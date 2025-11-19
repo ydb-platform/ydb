@@ -366,6 +366,10 @@ public:
         return FindCluster(row.at(embeddingPos).AsRef());
     }
 
+    double CalcDistance(const TStringBuf a, const TStringBuf b) override {
+        return TMetric::Distance(a.data(), b.data(), Dimensions);
+    }
+
     void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight) override {
         auto& aggregate = NextClusters.at(pos);
         auto* coords = aggregate.data();

@@ -391,6 +391,30 @@ struct TTestHelper {
         }
     }
 
+    void CreateCustomTable(const TString & name, TVector<TShardedTableOptions::TColumn> columns) {
+        auto &runtime = *Server->GetRuntime();
+
+        auto& table1 = Tables[name];
+        table1.Name = name;
+
+        auto opts = TShardedTableOptions()
+            .Shards(ShardCount)
+            .Columns(columns);
+        if (WithFollower)
+            opts.Followers(1);
+        auto [shards, tableId] = CreateShardedTable(Server, Sender, "/Root", name, opts);
+
+        table1.TableId = tableId;
+        table1.TabletId = shards.at(0);
+
+        auto [tables, ownerId] = GetTables(Server, table1.TabletId);
+        table1.UserTable = tables[name];
+
+        table1.ClientId = runtime.ConnectToPipe(table1.TabletId, Sender, 0, GetTestPipeConfig());
+
+        table1.Columns = columns;
+    }
+
     void UpsertMany(ui32 startRow, ui32 rowCount) {
         auto &runtime = *Server->GetRuntime();
         const auto& table = Tables["table-1-many"];
@@ -472,7 +496,7 @@ struct TTestHelper {
         if (!snapshot) {
             readVersion = CreateVolatileSnapshot(
                 Server,
-                {"/Root/movies", "/Root/table-1"},
+                {"/Root/"+tableName},
                 TDuration::Hours(1));
         } else {
             readVersion = snapshot;
@@ -5807,6 +5831,121 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
 
         auto ev = runtime.GrabEdgeEvent<TEvDataShard::TEvReadResult>(sender, TDuration::Seconds(1));
         UNIT_ASSERT_C(!ev, "Unexpected response received (should have been cancelled)");
+    }
+
+}
+
+Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
+
+    Y_UNIT_TEST(BadRequest) {
+        TTestHelper helper;
+        TVector<TShardedTableOptions::TColumn> columns = {
+            {"key", "Uint32", true, false},
+            {"emb", "String", false, false}};
+        helper.CreateCustomTable("table-vector", columns);
+
+        auto createRequest = [&]() {
+            auto request1 = helper.GetBaseReadRequest("table-vector", 1, NKikimrDataEvents::FORMAT_CELLVEC);
+            AddRangeQuery<ui32>(*request1, { 1 }, true, { 20 }, true);
+            auto topK = request1->Record.MutableVectorTopK();
+            topK->SetColumn(1);
+            topK->SetTargetVector("\xE4\x16\x02");
+            topK->SetLimit(3);
+            auto idx = topK->MutableSettings();
+            idx->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            idx->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
+            idx->set_vector_dimension(2);
+            return request1;
+        };
+
+        auto request1 = createRequest();
+        request1->Record.MutableVectorTopK()->SetLimit(0);
+        auto readResult1 = helper.SendRead("table-vector", request1.release());
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
+        UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("limit is 0"));
+
+        request1 = createRequest();
+        request1->Record.MutableVectorTopK()->SetColumn(2);
+        readResult1 = helper.SendRead("table-vector", request1.release());
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
+        UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("Too large topK column index"));
+
+        request1 = createRequest();
+        request1->Record.MutableVectorTopK()->ClearTargetVector();
+        readResult1 = helper.SendRead("table-vector", request1.release());
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
+        UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("Target vector is not specified"));
+
+        request1 = createRequest();
+        request1->Record.MutableVectorTopK()->SetTargetVector("\xE4\x16\x20\x10"); // 25-3 only has length check
+        readResult1 = helper.SendRead("table-vector", request1.release());
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
+        UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("Target vector has invalid format"));
+
+        request1 = createRequest();
+        request1->Record.MutableVectorTopK()->MutableSettings()->set_metric(Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED);
+        readResult1 = helper.SendRead("table-vector", request1.release());
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
+        UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("either distance or similarity"));
+    }
+
+    Y_UNIT_TEST_TWIN(Simple, Batch) {
+        TTestHelper helper;
+        TVector<TShardedTableOptions::TColumn> columns = {
+            {"key", "Uint32", true, false},
+            {"emb", "String", false, false}};
+        helper.CreateCustomTable("table-vector", columns);
+
+        // Insert initial data
+        ExecSQL(helper.Server, helper.Sender, R"(UPSERT INTO `/Root/table-vector` (key, emb) VALUES
+            ( 1, "\x00\xFF\x02"),
+            ( 2, "\x10\xF0\x02"),
+            ( 3, "\x20\xE0\x02"),
+            ( 4, "\x30\xD0\x02"),
+            ( 5, "\x40\xC0\x02"),
+            ( 6, "\x50\xB0\x02"),
+            ( 7, "\x60\xA0\x02"),
+            ( 8, "\x70\x90\x02"),
+            ( 9, "\x80\x80\x02"),
+            (10, "\x90\x70\x02"),
+            (11, "\xA0\x60\x02"),
+            (12, "\xB0\x50\x02"),
+            (13, "\xC0\x40\x02"),
+            (14, "\xD0\x30\x02"),
+            (15, "\xE0\x20\x02"),
+            (16, "\xF0\x10\x02"),
+            (17, "\xFF\x00\x02");)");
+
+        auto request1 = helper.GetBaseReadRequest("table-vector", 1, NKikimrDataEvents::FORMAT_CELLVEC);
+        if (Batch) {
+            request1->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
+        }
+        AddRangeQuery<ui32>(*request1, { 1 }, true, { 20 }, true);
+        auto topK = request1->Record.MutableVectorTopK();
+        topK->SetColumn(1);
+        topK->SetTargetVector("\xE4\x16\x02");
+        topK->SetLimit(3);
+        auto idx = topK->MutableSettings();
+        idx->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        idx->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
+        idx->set_vector_dimension(2);
+        auto readResult1 = helper.SendRead("table-vector", request1.release());
+        UNIT_ASSERT(readResult1->Record.GetFinished());
+        UNIT_ASSERT(readResult1->Record.GetStats().GetRows() == 17);
+        UNIT_ASSERT(readResult1->Record.GetStats().GetBytes() == 544);
+        CheckResult(helper.Tables.at("table-vector").UserTable, *readResult1, {
+            {TCell::Make(16), TCell("\xF0\x10\x02", 3)},
+            {TCell::Make(15), TCell("\xE0\x20\x02", 3)},
+            {TCell::Make(17), TCell("\xFF\x00\x02", 3)},
+        }, {
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
+            NScheme::TTypeInfo(NScheme::NTypeIds::String)
+        });
     }
 
 }

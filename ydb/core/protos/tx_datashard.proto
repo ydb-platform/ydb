@@ -2051,6 +2051,8 @@ message TEvRead {
     optional NKikimrSchemeOp.EOlapProgramType ProgramType = 903;
 
     optional NKikimrDataEvents.ELockMode LockMode = 904;
+
+    optional NKikimrKqp.TReadVectorTopK VectorTopK = 905;
 }
 
 message TReadContinuationToken {

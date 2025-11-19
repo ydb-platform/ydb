@@ -4,7 +4,11 @@
 namespace NKikimr::NOlap::NTxInteractions {
 
 std::shared_ptr<NKikimr::NOlap::NTxInteractions::ITxEvent> TEvReadStartWriter::DoBuildEvent() {
-    return std::make_shared<TEvReadStart>(PathId, Schema, Filter);
+    if (AddToInteractionContext) {
+        return std::make_shared<TEvReadStart>(PathId, Schema, Filter);
+    } else {
+        return nullptr;
+    }
 }
 
 bool TEvReadStart::DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEvent& proto) {

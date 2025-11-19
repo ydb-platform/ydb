@@ -60,7 +60,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TSimpleOlap) {
-        return;
         TSimple tester;
         tester.SetIsOlap(true);
         tester.Execute();
@@ -175,7 +174,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TConflictReadWriteOlap) {
-        return;
         TConflictReadWrite tester;
         tester.SetIsOlap(true);
         tester.Execute();
@@ -233,7 +231,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TReadOnlyOlap) {
-        return;
         TReadOnly tester;
         tester.SetIsOlap(true);
         tester.Execute();

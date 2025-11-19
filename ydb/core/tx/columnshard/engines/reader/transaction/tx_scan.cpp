@@ -72,6 +72,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         read.TxId = txId;
         if (request.HasLockTxId()) {
             read.LockId = request.GetLockTxId();
+            read.LockMode = request.HasLockMode() ? request.GetLockMode() : NKikimrDataEvents::OPTIMISTIC;
         }
 
         {

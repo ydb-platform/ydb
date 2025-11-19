@@ -33,6 +33,7 @@ public:
     // Table
     ui64 TxId = 0;
     std::optional<ui64> LockId;
+    std::optional<NKikimrDataEvents::ELockMode> LockMode;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;

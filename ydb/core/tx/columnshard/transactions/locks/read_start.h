@@ -11,6 +11,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
     YDB_READONLY_DEF(std::shared_ptr<TPKRangesFilter>, Filter);
     YDB_READONLY_DEF(THashSet<ui64>, LockIdsForCheck);
+    YDB_READONLY_DEF(bool, AddToInteractionContext);
 
     virtual bool DoCheckInteraction(
         const ui64 selfLockId, TInteractionsContext& /*context*/, TTxConflicts& /*conflicts*/, TTxConflicts& notifications) const override {
@@ -25,11 +26,12 @@ private:
 
 public:
     TEvReadStartWriter(const NColumnShard::TUnifiedPathId pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter,
-        const THashSet<ui64>& lockIdsForCheck)
+        const THashSet<ui64>& lockIdsForCheck, const bool addToInteractionContext)
         : PathId(pathId)
         , Schema(schema)
         , Filter(filter)
         , LockIdsForCheck(lockIdsForCheck)
+        , AddToInteractionContext(addToInteractionContext)
     {
         AFL_VERIFY(PathId.IsValid());
         AFL_VERIFY(Schema);

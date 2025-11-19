@@ -285,6 +285,12 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         const TString englishText = "cars are driving properly on the roads";
         analyzers.set_language("english");
         UNIT_ASSERT_VALUES_EQUAL(Analyze(englishText, analyzers), (TVector<TString>{"car", "are", "drive", "proper", "on", "the", "road"}));
+
+        analyzers.set_language("klingon");
+        UNIT_ASSERT_EXCEPTION(Analyze(englishText, analyzers), yexception);
+
+        analyzers.clear_language();
+        UNIT_ASSERT_EXCEPTION(Analyze(englishText, analyzers), yexception);
     }
 }
 

@@ -412,20 +412,20 @@ class CherryPickCreator:
         """Get Changelog category, entry, and merged entry content from original PRs
         
         For multiple PRs: merges Changelog entry contents with '---' separator.
+        If categories differ between PRs, returns None for category (to use template).
         Returns: (category, entry_text, merged_entry_content)
         """
-        category = None
+        categories = []  # Collect all categories from all PRs
         entry = None
         entry_contents = []  # Collect all Changelog entry contents to merge
         
         # Collect info from all PRs
         for pull in self.pull_requests:
             if pull.body:
-                # Extract category (take first non-empty)
-                if not category:
-                    cat = self._extract_changelog_category(pull.body)
-                    if cat:
-                        category = cat
+                # Extract category from each PR
+                cat = self._extract_changelog_category(pull.body)
+                if cat:
+                    categories.append(cat)
                 
                 # Extract entry text (take first non-empty) - used for building new entry if merged content not available
                 if not entry:
@@ -437,6 +437,16 @@ class CherryPickCreator:
                 entry_content = self._extract_changelog_entry_content(pull.body)
                 if entry_content:
                     entry_contents.append(entry_content)
+        
+        # Determine category: use it only if all PRs have the same category
+        category = None
+        if categories:
+            # Check if all categories are the same
+            unique_categories = set(categories)
+            if len(unique_categories) == 1:
+                # All PRs have the same category, use it
+                category = categories[0]
+            # If categories differ, category remains None (will use template)
         
         # Merge entry contents if multiple PRs have content
         if len(entry_contents) > 1:

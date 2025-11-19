@@ -3414,6 +3414,13 @@ public:
             }
         }
 
+        Clear();
+
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        TActorBootstrapped<TKqpBufferWriteActor>::PassAway();
+    }
+
+    void Clear() {
         ForEachLookupActor([](IKqpBufferTableLookup* actor, const TActorId) {
             actor->Terminate();
         });
@@ -3431,9 +3438,6 @@ public:
             HolderFactory.reset();
             TypeEnv.reset();
         }
-
-        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
-        TActorBootstrapped<TKqpBufferWriteActor>::PassAway();
     }
 
     void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev) {
@@ -4304,6 +4308,8 @@ public:
             std::move(issues),
             BuildStats()
         });
+
+        Clear();
     }
 
     TString GetPathes(ui64 shardId) const {

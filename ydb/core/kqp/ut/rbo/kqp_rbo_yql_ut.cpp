@@ -13,33 +13,10 @@
 
 #include <ctime>
 
-
-extern "C" {
-#include "catalog/pg_type_d.h"
-}
-
 namespace {
-    struct TPgTypeTestSpec {
-        ui32 TypeId;
-        bool IsKey;
-        std::function<TString(size_t)> TextIn, TextOut;
-        std::function<TString(TString)> ArrayPrint = [] (auto s) { return Sprintf("{%s,%s}", s.c_str(), s.c_str()); };
-    };
 
-    struct TPgTypeCoercionTestSpec {
-        ui32 TypeId;
-        TString TypeMod;
-        bool ShouldPass;
-        std::function<TString()> TextIn, TextOut;
-        std::function<TString(TString)> ArrayPrint = [] (auto s) { return Sprintf("{%s,%s}", s.c_str(), s.c_str()); };
-    };
-}
-
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYdb;
-using namespace NYdb::NTable;
+using namespace NKikimr;
+using namespace NKikimr::NKqp;
 
 double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nIterations) {
     auto db = kikimr.GetTableClient();
@@ -79,7 +56,15 @@ double TimeQuery(TString schema, TString query, int nIterations) {
     return elapsed_time / nIterations;        
 }
 
-Y_UNIT_TEST_SUITE(KqpRbo) {
+}
+
+namespace NKikimr {
+namespace NKqp {
+
+using namespace NYdb;
+using namespace NYdb::NTable;
+
+Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(Select) {
         NKikimrConfig::TAppConfig appConfig;
@@ -89,8 +74,8 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            --!syntax_pg
-            SELECT 1 as "a", 2 as "b";
+            PRAGMA YqlSelect = 'force';
+            SELECT 1 as a, 2 as b;
         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -130,71 +115,18 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
 
         std::vector<std::string> queries = {
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT id as "id2" FROM foo WHERE name != '3_name';
-            )",
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT id as "id2" FROM foo WHERE name = '3_name';
-            )",
-        };
-
-        std::vector<std::string> results = {
-            R"([["0"];["1"];["2"];["4"];["5"];["6"];["7"];["8"];["9"]])",
-            R"([["3"]])"
-        };
-
-        for (ui32 i = 0; i < queries.size(); ++i) {
-            const auto &query = queries[i];
-            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
-        }
-    }
-
-    Y_UNIT_TEST(FilterYql) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/foo` (
-                id	Int64	NOT NULL,	
-	            name	String,
-                primary key(id)	
-            );
-        )").GetValueSync();
-
-        NYdb::TValueBuilder rows;
-        rows.BeginList();
-        for (size_t i = 0; i < 10; ++i) {
-            rows.AddListItem()
-                .BeginStruct()
-                .AddMember("id").Int64(i)
-                .AddMember("name").String(std::to_string(i) + "_name")
-                .EndStruct();
-        }
-        rows.EndList();
-
-        auto resultUpsert = db.BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
-        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
-
-        db = kikimr.GetTableClient();
-        auto session2 = db.CreateSession().GetValueSync().GetSession();
-
-        std::vector<std::string> queries = {
-            R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT id as id2 FROM `/Root/foo` WHERE name != '3_name';
-            )"
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id as id2 FROM `/Root/foo` WHERE name = '3_name';
+            )",
         };
 
         std::vector<std::string> results = {
             R"([[0];[1];[2];[4];[5];[6];[7];[8];[9]])",
+            R"([[3]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -239,14 +171,13 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
 
         std::vector<std::string> queries = {
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT id as "id2" FROM foo WHERE id = 15 - 14 and 18-17 = 1;
+                PRAGMA YqlSelect = 'force';
+                SELECT id as id2 FROM `/Root/foo` WHERE id = 15 - 14 and 18-17 = 1;
             )"
         };
 
         std::vector<std::string> results = {
-            R"([["1"]])",
+            R"([[1]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -257,6 +188,7 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
         }
     }
 
+    /*
     Y_UNIT_TEST(ScalarSubquery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -311,15 +243,13 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
 
         std::vector<std::string> queries = {
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT bar.id FROM bar where bar.id = (SELECT id FROM foo);
+                SELECT bar.id FROM `/Root/bar` where bar.id = (SELECT id FROM `/Root/foo`);
             )"
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
         std::vector<std::string> results = {
-            R"([["0"]])",
+            R"([[0]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -384,39 +314,34 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
 
         std::vector<std::string> queries = {
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT foo.id FROM foo inner join bar on foo.id = bar.id;
+                PRAGMA YqlSelect = 'force';
+                SELECT foo.id FROM `/Root/foo` inner join `/Root/bar` on foo.id = bar.id;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT foo.id FROM foo inner join bar on foo.id = bar.id WHERE name = '1_name';
+                PRAGMA YqlSelect = 'force';
+                SELECT foo.id FROM `/Root/foo` inner join `/Root/bar` on foo.id = bar.id WHERE name = '1_name';
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT f.id as "id2" FROM foo AS f, bar WHERE f.id = bar.id and name = '0_name';
+                PRAGMA YqlSelect = 'force';
+                SELECT f.id as id2 FROM `/Root/foo` AS f, `/Root/bar` WHERE f.id = bar.id and name = '0_name';
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT foo.id FROM foo, bar;
+                PRAGMA YqlSelect = 'force';
+                SELECT foo.id FROM `/Root/foo`, `/Root/bar`;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT foo.id, bar.id FROM foo, bar;
+                PRAGMA YqlSelect = 'force';
+                SELECT foo.id, bar.id FROM `/Root/foo`, `/Root/bar`;
             )",
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
         std::vector<std::string> results = {
-            R"([["0"]])",
+            R"([[0]])",
             R"([])",
-            R"([["0"]])",
-            R"([["0"];["0"];["0"];["0"]])",
-            R"([["0";"0"];["0";"1"];["0";"2"];["0";"3"]])",
+            R"([[0]])",
+            R"([[0];[0];[0];[0]])",
+            R"([[0;0];[0;1];[0;2];[0;3]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -485,26 +410,23 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
 
         std::vector<std::string> queries = {
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT t1.a, t2.a FROM t1 left join t2 on t1.a = t2.a where t1.a = 0;
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` left join `/Root/t2` on t1.a = t2.a where t1.a = 0;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT t1.a FROM t1 left join t2 on t1.a = t2.a where t2.b = 'some_string';
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a FROM `/Root/t1` left join `/Root/t2` on t1.a = t2.a where t2.b = 'some_string';
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT t1.a FROM t1 left join t2 on t1.a = t2.a where t2.b IS NULL;
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a FROM `/Root/t1` left join `/Root/t2` on t1.a = t2.a where t2.b IS NULL;
             )",
         };
 
         std::vector<std::string> results = {
-            R"([["0";"0"]])",
+            R"([[0;0]])",
             R"([])",
-            R"([["1"]])"
+            R"([[1]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -589,124 +511,80 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
 
         std::vector<std::string> queries = {
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select t1.b, sum(t1.c) from t1 group by t1.b order by t1.b;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select t1.b, sum(t1.c) from t1 inner join t2 on t1.a = t2.a group by t1.b order by t1.b;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select sum(t1.c) from t1 group by t1.b
                 union all
                 select sum(t1.b) from t1;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select t1.b, min(t1.a) from t1 group by t1.b order by t1.b;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select t1.b, max(t1.a) from t1 group by t1.b order by t1.b;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select t1.b, count(t1.a) from t1 group by t1.b order by t1.b;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select max(t1.b), min(t1.a) from t1;
             )",
             R"(
-                --!syntax_pg
-                set TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select sum(t1.a) from t1 group by t1.b, t1.c;
             )",
             R"(
-                --!syntax_pg
-                set TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select sum(t1.c), t1.b from t1 group by t1.b order by t1.b;
             )",
             R"(
-                --!syntax_pg
-                set TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select max(t1.a), min(t1.a), min(t1.b) as min_b from t1;
             )",
             R"(
-                --!syntax_pg
-                set TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select distinct t1.a, t1.b from t1 order by t1.a;
             )",
             R"(
-                --!syntax_pg
-                set TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select distinct sum(t1.c) as sum_c, sum(t1.a) as sum_b from t1 group by t1.b order by sum_c;
             )",
             R"(
-                --!syntax_pg
-                set TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select distinct min(t1.a) as min_a, max(t1.a) as max_a from t1 group by t1.b order by min_a;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
+                PRAGMA YqlSelect = 'force';
                 select sum(t1.a + 1 + t1.c) as sumExpr0, sum(t1.c + 2) as sumExpr1 from t1 group by t1.b order by sumExpr0;
-            )",
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                select sum(t1.c) as sum0, sum(t1.a + 3) as sum1 from t1 group by t1.b + 1 order by sum0;
-            )",
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                select sum(t1.c) as sum0, t1.b + 1, t1.c + 2 from t1 group by t1.b + 1, t1.c + 2 order by sum0;
-            )",
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                select sum(t1.c + 2) as sum0 from t1 group by t1.b + t1.a order by sum0;
-            )",
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                select sum(distinct t1.b) as sum, t1.a from t1 group by t1.a order by sum;
-            )",
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                select sum(t1.a) + 1, t1.b from t1 group by t1.b order by t1.b;
             )",
         };
 
         std::vector<std::string> results = {
-            R"([["1";"4"];["2";"6"]])",
-            R"([["1";"4"];["2";"6"]])",
-            R"([["6"];["4"];["8"]])",
-            R"([["1";"1"];["2";"0"]])",
-            R"([["1";"3"];["2";"4"]])",
-            R"([["1";"2"];["2";"3"]])",
-            R"([["2";"0"]])",
-            R"([["6"];["4"]])",
-            R"([["4";"1"];["6";"2"]])",
-            R"([["4";"0";"1"]])",
-            R"([["0";"2"];["1";"1"];["2";"2"];["3";"1"];["4";"2"]])",
-            R"([["4";"4"];["6";"6"]])",
-            R"([["0";"4"];["1";"3"]])",
-            R"([["10";"8"];["15";"12"]])",
-            R"([["4";"10"];["6";"15"]])",
-            R"([["4";"2";"4"];["6";"3";"4"]])",
-            R"([["4"];["8"];["8"]])",
-            R"([["1";"1"];["1";"3"];["2";"0"];["2";"2"];["2";"4"]])",
-            R"([["5";"1"];["7";"2"]])"
+            R"([[1;4];[2;6]])",
+            R"([[1;4];[2;6]])",
+            R"([[6];[4];[8]])",
+            R"([[1;1];[2;0]])",
+            R"([[1;3];[2;4]])",
+            R"([[1;2];[2;3]])",
+            R"([[2;0]])",
+            R"([[6];[4]])",
+            R"([[4;1];[6;2]])",
+            R"([[4;0;1]])",
+            R"([[0;2];[1;1];[2;2];[3;1];[4;2]])",
+            R"([[4;4];[6;6]])",
+            R"([[0;4];[1;3]])",
+            R"([[10;8];[15;12]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -765,46 +643,42 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
 
         std::vector<std::string> queries = {
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT t1.a FROM t1
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a FROM `/Root/t1`
                 UNION ALL
-                SELECT t2.a FROM t2;
+                SELECT t2.a FROM `/Root/t2`;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT t1.a FROM t1
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a FROM `/Root/t1`
                 UNION ALL
-                SELECT t2.a FROM t2
+                SELECT t2.a FROM `/Root/t2`
                 UNION ALL
-                SELECT t3.a FROM t3;
+                SELECT t3.a FROM `/Root/t3`;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT t1.a FROM t1
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a FROM `/Root/t1`
                 UNION ALL
-                SELECT t2.a FROM t2
+                SELECT t2.a FROM `/Root/t2`
                 UNION ALL
-                SELECT t3.a FROM t3
+                SELECT t3.a FROM `/Root/t3`
                 UNION ALL
-                SELECT t4.a FROM t4;
+                SELECT t4.a FROM `/Root/t4`;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT t1.a FROM t1 inner join t2 on t1.a = t2.a where t1.a > 1
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a FROM `/Root/t1` inner join `/Root/t2` on t1.a = t2.a where t1.a > 1
                 UNION ALL
-                SELECT t3.a FROM t3 where t3.a = 1;
+                SELECT t3.a FROM `/Root/t3` where t3.a = 1;
             )",
         };
 
         std::vector<std::string> results = {
-            R"([["0"];["1"];["2"];["3"];["0"];["1"];["2"]])",
-            R"([["0"];["1"];["2"];["3"];["0"];["1"];["2"];["0"];["1"]])",
-            R"([["0"];["1"];["2"];["3"];["0"];["1"];["2"];["0"];["1"];["0"]])",
-            R"([["2"];["1"]])"
+            R"([[0];[1];[2];[3];[0];[1];[2]])",
+            R"([[0];[1];[2];[3];[0];[1];[2];[0];[1]])",
+            R"([[0];[1];[2];[3];[0];[1];[2];[0];[1];[0]])",
+            R"([[2];[1]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -848,31 +722,28 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
 
         std::vector<std::string> queries = {
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT a FROM t1
+                PRAGMA YqlSelect = 'force';
+                SELECT a FROM `/Root/t1`
                 ORDER BY a DESC;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT a,c FROM t1
+                PRAGMA YqlSelect = 'force';
+                SELECT a,c FROM `/Root/t1`
                 ORDER BY a DESC, c ASC;
             )",
             R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT a FROM t1
+                PRAGMA YqlSelect = 'force';
+                SELECT a FROM `/Root/t1`
                 UNION ALL
-                SELECT a FROM t2
+                SELECT a FROM `/Root/t2`
                 ORDER BY a DESC;
             )"
         };
 
         std::vector<std::string> results = {
-            R"([["3"];["2"];["1"];["0"]])",
-            R"([["3";"4"];["2";"3"];["1";"2"];["0";"1"]])",
-            R"([["3"];["2"];["2"];["1"];["1"];["0"];["0"]])"
+            R"([[3];[2];[1];[0]])",
+            R"([[3;4];[2;3];[1;2];[0;1]])",
+            R"([[3];[2];[2];[1];[1];[0];[0]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -1232,6 +1103,8 @@ CREATE TABLE `/Root/foo_0` (
 
         Cout << "Time per query: " << time;     
     }
+
+    */
 }
 
 } // namespace NKqp

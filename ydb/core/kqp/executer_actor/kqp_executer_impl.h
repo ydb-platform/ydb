@@ -463,6 +463,16 @@ protected:
             << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())
             << ", stats: " << state.GetStats());
 
+        auto& task = TasksGraph.GetTask(taskId);
+        if (AppData()->FeatureFlags.GetEnableShuttingDownNodeState() && task.ComputeActorId && task.ComputeActorId != computeActor) {
+            
+            LOG_D("[SHUTDOWN] Ignoring TEvState from old compute actor"
+                << ", TaskId: " << taskId
+                << ", oldComputeActor: " << computeActor
+                << ", currentComputeActor: " << task.ComputeActorId);
+            return false;
+        }
+
         YQL_ENSURE(Stats);
 
         if (state.HasStats()) {
@@ -897,6 +907,17 @@ protected:
 
             TActorId computeActorId = ActorIdFromProto(startedTask.GetActorId());
             LOG_D("Executing task: " << taskId << " on compute actor: " << computeActorId);
+            
+            // Check if task already has a different ComputeActorId (from earlier TEvState or race condition)
+            if (task.ComputeActorId && task.ComputeActorId != computeActorId) {
+                LOG_W("[SHUTDOWN] Task already has different ComputeActorId, skipping AcknowledgeCA"
+                    << ", TaskId: " << taskId
+                    << ", existingCA: " << task.ComputeActorId
+                    << ", newCA: " << computeActorId
+                    << ", keeping existing");
+                continue; // Skip this task, don't overwrite existing ComputeActorId
+            }
+            
             YQL_ENSURE(Planner);
             bool ack = Planner->AcknowledgeCA(taskId, computeActorId, nullptr);
             if (ack) {

@@ -135,6 +135,7 @@ private:
     STATEFN(ShuttingDownState) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleShuttingDown);
+            // misc
             hFunc(TEvents::TEvWakeup, HandleShuttingDown);
             hFunc(TEvents::TEvPoison, HandleShuttingDown);
             default: {

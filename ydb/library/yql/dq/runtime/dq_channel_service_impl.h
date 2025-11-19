@@ -120,7 +120,7 @@ std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType*
 
 class TChannelStub : public IChannelBuffer {
 public:
-    TChannelStub(ui64 channelId) {
+    TChannelStub(ui64 channelId, IDqChannelStorage::TPtr storage) : Storage(storage) {
         PopStats.ChannelId = channelId;
         PushStats.ChannelId = channelId;
     }
@@ -165,6 +165,7 @@ public:
     }
 
     std::shared_ptr<TDqFillAggregator> Aggregator;
+    IDqChannelStorage::TPtr Storage;
 };
 
 class TLocalBufferRegistry;
@@ -176,6 +177,7 @@ public:
         , Info(info)
         , ActorSystem(actorSystem)
         , InflightBytes(0)
+        , SpilledBytes(0)
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
         , NeedToNotifyOutput(false)
@@ -209,8 +211,13 @@ public:
     mutable std::queue<TDataChunk> Queue;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     EDqFillLevel FillLevel = EDqFillLevel::NoLimit;
+    std::queue<ui32> SpilledChunkBytes;
+    ui64 HeadBlobId = 0;
+    ui64 TailBlobId = 0;
+    IDqChannelStorage::TPtr Storage;
 
     std::atomic<ui64> InflightBytes;
+    std::atomic<ui64> SpilledBytes;
     const ui64 MaxInflightBytes; // NoLimit => HardLimit
     const ui64 MinInflightBytes; // HardLimit => NoLimit
 
@@ -630,16 +637,16 @@ public:
     std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId);
 
     // unbinded stubs
-    std::shared_ptr<IChannelBuffer> GetOutputBuffer(ui64 channelId);
+    std::shared_ptr<IChannelBuffer> GetOutputBuffer(ui64 channelId, IDqChannelStorage::TPtr storage);
     std::shared_ptr<IChannelBuffer> GetInputBuffer(ui64 channelId);
     // binded helpers
-    std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info) final;
+    std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) final;
     std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info) final;
     // remote buffers
     std::shared_ptr<TOutputBuffer> GetRemoteOutputBuffer(const TChannelFullInfo& info);
     std::shared_ptr<TInputBuffer> GetRemoteInputBuffer(const TChannelFullInfo& info);
     // local buffer
-    std::shared_ptr<IChannelBuffer> GetLocalBuffer(const TChannelFullInfo& info, bool bindInput);
+    std::shared_ptr<IChannelBuffer> GetLocalBuffer(const TChannelFullInfo& info, bool bindInput, IDqChannelStorage::TPtr storage);
     // unbinded channels
     IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelParams& params) final;
     IDqInputChannel::TPtr GetInputChannel(const TDqChannelParams& params) final;
@@ -661,7 +668,7 @@ class TFastDqOutputChannel : public IDqOutputChannel {
 
 public:
     TFastDqOutputChannel(std::weak_ptr<TDqChannelService> service, const TDqChannelParams& params, std::shared_ptr<IChannelBuffer> buffer, bool localChannel)
-        : Service(service), Serializer(CreateSerializer(params, buffer, localChannel)), Desc(params.Desc) {
+        : Service(service), Serializer(CreateSerializer(params, buffer, localChannel)), Desc(params.Desc), Storage(params.Storage) {
     }
 
     ~TFastDqOutputChannel() {
@@ -785,6 +792,7 @@ public:
     bool Finished = false;
     bool Binded = false;
     std::shared_ptr<TDqFillAggregator> Aggregator;
+    IDqChannelStorage::TPtr Storage;
 };
 
 class TFastDqInputChannel : public IDqInputChannel {

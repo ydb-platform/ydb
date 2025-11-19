@@ -194,6 +194,7 @@ public:
 
     template <typename T, typename = TStdLayout<T>>
     static inline TCell Make(const T& val) noexcept {
+        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
         auto *ptr = static_cast<const char*>(static_cast<const void*>(&val));
 
         return TCell(ptr, sizeof(val));

@@ -23,7 +23,6 @@ class TestModuleParameter(object):
             'GRPC_SERVER': LogLevels.DEBUG,
             'TX_PROXY': LogLevels.DEBUG,
         }
-        
         # Create configurator with module parameter
         cls.configurator = KikimrConfigGenerator(
             erasure=Erasure.NONE,
@@ -43,19 +42,14 @@ class TestModuleParameter(object):
     def test_cluster_starts_and_is_operational_with_module_parameter(self):
         # Check that cluster is running
         assert_that(len(self.cluster.nodes) > 0)
-        
         # Check that first node is alive
         node = self.cluster.nodes[1]
         assert_that(node.is_alive())
-        
         logger.info("Cluster started successfully with module parameter")
-        
         # Get swagger client for monitoring
         swagger_client = SwaggerClient(node.host, node.mon_port)
-        
         # Wait a bit for cluster to stabilize
         time.sleep(2)
-        
         # Check nodes info to verify cluster is operational
         try:
             nodes_info = swagger_client.nodes_info()
@@ -68,10 +62,7 @@ class TestModuleParameter(object):
     def test_module_parameter_in_command(self):
         node = self.cluster.nodes[1]
         command = node.command
-        
         # Check that --module parameter is in the command
         has_module_param = any("--module=" in arg for arg in command)
         assert_that(has_module_param)
-        
         logger.info(f"Command contains --module parameter: {command}")
-

@@ -299,5 +299,89 @@ class KiKiMRMessageBusClient(object):
         request.Alive = True
         return self.invoke(request, 'TabletStateRequest')
 
+    def read_host_configs(self, domain=1):
+        request = msgbus.TBlobStorageConfigRequest()
+        request.Domain = domain
+        request.Request.Command.add().ReadHostConfig.SetInParent()
+
+        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        if not response.Success:
+            raise RuntimeError(f'read_host_config request failed: {response.ErrorDescription}')
+        status = response.Status[0]
+        if not status.Success:
+            raise RuntimeError(f'read_host_config has failed status: {status.ErrorDescription}')
+
+        return status.HostConfig
+
+    def define_host_configs(self, host_configs, domain=1):
+        request = msgbus.TBlobStorageConfigRequest()
+        request.Domain = domain
+        for host_config in host_configs:
+            request.Request.Command.add().DefineHostConfig.MergeFrom(host_config)
+
+        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        if not response.Success:
+            raise RuntimeError(f'define_host_config request failed: {response.ErrorDescription}')
+        for i, status in enumerate(response.Status):
+            if not status.Success:
+                raise RuntimeError(f'define_host_config has failed status[{i}]: {status}')
+
+    def read_storage_pools(self, domain=1):
+        request = msgbus.TBlobStorageConfigRequest()
+        request.Domain = domain
+        cmd = request.Request.Command.add().ReadStoragePool
+        cmd.BoxId = 0xFFFFFFFFFFFFFFFF
+
+        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        if not response.Success:
+            raise RuntimeError(f'read_storage_pools request failed: {response.ErrorDescription}')
+
+        status = response.Status[0]
+        if not status.Success:
+            raise RuntimeError(f'read_storage_pools has failed status: {status.ErrorDescription}')
+
+        return status.StoragePool
+
+    def pdisk_set_all_active(self, pdisk_path=None, domain=1):
+        """Equivalent to `dstool pdisk set --status=ACTIVE --pdisk-ids <pdisks>`"""
+        base_config = self.query_base_config(domain=domain)
+
+        request = msgbus.TBlobStorageConfigRequest()
+        request.Domain = domain
+
+        for pdisk in base_config.BaseConfig.PDisk:
+            if pdisk_path is not None and pdisk.Path != pdisk_path:
+                continue
+            cmd = request.Request.Command.add().UpdateDriveStatus
+            cmd.HostKey.NodeId = pdisk.NodeId
+            cmd.PDiskId = pdisk.PDiskId
+            cmd.Status = blobstorage_config_pb2.EDriveStatus.ACTIVE
+
+        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+
+        if not response.Success:
+            raise RuntimeError(f'update_all_drive_status_active request failed: {response.ErrorDescription}')
+        for i, status in enumerate(response.Status):
+            if not status.Success:
+                raise RuntimeError(f'update_all_drive_status_active has failed status[{i}]: {status}')
+
+    def query_base_config(self, domain=1):
+        request = msgbus.TBlobStorageConfigRequest()
+        request.Domain = domain
+
+        command = request.Request.Command.add()
+        command.QueryBaseConfig.RetrieveDevices = True
+        command.QueryBaseConfig.VirtualGroupsOnly = False
+
+        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        if not response.Success:
+            raise RuntimeError(f'query_base_config failed: {response.ErrorDescription}')
+
+        status = response.Status[0]
+        if not status.Success:
+            raise RuntimeError(f'query_base_config failed: {status.ErrorDescription}')
+
+        return status
+
     def __del__(self):
         self.close()

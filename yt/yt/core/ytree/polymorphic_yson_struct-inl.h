@@ -199,6 +199,22 @@ TPolymorphicYsonStruct<TMapping>::operator bool() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T>
+    requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
+void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
+{
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("type_name").Value("optional")
+            .DoIf(options.AddCppTypeNames, [] (auto fluent) {
+                fluent.Item("cpp_type_name").Value(TypeName<T>());
+            })
+            .Item("item").Do([&] (auto fluent) {
+                fluent.Value("yson");
+            })
+        .EndMap();
+}
+
 template <CPolymorphicEnumMapping TMapping>
 void Serialize(const TPolymorphicYsonStruct<TMapping>& value, NYson::IYsonConsumer* consumer)
 {

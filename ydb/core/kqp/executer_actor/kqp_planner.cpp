@@ -196,6 +196,7 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
         << ", requestId: " << requestId
         << ", target: " << target
         << ", targetNode: " << target.NodeId()
+        << ", executerNode: " << ExecuterId.NodeId()
         << ", retryNumber: " << requestData.RetryNumber
         << ", tasksCount: " << requestData.TaskIds.size()
         << ", originalNode: " << requestData.NodeId
@@ -338,6 +339,12 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         singleNodeExecutionMakeSence)
     {
         ui64 selfNodeId = ExecuterId.NodeId();
+        LOG_I("[SHUTDOWN] Running tasks locally, node: " << selfNodeId 
+            << ", tasksCount: " << ComputeTasks.size()
+            << ", memory: " << LocalRunMemoryEst << " / " << localResources.Memory[NRm::EKqpMemoryPool::ScanQuery]
+            << ", executionUnits: " << ResourceEstimations.size() << " / " << localResources.ExecutionUnits
+            << ", txId: " << TxId);
+        
         for(ui64 taskId: ComputeTasks) {
             TasksPerNode[selfNodeId].push_back(taskId);
         }

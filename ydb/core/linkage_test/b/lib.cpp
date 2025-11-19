@@ -1,4 +1,9 @@
-void foo(){}
+void bar(){}
+void foo(){bar();}
+
+
+
+
 
 
 

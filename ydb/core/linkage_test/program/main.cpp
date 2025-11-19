@@ -1,3 +1,4 @@
 void foo();
+void bar();
 
-int main() {foo();}
+int main() {foo(); bar();}

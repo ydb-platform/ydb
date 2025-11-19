@@ -36,4 +36,7 @@ PEERDIR(
 
 END()
 
-RECURSE(queue_url)
+RECURSE(
+    protos
+    queue_url
+)

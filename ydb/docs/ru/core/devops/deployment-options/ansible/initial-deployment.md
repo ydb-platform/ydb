@@ -148,7 +148,7 @@ timeout = 60
               data_center: 'zone-b'
           static-node-3.ydb-cluster.com:
             location:
-              data_center: 'zone-c'
+              data_center: 'zone-d'
         vars:
           # Ansible
           ansible_user: ubuntu
@@ -220,15 +220,15 @@ timeout = 60
               rack: 'rack-6'
           static-node-7.ydb-cluster.com:
             location:
-              data_center: 'zone-c'
+              data_center: 'zone-d'
               rack: 'rack-7'
           static-node-8.ydb-cluster.com:
             location:
-              data_center: 'zone-c'
+              data_center: 'zone-d'
               rack: 'rack-8'
           static-node-9.ydb-cluster.com:
             location:
-              data_center: 'zone-c'
+              data_center: 'zone-d'
               rack: 'rack-9'
         vars:
           # Ansible

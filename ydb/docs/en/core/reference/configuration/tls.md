@@ -64,7 +64,7 @@ kafka_proxy_config:
 
 ### HTTP
 
-{{ ydb-short-name }} exposes a separate HTTP network port for running the [Embedded UI](../../reference/embedded-ui/index.md), exposing [metrics](../../devops/manual/monitoring.md), and other miscellaneous endpoints.
+{{ ydb-short-name }} exposes a separate HTTP network port for running the [Embedded UI](../../reference/embedded-ui/index.md), exposing [metrics](../../devops/observability/monitoring.md), and other miscellaneous endpoints.
 
 Example of enabling TLS on the HTTP port, making it HTTPS:
 

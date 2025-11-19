@@ -30,6 +30,7 @@ class GlobalIndexSettings;
 class VectorIndexSettings;
 class KMeansTreeSettings;
 class PartitioningSettings;
+class ReadReplicasSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
 class TtlTier;
@@ -199,11 +200,33 @@ struct TExplicitPartitions {
     void SerializeTo(Ydb::Table::ExplicitPartitions& proto) const;
 };
 
+//! Represents table read replicas settings
+class TReadReplicasSettings {
+public:
+    enum class EMode {
+        PerAz = 0,
+        AnyAz = 1
+    };
+
+    TReadReplicasSettings(EMode mode, uint64_t readReplicasCount);
+
+    EMode GetMode() const;
+    uint64_t GetReadReplicasCount() const;
+
+    static std::optional<TReadReplicasSettings> FromProto(const Ydb::Table::ReadReplicasSettings& proto);
+    void SerializeTo(Ydb::Table::ReadReplicasSettings& proto) const;
+
+private:
+    EMode Mode_;
+    uint64_t ReadReplicasCount_;
+};
+
 struct TGlobalIndexSettings {
     using TUniformOrExplicitPartitions = std::variant<std::monostate, uint64_t, TExplicitPartitions>;
 
     TPartitioningSettings PartitioningSettings;
     TUniformOrExplicitPartitions Partitions;
+    std::optional<TReadReplicasSettings> ReadReplicasSettings;
 
     static TGlobalIndexSettings FromProto(const Ydb::Table::GlobalIndexSettings& proto);
 
@@ -627,24 +650,6 @@ public:
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
-};
-
-//! Represents table read replicas settings
-class TReadReplicasSettings {
-public:
-    enum class EMode {
-        PerAz = 0,
-        AnyAz = 1
-    };
-
-    TReadReplicasSettings(EMode mode, uint64_t readReplicasCount);
-
-    EMode GetMode() const;
-    uint64_t GetReadReplicasCount() const;
-
-private:
-    EMode Mode_;
-    uint64_t ReadReplicasCount_;
 };
 
 enum class EStoreType {

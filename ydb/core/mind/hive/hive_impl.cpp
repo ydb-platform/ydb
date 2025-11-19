@@ -162,7 +162,7 @@ void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
     NKikimrHive::TEvStopTablet& rec = ev->Get()->Record;
     const TActorId actorToNotify = rec.HasActorToNotify() ? ActorIdFromProto(rec.GetActorToNotify()) : ev->Sender;
     if (rec.HasTabletID()) {
-
+        Execute(CreateStopTablet(rec.GetTabletID(), actorToNotify));
     } else {
         Y_ENSURE_LOG(rec.HasTabletID(), rec.ShortDebugString());
         Send(actorToNotify, new TEvHive::TEvStopTabletResult(NKikimrProto::ERROR, 0), 0, ev->Cookie);
@@ -257,7 +257,10 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
                 if (std::holds_alternative<TTooManyTabletsStarting>(bestNodeResult)) {
                     delayedTablets.push_back(record);
                     break;
-                } else if (std::holds_alternative<TNoNodeFound>(bestNodeResult)) {
+                } else {
+                    if (std::holds_alternative<TNotEnoughResources>(bestNodeResult)) {
+                        NotEnoughResources = true;
+                    }
                     for (const TActorId actorToNotify : tablet->ActorsToNotifyOnRestart) {
                         sideEffects.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
                     }
@@ -366,7 +369,7 @@ void THive::ProcessWaitQueue() {
 void THive::AddToBootQueue(TTabletInfo* tablet, TNodeId node) {
     tablet->UpdateWeight();
     tablet->BootState = BootStateBooting;
-    BootQueue.EmplaceToBootQueue(*tablet, node);
+    BootQueue.AddToBootQueue(*tablet, node);
     UpdateCounterBootQueueSize(BootQueue.BootQueue.size());
 }
 
@@ -687,6 +690,7 @@ void THive::BuildCurrentConfig() {
         SpreadNeighbours = false;
         ObjectDistributions.Disable();
     }
+    BootQueue.UpdateTabletBootQueuePriorities(CurrentConfig);
 }
 
 void THive::Cleanup() {
@@ -1412,7 +1416,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
         }
         if (debugState.NodesWithoutResources == nodesLeft) {
             tablet.BootState = BootStateNotEnoughResources;
-            return TNoNodeFound();
+            return TNotEnoughResources();
         }
         if (debugState.NodesWithoutLocation == nodesLeft) {
             tablet.BootState = BootStateNodesLocationUnknown;
@@ -1739,6 +1743,20 @@ void THive::UpdateCounterNodesFrozen(i64 nodesFrozenDiff) {
     }
 }
 
+void THive::UpdateCounterDeleteTabletQueueSize() {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_DELETE_TABLET_QUEUE_SIZE];
+        counter.Set(DeleteTabletQueue.size());
+    }
+}
+
+void THive::UpdateCounterTabletsDeleting() {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_DELETING];
+        counter.Set(DeleteTabletInProgress);
+    }
+}
+
 void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
@@ -1926,6 +1944,9 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
                 }
             }
         }
+        if (info->LockedToActor) {
+            ActorIdToProto(info->LockedToActor, tabletInfo.MutableLockedToActor());
+        }
     }
 }
 
@@ -2092,9 +2113,18 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
                     }
                 }
             } else {
+                std::optional<TSubDomainKey> filterObjectDomain;
+                if (request.HasFilterTabletsByObjectDomain()) {
+                    filterObjectDomain = TSubDomainKey(request.GetFilterTabletsByObjectDomain());
+                }
                 for (const auto& [state, set] : node.Tablets) {
                     std::vector<ui32> tabletTypeToCount;
                     for (const TTabletInfo* tablet : set) {
+                        if (filterObjectDomain) {
+                            if (tablet->NodeFilter.ObjectDomain != *filterObjectDomain) {
+                                continue;
+                            }
+                        }
                         TTabletTypes::EType type = tablet->GetTabletType();
                         if (static_cast<size_t>(type) >= tabletTypeToCount.size()) {
                             tabletTypeToCount.resize(type + 1);
@@ -2883,7 +2913,8 @@ void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects)
     if (tablet == nullptr) {
         return;
     }
-    if (DeleteTabletInProgress < MAX_DELETE_TABLET_IN_PROGRESS) {
+    Y_ENSURE(tablet->IsDeleting());
+    if (DeleteTabletInProgress < GetMaxDeleteTabletInProgress()) {
         ++DeleteTabletInProgress;
         if (!tablet->InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
             DeleteTabletWithoutStorage(tablet);
@@ -2891,6 +2922,8 @@ void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects)
     } else {
         DeleteTabletQueue.push(tabletId);
     }
+    UpdateCounterDeleteTabletQueueSize();
+    UpdateCounterTabletsDeleting();
 }
 
 void THive::ProcessPendingStopTablet() {
@@ -3553,7 +3586,7 @@ void THive::Handle(TEvPrivate::TEvUpdateFollowers::TPtr&) {
 
 void THive::MakeScaleRecommendation() {
     BLOG_D("[MSR] Started");
-    
+
     if (AreWeRootHive()) {
         return;
     }

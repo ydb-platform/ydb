@@ -131,19 +131,19 @@ void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {
         break;
 
     case EPrimitiveType::Date32:
-        Value.Date32(TryParse<i32>(buf));
+        Value.Date32(std::chrono::sys_time<TWideDays>(TWideDays(TryParse<int32_t>(buf))));
         break;
 
     case EPrimitiveType::Datetime64:
-        Value.Datetime64(TryParse<i64>(buf));
-        break;        
+        Value.Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(TryParse<int64_t>(buf))));
+        break;
 
     case EPrimitiveType::Timestamp64:
-        Value.Timestamp64(TryParse<i64>(buf));
-        break;        
+        Value.Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(TryParse<int64_t>(buf))));
+        break;
 
     case EPrimitiveType::Interval64:
-        Value.Interval64(TryParse<i64>(buf));
+        Value.Interval64(TWideMicroseconds(TryParse<int64_t>(buf)));
         break;
 
     case EPrimitiveType::TzDate:

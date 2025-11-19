@@ -220,7 +220,7 @@ void CmdPatch(const TString &originalKey, const TString &patchedKey, const TVect
         UNIT_ASSERT(result->Record.HasStatus());
         UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.PatchResultSize(), 1);
-        
+
         const auto &patchResult = result->Record.GetPatchResult(0);
         UNIT_ASSERT(patchResult.HasStatus());
         UNIT_ASSERT_EQUAL(patchResult.GetStatus(), NKikimrProto::OK);
@@ -2570,7 +2570,7 @@ Y_UNIT_TEST(TestCleanUpDataOnEmptyTablet) {
         UNIT_ASSERT_EQUAL(response.status(), decltype(response)::STATUS_SUCCESS);
         UNIT_ASSERT_EQUAL(response.generation(), 1);
 
-        
+
         NKikimrKeyValue::CleanUpDataResponse responseAlreadyCompleted = SendCleanUpDataRequest(1, tc);
         UNIT_ASSERT_EQUAL(responseAlreadyCompleted.status(), decltype(responseAlreadyCompleted)::STATUS_ALREADY_COMPLETED);
         UNIT_ASSERT_EQUAL(responseAlreadyCompleted.generation(), 1);
@@ -2585,7 +2585,7 @@ Y_UNIT_TEST(TestCleanUpDataOnEmptyTablet) {
 
         NKikimrKeyValue::CleanUpDataResponse response3 = SendCleanUpDataRequest(3, tc);
         UNIT_ASSERT_EQUAL(response3.status(), decltype(response3)::STATUS_ALREADY_COMPLETED);
-        UNIT_ASSERT_EQUAL(response3.generation(), 3);    
+        UNIT_ASSERT_EQUAL(response3.generation(), 3);
     });
 }
 
@@ -2676,6 +2676,28 @@ Y_UNIT_TEST(TestCleanUpDataWithMockDisk) {
             }
         }
     });
+}
+
+Y_UNIT_TEST(TestReadRequestInFlightLimit)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    icb->RegisterSharedControl(readRequestInFlightLimit, "KeyValueVolumeControls.ReadRequestsInFlightLimit");
+    readRequestInFlightLimit = 5;
+
+    CmdWrite("key-1", "value",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME,
+        tc);
+    CmdRead({"key-1"},
+        NKikimrClient::TKeyValueRequest::REALTIME,
+        {"value"}, {false},
+        tc);
 }
 
 } // TKeyValueTest

@@ -17,7 +17,7 @@ public:
     TTopicSdkTestSetup(const TString& testCaseName, const NKikimr::Tests::TServerSettings& settings = MakeServerSettings(), bool createTopic = true);
 
     void CreateTopic(const std::string& path = TEST_TOPIC, const std::string& consumer = TEST_CONSUMER, size_t partitionCount = 1,
-                     std::optional<size_t> maxPartitionCount = std::nullopt);
+                     std::optional<size_t> maxPartitionCount = std::nullopt, const TDuration retention = TDuration::Hours(1), bool important = false);
     void CreateTopicWithAutoscale(const std::string& path = TEST_TOPIC, const std::string& consumer = TEST_CONSUMER, size_t partitionCount = 1,
                      size_t maxPartitionCount = 100);
 

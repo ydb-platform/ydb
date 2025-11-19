@@ -122,7 +122,9 @@ TExprBase KqpApplyLimitToOlapReadTable(TExprBase node, TExprContext& ctx, const 
         return node; // already set
     }
     if (direction == ESortDirection::Reverse) {
-        settings.SetReverse();
+        settings.SetSorting(ERequestSorting::DESC);
+    } else if (direction == ESortDirection::Forward) {
+        settings.SetSorting(ERequestSorting::ASC);
     }
 
     auto keySelector = topSort.KeySelectorLambda();

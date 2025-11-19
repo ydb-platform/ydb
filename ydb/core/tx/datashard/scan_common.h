@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/util/intrusive_heap.h>
@@ -10,6 +11,7 @@
 
 namespace NKikimr::NDataShard {
 
+using TIndexBuildScanSettings = NKikimrIndexBuilder::TIndexBuildScanSettings;
 class TDataShard;
 struct TUserTable;
 
@@ -82,9 +84,12 @@ using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
 
 TColumnsTypes GetAllTypes(const TUserTable& tableInfo);
 
-// TODO(mbkkt) unfortunately key can have same columns as row
-// I can detect this but maybe better
-// if IScan will provide for us "how much data did we read"?
-ui64 CountBytes(TArrayRef<const TCell> key, const NTable::TRowState& row);
+ui64 CountRowCellBytes(TConstArrayRef<TCell> key, TConstArrayRef<TCell> value);
+
+inline TDuration GetRetryWakeupTimeoutBackoff(ui32 attempt) {
+    const ui32 maxBackoffExponent = 3;
+
+    return TDuration::Seconds(1u << Min(attempt, maxBackoffExponent));
+}
 
 }

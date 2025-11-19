@@ -1,8 +1,8 @@
 # CREATE TOPIC
 
-The `CREATE TOPIC` call creates a [topic](concepts/topic).
+The `CREATE TOPIC` call creates a [topic](../../../concepts/topic.md).
 
-When creating a topic, you can add topic [consumers](concepts/topic#consumer) to it and topic settings.
+When creating a topic, you can add topic [consumers](../../../concepts/topic.md#consumer) to it and topic settings.
 
 ```yql
 CREATE TOPIC topic_path (

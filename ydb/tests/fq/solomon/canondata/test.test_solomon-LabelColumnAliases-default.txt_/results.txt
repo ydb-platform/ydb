@@ -1,0 +1,40 @@
+columns {
+  name: "value"
+  type {
+    optional_type {
+      item {
+        type_id: DOUBLE
+      }
+    }
+  }
+}
+columns {
+  name: "l2"
+  type {
+    type_id: STRING
+  }
+}
+rows {
+  items {
+    double_value: 100
+  }
+  items {
+    bytes_value: ""
+  }
+}
+rows {
+  items {
+    double_value: 200
+  }
+  items {
+    bytes_value: ""
+  }
+}
+rows {
+  items {
+    double_value: 300
+  }
+  items {
+    bytes_value: ""
+  }
+}

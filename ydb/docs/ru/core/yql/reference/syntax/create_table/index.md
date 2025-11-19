@@ -20,8 +20,15 @@
         ...
         columnN typeN,
 {% if feature_secondary_index == true %}
-        INDEX index1_name GLOBAL ON ( column ),
-        INDEX index2_name GLOBAL ON ( column1, column2, ... ),
+        INDEX `<index_name>`
+          [GLOBAL|LOCAL]
+          [UNIQUE]
+          [SYNC|ASYNC]
+          [USING <index_type>]
+          ON ( <index_columns> )
+          [COVER ( <cover_columns> )]
+          [WITH ( <parameter_name> = <parameter_value>[, ...])]
+        ...
 {% endif %}
 {% if feature_map_tables %}
         PRIMARY KEY ( column, ... ),
@@ -245,6 +252,7 @@ CREATE TABLE <table_name> (
 При создании строковых таблиц возможно задать:
 
 * [Вторичный индекс](secondary_index.md).
+* [Векторный индекс](vector_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
 

@@ -172,14 +172,14 @@ void TKqpDatashardComputeContext::SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {
     UserDb.SetLockNodeId(lockNodeId);
 }
 
-void TKqpDatashardComputeContext::SetReadVersion(TRowVersion readVersion) {
-    UserDb.SetReadVersion(readVersion);
+void TKqpDatashardComputeContext::SetMvccVersion(TRowVersion mvccVersion) {
+    UserDb.SetMvccVersion(mvccVersion);
 }
 
-TRowVersion TKqpDatashardComputeContext::GetReadVersion() const {
-    Y_ABORT_UNLESS(!UserDb.GetReadVersion().IsMin(), "Cannot perform reads without ReadVersion set");
+TRowVersion TKqpDatashardComputeContext::GetMvccVersion() const {
+    Y_ABORT_UNLESS(!UserDb.GetMvccVersion().IsMin(), "Cannot perform reads without ReadVersion set");
 
-    return UserDb.GetReadVersion();
+    return UserDb.GetMvccVersion();
 }
 
 TEngineHostCounters& TKqpDatashardComputeContext::GetDatashardCounters() {
@@ -278,7 +278,7 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
                                          adjustLimit(key.RangeLimits.ItemsLimit),
                                          adjustLimit(key.RangeLimits.BytesLimit),
                                          key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
-                                         GetReadVersion());
+                                         GetMvccVersion());
 
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Run precharge on table " << tableInfo->Name
             << ", columns: [" << JoinSeq(", ", columnTags) << "]"
@@ -379,7 +379,7 @@ bool TKqpDatashardComputeContext::ReadRow(const TTableId& tableId, TArrayRef<con
     NTable::TRowState dbRow;
     NTable::TSelectStats stats;
     ui64 flags = DisableByKeyFilter ? (ui64) NTable::NoByKey : 0;
-    auto ready = Database->Select(localTid, keyValues, columnTags, dbRow, stats, flags, GetReadVersion(),
+    auto ready = Database->Select(localTid, keyValues, columnTags, dbRow, stats, flags, GetMvccVersion(),
             UserDb.GetReadTxMap(tableId),
             UserDb.GetReadTxObserver(tableId));
 
@@ -435,7 +435,7 @@ TAutoPtr<NTable::TTableIter> TKqpDatashardComputeContext::CreateIterator(const T
     keyRange.MaxInclusive = range.InclusiveTo;
 
     TouchTableRange(tableId, range);
-    return Database->IterateRange(localTid, keyRange, columnTags, GetReadVersion(),
+    return Database->IterateRange(localTid, keyRange, columnTags, GetMvccVersion(),
             UserDb.GetReadTxMap(tableId),
             UserDb.GetReadTxObserver(tableId));
 }
@@ -458,7 +458,7 @@ TAutoPtr<NTable::TTableReverseIter> TKqpDatashardComputeContext::CreateReverseIt
     keyRange.MaxInclusive = range.InclusiveTo;
 
     TouchTableRange(tableId, range);
-    return Database->IterateRangeReverse(localTid, keyRange, columnTags, GetReadVersion(),
+    return Database->IterateRangeReverse(localTid, keyRange, columnTags, GetMvccVersion(),
             UserDb.GetReadTxMap(tableId),
             UserDb.GetReadTxObserver(tableId));
 }

@@ -39,13 +39,13 @@ TString ColumnPrimitiveValueToString(NYdb::TValueParser& valueParser) {
         case NYdb::EPrimitiveType::Interval:
             return TStringBuilder() << valueParser.GetInterval();
         case NYdb::EPrimitiveType::Date32:
-            return TStringBuilder() << valueParser.GetDate32();
+            return TStringBuilder() << valueParser.GetDate32().time_since_epoch().count();
         case NYdb::EPrimitiveType::Datetime64:
-            return TStringBuilder() << valueParser.GetDatetime64();
+            return TStringBuilder() << valueParser.GetDatetime64().time_since_epoch().count();
         case NYdb::EPrimitiveType::Timestamp64:
-            return TStringBuilder() << valueParser.GetTimestamp64();
+            return TStringBuilder() << valueParser.GetTimestamp64().time_since_epoch().count();
         case NYdb::EPrimitiveType::Interval64:
-            return TStringBuilder() << valueParser.GetInterval64();
+            return TStringBuilder() << valueParser.GetInterval64().count();
         case NYdb::EPrimitiveType::TzDate:
             return TString(valueParser.GetTzDate());
         case NYdb::EPrimitiveType::TzDatetime:

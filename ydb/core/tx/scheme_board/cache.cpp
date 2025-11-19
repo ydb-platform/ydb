@@ -249,7 +249,7 @@ namespace {
                 SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
             }
 
-            entry.Kind = TResolve::KindUnknown;
+            entry.Kind = NSchemeCache::ETableKind::KindUnknown;
             entry.DomainInfo.Drop();
             TKeyDesc& keyDesc = *entry.KeyDescription;
             keyDesc.ColumnInfos.clear();
@@ -270,14 +270,31 @@ namespace {
     public:
         explicit TAccessChecker(TContextPtr context)
             : Context(context)
+            , RootSchemeShard(AppData()->DomainsInfo->GetDomain()->SchemeRoot, 1)
         {
             Y_ABORT_UNLESS(!Context->WaitCounter);
         }
 
         void Bootstrap(const TActorContext&) {
             for (auto& entry : Context->Request->ResultSet) {
-                if (!IsDomain(entry) && Context->ResolvedDomainInfo && entry.DomainInfo) {
-                    // ^ It is allowed to describe subdomains by specifying root as DatabaseName
+                // Lookup path policy for DatabaseName and Path provided by SchemeCache request
+                //
+                // DatabaseName         | Path                              | Allowed
+                // ------------------------------------------------------------------
+                // Domain root path     | Domain root path                  | True
+                // Domain root path     | Regular path within domain        | True
+                // Domain root path     | Subdomain root path               | True
+                // Domain root path     | Regular path within subdomain1    | False
+                // Subdomain1 root path | Domain root path                  | False
+                // Subdomain1 root path | Regular path within domain        | False
+                // Subdomain1 root path | Subdomain1 root path              | True
+                // Subdomain1 root path | Regular path within subdomain1    | True
+                // Subdomain1 root path | Subdomain2 root path              | False
+                // Subdomain1 root path | Regular path within subdomain2    | False
+
+                if (Context->ResolvedDomainInfo && entry.DomainInfo
+                    && !(Context->ResolvedDomainInfo->DomainKey == RootSchemeShard && IsDomain(entry))
+                ) {
 
                     if (Context->ResolvedDomainInfo->DomainKey != entry.DomainInfo->DomainKey) {
                         SBC_LOG_W("Path does not belong to the specified domain"
@@ -315,6 +332,7 @@ namespace {
 
     private:
         TContextPtr Context;
+        const TPathId RootSchemeShard;
 
     }; // TAccessChecker
 
@@ -714,7 +732,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         void Clear() {
             Status.Clear();
             Kind = TNavigate::KindUnknown;
-            TableKind = TResolve::KindUnknown;
+            TableKind = NSchemeCache::ETableKind::KindUnknown;
             Created = false;
             CreateStep = 0;
 
@@ -873,16 +891,16 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
         }
 
-        static TResolve::EKind PathSubTypeToTableKind(NKikimrSchemeOp::EPathSubType subType) {
+        static NSchemeCache::ETableKind PathSubTypeToTableKind(NKikimrSchemeOp::EPathSubType subType) {
             switch (subType) {
             case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
-                return TResolve::KindSyncIndexTable;
+                return NSchemeCache::ETableKind::KindSyncIndexTable;
             case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
-                return TResolve::KindAsyncIndexTable;
+                return NSchemeCache::ETableKind::KindAsyncIndexTable;
             case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
-                return TResolve::KindVectorIndexTable;
+                return NSchemeCache::ETableKind::KindVectorIndexTable;
             default:
-                return TResolve::KindRegularTable;
+                return NSchemeCache::ETableKind::KindRegularTable;
             }
         }
 
@@ -893,7 +911,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
-                    return true;
+                    return !AppData()->FeatureFlags.GetEnableAccessToIndexImplTables();
                 default:
                     return false;
                 }
@@ -1103,7 +1121,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             , Subscriber(subscriber)
             , Filled(false)
             , Kind(TNavigate::EKind::KindUnknown)
-            , TableKind(TResolve::EKind::KindUnknown)
+            , TableKind(NSchemeCache::ETableKind::KindUnknown)
             , Created(false)
             , CreateStep(0)
             , IsPrivatePath(false)
@@ -1531,6 +1549,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 break;
             case NKikimrSchemeOp::EPathTypeColumnTable:
                 Kind = TNavigate::KindColumnTable;
+                TableKind = PathSubTypeToTableKind(entryDesc.GetPathSubType());
                 if (Created) {
                     FillTableInfoFromColumnTable(pathDesc);
                 }
@@ -1925,6 +1944,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.ViewInfo = ViewInfo;
             entry.ResourcePoolInfo = ResourcePoolInfo;
             entry.BackupCollectionInfo = BackupCollectionInfo;
+            entry.TableKind = TableKind;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2150,7 +2170,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         // common
         TMaybe<NKikimrScheme::EStatus> Status;
         TNavigate::EKind Kind;
-        TResolve::EKind TableKind;
+        NSchemeCache::ETableKind TableKind;
         bool Created;
         ui64 CreateStep;
         TPathId PathId;

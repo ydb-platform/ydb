@@ -1,56 +1,166 @@
 #include "service.h"
-#include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/tx/conveyor/tracing/probes.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
+
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 namespace NKikimr::NConveyor {
 
-TDistributor::TDistributor(const TConfig& config, const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
+LWTRACE_USING(YDB_CONVEYOR_PROVIDER);
+
+TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId& distributorId, const TConfig& config, const TCounters& counters)
+    : WorkersCount(config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads()))
+    , Counters(counters) {
+    Workers.reserve(WorkersCount);
+    for (ui32 i = 0; i < WorkersCount; ++i) {
+        const auto usage = config.GetWorkerCPUUsage(i);
+        Workers.emplace_back(usage, std::make_unique<TWorker>(conveyorName, usage, distributorId, i, Counters.SendFwdHistogram, Counters.SendFwdDuration));
+        MaxWorkerThreads += usage;
+    }
+    AFL_VERIFY(WorkersCount)("name", conveyorName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)("count", WorkersCount);
+    Counters.AmountCPULimit->Set(0);
+    Counters.AvailableWorkersCount->Set(0);
+    Counters.WorkersCountLimit->Set(WorkersCount);
+}
+
+bool TWorkersPool::HasFreeWorker() const {
+    return !ActiveWorkersIdx.empty();
+}
+
+void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch) {
+    AFL_VERIFY(HasFreeWorker());
+    const auto workerIdx = ActiveWorkersIdx.back();
+    ActiveWorkersIdx.pop_back();
+    Counters.AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+
+    AFL_VERIFY(workerIdx < ActiveWorkersCount);
+    auto& worker = Workers[workerIdx];
+    worker.OnStartTask();
+    TActivationContext::Send(worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch)));
+}
+
+void TWorkersPool::ReleaseWorker(const ui32 workerIdx) {
+    AFL_VERIFY(workerIdx < Workers.size());
+    Workers[workerIdx].OnStopTask();
+    if (workerIdx < ActiveWorkersCount) {
+        ActiveWorkersIdx.emplace_back(workerIdx);
+        Counters.AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+    }
+}
+
+void TWorkersPool::ChangeAmountCPULimit(const double delta) {
+    AmountCPULimit += delta;
+    if (std::abs(AmountCPULimit) < Eps) {
+        AmountCPULimit = 0;
+    }
+    AFL_VERIFY(AmountCPULimit >= 0);
+    Counters.AmountCPULimit->Set(AmountCPULimit);
+    Counters.ChangeCPULimitRate->Inc();
+
+    double numberThreads = std::min(MaxWorkerThreads, AmountCPULimit);
+    if (std::abs(numberThreads - ActiveWorkerThreads) < Eps) {
+        return;
+    }
+
+    ActiveWorkersCount = 0;
+    ActiveWorkerThreads = numberThreads;
+    ActiveWorkersIdx.clear();
+    for (auto& worker : Workers) {
+        if (numberThreads <= 0) {
+            break;
+        }
+        if (!worker.GetRunningTask()) {
+            ActiveWorkersIdx.emplace_back(ActiveWorkersCount);
+        }
+        worker.ChangeCPUSoftLimit(std::min<double>(numberThreads, 1));
+        numberThreads -= worker.GetCPUSoftLimit();
+        ++ActiveWorkersCount;
+    }
+    AFL_VERIFY(std::abs(numberThreads) < Eps);
+}
+
+TDistributor::TDistributor(const TConfig& config, const TString& conveyorName, const bool enableProcesses, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
     : Config(config)
     , ConveyorName(conveyorName)
+    , EnableProcesses(enableProcesses)
     , Counters(ConveyorName, conveyorSignals) {
 
 }
 
-void TDistributor::Bootstrap() {
-    AddProcess(0);
-    const ui32 workersCount = Config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads());
-    AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString())("actor_id", SelfId());
-    for (ui32 i = 0; i < workersCount; ++i) {
-        const double usage = Config.GetWorkerCPUUsage(i);
-        Workers.emplace_back(Register(new TWorker(ConveyorName, usage, SelfId())));
-        if (usage < 1) {
-            AFL_VERIFY(!SlowWorkerId);
-            SlowWorkerId = Workers.back();
-        }
+TDistributor::~TDistributor() {
+    for (const auto& [_, process] : Processes) {
+        process.GetCPUGroup()->DecProcesses();
     }
-    Counters.AvailableWorkersCount->Set(Workers.size());
-    Counters.WorkersCountLimit->Set(Workers.size());
+}
+
+void TDistributor::Bootstrap() {
+    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CONVEYOR_PROVIDER));
+    WorkersPool = std::make_shared<TWorkersPool>(ConveyorName, SelfId(), Config, Counters);
+    if (!EnableProcesses) {
+        AddProcess(0, TCPULimitsConfig(WorkersPool->GetMaxWorkerThreads(), ""));
+    }
+    AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString())("actor_id", SelfId())("count", WorkersPool->GetWorkersCount());
     Counters.WaitingQueueSizeLimit->Set(Config.GetQueueSizeLimit());
     Become(&TDistributor::StateMain);
 }
 
-void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
-    const auto now = TMonotonic::Now();
-    const TDuration dExecution = now - ev->Get()->GetStartInstant();
-    Counters.SolutionsRate->Inc();
-    Counters.ExecuteHistogram->Collect(dExecution.MilliSeconds());
-    AddCPUTime(ev->Get()->GetProcessId(), now - std::max(LastAddProcessInstant, ev->Get()->GetStartInstant()));
-    if (ProcessesOrdered.size()) {
-        auto task = PopTask();
-        Counters.WaitingHistogram->Collect((now - task.GetCreateInstant()).MilliSeconds());
-        task.OnBeforeStart();
-        Send(ev->Sender, new TEvInternal::TEvNewTask(task));
+void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
+    auto& event = *evExt->Get();
+    WorkersPool->ReleaseWorker(event.GetWorketIdx());
+    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "result")("sender", evExt->Sender)
+        ("queue", ProcessesOrdered.size())("count", event.GetProcessIds().size())("d", event.GetInstants().back() - event.GetInstants().front());
+    for (ui32 idx = 0; idx < event.GetProcessIds().size(); ++idx) {
+        LWPROBE(TaskProcessedResult, ConveyorName, event.GetProcessIds()[idx], TDuration::MilliSeconds((event.GetInstants().back() - event.GetInstants().front()).MilliSeconds()), WaitingTasksCount.Val(), event.GetProcessIds().size());
+        AddCPUTime(event.GetProcessIds()[idx], event.GetInstants()[idx + 1] - std::max(LastAddProcessInstant, event.GetInstants()[idx]));
+        Counters.TaskExecuteHistogram->Collect((event.GetInstants()[idx + 1] - event.GetInstants()[idx]).MicroSeconds());
+    }
+    const TDuration dExecution = event.GetInstants().back() - event.GetInstants().front();
+    Counters.PackExecuteHistogram->Collect(dExecution.MicroSeconds());
+    Counters.ExecuteDuration->Add(dExecution.MicroSeconds());
+
+    const TMonotonic now = TMonotonic::Now();
+    const TDuration dBackSend = now - event.GetConstructInstant();
+    const TDuration dForwardSend = event.GetForwardSendDuration();
+
+    const TDuration predictedDurationPerTask = std::max<TDuration>(dExecution / event.GetProcessIds().size(), TDuration::MicroSeconds(10));
+    const double alpha = 0.1;
+    const ui32 countTheory = (dBackSend + dForwardSend).GetValue() / (alpha * predictedDurationPerTask.GetValue());
+    const ui32 countPredicted = std::max<ui32>(1, std::min<ui32>(WaitingTasksCount.Val() / WorkersPool->GetWorkersCount(), countTheory));
+    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "prediction")("alpha", alpha)
+        ("send_forward", dForwardSend)("send_back", dBackSend)("count", event.GetProcessIds().size())("exec", dExecution)("theory_count", countTheory)
+        ("real_count", countPredicted);
+
+    Counters.SendBackHistogram->Collect(dBackSend.MicroSeconds());
+    Counters.SendBackDuration->Add(dBackSend.MicroSeconds());
+    Counters.SolutionsRate->Add(event.GetProcessIds().size());
+
+    const bool hasFreeWorker = WorkersPool->HasFreeWorker();
+    if (ProcessesOrdered.size() && hasFreeWorker) {
+        std::vector<TWorkerTask> tasks;
+        while (ProcessesOrdered.size() && tasks.size() < countPredicted) {
+            auto task = PopTask();
+            Counters.WaitingHistogram->Collect((now - task.GetCreateInstant()).MicroSeconds());
+            task.OnBeforeStart();
+            tasks.emplace_back(std::move(task));
+        }
+        Counters.PackHistogram->Collect(tasks.size());
+        AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "to_execute")("id", evExt->Sender)("queue", WaitingTasksCount.Val())("count", tasks.size());
+        WorkersPool->RunTask(std::move(tasks));
     } else {
-        Workers.emplace_back(ev->Sender);
+        AFL_VERIFY(!WaitingTasksCount.Val() || !hasFreeWorker);
+        AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "return_worker")("id", evExt->Sender);
     }
     Counters.WaitingQueueSize->Set(WaitingTasksCount.Val());
-    Counters.AvailableWorkersCount->Set(Workers.size());
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
-    auto it = Processes.find(ev->Get()->GetProcessId());
+    AFL_VERIFY(EnableProcesses);
+    auto& event = *ev->Get();
+    auto it = Processes.find(event.GetProcessId());
+    LWPROBE(RegisterProcess, ConveyorName, event.GetProcessId(), WaitingTasksCount.Val());
     if (it == Processes.end()) {
-        AddProcess(ev->Get()->GetProcessId());
+        AddProcess(event.GetProcessId(), event.GetCPULimits());
     } else {
         it->second.IncRegistration();
     }
@@ -58,13 +168,21 @@ void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
-    auto it = Processes.find(ev->Get()->GetProcessId());
+    auto& event = *ev->Get();
+    AFL_VERIFY(EnableProcesses);
+    auto it = Processes.find(event.GetProcessId());
     AFL_VERIFY(it != Processes.end());
+    LWPROBE(UnregisterProcess, ConveyorName, event.GetProcessId(), WaitingTasksCount.Val());
     if (it->second.DecRegistration()) {
         if (it->second.GetTasks().size()) {
-            AFL_VERIFY(ProcessesOrdered.erase(it->second.GetAddress()));
+            AFL_VERIFY(ProcessesOrdered.erase(it->second.GetAddress(WorkersPool->GetAmountCPULimit())));
         }
+        const auto cpuGroup = it->second.GetCPUGroup();
         Processes.erase(it);
+        if (cpuGroup->DecProcesses()) {
+            ChangeAmountCPULimit(-cpuGroup->GetCPUThreadsLimit());
+            AFL_VERIFY(CPUGroups.erase(cpuGroup->GetName()));
+        }
     }
     Counters.ProcessesCount->Set(Processes.size());
 }
@@ -78,20 +196,17 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     if (itSignal == Signals.end()) {
         itSignal = Signals.emplace(taskClass, std::make_shared<TTaskSignals>("Conveyor/" + ConveyorName, taskClass)).first;
     }
+    Counters.ReceiveTaskHistogram->Collect((TMonotonic::Now() - ev->Get()->GetConstructInstant()).MicroSeconds());
 
     TWorkerTask wTask(ev->Get()->GetTask(), itSignal->second, processId);
+    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "add_task")("proc", processId)("queue", WaitingTasksCount.Val());
+    LWPROBE(NewTask, ConveyorName, processId, taskClass, WaitingTasksCount.Val());
 
-    if (Workers.size()) {
+    if (WorkersPool->HasFreeWorker()) {
         Counters.WaitingHistogram->Collect(0);
 
         wTask.OnBeforeStart();
-        if (Workers.size() == 1 || !SlowWorkerId || Workers.back() != *SlowWorkerId) {
-            Send(Workers.back(), new TEvInternal::TEvNewTask(wTask));
-            Workers.pop_back();
-        } else {
-            Send(Workers.front(), new TEvInternal::TEvNewTask(wTask));
-            Workers.pop_front();
-        }
+        WorkersPool->RunTask({ wTask });
         Counters.UseWorkerRate->Inc();
     } else if (WaitingTasksCount.Val() < Config.GetQueueSizeLimit()) {
         PushTask(wTask);
@@ -102,17 +217,29 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
         ev->Get()->GetTask()->OnCannotExecute("scan conveyor overloaded (" + ::ToString(WaitingTasksCount.Val()) + " >= " + ::ToString(Config.GetQueueSizeLimit()) + ")");
     }
     Counters.WaitingQueueSize->Set(WaitingTasksCount.Val());
-    Counters.AvailableWorkersCount->Set(Workers.size());
 }
 
-void TDistributor::AddProcess(const ui64 processId) {
+void TDistributor::AddProcess(const ui64 processId, const TCPULimitsConfig& cpuLimits) {
+    const auto& groupName = cpuLimits.GetCPUGroupName();
+    const auto cpuThreadsLimit = cpuLimits.GetCPUGroupThreadsLimitOptional().value_or(WorkersPool->GetMaxWorkerThreads());
+    const auto [it, inserted] = CPUGroups.emplace(groupName, std::make_shared<TCPUGroup>(groupName, cpuThreadsLimit));
+    if (inserted) {
+        ChangeAmountCPULimit(cpuThreadsLimit);
+    } else {
+        const auto previousLimit = it->second->GetCPUThreadsLimit();
+        it->second->SetCPUThreadsLimit(cpuThreadsLimit);
+        ChangeAmountCPULimit(cpuThreadsLimit - previousLimit);
+    }
+    it->second->IncProcesses();
+
     ProcessesOrdered.clear();
-    AFL_VERIFY(Processes.emplace(processId, TProcess(processId)).second);
+    AFL_VERIFY(Processes.emplace(processId, TProcess(processId, it->second)).second);
     LastAddProcessInstant = TMonotonic::Now();
+    const auto amountCPULimit = WorkersPool->GetAmountCPULimit();
     for (auto&& i : Processes) {
         i.second.CleanCPUMetric();
         if (i.second.GetTasks().size()) {
-            ProcessesOrdered.emplace(i.second.GetAddress());
+            ProcessesOrdered.emplace(i.second.GetAddress(amountCPULimit));
         }
     }
 }
@@ -122,12 +249,13 @@ void TDistributor::AddCPUTime(const ui64 processId, const TDuration d) {
     if (it == Processes.end()) {
         return;
     }
+    const auto amountCPULimit = WorkersPool->GetAmountCPULimit();
     if (it->second.GetTasks().size()) {
-        AFL_VERIFY(ProcessesOrdered.erase(it->second.GetAddress()));
+        AFL_VERIFY(ProcessesOrdered.erase(it->second.GetAddress(amountCPULimit)));
     }
     it->second.AddCPUTime(d);
     if (it->second.GetTasks().size()) {
-        AFL_VERIFY(ProcessesOrdered.emplace(it->second.GetAddress()).second);
+        AFL_VERIFY(ProcessesOrdered.emplace(it->second.GetAddress(amountCPULimit)).second);
     }
 }
 
@@ -147,10 +275,25 @@ void TDistributor::PushTask(const TWorkerTask& task) {
     auto it = Processes.find(task.GetProcessId());
     AFL_VERIFY(it != Processes.end());
     if (it->second.GetTasks().size() == 0) {
-        AFL_VERIFY(ProcessesOrdered.emplace(it->second.GetAddress()).second);
+        AFL_VERIFY(ProcessesOrdered.emplace(it->second.GetAddress(WorkersPool->GetAmountCPULimit())).second);
     }
     it->second.MutableTasks().push(task);
     WaitingTasksCount.Inc();
+}
+
+void TDistributor::ChangeAmountCPULimit(const double delta) {
+    if (std::abs(delta) < TWorkersPool::Eps) {
+        return;
+    }
+
+    WorkersPool->ChangeAmountCPULimit(delta);
+    ProcessesOrdered.clear();
+    const auto amountCPULimit = WorkersPool->GetAmountCPULimit();
+    for (const auto& process : Processes) {
+        if (process.second.GetTasks().size()) {
+            ProcessesOrdered.emplace(process.second.GetAddress(amountCPULimit));
+        }
+    }
 }
 
 }

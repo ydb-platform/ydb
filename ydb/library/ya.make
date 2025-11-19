@@ -12,8 +12,10 @@ RECURSE(
     folder_service
     formats
     fyamlcpp
+    global_plugins
     grpc
     http_proxy
+    intersection_tree
     keys
     lockfree_bucket
     logger
@@ -26,11 +28,16 @@ RECURSE(
     pretty_types_print
     protobuf_printer
     query_actor
+    range_treap
     schlab
     security
+    signal_backtrace
+    signals
+    slide_limiter
     table_creator
     testlib
     time_series_vec
+    union_copy_set
     wilson_ids
     workload
     workload

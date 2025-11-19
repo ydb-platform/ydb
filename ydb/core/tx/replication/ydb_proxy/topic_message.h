@@ -1,0 +1,36 @@
+#pragma once
+
+#include <ydb-cpp-sdk/client/topic/read_events.h>
+
+namespace NKikimr::NReplication {
+
+class TTopicMessage: protected NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation {
+    using TDataEvent = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent;
+    using ECodec = NYdb::NTopic::ECodec;
+
+    explicit TTopicMessage(const TDataEvent::TMessageBase& msg, ECodec codec, ui64 uncompressedSize);
+
+public:
+    explicit TTopicMessage(const TDataEvent::TMessage& msg);
+    explicit TTopicMessage(const TDataEvent::TCompressedMessage& msg);
+    TTopicMessage(TDataEvent::TMessageInformation&& msg, TString&& data);
+    TTopicMessage(ui64 offset, const TString& data); // from scratch
+
+    NYdb::NTopic::TMessageMeta::TPtr GetMessageMeta() const;
+    ECodec GetCodec() const;
+    const TString& GetData() const;
+    TString& GetData();
+    ui64 GetOffset() const;
+    ui64 GetSeqNo() const;
+    TInstant GetCreateTime() const;
+    TInstant GetWriteTime() const;
+    TString GetMessageGroupId() const;
+    TString GetProducerId() const;
+    void Out(IOutputStream& out) const;
+
+private:
+    ECodec Codec;
+    TString Data;
+};
+
+}

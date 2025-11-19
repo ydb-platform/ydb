@@ -1,5 +1,4 @@
 #pragma once
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/status.h>

@@ -1,5 +1,6 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 TEST_SRCS(
     test_example.py  # TODO: change file name to yours
@@ -7,9 +8,6 @@ TEST_SRCS(
 
 SIZE(MEDIUM)
 
-DEPENDS(
-    ydb/apps/ydbd
-)
 
 PEERDIR(
     ydb/tests/library

@@ -10,7 +10,11 @@ namespace NKikimr::NArrow::NAccessor {
 class TTrivialArray: public IChunkedArray {
 private:
     using TBase = IChunkedArray;
-    const std::shared_ptr<arrow::Array> Array;
+    std::shared_ptr<arrow::Array> Array;
+
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
+        visitor(Array);
+    }
 
 protected:
     virtual std::optional<ui64> DoGetRawSize() const override;
@@ -31,7 +35,16 @@ protected:
     }
     virtual ui32 DoGetValueRawBytes() const override;
 
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override;
+
 public:
+
+    virtual void Reallocate() override;
+
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
+        return std::make_shared<arrow::ChunkedArray>(Array);
+    }
+
     const std::shared_ptr<arrow::Array>& GetArray() const {
         return Array;
     }
@@ -45,10 +58,11 @@ public:
 
     static std::shared_ptr<arrow::Array> BuildArrayFromScalar(const std::shared_ptr<arrow::Scalar>& scalar) {
         AFL_VERIFY(scalar);
-        auto builder = NArrow::MakeBuilder(scalar->type, 1);
-        TStatusValidator::Validate(builder->AppendScalar(*scalar));
-        return NArrow::FinishBuilder(std::move(builder));
+        return TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*scalar, 1));
     }
+
+    static std::shared_ptr<arrow::Array> BuildArrayFromOptionalScalar(
+        const std::shared_ptr<arrow::Scalar>& scalar, const std::shared_ptr<arrow::DataType>& type);
 
     TTrivialArray(const std::shared_ptr<arrow::Scalar>& scalar)
         : TBase(1, EType::Array, TValidator::CheckNotNull(scalar)->type)
@@ -77,6 +91,16 @@ public:
             AFL_VERIFY(NArrow::Append<TArrowDataType>(*Builder, arrow::util::string_view(value.data(), value.size())));
         }
 
+        void AddNull(const ui32 recordIndex) {
+            if (LastRecordIndex) {
+                AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
+                TStatusValidator::Validate(Builder->AppendNulls(recordIndex - *LastRecordIndex));
+            } else {
+                TStatusValidator::Validate(Builder->AppendNulls(recordIndex + 1));
+            }
+            LastRecordIndex = recordIndex;
+        }
+
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
             if (LastRecordIndex) {
                 AFL_VERIFY(*LastRecordIndex < recordsCount)("last", LastRecordIndex)("count", recordsCount);
@@ -98,6 +122,16 @@ private:
     using TBase = IChunkedArray;
     const std::shared_ptr<arrow::ChunkedArray> Array;
 
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
+        for (auto&& i : Array->chunks()) {
+            visitor(i);
+        }
+    }
+
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
+        return Array;
+    }
+
 protected:
     virtual ui32 DoGetValueRawBytes() const override;
     virtual ui32 DoGetNullsCount() const override {
@@ -105,6 +139,7 @@ protected:
     }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::optional<ui64> DoGetRawSize() const override;
+
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
         auto chunk = GetChunkSlow(index);
         return NArrow::TStatusValidator::GetValid(chunk.GetArray()->GetScalar(chunk.GetAddress().GetLocalIndex(index)));

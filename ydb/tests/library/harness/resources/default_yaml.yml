@@ -156,6 +156,7 @@ grpc_config:
   - "monitoring"
   - "auth"
   - "query_service"
+  - "view"
 feature_flags:
   enable_persistent_query_stats: true
   enable_scheme_transactions_at_scheme_shard: true
@@ -260,3 +261,16 @@ federated_query_config:
       uri: ""
   pinger:
     ping_period: "30s"
+query_service_config:
+  available_external_data_sources:
+    - ObjectStorage
+    - ClickHouse
+    - PostgreSQL
+    - MySQL
+    - Ydb
+    - YT
+    - Greenplum
+    - MsSQLServer
+    - Oracle
+    - Logging
+    - Solomon

@@ -5,7 +5,6 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>

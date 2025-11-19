@@ -54,6 +54,7 @@ namespace NKikimrConfig {
     class TStreamingConfig;
     class TMeteringConfig;
     class TSqsConfig;
+    class TKafkaProxyConfig;
     class TAuthConfig;
 
     class THiveConfig;
@@ -74,6 +75,7 @@ namespace NKikimrConfig {
     class TMemoryControllerConfig;
     class TFeatureFlags;
     class THealthCheckConfig;
+    class TWorkloadManagerConfig;
 }
 
 namespace NKikimrReplication {
@@ -222,6 +224,7 @@ struct TAppData {
     NKikimrStream::TStreamingConfig& StreamingConfig;
     NKikimrPQ::TPQConfig& PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig& PQClusterDiscoveryConfig;
+    NKikimrConfig::TKafkaProxyConfig& KafkaProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig& NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig& NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig& SqsConfig;
@@ -249,6 +252,7 @@ struct TAppData {
     NKikimrProto::TDataIntegrityTrailsConfig& DataIntegrityTrailsConfig;
     NKikimrConfig::TDataErasureConfig& DataErasureConfig;
     NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
+    NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
@@ -316,6 +320,10 @@ inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
     TAppData* const x = actorSystem->AppData<TAppData>();
     Y_DEBUG_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
     return x;
+}
+
+inline bool HasAppData(NActors::TActorSystem* actorSystem) {
+    return actorSystem && AppData(actorSystem);
 }
 
 inline bool HasAppData() {

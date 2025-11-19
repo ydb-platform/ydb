@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.h"
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
 #include <ydb/library/formats/arrow/splitter/similar_packer.h>
@@ -36,15 +38,20 @@ public:
 
 class IChunkedArray {
 public:
+// PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
     enum class EType : ui8 {
         Undefined = 0,
-        Array,
-        ChunkedArray,
-        SerializedChunkedArray,
-        CompositeChunkedArray,
-        SparsedArray,
-        SubColumnsArray
+        Array = 1,
+        ChunkedArray = 2,
+        SerializedChunkedArray = 3,
+        CompositeChunkedArray = 4,
+        SparsedArray = 5,
+        SubColumnsArray = 6,
+        SubColumnsPartialArray = 7,
+        Dictionary = 8
     };
+
+    using TValuesSimpleVisitor = std::function<void(std::shared_ptr<arrow::Array>)>;
 
     class TCommonChunkAddress {
     private:
@@ -89,9 +96,13 @@ public:
             return Addresses.size();
         }
 
-        ui32 GetLocalIndex(const ui32 position) const {
-            AFL_VERIFY(Contains(position))("pos", position)("start", GlobalStartPosition);
-            return position - GlobalStartPosition;
+        ui32 GetLocalIndex(const ui32 global) const {
+            AFL_VERIFY(Contains(global))("pos", global)("start", GlobalStartPosition);
+            return global - GlobalStartPosition;
+        }
+
+        ui32 GetGlobalIndex(const ui32 local) const {
+            return local + GlobalStartPosition;
         }
 
         bool Contains(const ui32 position) const {
@@ -191,6 +202,8 @@ public:
         TCommonChunkAddress Address;
 
     public:
+        void Reallocate();
+
         const TCommonChunkAddress& GetAddress() const {
             return Address;
         }
@@ -242,6 +255,9 @@ private:
     }
     virtual std::optional<ui64> DoGetRawSize() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const = 0;
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& /*value*/) const {
+        return std::nullopt;
+    }
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
@@ -253,8 +269,11 @@ private:
     virtual ui32 DoGetNullsCount() const = 0;
     virtual ui32 DoGetValueRawBytes() const = 0;
     virtual std::shared_ptr<IChunkedArray> DoApplyFilter(const TColumnFilter& filter) const;
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const = 0;
 
 protected:
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const;
+
     std::shared_ptr<arrow::Schema> GetArraySchema() const {
         const arrow::FieldVector fields = { std::make_shared<arrow::Field>("val", GetDataType()) };
         return std::make_shared<arrow::Schema>(fields);
@@ -319,8 +338,44 @@ protected:
         AFL_VERIFY(false)("pos", position)("count", GetRecordsCount())("chunks_map", sb)("chunk_current", chunkCurrentInfo);
     }
 
+    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray(const TColumnConstructionContext& context) const;
+
 public:
     std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const;
+
+    virtual bool HasWholeDataVolume() const {
+        return true;
+    }
+
+    std::optional<bool> CheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
+        return DoCheckOneValueAccessor(value);
+    }
+
+    virtual bool HasSubColumnData(const TString& /*subColumnName*/) const {
+        return true;
+    }
+
+    virtual void Reallocate() {
+    }
+
+    void VisitValues(const TValuesSimpleVisitor& visitor) const {
+        DoVisitValues(visitor);
+    }
+
+    template <class TResult, class TActor>
+    static std::optional<TResult> VisitDataOwners(const std::shared_ptr<IChunkedArray>& arr, const TActor& actor) {
+        AFL_VERIFY(arr);
+        std::optional<IChunkedArray::TFullChunkedArrayAddress> arrCurrent;
+        for (ui32 currentIndex = 0; currentIndex < arr->GetRecordsCount();) {
+            arrCurrent = arr->GetArray(arrCurrent, currentIndex, arr);
+            auto result = actor(arrCurrent->GetArray());
+            if (result) {
+                return result;
+            }
+            currentIndex = currentIndex + arrCurrent->GetArray()->GetRecordsCount();
+        }
+        return std::nullopt;
+    }
 
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
@@ -400,22 +455,17 @@ public:
         return *result;
     }
 
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const {
-        std::vector<std::shared_ptr<arrow::Array>> chunks;
-        std::optional<TFullDataAddress> address;
-        for (ui32 position = 0; position < GetRecordsCount();) {
-            address = GetChunk(address, position);
-            chunks.emplace_back(address->GetArray());
-            position += address->GetArray()->length();
-        }
-        return std::make_shared<arrow::ChunkedArray>(chunks, GetDataType());
-    }
+    std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
+        const TColumnConstructionContext& context = Default<TColumnConstructionContext>()) const;
     virtual ~IChunkedArray() = default;
 
     std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
     std::shared_ptr<IChunkedArray> ISlice(const ui32 offset, const ui32 count) const {
         AFL_VERIFY(offset + count <= GetRecordsCount())("offset", offset)("count", count)("records", GetRecordsCount());
-        return DoISlice(offset, count);
+        auto result = DoISlice(offset, count);
+        AFL_VERIFY(result);
+        AFL_VERIFY(result->GetRecordsCount() == count)("records", result->GetRecordsCount())("count", count);
+        return result;
     }
 
     bool IsDataOwner() const {
@@ -423,7 +473,9 @@ public:
             case EType::SparsedArray:
             case EType::ChunkedArray:
             case EType::SubColumnsArray:
+            case EType::SubColumnsPartialArray:
             case EType::Array:
+            case EType::Dictionary:
                 return true;
             case EType::Undefined:
                 AFL_VERIFY(false);

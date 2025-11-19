@@ -36,10 +36,7 @@ void TRemovePortionsChange::DoApplyOnComplete(
         self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, Portions.size());
 
         for (auto& [_, portionInfo] : Portions) {
-            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BLOBS_DEACTIVATED, portionInfo->GetBlobIdsCount());
-            for (auto& blobId : portionInfo->GetBlobIds()) {
-                self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, blobId.BlobSize());
-            }
+            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, portionInfo->GetTotalBlobBytes());
             self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo->GetTotalRawBytes());
         }
     }

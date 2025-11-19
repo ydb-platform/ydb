@@ -114,15 +114,6 @@ public:
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(GetSessionDirName());
 
-        NACLib::TDiffACL diffAcl;
-        diffAcl.AddAccess(
-            NACLib::EAccessType::Allow,
-            NACLib::EAccessRights::CreateDirectory | NACLib::EAccessRights::DescribeSchema,
-            AppData()->AllAuthenticatedUsers);
-
-        auto* modifyAcl = modifyScheme->MutableModifyACL();
-        modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
-
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
         RegisterWithSameMailbox(requestHandler);
@@ -142,9 +133,7 @@ public:
         auto& record = ev->Record;
 
         record.SetDatabaseName(Database);
-        if (UserToken) {
-            record.SetUserToken(UserToken->GetSerializedToken());
-        }
+        record.SetUserToken(NACLib::TSystemUsers::Tmp().SerializeAsString());
         record.SetPeerName(ClientAddress);
 
         auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
@@ -156,14 +145,20 @@ public:
         makeDir->SetName(SessionId);
         ActorIdToProto(KqpTempTablesAgentActor, modifyScheme->MutableTempDirOwnerActorId());
 
-        NACLib::TDiffACL diffAcl;
-        diffAcl.RemoveAccess(
-            NACLib::EAccessType::Allow,
-            NACLib::EAccessRights::CreateDirectory | NACLib::EAccessRights::DescribeSchema,
-            AppData()->AllAuthenticatedUsers);
+        if (UserToken) {
+            constexpr ui32 access = NACLib::EAccessRights::CreateDirectory
+                | NACLib::EAccessRights::CreateTable
+                | NACLib::EAccessRights::RemoveSchema
+                | NACLib::EAccessRights::DescribeSchema;
 
-        auto* modifyAcl = modifyScheme->MutableModifyACL();
-        modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
+            NACLib::TDiffACL diffAcl;
+            diffAcl.AddAccess(
+                NACLib::EAccessType::Allow,
+                access,
+                UserToken->GetUserSID());
+            auto* modifyAcl = modifyScheme->MutableModifyACL();
+            modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
+        }
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
@@ -197,23 +192,31 @@ public:
             case NKqpProto::TKqpSchemeOperation::kCreateTable: {
                 auto modifyScheme = schemeOp.GetCreateTable();
                 if (Temporary) {
-                    NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
+                    auto changePath = [this](NKikimrSchemeOp::TTableDescription* tableDesc) {
+                        const auto fullPath = JoinPath({tableDesc->GetPath(), tableDesc->GetName()});
+                        YQL_ENSURE(fullPath.size() > 1);
+                        tableDesc->SetName(GetCreateTempTablePath(Database, SessionId, fullPath));
+                        tableDesc->SetPath(Database);
+                    };
+
                     switch (modifyScheme.GetOperationType()) {
                         case NKikimrSchemeOp::ESchemeOpCreateTable: {
-                            tableDesc = modifyScheme.MutableCreateTable();
+                            changePath(modifyScheme.MutableCreateTable());
                             break;
                         }
                         case NKikimrSchemeOp::ESchemeOpCreateIndexedTable: {
-                            tableDesc = modifyScheme.MutableCreateIndexedTable()->MutableTableDescription();
+                            changePath(modifyScheme.MutableCreateIndexedTable()->MutableTableDescription());
+                            break;
+                        }
+                        case NKikimrSchemeOp::ESchemeOpCreateColumnTable: {
+                            modifyScheme.MutableCreateColumnTable()->SetName(
+                                GetCreateTempTablePath(Database, SessionId, modifyScheme.GetCreateColumnTable().GetName()));
                             break;
                         }
                         default:
                             YQL_ENSURE(false, "Unexpected operation type");
                     }
-                    const auto fullPath = JoinPath({tableDesc->GetPath(), tableDesc->GetName()});
-                    YQL_ENSURE(fullPath.size() > 1);
-                    tableDesc->SetName(GetCreateTempTablePath(Database, SessionId, fullPath));
-                    tableDesc->SetPath(Database);
+
                     modifyScheme.SetAllowCreateInTempDir(true);
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
@@ -545,7 +548,7 @@ public:
             } else {
                 ev->Result.SetStatus(status.GetStatus());
                 if (TString message = status.GetErrorMessage()) {
-                    ev->Result.AddIssue(NYql::TIssue{message});
+                    ev->Result.AddIssue(NYql::TIssue(message).SetCode(status.GetStatus(), NYql::TSeverityIds::S_ERROR));
                 }
             }
             actorSystem->Send(selfId, ev.Release());
@@ -697,6 +700,9 @@ public:
         const auto& buildOp = schemeOp.GetBuildOperation();
         SetSchemeShardId(domainInfo->ExtractSchemeShard());
         auto req = std::make_unique<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>(TxId, Database, buildOp);
+        if (UserToken) {
+            req->Record.SetUserSID(UserToken->GetUserSID());
+        }
         ForwardToSchemeShard(std::move(req));
     }
 

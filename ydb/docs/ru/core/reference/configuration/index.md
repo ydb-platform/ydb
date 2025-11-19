@@ -571,6 +571,7 @@ domains_config:
         node: [1, 2, 3, 4, 5, 6, 7, 8]
         nto_select: 5
       ssid: 1
+  ```
 
 - `block-4-2` + Auth
 
@@ -595,6 +596,7 @@ domains_config:
       ssid: 1
     security_config:
       enforce_user_token_requirement: true
+  ```
 
 - `mirror-3-dc`
 
@@ -945,6 +947,62 @@ blob_storage_config:
 
 {{ ydb-short-name }} позволяет использовать различные способы аутентификации пользователя в системе. Настройки аутентификации и провайдеров аутентификации задаются в секции `auth_config`.
 
+### Конфигурация сложности пароля {#password-complexity}
+
+{{ ydb-short-name }} позволяет аутентифицировать пользователей по логину и паролю. Подробнее можно прочитать в разделе [аутентификация по логину и паролю](../../security/authentication.md#static-credentials). Для повышения безопасности в {{ ydb-short-name }} имеется возможность настроить [политику паролей](../../security/authentication.md#password-complexity) пользователей. Параметры политики паролей настраиваются в секции `password_complexity`.
+
+Синтаксис секции `password_complexity`:
+
+```yaml
+auth_config:
+  ...
+  password_complexity:
+    min_length: 8
+    min_lower_case_count: 1
+    min_upper_case_count: 1
+    min_numbers_count: 1
+    min_special_chars_count: 1
+    special_chars: "!@#$%^&*()_+{}|<>?="
+    can_contain_username: false
+  ...
+```
+
+| Параметр | Описание | Значение по умолчанию |
+| :--- | :--- | :---: |
+| `min_length` | Минимальная длина пароля | 0 |
+| `min_lower_case_count` | Минимальное число символов в нижнем регистре | 0 |
+| `min_upper_case_count` | Минимальное число символов в верхнем регистре | 0 |
+| `min_numbers_count` | Минимальное число цифр в пароле | 0 |
+| `min_special_chars_count` | Минимальное число специальных символов из списка `special_chars` | 0 |
+| `special_chars` | Специальные символы, которые допустимо использовать в пароле. Допускается указать любое подмножество из следующих символов `!@#$%^&*()_+{}\|<>?=`. Значение (`""`) эквивалентно списку `!@#$%^&*()_+{}\|<>?=` | `""` |
+| `can_contain_username` | Может ли пароль содержать имя пользователя | `false` |
+
+{% note info %}
+
+Любые изменения политики паролей не затрагивают уже действующие пароли пользователей, поэтому изменять существующие пароли не требуется, они будут приниматься в текущем виде.
+
+{% endnote %}
+
+### Блокировка пользователя после неуспешных попыток ввода пароля {#account-lockout}
+
+{{ ydb-short-name }} позволяет заблокировать возможность аутентификации пользователя после неудачных попыток ввода пароля. Правила блокировки настраиваются в секции `account_lockout`.
+
+Пример секции `account_lockout`:
+
+```yaml
+auth_config:
+  ...
+  account_lockout:
+    attempt_threshold: 4
+    attempt_reset_duration: "1h"
+  ...
+```
+
+| Параметр | Описание | Значение по умолчанию |
+| :--- | :--- | :---: |
+| `attempt_threshold` | Максимальное количество неуспешных попыток ввода правильного пароля. После `attempt_threshold` неуспешных попыток пользователь будет заблокирован на время, заданное в параметре `attempt_reset_duration`. Нулевое значение параметра `attempt_threshold` указывает на отсутствие каких-либо ограничений на число попыток ввода пароля. После успешной аутентификации (ввода правильных имени пользователя и пароля), счетчик неуспешных попыток сбрасывается в значение 0. | 4 |
+| `attempt_reset_duration` | Период времени блокировки пользователя. В течение этого периода пользователь не сможет аутентифицироваться в системе даже если введёт правильные имя пользователя и пароль. Период блокировки отсчитывается с момента последней неверной попытки ввода пароля. Если задан нулевой (`"0s"` - запись, эквивалентная 0 секунд) период блокировки, то пользователь будет считаться заблокированным на неограниченное время. В этом случае снять блокировку должен Администратор системы.<br/><br/>Минимальный интервал времени блокировки 1 секунда. <br/>Поддерживаемые единицы измерения:<ul><li>Секунды. `30s`</li><li>Минуты. `20m`</li><li>Часы. `5h`</li><li>Дни. `3d`</li></ul>Не допускается комбинировать единицы измерения в одной строке. Например такая запись некорректна: `1d12h`. Такую запись нужно заменить на эквивалентную, например `36h`. | "1h" |
+
 ### Конфигурация LDAP аутентификации {#ldap-auth-config}
 
 Одним из способов аутентификации пользователей в {{ ydb-short-name }} является использование LDAP каталога. Подробнее о таком виде аутентификации написано в разделе про [использование LDAP каталога](../../security/authentication.md#ldap). Для конфигурирования LDAP аутентификации необходимо описать секцию `ldap_authentication`.
@@ -1052,6 +1110,67 @@ resource_broker_config: !inherit
   - name: queue_ttl
     limit:
       cpu: 4
+```
+
+## Секция конфигурации `feature_flags` {#feature_flags}
+
+Для включения определённой функциональности в {{ ydb-short-name }}, нужно добавить соответствующий функциональный флаг в секцию `feature_flags` конфигурации кластера. Например, для включения поддержки векторных индексов и автопартиционирования топиков в CDC, нужно добавить следующие строки в конфигурацию:
+
+```yaml
+feature_flags:
+  enable_vector_index: true
+  enable_topic_autopartitioning_for_cdc: true
+```
+
+### Функциональные флаги
+
+| Флаг          | Функция |
+|---------------------------| ----------------------------------------------------|
+| `enable_vector_index`                                    | [Векторный индекс](../../dev/vector-indexes.md) для приближённого векторного поиска |
+| `enable_batch_updates`                                   | Поддержка запросов `BATCH UPDATE` и `BATCH DELETE` |
+| `enable_topic_autopartitioning_for_cdc`                  | [Автопартиционирование топиков](../../concepts/cdc.md#topic-partitions) в CDC для строковых таблиц |
+| `enable_access_to_index_impl_tables`                     | Возможность [указания числа реплик](../../yql/reference/syntax/alter_table/indexes.md) для вторичного индекса |
+| `enable_changefeeds_export`, `enable_changefeeds_import` | Поддержка потоков изменений (changefeed) в операциях резервного копирования и восстановления |
+| `enable_view_export`                                     | Поддержка представлений (`VIEW`) в операциях резервного копирования и восстановления |
+| `enable_export_auto_dropping`                            | Автоудаление временных директорий и таблиц при экспорте в S3 |
+| `enable_followers_stats`                                 | Системные представления с информацией об [истории перегруженных партиций](../../dev/system-views#top-overload-partitions) |
+| `enable_strict_acl_check`                                | Запрет на выдачу прав несуществующим пользователям и на удаление пользователей, которым выданы права |
+| `enable_strict_user_management`                          | Строгие правила администрирования локальных пользователей (т.е. администрировать локальных пользователей может только администратор кластера или базы данных)|
+| `enable_database_admin`                                  | Добавление роли администратора базы данных |
+| `enable_kafka_native_balancing`                          | Клиентская балансировка партиций при чтении по [протоколу Kafka](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
+| `enable_topic_compactification_by_key`                   | Включение компактификации топиков в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
+| `enable_kafka_transactions`                              | Включение транзакций в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
+
+## Конфигурация Kafka API {#kafka-proxy-config}
+
+В разделе `kafka_proxy_config` файла конфигурации {{ ydb-short-name }} включается и конфигурируется Kafka Proxy, которая дает доступ к работе с [{{ ydb-short-name }} Topics](../../concepts/topic.md) по [Kafka API](../../reference/kafka-api/index.md).
+
+### Описание параметров {#kafka-proxy-config-parameters}
+
+#|
+|| Параметр | Тип | Значение по умолчанию | Описание ||
+|| `enable_kafka_proxy` | bool | `false` | Включает или отключает Kafka Proxy. ||
+|| `listening_port` | int32 | `9092` | Порт, на котором будет доступен Kafka API. ||
+|| `transaction_timeout_ms` | uint32 | `300000` (5 минут) | Максимальный таймаут для Kafka транзакций, после которого транзакция будет отменена. ||
+|| `auto_create_topics_enable` | bool | `false` | Включает автоматическое создание топиков при обращении к ним. Аналог [такой же опции](https://kafka.apache.org/documentation/#brokerconfigs_auto.create.topics.enable) в Apache Kafka. ||
+|| `auto_create_consumers_enable` | bool | `true` | Включает автоматическое заведение консьюмеров при обращении к ним. ||
+|| `topic_creation_default_partitions` | uint32 | `1` | Количество партиций, которое будет создано, если при добавлении топика по Kafka протоколу не было указано количество партиций. Аналог опиции [num.partitions](https://kafka.apache.org/documentation/#brokerconfigs_num.partitions) в Apache Kafka. ||
+|| `ssl_cerificate` | string | - | Путь к файлу сертификата для доступа по SSL, включающий в себя сразу и файл сертификата и файл ключа. При указании этого параметра Kafka Proxy автоматически начинает обрабатывать запросы с использованием указанного SSL-сертификата. ||
+|| `cert` | string | - | Путь к файлу сертификата для доступа по SSL. При указании этого параметра Kafka Proxy автоматически начинает обрабатывать запросы с использованием указанного SSL-сертификата. ||
+|| `key` | string | - | Путь к файлу ключа для доступа по SSL. |#
+
+### Пример заполненного конфига {#kafka-proxy-config-example}
+
+```yaml
+kafka_proxy_config:
+  enable_kafka_proxy: true
+  listening_port: 9092
+  transaction_timeout_ms: 300000 # 5 минут
+  auto_create_topics_enable: true
+  auto_create_consumers_enable: true
+  topic_creation_default_partitions: 1
+  cert: /path/to/cert.pem
+  key: /path/to/key.pem
 ```
 
 ## Примеры конфигураций кластеров {#examples}

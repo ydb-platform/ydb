@@ -11,8 +11,8 @@
 `ydb.database.drop` | `DROP` | Право удалять базы данных в кластере
 Элементарные права на объекты базы данных
 `ydb.granular.select_row` | `SELECT ROW` | Право читать строки из таблицы (select), читать сообщения сообщения из топиков
-`ydb.granular.update_row` | `UPDATE ROW` | Право обновлять строки в таблице (insert, update, insert, erase), писать сообщения в топики
-`ydb.granular.erase_row` | `ERASE ROW` | Право удалять строки из таблицы
+`ydb.granular.update_row` | `UPDATE ROW` | Право обновлять строки в таблице (insert, update, upsert, replace), писать сообщения в топики
+`ydb.granular.erase_row` | `ERASE ROW` | Право удалять строки из таблицы (delete)
 `ydb.granular.create_directory` | `CREATE DIRECTORY` | Право создавать и удалять директории, в том числе существующие и вложенные
 `ydb.granular.create_table` | `CREATE TABLE` | Право создавать таблицы (в том числе индексные, внешние, колоночные), представления, последовательности
 `ydb.granular.create_queue` | `CREATE QUEUE` | Право создавать топики

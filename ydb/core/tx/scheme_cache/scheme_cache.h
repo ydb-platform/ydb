@@ -129,6 +129,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         return DomainKey != ResourcesDomainKey;
     }
 
+    inline TPathId GetResourcesDomainKey() {
+        return ResourcesDomainKey;
+    }
+
     TPathId DomainKey;
     TPathId ResourcesDomainKey;
     NKikimrSubDomains::TProcessingParams Params;
@@ -146,6 +150,14 @@ private:
     }
 
 }; // TDomainInfo
+
+enum class ETableKind {
+    KindUnknown = 0,
+    KindRegularTable = 1,
+    KindSyncIndexTable = 2,
+    KindAsyncIndexTable = 3,
+    KindVectorIndexTable = 4,
+};
 
 struct TSchemeCacheNavigate {
     enum class EStatus {
@@ -349,6 +361,7 @@ struct TSchemeCacheNavigate {
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
+        ETableKind TableKind = ETableKind::KindUnknown;
 
         // other
         TIntrusiveConstPtr<TDomainDescription> DomainDescription;
@@ -416,14 +429,6 @@ struct TSchemeCacheRequest {
         OpScheme = 1 << 3,
     };
 
-    enum EKind {
-        KindUnknown = 0,
-        KindRegularTable = 1,
-        KindSyncIndexTable = 2,
-        KindAsyncIndexTable = 3,
-        KindVectorIndexTable = 4,
-    };
-
     struct TEntry {
         // in
         THolder<TKeyDesc> KeyDescription;
@@ -433,7 +438,7 @@ struct TSchemeCacheRequest {
 
         // out
         EStatus Status = EStatus::Unknown;
-        EKind Kind = EKind::KindUnknown;
+        ETableKind Kind = ETableKind::KindUnknown;
         TIntrusivePtr<TDomainInfo> DomainInfo;
         ui64 GeneralVersion = 0;
 

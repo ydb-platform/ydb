@@ -109,13 +109,16 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
             }
             auto& responseFromPQPartition = it->second;
             responsePartition.LeaderEpoch = responseFromPQPartition.Generation;
-            responsePartition.Timestamp = TIMESTAMP_DEFAULT_RESPONSE_VALUE;
+            responsePartition.Timestamp = partitionRequestInfo.Timestamp;
 
             if (partitionRequestInfo.Timestamp == TIMESTAMP_START_OFFSET) {
                 responsePartition.Offset = responseFromPQPartition.StartOffset;
                 responsePartition.ErrorCode = NONE_ERROR;
             } else if (partitionRequestInfo.Timestamp == TIMESTAMP_END_OFFSET) {
                 responsePartition.Offset = responseFromPQPartition.EndOffset;
+                responsePartition.ErrorCode = NONE_ERROR;
+            } else if (partitionRequestInfo.Timestamp == 0) {
+                responsePartition.Offset = responseFromPQPartition.StartOffset;
                 responsePartition.ErrorCode = NONE_ERROR;
             } else {
                 responsePartition.ErrorCode = INVALID_REQUEST; // FIXME(savnik): handle

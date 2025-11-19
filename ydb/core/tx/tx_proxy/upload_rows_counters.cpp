@@ -86,6 +86,7 @@ TUploadCounters::TUploadCounters()
     : TBase("BulkUpsert") {
             RequestsCount = TBase::GetDeriviative("Requests/Count");
             ReplyDuration = TBase::GetHistogram("Replies/Duration", NMonitoring::ExponentialHistogram(15, 2, 10));
+            SuccessReplyDuration = TBase::GetHistogram("Replies/SuccessDuration", NMonitoring::ExponentialHistogram(15, 2, 10));
 
             RowsCount = TBase::GetDeriviative("Rows/Count");
             PackageSizeRecordsByRecords = TBase::GetHistogram("ByRecords/PackageSize/Records", NMonitoring::ExponentialHistogram(15, 2, 10));
@@ -95,5 +96,8 @@ TUploadCounters::TUploadCounters()
             WritingDuration = TBase::GetHistogram("Writing/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10));
             CommitDuration = TBase::GetHistogram("Commit/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10));
             PrepareReplyDuration = TBase::GetHistogram("ToReply/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10));
+            WrittenBytes = TBase::GetDeriviative("Replies/WrittenBytes");
+            FailedBytes = TBase::GetDeriviative("Replies/FailedBytes");
+            RequestsBytes = TBase::GetDeriviative("Requests/Bytes");
 }
 }

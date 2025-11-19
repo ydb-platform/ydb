@@ -14,7 +14,7 @@ using namespace NTabletFlatExecutor;
 class TSchemeShard::TIndexBuilder::TTxCreate: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvCreateRequest, TEvIndexBuilder::TEvCreateResponse> {
 public:
     explicit TTxCreate(TSelf* self, TEvIndexBuilder::TEvCreateRequest::TPtr& ev)
-        : TTxSimple(self, ev, TXTYPE_CREATE_INDEX_BUILD)
+        : TTxSimple(self, TIndexBuildId(ev->Get()->Record.GetTxId()), ev, TXTYPE_CREATE_INDEX_BUILD)
     {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -24,10 +24,9 @@ public:
 
         Response = MakeHolder<TEvIndexBuilder::TEvCreateResponse>(request.GetTxId());
 
-        const auto id = TIndexBuildId(request.GetTxId());
-        if (Self->IndexBuilds.contains(id)) {
+        if (Self->IndexBuilds.contains(BuildId)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
-                << "Index build with id '" << id << "' already exists");
+                << "Index build with id '" << BuildId << "' already exists");
         }
 
         const TString& uid = GetUid(request.GetOperationParams());
@@ -83,7 +82,9 @@ public:
             }
         }
 
-        TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo(id, uid);
+        TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo();
+        buildInfo->Id = BuildId;
+        buildInfo->Uid = uid;
         buildInfo->DomainPathId = domainPath.Base()->PathId;
         buildInfo->TablePathId = tablePath.Base()->PathId;
 
@@ -177,13 +178,15 @@ public:
             return makeReply("missing index or column to build");
         }
 
-        buildInfo->Limits.MaxBatchRows = settings.max_batch_rows();
-        buildInfo->Limits.MaxBatchBytes = settings.max_batch_bytes();
-        buildInfo->Limits.MaxShards = settings.max_shards_in_flight();
-        buildInfo->Limits.MaxRetries = settings.max_retries_upload_batch();
+        buildInfo->ScanSettings.CopyFrom(settings.GetScanSettings());
+        buildInfo->MaxInProgressShards = settings.max_shards_in_flight();
 
         buildInfo->CreateSender = Request->Sender;
         buildInfo->SenderCookie = Request->Cookie;
+        buildInfo->StartTime = TAppData::TimeProvider->Now();
+        if (request.HasUserSID()) {
+            buildInfo->UserSID = request.GetUserSID();
+        }
 
         Self->PersistCreateBuildIndex(db, *buildInfo);
 
@@ -196,14 +199,14 @@ public:
 
         Self->PersistBuildIndexState(db, *buildInfo);
 
-        auto [it, emplaced] = Self->IndexBuilds.emplace(id, buildInfo);
+        auto [it, emplaced] = Self->IndexBuilds.emplace(BuildId, buildInfo);
         Y_ASSERT(emplaced);
         if (uid) {
             std::tie(std::ignore, emplaced) = Self->IndexBuildsByUid.emplace(uid, buildInfo);
             Y_ASSERT(emplaced);
         }
 
-        Progress(id);
+        Progress(BuildId);
 
         return true;
     }
@@ -228,13 +231,20 @@ private:
             explain = "unsupported index type to build";
             return false;
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
-            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;
+            buildInfo.BuildKind = index.index_columns().size() == 1
+                ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
+                : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
             buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
             buildInfo.KMeans.K = std::max<ui32>(2, vectorIndexKmeansTreeDescription.GetSettings().clusters());
-            buildInfo.KMeans.Levels = std::max<ui32>(1, vectorIndexKmeansTreeDescription.GetSettings().levels());
+            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + std::max<ui32>(1, vectorIndexKmeansTreeDescription.GetSettings().levels());
+            buildInfo.KMeans.Rounds = NTableIndex::NTableVectorKmeansTreeIndex::DefaultKMeansRounds;
+            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(vectorIndexKmeansTreeDescription.GetSettings().settings(), buildInfo.KMeans.Rounds, explain);
+            if (!buildInfo.Clusters) {
+                return false;
+            }
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:

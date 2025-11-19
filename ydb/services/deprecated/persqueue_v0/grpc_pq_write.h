@@ -69,6 +69,14 @@ public:
 
     void StopService() {
         AtomicSet(ShuttingDown_, 1);
+        if (ClustersUpdaterStatus) {
+            ClustersUpdaterStatus->Stop();
+        }
+        auto g(Guard(Lock));
+        for (auto it = Sessions.begin(); it != Sessions.end();) {
+            auto jt = it++;
+            jt->second->DestroyStream("Grpc server is dead", NPersQueue::NErrorCode::BAD_REQUEST);
+        }
     }
 
     bool IsShuttingDown() const {
@@ -116,6 +124,7 @@ private:
     TAtomic ShuttingDown_ = 0;
 
     bool NeedDiscoverClusters; // Legacy mode OR account-mode in multi-cluster setup;
+    TClustersUpdater::TStatus::TPtr ClustersUpdaterStatus;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier; // Detects client's datacenter by IP. May be null
 };

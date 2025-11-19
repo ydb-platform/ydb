@@ -157,7 +157,7 @@ const TString SELECT_ALIVE_MEMBERS = R"sql(
     DECLARE $PaginationMemberId AS Utf8;
     DECLARE $Limit AS Uint64;
 
-    SELECT member_id, instance_id, rebalance_timeout_ms
+    SELECT member_id, instance_id, rebalance_timeout_ms, session_timeout_ms, heartbeat_deadline
     FROM `%s`
     VIEW PRIMARY KEY
     WHERE database = $Database

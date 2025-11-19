@@ -44,6 +44,8 @@ struct TKikimrSettings {
     /* No op just to avoid errors in Cloud Logging until they remove this from their queries */
     NCommon::TConfSetting<bool, false> KqpPushOlapProcess;
 
+    NCommon::TConfSetting<bool, false> KqpForceImmediateEffectsExecution;
+
     /* Compile time */
     NCommon::TConfSetting<ui64, false> _CommitPerShardKeysSizeLimitBytes;
     NCommon::TConfSetting<TString, false> _DefaultCluster;
@@ -66,9 +68,18 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, false> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, false> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, false> OptEnableOlapPushdownAggregate;
     NCommon::TConfSetting<bool, false> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
+    NCommon::TConfSetting<bool, false> OptShuffleElimination;
+    NCommon::TConfSetting<bool, false> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
+    NCommon::TConfSetting<bool, false> UseBlockReader;
+    // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
+    NCommon::TConfSetting<TString, false> CostBasedOptimization;
+
+    NCommon::TConfSetting<NDq::EHashShuffleFuncType , false> HashShuffleFuncType;
+    NCommon::TConfSetting<NDq::EHashShuffleFuncType , false> ColumnShardHashShuffleFuncType;
 
     NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;
 
@@ -91,6 +102,7 @@ struct TKikimrSettings {
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;
+    bool HasOptEnableOlapPushdownAggregate() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
     bool HasMaxSequentialReadsInFlight() const;
@@ -175,12 +187,26 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSpilling = true;
     ui32 DefaultCostBasedOptimizationLevel = 4;
     bool EnableConstantFolding = true;
+    bool EnableFoldUdfs = true;
     ui64 DefaultEnableSpillingNodes = 0;
     bool EnableAntlr4Parser = false;
     bool EnableSnapshotIsolationRW = false;
+    bool AllowMultiBroadcasts = false;
+    bool DefaultEnableShuffleElimination = false;
+    bool FilterPushdownOverJoinOptionalSide = false;
+    THashSet<TString> YqlCoreOptimizerFlags;
+    bool EnableSpillingInHashJoinShuffleConnections = false;
+    bool EnableOlapScalarApply = false;
+    bool EnableOlapSubstringPushdown = false;
+    bool EnableTempTablesForUser = false;
+    bool EnableOlapPushdownAggregate = false;
+
+    NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
+    NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;
+    bool GetEnableOlapPushdownAggregate() const;
 };
 
 }

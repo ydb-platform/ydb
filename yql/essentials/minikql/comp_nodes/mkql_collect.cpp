@@ -32,8 +32,8 @@ public:
 
         const auto valueType = Type::getInt128Ty(context);
 
-        const auto empty = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::GetEmptyContainerLazy));
-        const auto append = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::Append));
+        const auto empty = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::GetEmptyContainerLazy>());
+        const auto append = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::Append>());
 
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -69,7 +69,7 @@ public:
 
         {
             block = burn;
-            const auto thrower = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TCollectFlowWrapper::Throw));
+            const auto thrower = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCollectFlowWrapper::Throw>());
             const auto throwerType = FunctionType::get(Type::getVoidTy(context), {}, false);
             const auto throwerPtr = CastInst::Create(Instruction::IntToPtr, thrower, PointerType::getUnqual(throwerType), "thrower", block);
             CallInst::Create(throwerType, throwerPtr, {}, "", block);
@@ -115,7 +115,7 @@ public:
 
         const auto factory = ctx.GetFactory();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::Collect<!IsList>));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::Collect<!IsList>>());
 
         const auto seq = GetNodeValue(Seq, ctx, block);
 

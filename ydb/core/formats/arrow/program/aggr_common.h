@@ -13,4 +13,9 @@ enum class EAggregate {
     NumRows = 7,
 };
 
+class TAggregationsHelper {
+public:
+    static EAggregate GetSecondaryAggregationId(const EAggregate aggr);
+};
+
 }   // namespace NKikimr::NArrow::NSSA::NAggregation

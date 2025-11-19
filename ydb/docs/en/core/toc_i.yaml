@@ -29,6 +29,7 @@ items:
     mode: link
     path: contributor/toc_p.yaml
 - name: Reference
+  href: reference/index.md
   include:
     mode: link
     path: reference/toc_p.yaml

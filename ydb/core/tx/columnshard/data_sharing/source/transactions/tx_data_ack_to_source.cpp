@@ -13,7 +13,7 @@ bool TTxDataAckToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc
         auto& index = Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
         for (auto&& [_, i] : Session->GetCursorVerified()->GetPreviousSelected()) {
             for (auto&& portion : i.GetPortions()) {
-                portion.FillBlobIdsByStorage(sharedBlobIds, index);
+                portion->FillBlobIdsByStorage(sharedBlobIds, index);
             }
         }
         for (auto&& i : sharedBlobIds) {

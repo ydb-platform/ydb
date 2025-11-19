@@ -1,5 +1,7 @@
 #pragma once
 
+#include "topic_message.h"
+
 #include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/topic/client.h>
@@ -167,52 +169,6 @@ struct TEvYdbProxy {
     };
 
     struct TReadTopicResult {
-        class TMessage {
-            using TDataEvent = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent;
-            using ECodec = NYdb::NTopic::ECodec;
-
-            explicit TMessage(const TDataEvent::TMessageBase& msg, ECodec codec)
-                : Offset(msg.GetOffset())
-                , Data(msg.GetData())
-                , CreateTime(msg.GetCreateTime())
-                , Codec(codec)
-                , MessageGroupId(msg.GetMessageGroupId())
-                , ProducerId(msg.GetProducerId())
-                , SeqNo(msg.GetSeqNo())
-            {
-            }
-
-        public:
-            explicit TMessage(const TDataEvent::TMessage& msg)
-                : TMessage(msg, ECodec::RAW)
-            {
-            }
-
-            explicit TMessage(const TDataEvent::TCompressedMessage& msg)
-                : TMessage(msg, msg.GetCodec())
-            {
-            }
-
-            ui64 GetOffset() const { return Offset; }
-            const TString& GetData() const { return Data; }
-            TString& GetData() { return Data; }
-            TInstant GetCreateTime() const { return CreateTime; }
-            ECodec GetCodec() const { return Codec; }
-            TString& GetMessageGroupId() { return MessageGroupId; }
-            TString& GetProducerId() { return ProducerId; }
-            ui64 GetSeqNo() { return SeqNo; }
-            void Out(IOutputStream& out) const;
-
-        private:
-            ui64 Offset;
-            TString Data;
-            TInstant CreateTime;
-            ECodec Codec;
-            TString MessageGroupId;
-            TString ProducerId;
-            ui64 SeqNo;
-        };
-
         explicit TReadTopicResult(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
             PartitionId = event.GetPartitionSession()->GetPartitionId();
             Messages.reserve(event.GetMessagesCount());
@@ -227,10 +183,16 @@ struct TEvYdbProxy {
             }
         }
 
+        TReadTopicResult(ui64 partitionId, TVector<TTopicMessage>&& messages)
+            : PartitionId(partitionId)
+            , Messages(std::move(messages))
+        {
+        }
+
         void Out(IOutputStream& out) const;
 
         ui64 PartitionId;
-        TVector<TMessage> Messages;
+        TVector<TTopicMessage> Messages;
     };
 
     struct TEndTopicPartitionResult {
@@ -238,6 +200,13 @@ struct TEvYdbProxy {
             : PartitionId(event.GetPartitionSession()->GetPartitionId())
             , AdjacentPartitionsIds(event.GetAdjacentPartitionIds().begin(), event.GetAdjacentPartitionIds().end())
             , ChildPartitionsIds(event.GetChildPartitionIds().begin(), event.GetChildPartitionIds().end()) {
+        }
+
+        TEndTopicPartitionResult(ui64 partitionId, TVector<ui64>&& adjacentPartitionIds, TVector<ui64>&& childPartitionIds)
+            : PartitionId(partitionId)
+            , AdjacentPartitionsIds(std::move(adjacentPartitionIds))
+            , ChildPartitionsIds(std::move(childPartitionIds))
+        {
         }
 
         void Out(IOutputStream& out) const;
@@ -254,6 +223,11 @@ struct TEvYdbProxy {
     struct TStartTopicReadingSessionResult {
         explicit TStartTopicReadingSessionResult(const NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event)
             : ReadSessionId(event.GetPartitionSession()->GetReadSessionId())
+        {
+        }
+
+        explicit TStartTopicReadingSessionResult(const TString& readSessionId)
+            : ReadSessionId(readSessionId)
         {
         }
 
@@ -313,9 +287,11 @@ struct TEvYdbProxy {
 
 #pragma pop_macro("RemoveDirectory")
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& token);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl,
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl = false, const TString& caCert = {});
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TString& token);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert,
     const NKikimrReplication::TStaticCredentials& credentials);
+
+IActor* CreateLocalYdbProxy(const TString& database);
 
 }

@@ -7,6 +7,8 @@ namespace NKafka {
 
 class TKafkaFindCoordinatorActor: public NActors::TActorBootstrapped<TKafkaFindCoordinatorActor> {
 public:
+    const std::unordered_set<ui8> SUPPORTED_KEY_TYPES = {0, 1}; // consumer, transaction
+
     TKafkaFindCoordinatorActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TFindCoordinatorRequestData>& message)
         : Context(context)
         , CorrelationId(correlationId)

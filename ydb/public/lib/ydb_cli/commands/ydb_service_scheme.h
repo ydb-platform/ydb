@@ -102,6 +102,9 @@ private:
     int DescribeReplication(const TDriver& driver);
     int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
 
+    int DescribeTransfer(const TDriver& driver);
+    int PrintTransferResponsePretty(const NYdb::NReplication::TDescribeTransferResult& result) const;
+
     int DescribeView(const TDriver& driver);
     int PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const;
 

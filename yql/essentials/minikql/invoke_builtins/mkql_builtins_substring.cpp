@@ -20,7 +20,7 @@ struct TSubString {
     static Value* Generate(Value* string, Value* st, Value* cn, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(SubString));
+        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&SubString>());
         const auto start = StartOptional ?
             SelectInst::Create(
                 IsEmpty(st, block, context),

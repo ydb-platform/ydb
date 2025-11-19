@@ -12,9 +12,13 @@ void TShardDeleter::Shutdown(const NActors::TActorContext &ctx) {
 }
 
 void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
-                                       const THashSet<TShardIdx> &shardsToDelete,
-                                       const THashMap<NKikimr::NSchemeShard::TShardIdx, NKikimr::NSchemeShard::TShardInfo>& shardsInfos,
-                                       const NActors::TActorContext &ctx) {
+        const THashSet<TShardIdx> &shardsToDelete,
+        const THashMap<NKikimr::NSchemeShard::TShardIdx,
+        NKikimr::NSchemeShard::TShardInfo>& shardsInfos,
+        const NActors::TActorContext &ctx
+    ) {
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "SendDeleteRequests, shardsToDelete " << shardsToDelete.size()<< ", to hive " << hiveTabletId << ", at schemeshard " << MyTabletID);
+
     if (shardsToDelete.empty())
         return;
 

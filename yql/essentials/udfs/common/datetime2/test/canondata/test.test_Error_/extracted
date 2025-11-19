@@ -1,0 +1,32 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:4:15: Error: At function: Apply, At function: Udf, At DateTime2.ToDays
+            	    DateTime::ToDays("DATE"),
+	              ^
+                <tmp_path>/program.sql:<main>:4:15: Error: Failed to find UDF function: DateTime2.ToDays, reason: Error: Module: DateTime2, function: ToDays, error: Invalid argument type: got String, but Interval or Interval64 expected
+                	    DateTime::ToDays("DATE"),
+	              ^
+        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:6:15: Error: At function: Apply, At function: Udf, At DateTime2.TimeOfDay
+            	    DateTime::TimeOfDay("TIME"),
+	              ^
+                <tmp_path>/program.sql:<main>:6:15: Error: Failed to find UDF function: DateTime2.TimeOfDay, reason: Error: Module: DateTime2, function: TimeOfDay, error: Invalid argument type: got String, but Resource<'DateTime2.TM'> or Resource<'DateTime2.TM64'> expected
+                	    DateTime::TimeOfDay("TIME"),
+	              ^
+        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:8:15: Error: At function: Apply, At function: Udf, At DateTime2.TimeOfDay
+            	    DateTime::TimeOfDay(Nothing(Optional<Resource<"INVALID">>));
+	              ^
+                <tmp_path>/program.sql:<main>:8:15: Error: Failed to find UDF function: DateTime2.TimeOfDay, reason: Error: Module: DateTime2, function: TimeOfDay, error: Unexpected Resource tag: got 'INVALID', but 'DateTime2.TM' or 'DateTime2.TM64' expected
+                	    DateTime::TimeOfDay(Nothing(Optional<Resource<"INVALID">>));
+	              ^

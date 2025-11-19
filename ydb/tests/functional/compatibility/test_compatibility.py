@@ -15,16 +15,24 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 from decimal import Decimal
 
+
+ydbd_25_1 = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-25-1")
 ydbd_24_4 = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-24-4")
 current_binary_path = kikimr_driver_path()
 
 all_binary_combinations = [
+    [ydbd_25_1, current_binary_path],
+    [ydbd_25_1, [ydbd_25_1, current_binary_path]],
+    [current_binary_path, ydbd_25_1],
     [current_binary_path, current_binary_path],
     [ydbd_24_4, current_binary_path],
     [ydbd_24_4, [ydbd_24_4, current_binary_path]],
     [current_binary_path, ydbd_24_4],
 ]
 all_binary_combinations_ids = [
+    "stable_25_1_to_current",
+    "stable_25_1_to_current_mixed",
+    "current_to_stable_25_1",
     "current_to_current",
     "stable_24_4_to_current",
     "stable_24_4_to_current_mixed",
@@ -371,6 +379,7 @@ class TestCompatibility(object):
 
         export_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
             "--endpoint",
             "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
             "--database=/Root",

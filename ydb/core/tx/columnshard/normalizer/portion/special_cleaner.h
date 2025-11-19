@@ -10,20 +10,21 @@ private:
     using TBase = TNormalizationController::INormalizerComponent;
 
 public:
-    struct TKey {
-        ui32 Index;
-        ui64 Granule;
-        ui32 ColumnIdx;
-        ui64 PlanStep;
-        ui64 TxId;
-        ui64 Portion;
-        ui32 Chunk;
+    class IAction {
+    public:
+        virtual TConclusionStatus ApplyOnExecute(NIceDb::TNiceDb& db) const = 0;
+        virtual ~IAction() = default;
     };
 
-    using TKeyBatch = std::vector<TKey>;
-
 private:
-    std::optional<std::vector<TKeyBatch>> KeysToDelete(NTabletFlatExecutor::TTransactionContext& txc, const size_t maxBatchSize);
+    bool PrechargeV0(NTabletFlatExecutor::TTransactionContext& txc);
+    bool PrechargeV1(NTabletFlatExecutor::TTransactionContext& txc);
+    bool PrechargeV2(NTabletFlatExecutor::TTransactionContext& txc);
+    std::optional<std::vector<std::shared_ptr<IAction>>> LoadKeysV0(NTabletFlatExecutor::TTransactionContext& txc, const std::set<ui64>& columns);
+    std::optional<std::vector<std::shared_ptr<IAction>>> LoadKeysV1(NTabletFlatExecutor::TTransactionContext& txc, const std::set<ui64>& columns);
+    std::optional<std::vector<std::shared_ptr<IAction>>> LoadKeysV2(NTabletFlatExecutor::TTransactionContext& txc, const std::set<ui64>& columns);
+
+    std::optional<std::vector<std::shared_ptr<IAction>>> KeysToDelete(NTabletFlatExecutor::TTransactionContext& txc);
 
     virtual std::set<ui64> GetColumnIdsToDelete() const = 0;
 

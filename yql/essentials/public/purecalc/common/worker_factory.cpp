@@ -150,6 +150,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
     IModuleResolver::TPtr moduleResolver = factoryModuleResolver ? factoryModuleResolver->CreateMutableChild() : nullptr;
     typeContext = MakeIntrusive<TTypeAnnotationContext>();
+    typeContext->UseTypeDiffForConvertToError = true;
     typeContext->RandomProvider = CreateDefaultRandomProvider();
     typeContext->TimeProvider = DeterministicTimeProviderSeed_ ?
         CreateDeterministicTimeProvider(*DeterministicTimeProviderSeed_) :

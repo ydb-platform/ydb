@@ -985,7 +985,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
-            return state.Release();
+            return state;
         } else if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
@@ -1026,7 +1026,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeSetFlowWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeSetFlowWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1063,7 +1063,7 @@ public:
         codegenItemArg->CreateSetValue(ctx, block, item);
         const auto key = GetNodeValue(Key, ctx, block);
 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert));
+        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Insert>());
 
         const auto keyArg = key;
 
@@ -1075,7 +1075,7 @@ public:
 
         block = done;
 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build));
+        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Build>());
 
         const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
@@ -1162,7 +1162,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
-            return state.Release();
+            return state;
         } else if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
@@ -1207,7 +1207,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeSetWideWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeSetWideWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1250,7 +1250,7 @@ public:
 
         const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block);
 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert));
+        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Insert>());
 
         const auto keyArg = key;
 
@@ -1262,7 +1262,7 @@ public:
 
         block = done;
 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build));
+        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Build>());
 
         const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
@@ -1520,7 +1520,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeMapFlowWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeMapFlowWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1558,7 +1558,7 @@ public:
         const auto key = GetNodeValue(Key, ctx, block);
         const auto payload = GetNodeValue(Payload, ctx, block);
 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert));
+        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Insert>());
 
         const auto keyArg = key;
         const auto payloadArg = payload;
@@ -1571,7 +1571,7 @@ public:
 
         block = done;
 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build));
+        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Build>());
 
         const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
@@ -1709,7 +1709,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeMapWideWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSqueezeMapWideWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1753,7 +1753,7 @@ public:
         const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block);
         const auto payload = PasstroughPayload ? getres.second[*PasstroughPayload](ctx, block) : GetNodeValue(Payload, ctx, block);
 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert));
+        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Insert>());
 
         const auto keyArg = key;
         const auto payloadArg = payload;
@@ -1766,7 +1766,7 @@ public:
 
         block = done;
 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build));
+        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Build>());
 
         const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);

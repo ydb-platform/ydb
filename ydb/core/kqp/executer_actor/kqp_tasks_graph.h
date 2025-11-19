@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -29,6 +30,46 @@ struct TTransaction : private TMoveOnly {
         , Params(std::move(params)) {}
 };
 
+struct TColumnShardHashV1Params {
+    ui64 SourceShardCount = 0;
+    std::shared_ptr<TVector<NScheme::TTypeInfo>> SourceTableKeyColumnTypes = nullptr;
+    std::shared_ptr<TVector<ui64>> TaskIndexByHash = nullptr; // hash belongs [0; ShardCount]
+
+    TColumnShardHashV1Params DeepCopy() const {
+        TColumnShardHashV1Params copy;
+        copy.SourceShardCount = SourceShardCount;
+
+        if (SourceTableKeyColumnTypes) {
+            copy.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>(*SourceTableKeyColumnTypes);
+        } else {
+            copy.SourceTableKeyColumnTypes = nullptr;
+        }
+
+        if (TaskIndexByHash) {
+            copy.TaskIndexByHash = std::make_shared<TVector<ui64>>(*TaskIndexByHash);
+        } else {
+            copy.TaskIndexByHash = nullptr;
+        }
+
+        return copy;
+    }
+
+    TString KeyTypesToString() const {
+        if (SourceTableKeyColumnTypes == nullptr) {
+            return "[ NULL ]";
+        }
+
+        const auto& keyColumnTypes = *SourceTableKeyColumnTypes;
+        TVector<TString> stringNames;
+        stringNames.reserve(keyColumnTypes.size());
+        for (const auto& keyColumnType: keyColumnTypes) {
+            stringNames.push_back(NYql::NProto::TypeIds_Name(keyColumnType.GetTypeId()));
+        }
+
+        return "[" + JoinSeq(",", stringNames) + "]";
+    }
+};
+
 struct TStageInfoMeta {
     const IKqpGateway::TPhysicalTxData& Tx;
 
@@ -43,7 +84,34 @@ struct TStageInfoMeta {
 
     THashSet<TKeyDesc::ERowOperation> ShardOperations;
     THolder<TKeyDesc> ShardKey;
-    NSchemeCache::TSchemeCacheRequest::EKind ShardKind = NSchemeCache::TSchemeCacheRequest::EKind::KindUnknown;
+    NSchemeCache::ETableKind ShardKind = NSchemeCache::ETableKind::KindUnknown;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    TColumnShardHashV1Params ColumnShardHashV1Params;
+    THashMap<ui32, TColumnShardHashV1Params> HashParamsByOutput;
+
+    TColumnShardHashV1Params& GetColumnShardHashV1Params(ui32 outputIdx) {
+        if (!HashParamsByOutput.contains(outputIdx)) {
+            HashParamsByOutput[outputIdx] = ColumnShardHashV1Params.DeepCopy();
+        }
+        return HashParamsByOutput[outputIdx];
+    }
+
+    const TColumnShardHashV1Params& GetColumnShardHashV1Params(ui32 outputIdx) const {
+        if (HashParamsByOutput.contains(outputIdx)) {
+            return HashParamsByOutput.at(outputIdx);
+        }
+        return ColumnShardHashV1Params;
+    }
+
+    /*
+     * We want to propogate params for hash func through the stages. In default sutiation we do it by only ColumnShardHashV1Params.
+     * But challenges appear when there is CTE in plan. So we must store mapping from the outputStageIdx to params.
+     * Otherwise, we will rewrite ColumnShardHashV1Params, when we will meet the same stage again during propogation.
+     */
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
 
     const NKqpProto::TKqpPhyStage& GetStage(const size_t idx) const {
         auto& txBody = Tx.Body;
@@ -224,14 +292,13 @@ public:
         std::set<TString> ParameterNames;
     };
 
-    struct TReadInfo {
+    struct TReadInfo: public NYql::TSortingOperator<NYql::ERequestSorting::NONE> {
+    public:
         enum class EReadType {
             Rows,
             Blocks
         };
         ui64 ItemsLimit = 0;
-        bool Reverse = false;
-        bool Sorted = false;
         EReadType ReadType = EReadType::Rows;
         TKqpOlapProgram OlapProgram;
         TVector<NScheme::TTypeInfo> ResultColumnsTypes;
@@ -274,8 +341,7 @@ using TKqpTasksGraph = NYql::NDq::TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTas
 
 void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGateway::TPhysicalTxData>& txs);
 void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
-void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TStageInfo& stageInfo,
-    ui64 txId, bool enableSpilling);
+void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
 
 NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(TKqpTasksGraph& tasksGraph, const TTask& task, bool serializeAsyncIoSettings);
 void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta);

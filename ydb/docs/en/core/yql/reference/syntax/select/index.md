@@ -157,6 +157,8 @@ If the underlying queries have one of the `ORDER BY/LIMIT/DISCARD/INTO RESULT` o
 
 {% if feature_secondary_index %}
 
-* [VIEW INDEX](secondary_index.md)
+* [VIEW secondary_index](secondary_index.md)
 
 {% endif %}
+
+* [VIEW vector_index](vector_index.md)

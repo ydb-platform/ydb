@@ -18,6 +18,7 @@
 
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
+#include <algorithm>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -28,7 +29,7 @@ using namespace Ydb;
 namespace {
 
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
-bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) {
+bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, const NScheme::TTypeInfo* tableColumnType = nullptr) {
     switch (type.id()) {
         case arrow::Type::BOOL:
             toType.set_type_id(Ydb::Type::BOOL);
@@ -75,16 +76,18 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
         case arrow::Type::DURATION:
             toType.set_type_id(Ydb::Type::INTERVAL);
             return true;
-        case arrow::Type::DECIMAL: {
-            auto arrowDecimal = static_cast<const arrow::DecimalType *>(&type);
-            Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
-            decimalType->set_precision(arrowDecimal->precision());
-            decimalType->set_scale(arrowDecimal->scale());
-            return true;
+        case arrow::Type::FIXED_SIZE_BINARY: {
+            if (tableColumnType && tableColumnType->GetTypeId() == NScheme::NTypeIds::Decimal) {
+                Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
+                decimalType->set_precision(tableColumnType->GetDecimalType().GetPrecision());
+                decimalType->set_scale(tableColumnType->GetDecimalType().GetScale());
+                return true;
+            }
+
+            break;
         }
         case arrow::Type::NA:
         case arrow::Type::HALF_FLOAT:
-        case arrow::Type::FIXED_SIZE_BINARY:
         case arrow::Type::DATE32:
         case arrow::Type::DATE64:
         case arrow::Type::TIME32:
@@ -92,6 +95,7 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
         case arrow::Type::INTERVAL_MONTHS:
         case arrow::Type::LARGE_STRING:
         case arrow::Type::LARGE_BINARY:
+        case arrow::Type::DECIMAL:
         case arrow::Type::DECIMAL256:
         case arrow::Type::DENSE_UNION:
         case arrow::Type::DICTIONARY:
@@ -208,9 +212,7 @@ private:
         return true;
     }
 
-    TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override {
-        Y_UNUSED(errorMessage);
-
+    TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const override {
         const auto& type = GetProtoRequest(Request.get())->Getrows().Gettype();
         const auto& rowType = type.Getlist_type();
         const auto& rowFields = rowType.Getitem().Getstruct_type().Getmembers();
@@ -252,7 +254,7 @@ private:
             }
 
             // Fill rest of cells with non-key column members
-            if (!FillCellsFromProto(valueCells, ValueColumnPositions, r, errorMessage, valueDataPool)) {
+            if (!FillCellsFromProto(valueCells, ValueColumnPositions, r, errorMessage, valueDataPool, IsInfinityInJsonAllowed())) {
                 return false;
             }
 
@@ -398,30 +400,48 @@ private:
         return true;
     }
 
-    TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override {
+    TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const override {
+        TVector<std::pair<TString, Ydb::Type>> out;
         if (GetSourceType() == EUploadSource::CSV) {
             // TODO: for CSV with header we have to extract columns from data (from first batch in file stream)
-            return {};
+            return out;
         }
 
         auto schema = NArrow::DeserializeSchema(GetSourceSchema());
         if (!schema) {
-            errorMessage = TString("Wrong schema in bulk upsert data");
-            return {};
+            return TConclusionStatus::Fail("Wrong schema in bulk upsert data");
         }
 
-        TVector<std::pair<TString, Ydb::Type>> out;
         out.reserve(schema->num_fields());
+
+        const NSchemeCache::TSchemeCacheNavigate* resolveResult = GetResolveNameResult();
+        THashMap<TString, NScheme::TTypeInfo> tableColumnTypes;
+        if (!resolveResult || resolveResult->ResultSet.size() != 1) {
+            return TConclusionStatus::Fail(TStringBuilder() <<
+                "Wrong table resolve result: expected exactly one entry, got " <<
+                (resolveResult ? std::to_string(resolveResult->ResultSet.size()) : "none"));
+        }
+
+        const auto& entry = resolveResult->ResultSet.front();
+        for (auto&& [_, colInfo] : entry.Columns) {
+            tableColumnTypes[colInfo.Name] = colInfo.PType;
+        }
 
         for (auto& field : schema->fields()) {
             auto& name = field->name();
             auto& type = field->type();
 
             Ydb::Type ydbType;
-            if (!ConvertArrowToYdbPrimitive(*type, ydbType)) {
-                errorMessage = TString("Cannot convert arrow type to ydb one: " + type->ToString());
-                return {};
+            const NScheme::TTypeInfo* tableColumnType = nullptr;
+            auto tableTypeIt = tableColumnTypes.find(name);
+            if (tableTypeIt != tableColumnTypes.end()) {
+                tableColumnType = &tableTypeIt->second;
             }
+
+            if (!ConvertArrowToYdbPrimitive(*type, ydbType, tableColumnType)) {
+                return TConclusionStatus::Fail("Cannot convert arrow type to ydb one: " + type->ToString());
+            }
+
             out.emplace_back(name, std::move(ydbType));
         }
 
@@ -455,6 +475,7 @@ private:
                     errorMessage = "Cannot deserialize arrow batch with specified schema";
                     return false;
                 }
+
                 break;
             }
             case EUploadSource::CSV:

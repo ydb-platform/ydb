@@ -1,5 +1,5 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
 FORK_TEST_FILES()
@@ -15,12 +15,12 @@ TEST_SRCS(
 
 SIZE(LARGE)
 REQUIREMENTS(cpu:all)
+REQUIREMENTS(ram:all)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/apps/ydbd
     ydb/tests/library/compatibility
 )
 

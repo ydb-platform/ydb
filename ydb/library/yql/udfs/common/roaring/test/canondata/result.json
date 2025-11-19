@@ -28,5 +28,10 @@
         {
             "uri": "file://test.test_union_/results.txt"
         }
+    ],
+    "test.test[unmodifiable]": [
+        {
+            "uri": "file://test.test_unmodifiable_/results.txt"
+        }
     ]
 }

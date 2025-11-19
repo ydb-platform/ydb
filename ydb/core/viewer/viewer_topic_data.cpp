@@ -49,12 +49,8 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
         error << "While trying to find topic: '" << TopicPath << "' got error '" << NavigateResponse->GetError() << "'";
         return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", error));
     }
-    const auto& response = request.ResultSet.front();
-    if (response.Self->Info.GetPathType() != NKikimrSchemeOp::EPathTypePersQueueGroup) {
-        auto error = TStringBuilder() << "No such topic '" << TopicPath << "";
-        return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", error));
-    }
 
+    const auto& response = request.ResultSet[0];
     {
         TString authError;
         auto pathWithName = TStringBuilder() << "topic " << TopicPath;
@@ -67,6 +63,18 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
                 return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", authError));
         }
     }
+    if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+        if (ProcessCdc(response)) {
+            RequestDone();
+            return;
+        }
+    }
+
+    if (response.Self->Info.GetPathType() != NKikimrSchemeOp::EPathTypePersQueueGroup) {
+        auto error = TStringBuilder() << "No such topic '" << TopicPath << "";
+        return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", error));
+    }
+
     const auto& partitions = response.PQGroupInfo->Description.GetPartitions();
     for (auto& partition : partitions) {
         auto partitionId = partition.GetPartitionId();
@@ -78,6 +86,21 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
         }
     }
     ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "No such partition in topic"));
+}
+
+bool TTopicData::ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) {
+    if (!response.ListNodeEntry) {
+        ReplyAndPassAway(
+                GetHTTPINTERNALERROR("text/plain", "Error trying to describe CDC stream"));
+        return true;
+    }
+    if (response.ListNodeEntry->Children.size() != 1)
+        return false;
+
+    auto privateTopicName = response.ListNodeEntry->Children.at(0).Name;
+    TopicPath = JoinPath(ChildPath(NKikimr::SplitPath(TopicPath), privateTopicName));
+    NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::DescribeSchema, 1);
+    return true;
 }
 
 void TTopicData::SendPQReadRequest() {
@@ -106,9 +129,10 @@ void TTopicData::SendPQReadRequest() {
 }
 
 void TTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
+
     ReadResponse = ev->Release();
     const auto& record = ReadResponse->Record;
-    if (record.GetStatus() ==  NMsgBusProxy::MSTATUS_ERROR) {
+    if (record.GetStatus() == NMsgBusProxy::MSTATUS_ERROR) {
         switch (record.GetErrorCode()) {
             case ::NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET:
             case ::NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET:
@@ -278,7 +302,7 @@ void TTopicData::Bootstrap() {
 
     TopicPath = params.Get("path");
     if (!TopicPath.empty()) {
-        NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, true, NACLib::DescribeSchema, 1);
+        NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::DescribeSchema, 1);
     } else {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'path' is required and should not be empty"));
     }

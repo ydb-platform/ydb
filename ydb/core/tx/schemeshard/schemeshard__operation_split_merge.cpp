@@ -1,5 +1,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__data_erasure_manager.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -244,6 +245,7 @@ public:
 
         // Replace all Src datashard(s) with Dst datashard(s)
         TVector<TTableShardInfo> newPartitioning;
+        TVector<TShardIdx> newShardsIdx;
         THashSet<TShardIdx> allSrcShardIdxs;
         for (const auto& txShard : txState->Shards) {
             if (txShard.Operation == TTxState::TransferData)
@@ -280,6 +282,7 @@ public:
                     }
 
                     newPartitioning.push_back(dst);
+                    newShardsIdx.push_back(dst.ShardIdx);
                 }
 
                 dstAdded = true;
@@ -293,6 +296,9 @@ public:
         // Delete the whole old partitioning and persist the whole new partitioning as the indexes have changed
         context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo);
         context.SS->SetPartitioning(tableId, tableInfo, std::move(newPartitioning));
+        if (context.SS->EnableDataErasure && context.SS->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+            context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToDataErasure(std::move(newShardsIdx)));
+        }
         context.SS->PersistTablePartitioning(db, tableId, tableInfo);
         context.SS->PersistTablePartitionStats(db, tableId, tableInfo);
 

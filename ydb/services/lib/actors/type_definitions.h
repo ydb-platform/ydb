@@ -32,6 +32,8 @@ struct TTopicInitInfo {
 using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;
 
 struct TTopicHolder {
+    using TPtr = std::shared_ptr<TTopicHolder>;
+
     ui64 TabletID = 0;
     TActorId PipeClient;
     bool ACLRequestInfly = false;
@@ -49,21 +51,25 @@ struct TTopicHolder {
     THashMap<ui32, TPartitionInfo> Partitions;
     std::shared_ptr<NPQ::TPartitionGraph> PartitionGraph;
 
+    TTopicHolder() {
+    }
 
-    inline static TTopicHolder FromTopicInfo(const TTopicInitInfo& info) {
-        return TTopicHolder{
-            .TabletID = info.TabletID,
-            .ACLRequestInfly = false,
-            .CloudId = info.CloudId,
-            .DbId = info.DbId,
-            .DbPath = info.DbPath,
-            .IsServerless = info.IsServerless,
-            .FolderId = info.FolderId,
-            .MeteringMode = info.MeteringMode,
-            .FullConverter = info.TopicNameConverter,
-            .Partitions = info.Partitions,
-            .PartitionGraph = info.PartitionGraph
-        };
+    explicit TTopicHolder(const TTopicInitInfo& info) {
+        TabletID = info.TabletID;
+        ACLRequestInfly = false;
+        CloudId = info.CloudId;
+        DbId = info.DbId;
+        DbPath = info.DbPath;
+        IsServerless = info.IsServerless;
+        FolderId = info.FolderId;
+        MeteringMode = info.MeteringMode;
+        FullConverter = info.TopicNameConverter;
+        Partitions = info.Partitions;
+        PartitionGraph = info.PartitionGraph;
+    }
+
+    inline static TTopicHolder::TPtr FromTopicInfo(const TTopicInitInfo& info) {
+        return std::make_shared<TTopicHolder>(info);
     }
 };
 

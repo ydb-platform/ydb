@@ -6,7 +6,8 @@
 #include "common/modification_type.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -45,6 +46,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
     NMonitoring::TDynamicCounters::TCounterPtr GlobalTimeoutCount;
     NMonitoring::TDynamicCounters::TCounterPtr RetryTimeoutCount;
+    NMonitoring::TDynamicCounters::TCounterPtr RetryBySubscribeOnOverloadCount;
+    NMonitoring::TDynamicCounters::TCounterPtr RetryBySubscribeOnOverloadLimitExceededCount;
 
 public:
     TCSUploadCounters()
@@ -61,6 +64,8 @@ public:
         , FailsCount(TBase::GetDeriviative("Fails"))
         , GlobalTimeoutCount(TBase::GetDeriviative("GlobalTimeouts"))
         , RetryTimeoutCount(TBase::GetDeriviative("RetryTimeouts"))
+        , RetryBySubscribeOnOverloadCount(TBase::GetDeriviative("RetryBySubscribeOnOverload"))
+        , RetryBySubscribeOnOverloadLimitExceededCount(TBase::GetDeriviative("RetryBySubscribeOnOverloadLimitExceeded"))
     {
     }
 
@@ -70,6 +75,14 @@ public:
 
     void OnRetryTimeout() const {
         RetryTimeoutCount->Inc();
+    }
+
+    void OnRetryBySubscribeOnOverload() const {
+        RetryBySubscribeOnOverloadCount->Inc();
+    }
+
+    void OnRetryBySubscribeOnOverloadLimitExceeded() const {
+        RetryBySubscribeOnOverloadLimitExceededCount->Inc();
     }
 
     void OnRequest(const ui64 rows, const ui64 bytes) const {
@@ -105,13 +118,14 @@ private:
     TAtomicCounter WritesCount = 0;
     TAtomicCounter WritesIndex = 0;
     TAtomicCounter FailsCount = 0;
-    TMutex Mutex;
+
+    TAtomic HasCodeFail = 0;
     NYql::TIssues Issues;
     std::optional<Ydb::StatusIds::StatusCode> Code;
+
     NActors::TActorIdentity LongTxActorId;
     std::vector<TWriteIdForShard> WriteIds;
     const TMonotonic StartInstant = TMonotonic::Now();
-    const bool ImmediateWrite = false;
     YDB_READONLY_DEF(NLongTxService::TLongTxId, LongTxId);
     YDB_READONLY(std::shared_ptr<TCSUploadCounters>, Counters, std::make_shared<TCSUploadCounters>());
     void SendReply() {
@@ -119,16 +133,9 @@ private:
             Counters->OnFailedFullReply(TMonotonic::Now() - StartInstant);
             AFL_VERIFY(Code);
             LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(*Code, Issues));
-        } else if (ImmediateWrite) {
-            Counters->OnSucceedFullReply(TMonotonic::Now() - StartInstant);
-            LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(Ydb::StatusIds::SUCCESS));
         } else {
             Counters->OnSucceedFullReply(TMonotonic::Now() - StartInstant);
-            auto req = MakeHolder<NLongTxService::TEvLongTxService::TEvAttachColumnShardWrites>(LongTxId);
-            for (auto&& i : WriteIds) {
-                req->AddWrite(i.GetShardId(), i.GetWriteId());
-            }
-            LongTxActorId.Send(NLongTxService::MakeLongTxServiceID(LongTxActorId.NodeId()), req.Release());
+            LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(Ydb::StatusIds::SUCCESS));
         }
     }
 
@@ -155,8 +162,7 @@ public:
         };
     };
 
-    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId,
-        const bool immediateWrite);
+    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId);
     void OnSuccess(const ui64 shardId, const ui64 writeId, const ui32 writePartId);
     void OnFail(const Ydb::StatusIds::StatusCode code, const TString& message);
 };
@@ -178,9 +184,9 @@ private:
     TWritersController::TPtr ExternalController;
     const TActorId LeaderPipeCache;
     NWilson::TProfileSpan ActorSpan;
-    EModificationType ModificationType;
-    const bool ImmediateWrite = false;
     const std::optional<TDuration> Timeout;
+    const bool RetryBySubscription;
+    ui64 LastOverloadSeqNo = 0;
 
     void SendWriteRequest();
     static TDuration OverloadTimeout() {
@@ -190,21 +196,17 @@ private:
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true), IEventHandle::FlagTrackDelivery, 0,
             ActorSpan.GetTraceId());
     }
-    virtual void PassAway() override {
-        Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
-        TBase::PassAway();
-    }
 
 public:
     TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
-        const EModificationType mType, const bool immediateWrite, const std::optional<TDuration> timeout = std::nullopt);
+        const std::optional<TDuration> timeout = std::nullopt);
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvColumnShard::TEvWriteResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
+            hFunc(TEvColumnShard::TEvOverloadReady, Handle);
             hFunc(NActors::TEvents::TEvWakeup, Handle);
         }
     }
@@ -212,11 +214,16 @@ public:
     void Bootstrap();
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
-    void Handle(TEvColumnShard::TEvWriteResult::TPtr& ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
     void Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev);
+    void Handle(TEvColumnShard::TEvOverloadReady::TPtr& ev);
+
+protected:
+    void Die(const NActors::TActorContext& ctx) override;
+    void PassAway() override;
 
 private:
     bool RetryWriteRequest(const bool delayed = true);
+    bool IsMaxRetriesReached() const;
 };
 }   // namespace NKikimr::NEvWrite

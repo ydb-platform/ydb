@@ -50,5 +50,6 @@ namespace NYql {
         NYT::TNode MakeFakeSchema(bool pg = false);
         TFakeInputSpec FakeIS(ui32 inputsNumber = 1, bool pg = false);
         TFakeOutputSpec FakeOS(bool pg = false);
+        TFakeOutputSpec FakeStructOS();
     }
 }

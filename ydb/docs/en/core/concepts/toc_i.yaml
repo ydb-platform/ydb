@@ -14,6 +14,8 @@ items:
   href: transactions.md
 - name: Secondary indexes
   href: secondary_indexes.md
+- name: Vector search
+  href: vector_search.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
@@ -28,6 +30,9 @@ items:
 - name: Asynchronous replication
   href: async-replication.md
   when: feature_async_replication
+- name: Data transfer
+  href: transfer.md
+  when: feature_transfer
 - name: Query optimizer
   href: optimizer.md
 - name: Federated query

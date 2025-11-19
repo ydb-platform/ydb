@@ -321,7 +321,7 @@ FLATTEN LIST BY keys AS key
    kubectl delete database.ydb.tech database-minikube-sample
    ```
 
-   Чтобы удалить кластер{{ ydb-short-name }}, выполните следующие команды (все данные будут потеряны):
+   Чтобы удалить кластер {{ ydb-short-name }}, выполните следующие команды (все данные будут потеряны):
 
    ```bash
    kubectl delete storage.ydb.tech storage-minikube-sample

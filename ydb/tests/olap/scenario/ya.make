@@ -12,10 +12,9 @@ PY3TEST()
         test_alter_compression.py
     )
 
-    ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
     DEPENDS(
-        ydb/apps/ydbd
-    )
+        )
 
     PEERDIR(
         contrib/python/allure-pytest

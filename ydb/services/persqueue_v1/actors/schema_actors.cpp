@@ -109,6 +109,9 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         if (config.HasFederationAccount()) {
             (*settings->mutable_attributes())["_federation_account"] = config.GetFederationAccount();
         }
+        if (config.GetEnableCompactification()) {
+            (*settings->mutable_attributes())["_cleanup_policy"] = "compact";
+        }
         bool local = config.GetLocalDC();
         settings->set_client_write_disabled(!local);
         const auto &partConfig = config.GetPartitionConfig();
@@ -661,7 +664,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
     for (auto p : Settings.Partitions) {
         if (p >= TotalPartitions) {
             return RaiseError(
-                TStringBuilder() << "No partition " << Settings.Partitions[0] << " in topic",
+                TStringBuilder() << "No partition " << p << " in topic",
                 Ydb::PersQueue::ErrorCode::BAD_REQUEST, Ydb::StatusIds::BAD_REQUEST, ctx
             );
         }
@@ -874,12 +877,14 @@ void TDescribeTopicActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPer
                 SetProtoTime(stats->mutable_min_partitions_last_read_time(), cons.GetLastReadTimestampMs());
                 SetProtoTime(stats->mutable_max_read_time_lag(), cons.GetReadLagMs());
                 SetProtoTime(stats->mutable_max_write_time_lag(), cons.GetWriteLagMs());
+                SetProtoTime(stats->mutable_max_committed_time_lag(), cons.GetCommitedLagMs());
             } else {
                 auto* stats = it->second->mutable_consumer_stats();
 
                 UpdateProtoTime(stats->mutable_min_partitions_last_read_time(), cons.GetLastReadTimestampMs(), true);
                 UpdateProtoTime(stats->mutable_max_read_time_lag(), cons.GetReadLagMs(), false);
                 UpdateProtoTime(stats->mutable_max_write_time_lag(), cons.GetWriteLagMs(), false);
+                UpdateProtoTime(stats->mutable_max_committed_time_lag(), cons.GetCommitedLagMs(), false);
             }
 
             AddWindowsStat(it->second->mutable_consumer_stats()->mutable_bytes_read(), cons.GetAvgReadSpeedPerMin(), cons.GetAvgReadSpeedPerHour(), cons.GetAvgReadSpeedPerDay());
@@ -898,14 +903,12 @@ bool TDescribeTopicActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
-    Y_ABORT_UNLESS(record.LocationsSize() == TotalPartitions);
     Y_ABORT_UNLESS(Settings.RequireLocation);
 
-    for (auto i = 0u; i < TotalPartitions; ++i) {
+    for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
         const auto& location = record.GetLocations(i);
         auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
         SetPartitionLocation(location, locationResult);
-
     }
     return true;
 }
@@ -988,6 +991,7 @@ void TDescribeConsumerActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEv
             SetProtoTime(consStats->mutable_last_read_time(), partResult.GetLagsInfo().GetLastReadTimestampMs());
             SetProtoTime(consStats->mutable_max_read_time_lag(), partResult.GetLagsInfo().GetReadLagMs());
             SetProtoTime(consStats->mutable_max_write_time_lag(), partResult.GetLagsInfo().GetWriteLagMs());
+            SetProtoTime(consStats->mutable_max_committed_time_lag(), partResult.GetLagsInfo().GetCommitedLagMs());
 
             AddWindowsStat(consStats->mutable_bytes_read(), partResult.GetAvgReadSpeedPerMin(), partResult.GetAvgReadSpeedPerHour(), partResult.GetAvgReadSpeedPerDay());
 
@@ -997,12 +1001,14 @@ void TDescribeConsumerActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEv
                 SetProtoTime(stats->mutable_min_partitions_last_read_time(), partResult.GetLagsInfo().GetLastReadTimestampMs());
                 SetProtoTime(stats->mutable_max_read_time_lag(), partResult.GetLagsInfo().GetReadLagMs());
                 SetProtoTime(stats->mutable_max_write_time_lag(), partResult.GetLagsInfo().GetWriteLagMs());
+                SetProtoTime(stats->mutable_max_committed_time_lag(), partResult.GetLagsInfo().GetCommitedLagMs());
             } else {
                 auto* stats = Result.mutable_consumer()->mutable_consumer_stats();
 
                 UpdateProtoTime(stats->mutable_min_partitions_last_read_time(), partResult.GetLagsInfo().GetLastReadTimestampMs(), true);
                 UpdateProtoTime(stats->mutable_max_read_time_lag(), partResult.GetLagsInfo().GetReadLagMs(), false);
                 UpdateProtoTime(stats->mutable_max_write_time_lag(), partResult.GetLagsInfo().GetWriteLagMs(), false);
+                UpdateProtoTime(stats->mutable_max_committed_time_lag(), partResult.GetLagsInfo().GetCommitedLagMs(), false);
             }
         }
     }
@@ -1012,9 +1018,8 @@ bool TDescribeConsumerActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
-    Y_ABORT_UNLESS(record.LocationsSize() == TotalPartitions);
     Y_ABORT_UNLESS(Settings.RequireLocation);
-    for (auto i = 0u; i < TotalPartitions; ++i) {
+    for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
         const auto& location = record.GetLocations(i);
         auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
         SetPartitionLocation(location, locationResult);

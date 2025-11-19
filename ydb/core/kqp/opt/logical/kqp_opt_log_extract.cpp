@@ -148,6 +148,16 @@ TExprBase KqpApplyExtractMembersToReadTableRanges(TExprBase node, TExprContext& 
         .Done();
 }
 
+TCoAtomList GetFirstColumn(const TCoAtomList &columns, TExprContext &ctx) {
+    TVector<TExprNode::TPtr> memberColumns;
+    Y_ENSURE(columns.Size());
+
+    memberColumns.emplace_back(ctx.NewAtom(columns.Pos(), columns.Item(0).Value()));
+    return Build<TCoAtomList>(ctx, columns.Pos())
+            .Add(memberColumns)
+            .Done();
+}
+
 TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap,
     bool allowMultiUsage)
 {
@@ -156,16 +166,23 @@ TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ct
     }
 
     auto read = node.Cast<TKqpReadOlapTableRangesBase>();
+    if (read.Columns().Size() == 1) {
+        return node;
+    }
 
     auto usedColumns = GetUsedColumns(read, read.Columns(), parentsMap, allowMultiUsage, ctx);
     if (!usedColumns) {
         return node;
     }
 
+    if (TExprBase(read.Process().Body()).Maybe<TKqpOlapExtractMembers>()) {
+        return node;
+    }
+
     if (read.Process().Body().Raw() != read.Process().Args().Arg(0).Raw()) {
         auto extractMembers = Build<TKqpOlapExtractMembers>(ctx, node.Pos())
             .Input(read.Process().Args().Arg(0))
-            .Members(usedColumns.Cast())
+            .Members(usedColumns.Cast().Size() ? usedColumns.Cast() : GetFirstColumn(read.Columns(), ctx))
             .Done();
 
         auto extractMembersLambda = Build<TCoLambda>(ctx, node.Pos())

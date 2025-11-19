@@ -1,8 +1,7 @@
 #pragma once
 
 #include "command.h"
-
-#include <library/cpp/config/config.h>
+#include "ini_config/config.h"
 
 #include <util/generic/maybe.h>
 #include <util/system/env.h>
@@ -60,7 +59,7 @@ protected:
     static const TString AwsDefaultProfileName;
 
 private:
-    TMaybe<NConfig::TConfig> Config;
+    TMaybe<NIniConfig::TConfig> Config;
     TMaybe<TString> AwsProfile;
 };
 

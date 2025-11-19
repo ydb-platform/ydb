@@ -275,6 +275,28 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(IndexLoookupJoinStructJoin, StreamLookupJoin) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
+        auto settings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        auto result = session.ExecuteDataQuery(Q_(R"(
+            $a = AsList(AsStruct(AsStruct("Key" as Key) as join_info), AsStruct(AsStruct("Name1" as Key) as join_info));
+            SELECT a.join_info.Key as Key, b.Value as Value from AS_TABLE($a) as a
+            LEFT JOIN `/Root/Join1_3` as b
+            ON a.join_info.Key = b.Key
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([["Key";#];["Name1";[1001]]])",
+            FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(IdxLookupPartialLeftPredicate) {
         TKikimrSettings settings;
         TKikimrRunner kikimr(settings);
@@ -616,6 +638,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 PRAGMA FilterPushdownOverJoinOptionalSide;
+                PRAGMA config.flags("OptimizerFlags", "FuseEquiJoinsInputMultiLabels", "PullUpFlatMapOverJoinMultipleLabels");
 
                 SELECT t1.Key1, t1.Key2, t1.Fk1, t1.Value, t2.Key, t2.Value, t3.Key, t3.Value
 
@@ -639,6 +662,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 PRAGMA FilterPushdownOverJoinOptionalSide;
+                PRAGMA config.flags("OptimizerFlags", "FuseEquiJoinsInputMultiLabels", "PullUpFlatMapOverJoinMultipleLabels");
 
                 SELECT t1.Key1, t1.Key2, t1.Fk1, t1.Value, t2.Key, t2.Value, t3.Key, t3.Value
 

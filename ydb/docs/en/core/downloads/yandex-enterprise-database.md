@@ -1,3 +1,5 @@
+<!-- markdownlint-disable no-emphasis-as-heading -->
+
 # Download Yandex Enterprise Database
 
 [Yandex Enterprise Database](https://ydb.yandex.ru) is a commercial database management system based on the {{ ydb-short-name }} core.

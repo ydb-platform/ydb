@@ -1,10 +1,4 @@
 columns {
-  name: "kind"
-  type {
-    type_id: STRING
-  }
-}
-columns {
   name: "labels"
   type {
     dict_type {
@@ -32,20 +26,21 @@ columns {
 columns {
   name: "value"
   type {
-    type_id: DOUBLE
+    optional_type {
+      item {
+        type_id: DOUBLE
+      }
+    }
   }
 }
 rows {
-  items {
-    bytes_value: "MY_KIND"
-  }
   items {
     pairs {
       key {
         bytes_value: "downsampling.aggregation"
       }
       payload {
-        bytes_value: "SUM"
+        bytes_value: "3"
       }
     }
     pairs {
@@ -53,7 +48,7 @@ rows {
         bytes_value: "downsampling.fill"
       }
       payload {
-        bytes_value: "PREVIOUS"
+        bytes_value: "3"
       }
     }
     pairs {
@@ -69,7 +64,7 @@ rows {
         bytes_value: "from"
       }
       payload {
-        bytes_value: "2023-12-08T14:40:39.000000Z"
+        bytes_value: "seconds: 1\n"
       }
     }
     pairs {
@@ -77,7 +72,7 @@ rows {
         bytes_value: "downsampling.disabled"
       }
       payload {
-        bytes_value: "bool True"
+        bytes_value: "bool False"
       }
     }
     pairs {
@@ -101,15 +96,15 @@ rows {
         bytes_value: "to"
       }
       payload {
-        bytes_value: "2023-12-08T14:45:39.000000Z"
+        bytes_value: "seconds: 86401\n"
       }
     }
   }
   items {
-    uint32_value: 0
+    uint32_value: 10
   }
   items {
-    bytes_value: "MY_TYPE"
+    bytes_value: "RATE"
   }
   items {
     double_value: 100
@@ -117,15 +112,12 @@ rows {
 }
 rows {
   items {
-    bytes_value: "MY_KIND"
-  }
-  items {
     pairs {
       key {
         bytes_value: "downsampling.aggregation"
       }
       payload {
-        bytes_value: "SUM"
+        bytes_value: "3"
       }
     }
     pairs {
@@ -133,7 +125,7 @@ rows {
         bytes_value: "downsampling.fill"
       }
       payload {
-        bytes_value: "PREVIOUS"
+        bytes_value: "3"
       }
     }
     pairs {
@@ -149,7 +141,7 @@ rows {
         bytes_value: "from"
       }
       payload {
-        bytes_value: "2023-12-08T14:40:39.000000Z"
+        bytes_value: "seconds: 1\n"
       }
     }
     pairs {
@@ -157,7 +149,7 @@ rows {
         bytes_value: "downsampling.disabled"
       }
       payload {
-        bytes_value: "bool True"
+        bytes_value: "bool False"
       }
     }
     pairs {
@@ -181,15 +173,15 @@ rows {
         bytes_value: "to"
       }
       payload {
-        bytes_value: "2023-12-08T14:45:39.000000Z"
+        bytes_value: "seconds: 86401\n"
       }
     }
   }
   items {
-    uint32_value: 0
+    uint32_value: 20
   }
   items {
-    bytes_value: "MY_TYPE"
+    bytes_value: "RATE"
   }
   items {
     double_value: 200
@@ -197,15 +189,12 @@ rows {
 }
 rows {
   items {
-    bytes_value: "MY_KIND"
-  }
-  items {
     pairs {
       key {
         bytes_value: "downsampling.aggregation"
       }
       payload {
-        bytes_value: "SUM"
+        bytes_value: "3"
       }
     }
     pairs {
@@ -213,7 +202,7 @@ rows {
         bytes_value: "downsampling.fill"
       }
       payload {
-        bytes_value: "PREVIOUS"
+        bytes_value: "3"
       }
     }
     pairs {
@@ -229,7 +218,7 @@ rows {
         bytes_value: "from"
       }
       payload {
-        bytes_value: "2023-12-08T14:40:39.000000Z"
+        bytes_value: "seconds: 1\n"
       }
     }
     pairs {
@@ -237,7 +226,7 @@ rows {
         bytes_value: "downsampling.disabled"
       }
       payload {
-        bytes_value: "bool True"
+        bytes_value: "bool False"
       }
     }
     pairs {
@@ -261,15 +250,15 @@ rows {
         bytes_value: "to"
       }
       payload {
-        bytes_value: "2023-12-08T14:45:39.000000Z"
+        bytes_value: "seconds: 86401\n"
       }
     }
   }
   items {
-    uint32_value: 0
+    uint32_value: 30
   }
   items {
-    bytes_value: "MY_TYPE"
+    bytes_value: "RATE"
   }
   items {
     double_value: 300

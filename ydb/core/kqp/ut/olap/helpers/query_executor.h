@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/testlib/cs_helper.h>
-#include <ydb-cpp-sdk/client/value/value.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <library/cpp/json/writer/json_value.h>
 
 namespace NKikimr::NKqp {

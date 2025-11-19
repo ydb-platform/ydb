@@ -86,8 +86,8 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
 
             const auto& record = records.at(0);
-            UNIT_ASSERT_VALUES_EQUAL(record.Offset, 0);
-            UNIT_ASSERT_VALUES_EQUAL(record.Data, "message-1");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetOffset(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "message-1");
         }
 
         // trigger commit, write new data & kill reader
@@ -103,9 +103,40 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
 
             const auto& record = records.at(0);
-            UNIT_ASSERT_VALUES_EQUAL(record.Offset, 1);
-            UNIT_ASSERT_VALUES_EQUAL(record.Data, "message-2");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetOffset(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "message-2");
         }
+    }
+
+    Y_UNIT_TEST(PassAwayOnCreatingReadSession) {
+        TEnv env;
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
+
+        auto ydbProxy = env.GetRuntime().AllocateEdgeActor();
+
+        auto settings = TEvYdbProxy::TTopicReaderSettings()
+            .ConsumerName("consumer")
+            .AppendTopics(NYdb::NTopic::TTopicReadSettings()
+                .Path("/Root/topic")
+                .AppendPartitionIds(0)
+            );
+
+        auto reader = env.GetRuntime().Register(CreateRemoteTopicReader(ydbProxy, settings));
+        env.SendAsync(reader, new TEvWorker::TEvHandshake());
+
+        TAutoPtr<IEventHandle> ev;
+        do {
+            env.GetRuntime().template GrabEdgeEvents<TEvYdbProxy::TEvCreateTopicReaderRequest>(ev);
+        } while (ev->Sender != reader);
+
+        env.SendAsync(reader, new TEvents::TEvPoison());
+
+        auto topicReader = env.GetRuntime().AllocateEdgeActor();
+        env.SendAsync(reader, new TEvYdbProxy::TEvCreateTopicReaderResponse(topicReader));
+
+        do {
+            env.GetRuntime().template GrabEdgeEvents<TEvents::TEvPoison>(ev);
+        } while (ev->Sender != reader && ev->Recipient != topicReader);
     }
 }
 

@@ -18,19 +18,22 @@ struct TSourceIdInfo {
     ui64 Offset = 0;
     TInstant WriteTimestamp;
     TInstant CreateTimestamp;
+    TMaybe<i16> ProducerEpoch;  // For Kafka protocol
+
     bool Explicit = false;
     bool TxModified = false;
     TMaybe<TPartitionKeyRange> KeyRange;
     TMaybe<THeartbeat> LastHeartbeat;
     EState State = EState::Registered;
 
-    TSourceIdInfo() = default;
-    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs);
-    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat);
-    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit = false);
 
-    TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs) const;
-    TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat) const;
+    TSourceIdInfo() = default;
+    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<i16> producerEpoch = Nothing());
+    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat, TMaybe<i16> producerEpoch = Nothing());
+    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit = false, TMaybe<i16> producerEpoch = Nothing());
+
+    TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs, TMaybe<i16> producerEpoch = Nothing()) const;
+    TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat, TMaybe<i16> producerEpoch = Nothing()) const;
 
     static EState ConvertState(NKikimrPQ::TMessageGroupInfo::EState value);
     static NKikimrPQ::TMessageGroupInfo::EState ConvertState(EState value);

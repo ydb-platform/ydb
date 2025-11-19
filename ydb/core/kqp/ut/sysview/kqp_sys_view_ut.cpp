@@ -237,6 +237,10 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
 
+        const auto describeResult = kikimr.GetTestClient().Describe(
+            kikimr.GetTestServer().GetRuntime(), "/Root/TwoShard");
+        const auto startPathId = describeResult.GetPathId();
+
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT OwnerId, PartIdx, Path, PathId
             FROM `/Root/.sys/partition_stats`
@@ -245,42 +249,67 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-        CompareYson(R"([
-            [[72057594046644480u];[0u];["/Root/TwoShard"];[2u]];
-            [[72057594046644480u];[1u];["/Root/TwoShard"];[2u]];
-            [[72057594046644480u];[0u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[1u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[2u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[3u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[4u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[5u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[6u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[7u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[0u];["/Root/Logs"];[4u]];
-            [[72057594046644480u];[1u];["/Root/Logs"];[4u]];
-            [[72057594046644480u];[2u];["/Root/Logs"];[4u]];
-            [[72057594046644480u];[0u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[1u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[2u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[3u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[4u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[5u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[6u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[7u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[8u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[9u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[0u];["/Root/KeyValue"];[6u]];
-            [[72057594046644480u];[0u];["/Root/KeyValue2"];[7u]];
-            [[72057594046644480u];[0u];["/Root/KeyValueLargePartition"];[8u]];
-            [[72057594046644480u];[0u];["/Root/Test"];[9u]];
-            [[72057594046644480u];[0u];["/Root/Join1"];[10u]];
-            [[72057594046644480u];[1u];["/Root/Join1"];[10u]];
-            [[72057594046644480u];[0u];["/Root/Join2"];[11u]];
-            [[72057594046644480u];[1u];["/Root/Join2"];[11u]];
-            [[72057594046644480u];[0u];["/Root/TuplePrimaryDescending"];[12u]];
-            [[72057594046644480u];[1u];["/Root/TuplePrimaryDescending"];[12u]];
-            [[72057594046644480u];[2u];["/Root/TuplePrimaryDescending"];[12u]]
-        ])", StreamResultToYson(it));
+        TStringBuilder expectedYson;
+        expectedYson << "[" << Endl;
+
+        for (size_t i = 0; i < 2; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/TwoShard"];[%luu]
+            ];)", i, startPathId)  << Endl;
+        }
+
+        for (size_t i = 0; i < 8; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/EightShard"];[%luu]
+            ];)", i, startPathId + 1)  << Endl;
+        }
+
+        for (size_t i = 0; i < 3; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/Logs"];[%luu]
+            ];)", i, startPathId + 2)  << Endl;
+        }
+
+        for (size_t i = 0; i < 10; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/BatchUpload"];[%luu]
+            ];)", i, startPathId + 3)  << Endl;
+        }
+
+        expectedYson << Sprintf(R"(
+            [[72057594046644480u];[0u];["/Root/KeyValue"];[%luu]];
+            [[72057594046644480u];[0u];["/Root/KeyValue2"];[%luu]];
+            [[72057594046644480u];[0u];["/Root/KeyValueLargePartition"];[%luu]];
+            [[72057594046644480u];[0u];["/Root/Test"];[%luu]];
+        )", startPathId + 4, startPathId + 5, startPathId + 6, startPathId + 7)  << Endl;
+
+        for (size_t i = 0; i < 2; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/Join1"];[%luu]
+            ];)", i, startPathId + 8)  << Endl;
+        }
+
+        for (size_t i = 0; i < 2; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/Join2"];[%luu]
+            ];)", i, startPathId + 9)  << Endl;
+        }
+
+        for (size_t i = 0; i < 3; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/ReorderKey"];[%luu]
+            ];)", i, startPathId + 10)  << Endl;
+        }
+      
+        for (size_t i = 0; i < 5; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/ReorderOptionalKey"];[%luu]
+            ];)", i, startPathId + 11)  << Endl;
+        }
+
+        expectedYson << "]";
+
+        CompareYson(expectedYson, StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(PartitionStatsRanges) {
@@ -719,6 +748,11 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             ])", actual);
         }
 
+        // from master - should read
+        CheckTableReads(session, "/Root/Followers", false, true);
+        // from followers - should NOT read yet
+        CheckTableReads(session, "/Root/Followers", true, false);        
+
         Cerr << "... SELECT from follower" << Endl;
         {
             auto result = session.ExecuteDataQuery(R"(
@@ -733,6 +767,11 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                 [[31u];["Four"]]
             ])", actual);
         }
+
+        // from master - should read
+        CheckTableReads(session, "/Root/Followers", false, true);
+        // from followers - should read
+        CheckTableReads(session, "/Root/Followers", true, true);
 
         for (size_t attempt = 0; attempt < 30; ++attempt)
         {

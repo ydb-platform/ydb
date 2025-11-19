@@ -447,9 +447,11 @@ public:
     TColumnDataBatcher(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         std::vector<ui32> writeIndex,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        std::vector<ui32> readIndex)
             : Columns(BuildColumns(inputColumns))
             , WriteIndex(std::move(writeIndex))
+            , ReadIndex(std::move(readIndex))
             , BatchBuilder(std::make_unique<NArrow::TArrowBatchBuilder>(
                 arrow::Compression::UNCOMPRESSED,
                 BuildNotNullColumns(inputColumns),
@@ -471,10 +473,11 @@ public:
         TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
+                auto readIndex = ReadIndex.empty() ? index : ReadIndex[index];
                 rowBuilder.AddCell(
                     WriteIndex[index],
                     Columns[index].PType,
-                    row.GetElement(index),
+                    row.GetElement(readIndex),
                     Columns[index].PTypeMod);
             }
             BatchBuilder->AddRow(rowBuilder.BuildCells());
@@ -494,6 +497,7 @@ public:
 private:
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;
+    const std::vector<ui32> ReadIndex;
     std::unique_ptr<NArrow::TArrowBatchBuilder> BatchBuilder;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
@@ -821,9 +825,11 @@ public:
     TRowDataBatcher(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         std::vector<ui32> writeIndex,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        std::vector<ui32> readIndex)
             : Columns(BuildColumns(inputColumns))
             , WriteIndex(std::move(writeIndex))
+            , ReadIndex(std::move(readIndex))
             , RowBatcher(Columns.size(), std::nullopt, alloc)
             , Alloc(alloc) {
     }
@@ -832,10 +838,11 @@ public:
         TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
+                auto readIndex = ReadIndex.empty() ? index : ReadIndex[index];
                 rowBuilder.AddCell(
                     WriteIndex[index],
                     Columns[index].PType,
-                    row.GetElement(index),
+                    row.GetElement(readIndex),
                     Columns[index].PTypeMod);
             }
             auto cells = rowBuilder.BuildCells();
@@ -854,6 +861,7 @@ public:
 private:
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;
+    const std::vector<ui32> ReadIndex;
     TRowsBatcher RowBatcher;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
@@ -1018,13 +1026,19 @@ IPayloadSerializerPtr CreateDataShardPayloadSerializer(
 }
 
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
-    return MakeIntrusive<TColumnDataBatcher>(inputColumns, std::move(writeIndex), std::move(alloc));
+        std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        std::vector<ui32> readIndex) {
+    Y_ABORT_UNLESS(writeIndex.size() == inputColumns.size());
+    Y_ABORT_UNLESS(readIndex.empty() || readIndex.size() == inputColumns.size());
+    return MakeIntrusive<TColumnDataBatcher>(inputColumns, std::move(writeIndex), std::move(alloc), std::move(readIndex));
 }
 
 IDataBatcherPtr CreateRowDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
-    return MakeIntrusive<TRowDataBatcher>(inputColumns, std::move(writeIndex), std::move(alloc));
+        std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        std::vector<ui32> readIndex) {
+    Y_ABORT_UNLESS(writeIndex.size() == inputColumns.size());
+    Y_ABORT_UNLESS(readIndex.empty() || readIndex.size() == inputColumns.size());
+    return MakeIntrusive<TRowDataBatcher>(inputColumns, std::move(writeIndex), std::move(alloc), std::move(readIndex));
 }
 
 bool IDataBatch::IsEmpty() const {
@@ -1159,6 +1173,14 @@ public:
             SendAttempts = 0;
         }
 
+        ui32 GetOverloadSeqNo() const {
+            return OverloadSeqNo;
+        }
+
+        void IncOverloadSeqNo() {
+            ++OverloadSeqNo;
+        }
+
         bool HasRead() const {
             return HasReadInBatch;
         }
@@ -1174,6 +1196,7 @@ public:
         bool& Closed;
 
         ui32 SendAttempts = 0;
+        ui64 OverloadSeqNo = 1;
         size_t BatchesInFlight = 0;
     };
 
@@ -1187,17 +1210,15 @@ public:
         return insertIt->second;
     }
 
-    TVector<IShardedWriteController::TPendingShardInfo> GetPendingShards() const {
-        TVector<IShardedWriteController::TPendingShardInfo> result;
+    void ForEachPendingShard(std::function<void(const IShardedWriteController::TPendingShardInfo&)>&& callback) const {
         for (const auto& [id, shard] : ShardsInfo) {
             if (!shard.IsEmpty() && shard.GetSendAttempts() == 0) {
-                result.push_back(IShardedWriteController::TPendingShardInfo{
+                callback(IShardedWriteController::TPendingShardInfo{
                     .ShardId = id,
                     .HasRead = shard.HasRead(),
                 });
             }
         }
-        return result;
     }
 
     bool Has(ui64 shardId) const {
@@ -1382,6 +1403,17 @@ public:
         }
     }
 
+    void CleanupClosedTokens() override {
+        for (auto it = WriteInfos.begin(); it != WriteInfos.end();) {
+            if (it->second.Closed) {
+                AFL_ENSURE(it->second.Serializer->IsFinished());
+                it = WriteInfos.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     void FlushBuffers() override {
         TVector<TWriteToken> writeTokensFoFlush;
         for (const auto& [token, writeInfo] : WriteInfos) {
@@ -1420,8 +1452,14 @@ public:
         }
     }
 
-    TVector<TPendingShardInfo> GetPendingShards() const override {
-        return ShardsInfo.GetPendingShards();
+    void ForEachPendingShard(std::function<void(const TPendingShardInfo&)>&& callback) const override {
+        ShardsInfo.ForEachPendingShard(std::move(callback));
+    }
+
+    std::vector<TPendingShardInfo> ExtractShardUpdates() override {
+        std::vector<TPendingShardInfo> shardUpdates;
+        std::swap(shardUpdates, ShardUpdates);
+        return shardUpdates;
     }
 
     TVector<ui64> GetShardsIds() const override {
@@ -1445,6 +1483,7 @@ public:
         meta.OperationsCount = shardInfo.GetBatchesInFlight();
         meta.IsFinal = shardInfo.IsClosed() && shardInfo.Size() == shardInfo.GetBatchesInFlight();
         meta.SendAttempts = shardInfo.GetSendAttempts();
+        meta.NextOverloadSeqNo = shardInfo.GetOverloadSeqNo();
 
         return meta;
     }
@@ -1493,10 +1532,9 @@ public:
 
     void OnMessageSent(ui64 shardId, ui64 cookie) override {
         auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty() || shardInfo.GetCookie() != cookie) {
-            return;
-        }
+        AFL_ENSURE(!shardInfo.IsEmpty() && shardInfo.GetCookie() == cookie);
         shardInfo.IncSendAttempts();
+        shardInfo.IncOverloadSeqNo();
     }
 
     void ResetRetries(ui64 shardId, ui64 cookie) override {
@@ -1580,11 +1618,16 @@ private:
             for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
                 for (auto& batch : batches) {
                     if (batch && !batch->IsEmpty()) {
+                        const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                                || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
                         ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
                             .Token = token,
                             .Data = std::move(batch),
-                            .HasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
-                                || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE),
+                            .HasRead = hasRead,
+                        });
+                        ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
+                            .ShardId = shardId,
+                            .HasRead = hasRead,
                         });
                     }
                 }
@@ -1597,11 +1640,16 @@ private:
                     if (!batch || batch->IsEmpty()) {
                         break;
                     }
+                    const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                        || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
                     shard.PushBatch(TBatchWithMetadata{
                         .Token = token,
                         .Data = std::move(batch),
-                        .HasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
-                                || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE),
+                        .HasRead = hasRead,
+                    });
+                    ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
+                        .ShardId = shardId,
+                        .HasRead = hasRead,
                     });
                 }
             }
@@ -1615,6 +1663,7 @@ private:
                 shard.MakeNextBatches(1);
             } else {
                 shard.MakeNextBatches(std::nullopt);
+                AFL_ENSURE(shard.GetBatchesInFlight() == shard.Size());
             }
         }
     }
@@ -1646,6 +1695,7 @@ private:
     TWriteToken CurrentWriteToken = 0;
 
     TShardsInfo ShardsInfo;
+    std::vector<IShardedWriteController::TPendingShardInfo> ShardUpdates;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;

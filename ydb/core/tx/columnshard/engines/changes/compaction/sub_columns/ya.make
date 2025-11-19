@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/columnshard/engines/changes/compaction/common
+    ydb/core/formats/arrow/accessor/sub_columns
 )
 
 END()

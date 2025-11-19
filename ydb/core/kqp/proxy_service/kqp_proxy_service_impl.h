@@ -7,8 +7,9 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -426,7 +427,7 @@ private:
 
 class TResourcePoolsCache {
     struct TClassifierInfo {
-        const TString MemberName;
+        const std::optional<TString> MemberName;
         const TString PoolId;
         const i64 Rank;
 
@@ -491,9 +492,9 @@ public:
         return it->second;
     }
 
-    void UpdateFeatureFlags(const NKikimrConfig::TFeatureFlags& featureFlags, TActorContext actorContext) {
-        EnableResourcePools = featureFlags.GetEnableResourcePools();
-        EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
+    void UpdateConfig(const NKikimrConfig::TFeatureFlags& featureFlags, const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig, TActorContext actorContext) {
+        EnableResourcePools = featureFlags.GetEnableResourcePools() || workloadManagerConfig.GetEnabled();
+        EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless() || workloadManagerConfig.GetEnabled();
         UpdateResourcePoolClassifiersSubscription(actorContext);
     }
 
@@ -599,7 +600,7 @@ private:
         TString poolId = "";
         i64 rank = -1;
         for (const auto& [_, classifier] : databaseInfo.RankToClassifierInfo) {
-            if (classifier.MemberName != userSID) {
+            if (classifier.MemberName.value_or(userSID) != userSID) {
                 continue;
             }
 

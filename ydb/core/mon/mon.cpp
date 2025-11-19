@@ -16,6 +16,7 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/core/base/monitoring_provider.h>
+#include <ydb/core/util/wildcard.h>
 
 #include <library/cpp/monlib/service/pages/version_mon_page.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
@@ -403,7 +404,19 @@ public:
             type = "application/json";
         }
         NHttp::THeaders headers(request->Headers);
-        TString origin = TString(headers["Origin"]);
+        TString allowOrigin = AppData()->Mon->GetConfig().AllowOrigin;
+        TString requestOrigin = TString(headers["Origin"]);
+        TString origin;
+        if (allowOrigin) {
+            if (IsMatchesWildcards(requestOrigin, allowOrigin)) {
+                origin = requestOrigin;
+            } else {
+                Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseBadRequest("Invalid CORS origin")));
+                return PassAway();
+            }
+        } else if (requestOrigin) {
+            origin = requestOrigin;
+        }
         if (origin.empty()) {
             origin = "*";
         }
@@ -494,7 +507,7 @@ public:
     void ReplyForbiddenAndPassAway(const TString& error = {}) {
         NYql::TIssues issues;
         issues.AddIssue(error);
-        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, false);
+        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, true);
     }
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
@@ -1130,7 +1143,7 @@ public:
     void ReplyForbiddenAndPassAway(const TString& error = {}) {
         NYql::TIssues issues;
         issues.AddIssue(error);
-        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, false);
+        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, true);
     }
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result) {

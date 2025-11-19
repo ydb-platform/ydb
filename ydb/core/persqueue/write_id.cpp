@@ -3,8 +3,15 @@
 namespace NKikimr::NPQ {
 
 TWriteId::TWriteId(ui64 nodeId, ui64 keyId) :
+    KafkaApiTransaction(false),
     NodeId(nodeId),
     KeyId(keyId)
+{
+}
+
+TWriteId::TWriteId(NKafka::TProducerInstanceId kafkaProducerInstanceId) :
+    KafkaApiTransaction(true),
+    KafkaProducerInstanceId(kafkaProducerInstanceId)
 {
 }
 
@@ -20,22 +27,45 @@ bool TWriteId::operator<(const TWriteId& rhs) const
 
 void TWriteId::ToStream(IOutputStream& s) const
 {
-    s << '{' << NodeId << ", " << KeyId << '}';
+    if (KafkaApiTransaction) {
+        s << "KafkaTransactionWriteId{" << KafkaProducerInstanceId.Id << ", " << KafkaProducerInstanceId.Epoch << '}';
+    } else {
+        s << '{' << NodeId << ", " << KeyId << '}';
+    }
+}
+
+TString TWriteId::ToString() const {
+    TStringStream ss;
+    ToStream(ss);
+    return ss.Str();
 }
 
 template <class T>
 TWriteId GetWriteIdImpl(const T& m)
 {
     const auto& writeId = m.GetWriteId();
-    return {writeId.GetNodeId(), writeId.GetKeyId()};
+    if (writeId.GetKafkaTransaction()) {
+        const auto& kafkaProducerInstanceId = writeId.GetKafkaProducerInstanceId();
+        return TWriteId{NKafka::TProducerInstanceId{kafkaProducerInstanceId.GetId(), kafkaProducerInstanceId.GetEpoch()}};
+    } else {
+        return {writeId.GetNodeId(), writeId.GetKeyId()};
+    }
 }
 
 template <class T>
 void SetWriteIdImpl(T& m, const TWriteId& writeId)
 {
     auto* w = m.MutableWriteId();
-    w->SetNodeId(writeId.NodeId);
-    w->SetKeyId(writeId.KeyId);
+    if (writeId.KafkaApiTransaction) {
+        w->SetKafkaTransaction(true);
+        auto* kafkaProducerInstanceId = w->MutableKafkaProducerInstanceId();
+        kafkaProducerInstanceId->SetId(writeId.KafkaProducerInstanceId.Id);
+        kafkaProducerInstanceId->SetEpoch(writeId.KafkaProducerInstanceId.Epoch);
+    } else {
+        w->SetKafkaTransaction(false);
+        w->SetNodeId(writeId.NodeId);
+        w->SetKeyId(writeId.KeyId);
+    }
 }
 
 TWriteId GetWriteId(const NKikimrPQ::TTransaction& m)

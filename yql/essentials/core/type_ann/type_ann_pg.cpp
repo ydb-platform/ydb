@@ -5187,7 +5187,7 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
                 } else {
                     const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TOptionalExprType>(
                     ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64));
-                    auto convertStatus = TryConvertTo(data, *expectedType, ctx.Expr);
+                    auto convertStatus = TryConvertTo(data, *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
                     if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
                         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(data->Pos()), "Mismatch argument types"));
                         return IGraphTransformer::TStatus::Error;

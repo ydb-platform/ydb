@@ -423,6 +423,7 @@ public:
 
         if (dstParentPath.IsUnderOperation()) {
             dstPath = TPath::ResolveWithInactive(OperationId, dstPathStr, context.SS);
+            dstParentPath = dstPath.Parent();
         } else {
             Y_ABORT("NONO");
         }

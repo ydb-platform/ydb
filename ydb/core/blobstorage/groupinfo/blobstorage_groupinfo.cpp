@@ -3,6 +3,7 @@
 #include "blobstorage_groupinfo_iter.h"
 #include "blobstorage_groupinfo_sets.h"
 #include "blobstorage_groupinfo_partlayout.h"
+#include "blobstorage_groupinfo_data_check.h"
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/protos/blobstorage.pb.h>
@@ -87,6 +88,27 @@ public:
         }
     }
 
+    TBlobStorageGroupInfo::EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+            const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
+        if (!CheckFailModelForSubgroup(failedDisks)) {
+            return TBlobStorageGroupInfo::EBS_DISINTEGRATED;
+        }
+
+        const TBlobStorageGroupType type = Top->GType;
+        ui32 effectiveReplicas = parts.CountEffectiveReplicas(type);
+        auto state = Top->BlobState(effectiveReplicas, failedDisks.GetNumSetItems());
+        if (state == TBlobStorageGroupInfo::EBS_FULL) {
+            return state;
+        }
+
+        ui32 distinctParts = parts.CountDistinctParts(type);
+        if (distinctParts < type.MinimalRestorablePartCount()) {
+            return TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
+        }
+
+        return TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY;
+    }
+
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const override {
         const TBlobStorageGroupType type = Top->GType;
         const ui32 effectiveReplicas = parts.CountEffectiveReplicas(Top->GType);
@@ -160,6 +182,11 @@ public:
         } else {
             return TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
         }
+    }
+
+    TBlobStorageGroupInfo::EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+            const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
+        return GetBlobState(parts, failedDisks);
     }
 
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const override {
@@ -275,6 +302,11 @@ quitIter:   ;
         }
     }
 
+    TBlobStorageGroupInfo::EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+            const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
+        return GetBlobState(parts, failedDisks);
+    }
+
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const override {
         const TBlobStorageGroupInfo::TSubgroupVDisks& disksWithReplica = parts.GetInvolvedDisks(Top);
         const ui32 myRing = idxInSubgroup % 3;
@@ -355,6 +387,8 @@ void TBlobStorageGroupInfo::TTopology::FinalizeConstruction() {
     BlobMapper.reset(CreateMapper(GType, this));
     // create quorum checker
     QuorumChecker.reset(CreateQuorumChecker(this));
+    // create data integrity checker
+    DataIntegrityChecker.reset(CreateDataIntegrityChecker(this));
 }
 
 bool TBlobStorageGroupInfo::TTopology::IsValidId(const TVDiskID& vdisk) const {
@@ -519,6 +553,42 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
     }
 
     Y_ABORT();
+}
+
+TBlobStorageGroupInfo::IDataIntegrityChecker*
+TBlobStorageGroupInfo::TTopology::CreateDataIntegrityChecker(const TTopology* topology) {
+    switch (topology->GType.GetErasure()) {
+        case TBlobStorageGroupType::ErasureNone:
+        case TBlobStorageGroupType::ErasureMirror3:
+        case TBlobStorageGroupType::Erasure3Plus1Block:
+        case TBlobStorageGroupType::Erasure3Plus1Stripe:
+        case TBlobStorageGroupType::Erasure3Plus2Block:
+        case TBlobStorageGroupType::Erasure4Plus2Stripe:
+        case TBlobStorageGroupType::Erasure3Plus2Stripe:
+        case TBlobStorageGroupType::ErasureMirror3Plus2:
+        case TBlobStorageGroupType::Erasure4Plus3Block:
+        case TBlobStorageGroupType::Erasure4Plus3Stripe:
+        case TBlobStorageGroupType::Erasure3Plus3Block:
+        case TBlobStorageGroupType::Erasure3Plus3Stripe:
+        case TBlobStorageGroupType::Erasure2Plus3Block:
+        case TBlobStorageGroupType::Erasure2Plus3Stripe:
+        case TBlobStorageGroupType::Erasure2Plus2Block:
+        case TBlobStorageGroupType::Erasure2Plus2Stripe:
+            return new TDataIntegrityCheckerTrivial(topology);
+
+        case TBlobStorageGroupType::Erasure4Plus2Block:
+            return new TDataIntegrityCheckerBlock42(topology);
+
+        case TBlobStorageGroupType::ErasureMirror3dc:
+            return new TDataIntegrityCheckerMirror3dc(topology);
+
+        case TBlobStorageGroupType::ErasureMirror3of4:
+            return new TDataIntegrityCheckerMirror3of4(topology);
+
+        default:
+            Y_ABORT("unexpected erasure type 0x%08" PRIx32,
+                   static_cast<ui32>(topology->GType.GetErasure()));
+    }
 }
 
 TString TBlobStorageGroupInfo::TTopology::ToString() const {

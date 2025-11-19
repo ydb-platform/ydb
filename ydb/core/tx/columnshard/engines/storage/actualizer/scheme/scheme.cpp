@@ -80,7 +80,9 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
                 }
             }
             auto info = BuildActualizationInfo(*portion);
-            AFL_VERIFY(info);
+            if (!info) { // its possible through chains with equivalent schemas collapsed
+                portionsToRemove.emplace(portion->GetPortionId());
+            }
             auto portionScheme = portion->GetSchema(VersionedIndex);
             TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
             features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
@@ -137,7 +139,7 @@ void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
     }
 }
 
-TSchemeActualizer::TSchemeActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex)
+TSchemeActualizer::TSchemeActualizer(const TInternalPathId pathId, const TVersionedIndex& versionedIndex)
     : PathId(pathId)
     , VersionedIndex(versionedIndex) {
     Y_UNUSED(PathId);

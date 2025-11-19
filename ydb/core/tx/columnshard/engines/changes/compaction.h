@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/changes/abstract/compaction_info.h>
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 
@@ -21,7 +22,7 @@ protected:
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     virtual void DoDebugString(TStringOutput& out) const override;
     virtual void DoCompile(TFinalizationContext& context) override;
-    virtual TPortionMeta::EProduced GetResultProducedClass() const = 0;
+    virtual NPortion::EProduced GetResultProducedClass() const = 0;
     virtual void OnAbortEmergency() override {
         NeedGranuleStatusProvide = false;
     }
@@ -29,7 +30,7 @@ protected:
         return NDataLocks::ELockCategory::Compaction;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
-        const THashSet<ui64> pathIds = { GranuleMeta->GetPathId() };
+        const THashSet<TInternalPathId> pathIds = { GranuleMeta->GetPathId() };
         return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), pathIds, GetLockCategory());
     }
 

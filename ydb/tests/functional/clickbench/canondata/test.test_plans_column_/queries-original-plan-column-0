@@ -73,13 +73,24 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TableFullScan",
+                                                "Node Type": "Aggregate-TableFullScan",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
+                                                    },
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
                                                         "Path": "/local/clickbench/plans/column/hits",
-                                                        "ReadColumns": null,
+                                                        "ReadColumns": [
+                                                            "CounterID"
+                                                        ],
                                                         "ReadRanges": [
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
@@ -91,30 +102,15 @@
                                                         "SsaProgram": {
                                                             "Command": [
                                                                 {
-                                                                    "GroupBy": {
-                                                                        "Aggregates": [
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 106
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Id": 2
-                                                                                }
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                },
-                                                                {
                                                                     "Projection": {
                                                                         "Columns": [
                                                                             {
-                                                                                "Id": 106
+                                                                                "Id": 7
                                                                             }
                                                                         ]
                                                                     }
                                                                 }
-                                                            ],
-                                                            "Version": 5
+                                                            ]
                                                         },
                                                         "Table": "clickbench/plans/column/hits"
                                                     }
@@ -141,6 +137,9 @@
                     "name": "/local/clickbench/plans/column/hits",
                     "reads": [
                         {
+                            "columns": [
+                                "CounterID"
+                            ],
                             "scan_by": [
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",

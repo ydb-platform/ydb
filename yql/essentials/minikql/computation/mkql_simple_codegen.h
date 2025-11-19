@@ -91,9 +91,9 @@ protected:
             : TBase(mutables, source, StateKind)
             , TLLVMBase(source, inWidth, outWidth, {
                 .ThisPtr = reinterpret_cast<uintptr_t>(this),
-                .InitStateMethPtr = GetMethodPtr(&TDerived::InitState),
-                .PrepareInputMethPtr = GetMethodPtr(&TDerived::PrepareInput),
-                .DoProcessMethPtr = GetMethodPtr(&TDerived::DoProcess)
+                .InitStateMethPtr = GetMethodPtr<&TDerived::InitState>(),
+                .PrepareInputMethPtr = GetMethodPtr<&TDerived::PrepareInput>(),
+                .DoProcessMethPtr = GetMethodPtr<&TDerived::DoProcess>()
             }) {}
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -115,7 +115,7 @@ public:
         auto result = TMaybeFetchResult::None();
         while (result.Empty()) {
             NUdf::TUnboxedValue*const* input = static_cast<const TDerived*>(this)->PrepareInput(state, ctx, output);
-            TMaybeFetchResult fetchResult = input ? SourceFlow->FetchValues(ctx, input) : TMaybeFetchResult::None();
+            TMaybeFetchResult fetchResult = input || !InWidth ? SourceFlow->FetchValues(ctx, input) : TMaybeFetchResult::None();
             result = static_cast<const TDerived*>(this)->DoProcess(state, ctx, fetchResult, output);
         }
         return result.Get();

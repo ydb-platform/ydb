@@ -4,6 +4,7 @@ import dataclasses
 import os
 import sys
 import traceback
+import re
 from codeowners import CodeOwners
 from enum import Enum
 from operator import attrgetter
@@ -11,6 +12,38 @@ from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from junit_utils import get_property_value, iter_xml_files
 from get_test_history import get_test_history
+
+
+def is_sanitizer_issue(error_text):
+    """
+    Detect if a test failure is caused by a sanitizer.
+    Returns True if the error text contains sanitizer-specific patterns.
+    """
+    if not error_text:
+        return False
+    
+    # Sanitizer error patterns for comprehensive coverage
+    sanitizer_patterns = [
+        # Main sanitizer patterns with severity levels (covers most cases)
+        r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
+        
+        # Process ID prefixed patterns (format: ==PID==SEVERITY: SANITIZER)
+        r'==\d+==\s*(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
+        
+        # UndefinedBehaviorSanitizer runtime errors
+        r'runtime error:',
+        r'==\d+==.*runtime error:',
+        
+        # Memory leak detection (specific LeakSanitizer output)
+        r'detected memory leaks',
+        r'==\d+==.*detected memory leaks',
+    ]
+    
+    for pattern in sanitizer_patterns:
+        if re.search(pattern, error_text, re.IGNORECASE | re.MULTILINE):
+            return True
+    
+    return False
 
 
 class TestStatus(Enum):
@@ -38,6 +71,7 @@ class TestResult:
     count_of_passed: int
     owners: str
     status_description: str
+    is_sanitizer_issue: bool = False
 
     @property
     def status_display(self):
@@ -105,7 +139,7 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description)
+        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description, is_sanitizer_issue(status_description))
 
 
 class TestSummaryLine:

@@ -31,6 +31,14 @@ public:
         MarkUserDeprecated = 'u'
     };
 
+    enum EServiceType : char {
+        ServiceTypeInfo = 'M',
+        ServiceTypeData = 'D',
+        ServiceTypeTmpData = 'X',
+        ServiceTypeMeta = 'J',
+        ServiceTypeTxMeta = 'K'
+    };
+
     TKeyPrefix(EType type, const TPartitionId& partition)
         : Partition(partition)
     {
@@ -111,13 +119,6 @@ protected:
     bool HasServiceType() const;
 
 private:
-    enum EServiceType : char {
-        ServiceTypeInfo = 'M',
-        ServiceTypeData = 'D',
-        ServiceTypeTmpData = 'X',
-        ServiceTypeMeta = 'J',
-        ServiceTypeTxMeta = 'K'
-    };
 
     void SetTypeImpl(EType, bool isServicePartition);
 
@@ -254,6 +255,21 @@ public:
     bool operator==(const TKey& key) const
     {
         return Size() == key.Size() && strncmp(Data(), key.Data(), Size()) == 0;
+    }
+    bool operator<(const TKey& key) const
+    {
+        if (GetPartition() < key.GetPartition())
+            return true;
+
+        if (GetPartition() == key.GetPartition()) {
+            if (GetOffset() < key.GetOffset())
+                return true;
+            if (GetOffset() == key.GetOffset()) {
+                if (GetPartNo() < key.GetPartNo())
+                    return true;
+            }
+        }
+        return false;
     }
 
 private:

@@ -32,3 +32,5 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
 
 void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId, ui32 blobsNum, ui32 maxBlobSize, ui32 readsNum,
         bool decommit = false, ui32 timeLimitSec = 0, std::vector<ui32> probabilities = { 5, 1, 5, 5, 1, 1 });
+
+void TestBasicCheckIntegrity(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId);

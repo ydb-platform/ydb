@@ -138,6 +138,25 @@ class TYdbSetup::TImpl {
     using EVerbose = TYdbSetupSettings::EVerbose;
     using EHealthCheck = TYdbSetupSettings::EHealthCheck;
 
+    class TPortGenerator {
+    public:
+        TPortGenerator(TPortManager& portManager, ui32 firstPort)
+            : PortManager_(portManager)
+            , Port_(firstPort)
+        {}
+
+        ui32 GetPort() {
+            if (!Port_) {
+                return PortManager_.GetPort();
+            }
+            return Port_++;
+        }
+
+    private:
+        TPortManager& PortManager_;
+        ui32 Port_;
+    };
+
 private:
     TAutoPtr<TLogBackend> CreateLogBackend() const {
         if (Settings_.LogOutputFile) {
@@ -237,7 +256,7 @@ private:
         NKikimr::Tests::TServerSettings serverSettings(msgBusPort, Settings_.AppConfig.GetAuthConfig(), Settings_.AppConfig.GetPQConfig());
         serverSettings.SetNodeCount(Settings_.NodeCount);
 
-        serverSettings.SetDomainName(Settings_.DomainName);
+        serverSettings.SetDomainName(TString(NKikimr::ExtractDomain(NKikimr::CanonizePath(Settings_.DomainName))));
         serverSettings.SetAppConfig(Settings_.AppConfig);
         serverSettings.SetFeatureFlags(Settings_.AppConfig.GetFeatureFlags());
         serverSettings.SetControls(Settings_.AppConfig.GetImmediateControlsConfig());
@@ -261,7 +280,7 @@ private:
 
         if (Settings_.MonitoringEnabled) {
             serverSettings.InitKikimrRunConfig();
-            serverSettings.SetMonitoringPortOffset(Settings_.MonitoringPortOffset, true);
+            serverSettings.SetMonitoringPortOffset(Settings_.FirstMonitoringPort, true);
             serverSettings.SetNeedStatsCollectors(true);
         }
 
@@ -276,7 +295,7 @@ private:
         ui32 dynNodesCount = 0;
         for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
             if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
-                serverSettings.AddStoragePoolType(tenantPath);
+                serverSettings.AddStoragePool(tenantPath, TStringBuilder() << GetTenantPath(tenantPath) << ":" << tenantPath);
                 dynNodesCount += tenantInfo.GetNodesCount();
             }
         }
@@ -285,7 +304,7 @@ private:
         return serverSettings;
     }
 
-    void CreateTenant(Ydb::Cms::CreateDatabaseRequest&& request, const TString& relativePath, const TString& type, TStorageMeta::TTenant tenantInfo) {
+    void CreateTenant(Ydb::Cms::CreateDatabaseRequest&& request, const TString& relativePath, const TString& type, TStorageMeta::TTenant tenantInfo, ui32 grpcPort) {
         const auto absolutePath = request.path();
         const auto [it, inserted] = StorageMeta_.MutableTenants()->emplace(relativePath, tenantInfo);
         if (inserted || it->second.GetCreationInProgress()) {
@@ -319,10 +338,14 @@ private:
             }
         }
 
-        if (Settings_.MonitoringEnabled) {
-            ui32 nodeIndex = GetNodeIndexForDatabase(absolutePath);
-            NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
-            GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(absolutePath), "", edgeActor, 0, true), nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
+        if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
+            if (Settings_.GrpcEnabled) {
+                Server_->EnableGRpc(grpcPort, GetNodeIndexForDatabase(absolutePath), absolutePath);
+            } else if (Settings_.MonitoringEnabled) {
+                ui32 nodeIndex = GetNodeIndexForDatabase(absolutePath);
+                NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
+                GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(absolutePath), "", edgeActor, 0, true), nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
+            }
         }
     }
 
@@ -331,7 +354,7 @@ private:
         storage->set_count(1);
     }
 
-    void CreateTenants() {
+    void CreateTenants(TPortGenerator& grpcPortGen) {
         std::set<TString> sharedTenants;
         std::map<TString, TStorageMeta::TTenant> serverlessTenants;
         for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
@@ -341,13 +364,13 @@ private:
             switch (tenantInfo.GetType()) {
                 case TStorageMeta::TTenant::DEDICATED:
                     AddTenantStoragePool(request.mutable_resources()->add_storage_units(), tenantPath);
-                    CreateTenant(std::move(request), tenantPath, "dedicated", tenantInfo);
+                    CreateTenant(std::move(request), tenantPath, "dedicated", tenantInfo, grpcPortGen.GetPort());
                     break;
 
                 case TStorageMeta::TTenant::SHARED:
                     sharedTenants.emplace(tenantPath);
                     AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), tenantPath);
-                    CreateTenant(std::move(request), tenantPath, "shared", tenantInfo);
+                    CreateTenant(std::move(request), tenantPath, "shared", tenantInfo, grpcPortGen.GetPort());
                     break;
 
                 case TStorageMeta::TTenant::SERVERLESS:
@@ -375,12 +398,14 @@ private:
             request.set_path(GetTenantPath(tenantPath));
             request.mutable_serverless_resources()->set_shared_database_path(GetTenantPath(tenantInfo.GetSharedTenant()));
             ServerlessToShared_[request.path()] = request.serverless_resources().shared_database_path();
-            CreateTenant(std::move(request), tenantPath, "serverless", tenantInfo);
+            CreateTenant(std::move(request), tenantPath, "serverless", tenantInfo, 0);
         }
     }
 
-    void InitializeServer(ui32 grpcPort) {
-        NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(grpcPort);
+    void InitializeServer() {
+        TPortGenerator grpcPortGen(PortManager_, Settings_.FirstGrpcPort);
+        const ui32 domainGrpcPort = grpcPortGen.GetPort();
+        NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(domainGrpcPort);
 
         Server_ = MakeIntrusive<NKikimr::Tests::TServer>(serverSettings);
 
@@ -390,14 +415,14 @@ private:
         Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
 
         if (Settings_.GrpcEnabled) {
-            Server_->EnableGRpc(grpcPort);
+            Server_->EnableGRpc(domainGrpcPort);
         }
 
         Client_ = MakeHolder<NKikimr::Tests::TClient>(serverSettings);
         Client_->InitRootScheme();
 
         Tenants_ = MakeHolder<NKikimr::Tests::TTenants>(Server_);
-        CreateTenants();
+        CreateTenants(grpcPortGen);
     }
 
     void InitializeYqlLogger() {
@@ -449,10 +474,8 @@ public:
         : Settings_(settings)
         , CoutColors_(NColorizer::AutoColors(Cout))
     {
-        const ui32 grpcPort = Settings_.GrpcPort ? Settings_.GrpcPort : PortManager_.GetPort();
-
         InitializeYqlLogger();
-        InitializeServer(grpcPort);
+        InitializeServer();
         WaitResourcesPublishing();
 
         if (Settings_.MonitoringEnabled && Settings_.VerboseLevel >= EVerbose::Info) {
@@ -472,7 +495,12 @@ public:
         }
 
         if (Settings_.GrpcEnabled && Settings_.VerboseLevel >= EVerbose::Info) {
-            Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << grpcPort << Endl;
+            Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << Server_->GetGRpcServer().GetPort() << Endl;
+            for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
+                if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
+                    Cout << CoutColors_.Cyan() << "Tenant [" << tenantPath << "] gRPC port: " << CoutColors_.Default() << Server_->GetTenantGRpcServer(GetTenantPath(tenantPath)).GetPort() << Endl;
+                }
+            }
         }
     }
 
@@ -516,13 +544,15 @@ public:
     }
 
     NKikimr::NKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, i32 resultSetId) const {
-        TString executionId = *NKikimr::NKqp::ScriptExecutionIdFromOperation(operation);
+        TString error;
+        const auto executionId = NKikimr::NKqp::ScriptExecutionIdFromOperation(operation, error);
+        Y_ENSURE(executionId, error);
 
         ui32 nodeIndex = GetNodeIndexForDatabase(database);
         NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
         auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
         auto sizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit();
-        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, GetDatabasePath(database), executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
+        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, GetDatabasePath(database), *executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
 
         GetRuntime()->Register(fetchActor, nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
 
@@ -655,11 +685,7 @@ private:
     }
 
     TString GetDatabasePath(const TString& database) const {
-        const TString& result = NKikimr::CanonizePath(database ? database : GetDefaultDatabase());
-        if (StorageMeta_.TenantsSize() > 0 && result == NKikimr::CanonizePath(Settings_.DomainName)) {
-            ythrow yexception() << "Cannot use root domain '" << result << "' as request database then created additional tenants";
-        }
-        return result;
+        return NKikimr::CanonizePath(database ? database : GetDefaultDatabase());
     }
 
     ui32 GetNodeIndexForDatabase(const TString& path) const {

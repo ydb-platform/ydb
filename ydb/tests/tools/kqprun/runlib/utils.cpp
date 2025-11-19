@@ -105,6 +105,7 @@ void TStatsPrinter::PrintPlan(const TString& plan, IOutputStream& output) const 
 
     NYdb::NConsoleClient::TQueryPlanPrinter printer(PlanFormat, true, output);
     printer.Print(plan);
+    output.Flush();
 }
 
 void TStatsPrinter::PrintInProgressStatistics(const TString& plan, IOutputStream& output) const {

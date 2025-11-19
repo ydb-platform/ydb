@@ -182,6 +182,7 @@ public:
     bool IsValidLeafName(TString& explain) const;
     TString GetEffectiveACL() const;
     ui64 GetEffectiveACLVersion() const;
+    bool IsLocked() const;
     TTxId LockedBy() const;
 
     bool IsActive() const;

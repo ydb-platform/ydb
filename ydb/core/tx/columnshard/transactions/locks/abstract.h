@@ -33,6 +33,8 @@ public:
 
     virtual TString GetClassName() const = 0;
 
+    virtual NColumnShard::TUnifiedPathId GetPathId() const = 0;
+
     bool DeserializeFromProto(const TProto& proto) {
         return DoDeserializeFromProto(proto);
     }

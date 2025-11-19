@@ -88,6 +88,7 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
         yaml_dict["table_service_config"]["enable_htap_tx"] = True
         yaml_dict["table_service_config"]["enable_olap_sink"] = True
         yaml_dict["table_service_config"]["enable_create_table_as"] = True
+        yaml_dict["feature_flags"]["enable_table_datetime64"] = True
     return yaml_dict
 
 
@@ -164,11 +165,21 @@ class KikimrConfigGenerator(object):
             separate_node_configs=False,
             default_clusteradmin=None,
             enable_resource_pools=None,
-            grouped_memory_limiter_config=None,
+            scan_grouped_memory_limiter_config=None,
+            comp_grouped_memory_limiter_config=None,
+            deduplication_grouped_memory_limiter_config=None,
             query_service_config=None,
             domain_login_only=None,
             use_self_management=False,
             simple_config=False,
+            breakpad_minidumps_path=None,
+            breakpad_minidumps_script=None,
+            explicit_hosts_and_host_configs=False,
+            table_service_config=None,  # dict[name]=value
+            bridge_config=None,
+            memory_controller_config=None,
+            verbose_memory_limit_exception=False,
+            enable_static_auth=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -335,6 +346,8 @@ class KikimrConfigGenerator(object):
         rack_it = itertools.count(start=1)
         body_it = itertools.count(start=1)
         self.yaml_config["nameservice_config"] = {"node": []}
+        self.breakpad_minidumps_path = breakpad_minidumps_path
+        self.breakpad_minidumps_script = breakpad_minidumps_script
         for node_id in self.__node_ids:
             dc, rack, body = next(dc_it), next(rack_it), next(body_it)
             ic_port = self.port_allocator.get_node_port_allocator(node_id).ic_port
@@ -385,6 +398,19 @@ class KikimrConfigGenerator(object):
         if columnshard_config:
             self.yaml_config["column_shard_config"] = columnshard_config
 
+        if column_shard_config:
+            self.yaml_config["column_shard_config"] = column_shard_config
+
+        if query_service_config:
+            self.yaml_config["query_service_config"] = query_service_config
+
+        if scan_grouped_memory_limiter_config:
+            self.yaml_config["scan_grouped_memory_limiter_config"] = scan_grouped_memory_limiter_config
+        if comp_grouped_memory_limiter_config:
+            self.yaml_config["comp_grouped_memory_limiter_config"] = comp_grouped_memory_limiter_config
+        if deduplication_grouped_memory_limiter_config:
+            self.yaml_config["deduplication_grouped_memory_limiter_config"] = deduplication_grouped_memory_limiter_config
+
         self.__build()
 
         if self.grpc_ssl_enable:
@@ -415,8 +441,13 @@ class KikimrConfigGenerator(object):
         if default_user_sid:
             security_config_root["security_config"]["default_user_sids"] = [default_user_sid]
 
+        if memory_controller_config:
+            self.yaml_config["memory_controller_config"] = memory_controller_config
+
         if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
-            self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}
+            if "memory_controller_config" not in self.yaml_config:
+                self.yaml_config["memory_controller_config"] = {}
+            self.yaml_config["memory_controller_config"]["hard_limit_bytes"] = int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))
 
         if os.getenv("YDB_CHANNEL_BUFFER_SIZE"):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
@@ -506,6 +537,11 @@ class KikimrConfigGenerator(object):
             security_config = self.yaml_config["domains_config"]["security_config"]
             security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
             security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
+        self.__enable_static_auth = enable_static_auth
+
+    @property
+    def enable_static_auth(self):
+        return self.__enable_static_auth
 
     @property
     def default_clusteradmin(self):

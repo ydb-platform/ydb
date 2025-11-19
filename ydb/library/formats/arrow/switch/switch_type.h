@@ -1,7 +1,10 @@
 #pragma once
 #include <ydb/library/formats/arrow/validation/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/xxhash/xxhash.h>
+#include <util/string/cast.h>
 #include <util/system/yassert.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
@@ -12,8 +15,143 @@ extern "C" {
 namespace NKikimr::NArrow {
 
 template <typename TType>
-struct TTypeWrapper {
+class TTypeWrapper {
+private:
+    template <typename T, bool IsCType>
+    struct ValueTypeSelector {
+        using type = typename arrow::TypeTraits<T>::CType;
+    };
+
+    template <typename T>
+    struct ValueTypeSelector<T, false> {
+        using type = arrow::util::string_view;
+    };
+
+public:
     using T = TType;
+    static constexpr bool IsCType = arrow::has_c_type<T>() && !std::is_same_v<arrow::HalfFloatType, T>;
+    static constexpr bool IsStringView = arrow::has_string_view<T>();
+    static_assert(!IsCType || !IsStringView);
+    static constexpr bool IsAppropriate = IsCType || IsStringView;
+    static constexpr bool IsIndexType() {
+        return std::is_same_v<arrow::UInt32Type, T> || std::is_same_v<arrow::UInt16Type, T> || std::is_same_v<arrow::UInt8Type, T>;
+    }
+    using ValueType = ValueTypeSelector<T, IsCType>::type;
+    using TArray = typename arrow::TypeTraits<T>::ArrayType;
+    using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
+    using TScalar = typename arrow::TypeTraits<T>::ScalarType;
+
+    template <class TExt>
+    static TBuilder* CastBuilder(TExt* builder) {
+        return static_cast<TBuilder*>(builder);
+    }
+
+    template <class TExt>
+    static TScalar* CastScalar(TExt* scalar) {
+        return static_cast<TScalar*>(scalar);
+    }
+
+    template <class TExt>
+    static const TArray* CastArray(const TExt* arr) {
+        return static_cast<const TArray*>(arr);
+    }
+
+    template <class TExt>
+    static TArray* CastArray(TExt* arr) {
+        return static_cast<TArray*>(arr);
+    }
+
+    template <class TExt>
+    static std::shared_ptr<TArray> CastArray(const std::shared_ptr<TExt>& arr) {
+        return std::static_pointer_cast<TArray>(arr);
+    }
+
+    ui64 CalcHash(const ValueType val) const {
+        if constexpr (IsCType) {
+            return XXH3_64bits((const ui8*)&val, sizeof(val));
+        }
+        if constexpr (IsStringView) {
+            return XXH3_64bits((const ui8*)val.data(), val.size());
+        }
+        Y_FAIL();
+    }
+
+    void AppendValue(arrow::ArrayBuilder& builder, const ValueType val) const {
+        if constexpr (IsCType) {
+            TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(val));
+            return;
+        }
+        if constexpr (IsStringView) {
+            TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(val));
+            return;
+        }
+        Y_FAIL();
+    }
+
+    template <class TValue>
+    std::shared_ptr<arrow::Scalar> BuildScalar(const TValue val, const std::shared_ptr<arrow::DataType>& dType) const {
+        if constexpr (IsCType) {
+            if constexpr (arrow::is_parameter_free_type<TType>::value) {
+                return std::make_shared<TScalar>(val);
+            }
+            if constexpr (!arrow::is_parameter_free_type<TType>::value) {
+                return std::make_shared<TScalar>(val, dType);
+            }
+        }
+        if constexpr (IsStringView) {
+            if constexpr (std::is_same<TValue, arrow::util::string_view>::value) {
+                if constexpr (arrow::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow::Buffer::FromString(std::string(val.data(), val.size())));
+                }
+                if constexpr (!arrow::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow::Buffer::FromString(std::string(val.data(), val.size())), dType);
+                }
+            }
+            if constexpr (!std::is_same<TValue, arrow::util::string_view>::value) {
+                if constexpr (arrow::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow::Buffer::FromString(val));
+                }
+                if constexpr (!arrow::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow::Buffer::FromString(val), dType);
+                }
+            }
+        }
+        Y_FAIL();
+        return nullptr;
+    }
+
+    TString ToString(const ValueType& value) const {
+        if constexpr (IsCType) {
+            return ::ToString(value);
+        }
+        if constexpr (IsStringView) {
+            return TString(value.data(), value.size());
+        }
+        Y_FAIL();
+        return "";
+    }
+
+    ValueType GetValue(const TScalar& scalar) const {
+        if constexpr (IsCType) {
+            return scalar.value;
+        }
+        if constexpr (IsStringView) {
+            return (arrow::util::string_view)*scalar.value;
+        }
+        Y_FAIL();
+        return ValueType{};
+    }
+
+    ValueType GetValue(const TArray& arr, const ui32 index) const {
+        if constexpr (IsCType) {
+            return arr.Value(index);
+        }
+        if constexpr (IsStringView) {
+            return arr.GetView(index);
+        }
+        Y_FAIL();
+        return ValueType{};
+    }
 };
 
 template <class TResult, TResult defaultValue, typename TFunc, bool EnableNull = false>
@@ -113,8 +251,16 @@ bool SwitchArrayType(const arrow::Datum& column, TFunc&& f) {
 template <typename T>
 bool Append(arrow::ArrayBuilder& builder, const typename T::c_type& value) {
     using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
-
     TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(value));
+    return true;
+}
+
+template <typename T>
+bool AppendValues(arrow::ArrayBuilder& builder, const typename T::c_type& value, const ui32 count) {
+    using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
+    for (ui32 i = 0; i < count; ++i) {
+        TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(value));
+    }
     return true;
 }
 
@@ -143,9 +289,10 @@ bool Append(arrow::ArrayBuilder& builder, const std::vector<typename T::c_type>&
 }
 
 template <typename T>
-[[nodiscard]] bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
+[[nodiscard]] bool Append(T& builder, const arrow::Type::type typeId, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
     Y_DEBUG_ABORT_UNLESS(builder.type()->id() == array.type_id());
-    return SwitchType(array.type_id(), [&](const auto& type) {
+    Y_DEBUG_ABORT_UNLESS(typeId == array.type_id());
+    return SwitchType(typeId, [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
         using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
@@ -178,6 +325,11 @@ template <typename T>
         Y_ABORT_UNLESS(false, "unpredictable variant");
         return false;
     });
+}
+
+template <typename T>
+[[nodiscard]] bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
+    return Append<T>(builder, array.type_id(), array, position, recordSize);
 }
 
 }   // namespace NKikimr::NArrow

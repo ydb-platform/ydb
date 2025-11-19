@@ -207,7 +207,7 @@ public:
                 self->GetKeyAccessSampler()))
         , Self(self)
         , EngineBay(engineBay)
-        , UserDb(*self, db, globalTxId, TRowVersion::Min(), TRowVersion::Max(), counters, now)        
+        , UserDb(*self, db, globalTxId, TRowVersion::Max(), counters, now)
     {
     }
 
@@ -217,9 +217,9 @@ public:
             TArrayRef<const NTable::TTag> tags,
             NTable::TRowState& row,
             NTable::TSelectStats& stats,
-            const TMaybe<TRowVersion>& readVersion) override
+            const TMaybe<TRowVersion>& snapshot) override
     {
-        return UserDb.SelectRow(tableId, key, tags, row, stats, readVersion);
+        return UserDb.SelectRow(tableId, key, tags, row, stats, snapshot);
     }
 
     NTable::EReady SelectRow(
@@ -227,29 +227,27 @@ public:
             TArrayRef<const TRawTypeValue> key,
             TArrayRef<const NTable::TTag> tags,
             NTable::TRowState& row,
-            const TMaybe<TRowVersion>& readVersion) override
+            const TMaybe<TRowVersion>& snapshot) override
     {
-        return UserDb.SelectRow(tableId, key, tags, row, readVersion);
+        return UserDb.SelectRow(tableId, key, tags, row, snapshot);
     }
 
-    void SetWriteVersion(TRowVersion writeVersion) {
-        UserDb.SetWriteVersion(writeVersion);
+    void SetMvccVersion(TRowVersion mvccVersion) {
+        UserDb.SetMvccVersion(mvccVersion);
     }
 
     TRowVersion GetWriteVersion(const TTableId& tableId) const override {
         Y_UNUSED(tableId);
-        Y_ABORT_UNLESS(!UserDb.GetWriteVersion().IsMax(), "Cannot perform writes without WriteVersion set");
-        return UserDb.GetWriteVersion();
-    }
-
-    void SetReadVersion(TRowVersion readVersion) {
-        UserDb.SetReadVersion(readVersion);
+        auto mvccVersion = UserDb.GetMvccVersion();
+        Y_ABORT_UNLESS(!mvccVersion.IsMax(), "Cannot perform writes without the correct MvccVersion set");
+        return mvccVersion;
     }
 
     TRowVersion GetReadVersion(const TTableId& tableId) const override {
         Y_UNUSED(tableId);
-        Y_ABORT_UNLESS(!UserDb.GetReadVersion().IsMin(), "Cannot perform reads without ReadVersion set");
-        return UserDb.GetReadVersion();
+        auto mvccVersion = UserDb.GetMvccVersion();
+        Y_ABORT_UNLESS(!mvccVersion.IsMax(), "Cannot perform reads without the correct MvccVersion set");
+        return mvccVersion;
     }
 
     void SetVolatileTxId(ui64 txId) {
@@ -276,8 +274,8 @@ public:
         return UserDb.GetChangeCollector(tableId);
     }
 
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) override {
-        UserDb.CommitChanges(tableId, lockId, writeVersion);
+    void CommitChanges(const TTableId& tableId, ui64 lockId) override {
+        UserDb.CommitChanges(tableId, lockId);
     }
 
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const {
@@ -389,6 +387,10 @@ public:
         UserDb.UpdateRow(tableId, key, ops);
     }
 
+    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+        UserDb.IncrementRow(tableId, key, ops);
+    }
+    
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);
@@ -596,21 +598,14 @@ TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
     return outSizes;
 }
 
-void TEngineBay::SetWriteVersion(TRowVersion writeVersion) {
+void TEngineBay::SetMvccVersion(TRowVersion mvccVersion) {
     Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-    host->SetWriteVersion(writeVersion);
-}
-
-void TEngineBay::SetReadVersion(TRowVersion readVersion) {
-    Y_ABORT_UNLESS(EngineHost);
-
-    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-    host->SetReadVersion(readVersion);
+    host->SetMvccVersion(mvccVersion);
 
     Y_ABORT_UNLESS(ComputeCtx);
-    ComputeCtx->SetReadVersion(readVersion);
+    ComputeCtx->SetMvccVersion(mvccVersion);
 }
 
 void TEngineBay::SetVolatileTxId(ui64 txId) {

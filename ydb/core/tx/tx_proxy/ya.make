@@ -16,6 +16,7 @@ SRCS(
     rpc_long_tx.cpp
     snapshotreq.cpp
     commitreq.cpp
+    upload_columns.cpp
     upload_rows_counters.cpp
     upload_rows_common_impl.cpp
     upload_rows.cpp

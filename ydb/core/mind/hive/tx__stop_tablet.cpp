@@ -32,6 +32,7 @@ public:
                     return true;
                 }
             }
+            BLOG_D("THive::TTxStopTablet::Execute Tablet: " << TabletId << " State: " << ETabletStateName(tablet->State) << " VolatileState: " << TTabletInfo::EVolatileStateName(tablet->GetVolatileState()));
             ETabletState state = tablet->State;
             ETabletState newState = state;
             NIceDb::TNiceDb db(txc.DB);
@@ -59,6 +60,8 @@ public:
                 if (tablet->IsAlive()) {
                     tablet->InitiateStop(SideEffects);
                     db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::LeaderNode>(0);
+                } else {
+                    tablet->BecomeStopped();
                 }
                 status = NKikimrProto::OK;
                 break;

@@ -429,6 +429,7 @@ protected:
     TFollowerUpdates PendingFollowerUpdates;
     std::queue<TTabletId> StopTenantTabletsQueue;
     std::queue<TTabletId> ResumeTenantTabletsQueue;
+    bool NotEnoughResources = false;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -442,7 +443,6 @@ protected:
     ui64 UpdateTabletMetricsInProgress = 0;
     static constexpr ui64 MAX_UPDATE_TABLET_METRICS_IN_PROGRESS = 10000; // 10K
     i64 DeleteTabletInProgress = 0;
-    static constexpr i64 MAX_DELETE_TABLET_IN_PROGRESS = 100;
     std::queue<TTabletId> DeleteTabletQueue;
 
     TString BootStateBooting = "Booting";
@@ -621,7 +621,8 @@ protected:
 
     struct TNoNodeFound {};
     struct TTooManyTabletsStarting {};
-    using TBestNodeResult = std::variant<TNodeInfo*, TNoNodeFound, TTooManyTabletsStarting>;
+    struct TNotEnoughResources {};
+    using TBestNodeResult = std::variant<TNodeInfo*, TNoNodeFound, TTooManyTabletsStarting, TNotEnoughResources>;
 
     TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
 
@@ -681,6 +682,8 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void UpdateCounterTabletChannelHistorySize();
     void UpdateCounterNodesDown(i64 nodesDownDiff);
     void UpdateCounterNodesFrozen(i64 nodesFrozenDiff);
+    void UpdateCounterDeleteTabletQueueSize();
+    void UpdateCounterTabletsDeleting();
     void RecordTabletMove(const TTabletMoveInfo& info);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
@@ -1007,6 +1010,10 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
 
     ui64 GetNodeRestartsForPenalty() const {
         return CurrentConfig.GetNodeRestartsForPenalty();
+    }
+
+    i64 GetMaxDeleteTabletInProgress() const {
+        return static_cast<i64>(CurrentConfig.GetMaxDeleteTabletInProgress());
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

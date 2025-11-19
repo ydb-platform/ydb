@@ -1133,6 +1133,10 @@ public:
         }
     }
 
+    void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
+        Y_UNUSED(settings);
+    }
+
     template<typename T>
     void FromProto(const T& f)
     {

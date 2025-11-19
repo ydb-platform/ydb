@@ -4,6 +4,7 @@ RECURSE_FOR_TESTS(
     cost
     data
     data_integrity
+    discovery
     effects
     federated_query
     indexes

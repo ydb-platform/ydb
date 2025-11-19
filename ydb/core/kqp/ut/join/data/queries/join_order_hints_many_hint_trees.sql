@@ -1,6 +1,6 @@
 PRAGMA TablePathPrefix='/Root';
 
-PRAGMA ydb.OptimizerHints = 
+PRAGMA ydb.OptimizerHints =
 '
     Rows(R # 10e8)
     Rows(T # 1)
@@ -14,7 +14,7 @@ PRAGMA ydb.OptimizerHints =
     JoinType(T U Broadcast)
 ';
 
-SELECT * FROM 
+SELECT * FROM
     R   INNER JOIN  S   on  R.id = S.id
         INNER JOIN  T   on  R.id = T.id
         INNER JOIN  U   on  T.id = U.id

@@ -9,7 +9,6 @@ namespace NKikimr::NOlap {
 class TWritingContext {
 private:
     YDB_READONLY(ui64, TabletId, 0);
-    YDB_READONLY(NActors::TActorId, BufferizationInsertionActorId, NActors::TActorId());
     YDB_READONLY(NActors::TActorId, BufferizationPortionsActorId, NActors::TActorId());
     YDB_READONLY(NActors::TActorId, TabletActorId, NActors::TActorId());
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ActualSchema);
@@ -17,8 +16,10 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TSplitterCounters>, SplitterCounters);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TWriteCounters>, WritingCounters);
     YDB_READONLY(TSnapshot, ApplyToSnapshot, TSnapshot::Zero());
+    YDB_READONLY_DEF(std::optional<ui64>, LockId);
     const std::shared_ptr<const TAtomicCounter> ActivityChecker;
     YDB_READONLY(bool, NoTxWrite, false);
+    YDB_READONLY(bool, IsBulk, false);
 
 public:
     void MergeFrom(const TWritingContext& newContext) {
@@ -36,11 +37,10 @@ public:
 
     TWritingContext(const ui64 tabletId, const NActors::TActorId& tabletActorId, const std::shared_ptr<ISnapshotSchema>& actualSchema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,
-        const std::shared_ptr<NColumnShard::TWriteCounters>& writingCounters, const TSnapshot& applyToSnapshot,
-        const std::shared_ptr<const TAtomicCounter>& activityChecker, const bool noTxWrite,
-        const NActors::TActorId& bufferizationInsertionActorId, const NActors::TActorId& bufferizationPortionsActorId)
+        const std::shared_ptr<NColumnShard::TWriteCounters>& writingCounters, const TSnapshot& applyToSnapshot, const std::optional<ui64>& lockId,
+        const std::shared_ptr<const TAtomicCounter>& activityChecker, const bool noTxWrite, const NActors::TActorId& bufferizationPortionsActorId,
+        const bool isBulk)
         : TabletId(tabletId)
-        , BufferizationInsertionActorId(bufferizationInsertionActorId)
         , BufferizationPortionsActorId(bufferizationPortionsActorId)
         , TabletActorId(tabletActorId)
         , ActualSchema(actualSchema)
@@ -48,8 +48,10 @@ public:
         , SplitterCounters(splitterCounters)
         , WritingCounters(writingCounters)
         , ApplyToSnapshot(applyToSnapshot)
+        , LockId(lockId)
         , ActivityChecker(activityChecker)
         , NoTxWrite(noTxWrite)
+        , IsBulk(isBulk)
     {
         AFL_VERIFY(ActivityChecker);
     }

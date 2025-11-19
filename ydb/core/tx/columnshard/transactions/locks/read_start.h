@@ -1,12 +1,13 @@
 #pragma once
 #include "abstract.h"
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 
 class TEvReadStartWriter: public ITxEventWriter {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
     YDB_READONLY_DEF(std::shared_ptr<TPKRangesFilter>, Filter);
     YDB_READONLY_DEF(THashSet<ui64>, LockIdsForCheck);
@@ -22,14 +23,14 @@ private:
     virtual std::shared_ptr<ITxEvent> DoBuildEvent() override;
 
 public:
-    TEvReadStartWriter(const ui64 pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter,
+    TEvReadStartWriter(const NColumnShard::TUnifiedPathId pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter,
         const THashSet<ui64>& lockIdsForCheck)
         : PathId(pathId)
         , Schema(schema)
         , Filter(filter)
         , LockIdsForCheck(lockIdsForCheck)
     {
-        AFL_VERIFY(PathId);
+        AFL_VERIFY(PathId.IsValid());
         AFL_VERIFY(Schema);
         AFL_VERIFY(Filter);
     }
@@ -42,7 +43,7 @@ public:
     }
 
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    const NColumnShard::TUnifiedPathId PathId;
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
     YDB_READONLY_DEF(std::shared_ptr<TPKRangesFilter>, Filter);
 
@@ -57,12 +58,16 @@ public:
         return GetClassNameStatic();
     }
 
+    virtual NColumnShard::TUnifiedPathId GetPathId() const override {
+        return PathId;
+    }
+
     TEvReadStart() = default;
-    TEvReadStart(const ui64 pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter)
+    TEvReadStart(const NColumnShard::TUnifiedPathId& pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter)
         : PathId(pathId)
         , Schema(schema)
         , Filter(filter) {
-        AFL_VERIFY(PathId);
+        AFL_VERIFY(PathId.IsValid());
         AFL_VERIFY(Schema);
         AFL_VERIFY(Filter);
     }

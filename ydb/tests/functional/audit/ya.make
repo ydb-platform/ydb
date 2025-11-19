@@ -10,7 +10,7 @@ SPLIT_FACTOR(100)
 SIZE(MEDIUM)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 TEST_SRCS(
     conftest.py
@@ -18,7 +18,6 @@ TEST_SRCS(
 )
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(

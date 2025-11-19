@@ -31,6 +31,11 @@ WITH (option = value [, ...])
     * `USER` — имя пользователя.
     * `PASSWORD_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего пароль.
 
+* `CONSISTENCY_LEVEL` — [уровень согласованности реплицируемых данных](../../../concepts/async-replication.md#consistency-levels):
+  * `ROW` — [согласованность данных уровня строки](../../../concepts/async-replication.md#consistency-level-row). Режим по умолчанию.
+  * `GLOBAL` — [глобальная согласованность данных](../../../concepts/async-replication.md#consistency-level-global). Дополнительно можно указать:
+    * `COMMIT_INTERVAL` — [периодичность фиксации изменений](../../../concepts/async-replication.md#commit-interval) в формате [ISO 8601](https://ru.wikipedia.org/wiki/ISO_8601). Значение по умолчанию — 10 секунд.
+
 ## Примеры {#examples}
 
 {% note tip %}
@@ -82,6 +87,31 @@ FOR `/Root/another_database` AS `/Root/my_database`
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
+);
+```
+
+Создание экземпляра асинхронной репликации в режиме глобальной согласованности данных (периодичность фиксации изменений по умолчанию — 10 секунд):
+
+```yql
+CREATE ASYNC REPLICATION my_consistent_replication
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_NAME = 'my_secret',
+    CONSISTENCY_LEVEL = 'GLOBAL'
+);
+```
+
+Создание экземпляра асинхронной репликации в режиме глобальной согласованности данных с минутной периодичностью фиксации изменений:
+
+```yql
+CREATE ASYNC REPLICATION my_consistent_replication_1min_commit_interval
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_NAME = 'my_secret',
+    CONSISTENCY_LEVEL = 'GLOBAL',
+    COMMIT_INTERVAL = Interval('PT1M')
 );
 ```
 

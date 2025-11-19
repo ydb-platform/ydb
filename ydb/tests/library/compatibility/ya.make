@@ -13,3 +13,4 @@ RUN_PROGRAM(
 END()
 
 RECURSE(downloader)
+RECURSE(configs)

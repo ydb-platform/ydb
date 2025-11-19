@@ -413,6 +413,14 @@ namespace NFake {
                     msg->RecordGeneration, msg->PerGenerationCounter, msg->Channel);
         }
 
+        TEvBlobStorage::TEvCheckIntegrityResult* Handle(TEvBlobStorage::TEvCheckIntegrity *msg) {
+            auto* result = new TEvBlobStorage::TEvCheckIntegrityResult(NKikimrProto::OK);
+            result->Id = msg->Id;
+            result->PlacementStatus = TEvBlobStorage::TEvCheckIntegrityResult::PS_UNKNOWN;
+            result->DataStatus = TEvBlobStorage::TEvCheckIntegrityResult::DS_UNKNOWN;
+            return result;
+        }
+
     public: // Non-event model interaction methods
         TStorageStatusFlags GetStorageStatusFlags() const noexcept {
             return StorageStatusFlags;

@@ -1,19 +1,23 @@
 #include "lz4io.h"
-
-#include <util/generic/scope.h>
-#include <util/generic/size_literals.h>
+#include "output_queue_impl.h"
 
 #include <contrib/libs/lz4/lz4.h>
 #include <contrib/libs/lz4/lz4hc.h>
 
+#include <util/generic/scope.h>
+#include <util/generic/size_literals.h>
+
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/exceptions.h>
-#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
-#include "output_queue_impl.h"
 
-namespace NYql {
+#define LZ4F_STATIC_LINKING_ONLY
+#include <contrib/libs/lz4/lz4frame.h>
 
-namespace NLz4 {
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+
+namespace NYql::NLz4 {
 
 namespace {
 
@@ -42,6 +46,12 @@ ui32 ReadLE32(const void* s) {
     return value32;
 }
 
+enum class EStreamType {
+    Unknown = 0,
+    Frame,
+    Legacy
+};
+
 EStreamType CheckMagic(const void* data) {
     switch (ReadLE32(data)) {
         case Lz4ioMagicNumber:
@@ -59,7 +69,24 @@ EStreamType CheckMagic(NDB::ReadBuffer& input) {
     return CheckMagic(data);
 }
 
-}
+class TReadBuffer : public NDB::ReadBuffer {
+public:
+    TReadBuffer(NDB::ReadBuffer& source);
+    ~TReadBuffer();
+private:
+    bool nextImpl() final;
+
+    size_t DecompressFrame();
+    size_t DecompressLegacy();
+
+    NDB::ReadBuffer& Source;
+    const EStreamType StreamType;
+    std::vector<char> InBuffer, OutBuffer;
+
+    LZ4F_decompressionContext_t Ctx;
+    LZ4F_errorCode_t NextToLoad;
+    size_t Pos, Remaining;
+};
 
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     : NDB::ReadBuffer(nullptr, 0ULL), Source(source), StreamType(CheckMagic(Source)), Pos(0ULL), Remaining(0ULL)
@@ -173,8 +200,6 @@ size_t TReadBuffer::DecompressLegacy() {
     return size_t(decodeSize);
 }
 
-namespace {
-
 class TCompressor : public TOutputQueue<> {
 public:
     TCompressor(int level)
@@ -269,12 +294,14 @@ private:
     bool IsFirstBlock = true;
 };
 
+} // anonymous namespace
+
+std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source) {
+    return std::make_unique<TReadBuffer>(source);
 }
 
 IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
     return std::make_unique<TCompressor>(cLevel.value_or(LZ4HC_CLEVEL_DEFAULT));
 }
 
-}
-
-}
+} // namespace NYql::NLz4

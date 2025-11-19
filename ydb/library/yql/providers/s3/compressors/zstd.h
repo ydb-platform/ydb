@@ -1,31 +1,18 @@
 #pragma once
 
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
-#define ZSTD_STATIC_LINKING_ONLY
-#include <contrib/libs/zstd/include/zstd.h>
 #include "output_queue.h"
 
-namespace NYql {
+namespace NDB {
 
-namespace NZstd {
+// forward declaration for <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+class ReadBuffer;
 
-class TReadBuffer : public NDB::ReadBuffer {
-public:
-    TReadBuffer(NDB::ReadBuffer& source);
-    ~TReadBuffer();
-private:
-    bool nextImpl() final;
+} // namespace NDB
 
-    NDB::ReadBuffer& Source_;
-    std::vector<char> InBuffer, OutBuffer;
-    ::ZSTD_DStream *const ZCtx_;
-    size_t Offset_;
-    size_t Size_;
-    bool Finished_ = false;
-};
+namespace NYql::NZstd {
+
+std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source);
 
 IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel = {});
 
-}
-
-}
+} // namespace NYql::NZstd

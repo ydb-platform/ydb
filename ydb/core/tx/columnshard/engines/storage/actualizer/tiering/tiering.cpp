@@ -68,7 +68,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         } else {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "skip_add_portion")("reason", "no_eviction")(
                 "portion", portion.GetPortionId())("skip_eviction", skipEviction)("optimized",
-                portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized))("has_insert_write_id", portion.HasInsertWriteId());
+                portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized))("has_insert_write_id", portion.GetPortionType());
             return {};
         }
     } else if (currentTierName != IStoragesManager::DefaultStorageId) {
@@ -112,8 +112,8 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
         auto schema = portion.GetSchema(VersionedIndex);
         if (*TValidator::CheckNotNull(TieringColumnId) == schema->GetIndexInfo().GetPKColumnIds().front()) {
             NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
-            const auto lastPk = portion.GetMeta().GetFirstLastPK().GetLast();
-            const auto max = NArrow::TStatusValidator::GetValid(lastPk.Column(0).GetScalar(lastPk.GetPosition()));
+            const auto lastPk = portion.IndexKeyEnd();
+            const auto max = lastPk.GetScalar(0);
             AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
             AddPortionImpl(portion, addContext.GetNow());
         } else {
@@ -136,8 +136,10 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
         AFL_VERIFY(*TieringColumnId != portionSchema->GetIndexInfo().GetPKColumnIds().front());
         if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId)) {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
-            const std::vector<TString> data = accessor.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
-            max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+            const std::vector<TString> data = accessor.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
+            if (!data.empty()) {
+                max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+            }
         }
         AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
     }
@@ -162,9 +164,10 @@ void TTieringActualizer::DoRemovePortion(const ui64 portionId) {
 void TTieringActualizer::DoExtractTasks(
     TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
     THashSet<ui64> portionIds;
+    THashSet<ui64> rejectedPortions;
     for (auto&& [address, addressPortions] : PortionIdByWaitDuration) {
         if (addressPortions.GetPortions().size() && tasksContext.GetActualInstant() < addressPortions.GetPortions().begin()->first) {
-            Counters.SkipEvictionForLimit->Add(1);
+            Counters.SkipEvictionForTooEarly->Add(1);
             continue;
         }
         if (!tasksContext.IsRWAddressAvailable(address)) {
@@ -179,7 +182,11 @@ void TTieringActualizer::DoExtractTasks(
             for (auto&& p : portions) {
                 const auto& portion = externalContext.GetPortionVerified(p);
                 auto info = BuildActualizationInfo(*portion, tasksContext.GetActualInstant());
-                AFL_VERIFY(info);
+                if (!info) {
+                    Counters.SkipEvictionForNoLongerNeeded->Add(1);
+                    rejectedPortions.insert(p);
+                    continue;
+                }
                 auto portionScheme = portion->GetSchema(VersionedIndex);
                 TPortionEvictionFeatures features(
                     portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
@@ -228,6 +235,9 @@ void TTieringActualizer::DoExtractTasks(
     for (auto&& i : portionIds) {
         RemovePortion(i);
     }
+    for (auto&& i : rejectedPortions) {
+        RemovePortion(i);
+    }
 }
 
 void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext) {
@@ -263,7 +273,7 @@ private:
         }
         TActualizationContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now());
         for (auto&& [_, portion] : result.GetValue().GetPortions()) {
-            locked->ActualizePortionInfo(portion, context);
+            locked->ActualizePortionInfo(*portion, context);
         }
     }
 
@@ -277,7 +287,7 @@ public:
 }   // namespace
 
 std::vector<TCSMetadataRequest> TTieringActualizer::BuildMetadataRequests(
-    const ui64 /*pathId*/, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index) {
+    const TInternalPathId /*pathId*/, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index) {
     if (NewPortionIds.empty()) {
         NYDBTest::TControllers::GetColumnShardController()->OnTieringMetadataActualized();
         return {};
@@ -288,7 +298,7 @@ std::vector<TCSMetadataRequest> TTieringActualizer::BuildMetadataRequests(
     std::shared_ptr<TDataAccessorsRequest> currentRequest;
     for (auto&& i : NewPortionIds) {
         if (!currentRequest) {
-            currentRequest = std::make_shared<TDataAccessorsRequest>("TIERING_ACTUALIZER");
+            currentRequest = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::TTL);
         }
         auto it = portions.find(i);
         AFL_VERIFY(it != portions.end());

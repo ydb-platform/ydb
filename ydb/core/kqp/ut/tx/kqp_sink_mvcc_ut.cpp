@@ -388,6 +388,83 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.SetIsOlap(true);
         tester.Execute();
     }
+
+    class TInsertConflictingKey: public TTableDataModificationTester {
+        YDB_ACCESSOR(bool, CommitOnInsert, false);
+    protected:
+        void DoExecute() override {
+            auto queryClient = Kikimr->GetQueryClient();
+
+            auto session1 = queryClient.GetSession().GetValueSync().GetSession();
+            auto session2 = queryClient.GetSession().GetValueSync().GetSession();
+
+            auto readResult1 = session1
+                                .ExecuteQuery(R"(
+                        SELECT * FROM `/Root/KV`;
+                                        )",
+                                    NQuery::TTxControl::BeginTx())
+                                .GetValueSync();
+            UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, readResult1.GetStatus(), readResult1.GetIssues().ToString());
+
+            auto tx1 = readResult1.GetTransaction();
+            UNIT_ASSERT(tx1);
+
+            auto readResult2 = session2
+                                .ExecuteQuery(R"(
+                        SELECT * FROM `/Root/KV`;
+                                        )",
+                                    NQuery::TTxControl::BeginTx())
+                                .GetValueSync();
+            UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, readResult2.GetStatus(), readResult2.GetIssues().ToString());
+            auto tx2 = readResult2.GetTransaction();
+            UNIT_ASSERT(tx2);
+
+            if (CommitOnInsert) {
+
+                auto insertResult1 = session1
+                                        .ExecuteQuery(R"(
+                            INSERT INTO `/Root/KV` (Key) VALUES (100)
+                    )",
+                                            NQuery::TTxControl::Tx(tx1->GetId()).CommitTx())
+                                        .GetValueSync();
+                UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult1.GetStatus(), insertResult1.GetIssues().ToString());
+                auto insertResult2 = session2
+                                        .ExecuteQuery(R"(
+                            INSERT INTO `/Root/KV` (Key) VALUES (100)
+                    )",
+                                            NQuery::TTxControl::Tx(tx2->GetId()).CommitTx())
+                                        .GetValueSync();
+                UNIT_ASSERT_EQUAL_C(insertResult2.GetStatus(), NYdb::EStatus::ABORTED, insertResult2.GetIssues().ToString());
+            } else {
+
+                auto insertResult1 = session1
+                                        .ExecuteQuery(R"(
+                            INSERT INTO `/Root/KV` (Key) VALUES (100)
+                    )",
+                                            NQuery::TTxControl::Tx(tx1->GetId()))
+                                        .GetValueSync();
+                UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult1.GetStatus(), insertResult1.GetIssues().ToString());
+                auto insertResult2 = session2
+                                        .ExecuteQuery(R"(
+                            INSERT INTO `/Root/KV` (Key) VALUES (100)
+                    )",
+                                            NQuery::TTxControl::Tx(tx2->GetId()))
+                                        .GetValueSync();
+                UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult2.GetStatus(), insertResult2.GetIssues().ToString());
+                auto commitResult1 = tx1->Commit().GetValueSync();
+                UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, commitResult1.GetStatus(), commitResult1.GetIssues().ToString());
+                auto commitResult2 = tx2->Commit().GetValueSync();
+                UNIT_ASSERT_EQUAL_C(commitResult2.GetStatus(), NYdb::EStatus::ABORTED, commitResult2.GetIssues().ToString());
+            }
+        }
+    };
+
+    Y_UNIT_TEST_QUAD(InsertConflictingKey, IsOlap, CommitOnInsert) {
+        TInsertConflictingKey tester;
+        tester.SetIsOlap(IsOlap);
+        tester.SetCommitOnInsert(CommitOnInsert);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

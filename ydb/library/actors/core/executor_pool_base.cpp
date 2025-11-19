@@ -56,9 +56,9 @@ namespace NActors {
                 Y_ABORT_UNLESS(actor->StuckIndex == i);
                 const TDuration delta = now - actor->LastReceiveTimestamp;
                 if (delta > TDuration::Seconds(30)) {
-                    ++stats.StuckActorsByActivity[actor->GetActivityType()];
+                    ++stats.StuckActorsByActivity[actor->GetActivityType().GetIndex()];
                 }
-                accountUsage(actor->GetActivityType(), actor->GetUsage(GetCycleCountFast()));
+                accountUsage(actor->GetActivityType().GetIndex(), actor->GetUsage(GetCycleCountFast()));
             }
             for (const auto& [activityType, usage] : DeadActorsUsage) {
                 accountUsage(activityType, usage);
@@ -71,7 +71,7 @@ namespace NActors {
     TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue)
         : TExecutorPoolBaseMailboxed(poolId)
         , PoolThreads(threads)
-        , UseRingQueue(useRingQueue)
+        , UseRingQueueValue(useRingQueue)
         , ThreadsAffinity(affinity)
     {
         if (useRingQueue) {
@@ -147,7 +147,7 @@ namespace NActors {
     }
 
     void TExecutorPoolBase::ScheduleActivation(TMailbox* mailbox) {
-        if (UseRingQueue) {
+        if (UseRingQueue()) {
             ScheduleActivationEx(mailbox, 0);
         } else {
             ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
@@ -169,9 +169,12 @@ namespace NActors {
         if (NFeatures::IsCommon() && IsAllowedToCapture(this) || IsTailSend(this)) {
             mailbox = TlsThreadContext->CaptureMailbox(mailbox);
         }
-        if (mailbox && UseRingQueue) {
+        if (!mailbox) {
+            return;
+        }
+        if (UseRingQueueValue) {
             ScheduleActivationEx(mailbox, 0);
-        } else if (mailbox) {
+        } else {
             ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
         }
     }
@@ -185,7 +188,7 @@ namespace NActors {
         NHPTimer::STime hpstart = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER, false> activityGuard(hpstart);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
-        ui32 at = actor->GetActivityType();
+        ui32 at = actor->GetActivityType().GetIndex();
         Y_DEBUG_ABORT_UNLESS(at < Stats.ActorsAliveByActivity.size());
         if (at >= Stats.MaxActivityType()) {
             at = TActorTypeOperator::GetActorActivityIncorrectIndex();
@@ -233,7 +236,7 @@ namespace NActors {
         NHPTimer::STime hpstart = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER, false> activityGuard(hpstart);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
-        ui32 at = actor->GetActivityType();
+        ui32 at = actor->GetActivityType().GetIndex();
         if (at >= Stats.MaxActivityType())
             at = 0;
         AtomicIncrement(Stats.ActorsAliveByActivity[at]);
@@ -301,5 +304,9 @@ namespace NActors {
 
     TMailboxTable* TExecutorPoolBaseMailboxed::GetMailboxTable() const {
         return MailboxTable;
+    }
+
+    bool TExecutorPoolBase::UseRingQueue() const {
+        return UseRingQueueValue;
     }
 }

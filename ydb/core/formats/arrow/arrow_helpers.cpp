@@ -31,25 +31,27 @@
 namespace NKikimr::NArrow {
 
 template <typename TType>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl(const NScheme::TTypeInfo& typeInfo) {
-    Y_UNUSED(typeInfo);
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
     return std::make_shared<TType>();
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>(const NScheme::TTypeInfo& typeInfo) {
-    return arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {
+    return arrow::fixed_size_binary(NScheme::FSB_SIZE);
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>(const NScheme::TTypeInfo& typeInfo) {
-    Y_UNUSED(typeInfo);
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>() {
+    return arrow::fixed_size_binary(NScheme::FSB_SIZE);
+}
+
+template <>
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>() {
     return arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO);
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>(const NScheme::TTypeInfo& typeInfo) {
-    Y_UNUSED(typeInfo);
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>() {
     return arrow::duration(arrow::TimeUnit::TimeUnit::MICRO);
 }
 
@@ -57,7 +59,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo 
     std::shared_ptr<arrow::DataType> result;
     bool success = SwitchYqlTypeToArrowType(typeInfo, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);
-        result = CreateEmptyArrowImpl<TType>(typeInfo);
+        result = CreateEmptyArrowImpl<TType>();
         return true;
     });
     if (success) {
@@ -79,6 +81,8 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
         case NScheme::NTypeIds::Date:
         case NScheme::NTypeIds::Date32:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
+        case NScheme::NTypeIds::Decimal:
+            return std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE);
         default:
             return GetArrowType(typeId);
     }
@@ -238,6 +242,43 @@ std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table
             NArrow::NSerialization::TNativeSerializer(pool).Deserialize(NArrow::NSerialization::TNativeSerializer(pool).SerializeFull(i)));
     }
     return NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
+}
+
+std::shared_ptr<arrow::ChunkedArray> ReallocateArray(const std::shared_ptr<arrow::ChunkedArray>& original, arrow::MemoryPool* pool) {
+    if (!original) {
+        return original;
+    }
+    auto f = std::make_shared<arrow::Field>("1", original->type());
+    auto table = arrow::Table::Make(std::make_shared<arrow::Schema>(arrow::FieldVector({ f })), { original }, original->length());
+    table = ReallocateBatch(table, pool);
+    AFL_VERIFY(table->num_columns() == 1);
+    return table->column(0);
+}
+
+std::shared_ptr<arrow::Array> ReallocateArray(
+    const std::shared_ptr<arrow::Array>& arr, arrow::MemoryPool* pool /*= arrow::default_memory_pool()*/) {
+    if (!arr) {
+        return arr;
+    }
+    if (arr->length() == 0) {
+        return arr;
+    }
+    auto cArray = NArrow::ReallocateArray(std::make_shared<arrow::ChunkedArray>(arr), pool);
+    AFL_VERIFY(cArray->num_chunks() == 1);
+    return cArray->chunk(0);
+}
+
+std::vector<std::shared_ptr<arrow::Field>> BuildFakeFields(const std::vector<std::shared_ptr<arrow::Array>>& columns) {
+    arrow::FieldVector fields;
+    ui32 idx = 0;
+    for (auto&& i : columns) {
+        fields.emplace_back(std::make_shared<arrow::Field>(::ToString(idx++), i->type()));
+    }
+    return fields;
+}
+
+std::shared_ptr<arrow::Schema> BuildFakeSchema(const std::vector<std::shared_ptr<arrow::Array>>& columns) {
+    return std::make_shared<arrow::Schema>(BuildFakeFields(columns));
 }
 
 }   // namespace NKikimr::NArrow

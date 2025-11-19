@@ -100,6 +100,7 @@ public:
 private:
     std::unique_ptr<TKikimrRunner> Kikimr;
     std::unique_ptr<NYdb::NTable::TTableClient> TableClient;
+    std::unique_ptr<NYdb::NQuery::TQueryClient> QueryClient;
     std::unique_ptr<NYdb::NTable::TSession> Session;
 
 public:
@@ -114,11 +115,12 @@ public:
     TString CreateTieringRule(const TString& tierName, const TString& columnName);
     void SetTiering(const TString& tableName, const TString& tierName, const TString& columnName);
     void ResetTiering(const TString& tableName);
-    void BulkUpsert(
-        const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
+    void BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates,
+        const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS, const TString& expectedIssuePrefix = {});
     void BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch,
         const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
     void ReadData(const TString& query, const TString& expected, const NYdb::EStatus opStatus = NYdb::EStatus::SUCCESS) const;
+    void ExecuteQuery(const TString& query) const;
     void RebootTablets(const TString& tableName);
     void WaitTabletDeletionInHive(ui64 tabletId, TDuration duration);
     void SetCompression(const TColumnTableBase& columnTable, const TString& columnName, const TCompression& compression,

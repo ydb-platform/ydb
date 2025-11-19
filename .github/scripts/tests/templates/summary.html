@@ -56,6 +56,22 @@
         span.test_mute {
             color: blue;
         }
+        
+        span.test_fail_sanitizer {
+            color: #ff4500;  /* Dark orange to distinguish from regular red */
+            background-color: #fff5ee;  /* Light orange background */
+            padding: 2px 4px;
+            border-radius: 3px;
+            border-left: 3px solid #ff4500;
+        }
+        
+        span.test_error_sanitizer {
+            color: #ff4500;  /* Dark orange to distinguish from regular red */
+            background-color: #fff5ee;  /* Light orange background */
+            padding: 2px 4px;
+            border-radius: 3px;
+            border-left: 3px solid #ff4500;
+        }
         .svg_passed {
             fill: green;
         }
@@ -725,7 +741,13 @@
         <button id="collapse-all">Collapse All</button>
     </div>
 {% for status in status_order %}
-<h1 id="{{ status.name}}" class="collapsible-header">{{ status.name }} ({{ tests[status] | length }})</h1>
+{% set sanitizer_count = tests[status] | selectattr('is_sanitizer_issue') | list | length %}
+<h1 id="{{ status.name}}" class="collapsible-header">
+    {{ status.name }} ({{ tests[status] | length }})
+    {% if sanitizer_count > 0 %}
+        <span style="color: #ff4500; font-weight: bold;">- {{ sanitizer_count }} SANITIZER ISSUE{{ 's' if sanitizer_count != 1 else '' }}</span>
+    {% endif %}
+</h1>
 <table class="collapsible-content active" border="1">
     <thead>
     <tr>
@@ -755,6 +777,9 @@
         <td class="test_name">
         {% endif %}
             <span>{{ t.full_name }}</span>
+            {% if t.is_sanitizer_issue %}
+                <span style="background-color: #ff4500; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">SANITIZER</span>
+            {% endif %}
             {% if status.is_error %}
             <div class="button-group">
                 <button class="button" title="Show options">

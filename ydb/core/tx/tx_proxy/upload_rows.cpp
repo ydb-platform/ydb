@@ -14,13 +14,17 @@ public:
         std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
         std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
         EUploadRowsMode mode,
-        bool writeToPrivateTable)
+        bool writeToPrivateTable,
+        bool writeToIndexImplTable,
+        ui64 cookie)
         : Sender(sender)
         , Table(table)
         , ColumnTypes(types)
         , Rows(rows)
+        , Cookie(cookie)
     {
         AllowWriteToPrivateTable = writeToPrivateTable;
+        AllowWriteToIndexImplTable = writeToIndexImplTable;
 
         switch (mode) {
             case EUploadRowsMode::Normal:
@@ -54,7 +58,15 @@ private:
 
     void SendResult(const NActors::TActorContext& ctx, const Ydb::StatusIds::StatusCode& status) override {
         auto ev = new TEvTxUserProxy::TEvUploadRowsResponse(status, Issues);
-        ctx.Send(Sender, ev);
+        ctx.Send(Sender, ev, 0, Cookie);
+    }
+
+    bool ValidateTable(TString& errorMessage) override {
+        if (GetTableKind() != NSchemeCache::TSchemeCacheNavigate::KindTable) {
+            errorMessage = "Only the OLTP table is supported";
+            return false;
+        }
+        return true;
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -70,8 +82,7 @@ private:
         return false;
     }
 
-    TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override {
-        Y_UNUSED(errorMessage);
+    TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const override {
         return *ColumnTypes;
     }
 
@@ -80,6 +91,7 @@ private:
     const TString Table;
     const std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
     const std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> Rows;
+    const ui64 Cookie;
 
     NYql::TIssues Issues;
 };
@@ -89,14 +101,18 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
     std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
     std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
     EUploadRowsMode mode,
-    bool writeToPrivateTable)
+    bool writeToPrivateTable,
+    bool writeToIndexImplTable,
+    ui64 cookie)
 {
     return new TUploadRowsInternal(sender,
         table,
         types,
         rows,
         mode,
-        writeToPrivateTable);
+        writeToPrivateTable,
+        writeToIndexImplTable,
+        cookie);
 }
 
 } // namespace NTxProxy

@@ -92,6 +92,8 @@ public:
                         "TTxUpdateConfig reply with: " << Response->ToString());
             ctx.Send(Response);
         }
+
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

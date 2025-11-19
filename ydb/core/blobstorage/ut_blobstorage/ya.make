@@ -17,6 +17,7 @@ SRCS(
     acceleration.cpp
     assimilation.cpp
     block_race.cpp
+    bsc_cache.cpp
     counting_events.cpp
     deadlines.cpp
     decommit_3dc.cpp
@@ -46,7 +47,6 @@ SRCS(
     snapshots.cpp
     space_check.cpp
     sync.cpp
-    ut_helpers.cpp
     validation.cpp
     vdisk_malfunction.cpp
 )
@@ -66,6 +66,7 @@ RECURSE_FOR_TESTS(
     ut_balancing
     ut_blob_depot
     ut_blob_depot_fat
+    ut_check_integrity
     ut_donor
     ut_group_reconfiguration
     ut_huge

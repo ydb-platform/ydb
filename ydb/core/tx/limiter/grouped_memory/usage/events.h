@@ -14,7 +14,7 @@ struct TEvExternal {
         EvFinishAllocationTask,
         EvStartAllocationGroup,
         EvFinishAllocationGroup,
-        EvUpdateAllocationTask,
+        EvAllocationTaskUpdated,
         EvStartAllocationProcess,
         EvFinishAllocationProcess,
         EvStartAllocationProcessScope,
@@ -57,19 +57,17 @@ struct TEvExternal {
         }
     };
 
-    class TEvUpdateTask: public NActors::TEventLocal<TEvUpdateTask, EvUpdateAllocationTask> {
+    class TEvTaskUpdated: public NActors::TEventLocal<TEvTaskUpdated, EvAllocationTaskUpdated> {
     private:
         YDB_READONLY(ui64, ExternalProcessId, 0);
         YDB_READONLY(ui64, ExternalScopeId, 0);
         YDB_READONLY(ui64, AllocationId, 0);
-        YDB_READONLY(ui64, Volume, 0);
 
     public:
-        explicit TEvUpdateTask(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume)
+        explicit TEvTaskUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId)
             : ExternalProcessId(externalProcessId)
             , ExternalScopeId(externalScopeId)
-            , AllocationId(allocationId)
-            , Volume(volume) {
+            , AllocationId(allocationId) {
         }
     };
 

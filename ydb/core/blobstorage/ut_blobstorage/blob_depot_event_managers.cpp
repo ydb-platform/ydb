@@ -644,3 +644,42 @@ void VerifiedBlock(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, ui64 table
     auto res = CaptureTEvBlockResult(env, sender, true, withDeadline);
     VerifyTEvBlockResult(res.Release(), tabletId, generation, state);
 }
+
+
+void SendTEvCheckIntegrity(TEnvironmentSetup& env, TActorId sender, ui32 groupId, TLogoBlobID id, ui64 cookie) {
+    auto ev = new TEvBlobStorage::TEvCheckIntegrity(id, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead);
+    env.Runtime->WrapInActorContext(sender, [&] {
+        SendToBSProxy(sender, groupId, ev, cookie);
+    });
+}
+
+TAutoPtr<TEventHandle<TEvBlobStorage::TEvCheckIntegrityResult>> CaptureTEvCheckIntegrityResult(
+        TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
+    const TInstant deadline = MakeDeadline(env, withDeadline);
+    auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCheckIntegrityResult>(sender, termOnCapture, deadline);
+    UNIT_ASSERT(res);
+    return res.Release();
+}
+
+
+void VerifyTEvCheckIntegrityResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvCheckIntegrityResult>> res,
+        TBlobInfo& blob, TBSState& state) {
+    Y_UNUSED(blob);
+    Y_UNUSED(state);
+
+    auto* event = res->Get();
+    UNIT_ASSERT(event->Status == NKikimrProto::OK);
+    Cerr << "ErrorReason" << Endl << event->ErrorReason << Endl;
+
+    UNIT_ASSERT(event->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+    UNIT_ASSERT(event->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
+    Cerr << "DataInfo" << Endl <<  event->DataInfo << Endl;
+}
+
+void VerifiedCheckIntegrity(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId,
+        TBlobInfo& blob, TBSState& state, bool withDeadline) {
+    auto sender = env.Runtime->AllocateEdgeActor(nodeId);
+    SendTEvCheckIntegrity(env, sender, groupId, blob.Id);
+    auto res = CaptureTEvCheckIntegrityResult(env, sender, true, withDeadline);
+    VerifyTEvCheckIntegrityResult(res.Release(), blob, state);
+}

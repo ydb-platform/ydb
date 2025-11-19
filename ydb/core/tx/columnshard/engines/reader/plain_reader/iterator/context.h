@@ -13,7 +13,6 @@ namespace NKikimr::NOlap::NReader::NPlain {
 
 class IDataSource;
 using TColumnsSet = NCommon::TColumnsSet;
-using EStageFeaturesIndexes = NCommon::EStageFeaturesIndexes;
 using TColumnsSetIds = NCommon::TColumnsSetIds;
 using EMemType = NCommon::EMemType;
 using TFetchingScript = NCommon::TFetchingScript;
@@ -32,7 +31,8 @@ private:
         CacheFetchingScripts;
     std::shared_ptr<TFetchingScript> AskAccumulatorsScript;
 
-    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source) override;
+    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(
+        const std::shared_ptr<NCommon::IDataSource>& source, const bool /*isFinalSyncPoint*/) override;
 
 public:
     const ui64 ReadSequentiallyBufferSize = TGlobalLimits::DefaultReadSequentiallyBufferSize;

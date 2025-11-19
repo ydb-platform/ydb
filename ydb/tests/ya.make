@@ -1,4 +1,5 @@
 RECURSE(
+    compatibility
     example
     fq
     functional

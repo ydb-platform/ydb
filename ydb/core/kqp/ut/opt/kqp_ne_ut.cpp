@@ -1910,7 +1910,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 6);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).deletes().rows(), 2);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
@@ -2334,92 +2333,75 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         }
     }
 
-    Y_UNIT_TEST(StaleRO) {
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+    Y_UNIT_TEST_TWIN(StaleRO, EnableFollowers) {
+        auto settings = TKikimrSettings()
+            .SetEnableForceFollowers(EnableFollowers)
+            .SetWithSampleTables(false);
 
-        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-            --!syntax_v1
-            CREATE TABLE `FollowersKv` (
+        TKikimrRunner kikimr(settings);
+        auto tableClient = kikimr.GetTableClient();
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(Sprintf(Q_(R"(
+            CREATE TABLE `Table` (
                 Key Uint64,
                 Value String,
                 PRIMARY KEY (Key)
             )
             WITH (
-                PARTITION_AT_KEYS = (10, 20, 30),
-                READ_REPLICAS_SETTINGS = "ANY_AZ:1"
+                PARTITION_AT_KEYS = (10, 20, 30)
+                %s
             );
-        )").GetValueSync());
+        )").c_str(), EnableFollowers ? ", READ_REPLICAS_SETTINGS = \"ANY_AZ:3\"" : "")
+        ).GetValueSync());
 
-        AssertSuccessResult(session.ExecuteDataQuery(R"(
-            --!syntax_v1
-
-            REPLACE INTO `FollowersKv` (Key, Value) VALUES
+        AssertSuccessResult(session.ExecuteDataQuery(Q_(R"(
+            UPSERT INTO `Table` (Key, Value) VALUES
                 (1u, "One"),
                 (11u, "Two"),
                 (21u, "Three"),
                 (31u, "Four");
-        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+         )"), TTxControl::BeginTx().CommitTx()).GetValueSync());
 
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_INFO);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG);
-        //kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::PIPE_SERVER, NActors::NLog::PRI_DEBUG);
 
-        // Followers immediate
-        auto result = session.ExecuteDataQuery(R"(
-            --!syntax_v1
-            SELECT * FROM FollowersKv WHERE Key = 21;
-        )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
-        AssertSuccessResult(result);
+        auto checkRead = [&](const TString& query, const TString& expectedResult, const TString& tablePath) {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+            CompareYson(expectedResult, FormatResultSetYson(result.GetResultSet(0)));
 
-        CompareYson(R"(
+            if (EnableFollowers) {
+                // from master - should NOT read
+                CheckTableReads(session, tablePath, false, false);
+                // from followers - should read
+                CheckTableReads(session, tablePath, true, true);
+            } else {
+                // from master - should read
+                CheckTableReads(session, tablePath, false, true);
+                // from followers - should NOT read
+                CheckTableReads(session, tablePath, true, false); 
+            }
+        };
+
+        // immediate
+        checkRead(Q_(R"(
+            SELECT * FROM Table WHERE Key = 21;
+        )"), R"(
             [
                 [[21u];["Three"]];
             ]
-        )", FormatResultSetYson(result.GetResultSet(0)));
+        )", "/Root/Table");
 
-        // Followers distributed
-        result = session.ExecuteDataQuery(R"(
-            --!syntax_v1
-            SELECT * FROM FollowersKv WHERE Value != "One" ORDER BY Key;
-        )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
-        AssertSuccessResult(result);
-
-        CompareYson(R"(
+        // distributed
+        checkRead(Q_(R"(
+            SELECT * FROM Table WHERE Value != "One" ORDER BY Key;
+        )"), R"(
             [
                 [[11u];["Two"]];
                 [[21u];["Three"]];
                 [[31u];["Four"]];
             ]
-        )", FormatResultSetYson(result.GetResultSet(0)));
-
-        // No followers immediate
-        result = session.ExecuteDataQuery(R"(
-            --!syntax_v1
-            SELECT * FROM TwoShard WHERE Key = 2;
-        )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
-        AssertSuccessResult(result);
-
-        CompareYson(R"(
-            [
-                [[2u];["Two"];[0]];
-            ]
-        )", FormatResultSetYson(result.GetResultSet(0)));
-
-        // No followers distributed
-        result = session.ExecuteDataQuery(R"(
-            --!syntax_v1
-            SELECT * FROM TwoShard WHERE Value2 < 0 ORDER BY Key;
-        )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
-        AssertSuccessResult(result);
-
-        CompareYson(R"(
-            [
-                [[1u];["One"];[-1]];
-                [[4000000001u];["BigOne"];[-1]]
-            ]
-        )", FormatResultSetYson(result.GetResultSet(0)));
+        )", "/Root/Table");
     }
 
     Y_UNIT_TEST(StaleRO_Immediate) {
@@ -2442,6 +2424,70 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 [["One"];[-1];[1u]]
             ]
         )", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST_TWIN(StaleRO_IndexFollowers, EnableFollowers) {
+        auto settings = TKikimrSettings()
+            .SetEnableForceFollowers(EnableFollowers)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(Q_(R"(
+            CREATE TABLE Table (
+                Key Uint64,
+                Subkey Uint64,
+                Value String,
+                Order Uint32,
+                PRIMARY KEY (Key, Subkey)
+            );
+
+            ALTER TABLE Table ADD INDEX idx GLOBAL SYNC ON (Key, Order) COVER (Value);
+        )")).GetValueSync());
+
+        if constexpr (EnableFollowers) {
+            AssertSuccessResult(session.ExecuteSchemeQuery(Q_(R"(
+                ALTER TABLE Table ALTER INDEX idx SET READ_REPLICAS_SETTINGS "ANY_AZ:1";
+            )")).GetValueSync());
+        }
+
+        AssertSuccessResult(session.ExecuteDataQuery(Q_(R"(
+            UPSERT INTO Table (Key, Subkey, Value, Order) VALUES
+                (1u, 2u, "One", 7u),
+                (1u, 3u, "Two", 4u),
+                (21u, 8u, "Three", 1u),
+                (31u, 0u, "Four", 8u);
+        )"), TTxControl::BeginTx().CommitTx()).GetValueSync());
+
+        auto result = session.ExecuteDataQuery(Q_(R"(
+            SELECT Key, Value FROM Table VIEW idx WHERE Key = 1 ORDER BY Order;
+        )"), TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
+        AssertSuccessResult(result);
+
+        CompareYson(R"(
+            [
+                [[1u];["Two"]];
+                [[1u];["One"]];
+            ]
+        )", FormatResultSetYson(result.GetResultSet(0)));
+
+        // from main master - should NOT read
+        CheckTableReads(session, "/Root/Table", false, false);
+        // from main followers - should NOT read
+        CheckTableReads(session, "/Root/Table", true, false);
+
+        if constexpr (EnableFollowers) {
+            // from index master - should NOT read
+            CheckTableReads(session, "/Root/Table/idx/indexImplTable", false, false);
+            // from index followers - should read
+            CheckTableReads(session, "/Root/Table/idx/indexImplTable", true, true);
+        } else {
+            // from index master - should read
+            CheckTableReads(session, "/Root/Table/idx/indexImplTable", false, true);
+            // from index followers - should NOT read
+            CheckTableReads(session, "/Root/Table/idx/indexImplTable", true, false);
+        }
     }
 
     Y_UNIT_TEST(ReadRangeWithParams) {

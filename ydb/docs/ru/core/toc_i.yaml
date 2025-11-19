@@ -29,6 +29,7 @@ items:
     mode: link
     path: contributor/toc_p.yaml
 - name: Справка
+  href: reference/index.md
   include:
     mode: link
     path: reference/toc_p.yaml
@@ -65,5 +66,7 @@ items:
   items:
     - name: Курс для администраторов
       href: "https://yandex.cloud/ru/training/ydb-admin?utm_medium=owned&utm_source=oss_docs"
+    - name: Курс для разработчиков
+      href: "https://ydb.yandex.ru/training/ydb-developer?utm_medium=owned&utm_source=oss_docs"
     - name: Сертификация
       href: "https://yandex.cloud/ru/certification/ydb-competencies?utm_medium=owned&utm_source=oss_docs"

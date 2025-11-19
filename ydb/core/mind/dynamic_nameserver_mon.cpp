@@ -21,6 +21,19 @@ TString ToString(TInstant t)
     return t.FormatLocalTime("%d %b %Y %H:%M:%S %Z");
 }
 
+TString ToString(EProtocolState s)
+{
+    switch (s) {
+        case EProtocolState::Connecting:
+            return "Connecting";
+        case EProtocolState::UseEpochProtocol:
+            return "EpochProtocol";
+        case EProtocolState::UseDeltaProtocol:
+            return "DeltaProtocol";
+    }
+    return "Unknown";
+}
+
 void OutputStaticContent(IOutputStream &str)
 {
     str << R"__(
@@ -92,6 +105,19 @@ void OutputNodeInfo(ui32 nodeId,
     str << "</tr>" << Endl;
 }
 
+void OutputExpiredNodeInfo(ui32 nodeId,IOutputStream &str, const TString &cl = "")
+{
+    str << "<tr class='" << cl << "'>" << Endl
+    << "  <td>" << nodeId << "</td>" << Endl
+    << "  <td>N/A</td>" << Endl
+    << "  <td>N/A</td>" << Endl
+    << "  <td>N/A</td>" << Endl
+    << "  <td>N/A</td>" << Endl
+    << "  <td>N/A</td>" << Endl;
+    str << "<td>N/A</td>" << Endl;
+    str << "</tr>" << Endl;
+}
+
 void OutputStaticNodes(const TTableNameserverSetup &setup,
                        IOutputStream &str)
 {
@@ -146,11 +172,10 @@ void OutputDynamicNodes(const TString &domain,
     }
 
     ids.clear();
-    for (auto &pr : config->ExpiredNodes)
-        ids.insert(pr.first);
+    for (auto id : config->ExpiredNodes)
+        ids.insert(id);
     for (auto id : ids) {
-        auto &node = config->ExpiredNodes.at(id);
-        OutputNodeInfo(id, node, str, node.Expire, "gray");
+        OutputExpiredNodeInfo(id, str, "gray");
     }
 
     str << "  </tbody>" << Endl
@@ -181,6 +206,10 @@ void TDynamicNameserver::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext
                 << "    <tr>" << Endl
                 << "      <td class='right-align'>Max dynamic node ID:</td>" << Endl
                 << "      <td>" << config->MaxDynamicNodeId << "</td>" << Endl
+                << "    </tr>" << Endl
+                << "    <tr>" << Endl
+                << "      <td class='right-align'>Protocol state:</td>" << Endl
+                << "      <td>" << ToString(ProtocolState) << "</td>" << Endl
                 << "    </tr>" << Endl
                 << "  </tbody>" << Endl
                 << "</table></div>" << Endl;

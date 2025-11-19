@@ -23,6 +23,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
         auto& buildInfo = *buildInfoPtr->Get();
         LOG_I("Change state from " << buildInfo.State << " to " << state);
+        if (state == TIndexBuildInfo::EState::Rejected ||
+            state == TIndexBuildInfo::EState::Cancelled ||
+            state == TIndexBuildInfo::EState::Done) {
+            buildInfo.EndTime = TAppData::TimeProvider->Now();
+        }
         buildInfo.State = state;
 
         NIceDb::TNiceDb db(txc.DB);
@@ -49,11 +54,6 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplySchedule(const TActorContext& ct
                 ui64(std::get<0>(rec)),
                 ctx.Now()));
     }
-}
-
-ui64 TSchemeShard::TIndexBuilder::TTxBase::RequestUnits(const TBillingStats& stats) {
-    return TRUCalculator::ReadTable(stats.GetReadBytes())
-         + TRUCalculator::BulkUpsert(stats.GetUploadBytes(), stats.GetUploadRows());
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::RoundPeriod(TInstant& start, TInstant& end) {
@@ -96,8 +96,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         auto& processed = buildInfo.Processed;
         auto& billed = buildInfo.Billed;
 
-        TBillingStats toBill = processed - billed;
-        if (!toBill) {
+        auto toBill = processed - billed;
+        if (TMeteringStatsHelper::IsZero(toBill)) {
             continue;
         }
 
@@ -118,7 +118,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         }
 
         if (!cloud_id || !folder_id || !database_id) {
-            LOG_N("ApplyBill: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain"
+            LOG_I("ApplyBill: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain"
                   << ", build index operation: " << buildId
                   << ", domain: " << domain.PathString()
                   << ", domainId: " << buildInfo.DomainPathId
@@ -128,7 +128,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         }
 
         if (!Self->IsServerlessDomain(domain)) {
-            LOG_N("ApplyBill: unable to make a bill, domain is not a serverless db"
+            LOG_I("ApplyBill: unable to make a bill, domain is not a serverless db"
                   << ", build index operation: " << buildId
                   << ", domain: " << domain.PathString()
                   << ", domainId: " << buildInfo.DomainPathId
@@ -152,7 +152,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         billed += toBill;
         Self->PersistBuildIndexBilled(db, buildInfo);
 
-        ui64 requestUnits = RequestUnits(toBill);
+        TString requestUnitsExplain;
+        ui64 requestUnits = TRUCalculator::Calculate(toBill, requestUnitsExplain);
 
         const TString billRecord = TBillRecord()
             .Id(id)
@@ -163,9 +164,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             .Usage(TBillRecord::RequestUnits(requestUnits, startPeriod, endPeriod))
             .ToString();
 
-        LOG_D("ApplyBill: made a bill"
-              << ", buildInfo: " << buildInfo
-              << ", record: '" << billRecord << "'");
+        LOG_N("ApplyBill: make a bill, id#" << buildId
+            << ", billRecord: " << billRecord
+            << ", toBill: " << toBill
+            << ", explain: " << requestUnitsExplain
+            << ", buildInfo: " << buildInfo);
 
         auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
         // send message at Complete stage
@@ -175,6 +178,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
 
 void TSchemeShard::TIndexBuilder::TTxBase::Send(TActorId dst, THolder<IEventBase> message, ui32 flags, ui64 cookie) {
     SideEffects.Send(dst, message.Release(), cookie, flags);
+}
+
+void TSchemeShard::TIndexBuilder::TTxBase::AllocateTxId(TIndexBuildId buildId) {
+    LOG_D("AllocateTxId " << buildId);
+    Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(buildId));
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::ChangeState(TIndexBuildId id, TIndexBuildInfo::EState state) {
@@ -187,8 +195,17 @@ void TSchemeShard::TIndexBuilder::TTxBase::Progress(TIndexBuildId id) {
 
 void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo& indexInfo) {
     index.SetId(ui64(indexInfo.Id));
-    if (indexInfo.Issue) {
-        AddIssue(index.MutableIssues(), indexInfo.Issue);
+    if (indexInfo.GetIssue()) {
+        AddIssue(index.MutableIssues(), indexInfo.GetIssue());
+    }
+    if (indexInfo.StartTime != TInstant::Zero()) {
+        *index.MutableStartTime() = SecondsToProtoTimeStamp(indexInfo.StartTime.Seconds());
+    }
+    if (indexInfo.EndTime != TInstant::Zero()) {
+        *index.MutableEndTime() = SecondsToProtoTimeStamp(indexInfo.EndTime.Seconds());
+    }
+    if (indexInfo.UserSID) {
+        index.SetUserSID(*indexInfo.UserSID);
     }
 
     for (const auto& item: indexInfo.Shards) {
@@ -215,6 +232,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     case TIndexBuildInfo::EState::Filling:
     case TIndexBuildInfo::EState::DropBuild:
     case TIndexBuildInfo::EState::CreateBuild:
+    case TIndexBuildInfo::EState::LockBuild:
         index.SetState(Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
         index.SetProgress(indexInfo.CalcProgressPercent());
         break;
@@ -227,6 +245,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         index.SetState(Ydb::Table::IndexBuildState::STATE_DONE);
         index.SetProgress(100.0);
         break;
+    case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
     case TIndexBuildInfo::EState::Cancellation_Applying:
     case TIndexBuildInfo::EState::Cancellation_Unlocking:
         index.SetState(Ydb::Table::IndexBuildState::STATE_CANCELLATION);
@@ -236,10 +255,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         index.SetState(Ydb::Table::IndexBuildState::STATE_CANCELLED);
         index.SetProgress(0.0);
         break;
+    case TIndexBuildInfo::EState::Rejection_DroppingColumns:
     case TIndexBuildInfo::EState::Rejection_Applying:
-        index.SetState(Ydb::Table::IndexBuildState::STATE_REJECTION);
-        index.SetProgress(0.0);
-        break;
     case TIndexBuildInfo::EState::Rejection_Unlocking:
         index.SetState(Ydb::Table::IndexBuildState::STATE_REJECTION);
         index.SetProgress(0.0);
@@ -296,10 +313,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         }
     }
 
-    settings.set_max_batch_bytes(info.Limits.MaxBatchBytes);
-    settings.set_max_batch_rows(info.Limits.MaxBatchRows);
-    settings.set_max_shards_in_flight(info.Limits.MaxShards);
-    settings.set_max_retries_upload_batch(info.Limits.MaxRetries);
+    settings.MutableScanSettings()->CopyFrom(info.ScanSettings);
+    settings.set_max_shards_in_flight(info.MaxInProgressShards);
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::AddIssue(::google::protobuf::RepeatedPtrField<::Ydb::Issue::IssueMessage>* issues,
@@ -333,6 +348,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo&
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.ApplyTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.UnlockTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.AlterMainTableTxId);
+    Self->TxIdToIndexBuilds.erase(indexBuildInfo.DropColumnsTxId);
 
     Self->IndexBuildsByUid.erase(indexBuildInfo.Uid);
     Self->IndexBuilds.erase(indexBuildInfo.Id);
@@ -410,12 +426,47 @@ bool TSchemeShard::TIndexBuilder::TTxBase::GotScheduledBilling(TIndexBuildInfo& 
 }
 
 bool TSchemeShard::TIndexBuilder::TTxBase::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    if (!DoExecute(txc, ctx)) {
+    bool executeResult;
+
+    try {
+        executeResult = DoExecute(txc, ctx);
+    } catch (const std::exception& exc) {
+        if (OnUnhandledExceptionSafe(txc, ctx, exc)) {
+            return true;
+        }
+        throw; // fail process, a really bad thing has happened
+    }
+
+    if (!executeResult) {
         return false;
     }
 
     ApplyOnExecute(txc, ctx);
     return true;
+}
+
+bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransactionContext& txc, const TActorContext& ctx, const std::exception& originalExc) {
+    try {
+        const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
+        TIndexBuildInfo* buildInfo = buildInfoPtr
+            ? buildInfoPtr->Get()
+            : nullptr;
+
+        LOG_E("Unhandled exception, id#"
+            << (BuildId == InvalidIndexBuildId ? TString("<no id>") : TStringBuilder() << BuildId)
+            << " " << TypeName(originalExc) << ": " << originalExc.what() << Endl
+            << TBackTrace::FromCurrentException().PrintToString()
+            << ", TIndexBuildInfo: " << (buildInfo ? TStringBuilder() << (*buildInfo) : TString("<no build info>")));
+
+        OnUnhandledException(txc, ctx, buildInfo, originalExc);
+
+        return true;
+    } catch (const std::exception& handleExc) {
+        LOG_E("OnUnhandledException throws unhandled exception " 
+            << TypeName(handleExc) << ": " << handleExc.what() << Endl
+            << TBackTrace::FromCurrentException().PrintToString());
+        return false;
+    }
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::Complete(const TActorContext& ctx) {

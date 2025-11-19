@@ -60,6 +60,7 @@
                                                 "PlanNodeId": 3,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "ClientIP",
                                                             "SearchEngineID"
@@ -69,12 +70,23 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Filter-TableFullScan",
+                                                                "Node Type": "Aggregate-Filter-TableFullScan",
                                                                 "Operators": [
                                                                     {
+                                                                        "Aggregation": "{[SUM(item.ResolutionWidth),Inc()],SUM(1),SUM(item.IsRefresh)}",
+                                                                        "GroupBy": "[item.ClientIP,item.SearchEngineID]",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
+                                                                    },
+                                                                    {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 2
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",
@@ -140,92 +152,24 @@
                                                                                     }
                                                                                 },
                                                                                 {
-                                                                                    "GroupBy": {
-                                                                                        "Aggregates": [
-                                                                                            {
-                                                                                                "Column": {
-                                                                                                    "Id": 108
-                                                                                                },
-                                                                                                "Function": {
-                                                                                                    "Arguments": [
-                                                                                                        {
-                                                                                                            "Id": 21
-                                                                                                        }
-                                                                                                    ],
-                                                                                                    "Id": 5
-                                                                                                }
-                                                                                            },
-                                                                                            {
-                                                                                                "Column": {
-                                                                                                    "Id": 109
-                                                                                                },
-                                                                                                "Function": {
-                                                                                                    "Arguments": [
-                                                                                                        {
-                                                                                                            "Id": 21
-                                                                                                        }
-                                                                                                    ],
-                                                                                                    "Id": 2
-                                                                                                }
-                                                                                            },
-                                                                                            {
-                                                                                                "Column": {
-                                                                                                    "Id": 110
-                                                                                                },
-                                                                                                "Function": {
-                                                                                                    "Id": 2
-                                                                                                }
-                                                                                            },
-                                                                                            {
-                                                                                                "Column": {
-                                                                                                    "Id": 111
-                                                                                                },
-                                                                                                "Function": {
-                                                                                                    "Arguments": [
-                                                                                                        {
-                                                                                                            "Id": 16
-                                                                                                        }
-                                                                                                    ],
-                                                                                                    "Id": 5
-                                                                                                }
-                                                                                            }
-                                                                                        ],
-                                                                                        "KeyColumns": [
-                                                                                            {
-                                                                                                "Id": 8
-                                                                                            },
-                                                                                            {
-                                                                                                "Id": 39
-                                                                                            }
-                                                                                        ]
-                                                                                    }
-                                                                                },
-                                                                                {
                                                                                     "Projection": {
                                                                                         "Columns": [
                                                                                             {
                                                                                                 "Id": 8
                                                                                             },
                                                                                             {
+                                                                                                "Id": 16
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 21
+                                                                                            },
+                                                                                            {
                                                                                                 "Id": 39
-                                                                                            },
-                                                                                            {
-                                                                                                "Id": 109
-                                                                                            },
-                                                                                            {
-                                                                                                "Id": 108
-                                                                                            },
-                                                                                            {
-                                                                                                "Id": 110
-                                                                                            },
-                                                                                            {
-                                                                                                "Id": 111
                                                                                             }
                                                                                         ]
                                                                                     }
                                                                                 }
-                                                                            ],
-                                                                            "Version": 5
+                                                                            ]
                                                                         },
                                                                         "Table": "clickbench/plans/column/hits"
                                                                     }

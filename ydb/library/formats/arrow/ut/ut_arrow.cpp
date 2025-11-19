@@ -8,6 +8,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <util/random/shuffle.h>
 
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
+
 namespace NKikimr {
 namespace {
 

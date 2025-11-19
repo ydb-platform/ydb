@@ -60,6 +60,7 @@
                                                 "PlanNodeId": 9,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "RegionID"
                                                         ],
@@ -141,8 +142,7 @@
                                                                                                         ]
                                                                                                     }
                                                                                                 }
-                                                                                            ],
-                                                                                            "Version": 5
+                                                                                            ]
                                                                                         },
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }
@@ -186,6 +186,7 @@
                                                                                 "PlanNodeId": 3,
                                                                                 "Plans": [
                                                                                     {
+                                                                                        "HashFunc": "HashV1",
                                                                                         "KeyColumns": [
                                                                                             "RegionID",
                                                                                             "UserID"
@@ -246,8 +247,7 @@
                                                                                                                         ]
                                                                                                                     }
                                                                                                                 }
-                                                                                                            ],
-                                                                                                            "Version": 5
+                                                                                                            ]
                                                                                                         },
                                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                                     }

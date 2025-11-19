@@ -10,6 +10,7 @@ from importlib_resources import read_binary
 from google.protobuf import text_format
 import yaml
 import subprocess
+import requests
 
 from six.moves.queue import Queue
 
@@ -234,6 +235,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--data-center=%s" % self.data_center
             )
 
+        if self.__configurator.breakpad_minidumps_path:
+            command.extend(["--breakpad-minidumps-path", self.__configurator.breakpad_minidumps_path])
+        if self.__configurator.breakpad_minidumps_script:
+            command.extend(["--breakpad-minidumps-script", self.__configurator.breakpad_minidumps_script])
+
         logger.info('CFG_DIR_PATH="%s"', self.__config_path)
         logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
         return command
@@ -341,6 +347,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if token is not None:
             env = os.environ.copy()
             env['YDB_TOKEN'] = token
+        elif self.__configurator.enable_static_auth:
+            # If no token is provided, use the default user from the configuration
+            default_user = next(iter(self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"]))
+            env = os.environ.copy()
+            env['YDB_USER'] = default_user["name"]
+            env['YDB_PASSWORD'] = default_user["password"]
 
         logger.debug("Executing command = {}".format(full_command))
         try:
@@ -427,8 +439,17 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             )
             pools[p['name']] = p['kind']
 
+        root_token = self.__configurator.default_clusteradmin
+        if not root_token and self.__configurator.enable_static_auth:
+            root_token = requests.post("http://localhost:%s/login" % self.nodes[1].mon_port, json={
+                "user": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["name"],
+                "password": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["password"]
+            }).cookies.get('ydb_session_id')
+            logger.info("Obtained root token: %s" % root_token)
+
         if len(pools) > 0:
-            self.client.bind_storage_pools(self.domain_name, pools)
+            logger.info("Binding storage pools to domain %s: %s", self.domain_name, pools)
+            self.client.bind_storage_pools(self.domain_name, pools, token=root_token)
             default_pool_name = list(pools.keys())[0]
         else:
             default_pool_name = ""
@@ -437,7 +458,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         logger.info("Cluster started and initialized")
 
         if bs_needed:
-            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"), token=self.__configurator.default_clusteradmin)
+            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"), token=root_token)
 
     def __run_node(self, node_id):
         """

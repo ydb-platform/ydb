@@ -20,10 +20,7 @@ TKafkaWritable& TKafkaWritable::operator<<(const TKafkaUuid& val) {
 }
 
 void TKafkaWritable::write(const char* val, size_t length) {
-    ssize_t res = Buffer.write(val, length);
-    if (res < 0) {
-        ythrow yexception() << "Error during flush of the written to socket data. Error code: " << strerror(-res) << " (" << res << ")";
-    }
+    Buffer.write(val, length);
 }
 
 TKafkaReadable& TKafkaReadable::operator>>(TKafkaUuid& val) {
@@ -66,10 +63,34 @@ char TKafkaReadable::take(size_t shift) {
     return *(Is.Data() + Position + shift);
 }
 
+size_t TKafkaReadable::left() const {
+    return Is.Size() - Position;
+}
+
+size_t TKafkaReadable::position() const {
+    return Position;
+}
+
 void TKafkaReadable::checkEof(size_t length) {
     if (Position + length > Is.Size()) {
         ythrow yexception() << "unexpected end of stream";
     }
+}
+
+char Hex(const unsigned char c) {
+    return c < 10 ? '0' + c : 'A' + c - 10;
+}
+
+TString Hex(const char* begin, const char *end) {
+    TStringBuilder sb;
+    for(auto i = begin; i < end; ++i) {
+        unsigned char c = *i;
+        if (i != begin) {
+            sb << ", ";
+        }
+        sb << "0x" << Hex(c >> 4) << Hex(c & 0x0F);
+    }
+    return sb;
 }
 
 } // namespace NKafka

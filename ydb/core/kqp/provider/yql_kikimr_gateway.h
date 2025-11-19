@@ -203,7 +203,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
-                return true;
+                return false;
         }
     }
 
@@ -487,6 +487,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     EKikimrTableKind Kind = EKikimrTableKind::Unspecified;
     ETableType TableType = ETableType::Table;
     EStoreType StoreType = EStoreType::Row;
+    bool IsIndexImplTable = false;
 
     ui64 RecordsCount = 0;
     ui64 DataSize = 0;
@@ -510,6 +511,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
 
     TExternalSource ExternalSource;
     TViewPersistedData ViewPersistedData;
+
+    TVector<TString> PartitionedByColumns;
 
     TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)
@@ -834,6 +837,7 @@ struct TReplicationSettingsBase {
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
+    TMaybe<TString> CaCert;
     TMaybe<TStateDone> StateDone;
     bool StatePaused = false;
     bool StateStandBy = false;
@@ -929,6 +933,8 @@ struct TTransferSettings : public TReplicationSettingsBase {
 
         return *Batching;
     }
+
+    TMaybe<TString> DirectoryPath;
 };
 
 struct TCreateTransferSettings {

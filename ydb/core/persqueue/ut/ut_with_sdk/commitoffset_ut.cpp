@@ -618,6 +618,49 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             return true;
         });
     }
+
+    Y_UNIT_TEST(DistributedTxCommit_LongReadSession) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareAutopartitionedTopic(setup);
+
+        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent> messages;
+
+        auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+            messages.push_back(x);
+            return true;
+        });
+
+        {
+            Cerr << ">>>>> Alter topic" << Endl << Flush;
+            TTopicClient client(setup.MakeDriver());
+            TAlterTopicSettings settings;
+            settings.SetRetentionPeriod(TDuration::Hours(1));
+            client.AlterTopic(TEST_TOPIC, settings).GetValueSync();
+        }
+
+        // Wait recheck acl happened
+        messages[0].GetMessages()[0].Commit(); // trigger recheck
+        Sleep(TDuration::Seconds(5));
+
+        Cerr << ">>>>> Commit message" << Endl << Flush;
+
+        bool first = true;
+        for (auto& e : messages) {
+            for (auto& m :e.GetMessages()) {
+                if (first) {
+                    first = false;
+                    continue;
+                }
+                m.Commit();
+            }
+        }
+
+        // Wait commit happened
+        Sleep(TDuration::Seconds(5));
+
+        result.Reader->Close();
+    }
+
 }
 
 } // namespace NKikimr

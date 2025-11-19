@@ -97,6 +97,10 @@ TSparsedArrayChunk TSparsedArray::MakeDefaultChunk(
     return TSparsedArrayChunk(recordsCount, it->second, defaultValue);
 }
 
+void TSparsedArray::Reallocate() {
+    Record = TSparsedArrayChunk(GetRecordsCount(), NArrow::ReallocateBatch(Record.GetRecords()), DefaultValue);
+}
+
 IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
     const std::optional<IChunkedArray::TCommonChunkAddress>& /*chunkCurrent*/, const ui64 position) const {
     const auto predCompare = [](const ui32 position, const TInternalChunkInfo& item) {
@@ -106,8 +110,13 @@ IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
     AFL_VERIFY(it != RemapExternalToInternal.begin());
     --it;
     if (it->GetIsDefault()) {
-        return IChunkedArray::TLocalDataAddress(
-            NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, it->GetSize()), it->GetStartExt(), 0);
+        std::shared_ptr<arrow::Array> arr;
+        if (!DefaultValue) {
+            arr = NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, it->GetSize());
+        } else {
+            arr = NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*DefaultValue, it->GetSize()));
+        }
+        return IChunkedArray::TLocalDataAddress(arr, it->GetStartExt(), 0);
     } else {
         return IChunkedArray::TLocalDataAddress(ColValue->Slice(it->GetStartInt(), it->GetSize()), it->GetStartExt(), 0);
     }
@@ -134,6 +143,7 @@ TSparsedArrayChunk::TSparsedArrayChunk(
     if (DefaultValue) {
         AFL_VERIFY(DefaultValue->type->id() == ColValue->type_id());
     }
+    DefaultsArray = TTrivialArray::BuildArrayFromOptionalScalar(DefaultValue, ColValue->type());
     ui32 nextIndex = 0;
     ui32 startIndexExt = 0;
     ui32 startIndexInt = 0;
@@ -212,8 +222,8 @@ TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) 
     ui32 filteredCount = 0;
     bool currentAcceptance = filter.GetStartValue();
     TColumnFilter filterNew = TColumnFilter::BuildAllowFilter();
-    auto indexesBuilder = NArrow::MakeBuilder(arrow::uint32());
-    auto valuesBuilder = NArrow::MakeBuilder(ColValue->type());
+    auto indexesBuilder = NArrow::MakeBuilder(arrow::uint32(), filter.GetFilteredCountVerified());
+    auto valuesBuilder = NArrow::MakeBuilder(ColValue->type(), filter.GetFilteredCountVerified());
     for (auto it = filter.GetFilter().begin(); it != filter.GetFilter().end(); ++it) {
         for (; recordIndex < UI32ColIndex->length(); ++recordIndex) {
             if (UI32ColIndex->Value(recordIndex) < filterIntervalStart) {

@@ -9,9 +9,12 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <ydb/library/yql/dq/runtime/dq_transport.h>
 
 namespace NKikimr {
 namespace NKqp {
+
+constexpr ui64 MAX_IN_FLIGHT_LIMIT = 500;
 
 namespace {
 std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpStreamLookupWorker::TPartitionInfo& partitionInfo,
@@ -19,10 +22,26 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
 
     YQL_ENSURE(partitionInfo);
 
+    // Binary search of the index to start with.
+    size_t idxStart = 0;
+    size_t idxFinish = partitionInfo->size();
+    while ((idxFinish - idxStart) > 1) {
+        size_t idxCur = (idxFinish + idxStart) / 2;
+        const auto& partCur = (*partitionInfo)[idxCur].Range->EndKeyPrefix.GetCells();
+        YQL_ENSURE(partCur.size() <= keyColumnTypes.size());
+        int cmp = CompareTypedCellVectors(partCur.data(), range.From.data(), keyColumnTypes.data(),
+                                          std::min(partCur.size(), range.From.size()));
+        if (cmp < 0) {
+            idxStart = idxCur;
+        } else {
+            idxFinish = idxCur;
+        }
+    }
+
     std::vector<TCell> minusInf(keyColumnTypes.size());
 
     std::vector<std::pair<ui64, TOwnedTableRange>> rangePartition;
-    for (size_t idx = 0; idx < partitionInfo->size(); ++idx) {
+    for (size_t idx = idxStart; idx < partitionInfo->size(); ++idx) {
         TTableRange partitionRange{
             idx == 0 ? minusInf : (*partitionInfo)[idx - 1].Range->EndKeyPrefix.GetCells(),
             idx == 0 ? true : !(*partitionInfo)[idx - 1].Range->IsInclusive,
@@ -55,11 +74,6 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
     }
 
     return rangePartition;
-}
-
-NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType* type) {
-    YQL_ENSURE(type);
-    return NScheme::TypeInfoFromMiniKQLType(type);
 }
 
 
@@ -110,6 +124,12 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
             column.GetTypeInfo().GetPgTypeMod()
         });
     }
+
+    KeyColumnTypes.resize(KeyColumns.size());
+    for (const auto& [_, columnInfo] : KeyColumns) {
+        YQL_ENSURE(columnInfo.KeyOrder < static_cast<i64>(KeyColumnTypes.size()));
+        KeyColumnTypes[columnInfo.KeyOrder] = columnInfo.PType;
+    }
 }
 
 TKqpStreamLookupWorker::~TKqpStreamLookupWorker() {
@@ -121,16 +141,6 @@ std::string TKqpStreamLookupWorker::GetTablePath() const {
 
 TTableId TKqpStreamLookupWorker::GetTableId() const {
     return TableId;
-}
-
-std::vector<NScheme::TTypeInfo> TKqpStreamLookupWorker::GetKeyColumnTypes() const {
-    std::vector<NScheme::TTypeInfo> keyColumnTypes(KeyColumns.size());
-    for (const auto& [_, columnInfo] : KeyColumns) {
-        YQL_ENSURE(columnInfo.KeyOrder < static_cast<i64>(keyColumnTypes.size()));
-        keyColumnTypes[columnInfo.KeyOrder] = columnInfo.PType;
-    }
-
-    return keyColumnTypes;
 }
 
 class TKqpLookupRows : public TKqpStreamLookupWorker {
@@ -274,12 +284,15 @@ public:
         ReadResults.emplace_back(std::move(result));
     }
 
+    bool IsOverloaded() final {
+        return false;
+    }
+
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
         TReadResultStats resultStats;
-        bool sizeLimitExceeded = false;
         batch.clear();
 
-        while (!ReadResults.empty() && !sizeLimitExceeded) {
+        while (!ReadResults.empty() && !resultStats.SizeLimitExceeded) {
             auto& result = ReadResults.front();
             for (; result.UnprocessedResultRow < result.ReadResult->Get()->GetRowsCount(); ++result.UnprocessedResultRow) {
                 const auto& resultRow = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
@@ -305,10 +318,10 @@ public:
                 }
 
                 if (rowSize + (i64)resultStats.ResultBytesCount > freeSpace) {
-                    sizeLimitExceeded = true;
+                    resultStats.SizeLimitExceeded = true;
                 }
 
-                if (resultStats.ResultRowsCount && sizeLimitExceeded) {
+                if (resultStats.ResultRowsCount && resultStats.SizeLimitExceeded) {
                     row.DeleteUnreferenced();
                     break;
                 }
@@ -444,6 +457,10 @@ public:
         UnprocessedRows.emplace_back(std::make_pair(TOwnedCellVec(joinKeyCells), std::move(inputRow.GetElement(1))));
     }
 
+    bool IsOverloaded() final {
+        return UnprocessedRows.size() >= MAX_IN_FLIGHT_LIMIT || PendingLeftRowsByKey.size() >= MAX_IN_FLIGHT_LIMIT || ResultRowsBySeqNo.size() >= MAX_IN_FLIGHT_LIMIT;
+    }
+
     std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
         TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) final {
 
@@ -462,8 +479,14 @@ public:
             auto unprocessedRange = ranges[firstUnprocessedQuery];
             YQL_ENSURE(!unprocessedRange.Point);
 
-            unprocessedRanges.emplace_back(*lastProcessedKey, false,
+            TOwnedTableRange range(*lastProcessedKey, false,
                 unprocessedRange.GetOwnedTo(), unprocessedRange.InclusiveTo);
+
+            auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(range));
+            YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
+            leftRowIt->second.PendingReads.erase(prevReadId);
+
+            unprocessedRanges.emplace_back(std::move(range));
             ++firstUnprocessedQuery;
         }
 
@@ -526,6 +549,8 @@ public:
 
             auto partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), range);
             for (auto [shardId, range] : partitions) {
+                YQL_ENSURE(PendingLeftRowsByKey.contains(ExtractKeyPrefix(range)));
+
                 if (range.Point) {
                     pointsPerShard[shardId].push_back(std::move(range));
                 } else {
@@ -564,7 +589,7 @@ public:
                 std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
                 if (joinKey.size() < KeyColumns.size()) {
                     // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
-                    std::vector <TCell> fromCells(KeyColumns.size());
+                    std::vector<TCell> fromCells(KeyColumns.size() - joinKey.size());
                     fromCells.insert(fromCells.begin(), joinKey.begin(), joinKey.end());
                     bool fromInclusive = true;
                     bool toInclusive = false;
@@ -699,8 +724,14 @@ public:
             auto unprocessedRange = ranges[firstUnprocessedQuery];
             YQL_ENSURE(!unprocessedRange.Point);
 
-            UnprocessedKeys.emplace_back(*lastProcessedKey, false,
+            TOwnedTableRange range(*lastProcessedKey, false,
                 unprocessedRange.GetOwnedTo(), unprocessedRange.InclusiveTo);
+
+            auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(range));
+            YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
+            leftRowIt->second.PendingReads.erase(readId);
+
+            UnprocessedKeys.emplace_back(std::move(range));
             ++firstUnprocessedQuery;
         }
 
@@ -718,7 +749,6 @@ public:
 
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
         TReadResultStats resultStats;
-        bool sizeLimitExceeded = false;
         batch.clear();
 
         // we should process left rows that haven't matches on the right
@@ -747,7 +777,7 @@ public:
             return ResultRowsBySeqNo.find(CurrentResultSeqNo);
         };
 
-        while (!sizeLimitExceeded) {
+        while (!resultStats.SizeLimitExceeded) {
             auto resultIt = getNextResult();
             if (resultIt == ResultRowsBySeqNo.end()) {
                 break;
@@ -758,7 +788,7 @@ public:
                 auto& row = result.Rows[result.FirstUnprocessedRow];
 
                 if (resultStats.ResultRowsCount && resultStats.ResultBytesCount + row.Stats.ResultBytesCount > (ui64)freeSpace) {
-                    sizeLimitExceeded = true;
+                    resultStats.SizeLimitExceeded = true;
                     break;
                 }
 
@@ -901,10 +931,7 @@ private:
 
         i64 storageReadBytes = 0;
 
-        for (size_t i = 0; i < leftRowType->GetMembersCount(); ++i) {
-            auto columnTypeInfo = UnpackTypeInfo(leftRowType->GetMemberType(i));
-            leftRowSize += NMiniKQL::GetUnboxedValueSize(leftRowInfo.Row.GetElement(i), columnTypeInfo).AllocatedBytes;
-        }
+        leftRowSize = NYql::NDq::TDqDataSerializer::EstimateSize(leftRowInfo.Row, leftRowType);
 
         if (!rightRow.empty()) {
             leftRowInfo.RightRowExist = true;

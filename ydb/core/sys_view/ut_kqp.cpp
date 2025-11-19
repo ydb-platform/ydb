@@ -199,7 +199,7 @@ void SetupAuthAccessEnvironment(TTestEnv& env) {
 }
 
 void CheckAuthAdministratorAccessIsRequired(TScanQueryPartIterator& it) {
-    NKqp::StreamResultToYson(it, false, EStatus::UNAUTHORIZED, 
+    NKqp::StreamResultToYson(it, false, EStatus::UNAUTHORIZED,
         "Administrator access is required");
 }
 
@@ -248,7 +248,7 @@ void WaitForStats(TTableClient& client, const TString& tableName, const TString&
             break;
         Sleep(TDuration::Seconds(5));
     }
-    UNIT_ASSERT_GE(rowCount, 0);   
+    UNIT_ASSERT_GE(rowCount, 0);
 }
 
 class TYsonFieldChecker {
@@ -846,14 +846,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(PartitionStatsLocksFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
-        TTestEnv env;
+        TTestEnv env({.DataShardStatsReportIntervalSeconds = 0});
         CreateRootTable(env, /* partitionCount */ 1, /* fillTable */ true);
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
-     
+
         BreakLock(session, "/Root/Table0");
 
         WaitForStats(client, "/Root/.sys/partition_stats", "LocksBroken != 0");
@@ -873,14 +871,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(1); // LocksAcquired
         check.Uint64(0); // LocksWholeShard
         check.Uint64(1); // LocksBroken
-    }    
+    }
 
     Y_UNIT_TEST(PartitionStatsFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env;
+        TTestEnv env({.DataShardStatsReportIntervalSeconds = 0});
         CreateRootTable(env);
 
         TTableClient client(env.GetDriver());
@@ -1357,11 +1353,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(TopPartitionsByCpuFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env(1, 4, {.EnableSVP = true});
+        TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env);
 
         TTableClient client(env.GetDriver());
@@ -1409,11 +1403,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(TopPartitionsByCpuTables) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         constexpr ui64 partitionCount = 5;
 
-        TTestEnv env(1, 4, {.EnableSVP = true});
+        TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env, true, partitionCount);
 
         TTableClient client(env.GetDriver());
@@ -1439,11 +1431,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(TopPartitionsByCpuRanges) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         constexpr ui64 partitionCount = 5;
 
-        TTestEnv env(1, 4, {.EnableSVP = true});
+        TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env, true, partitionCount);
 
         TTableClient client(env.GetDriver());
@@ -1520,11 +1510,13 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(TopPartitionsByCpuFollowers) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env(1, 4, {.EnableSVP = true, .EnableForceFollowers = true});
+        TTestEnv env(1, 4, {
+            .EnableSVP = true,
+            .EnableForceFollowers = true,
+            .DataShardStatsReportIntervalSeconds = 0,
+        });
 
         auto& runtime = *env.GetServer().GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1558,7 +1550,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 1;
             )", TTxControl::BeginTx().CommitTx()).GetValueSync();
             NKqp::AssertSuccessResult(result);
-            
+
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             NKqp::CompareYson(R"([
                 [[1u]]
@@ -1571,12 +1563,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 2;
             )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
             NKqp::AssertSuccessResult(result);
-            
+
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             NKqp::CompareYson(R"([
                 [[2u]]
             ])", actual);
-        }        
+        }
 
         size_t rowCount = 0;
         for (size_t iter = 0; iter < 30; ++iter) {
@@ -1588,7 +1580,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                SELECT                     
+                SELECT
                     IntervalEnd,
                     Rank,
                     TabletId,
@@ -1691,18 +1683,16 @@ Y_UNIT_TEST_SUITE(SystemView) {
             check.Uint64(0); // IndexSize
             check.Uint64(0); // InFlightTxCount
             check.Uint64Greater(0); // FollowerId
-        }        
-    }    
+        }
+    }
 
     Y_UNIT_TEST(TopPartitionsByTliFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
-        TTestEnv env(1, 4, {.EnableSVP = true});
+        TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env);
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
-     
+
         const TString tableName = "/Root/Tenant1/Table1";
         const TString viewName = "/Root/Tenant1/.sys/top_partitions_by_tli_one_minute";
 
@@ -1926,7 +1916,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 32);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 33);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -1945,7 +1935,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 26);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 27);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2442,7 +2432,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 CheckEmpty(it);
             }
         }
-        
+
         { // user1rootadmin is /Root admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
@@ -3329,7 +3319,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }) {
             env.GetClient().AddGroupMembership("/Root", membership.first, membership.second);
         }
-        
+
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT *
             FROM `Root/.sys/auth_group_members`
@@ -3379,7 +3369,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }) {
             env.GetClient().AddGroupMembership("/Root", membership.first, membership.second);
         }
-        
+
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
@@ -3760,7 +3750,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }) {
             env.GetClient().MkDir("/Root", path);
         }
-        
+
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT *
             FROM `Root/.sys/auth_owners`
@@ -3817,7 +3807,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().ModifyOwner("/Root/Dir1", "SubDir0", "user0");
         env.GetClient().ModifyOwner("/Root/Dir1", "SubDir1", "user1");
         env.GetClient().ModifyOwner("/Root/Dir1", "SubDir2", "user2");
-        
+
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
@@ -4139,7 +4129,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "group1");
             env.GetClient().ModifyACL("/Root/Tenant2", "Dir4", acl.SerializeAsString());
         }
-        
+
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2/Dir4").DebugString() << Endl;
 
         {
@@ -4202,7 +4192,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().MkDir("/Root", "Dir2");
         env.GetClient().MkDir("/Root/Tenant1", "Dir3");
         env.GetClient().MkDir("/Root/Tenant1", "Dir4");
-        
+
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1rootadmin");
@@ -4238,10 +4228,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1rootadmin"]];
                 [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
                 [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]];
             ])";
@@ -4271,10 +4261,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["root@builtin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1rootadmin"]];
                     [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
                     [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]];
                 ])";
@@ -4321,10 +4311,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1rootadmin"]];
                 [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
             ])";
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
@@ -4353,7 +4343,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }) {
             env.GetClient().MkDir("/Root", dir);
         }
-        
+
         for (auto acl : TVector<std::tuple<TString, TString, TString, NACLib::EAccessRights>>{
             {"/", "Root", "user1", NACLib::SelectRow},
             {"/", "Root", "user1", NACLib::EraseRow},
@@ -4422,7 +4412,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user2");
             env.GetClient().ModifyACL("/Root/Tenant1", "Dir2", acl.SerializeAsString());
         }
-        
+
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2/Dir4").DebugString() << Endl;
 
         {
@@ -4493,7 +4483,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user2");
             env.GetClient().ModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
         }
-        
+
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *

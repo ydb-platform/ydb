@@ -630,6 +630,14 @@ public:
     }
 
 private:
+    bool CanSkipRightOnLeftFinished() const {
+        return !IsSelfJoin_ && LeftPacker->TuplesPacked == 0 && GraceJoin::ShouldSkipRightIfLeftEmpty(JoinKind);
+    }
+
+    bool CanSkipLeftOnRightFinished() const {
+        return !IsSelfJoin_ && RightPacker->TuplesPacked == 0 && GraceJoin::ShouldSkipLeftIfRightEmpty(JoinKind);
+    }
+
     EOperatingMode GetMode() const {
         return Mode;
     }
@@ -755,6 +763,12 @@ private:
             }
         }
 
+        if (resultLeft == EFetchResult::Finish && CanSkipRightOnLeftFinished() ||
+                resultRight == EFetchResult::Finish && CanSkipLeftOnRightFinished()) {
+            IsEarlyExitDueToEmptyInput = true;
+            return EFetchResult::Finish;
+        }
+
         if (resultLeft == EFetchResult::Yield || resultRight == EFetchResult::Yield) {
             return EFetchResult::Yield;
         }
@@ -844,6 +858,11 @@ private:
             }
 
             auto isYield = FetchAndPackData(ctx, output);
+            if (IsEarlyExitDueToEmptyInput) {
+                *HaveMoreLeftRows = false;
+                *HaveMoreRightRows = false;
+                return EFetchResult::Finish;
+            }
             if (isYield == EFetchResult::One)
                 return isYield;
             if (IsSpillingAllowed && ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
@@ -1044,6 +1063,7 @@ private:
     const bool IsSpillingAllowed;
 
     bool IsSpillingFinalized = false;
+    bool IsEarlyExitDueToEmptyInput = false;
 
     NYql::NUdf::TCounter CounterOutputRows_;
     ui32 SpilledBucketsJoinOrderCurrentIndex = 0;
@@ -1131,7 +1151,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TGraceJoinWrapper::MakeSpillingSupportState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TGraceJoinWrapper::MakeSpillingSupportState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1149,7 +1169,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TGraceJoinSpillingSupportState::FetchValues));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TGraceJoinSpillingSupportState::FetchValues>());
         const auto funcType = FunctionType::get(Type::getInt32Ty(context), { statePtrType, ctx.Ctx->getType(), fields->getType() }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
         const auto result = CallInst::Create(funcType, funcPtr, { stateArg, ctx.Ctx, fields }, "fetch", block);

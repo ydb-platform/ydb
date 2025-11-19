@@ -73,12 +73,21 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Filter-TableFullScan",
+                                                "Node Type": "Aggregate-Filter-TableFullScan",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
                                                             {
                                                                 "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
+                                                    },
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 2
                                                             }
                                                         ],
                                                         "Name": "Filter",
@@ -140,30 +149,15 @@
                                                                     }
                                                                 },
                                                                 {
-                                                                    "GroupBy": {
-                                                                        "Aggregates": [
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 108
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Id": 2
-                                                                                }
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                },
-                                                                {
                                                                     "Projection": {
                                                                         "Columns": [
                                                                             {
-                                                                                "Id": 108
+                                                                                "Id": 14
                                                                             }
                                                                         ]
                                                                     }
                                                                 }
-                                                            ],
-                                                            "Version": 5
+                                                            ]
                                                         },
                                                         "Table": "clickbench/plans/column/hits"
                                                     }

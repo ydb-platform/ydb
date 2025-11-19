@@ -33,6 +33,8 @@ common:
     to: /public-materials/videos.md
   - from: /concepts/databases.md
     to: /concepts/glossary.md
+  - from: /concepts/vector_index.md
+    to: concepts/vector_search.md
   - from: /postgresql/pg-dump.md
     to: /postgresql/import.md
   - from: /concepts/column-table.md
@@ -84,11 +86,92 @@ common:
   - from: /deploy/configuration/config.md
     to: /reference/configuration/index.md
   - from: /deploy/manual/connector.md
-    to: /devops/manual/federated-queries/connector-deployment.md
+    to: /devops/deployment-options/manual/federated-queries/connector-deployment.md
   - from: /deploy/manual/deploy-ydb-federated-query.md
-    to: /devops/manual/federated-queries/index.md
+    to: /devops/deployment-options/manual/federated-queries/index.md
+  - from: /devops/manual/federated-queries/connector-deployment.md
+    to: /devops/deployment-options/manual/federated-queries/connector-deployment.md
+  - from: /devops/manual/federated-queries/index.md
+    to: /devops/deployment-options/manual/federated-queries/index.md
 
-# Dev-related redirects
+
+
+  # Redirects for Deployment Options
+
+  - from: /devops/ansible/initial-deployment.md
+    to: /devops/deployment-options/ansible/initial-deployment.md
+  - from: /devops/ansible/preparing-vms-with-terraform.md
+    to: /devops/deployment-options/ansible/preparing-vms-with-terraform.md
+  - from: /devops/ansible/restart.md
+    to: /devops/deployment-options/ansible/restart.md
+  - from: /devops/ansible/update-config.md
+    to: /devops/deployment-options/ansible/update-config.md
+  - from: /devops/ansible/update-executable.md
+    to: /devops/deployment-options/ansible/update-executable.md
+  - from: /devops/ansible/index.md
+    to: /devops/deployment-options/ansible/index.md
+  - from: /devops/ansible/observability/index.md
+    to: /devops/deployment-options/ansible/observability/index.md
+  - from: /devops/ansible/observability/logging.md
+    to: /devops/deployment-options/ansible/observability/logging.md
+
+  - from: /devops/kubernetes/index.md
+    to: /devops/deployment-options/kubernetes/index.md
+  - from: /devops/kubernetes/initial-deployment.md
+    to: /devops/deployment-options/kubernetes/initial-deployment.md
+
+  - from: /devops/manual/decommissioning.md
+    to: /devops/deployment-options/manual/decommissioning.md
+  - from: /devops/manual/index.md
+    to: /devops/deployment-options/manual/index.md
+  - from: /devops/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment.md
+
+  - from: /maintenance/manual/cms.md
+    to: /devops/configuration-management/configuration-v1/cms.md
+  - from: /maintenance/manual/dynamic-config.md
+    to: /devops/configuration-management/configuration-v1/dynamic-config.md
+  - from: /maintenance/manual/config-overview.md
+    to: /devops/configuration-management/configuration-v1/config-overview.md
+  - from: /maintenance/manual/change_actorsystem_configs.md
+    to: /devops/configuration-management/configuration-v1/change_actorsystem_configs.md
+  - from: /maintenance/manual/replacing_nodes.md
+    to: /devops/configuration-management/configuration-v1/replacing-nodes.md
+  - from: /maintenance/manual/cluster_expansion.md
+    to: /devops/configuration-management/configuration-v1/cluster-expansion.md
+
+
+  # Redirects for Observability
+  - from: /devops/manual/monitoring.md
+    to: /devops/observability/monitoring.md
+  - from: /devops/manual/logging.md
+    to: /devops/observability/logging.md
+  - from: /devops/manual/system-views.md
+    to: /devops/observability/system-views.md
+
+  # Redirects for Maintenance
+  - from: /devops/manual/upgrade.md
+    to: /devops/concepts/versioning.md
+  - from: /devops/manual/maintenance-without-downtime.md
+    to: /devops/concepts/maintenance-without-downtime.md
+
+  # Redirect for backup-and-recovery
+  - from: /devops/manual/backup-and-recovery.md
+    to: /devops/backup-and-recovery.md
+
+  # Redirect for deprecated instructions
+  - from: /devops/manual/state-storage-move.md
+    to: /devops/configuration-management/configuration-v1/state-storage-move.md
+  - from: /devops/manual/static-group-move.md
+    to: /devops/configuration-management/configuration-v1/static-group-move.md
+
+  # Redirect for system-requirements
+  - from: /devops/system-requirements.md
+    to: /devops/concepts/system-requirements.md
+  - from: /cluster/system-requirements.md
+    to: /devops/concepts/system-requirements.md
+
+  # Dev-related redirects
   - from: /db/index.md
     to: /dev/index.md
   - from: /troubleshooting/system_views.md
@@ -175,6 +258,8 @@ common:
     to: /yql/reference/syntax/alter-topic.md
   - from: /yql/reference/syntax/create_topic.md
     to: /yql/reference/syntax/create-topic.md
+  - from: /yql/reference/syntax/alter_table/secondary_index.md
+    to: /yql/reference/syntax/alter_table/indexes.md
 
 # Security-related redirects
   - from: /cluster/access.md
@@ -224,6 +309,8 @@ common:
   - from: /concepts/clusters/index.md
     to: /concepts/topology.md
   - from: /concepts/clusters/common_scheme_ydb.md
+    to: /contributor/general-schema.md
+  - from: /concepts/cluster/common_scheme_ydb.md
     to: /contributor/general-schema.md
   - from: /concepts/clusters/distributed_storage.md
     to: /contributor/distributed-storage.md
@@ -390,69 +477,21 @@ ru:
     to: /dev/terraform.md
   - from: /postgresql/docker-connect.md
     to: /postgresql/connect.md
+  - from: /maintenance/manual/dynamic-config-selectors.md
+    to: /devops/configuration-management/configuration-v1/dynamic-config-selectors.md
+  - from: /maintenance/manual/dynamic-config-volatile-config.md
+    to: /devops/configuration-management/configuration-v1/dynamic-config-volatile-config.md
+  - from: /maintenance/manual/replacing_nodes.md
+    to: /devops/configuration-management/configuration-v1/replacing-nodes.md
 
-  # Redirects for Deployment Options
-  - from: /devops/(ansible|kubernetes|manual)/(.*)$
-    to: /devops/deployment-options/$1/$2
-
-  # Redirects for Observability
-  - from: /devops/manual/(monitoring|logging)\.md$
-    to: /devops/observability/$1.md
-  - from: /devops/manual/system-views.md
-    to: /devops/observability/system-views.md
-
-  # Redirects for Maintenance
-  - from: /devops/manual/upgrade.md
-    to: /devops/concepts/versioning.md
-  - from: /devops/manual/maintenance-without-downtime.md
-    to: /devops/concepts/maintenance-without-downtime.md
-
-  # Redirects for Federated Queries
-  - from: /devops/manual/federated-queries/(.*)$
-    to: /devops/deployment-options/manual/federated-queries/$1
-
-  # Redirect for backup-and-recovery
-  - from: /devops/manual/backup-and-recovery.md
-    to: /devops/backup-and-recovery.md
-
-  # Redirect for deprecated instructions
-  - from: /devops/manual/state-storage-move.md
-    to: /devops/configuration-management/configuration-v1/state-storage-move.md
-  - from: /devops/manual/static-group-move.md
-    to: /devops/configuration-management/configuration-v1/static-group-move.md
-
-  # Redirect for system-requirements
-  - from: /devops/system-requirements.md
-    to: /devops/concepts/system-requirements.md
-  - from: /cluster/system-requirements.md
-    to: /devops/concepts/system-requirements.md
-
-  # Redirects for maintenance folder
-  - from: /maintenance/(.*)$
-    to: /devops/deployment-options/manual/$1
 
 en:
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md
   - from: /devops/observability/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment.md
-  - from: /maintenance/manual/dynamic-config.md
-    to: /devops/deployment-options/manual/dynamic-config.md
-  - from: /maintenance/manual/config-overview.md
-    to: /devops/deployment-options/manual/config-overview.md
-  - from: /maintenance/manual/node_restarting.md
-    to: /devops/deployment-options/manual/node-restarting.md
-  - from: /maintenance/manual/cluster_expansion.md
-    to: /devops/deployment-options/manual/cluster-expansion.md
-  - from: /maintenance/manual/selfheal.md
-    to: /devops/deployment-options/manual/selfheal.md
   - from: /maintenance/manual/index.md
     to: /devops/deployment-options/manual/index.md
-  - from: /maintenance/manual/change_actorsystem_configs.md
-    to: /devops/deployment-options/manual/change-actorsystem-configs.md
-  - from: /maintenance/manual/cms.md
-    to: /devops/deployment-options/manual/cms.md
+  - from: /reference/ydbops/scenarios.md
+    to: /reference/ydbops/rolling-restart-scenario.md
 
-  # Redirects for maintenance folder
-  - from: /maintenance/(.*)$
-    to: /devops/deployment-options/manual/$1

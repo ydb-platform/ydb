@@ -18,9 +18,8 @@ private:
     std::vector<std::string> GetRegistryFunctionNames() const override {
         return { GetFunctionName(AggregationType), GetHouseFunctionName(AggregationType) };
     }
-    virtual TConclusion<arrow::Datum> Call(
-        const TExecFunctionContext& context, const std::shared_ptr<TAccessorsCollection>& resources) const override;
-    
+    virtual TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
+
     TConclusion<arrow::Datum> PrepareResult(arrow::Datum&& datum) const override {
         if (!datum.is_scalar()) {
             return TConclusionStatus::Fail("Aggregate result is not a scalar.");
@@ -43,7 +42,19 @@ private:
         return std::move(datum);
     }
 
+    virtual NJson::TJsonValue DoDebugJson() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("function", ::ToString(GetAggregationType()));
+        return result;
+    }
+
+    virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator(const TColumnChainInfo& output) const override;
+
 public:
+    virtual bool IsAggregation() const override {
+        return true;
+    }
+
     TAggregateFunction(const EAggregate aggregationType, const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions = nullptr)
         : TBase(functionOptions, true)
         , AggregationType(aggregationType) {
@@ -99,13 +110,14 @@ public:
         return "";
     }
 
-    virtual TConclusionStatus CheckIO(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& output) const override {
+    virtual TConclusionStatus CheckIO(
+        const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& output) const override {
         if (output.size() != 1) {
             return TConclusionStatus::Fail("output size != 1 (" + ::ToString(output.size()) + ")");
         }
-//        if (input.size() != 1) {
-//            return TConclusionStatus::Fail("input size != 1 (" + ::ToString(input.size()) + ")");
-//        }
+        //        if (input.size() != 1) {
+        //            return TConclusionStatus::Fail("input size != 1 (" + ::ToString(input.size()) + ")");
+        //        }
         return TConclusionStatus::Success();
     }
 };
@@ -117,6 +129,10 @@ private:
     const EAggregate AggregationId;
 
 public:
+    EAggregate GetSecondaryAggregationId() const {
+        return TAggregationsHelper::GetSecondaryAggregationId(AggregationId);
+    }
+
     EAggregate GetAggregationId() const {
         return AggregationId;
     }
@@ -127,6 +143,8 @@ public:
         , AggregationId(aggregationId) {
         AFL_VERIFY(Inputs.size() <= 1);
     }
+
+    TString DebugString() const;
 
     const std::vector<TColumnChainInfo>& GetInputs() const {
         return Inputs;
@@ -145,13 +163,33 @@ private:
     std::vector<TColumnChainInfo> AggregationKeys;
     std::vector<TWithKeysAggregationOption> Aggregations;
 
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const override;
+    virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator() const override;
+
+    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     TWithKeysAggregationProcessor(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output,
         std::vector<TColumnChainInfo>&& aggregationKeys, std::vector<TWithKeysAggregationOption>&& aggregations)
         : TBase(std::move(input), std::move(output), EProcessorType::Aggregation)
         , AggregationKeys(std::move(aggregationKeys))
         , Aggregations(std::move(aggregations)) {
+    }
+    virtual bool IsAggregation() const override {
+        return true;
+    }
+    virtual NJson::TJsonValue DoDebugJson() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("type", "AGGREGATION");
+        if (AggregationKeys.size()) {
+            auto& jsonKeys = result.InsertValue("keys", NJson::JSON_ARRAY);
+            for (auto&& i : AggregationKeys) {
+                jsonKeys.AppendValue(i.GetColumnId());
+            }
+        }
+        auto& jsonOptions = result.InsertValue("options", NJson::JSON_ARRAY);
+        for (auto&& i : Aggregations) {
+            jsonOptions.AppendValue(i.DebugString());
+        }
+        return result;
     }
 
 public:

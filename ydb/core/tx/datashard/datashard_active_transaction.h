@@ -128,7 +128,8 @@ public:
                      const TStepOrder &stepTxId,
                      TInstant receivedAt,
                      const TString &txBody,
-                     bool usesMvccSnapshot);
+                     bool usesMvccSnapshot,
+                     bool isPropose = false);
 
     ~TValidatedDataTx();
 
@@ -185,8 +186,7 @@ public:
     bool CanCancel();
     bool CheckCancelled(ui64 tabletId);
 
-    void SetWriteVersion(TRowVersion writeVersion) { EngineBay.SetWriteVersion(writeVersion); }
-    void SetReadVersion(TRowVersion readVersion) { EngineBay.SetReadVersion(readVersion); }
+    void SetMvccVersion(TRowVersion mvccVersion) { EngineBay.SetMvccVersion(mvccVersion); }
     void SetVolatileTxId(ui64 txId) { EngineBay.SetVolatileTxId(txId); }
 
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const { return EngineBay.GetCollectedChanges(); }
@@ -432,7 +432,7 @@ public:
     const TValidatedDataTx::TPtr& GetDataTx() const { return DataTx; }
     TValidatedDataTx::TPtr BuildDataTx(TDataShard *self,
                                        TTransactionContext &txc,
-                                       const TActorContext &ctx);
+                                       const TActorContext &ctx, bool isPropose = false);
     void ClearDataTx() { DataTx = nullptr; }
 
     const NKikimrTxDataShard::TFlatSchemeTransaction &GetSchemeTx() const

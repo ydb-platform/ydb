@@ -1,6 +1,7 @@
 #include "event_helpers.h"
 #include "common_app.h"
 #include "mirrorer.h"
+#include "partition_compactification.h"
 #include "partition_util.h"
 #include "partition.h"
 #include "read.h"
@@ -62,6 +63,55 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         PROPERTY("LastOffset", Head.GetNextOffset());
                         PROPERTY("Last message WriteTimestamp", EndWriteTimestamp.ToRfc822String());
                         PROPERTY("HeadOffset", Head.Offset << ", count: " << Head.GetCount());
+                    }
+
+                    if (Compacter) {
+                        auto step = [&]() {
+                            switch(Compacter->Step) {
+                                case TPartitionCompaction::EStep::READING:
+                                    return "Reading";
+                                case TPartitionCompaction::EStep::COMPACTING:
+                                    return "Compacting";
+                                case TPartitionCompaction::EStep::PENDING:
+                                    return "Pending";
+                            }
+                        };
+
+                        PROPERTIES("Compaction") {
+                            PROPERTY("Step", step());
+                            PROPERTY("First uncompacted offset", Compacter->FirstUncompactedOffset);
+
+                            if (Compacter->ReadState) {
+                                PROPERTY("OffsetToRead", Compacter->ReadState->OffsetToRead);
+                                PROPERTY("LastOffset", Compacter->ReadState->LastOffset);
+                                PROPERTY("NextPartNo", Compacter->ReadState->NextPartNo);
+                                PROPERTY("SkipOffset", Compacter->ReadState->SkipOffset);
+                                PROPERTY("TopicData (size)", Compacter->ReadState->TopicData.size());
+                            }
+
+                            if (Compacter->CompactState) {
+                                PROPERTY("MaxOffset", Compacter->CompactState->MaxOffset);
+                                PROPERTY("TopicData (size)", Compacter->CompactState->TopicData.size());
+                                PROPERTY("LastProcessedOffset", Compacter->CompactState->LastProcessedOffset);
+                                PROPERTY("CommitCookie", Compacter->CompactState->CommitCookie);
+                                PROPERTY("FirstHeadOffset", Compacter->CompactState->FirstHeadOffset);
+                                PROPERTY("FirstHeadPartNo", Compacter->CompactState->FirstHeadPartNo);
+                                PROPERTY("CommittedOffset", Compacter->CompactState->CommittedOffset);
+                                PROPERTY("SkipOffset", Compacter->CompactState->SkipOffset);
+                                PROPERTY("DataKeysBody (size)", Compacter->CompactState->DataKeysBody.size());
+                                PROPERTY("UpdatedKeys (size)", Compacter->CompactState->UpdatedKeys.size());
+                                PROPERTY("DeletedKeys (size)", Compacter->CompactState->DeletedKeys.size());
+                                PROPERTY("EmptyBlobs (size)", Compacter->CompactState->EmptyBlobs.size());
+                                PROPERTY("LastBatchKey", Compacter->CompactState->LastBatchKey.ToString());
+                            }
+
+                            PROPERTY("PartitionRequestInflight", CompacterPartitionRequestInflight);
+                            PROPERTY("KvRequestInflight", CompacterKvRequestInflight);
+                        }
+                    } else {
+                        PROPERTIES("Compaction") {
+                            PROPERTY("State", "Disabled");
+                        }
                     }
                 }
 
@@ -232,20 +282,21 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                             }
                         }
                         TABLEBODY() {
-                            for (auto& d: UsersInfoStorage->GetAll()) {
+                            for (auto& [user, userInfo]: UsersInfoStorage->GetAll()) {
+                                auto snapshot = CreateSnapshot(userInfo);
                                 TABLER() {
-                                    TABLED() {out << EncodeHtmlPcdata(d.first);}
-                                    TABLED() {out << d.second.Offset;}
-                                    TABLED() {out << (EndOffset - d.second.Offset);}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.ReadFromTimestamp);}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.WriteTimestamp);}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.CreateTimestamp);}
-                                    TABLED() {out << (d.second.GetReadOffset());}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.GetReadWriteTimestamp(EndOffset));}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.GetReadCreateTimestamp(EndOffset));}
-                                    TABLED() {out << (d.second.ReadOffsetRewindSum);}
-                                    TABLED() {out << d.second.ActiveReads;}
-                                    TABLED() {out << d.second.Subscriptions;}
+                                    TABLED() {out << EncodeHtmlPcdata(user);}
+                                    TABLED() {out << userInfo.Offset;}
+                                    TABLED() {out << (EndOffset - userInfo.Offset);}
+                                    TABLED() {out << ToStringLocalTimeUpToSeconds(userInfo.ReadFromTimestamp);}
+                                    TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastCommittedMessage.WriteTimestamp);}
+                                    TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastCommittedMessage.WriteTimestamp);}
+                                    TABLED() {out << (userInfo.GetReadOffset());}
+                                    TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastReadMessage.WriteTimestamp);}
+                                    TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastReadMessage.CreateTimestamp);}
+                                    TABLED() {out << (userInfo.ReadOffsetRewindSum);}
+                                    TABLED() {out << userInfo.ActiveReads;}
+                                    TABLED() {out << userInfo.Subscriptions;}
                                 }
                             }
                         }

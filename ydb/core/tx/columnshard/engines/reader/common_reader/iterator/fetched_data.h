@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/collection.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -19,70 +20,119 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+class IKernelFetchLogic;
+
 class TFetchedData {
 private:
     using TBlobs = THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>;
+    using TFetchers = THashMap<ui32, std::shared_ptr<IKernelFetchLogic>>;
+    TFetchers Fetchers;
     YDB_ACCESSOR_DEF(TBlobs, Blobs);
-    YDB_READONLY_DEF(std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>, Table);
+    std::unique_ptr<NArrow::NAccessor::TAccessorsCollection> Table;
+    YDB_READONLY_DEF(std::shared_ptr<NIndexes::TIndexesCollection>, Indexes);
     YDB_READONLY(bool, Aborted, false);
 
-    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AccessorsGuard;
-    std::optional<TPortionDataAccessor> PortionAccessor;
+    THashMap<NArrow::NSSA::IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> DataAddrToIndex;
 
 public:
+    bool HasTable() const {
+        return !!Table;
+    }
+
+    const NArrow::NAccessor::TAccessorsCollection& GetTable() const {
+        AFL_VERIFY(!!Table);
+        return *Table;
+    }
+
+    NArrow::NAccessor::TAccessorsCollection& MutableTable() {
+        AFL_VERIFY(!!Table);
+        return *Table;
+    }
+
+    std::unique_ptr<NArrow::NAccessor::TAccessorsCollection> ExtractTable() {
+        AFL_VERIFY(!!Table);
+        return std::move(Table);
+    }
+
+    void ReturnTable(std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& table) {
+        AFL_VERIFY(!Table);
+        Table = std::move(table);
+    }
+
+    void AddRemapDataToIndex(const NArrow::NSSA::IDataSource::TCheckIndexContext& addr, const std::shared_ptr<NIndexes::IIndexMeta>& index) {
+        AFL_VERIFY(DataAddrToIndex.emplace(addr, index).second);
+    }
+
+    std::shared_ptr<NIndexes::IIndexMeta> GetRemapDataToIndex(const NArrow::NSSA::IDataSource::TCheckIndexContext& addr) const {
+        auto it = DataAddrToIndex.find(addr);
+        AFL_VERIFY(it != DataAddrToIndex.end());
+        return it->second;
+    }
+
+    void AddFetchers(const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchers);
+    void AddFetcher(const std::shared_ptr<IKernelFetchLogic>& fetcher);
+
+    std::shared_ptr<IKernelFetchLogic> ExtractFetcherOptional(const ui32 entityId) {
+        auto it = Fetchers.find(entityId);
+        if (it == Fetchers.end()) {
+            return nullptr;
+        } else {
+            auto result = it->second;
+            Fetchers.erase(it);
+            return result;
+        }
+    }
+
+    std::shared_ptr<IKernelFetchLogic> ExtractFetcherVerified(const ui32 entityId) {
+        auto result = ExtractFetcherOptional(entityId);
+        AFL_VERIFY(!!result)("column_id", entityId);
+        return result;
+    }
+
     void Abort() {
         Aborted = true;
     }
 
     bool GetUseFilter() const {
-        return Table->GetFilterUsage();
+        return GetTable().GetFilterUsage();
     }
 
     TString DebugString() const {
         return TStringBuilder() << "OK";
     }
 
-    TFetchedData(const bool useFilter, const ui32 recordsCount) {
-        Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(recordsCount);
-        Table->SetFilterUsage(useFilter);
+    TFetchedData(const bool useFilter, const std::optional<ui32> recordsCount) {
+        if (recordsCount) {
+            Table.reset(new NArrow::NAccessor::TAccessorsCollection(*recordsCount));
+        } else {
+            Table.reset(new NArrow::NAccessor::TAccessorsCollection());
+        }
+        MutableTable().SetFilterUsage(useFilter);
+        Indexes = std::make_shared<NIndexes::TIndexesCollection>();
     }
 
-    void SetAccessorsGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
-        AFL_VERIFY(!AccessorsGuard);
-        AFL_VERIFY(!!guard);
-        AccessorsGuard = std::move(guard);
+    void InitRecordsCount(const ui32 recordsCount) {
+        AFL_VERIFY(!!Table);
+        AFL_VERIFY(!Table->HasData());
+        Table.reset(new NArrow::NAccessor::TAccessorsCollection(recordsCount));
     }
 
     void SetUseFilter(const bool value) {
-        Table->SetFilterUsage(value);
-    }
-
-    bool HasPortionAccessor() const {
-        return !!PortionAccessor;
-    }
-
-    void SetPortionAccessor(TPortionDataAccessor&& accessor) {
-        AFL_VERIFY(!PortionAccessor);
-        PortionAccessor = std::move(accessor);
-    }
-
-    const TPortionDataAccessor& GetPortionAccessor() const {
-        AFL_VERIFY(!!PortionAccessor);
-        return *PortionAccessor;
+        MutableTable().SetFilterUsage(value);
     }
 
     ui32 GetFilteredCount(const ui32 recordsCount, const ui32 defLimit) const {
-        return Table->GetFilteredCount(recordsCount, defLimit);
+        return GetTable().GetFilteredCount(recordsCount, defLimit);
     }
 
     void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema, const ui32 recordsCount);
 
-    std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
-        return Table->GetAppliedFilter();
+    const std::shared_ptr<NArrow::TColumnFilter>& GetAppliedFilter() const {
+        return GetTable().GetAppliedFilter();
     }
 
     std::shared_ptr<NArrow::TColumnFilter> GetNotAppliedFilter() const {
-        return Table->GetNotAppliedFilter();
+        return GetTable().GetNotAppliedFilter();
     }
 
     TString ExtractBlob(const TChunkAddress& address) {
@@ -94,8 +144,9 @@ public:
         return result;
     }
 
-    void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& container, const NArrow::NSSA::IColumnResolver& resolver, const bool withFilter) {
-        Table->AddBatch(container, resolver, withFilter);
+    void AddBatch(
+        const std::shared_ptr<NArrow::TGeneralContainer>& container, const NArrow::NSSA::IColumnResolver& resolver, const bool withFilter) {
+        MutableTable().AddBatch(container, resolver, withFilter);
     }
 
     void AddBlobs(THashMap<TChunkAddress, TString>&& blobData) {
@@ -110,35 +161,59 @@ public:
         }
     }
 
-    bool IsEmptyFiltered() const {
-        return Table->IsEmptyFiltered();
+    bool IsEmptyWithData() const {
+        return Table ? Table->HasDataAndResultIsEmpty() : false;
     }
 
     void Clear() {
-        Table->Clear();
+        MutableTable().Clear();
     }
 
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
         if (!filter) {
             return;
         }
-        return Table->AddFilter(*filter);
+        return MutableTable().AddFilter(*filter);
     }
 
     std::shared_ptr<NArrow::TGeneralContainer> ToGeneralContainer() const {
-        return Table->ToGeneralContainer();
+        return GetTable().ToGeneralContainer();
     }
 
     void CutFilter(const ui32 recordsCount, const ui32 limit, const bool reverse) {
-        Table->CutFilter(recordsCount, limit, reverse);
+        MutableTable().CutFilter(recordsCount, limit, reverse);
     }
 
     void AddFilter(const NArrow::TColumnFilter& filter) {
-        Table->AddFilter(filter);
+        MutableTable().AddFilter(filter);
+    }
+};
+
+class TSourceChunkToReply {
+private:
+    YDB_READONLY(ui32, StartIndex, 0);
+    YDB_READONLY(ui32, RecordsCount, 0);
+    std::shared_ptr<arrow::Table> Table;
+
+public:
+    const std::shared_ptr<arrow::Table>& GetTable() const {
+        AFL_VERIFY(Table);
+        return Table;
     }
 
-    void AddColumn(const ui32 columnId, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column) {
-        Table->AddVerified(columnId, column);
+    std::shared_ptr<arrow::Table>&& ExtractTable() {
+        AFL_VERIFY(Table);
+        return std::move(Table);
+    }
+
+    bool HasData() const {
+        return !!Table && Table->num_rows();
+    }
+
+    TSourceChunkToReply(const ui32 startIndex, const ui32 recordsCount, const std::shared_ptr<arrow::Table>& table)
+        : StartIndex(startIndex)
+        , RecordsCount(recordsCount)
+        , Table(table) {
     }
 };
 
@@ -147,7 +222,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
     std::optional<std::deque<TPortionDataAccessor::TReadPage>> PagesToResult;
-    std::optional<std::shared_ptr<arrow::Table>> ChunkToReply;
+    std::optional<TSourceChunkToReply> ChunkToReply;
 
     TFetchedResult() = default;
 
@@ -158,12 +233,12 @@ public:
 
     TFetchedResult(
         std::unique_ptr<TFetchedData>&& data, const std::optional<std::set<ui32>>& columnIds, const NArrow::NSSA::IColumnResolver& resolver)
-        : Batch(data->GetAborted() ? nullptr : data->GetTable()->ToGeneralContainer(&resolver, columnIds, false))
+        : Batch(data->GetAborted() ? nullptr : data->GetTable().ToGeneralContainer(&resolver, columnIds, false))
         , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter()) {
     }
 
     TFetchedResult(std::unique_ptr<TFetchedData>&& data, const NArrow::NSSA::IColumnResolver& resolver)
-        : Batch(data->GetAborted() ? nullptr : data->GetTable()->ToGeneralContainer(&resolver, {}, false))
+        : Batch(data->GetAborted() ? nullptr : data->GetTable().ToGeneralContainer(&resolver, {}, false))
         , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter()) {
     }
 
@@ -190,7 +265,7 @@ public:
         AFL_VERIFY(page.GetIndexStart() == indexStart)("real", page.GetIndexStart())("expected", indexStart);
         AFL_VERIFY(page.GetRecordsCount() == recordsCount)("real", page.GetRecordsCount())("expected", recordsCount);
         AFL_VERIFY(!ChunkToReply);
-        ChunkToReply = std::move(table);
+        ChunkToReply = TSourceChunkToReply(indexStart, recordsCount, std::move(table));
     }
 
     bool IsFinished() const {
@@ -201,7 +276,7 @@ public:
         return !!ChunkToReply;
     }
 
-    std::shared_ptr<arrow::Table> ExtractResultChunk() {
+    std::optional<TSourceChunkToReply> ExtractResultChunk() {
         AFL_VERIFY(!!ChunkToReply);
         auto result = std::move(*ChunkToReply);
         ChunkToReply.reset();

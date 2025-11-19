@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/library/signals/object_counter.h>
 #include "counters.h"
 
 namespace NKikimr::NOlap::NResourceBroker::NSubscribe {

@@ -19,11 +19,18 @@
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/cloud_permissions/cloud_permissions.h>
 
 #include <util/string/split.h>
 
 namespace NKikimr {
 namespace NGRpcService {
+
+struct TCloudPermissionsSettings {
+    bool UseAccessService = false;
+    bool NeedClusterAccessResourceCheck = false;
+    TString AccessServiceType;
+};
 
 template<typename TCtx>
 bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
@@ -39,18 +46,43 @@ bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
     }
 }
 
-inline const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev) {
-    if (ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer")) {
-        if (AppData()->AuthConfig.GetUseAccessService()
-            && (AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 || AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0)) {
-            static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
-                {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
-            };
-            return entries;
+inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev, const TCloudPermissionsSettings& settings) {
+    const bool isBearerToken = ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer");
+    if (!isBearerToken || !settings.UseAccessService || !settings.NeedClusterAccessResourceCheck) {
+        return {};
+    }
+
+    if (settings.AccessServiceType == "Yandex_v2") {
+        static const TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+            {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
+        };
+        return entries;
+    } else {
+        return {};
+    }
+}
+
+inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForClusterAccessCheck(const TVector<std::pair<TString, TString>>& rootAttributes, const TCloudPermissionsSettings& settings) {
+    if (!settings.UseAccessService || !settings.NeedClusterAccessResourceCheck) {
+        return {};
+    }
+
+    static const auto permissions = NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({
+        "ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"
+    });
+    static const std::vector<TString> allowedAttributes = {"folder_id"};
+    TVector<std::pair<TString, TString>> attributes;
+    for (const auto& attr : rootAttributes) {
+        if (std::find(allowedAttributes.begin(), allowedAttributes.end(), attr.first) != allowedAttributes.end()) {
+            attributes.emplace_back(attr);
         }
     }
-    static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
-    return emptyEntries;
+    if (attributes.empty()) {
+        return {};
+    }
+    return {
+        {permissions, {attributes}}
+    };
 }
 
 template <typename TEvent>
@@ -62,6 +94,7 @@ class TGrpcRequestCheckActor
 {
     using TSelf = TGrpcRequestCheckActor<TEvent>;
     using TBase = TActorBootstrappedSecureRequest<TGrpcRequestCheckActor>;
+
 public:
     void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
         LOG_INFO(ctx, NKikimrServices::GRPC_SERVER, error.ToString());
@@ -78,17 +111,21 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ_AUTH;
     }
 
-    static const TVector<TString>& GetPermissions();
+    static const TVector<TString>& GetPermissions() {
+        return NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::DEFAULT>::Get();
+    }
 
-    void InitializeAttributesFromSchema(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+    void InitializeAttributesFromSchema(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
         CheckedDatabaseName_ = CanonizePath(schemeData.GetPath());
         if (!GrpcRequestBaseCtx_->TryCustomAttributeProcess(schemeData, this)) {
-            ProcessCommonAttributes(schemeData);
+            ProcessCommonAttributes(schemeData, rootAttributes);
         }
     }
 
-    void ProcessCommonAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+    void ProcessCommonAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
         TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries;
+        // cloud_id is not checked. Access Service has information about cloud in which the folder is located
+        // In order to check cloud_id need change config in Access Service. Request to IAM service
         static std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
         TVector<std::pair<TString, TString>> attributes;
         attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
@@ -102,9 +139,12 @@ public:
         }
 
         if constexpr (std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
-            const auto& e = GetEntriesForAuthAndCheckRequest(Request_);
-            entries.insert(entries.end(), e.begin(), e.end());
+            TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> authCheckRequestEntries = GetEntriesForAuthAndCheckRequest(Request_, CloudPermissionsSettings);
+            entries.insert(entries.end(), authCheckRequestEntries.begin(), authCheckRequestEntries.end());
         }
+
+        TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> clusterAccessCheckEntries = GetEntriesForClusterAccessCheck(rootAttributes, CloudPermissionsSettings);
+        entries.insert(entries.end(), clusterAccessCheckEntries.begin(), clusterAccessCheckEntries.end());
 
         if (!entries.empty()) {
             SetEntries(entries);
@@ -115,15 +155,33 @@ public:
         TBase::SetEntries(entries);
     }
 
-    void InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
+    void InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes);
 
-    void Initialize(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+    void Initialize(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
         TString peerName = GrpcRequestBaseCtx_->GetPeerName();
         TBase::SetPeerName(peerName);
-        InitializeAttributes(schemeData);
+        InitializeAttributes(schemeData, rootAttributes);
         TBase::SetDatabase(CheckedDatabaseName_);
         InitializeAuditSettings(schemeData);
     }
+
+    TGrpcRequestCheckActor(const TActorId& owner,
+        const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
+        TIntrusivePtr<TSecurityObject> securityObject,
+        TAutoPtr<TEventHandle<TEvent>> request,
+        IGRpcProxyCounters::TPtr counters,
+        bool skipCheckConnectRights,
+        const IFacilityProvider* facilityProvider,
+        const TVector<std::pair<TString, TString>>& rootAttributes)
+        : TGrpcRequestCheckActor(owner, schemeData, securityObject, request, counters, skipCheckConnectRights, facilityProvider, rootAttributes, {
+            .UseAccessService = AppData()->AuthConfig.GetUseAccessService(),
+            .NeedClusterAccessResourceCheck = AppData()->DomainsConfig.GetSecurityConfig().DatabaseAllowedSIDsSize() > 0 ||
+                AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
+                AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0 ||
+                AppData()->DomainsConfig.GetSecurityConfig().AdministrationAllowedSIDsSize() > 0,
+            .AccessServiceType = AppData()->AuthConfig.GetAccessServiceType()
+        })
+        {}
 
     TGrpcRequestCheckActor(
         const TActorId& owner,
@@ -132,7 +190,9 @@ public:
         TAutoPtr<TEventHandle<TEvent>> request,
         IGRpcProxyCounters::TPtr counters,
         bool skipCheckConnectRights,
-        const IFacilityProvider* facilityProvider)
+        const IFacilityProvider* facilityProvider,
+        const TVector<std::pair<TString, TString>>& rootAttributes,
+        const TCloudPermissionsSettings& cloudPermissionsSettings)
         : Owner_(owner)
         , Request_(std::move(request))
         , Counters_(counters)
@@ -141,6 +201,7 @@ public:
         , SkipCheckConnectRights_(skipCheckConnectRights)
         , FacilityProvider_(facilityProvider)
         , Span_(TWilsonGrpc::RequestCheckActor, GrpcRequestBaseCtx_->GetWilsonTraceId(), "RequestCheckActor")
+        , CloudPermissionsSettings(cloudPermissionsSettings)
     {
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
         if (authToken) {
@@ -152,7 +213,7 @@ public:
                 TBase::SetSecurityToken(TString(clientCertificates.front()));
             }
         }
-        Initialize(schemeData);
+        Initialize(schemeData, rootAttributes);
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -591,48 +652,16 @@ private:
     bool DmlAuditEnabled_ = false;
     std::unordered_set<TString> DmlAuditExpectedSubjects_;
     NWilson::TSpan Span_;
+    TCloudPermissionsSettings CloudPermissionsSettings;
 };
 
 // default behavior - attributes in schema
 template <typename TEvent>
-void TGrpcRequestCheckActor<TEvent>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+void TGrpcRequestCheckActor<TEvent>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
     for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
         Attributes_.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue()));
     }
-    InitializeAttributesFromSchema(schemeData);
-}
-
-template<typename T>
-inline constexpr bool IsStreamWrite = (
-    std::is_same_v<T, TEvStreamPQWriteRequest>
-    || std::is_same_v<T, TEvStreamTopicWriteRequest>
-    || std::is_same_v<T, TRefreshTokenStreamWriteSpecificRequest>
-);
-
-template <typename TEvent>
-const TVector<TString>& TGrpcRequestCheckActor<TEvent>::GetPermissions() {
-    if constexpr (IsStreamWrite<TEvent>) {
-        // extended permissions for stream write request family
-        static const TVector<TString> permissions = {
-            "ydb.databases.list",
-            "ydb.databases.create",
-            "ydb.databases.connect",
-            "ydb.tables.select",
-            "ydb.schemas.getMetadata",
-            "ydb.streams.write"
-        };
-        return permissions;
-    } else {
-        // default permissions
-        static const TVector<TString> permissions = {
-            "ydb.databases.list",
-            "ydb.databases.create",
-            "ydb.databases.connect",
-            "ydb.tables.select",
-            "ydb.schemas.getMetadata"
-        };
-        return permissions;
-    }
+    InitializeAttributesFromSchema(schemeData, rootAttributes);
 }
 
 template <typename TEvent>
@@ -643,9 +672,25 @@ IActor* CreateGrpcRequestCheckActor(
     TAutoPtr<TEventHandle<TEvent>> request,
     IGRpcProxyCounters::TPtr counters,
     bool skipCheckConnectRights,
+    const TVector<std::pair<TString, TString>>& rootAttributes,
     const IFacilityProvider* facilityProvider) {
 
-    return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRights, facilityProvider);
+    return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRights, facilityProvider, rootAttributes);
+}
+
+template <typename TEvent>
+IActor* CreateGrpcRequestCheckActor(
+    const TActorId& owner,
+    const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
+    TIntrusivePtr<TSecurityObject> securityObject,
+    TAutoPtr<TEventHandle<TEvent>> request,
+    IGRpcProxyCounters::TPtr counters,
+    bool skipCheckConnectRights,
+    const TVector<std::pair<TString, TString>>& rootAttributes,
+    const IFacilityProvider* facilityProvider,
+    const TCloudPermissionsSettings& cloudPermissionsSettings) {
+
+    return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRights, facilityProvider, rootAttributes, cloudPermissionsSettings);
 }
 
 }

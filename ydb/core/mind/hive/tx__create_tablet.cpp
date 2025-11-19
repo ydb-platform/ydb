@@ -276,6 +276,12 @@ public:
 
                     UpdateChannelsBinding(*tablet, db);
 
+                    for (auto& [_, dc] : Self->DataCenters) {
+                        for (const auto& followerGroup : tablet->FollowerGroups) {
+                            dc.Followers.erase({TabletId, followerGroup.Id});
+                        }
+                    }
+
                     auto itFollowerGroup = tablet->FollowerGroups.begin();
                     for (const auto& srcFollowerGroup : FollowerGroups) {
                         TFollowerGroup* followerGroup;

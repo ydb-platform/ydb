@@ -7,8 +7,7 @@
 namespace NKikimr::NKqp {
 
 void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases) {
-    auto settings = TKikimrSettings()
-        .SetWithSampleTables(false);
+    auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("SIMPLE");
     TKikimrRunner kikimr(settings);
 
     TLocalHelper(kikimr).CreateTestOlapTable();
@@ -43,9 +42,7 @@ void TestAggregationsInternal(const std::vector<TAggregationTestCase>& cases) {
     TPortManager tp;
     ui16 mbusport = tp.GetPort(2134);
     auto settings = Tests::TServerSettings(mbusport)
-        .SetDomainName("Root")
-        .SetUseRealThreads(false)
-        .SetNodeCount(2);
+        .SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
 
     Tests::TServer::TPtr server = new Tests::TServer(settings);
 

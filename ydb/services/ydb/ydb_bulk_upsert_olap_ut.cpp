@@ -301,9 +301,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             fields.push_back(std::make_shared<arrow::Field>("a", arrow::utf8()));
             fields.push_back(std::make_shared<arrow::Field>("b", arrow::utf8()));
             fields.push_back(std::make_shared<arrow::Field>("b", arrow::utf8())); // not unique column
-            if (i) {
-                fields.push_back(std::make_shared<arrow::Field>("c", arrow::utf8()));
-            }
+            fields.push_back(std::make_shared<arrow::Field>("c", arrow::utf8()));
 
             auto schema = std::make_shared<arrow::Schema>(fields);
             std::unique_ptr<arrow::RecordBatchBuilder> builder;
@@ -1066,6 +1064,73 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // Read all
             auto rows = ScanQuerySelect(client, tablePath);
             UNIT_ASSERT_EQUAL(rows.size(), 102);
+        }
+    }
+
+    Y_UNIT_TEST(RequireAllColumnsFeatureFlagColumnTable) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestAllColumnsColumnTable` (
+                    Shard Uint64 NOT NULL,
+                    App Utf8 NOT NULL,
+                    Timestamp Int64 NOT NULL,
+                    HttpCode Uint32,
+                    Message Utf8,
+                    PRIMARY KEY (Shard, App, Timestamp)
+                )
+                WITH (
+                    STORE = COLUMN
+                )
+            )").ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Shard").Uint64(42)
+                        .AddMember("App").Utf8("app")
+                        .AddMember("Timestamp").Int64(1)
+                        // Missing HttpCode and Message columns
+                    .EndStruct();
+            rows.EndList();
+
+            auto res = client.BulkUpsert("/Root/TestAllColumnsColumnTable", rows.Build()).GetValueSync();
+            Cerr << res.GetIssues().ToString() << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "All columns are required during BulkUpsert");
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
+        }
+
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Shard").Uint64(42)
+                        .AddMember("App").Utf8("app")
+                        .AddMember("Timestamp").Int64(1)
+                        .AddMember("HttpCode").Uint32(200)
+                        .AddMember("Message").Utf8("test")
+                    .EndStruct();
+            rows.EndList();
+
+            auto res = client.BulkUpsert("/Root/TestAllColumnsColumnTable", rows.Build()).GetValueSync();
+            Cerr << res.GetStatus() << Endl;
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
         }
     }
 }

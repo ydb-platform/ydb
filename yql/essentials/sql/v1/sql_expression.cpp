@@ -1798,19 +1798,25 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                             return nullptr;
                         }
 
-                        if (opName == "like" || mayIgnoreCase) {
+                        if ((opName == "like") || mayIgnoreCase || Ctx.OptimizeSimpleIlike) {
                             // TODO: expand LIKE in optimizers - we can analyze argument types there
+                            const bool useIgnoreCaseOp = (opName == "ilike") && !mayIgnoreCase;
+                            const auto& equalOp = useIgnoreCaseOp ? "EqualsIgnoreCase" : "==";
+                            const auto& startsWithOp = useIgnoreCaseOp ? "StartsWithIgnoreCase" : "StartsWith";
+                            const auto& endsWithOp = useIgnoreCaseOp ? "EndsWithIgnoreCase" : "EndsWith";
+                            const auto& containsOp = useIgnoreCaseOp ? "StringContainsIgnoreCase" : "StringContains";
+
                             YQL_ENSURE(!components.empty());
                             const auto& first = components.front();
                             if (components.size() == 1 && first.IsSimple) {
                                 // no '%'s and '_'s  in pattern
                                 YQL_ENSURE(first.Prefix == first.Suffix);
-                                isMatch = BuildBinaryOp(Ctx, pos, "==", res, BuildLiteralRawString(pos, first.Suffix, isUtf8));
+                                isMatch = BuildBinaryOp(Ctx, pos, equalOp, res, BuildLiteralRawString(pos, first.Suffix, isUtf8));
                             } else if (!first.Prefix.empty()) {
                                 const TString& prefix = first.Prefix;
                                 TNodePtr prefixMatch;
                                 if (Ctx.EmitStartsWith) {
-                                    prefixMatch = BuildBinaryOp(Ctx, pos, "StartsWith", res, BuildLiteralRawString(pos, prefix, isUtf8));
+                                    prefixMatch = BuildBinaryOp(Ctx, pos, startsWithOp, res, BuildLiteralRawString(pos, prefix, isUtf8));
                                 } else {
                                     prefixMatch = BuildBinaryOp(Ctx, pos, ">=", res, BuildLiteralRawString(pos, prefix, isUtf8));
                                     auto upperBound = isUtf8 ? NextValidUtf8(prefix) : NextLexicographicString(prefix);
@@ -1835,7 +1841,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                                         TNodePtr sizePred = BuildBinaryOp(Ctx, pos, ">=",
                                             TNodePtr(new TCallNodeImpl(pos, "Size", { res })),
                                             TNodePtr(new TLiteralNumberNode<ui32>(pos, "Uint32", ToString(prefix.size() + suffix.size()))));
-                                        TNodePtr suffixMatch = BuildBinaryOp(Ctx, pos, "EndsWith", res, BuildLiteralRawString(pos, suffix, isUtf8));
+                                        TNodePtr suffixMatch = BuildBinaryOp(Ctx, pos, endsWithOp, res, BuildLiteralRawString(pos, suffix, isUtf8));
                                         isMatch = new TCallNodeImpl(pos, "And", {
                                             sizePred,
                                             prefixMatch,
@@ -1850,14 +1856,14 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                                 if (components.size() == 3 && components.back().Prefix.empty()) {
                                     // '%foo%'
                                     YQL_ENSURE(!components[1].Prefix.empty());
-                                    isMatch = BuildBinaryOp(Ctx, pos, "StringContains", res, BuildLiteralRawString(pos, components[1].Prefix, isUtf8));
+                                    isMatch = BuildBinaryOp(Ctx, pos, containsOp, res, BuildLiteralRawString(pos, components[1].Prefix, isUtf8));
                                 } else if (components.size() == 2) {
                                     // '%foo'
-                                    isMatch = BuildBinaryOp(Ctx, pos, "EndsWith", res, BuildLiteralRawString(pos, components[1].Prefix, isUtf8));
+                                    isMatch = BuildBinaryOp(Ctx, pos, endsWithOp, res, BuildLiteralRawString(pos, components[1].Prefix, isUtf8));
                                 }
                             } else if (Ctx.AnsiLike && !components.back().Suffix.empty()) {
                                 const TString& suffix = components.back().Suffix;
-                                TNodePtr suffixMatch = BuildBinaryOp(Ctx, pos, "EndsWith", res, BuildLiteralRawString(pos, suffix, isUtf8));
+                                TNodePtr suffixMatch = BuildBinaryOp(Ctx, pos, endsWithOp, res, BuildLiteralRawString(pos, suffix, isUtf8));
                                 isMatch = BuildBinaryOp(Ctx, pos, "And", suffixMatch, isMatch);
                             }
                             // TODO: more StringContains/StartsWith/EndsWith cases?

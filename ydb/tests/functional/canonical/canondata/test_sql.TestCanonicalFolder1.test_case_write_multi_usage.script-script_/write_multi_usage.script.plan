@@ -65,6 +65,7 @@
                                                                     "Name (-\u221e, +\u221e)"
                                                                 ],
                                                                 "ReadRangesPointPrefixLen": "0",
+                                                                "Reverse": false,
                                                                 "Scan": "Sequential",
                                                                 "Table": "base_write_multi_usage_script_script/Temp"
                                                             }
@@ -144,6 +145,7 @@
                                                                     "Name (-\u221e, +\u221e)"
                                                                 ],
                                                                 "ReadRangesPointPrefixLen": "0",
+                                                                "Reverse": false,
                                                                 "Scan": "Sequential",
                                                                 "Table": "base_write_multi_usage_script_script/Input1"
                                                             }

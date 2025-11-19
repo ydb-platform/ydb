@@ -6,7 +6,7 @@
 #include <util/generic/hash_set.h>
 #include <util/stream/null.h>
 
-#include "ut_helpers.h"
+#include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
 #define Ctest Cnull
 

@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/operations/slice_builder/pack_builder.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -14,36 +15,38 @@ namespace NKikimr::NOlap::NWritingPortions {
 
 class TAggregationId {
 private:
-    const ui64 PathId;
+    const TInternalPathId PathId;
     const ui64 SchemaVersion;
     const NEvWrite::EModificationType ModificationType;
+    const bool IsBulk;
 
 public:
-    TAggregationId(const ui64 pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType)
+    TAggregationId(const TInternalPathId pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType, bool isBulk)
         : PathId(pathId)
         , SchemaVersion(schemaVersion)
-        , ModificationType(mType) {
+        , ModificationType(mType)
+        , IsBulk(isBulk) {
     }
 
     bool operator==(const TAggregationId& item) const {
-        return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType;
+        return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType && IsBulk == item.IsBulk;
     }
 
     operator size_t() const {
-        return CombineHashes<ui64>(CombineHashes<ui64>(PathId, SchemaVersion), (ui64)ModificationType);
+        return CombineHashes<ui64>(CombineHashes<ui64>(CombineHashes<ui64>(PathId.GetRawValue(), SchemaVersion), (ui64)ModificationType), ui64(IsBulk));
     }
 };
 
 class TWriteAggregation {
 private:
-    const ui64 PathId;
+    const TInternalPathId PathId;
     const NEvWrite::EModificationType ModificationType;
     std::vector<TWriteUnit> Units;
     NOlap::TWritingContext Context;
     ui64 SumSize = 0;
 
 public:
-    TWriteAggregation(const NOlap::TWritingContext& context, const ui64 pathId, const NEvWrite::EModificationType modificationType)
+    TWriteAggregation(const NOlap::TWritingContext& context, const TInternalPathId pathId, const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
         , ModificationType(modificationType)
         , Context(context) {

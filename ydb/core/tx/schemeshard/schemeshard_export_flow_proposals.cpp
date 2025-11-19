@@ -2,6 +2,7 @@
 #include "schemeshard_path_describer.h"
 
 #include <ydb/core/ydb_convert/compression.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <util/string/builder.h>

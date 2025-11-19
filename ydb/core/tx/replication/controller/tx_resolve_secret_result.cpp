@@ -29,6 +29,12 @@ public:
             return true;
         }
 
+        if (Ev->Cookie != Replication->GetExpectedSecretResolverCookie()) {
+            CLOG_E(ctx, "Unexpected cookie"
+                << ": cookie# " << Ev->Cookie);
+            return true;
+        }
+
         if (Ev->Get()->IsSuccess()) {
             CLOG_N(ctx, "Secret resolved"
                 << ": rid# " << rid);

@@ -1,6 +1,6 @@
 #pragma once
 
-
+#include <util/stream/format.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/mon_alloc/memory_info.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
@@ -10,16 +10,22 @@
 
 namespace NKikimr::NMemory {
 
+::NFormatPrivate::THumanReadableSize HumanReadableBytes(ui64 bytes);
+
+TString HumanReadableBytes(std::optional<ui64> bytes);
+
 struct TResourceBrokerConfig {
     ui64 LimitBytes = 0;
-    ui64 QueryExecutionLimitBytes = 0;
+    TMap<TString, ui64> QueueLimits;
 
     auto operator<=>(const TResourceBrokerConfig&) const = default;
 
     TString ToString() const noexcept {
         TStringBuilder result;
-        result << "LimitBytes: " << LimitBytes;
-        result << " QueryExecutionLimitBytes: " << QueryExecutionLimitBytes;
+        result << "LimitBytes: " << HumanReadableBytes(LimitBytes);
+        for (auto& [name, limitBytes] : QueueLimits) {
+            result << " " << name << ": " << HumanReadableBytes(limitBytes);
+        }
         return result;
     }
 };

@@ -15,7 +15,7 @@ public:
     {}
 
     void Bootstrap() override {
-        if (TBase::NeedToRedirect()) {
+        if (TBase::NeedToRedirect(false/* don't check auth for capabilities on purpose */)) {
             return;
         }
         ReplyAndPassAway();
@@ -23,10 +23,21 @@ public:
 
     NJson::TJsonValue GetSettings() {
         NJson::TJsonValue json;
+
         NJson::TJsonValue& security(json["Security"]);
         security["IsTokenRequired"] = AppData()->EnforceUserTokenRequirement;
         security["UseLoginProvider"] = AppData()->AuthConfig.GetUseLoginProvider();
         security["DomainLoginOnly"] = AppData()->AuthConfig.GetDomainLoginOnly();
+
+        if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
+            if (DatabaseNavigateResponse->Get()->Request && !DatabaseNavigateResponse->Get()->Request->ResultSet.empty()) {
+                NJson::TJsonValue& database(json["Database"]);
+                TSchemeCacheNavigate::TEntry& entry = DatabaseNavigateResponse->Get()->Request->ResultSet.front();
+                if (entry.DomainInfo) {
+                    database["GraphShardExists"] = entry.DomainInfo->Params.GetGraphShard() != 0;
+                }
+            }
+        }
         return json;
     }
 

@@ -102,9 +102,9 @@
                                                                                             "Group",
                                                                                             "Value"
                                                                                         ],
-                                                                                        "E-Cost": "0",
-                                                                                        "E-Rows": "0",
-                                                                                        "E-Size": "0",
+                                                                                        "E-Cost": "No estimate",
+                                                                                        "E-Rows": "No estimate",
+                                                                                        "E-Size": "No estimate",
                                                                                         "LookupKeyColumns": [
                                                                                             "Group"
                                                                                         ],
@@ -189,6 +189,7 @@
                                                 "PlanNodeId": 4,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "Group"
                                                         ],

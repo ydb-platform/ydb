@@ -542,3 +542,8 @@ namespace NActors {
         TlsActivationContext->ExecutorThread.SetOverwrittenTimePerMailboxTs(value);
     }
 }
+
+template <>
+void Out<NActors::TActorActivityType>(IOutputStream& o, const NActors::TActorActivityType& x) {
+    o << x.GetName();
+}

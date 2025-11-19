@@ -1,6 +1,8 @@
 #pragma once
+#include "util/generic/yexception.h"
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NEvWrite {
 enum class EModificationType {
@@ -8,7 +10,8 @@ enum class EModificationType {
     Insert,
     Update,
     Replace,
-    Delete
+    Delete,
+    Increment
 };
 
 }
@@ -30,6 +33,7 @@ public:
             case NEvWrite::EModificationType::Upsert:
             case NEvWrite::EModificationType::Delete:
             case NEvWrite::EModificationType::Update:
+            case NEvWrite::EModificationType::Increment:
                 return false;
             case NEvWrite::EModificationType::Insert:
             case NEvWrite::EModificationType::Replace:
@@ -42,6 +46,7 @@ public:
             case NEvWrite::EModificationType::Upsert:
             case NEvWrite::EModificationType::Delete:
             case NEvWrite::EModificationType::Update:
+            case NEvWrite::EModificationType::Increment:
                 return false;
             case NEvWrite::EModificationType::Insert:
             case NEvWrite::EModificationType::Replace:
@@ -61,6 +66,8 @@ public:
                 return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE;
             case NEvWrite::EModificationType::Update:
                 return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE;
+            case NEvWrite::EModificationType::Increment:
+                return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT;
         }
     }
 
@@ -78,6 +85,8 @@ public:
                 return NEvWrite::EModificationType::Delete;
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
                 return NEvWrite::EModificationType::Replace;
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT:
+                return NEvWrite::EModificationType::Increment;
         }
     }
 
@@ -93,6 +102,8 @@ public:
                 return NKikimrTxColumnShard::TEvWrite::OPERATION_REPLACE;
             case NEvWrite::EModificationType::Update:
                 return NKikimrTxColumnShard::TEvWrite::OPERATION_UPDATE;
+            case NEvWrite::EModificationType::Increment:
+                Y_ENSURE(false);
         }
     }
 

@@ -35,7 +35,6 @@ using namespace NTabletFlatExecutor;
 // But in unit tests we want to test both scenarios
 bool gAllowLogBatchingDefaultValue = true;
 
-TDuration gDbStatsReportInterval = TDuration::Seconds(10);
 ui64 gDbStatsDataSizeResolution = 10*1024*1024;
 ui64 gDbStatsRowCountResolution = 100000;
 ui32 gDbStatsHistogramBucketsCount = 10;
@@ -67,7 +66,7 @@ public:
         }
 
         // Write user tables with a minimal safe version (avoiding snapshots)
-        return Self->GetLocalReadWriteVersions().WriteVersion;
+        return Self->GetLocalMvccVersion();
     }
 
     TRowVersion GetReadVersion(const TTableId& tableId) const override {
@@ -83,7 +82,7 @@ public:
             return TRowVersion::Max();
         }
 
-        return Self->GetLocalReadWriteVersions().ReadVersion;
+        return TRowVersion::Max();
     }
 
 private:
@@ -2325,23 +2324,8 @@ bool TDataShard::AllowCancelROwithReadsets() const {
     return CanCancelROWithReadSets;
 }
 
-TReadWriteVersions TDataShard::GetLocalReadWriteVersions() const {
-    if (IsFollower())
-        return {TRowVersion::Max(), TRowVersion::Max()};
-
-    TRowVersion edge = Max(
-            SnapshotManager.GetCompleteEdge(),
-            SnapshotManager.GetIncompleteEdge(),
-            SnapshotManager.GetUnprotectedReadEdge());
-
-    if (auto nextOp = Pipeline.GetNextPlannedOp(edge.Step, edge.TxId))
-        return TRowVersion(nextOp->GetStep(), nextOp->GetTxId());
-
-    TRowVersion maxEdge(edge.Step, ::Max<ui64>());
-
-    TRowVersion writeVersion = Max(maxEdge, edge.Next(), SnapshotManager.GetImmediateWriteEdge());
-
-    return {TRowVersion::Max(), writeVersion};
+TRowVersion TDataShard::GetLocalMvccVersion() const {
+    return GetMvccVersion();
 }
 
 TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const {
@@ -2436,17 +2420,17 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
     Y_ABORT("unreachable");
 }
 
-TReadWriteVersions TDataShard::GetReadWriteVersions(TOperation* op) const {
+TRowVersion TDataShard::GetMvccVersion(TOperation* op) const {
     if (IsFollower()) {
-        return {TRowVersion::Max(), TRowVersion::Max()};
+        return TRowVersion::Max();
     }
 
     if (op) {
-        if (!op->MvccReadWriteVersion) {
-            op->MvccReadWriteVersion = GetMvccTxVersion(op->IsReadOnly() ? EMvccTxMode::ReadOnly : EMvccTxMode::ReadWrite, op);
+        if (!op->CachedMvccVersion) {
+            op->CachedMvccVersion = GetMvccTxVersion(op->IsReadOnly() ? EMvccTxMode::ReadOnly : EMvccTxMode::ReadWrite, op);
         }
 
-        return *op->MvccReadWriteVersion;
+        return *op->CachedMvccVersion;
     }
 
     return GetMvccTxVersion(EMvccTxMode::ReadWrite, nullptr);

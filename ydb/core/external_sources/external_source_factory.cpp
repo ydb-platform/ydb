@@ -14,20 +14,44 @@ namespace NKikimr::NExternalSource {
 namespace {
 
 struct TExternalSourceFactory : public IExternalSourceFactory {
-    TExternalSourceFactory(const TMap<TString, IExternalSource::TPtr>& sources)
+    TExternalSourceFactory(
+        const TMap<TString, IExternalSource::TPtr>& sources,
+        bool allExternalDataSourcesAreAvailable,
+        const std::set<TString>& availableExternalDataSources)
         : Sources(sources)
-    {}
+        , AllExternalDataSourcesAreAvailable(allExternalDataSourcesAreAvailable)
+        , AvailableExternalDataSources(availableExternalDataSources)
+    {
+        for (const auto& [type, source] : sources) {
+            if (AvailableExternalDataSources.contains(type)) {
+                AvailableProviders.insert(source->GetName());
+            }
+        }
+    }
 
     IExternalSource::TPtr GetOrCreate(const TString& type) const override {
         auto it = Sources.find(type);
-        if (it != Sources.end()) {
-            return it->second;
+        if (it == Sources.end()) {
+            throw TExternalSourceException() << "External source with type " << type << " was not found";
         }
-        throw TExternalSourceException() << "External source with type " << type << " was not found";
+        if (!AllExternalDataSourcesAreAvailable && !AvailableExternalDataSources.contains(type)) {
+            throw TExternalSourceException() << "External source with type " << type << " is disabled. Please contact your system administrator to enable it";
+        }
+        return it->second;
+    }
+
+    bool IsAvailableProvider(const TString& provider) const override {
+        if (AllExternalDataSourcesAreAvailable) {
+            return true;
+        }
+        return AvailableProviders.contains(provider);
     }
 
 private:
-    TMap<TString, IExternalSource::TPtr> Sources;
+    const TMap<TString, IExternalSource::TPtr> Sources;
+    bool AllExternalDataSourcesAreAvailable;
+    const std::set<TString> AvailableExternalDataSources;
+    std::set<TString> AvailableProviders;
 };
 
 }
@@ -37,7 +61,9 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          size_t pathsLimit,
                                                          std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
                                                          bool enableInfer,
-                                                         bool allowLocalFiles) {
+                                                         bool allowLocalFiles,
+                                                         bool allExternalDataSourcesAreAvailable,
+                                                         const std::set<TString>& availableExternalDataSources) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
@@ -82,9 +108,11 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Solomon),
-            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {"use_ssl", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
         }
-    }); 
+    },
+    allExternalDataSourcesAreAvailable,
+    availableExternalDataSources); 
 }
 
 }

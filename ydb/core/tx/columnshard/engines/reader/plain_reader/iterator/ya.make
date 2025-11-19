@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    constructors.cpp
     scanner.cpp
     source.cpp
     interval.cpp

@@ -8,7 +8,11 @@
 
 #include <functional>
 
-namespace NKikimr::NReplication::NService {
+namespace NKikimr::NReplication {
+
+class TTopicMessage;
+
+namespace NService {
 
 struct TEvWorker {
     enum EEv {
@@ -44,25 +48,12 @@ struct TEvWorker {
     };
 
     struct TEvData: public TEventLocal<TEvData, EvData> {
-        struct TRecord {
-            ui64 Offset;
-            TString Data;
-            TInstant CreateTime;
-            TString MessageGroupId;
-            TString ProducerId;
-            ui64 SeqNo;
-
-            explicit TRecord(ui64 offset, const TString& data, TInstant createTime, const TString& messageGroupId, const TString& producerId, ui64 seqNo);
-            explicit TRecord(ui64 offset, TString&& data, TInstant createTime, TString&& messageGroupId, TString&& producerId, ui64 seqNo);
-            void Out(IOutputStream& out) const;
-        };
-
         ui32 PartitionId;
         TString Source;
-        TVector<TRecord> Records;
+        TVector<TTopicMessage> Records;
 
-        explicit TEvData(ui32 partitionId, const TString& source, const TVector<TRecord>& records);
-        explicit TEvData(ui32 partitionId, const TString& source, TVector<TRecord>&& records);
+        explicit TEvData(ui32 partitionId, const TString& source, const TVector<TTopicMessage>& records);
+        explicit TEvData(ui32 partitionId, const TString& source, TVector<TTopicMessage>&& records);
         TString ToString() const override;
     };
 
@@ -72,6 +63,7 @@ struct TEvWorker {
             S3_ERROR,
             SCHEME_ERROR,
             UNAVAILABLE,
+            OVERLOAD
         };
 
         EStatus Status;
@@ -103,8 +95,5 @@ IActor* CreateWorker(
     std::function<IActor*(void)>&& createReaderFn,
     std::function<IActor*(void)>&& createWriterFn);
 
-}
-
-Y_DECLARE_OUT_SPEC(inline, NKikimr::NReplication::NService::TEvWorker::TEvData::TRecord, o, x) {
-    return x.Out(o);
-}
+} // NService
+} // NKikimr::NReplication

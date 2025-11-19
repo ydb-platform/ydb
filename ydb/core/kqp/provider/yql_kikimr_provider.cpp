@@ -610,12 +610,14 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
             protoValue.SetBool(FromString<bool>(value));
             break;
         case EDataSlot::Uint8:
+        case EDataSlot::Uint16:
         case EDataSlot::Uint32:
         case EDataSlot::Date:
         case EDataSlot::Datetime:
             protoValue.SetUint32(FromString<ui32>(value));
             break;
         case EDataSlot::Int8:
+        case EDataSlot::Int16:
         case EDataSlot::Int32:
         case EDataSlot::Date32:
             protoValue.SetInt32(FromString<i32>(value));
@@ -769,12 +771,14 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             protoValue.set_bool_value(FromString<bool>(value));
             break;
         case EDataSlot::Uint8:
+        case EDataSlot::Uint16:
         case EDataSlot::Uint32:
         case EDataSlot::Date:
         case EDataSlot::Datetime:
             protoValue.set_uint32_value(FromString<ui32>(value));
             break;
         case EDataSlot::Int8:
+        case EDataSlot::Int16:
         case EDataSlot::Int32:
         case EDataSlot::Date32:
             protoValue.set_int32_value(FromString<i32>(value));
@@ -791,11 +795,12 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             protoValue.set_uint64_value(FromString<ui64>(value));
             break;
         case EDataSlot::String:
-        case EDataSlot::DyNumber:
             protoValue.set_bytes_value(value.data(), value.size());
             break;
         case EDataSlot::Utf8:
         case EDataSlot::Json:
+        case EDataSlot::DyNumber:
+        case EDataSlot::JsonDocument:
             protoValue.set_text_value(ToString(value));
             break;
         case EDataSlot::Double:

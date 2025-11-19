@@ -92,8 +92,14 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             if (poolConfig.HasMaxLocalQueueSize()) {
                 basic.MaxLocalQueueSize = poolConfig.GetMaxLocalQueueSize();
             }
+            for (const auto& pool : poolConfig.GetAdjacentPools()) {
+                basic.AdjacentPools.push_back(pool);
+            }
+            if (poolConfig.HasForcedForeignSlots()) {
+                basic.ForcedForeignSlotCount = poolConfig.GetForcedForeignSlots();
+            }
             cpuManager.Basic.emplace_back(std::move(basic));
-            
+
             break;
         }
 
@@ -134,10 +140,8 @@ NMemory::TResourceBrokerConfig CreateMemoryControllerResourceBrokerConfig(const 
             resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
         }
         for (const auto& queue : resourceBrokerConfig.GetQueues()) {
-            if (queue.GetName() == NLocalDb::KqpResourceManagerQueue) {
-                if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
-                    resourceBrokerSelfConfig.QueryExecutionLimitBytes = queue.GetLimit().GetMemory();
-                }
+            if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
+                resourceBrokerSelfConfig.QueueLimits[queue.GetName()] = queue.GetLimit().GetMemory();
             }
         }
     };

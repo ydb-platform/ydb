@@ -1,4 +1,4 @@
-# /* custom error:Failed to convert type: Variant<Int32,Int32,Int32> to Variant<'A':Int32,'B':Int32,'C':Int32>*/
+# /* custom error: type diff: Variant<Tuple!=Struct> */
 (
 (let config (DataSource 'config))
 (let res_sink (DataSink 'result))

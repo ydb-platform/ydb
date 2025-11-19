@@ -8,7 +8,7 @@ namespace NKikimr::NArrow {
 
 class TRecordBatchReader {
 private:
-    std::shared_ptr<arrow::RecordBatch> Batch;
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
 public:
     TRecordBatchReader() = default;
     TRecordBatchReader(const std::shared_ptr<arrow::RecordBatch>& batch)

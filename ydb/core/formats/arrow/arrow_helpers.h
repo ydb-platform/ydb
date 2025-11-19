@@ -12,18 +12,18 @@
 namespace NKikimr::NArrow {
 
 template <class TArray, class TValue>
-std::optional<ui32> FindUpperOrEqualPosition(const TArray& arr, const TValue val) {
+std::optional<ui32> FindUpperOrEqualPosition(const TArray& arr, const TValue val, const ui32 startIndex = 0) {
     if (!arr.length()) {
         return std::nullopt;
     }
-    TValue left = arr.Value(0);
+    TValue left = arr.Value(startIndex);
     TValue right = arr.Value(arr.length() - 1);
     if (val < left) {
-        return 0;
+        return startIndex;
     } else if (right < val) {
         return std::nullopt;
     } else if (val == left) {
-        return 0;
+        return startIndex;
     }
     ui32 idxLeft = 0;
     ui32 idxRight = arr.length() - 1;
@@ -39,6 +39,9 @@ std::optional<ui32> FindUpperOrEqualPosition(const TArray& arr, const TValue val
         } else {
             idxRight = idxMiddle;
         }
+    }
+    while (idxRight && arr.Value(idxRight) == arr.Value(idxRight - 1)) {
+        --idxRight;
     }
     return idxRight;
 }
@@ -70,7 +73,16 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                        const std::shared_ptr<arrow::Schema>& sortingKey,
                        std::vector<std::shared_ptr<arrow::RecordBatch>>& out);
 
-std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
-std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
+[[nodiscard]] std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
+[[nodiscard]] std::shared_ptr<arrow::Table> ReallocateBatch(
+    const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
+[[nodiscard]] std::shared_ptr<arrow::ChunkedArray> ReallocateArray(
+    const std::shared_ptr<arrow::ChunkedArray>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
+[[nodiscard]] std::shared_ptr<arrow::Array> ReallocateArray(const std::shared_ptr<arrow::Array>& arr, arrow::MemoryPool* pool = arrow::default_memory_pool());
+
+std::vector<std::shared_ptr<arrow::Field>> BuildFakeFields(const std::vector<std::shared_ptr<arrow::Array>>& columns);
+
+std::shared_ptr<arrow::Schema> BuildFakeSchema(const std::vector<std::shared_ptr<arrow::Array>>& columns);
+
 
 }

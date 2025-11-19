@@ -91,4 +91,4 @@ private:
     size_t FailsCount = 0;
 };
 
-}
+} // namespace NKikimr::NOlap

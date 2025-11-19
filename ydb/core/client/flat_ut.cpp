@@ -2631,7 +2631,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        cleverServer.GetRuntime()->GetAppData()
+            .DataShardConfig.SetStatsReportIntervalSeconds(0);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 //        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
@@ -2748,7 +2749,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        cleverServer.GetRuntime()->GetAppData()
+            .DataShardConfig.SetStatsReportIntervalSeconds(0);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 //        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
@@ -2921,7 +2923,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 4);
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        cleverServer.GetRuntime()->GetAppData()
+            .DataShardConfig.SetStatsReportIntervalSeconds(0);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 //        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
@@ -3027,7 +3030,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TVector<ui64> initialPartitions = annoyingClient.GetTablePartitions("/dc-1/Dir/T1");
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        cleverServer.GetRuntime()->GetAppData()
+            .DataShardConfig.SetStatsReportIntervalSeconds(0);
         NDataShard::gDbStatsDataSizeResolution = 80000;
 
         TString bigValue(100*1024, '0');

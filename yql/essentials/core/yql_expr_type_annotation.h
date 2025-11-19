@@ -241,9 +241,9 @@ using TConvertFlags = TEnumBitSet<EFlags, DisableTruncation, Last>;
 using NConvertFlags::TConvertFlags;
 
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
-    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags = {});
+    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags = {}, bool useTypeDiff = false);
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
-    TExprContext& ctx, TConvertFlags flags = {});
+    TExprContext& ctx, TConvertFlags flags = {}, bool useTypeDiff = false);
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType, TExprContext& ctx,
     TConvertFlags flags = {});
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
@@ -254,7 +254,8 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNo
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
     TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx,
     const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
-IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx);
+IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx,
+    bool useTypeDiff = false);
 
 bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node);
 

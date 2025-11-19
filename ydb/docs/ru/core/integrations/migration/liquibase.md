@@ -304,7 +304,7 @@ id,bool,bigint,smallint,tinyint,float,double,decimal,uint8,uint16,uint32,uint64,
 
 {% note warning %}
 
-Чтобы понять, какие SQL-конструкции может выполнять {{ ydb-short-name }} и какие существуют ограничения на типы данных, ознакомьтесь с документацией по языку запросов [YQL](](../../yql/reference/index.md)).
+Чтобы понять, какие SQL-конструкции может выполнять {{ ydb-short-name }} и какие существуют ограничения на типы данных, ознакомьтесь с документацией по языку запросов [YQL](../../yql/reference/index.md).
 
 {% endnote %}
 

@@ -510,9 +510,9 @@ private:
         return false;
     }
 
-    void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
+    void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         std::vector<TPortionInfo::TPtr> sortedRemove;
-        for (const auto& [_, p] : remove) {
+        for (const auto& p : remove) {
             sortedRemove.push_back(p);
         }
         std::sort(sortedRemove.begin(), sortedRemove.end(), [](const auto& a, const auto& b) {
@@ -530,7 +530,7 @@ private:
         }
 
         std::vector<TPortionInfo::TPtr> sortedAdd;
-        for (const auto& [_, p] : add) {
+        for (const auto& p : add) {
             sortedAdd.push_back(p);
         }
         std::sort(sortedAdd.begin(), sortedAdd.end(), [](const auto& a, const auto& b) {

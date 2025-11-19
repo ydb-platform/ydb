@@ -12,7 +12,7 @@ namespace NKikimr::NColumnShard {
 namespace {
 
 ui64 GetBadPortionSizeLimit() {
-    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetBadPortionSizeLimit() : 512_KB;
+    return HasAppData() ? AppData()->ColumnShardConfig.GetBadPortionSizeLimit() : 512_KB;
 }
 
 }

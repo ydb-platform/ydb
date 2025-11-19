@@ -28,7 +28,7 @@ def main():
     
     results = []
     
-    # Check 1: module parameter in KikimrConfigGenerator.__init_
+    # Check 1: module parameter in KikimrConfigGenerator.__init__
     print("Checking kikimr_config.py...")
     results.append(check_file_contains(
         "ydb/tests/library/harness/kikimr_config.py",
@@ -68,6 +68,12 @@ def main():
         "ydb/tests/functional/config/test_module_parameter.py",
         r'module="TEST-MODULE-01"',
         "module parameter used in test"
+    ))
+    
+    results.append(check_file_contains(
+        "ydb/tests/functional/config/test_module_parameter.py",
+        r"test_cluster_starts_and_is_operational_with_module_parameter",
+        "combined test for cluster start and operation"
     ))
     
     # Check 4: Test added to ya.make

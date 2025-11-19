@@ -40,10 +40,7 @@ class TestModuleParameter(object):
     def teardown_class(cls):
         cls.cluster.stop()
 
-    def test_cluster_starts_with_module_parameter(self):
-        """
-        Test that cluster starts successfully with module parameter.
-        """
+    def test_cluster_starts_and_is_operational_with_module_parameter(self):
         # Check that cluster is running
         assert_that(len(self.cluster.nodes) > 0)
         
@@ -52,19 +49,14 @@ class TestModuleParameter(object):
         assert_that(node.is_alive())
         
         logger.info("Cluster started successfully with module parameter")
-
-    def test_cluster_is_operational(self):
-        """
-        Test that cluster is operational after starting with module parameter.
-        """
+        
         # Get swagger client for monitoring
-        node = self.cluster.nodes[1]
         swagger_client = SwaggerClient(node.host, node.mon_port)
         
         # Wait a bit for cluster to stabilize
         time.sleep(2)
         
-        # Check nodes info
+        # Check nodes info to verify cluster is operational
         try:
             nodes_info = swagger_client.nodes_info()
             assert_that(nodes_info is not None)
@@ -74,9 +66,6 @@ class TestModuleParameter(object):
             raise
 
     def test_module_parameter_in_command(self):
-        """
-        Test that --module parameter is present in the command line.
-        """
         node = self.cluster.nodes[1]
         command = node.command
         

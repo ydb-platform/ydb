@@ -19,6 +19,7 @@ class TBackupPathTestFixture : public TS3BackupTestFixture {
                 PRIMARY KEY (key)
             ) WITH (
                 STORE = {store}
+                {partition_count}
             );
 
             CREATE TABLE `/Root/RecursiveFolderProcessing/dir1/Table1` (
@@ -27,6 +28,7 @@ class TBackupPathTestFixture : public TS3BackupTestFixture {
                 PRIMARY KEY (key)
             ) WITH (
                 STORE = {store}
+                {partition_count}
             );
 
             CREATE TABLE `/Root/RecursiveFolderProcessing/dir1/dir2/Table2` (
@@ -35,8 +37,10 @@ class TBackupPathTestFixture : public TS3BackupTestFixture {
                 PRIMARY KEY (key)
             ) WITH (
                 STORE = {store}
+                {partition_count}
             );
-        )sql", "store"_a = isOlap ? "COLUMN" : "ROW"), NQuery::TTxControl::NoTx()).GetValueSync();
+        )sql", "store"_a = isOlap ? "COLUMN" : "ROW",
+        "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
         // Empty dir

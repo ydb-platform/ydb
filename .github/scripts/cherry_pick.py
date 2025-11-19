@@ -690,11 +690,19 @@ After resolving conflicts, mark this PR as ready for review.
                 # Found a CONFLICT line, collect it and any continuation lines
                 conflict_msg = line.strip()
                 # Check if next line is a continuation (starts with "Version" or is part of the message)
+                # Stop if we encounter another CONFLICT, hint:, error:, or empty line
                 j = i + 1
-                while j < len(lines) and (lines[j].strip().startswith('Version') or 
-                                         (lines[j].strip() and not lines[j].strip().startswith('hint:') and 
-                                          not lines[j].strip().startswith('error:'))):
-                    conflict_msg += ' ' + lines[j].strip()
+                while j < len(lines):
+                    next_line = lines[j].strip()
+                    # Stop if we encounter another CONFLICT message
+                    if 'CONFLICT' in next_line and '(' in next_line and ')' in next_line:
+                        break
+                    # Stop on hint:, error:, or empty line
+                    if next_line.startswith('hint:') or next_line.startswith('error:') or not next_line:
+                        break
+                    # Continue if it's a continuation (starts with "Version" or is part of the message)
+                    if next_line.startswith('Version') or next_line:
+                        conflict_msg += ' ' + next_line
                     j += 1
                 conflict_messages.append(conflict_msg)
         
@@ -742,11 +750,28 @@ After resolving conflicts, mark this PR as ready for review.
                                 conflict_line = self._find_first_conflict_line(file_path)
                                 
                                 # Find matching conflict message from git output
+                                # Git outputs messages like "CONFLICT (type): filename ..."
+                                # We need to match the message that specifically mentions this file
                                 conflict_message = None
+                                file_basename = os.path.basename(file_path)
                                 for msg in conflict_messages:
-                                    if file_path in msg:
-                                        conflict_message = msg
-                                        break
+                                    # Git format: "CONFLICT (type): filename ..."
+                                    # Extract filename from message (first word after ": ")
+                                    if ': ' in msg:
+                                        msg_file_part = msg.split(': ', 1)[1]
+                                        # Extract filename (first word after ": ")
+                                        msg_filename = msg_file_part.split()[0] if msg_file_part.split() else ""
+                                        # Match if filename matches (handle both relative and absolute paths)
+                                        if msg_filename == file_path or msg_filename == file_basename:
+                                            conflict_message = msg
+                                            break
+                                    # Fallback: check if file_path appears right after "CONFLICT (type): "
+                                    elif file_path in msg:
+                                        # Make sure it's not a substring match (e.g., "file.py" in "file.pyc")
+                                        # Check if file_path appears as a word boundary match
+                                        if re.search(rf'\b{re.escape(file_path)}\b', msg) or re.search(rf'\b{re.escape(file_basename)}\b', msg):
+                                            conflict_message = msg
+                                            break
                                 
                                 conflict_files.append((file_path, conflict_line, conflict_message))
                 
@@ -768,11 +793,27 @@ After resolving conflicts, mark this PR as ready for review.
                                     conflict_line = self._find_first_conflict_line(file_path)
                                     
                                     # Find matching conflict message
+                                    # Git outputs messages like "CONFLICT (type): filename ..."
                                     conflict_message = None
+                                    file_basename = os.path.basename(file_path)
                                     for msg in conflict_messages:
-                                        if file_path in msg:
-                                            conflict_message = msg
-                                            break
+                                        # Git format: "CONFLICT (type): filename ..."
+                                        # Extract filename from message (first word after ": ")
+                                        if ': ' in msg:
+                                            msg_file_part = msg.split(': ', 1)[1]
+                                            # Extract filename (first word after ": ")
+                                            msg_filename = msg_file_part.split()[0] if msg_file_part.split() else ""
+                                            # Match if filename matches (handle both relative and absolute paths)
+                                            if msg_filename == file_path or msg_filename == file_basename:
+                                                conflict_message = msg
+                                                break
+                                        # Fallback: check if file_path appears right after "CONFLICT (type): "
+                                        elif file_path in msg:
+                                            # Make sure it's not a substring match (e.g., "file.py" in "file.pyc")
+                                            # Check if file_path appears as a word boundary match
+                                            if re.search(rf'\b{re.escape(file_path)}\b', msg) or re.search(rf'\b{re.escape(file_basename)}\b', msg):
+                                                conflict_message = msg
+                                                break
                                     
                                     conflict_files.append((file_path, conflict_line, conflict_message))
                     except subprocess.CalledProcessError:
@@ -1004,6 +1045,12 @@ After resolving conflicts, mark this PR as ready for review.
                 # Check if commit is already applied (git cherry-pick returns error but commit is already in branch)
                 if "empty" in full_output.lower() or "nothing to commit" in full_output.lower():
                     self.logger.info(f"Commit {commit_sha[:7]} changes is already in branch {target_branch}, skipping")
+                    # Quit cherry-pick operation to clean up state before next commit
+                    try:
+                        self.git_run("cherry-pick", "--quit")
+                    except subprocess.CalledProcessError:
+                        # If --quit fails, we're probably not in cherry-pick state, continue anyway
+                        pass
                     continue
                 
                 # Check if this is a conflict or another error

@@ -106,163 +106,150 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     YQL_ENSURE(indexes);
     const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
 
-    const bool needPrecompute = !abortOnError
-        || !useStreamIndex
+    const bool needPrecompute = !useStreamIndex
+        || !abortOnError
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            return index.second->Type != TIndexDescription::EType::GlobalSync
-                && index.second->Type != TIndexDescription::EType::GlobalSyncUnique;
-        });;
+            return index.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
+                || index.second->Type == TIndexDescription::EType::GlobalFulltext;
+        });
 
-    if (!needPrecompute) {
-        TVector<TStringBuf> insertColumns;
-        THashSet<TStringBuf> inputColumnsSet;
-        for (const auto& column : insert.Columns()) {
-            YQL_ENSURE(inputColumnsSet.emplace(column.Value()).second);
-            insertColumns.emplace_back(column.Value());
-        }
+    TVector<TStringBuf> insertColumns;
+    THashSet<TStringBuf> inputColumnsSet;
+    for (const auto& column : insert.Columns()) {
+        YQL_ENSURE(inputColumnsSet.emplace(column.Value()).second);
+        insertColumns.emplace_back(column.Value());
+    }
 
-        THashSet<TStringBuf> requiredIndexColumnsSet;
-        for (const auto& [tableNode, indexDesc] : indexes) {
-            for (const auto& column : indexDesc->KeyColumns) {
-                if (requiredIndexColumnsSet.emplace(column).second && !inputColumnsSet.contains(column)) {
-                    insertColumns.emplace_back(column);
-                }
+    THashSet<TStringBuf> requiredIndexColumnsSet;
+    for (const auto& [tableNode, indexDesc] : indexes) {
+        for (const auto& column : indexDesc->KeyColumns) {
+            if (requiredIndexColumnsSet.emplace(column).second && !inputColumnsSet.contains(column)) {
+                insertColumns.emplace_back(column);
             }
         }
+    }
 
-        auto insertRows = (insertColumns.size() == insert.Columns().Size())
+    std::optional<TExprBase> insertRows;
+    if (needPrecompute) {
+        // TODO: don't use precompute here!
+        auto conditionalInsertRows = MakeConditionalInsertRows(insert.Input(), table, inputColumnsSet, abortOnError, insert.Pos(), ctx);
+        if (!conditionalInsertRows) {
+            return node;
+        }
+
+        insertRows = Build<TDqPhyPrecompute>(ctx, node.Pos())
+            .Connection(conditionalInsertRows.Cast())
+            .Done();
+    } else {
+        insertRows = (insertColumns.size() == insert.Columns().Size())
             ? insert.Input()
             : MakeInsertIndexRows(
                 insert.Input(), table, inputColumnsSet, insertColumns, insert.Pos(), ctx, false);
+    }
+    AFL_ENSURE(insertRows);
 
-        return Build<TKqlUpsertRows>(ctx, insert.Pos())
+    TVector<TExprBase> effects;
+
+    if (useStreamIndex) {
+        effects.emplace_back(Build<TKqlUpsertRows>(ctx, insert.Pos())
             .Table(insert.Table())
-            .Input(insertRows)
+            .Input(*insertRows)
             .Columns(BuildColumnsList(insertColumns, insert.Pos(), ctx))
             .ReturningColumns(insert.ReturningColumns())
             .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
             .Settings(insert.Settings())
-            .Done();
+            .Done());
     } else {
-        THashSet<TStringBuf> inputColumnsSet;
-        for (const auto& column : insert.Columns()) {
-            inputColumnsSet.emplace(column.Value());
+        effects.emplace_back(Build<TKqlUpsertRows>(ctx, insert.Pos())
+            .Table(insert.Table())
+            .Input(*insertRows)
+            .Columns(insert.Columns())
+            .ReturningColumns(insert.ReturningColumns())
+            .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+            .Done());
+    }
+
+    for (const auto& [tableNode, indexDesc] : indexes) {
+        if (useStreamIndex
+                && (indexDesc->Type == TIndexDescription::EType::GlobalSync
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+            continue;
         }
 
-        auto insertRows = MakeConditionalInsertRows(insert.Input(), table, inputColumnsSet, abortOnError, insert.Pos(), ctx);
-        if (!insertRows) {
-            return node;
+        THashSet<TStringBuf> indexTableColumnsSet;
+        TVector<TStringBuf> indexTableColumns;
+
+        for (const auto& column : indexDesc->KeyColumns) {
+            YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+            indexTableColumns.emplace_back(column);
         }
 
-        // TODO: don't use precompute here!
-        auto insertRowsPrecompute = Build<TDqPhyPrecompute>(ctx, node.Pos())
-            .Connection(insertRows.Cast())
-            .Done();
-
-        TVector<TExprBase> effects;
-
-        if (useStreamIndex) {
-            effects.emplace_back(Build<TKqlUpsertRows>(ctx, insert.Pos())
-                .Table(insert.Table())
-                .Input(insertRowsPrecompute)
-                .Columns(insert.Columns())
-                .ReturningColumns(insert.ReturningColumns())
-                .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
-                .Settings(insert.Settings())
-                .Done());
-        } else {
-            effects.emplace_back(Build<TKqlUpsertRows>(ctx, insert.Pos())
-                .Table(insert.Table())
-                .Input(insertRowsPrecompute)
-                .Columns(insert.Columns())
-                .ReturningColumns(insert.ReturningColumns())
-                .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
-                .Done());
-        }
-
-        for (const auto& [tableNode, indexDesc] : indexes) {
-            if (useStreamIndex
-                    && (indexDesc->Type == TIndexDescription::EType::GlobalSync
-                        || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
-                continue;
-            }
-
-            THashSet<TStringBuf> indexTableColumnsSet;
-            TVector<TStringBuf> indexTableColumns;
-
-            for (const auto& column : indexDesc->KeyColumns) {
-                YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+        for (const auto& column : table.Metadata->KeyColumnNames) {
+            if (indexTableColumnsSet.insert(column).second) {
                 indexTableColumns.emplace_back(column);
             }
-
-            for (const auto& column : table.Metadata->KeyColumnNames) {
-                if (indexTableColumnsSet.insert(column).second) {
-                    indexTableColumns.emplace_back(column);
-                }
-            }
-
-            for (const auto& column : indexDesc->DataColumns) {
-                if (inputColumnsSet.contains(column) && indexTableColumnsSet.emplace(column).second) {
-                    indexTableColumns.emplace_back(column);
-                }
-            }
-
-            std::optional<TExprBase> upsertIndexRows;
-            switch (indexDesc->Type) {
-                case TIndexDescription::EType::GlobalAsync:
-                    AFL_ENSURE(false);
-                case TIndexDescription::EType::GlobalSync:
-                case TIndexDescription::EType::GlobalSyncUnique: {
-                    upsertIndexRows = MakeInsertIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
-                        insert.Pos(), ctx, true);
-                    break;
-                }
-                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
-                    upsertIndexRows = MakeInsertIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
-                        insert.Pos(), ctx, true);
-                    if (indexDesc->KeyColumns.size() > 1) {
-                        // First resolve prefix IDs using StreamLookup
-                        const auto& prefixTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
-                            << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
-                        if (prefixTable.Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {
-                            auto res = BuildVectorIndexPrefixRowsWithNew(table, prefixTable, indexDesc, upsertIndexRows.value(), indexTableColumns, insert.Pos(), ctx);
-                            upsertIndexRows = std::move(res.first);
-                            effects.emplace_back(std::move(res.second));
-                        } else {
-                            // Handle old prefixed vector index tables without the sequence
-                            upsertIndexRows = BuildVectorIndexPrefixRows(table, prefixTable, true, indexDesc, upsertIndexRows.value(), indexTableColumns, insert.Pos(), ctx);
-                        }
-                    }
-                    upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns,
-                        upsertIndexRows.value(), true, insert.Pos(), ctx);
-                    indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
-                    break;
-                }
-                case TIndexDescription::EType::GlobalFulltext: {
-                    // For fulltext indexes, we need to tokenize the text and create inserted rows
-                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, insertRowsPrecompute, inputColumnsSet, indexTableColumns, /*includeDataColumns=*/true,
-                        insert.Pos(), ctx);
-                    break;
-                }
-            }
-            Y_ENSURE(upsertIndexRows.has_value());
-            Y_ENSURE(indexTableColumns);
-
-            auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())
-                .Table(tableNode)
-                .Input(upsertIndexRows.value())
-                .Columns(BuildColumnsList(indexTableColumns, insert.Pos(), ctx))
-                .ReturningColumns<TCoAtomList>().Build()
-                .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
-                .Done();
-
-            effects.emplace_back(upsertIndex);
         }
 
-        return Build<TExprList>(ctx, insert.Pos())
-            .Add(effects)
+        for (const auto& column : indexDesc->DataColumns) {
+            if (inputColumnsSet.contains(column) && indexTableColumnsSet.emplace(column).second) {
+                indexTableColumns.emplace_back(column);
+            }
+        }
+
+        std::optional<TExprBase> upsertIndexRows;
+        switch (indexDesc->Type) {
+            case TIndexDescription::EType::GlobalAsync:
+                AFL_ENSURE(false);
+            case TIndexDescription::EType::GlobalSync:
+            case TIndexDescription::EType::GlobalSyncUnique: {
+                upsertIndexRows = MakeInsertIndexRows(*insertRows, table, inputColumnsSet, indexTableColumns,
+                    insert.Pos(), ctx, true);
+                break;
+            }
+            case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                upsertIndexRows = MakeInsertIndexRows(*insertRows, table, inputColumnsSet, indexTableColumns,
+                    insert.Pos(), ctx, true);
+                if (indexDesc->KeyColumns.size() > 1) {
+                    // First resolve prefix IDs using StreamLookup
+                    const auto& prefixTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
+                    if (prefixTable.Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {
+                        auto res = BuildVectorIndexPrefixRowsWithNew(table, prefixTable, indexDesc, upsertIndexRows.value(), indexTableColumns, insert.Pos(), ctx);
+                        upsertIndexRows = std::move(res.first);
+                        effects.emplace_back(std::move(res.second));
+                    } else {
+                        // Handle old prefixed vector index tables without the sequence
+                        upsertIndexRows = BuildVectorIndexPrefixRows(table, prefixTable, true, indexDesc, upsertIndexRows.value(), indexTableColumns, insert.Pos(), ctx);
+                    }
+                }
+                upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns,
+                    upsertIndexRows.value(), true, insert.Pos(), ctx);
+                indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+                break;
+            }
+            case TIndexDescription::EType::GlobalFulltext: {
+                // For fulltext indexes, we need to tokenize the text and create inserted rows
+                upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, *insertRows, inputColumnsSet, indexTableColumns, /*includeDataColumns=*/true,
+                    insert.Pos(), ctx);
+                break;
+            }
+        }
+        Y_ENSURE(upsertIndexRows.has_value());
+        Y_ENSURE(indexTableColumns);
+
+        auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())
+            .Table(tableNode)
+            .Input(upsertIndexRows.value())
+            .Columns(BuildColumnsList(indexTableColumns, insert.Pos(), ctx))
+            .ReturningColumns<TCoAtomList>().Build()
+            .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
             .Done();
+
+        effects.emplace_back(upsertIndex);
     }
+    return Build<TExprList>(ctx, insert.Pos())
+        .Add(effects)
+        .Done();
 }
 
 } // namespace NKikimr::NKqp::NOpt

@@ -190,6 +190,7 @@ struct TUtils {
         UNIT_ASSERT_VALUES_EQUAL(ometrics.UnprocessedMessageCount, metrics.UnprocessedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.LockedMessageCount, metrics.LockedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.LockedMessageGroupCount, metrics.LockedMessageGroupCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.DelayedMessageCount, metrics.DelayedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.CommittedMessageCount, metrics.CommittedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.DeadlineExpiredMessageCount, metrics.DeadlineExpiredMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.DLQMessageCount, metrics.DLQMessageCount);
@@ -368,20 +369,48 @@ Y_UNIT_TEST(AddMessageWithDelay) {
     TUtils utils;
     utils.Begin();
 
-    utils.Storage.AddMessage(3, false, 0, utils.TimeProvider->Now(), TDuration::Seconds(137));
+    utils.Storage.AddMessage(3, true, 0, utils.TimeProvider->Now(), TDuration::Seconds(137));
 
     auto it = utils.Storage.begin();
     UNIT_ASSERT(it != utils.Storage.end());
     auto message = *it;
     UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
-    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
+    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Delayed);
     UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(137));
 
     auto& metrics = utils.Storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
-    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DelayedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    utils.End();
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(AddMessageWithBigDelay) {
+    TUtils utils;
+    utils.Begin();
+
+    utils.Storage.AddMessage(3, false, 0, utils.TimeProvider->Now(), TDuration::Days(1));
+
+    auto it = utils.Storage.begin();
+    UNIT_ASSERT(it != utils.Storage.end());
+    auto message = *it;
+    UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Delayed);
+    UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Hours(12)); // max deadline
+
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DelayedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
@@ -408,6 +437,7 @@ Y_UNIT_TEST(AddMessageWithZeroDelay) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DelayedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
@@ -415,6 +445,42 @@ Y_UNIT_TEST(AddMessageWithZeroDelay) {
     utils.End();
     utils.AssertLoad();
 }
+
+Y_UNIT_TEST(AddMessageWithDelay_Unlock) {
+    TUtils utils;
+
+    utils.Storage.AddMessage(3, true, 0, utils.TimeProvider->Now(), TDuration::Seconds(1));
+    utils.Storage.AddMessage(4, true, 0, utils.TimeProvider->Now());
+
+    auto result = utils.Next(TDuration::Seconds(10));
+    UNIT_ASSERT_VALUES_EQUAL(result, 4); // offset 3 delayed by 1 second, so it should be the next message
+
+    utils.Begin();
+
+    utils.TimeProvider->Tick(TDuration::Seconds(2)); // delay of message with offset 3 expired
+    utils.Storage.ProccessDeadlines();
+
+    auto it = utils.Storage.begin();
+    UNIT_ASSERT(it != utils.Storage.end());
+    auto message = *it;
+    UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+    UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    utils.End();
+    utils.AssertLoad();
+}
+
+
 
 Y_UNIT_TEST(NextWithoutKeepMessageOrderStorage) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
@@ -1472,7 +1538,7 @@ Y_UNIT_TEST(CompactStorage_ByCommittedOffset) {
 
 Y_UNIT_TEST(CompactStorage_ByRetention) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
-    auto writeTimestamp = timeProvider->Now() + TDuration::Seconds(12);
+    auto writeTimestamp = timeProvider->Now() + TDuration::Seconds(13);
 
     TStorage storage(timeProvider);
     storage.SetRetentionPeriod(TDuration::Seconds(1));
@@ -1483,8 +1549,9 @@ Y_UNIT_TEST(CompactStorage_ByRetention) {
 
     timeProvider->Tick(TDuration::Seconds(12));
 
+    Cerr << "BEFOR: " << storage.DebugString() << Endl;
     auto result = storage.Compact();
-    Cerr << storage.DebugString() << Endl;
+    Cerr << "AFTER: " << storage.DebugString() << Endl;
     UNIT_ASSERT_VALUES_EQUAL_C(result, 2, "must remove message with offset 3 and 4");
 
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 5);
@@ -1508,6 +1575,47 @@ Y_UNIT_TEST(CompactStorage_ByRetention) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1); // offset 5
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(CompactStorage_ByDeadline) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    auto writeTimestamp = timeProvider->Now() + TDuration::Seconds(7);
+
+    TStorage storage(timeProvider);
+    storage.SetRetentionPeriod(TDuration::Seconds(1));
+
+    storage.AddMessage(3, true, 5, writeTimestamp, TDuration::Seconds(1));
+
+    timeProvider->Tick(TDuration::Seconds(5));
+
+    Cerr << "BEFOR: " << storage.DebugString() << Endl;
+    auto result = storage.Compact();
+    Cerr << "AFTER: " << storage.DebugString() << Endl;
+    UNIT_ASSERT_VALUES_EQUAL_C(result, 0, "they should not be deleted by deadline");
+
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 4);
+
+    auto it = storage.begin();
+    {
+        UNIT_ASSERT(it != storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Delayed);
+        UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
+    }
+    ++it;
+    UNIT_ASSERT(it == storage.end());
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DelayedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);

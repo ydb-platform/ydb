@@ -283,6 +283,14 @@ template <typename T>
 TCell MakeDefaultCellByPrimitiveType() {
     return TCell::Make<T>(T());
 }
+
+// Specialization for Decimal storage type: std::pair<ui64, i64> (16 bytes)
+template <>
+inline TCell MakeDefaultCellByPrimitiveType<std::pair<ui64, i64>>() {
+    static const std::pair<ui64, i64> kZeroDecimal{0, 0};
+    return TCell(reinterpret_cast<const char*>(&kZeroDecimal), sizeof(kZeroDecimal));
+}
+
 }   // namespace
 
 TConclusion<TCell> TRangesBuilder::MakeDefaultCell(const NScheme::TTypeInfo typeInfo) {

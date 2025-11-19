@@ -1656,7 +1656,6 @@ private:
     }
 
     void PrepareResultFormatSettings(TMaybe<NCommon::TResultFormatSettings>& resultFormatSettings, NFq::NProto::TGraphParams& dqGraphParams, const TDqConfiguration& dqConfiguration) {
-
         resultFormatSettings.ConstructInPlace();
         for (const auto& c : dqGraphParams.GetColumns()) {
             resultFormatSettings->Columns.push_back(c);

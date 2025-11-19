@@ -1311,7 +1311,6 @@ Pear,15,33'''
         assert "Runtime listing is not allowed for federated queries, pragma value was ignored" in describe_string, describe_string
         assert len(client.get_result_data(query_id).result.result_set.rows) == 3
 
-
     @yq_v1
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_precompute_with_different_result_types(self, kikimr, s3, client, unique_prefix):
@@ -1339,7 +1338,7 @@ Banana,3'''
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f'''
-            $input1 = 
+            $input1 =
                 SELECT AGGREGATE_LIST( AsStruct(f1 AS dns_mining_pool))
                 FROM `{storage_connection_name}`.`file1.csv`
                 WITH (format=csv_with_names, SCHEMA (
@@ -1376,7 +1375,7 @@ Banana,3'''
 
             $parsed = SELECT $f1() AS f1,  $f2() AS f2;
 
-            $parsed = 
+            $parsed =
                 SELECT
                     p.f1.dns_mining_pool AS f1, p.f2.dns_f_query AS f2
                 FROM $parsed AS p;

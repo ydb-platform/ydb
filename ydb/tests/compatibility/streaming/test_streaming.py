@@ -206,4 +206,3 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
             input = ['{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-2"}']
             expected_data = ['{"host":"host-2","level":"error","time":"2025-01-01T00:15:00.000000Z"}']
             self.do_write_read(input, expected_data)
-

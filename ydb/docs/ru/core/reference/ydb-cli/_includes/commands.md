@@ -22,8 +22,6 @@
 
 Команда / подкоманда | Краткое описание
 --- | ---
-<<<<<<< HEAD
-=======
 admin cluster bootstrap | Инициализация подготовленного [кластера](../../../concepts/glossary.md#cluster)
 [admin cluster bridge failover](../commands/bridge/failover.md) | Аварийное переключение при недоступности [pile](../../../concepts/glossary.md#pile)
 [admin cluster bridge list](../commands/bridge/list.md) | Список состояния каждого [pile](../../../concepts/glossary.md#pile) в [режиме bridge](../../../concepts/bridge.md)
@@ -46,7 +44,6 @@ admin database config version | Отображение версии конфиг
 [admin database restore](../export-import/tools-restore.md#db) | Восстановление метаданных и данных базы данных из файловой системы
 [admin node config init](../commands/configuration/node/init.md) | Инициализация конфигурации [узла](../../../concepts/glossary.md#node)
 auth get-token | Получение [аутентификационного токена](../../../concepts/glossary.md#auth-token) из параметров аутентификации
->>>>>>> 448fd4c91 ((docs) YDB Cli full list of options (#28931))
 [config info](../commands/config-info.md) | Просмотр [параметров соединения](../connect.md)
 [config profile activate](../profile/activate.md) | Активация [профиля](../profile/index.md)
 [config profile create](../profile/create.md) | Создание [профиля](../profile/index.md)
@@ -95,26 +92,6 @@ debug ping | Проверка доступности {{ ydb-short-name }}
 [table index rename](../commands/secondary_index.md#rename) | Переименование [вторичного индекса](../../../concepts/glossary.md#secondary-index) для указанной [таблицы](../../../concepts/glossary.md#table)
 [table query execute](../table-query-execute.md) | Исполнение YQL-запроса (команда устарела, используйте [`ydb sql`](../sql.md))
 [table query explain](../commands/explain-plan.md) | Получение плана исполнения YQL-запроса (команда устарела, используйте [`ydb sql --explain`](../sql.md))
-<<<<<<< HEAD
-[table read](../commands/readtable.md) | Потоковое чтение строковой таблицы
-[table ttl set](../table-ttl-set.md) | Установка параметров TTL для строковых и колоночных таблиц
-[table ttl reset](../table-ttl-reset.md) | Сброс параметров TTL для строковых и колоночных таблиц
-[tools copy](../tools-copy.md) | Копирование таблиц
-[tools dump](../export-import/tools-dump.md) | Выгрузка директории или таблиц в файловую систему
-{% if ydb-cli == "ydb" %}
-[tools pg-convert](../../../postgresql/import.md#pg-convert) | Конвертация дампа PostgreSQL, полученного утилитой pg_dump, в формат, понятный YDB
-{% endif %}
-[tools rename](../commands/tools/rename.md) | Переименование строковых таблиц
-[tools restore](../export-import/tools-restore.md) | Восстановление из файловой системы
-[topic create](../topic-create.md) | Создание топика
-[topic alter](../topic-alter.md) | Модификация параметров топика и перечня читателей
-[topic drop](../topic-drop.md) | Удаление топика
-[topic consumer add](../topic-consumer-add.md) | Добавление читателя в топик
-[topic consumer drop](../topic-consumer-drop.md) | Удаление читателя из топика
-[topic consumer offset commit](../topic-consumer-offset-commit.md) | Сохранение позиции чтения
-[topic read](../topic-read.md) | Чтение сообщений из топика
-[topic write](../topic-write.md) | Запись сообщений в топик
-=======
 [table read](../commands/readtable.md) | Потоковое чтение строковой [таблицы](../../../concepts/glossary.md#row-oriented-table)
 [table ttl set](../table-ttl-set.md) | Установка параметров [TTL](../../../concepts/glossary.md#ttl) для строковых и колоночных [таблиц](../../../concepts/glossary.md#table)
 [table ttl reset](../table-ttl-reset.md) | Сброс параметров [TTL](../../../concepts/glossary.md#ttl) для строковых и колоночных [таблиц](../../../concepts/glossary.md#table)
@@ -135,7 +112,6 @@ topic consumer describe | Описание [читателя](../../../concepts/
 [topic consumer offset commit](../topic-consumer-offset-commit.md) | Сохранение [смещения](../../../concepts/glossary.md#offset) чтения
 [topic read](../topic-read.md) | Чтение сообщений из [топика](../../../concepts/glossary.md#topic)
 [topic write](../topic-write.md) | Запись сообщений в [топик](../../../concepts/glossary.md#topic)
->>>>>>> 448fd4c91 ((docs) YDB Cli full list of options (#28931))
 {% if ydb-cli == "ydb" %}
 [update](../commands/service.md) | Обновление {{ ydb-short-name }} CLI
 [version](../commands/service.md) | Вывод информации о версии {{ ydb-short-name }} CLI

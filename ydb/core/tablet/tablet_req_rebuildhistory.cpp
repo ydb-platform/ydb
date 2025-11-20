@@ -518,9 +518,24 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         while(firstRequestIdx < endIdx) {
             ui64 endRequestIdx = endIdx;
             ui64 totalSize = 0;
+
+            bool needToForce = false;
+
             for (ui64 i = firstRequestIdx; i != endIdx; ++i) {
                 ui64 size = refs[i].BlobSize();
                 Y_ABORT_UNLESS(size != 0);
+
+                const ui32 channel = refs[i].Channel();
+                Y_ABORT_UNLESS(channel < std::size(Info->Channels));
+                const auto& ch = Info->Channels[channel];
+                Y_ABORT_UNLESS(!ch.History.empty());
+                const bool currentNeedToForce = ch.History.back().FromGeneration <= refs[i].Generation();
+                if (i == firstRequestIdx) {
+                    needToForce = currentNeedToForce;
+                } else if (currentNeedToForce != needToForce) {
+                    endRequestIdx = i;
+                    break;
+                }
 
                 const ui64 replyDataSize = totalSize + size + NKikimr::BlobProtobufHeaderMaxSize;
                 if (replyDataSize <= NKikimr::MaxProtobufSize) {
@@ -538,8 +553,12 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             for (ui64 i = 0; i < count; ++i) {
                 q[i].Set(refs[i + firstRequestIdx] /*must be index read*/);
             }
+
             SendToBSProxy(SelfId(), group, new TEvBlobStorage::TEvGet(q, (ui32)count, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::FastRead, true, true, TEvBlobStorage::TEvGet::TForceBlockTabletData(Info->TabletID, BlockedGen)));
+                NKikimrBlobStorage::EGetHandleClass::FastRead, true, true,
+                needToForce
+                    ? std::make_optional(TEvBlobStorage::TEvGet::TForceBlockTabletData(Info->TabletID, BlockedGen))
+                    : std::nullopt));
             ++RequestsLeft;
 
             firstRequestIdx = endRequestIdx;

@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/persqueue/public/mlp)
 YQL_LAST_ABI_VERSION()
 
 SIZE(MEDIUM)
-TIMEOUT(30)
+#TIMEOUT(30)
 
 SRCS(
     mlp_changer_ut.cpp

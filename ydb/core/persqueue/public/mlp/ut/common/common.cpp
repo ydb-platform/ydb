@@ -48,8 +48,9 @@ void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topi
     setup->GetServer().WaitInit(GetTopicPath(topicName));
 }
 
-void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName) {
+void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount) {
     return CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
+            .PartitioningSettings(partitionCount, partitionCount)
             .BeginAddSharedConsumer(consumerName)
                 .KeepMessagesOrder(false)
                 .BeginDeadLetterPolicy()

@@ -51,7 +51,6 @@ private:
         size_t Index;
         ui64 TabletId;
         ui32 PartitionId;
-        TString MessageId;
 
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::INTERNAL_ERROR;
         bool ResultReceived = false;

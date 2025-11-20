@@ -74,9 +74,9 @@ namespace NKikimr {
             case NKikimrProto::BLOCKED:
             case NKikimrProto::DEADLINE:
             case NKikimrProto::RACE:
-            case NKikimrProto::ERROR:
                 return NActors::NLog::EPriority::PRI_INFO;
             case NKikimrProto::NODATA:
+            case NKikimrProto::ERROR:
                 return NActors::NLog::EPriority::PRI_NOTICE;
             default:
                 return NActors::NLog::EPriority::PRI_ERROR;

@@ -40,7 +40,7 @@ private:
     ui32 VPutResponses = 0;
     ui32 VMultiPutRequests = 0;
     ui32 VMultiPutResponses = 0;
-    bool AtLeastOneResponseWasNotOk = false;
+    NActors::NLog::EPriority ResultPriority = NActors::NLog::PRI_DEBUG;
     bool EnableRequestMod3x3ForMinLatecy = false;
 
     const TEvBlobStorage::TEvPut::ETactic Tactic;
@@ -297,7 +297,7 @@ public:
         ++VPutResponses;
         ProcessResponseCommonPart(msg.Record);
         ui32 orderNumber = Info->GetOrderNumber(TVDiskIdShort(VDiskIDFromVDiskID(msg.Record.GetVDiskID())));
-        ProcessResponseBlob(msg.Record.GetStatus(), orderNumber, msg.Record);
+        ProcessResponseBlob(orderNumber, msg.Record);
         History.AddVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
     }
 
@@ -306,7 +306,7 @@ public:
         ProcessResponseCommonPart(msg.Record);
         ui32 orderNumber = Info->GetOrderNumber(TVDiskIdShort(VDiskIDFromVDiskID(msg.Record.GetVDiskID())));
         for (const auto& item : msg.Record.GetItems()) {
-            ProcessResponseBlob(item.GetStatus(), orderNumber, item);
+            ProcessResponseBlob(orderNumber, item);
         }
         History.AddVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
     }
@@ -317,10 +317,6 @@ public:
         return it->second;
     }
 
-    bool WasNotOkResponses() {
-        return AtLeastOneResponseWasNotOk;
-    }
-
 protected:
     void RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults, const TBlobStorageGroupInfo::TGroupVDisks& expired,
         bool accelerate);
@@ -328,7 +324,7 @@ protected:
         const TBlobStorageGroupInfo::TGroupVDisks& expired);
 
     template<typename TProtobuf>
-    void ProcessResponseBlob(NKikimrProto::EReplyStatus status, ui32 orderNumber, TProtobuf& record) {
+    void ProcessResponseBlob(ui32 orderNumber, TProtobuf& record) {
         Y_ABORT_UNLESS(record.HasStatus());
         Y_ABORT_UNLESS(record.HasBlobID());
 
@@ -346,7 +342,6 @@ protected:
             case NKikimrProto::VDISK_ERROR_STATE:
             case NKikimrProto::OUT_OF_SPACE:
                 Blackboard.AddErrorResponse(blobId, orderNumber, record.GetErrorReason());
-                AtLeastOneResponseWasNotOk = status != NKikimrProto::NOTREADY;
                 break;
             case NKikimrProto::OK:
             case NKikimrProto::ALREADY:

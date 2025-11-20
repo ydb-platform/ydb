@@ -76,8 +76,9 @@ namespace NKikimr {
             case NKikimrProto::RACE:
                 return NActors::NLog::EPriority::PRI_INFO;
             case NKikimrProto::NODATA:
-            case NKikimrProto::ERROR:
                 return NActors::NLog::EPriority::PRI_NOTICE;
+            case NKikimrProto::ERROR:
+                return NActors::NLog::EPriority::PRI_ERROR;
             default:
                 return NActors::NLog::EPriority::PRI_ERROR;
         }

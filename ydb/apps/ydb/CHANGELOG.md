@@ -1,3 +1,4 @@
+* Added `NO_COLOR` environment variable support to disable ANSI colors in YDB CLI (no-color.org)
 * Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output .tar.bz2 file.
 * Added a simple progress bar for non-interactive stderr.
 

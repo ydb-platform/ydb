@@ -157,6 +157,9 @@ runs:
         set -ex
         
         if [ "$COLLECT_COREDUMPS" = "true" ]; then
+          sudo mkdir -p /coredumps
+          sudo chmod 1777 /coredumps
+          echo "/coredumps/%p.%s" | sudo tee /proc/sys/kernel/core_pattern
           ulimit -c unlimited
         else
           ulimit -c 0

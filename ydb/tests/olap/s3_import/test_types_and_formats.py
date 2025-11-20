@@ -113,18 +113,14 @@ class TestTypesAndFormats(S3ImportTestBase):
                     'uint64': 'UINT64',
                     'float': 'FLOAT32',
                     'double': 'FLOAT64',
-                    'large_binary': 'BINARY',
                     'binary': 'BINARY',
                     'string': 'BINARY',
                     'utf8': 'BINARY',
-                    'large_string': 'BINARY',
                     'bool': 'BOOL',
                     'date32': 'DATE',
-                    'date64': 'DATE64',
                     'date': 'DATE',
                     'timestamp': 'TIMESTAMP',
                     'decimal128': 'DECIMAL',
-                    'decimal256': 'DECIMAL',
                     'decimal': 'DECIMAL',
                 }
 
@@ -133,8 +129,7 @@ class TestTypesAndFormats(S3ImportTestBase):
                 if normalized_arrow_type is None:
                     arrow_type_lower = arrow_type_str.lower()
                     priority_keys = ['float32', 'float64', 'uint8', 'uint16', 'uint32', 'uint64',
-                                     'int8', 'int16', 'int32', 'int64', 'large_binary', 'large_string',
-                                     'date32', 'date64', 'decimal128', 'decimal256']
+                                     'int8', 'int16', 'int32', 'int64', 'date32', 'decimal128']
                     for key in priority_keys:
                         if arrow_type_lower == key or arrow_type_lower.startswith(key + '[') or arrow_type_lower.startswith(key + '('):
                             normalized_arrow_type = arrow_type_mapping.get(key)

@@ -35,9 +35,9 @@ struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, EEv::EvW
     TString ErrorDescription;
 
     struct TMessage {
+        size_t Index;
         // if message was written successfully, it will be set
         std::optional<TMessageId> MessageId;
-        TString BatchId;
     };
     std::vector<TMessage> Messages;
 };
@@ -83,20 +83,20 @@ struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::E
     std::vector<TResult> Messages;
 };
 
-struct TMessage {
-    TString MessageBody;
-    TString MessageId;
-    std::optional<TString> MessageGroupId;
-    std::optional<TString> MessageDeduplicationId;
-    std::optional<TString> SerializedMessageAttributes;
-    TDuration Delay;
-    TString BatchId;
-};
-
 struct TWriterSettings {
     TString DatabasePath;
     TString TopicName;
+
+    struct TMessage {
+        size_t Index;
+        TString MessageBody;
+        std::optional<TString> MessageGroupId;
+        std::optional<TString> MessageDeduplicationId;
+        std::optional<TString> SerializedMessageAttributes;
+        TDuration Delay;
+    };
     std::vector<TMessage> Messages;
+
     bool ShouldBeCharged = false;
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;

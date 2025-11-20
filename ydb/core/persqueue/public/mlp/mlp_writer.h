@@ -48,10 +48,10 @@ private:
     size_t PendingRequests = 0;
 
     struct TPendingMessage {
+        size_t Index;
         ui64 TabletId;
         ui32 PartitionId;
         TString MessageId;
-        TString BatchId;
 
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::INTERNAL_ERROR;
         bool ResultReceived = false;

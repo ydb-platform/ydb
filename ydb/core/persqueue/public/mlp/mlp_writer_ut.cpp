@@ -13,9 +13,8 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             .TopicName = "/Root/topic_not_exists",
             .Messages = {
                 {
+                    .Index = 0,
                     .MessageBody = "message_body",
-                    .MessageId = "message_id",
-                    .BatchId = "batch_id"
                 }
             }
         });
@@ -53,12 +52,11 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             .TopicName = "/Root/topic1",
             .Messages = {
                 {
+                    .Index = 3,
                     .MessageBody = "message_body",
-                    .MessageId = "message_id",
                     .MessageGroupId = "message_group_id",
                     .MessageDeduplicationId = "message_deduplication_id",
                     .SerializedMessageAttributes = "message_attributes",
-                    .BatchId = "batch_id"
                 }
             }
         });
@@ -69,10 +67,10 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
                 Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::SUCCESS), response->ErrorDescription);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
             auto& msg = response->Messages[0];
+            UNIT_ASSERT_VALUES_EQUAL(msg.Index, 3);
             UNIT_ASSERT(msg.MessageId.has_value());
             UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->PartitionId, 0);
             UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->Offset, 0);
-            UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id");
         }
 
         CreateReaderActor(runtime, {
@@ -104,16 +102,14 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             .TopicName = "/Root/topic1",
             .Messages = {
                 {
+                    .Index = 3,
                     .MessageBody = "message_body_1",
-                    .MessageId = "message_id_1",
                     .MessageGroupId = "message_group_id_1",
-                    .BatchId = "batch_id_1"
                 },
                 {
+                    .Index = 7,
                     .MessageBody = "message_body_2",
-                    .MessageId = "message_id_2",
                     .MessageGroupId = "message_group_id_2",
-                    .BatchId = "batch_id_2"
                 }
             }
         });
@@ -125,17 +121,17 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             {
                 auto& msg = response->Messages[0];
+                UNIT_ASSERT_VALUES_EQUAL(msg.Index, 3);
                 UNIT_ASSERT(msg.MessageId.has_value());
                 UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->PartitionId, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->Offset, 0);
-                UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id_1");
             }
             {
                 auto& msg = response->Messages[1];
+                UNIT_ASSERT_VALUES_EQUAL(msg.Index, 7);
                 UNIT_ASSERT(msg.MessageId.has_value());
                 UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->PartitionId, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->Offset, 1);
-                UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id_2");
             }
         }
     }
@@ -151,16 +147,14 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             .TopicName = "/Root/topic1",
             .Messages = {
                 {
+                    .Index = 0,
                     .MessageBody = "message_body_1",
-                    .MessageId = "message_id_1",
                     .MessageGroupId = "message_group_id_1",
-                    .BatchId = "batch_id_1"
                 },
                 {
+                    .Index = 1,
                     .MessageBody = "message_body_2",
-                    .MessageId = "message_id_2",
                     .MessageGroupId = "message_group_id_2",
-                    .BatchId = "batch_id_2"
                 }
             }
         });
@@ -172,17 +166,17 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             {
                 auto& msg = response->Messages[0];
+                UNIT_ASSERT_VALUES_EQUAL(msg.Index, 0);
                 UNIT_ASSERT(msg.MessageId.has_value());
                 UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->PartitionId, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->Offset, 0);
-                UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id_1");
             }
             {
                 auto& msg = response->Messages[1];
+                UNIT_ASSERT_VALUES_EQUAL(msg.Index, 1);
                 UNIT_ASSERT(msg.MessageId.has_value());
                 UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->PartitionId, 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->Offset, 0);
-                UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id_2");
             }
         }
     }

@@ -66,7 +66,7 @@ STFUNC(TWriterActor::DescribeState) {
 
 namespace {
 
-size_t SerializeTo(TMessage& item, ::NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmdWrite) {
+size_t SerializeTo(const TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmdWrite) {
     size_t totalSize = item.MessageBody.size() + (item.SerializedMessageAttributes.has_value() ? 
         item.SerializedMessageAttributes.value().size() : 0);
 
@@ -80,12 +80,6 @@ size_t SerializeTo(TMessage& item, ::NKikimrClient::TPersQueuePartitionRequest::
     proto.SetCodec(0); // NPersQueue::CODEC_RAW
     proto.SetData(std::move(item.MessageBody));
 
-    {
-        AFL_ENSURE(!item.MessageId.empty());
-        auto* m = proto.AddMessageMeta();
-        m->set_key(NPQ::NMLP::NMessageConsts::MessageId);
-        m->set_value(std::move(item.MessageId));
-    }
     if (item.MessageGroupId) {
         auto* m = proto.AddMessageMeta();
         m->set_key(MESSAGE_KEY);
@@ -136,10 +130,9 @@ void TWriterActor::DoWrite() {
         }
 
         PendingMessages.push_back({
+            .Index = message.Index,
             .TabletId = partition->TabletId,
             .PartitionId = partition->PartitionId,
-            .MessageId = message.MessageId,
-            .BatchId = message.BatchId,
         });
 
         auto it = requests.find(partition->PartitionId);
@@ -288,8 +281,8 @@ void TWriterActor::ReplyIfPossible() {
             };
         }
         response->Messages.push_back({
+            .Index = message.Index,
             .MessageId = messageId,
-            .BatchId = message.BatchId,
         });
     }
 

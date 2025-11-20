@@ -1,4 +1,5 @@
 
+#include <counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 namespace NKikimr {
@@ -60,8 +61,9 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             ).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         }
+        int duplicates = 20;
         for (ui32 i = 0; i < 300; ++i) {
-            auto str = TString(20000, 'a' + (i / 20));
+            auto str = TString(200000, 'a' + (i / duplicates));
             auto result = queryClient.ExecuteQuery(Sprintf(R"(
                 --!syntax_v1
                 INSERT INTO `/Root/left_table` (id, data) VALUES (%d, "%s");
@@ -99,10 +101,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
             TString select = R"(
-                SELECT count(*)
+                SELECT L.*
                 FROM `left_table` AS L
-                INNER JOIN `right_table` AS R1
-                ON L.data = R1.data
+                INNER JOIN `right_table` AS R
+                ON L.data = R.data;
             )";
 
                 // inner join `right_table` AS R2
@@ -114,7 +116,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
             auto resultSet = status.GetResultSets()[0];
-            auto expectedRowsCount = 300*20*20;
+            auto expectedRowsCount = 300*duplicates;
             UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), expectedRowsCount);
 
             auto explainResult = queryClient.ExecuteQuery(
@@ -131,6 +133,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
 
             UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
                 TStringBuilder() << "AST should contain BlockHashJoin when enabled! Actual AST: " << ast);
+            TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+            UNIT_ASSERT(counters.SpillingWriteBlobs->Val() > 0);
+            UNIT_ASSERT(counters.SpillingReadBlobs->Val() > 0);
+
         }
     }
     Y_UNIT_TEST_TWIN(BlockHashJoinTest, UseBlockHashJoin) {

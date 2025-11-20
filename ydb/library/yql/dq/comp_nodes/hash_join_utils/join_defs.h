@@ -11,6 +11,17 @@ template <typename T> using TMKQLDeque = std::deque<T, TMKQLAllocator<T>>;
 using TFuturePage = NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>;
 
 enum class ESide { Probe, Build };
+#ifdef MKQL_ENSURE
+#undef MKQL_ENSURE
+#endif
+#define MKQL_ENSURE(condition, message)                                   \
+    do {                                                                  \
+        if (Y_UNLIKELY(!(condition))) {                                   \
+            PrintBackTrace();                                             \
+            (THROW yexception() << __FUNCTION__ << "(): requirement "     \
+                                << #condition << " failed. " << message); \
+        }                                                                 \
+    } while (0)
 
 template <typename T> struct TSides {
     T Build;

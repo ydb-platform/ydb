@@ -39,7 +39,7 @@ struct TSpillerSettings {
 
 // constexpr TSpillerSettings RuntimeStorageSettings{.Buckets = 128, .BucketSizeBytes = (1<<19), .SpillingPagesAtTime =
 // 3};
-constexpr TSpillerSettings TestStorageSettings{.Buckets = 4, .BucketSizeBytes = (1 << 16), .SpillingPagesAtTime = 1};
+constexpr TSpillerSettings TestStorageSettings{.Buckets = 64, .BucketSizeBytes = (1 << 16), .SpillingPagesAtTime = 8};
 
 enum ESpillResult {
     Spilling,

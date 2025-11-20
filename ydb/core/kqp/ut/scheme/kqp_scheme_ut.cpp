@@ -13865,7 +13865,7 @@ END DO)",
         }
     }
 
-    Y_UNIT_TEST(SecretsEnables) {
+    Y_UNIT_TEST(SecretsEnabled) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableSchemaSecrets(true);
         const auto settings = TKikimrSettings()

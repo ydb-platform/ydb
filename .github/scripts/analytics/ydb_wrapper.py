@@ -517,7 +517,7 @@ class YDBWrapper:
                     rows_affected = len(data) if isinstance(data, list) else 0
                     
                     end_time = time.time()
-                    duration = end_time - start_time if start_time is not None else 0
+                    duration = end_time - start_time
                     
                     if rows_affected == 0:
                         self._log("success", f"Scan query with metadata completed", f"No results found, Duration: {duration:.2f}s")
@@ -574,7 +574,7 @@ class YDBWrapper:
                 
         except Exception as e:
             end_time = time.time()
-            duration = end_time - start_time
+            duration = end_time - start_time if start_time is not None else 0
             status = "error"
             error = str(e)
             
@@ -718,7 +718,7 @@ class YDBWrapper:
                         self._log("progress", f"Batch {batch_num}/{num_batches}", 
                                   f"{processed}/{total_rows} rows, {elapsed:.2f}s")
             
-            duration = time.time() - start_time if start_time is not None else 0
+            duration = time.time() - start_time
             self._log("success", f"bulk_upsert_batches completed", 
                       f"Total: {total_rows} rows in {num_batches} batches, Duration: {duration:.2f}s")
             

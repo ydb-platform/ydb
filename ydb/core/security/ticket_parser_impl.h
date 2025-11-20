@@ -350,7 +350,7 @@ private:
     std::unordered_map<TString, NLogin::TLoginProvider> LoginProviders;
     bool UseLoginProvider = false;
     std::unordered_map<TString, TString> ServiceTokens;
-    THashMap<TString, std::pair<TInstant, THashSet<TString>>> DeferredLoginTokens;
+    std::unordered_map<TString, std::pair<TInstant, std::unordered_set<TString>>> DeferredLoginTokens;
 
     TDerived* GetDerived() {
         return static_cast<TDerived*>(this);
@@ -858,15 +858,23 @@ private:
                     auto it = DeferredLoginTokens.find(database);
                     if (it != DeferredLoginTokens.end()) {
                         auto& tokenKeys = it->second.second;
-                        tokenKeys.insert(key);
+                        static constexpr ui64 MAX_NUMBER_DEFERRED_TOKENS = 1'000'000;
+                        if (tokenKeys.size() < MAX_NUMBER_DEFERRED_TOKENS) {
+                            tokenKeys.insert(key);
+                        } else {
+                            SetError(key, record, {.Message = "Login state is not available yet", .Retryable = false});
+                            CounterTicketsLogin->Inc();
+                            BLOG_TRACE("CanInitLoginToken, database " << database << ", login state is not available yet, cannot deffer token (" << MaskTicket(record.Ticket) << ")");
+                            return true;
+                        }
                     } else {
-                        static constexpr ui32 NUM_SECONDS_TO_WAIT_FOR_SECURITY_STATE_UPDATE = 2;
-                        DeferredLoginTokens.insert(std::make_pair(database, std::make_pair(TlsActivationContext->Now() + TDuration::Seconds(NUM_SECONDS_TO_WAIT_FOR_SECURITY_STATE_UPDATE), THashSet<TString>({key}))));
+                        static const ui64 NUM_SECONDS_TO_WAIT_FOR_SECURITY_STATE_UPDATE = std::max(RefreshPeriod.Seconds(), 2UL);
+                        DeferredLoginTokens.insert(std::make_pair(database, std::make_pair(TlsActivationContext->Now() + TDuration::Seconds(NUM_SECONDS_TO_WAIT_FOR_SECURITY_STATE_UPDATE), std::unordered_set<TString>({key}))));
                     }
                     BLOG_TRACE("CanInitLoginToken, database " << database << ", login state is not available yet, deffer token (" << MaskTicket(record.Ticket) << ")");
                     return true;
                 }
-                BLOG_TRACE("CanInitLoginToken, database " << database << ", A6 error");
+                BLOG_TRACE("CanInitLoginToken, database " << database << ", A5 error");
             }
         }
         return false;
@@ -2310,12 +2318,13 @@ public:
 
 template <typename TDerived>
 void TTicketParserImpl<TDerived>::RefreshDeferredLoginTokens(const TInstant& now) {
-    static constexpr ui32 DATABASE_DELETE_NUM = 10;
-    TVector<TString> keysToDelete;
-    keysToDelete.reserve(DATABASE_DELETE_NUM);
+    static constexpr ui32 FINISH_WAITING_FOR_LOGIN_PROVIDERS_NUM = 10;
+    TVector<TString> finishWaitingForLoginProviders;
+    finishWaitingForLoginProviders.reserve(FINISH_WAITING_FOR_LOGIN_PROVIDERS_NUM);
     for (const auto& [database, deferredTokens] : DeferredLoginTokens) {
-        if (deferredTokens.first <= now) {
-            keysToDelete.push_back(database);
+        const auto& expiredTimeWaitingForLoginProvider = deferredTokens.first;
+        if (expiredTimeWaitingForLoginProvider <= now) {
+            finishWaitingForLoginProviders.push_back(database);
             for (const TString& key : deferredTokens.second) {
                 auto& userTokens = GetDerived()->GetUserTokens();
                 auto it = userTokens.find(key);
@@ -2330,12 +2339,13 @@ void TTicketParserImpl<TDerived>::RefreshDeferredLoginTokens(const TInstant& now
         }
     }
     TStringBuilder deferredLoginTokensMessage;
-    deferredLoginTokensMessage << "Finish waiting for login providers for db: ";
-    for (const TString& key : keysToDelete) {
+    deferredLoginTokensMessage << "Finish waiting for login providers for " << finishWaitingForLoginProviders.size() << " databases: ";
+    for (size_t i = 0; i < finishWaitingForLoginProviders.size() && i < FINISH_WAITING_FOR_LOGIN_PROVIDERS_NUM; ++i) {
+        const TString& key = finishWaitingForLoginProviders[i];
         deferredLoginTokensMessage << key;
         DeferredLoginTokens.erase(key);
     }
-    if (!keysToDelete.empty()) {
+    if (!finishWaitingForLoginProviders.empty()) {
         BLOG_TRACE(deferredLoginTokensMessage);
     }
 }

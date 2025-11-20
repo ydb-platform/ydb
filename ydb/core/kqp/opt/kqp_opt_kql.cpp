@@ -1186,12 +1186,15 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                         auto dataSource = typesCtx.DataSourceMap.FindPtr(dataSourceName);
                         YQL_ENSURE(dataSource);
                         if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
-                            const auto wrSettings = IDqIntegration::TWrapReadSettings {
-                                .WatermarksMode = AppData()->FeatureFlags.GetEnableWatermarks() ? TMaybe<TString>{"default"} : Nothing(),
-                                .WatermarksGranularityMs = 1000,
-                                .WatermarksLateArrivalDelayMs = 5000,
-                                .WatermarksEnableIdlePartitions = false,
-                            };
+                            IDqIntegration::TWrapReadSettings wrSettings;
+                            if (AppData()->FeatureFlags.GetEnableWatermarks()) {
+                                wrSettings = {
+                                    .WatermarksMode = "default",
+                                    .WatermarksGranularityMs = 1000,
+                                    .WatermarksLateArrivalDelayMs = 5000,
+                                    .WatermarksEnableIdlePartitions = false,
+                                };
+                            }
                             auto newRead = dqIntegration->WrapRead(input.Cast().Ptr(), ctx, wrSettings);
                             if (newRead.Get() != input.Raw()) {
                                 return newRead;

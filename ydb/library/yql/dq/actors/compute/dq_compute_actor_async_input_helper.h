@@ -93,7 +93,7 @@ public:
                     Pause(*watermark);
                 }
 
-                // do not push watermark to sync ca
+                // do not push watermark to IDqAsyncInputBuffer for async ca
                 watermark.Clear();
             }
 

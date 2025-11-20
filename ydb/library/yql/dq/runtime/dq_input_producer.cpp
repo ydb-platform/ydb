@@ -70,7 +70,7 @@ private:
                             inputChannel->GetChannelId(), *Watermark
                         );
                     } else {
-                        Y_DEBUG_ABORT();
+                        Y_ENSURE(false, "Unknown IDqInput type");
                         return false;
                     }
                 }();

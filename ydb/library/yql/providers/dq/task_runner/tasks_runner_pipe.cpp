@@ -718,7 +718,7 @@ public:
     [[nodiscard]]
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override {
         Y_UNUSED(batch);
-        Y_DEBUG_ABORT_UNLESS(watermark.Empty());
+        Y_UNUSED(watermark);
         ythrow yexception() << "unimplemented";
     }
 

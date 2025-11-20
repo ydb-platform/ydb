@@ -6678,6 +6678,139 @@
         "ResponseDuration": "not-zero-number",
         "ResponseTime": "not-zero-number-text"
     },
+    "test.TestViewer.test_viewer_peers": {
+        "FoundPeers": "2",
+        "NoDC": true,
+        "Peers": [
+            {
+                "Forward": {
+                    "BytesWritten": "text",
+                    "ChangeTime": "not-zero-number-text",
+                    "ClockSkewUs": "text",
+                    "ConnectStatus": "Green",
+                    "ConnectTime": "not-zero-number-text",
+                    "Connected": true,
+                    "PeerName": "text",
+                    "PeerNodeId": 50000,
+                    "PingTimeUs": "text",
+                    "SameScope": false,
+                    "SessionState": "CONNECTED",
+                    "Utilization": "number"
+                },
+                "Reverse": {
+                    "BytesWritten": "text",
+                    "ChangeTime": "not-zero-number-text",
+                    "ClockSkewUs": "text",
+                    "ConnectStatus": "Green",
+                    "ConnectTime": "not-zero-number-text",
+                    "Connected": true,
+                    "PeerName": "text",
+                    "PeerNodeId": 1,
+                    "PingTimeUs": "text",
+                    "SessionState": "CONNECTED",
+                    "Utilization": "number"
+                },
+                "SystemState": {
+                    "ChangeTime": "not-zero-number-text",
+                    "CoresTotal": "not-zero-number",
+                    "CoresUsed": "not-zero-number",
+                    "Endpoints": [
+                        {
+                            "Address": "text",
+                            "Name": "grpc"
+                        },
+                        {
+                            "Address": "text",
+                            "Name": "http-mon"
+                        },
+                        {
+                            "Address": "text",
+                            "Name": "ic"
+                        }
+                    ],
+                    "Host": "text",
+                    "LoadAverage": "not-empty-array",
+                    "Location": {},
+                    "MemoryLimit": "not-zero-number-text",
+                    "NetworkUtilization": "number",
+                    "NodeId": 50000,
+                    "NumberOfCpus": "not-zero-number",
+                    "RealNumberOfCpus": "not-zero-number",
+                    "Roles": "not-empty-array",
+                    "StartTime": "not-zero-number-text",
+                    "SystemState": "Green",
+                    "Tenants": [
+                        "/Root/dedicated_db"
+                    ],
+                    "TotalSessions": "number"
+                }
+            },
+            {
+                "Forward": {
+                    "BytesWritten": "text",
+                    "ChangeTime": "not-zero-number-text",
+                    "ClockSkewUs": "text",
+                    "ConnectStatus": "Green",
+                    "ConnectTime": "not-zero-number-text",
+                    "Connected": true,
+                    "PeerName": "text",
+                    "PeerNodeId": 50001,
+                    "PingTimeUs": "text",
+                    "SameScope": false,
+                    "SessionState": "CONNECTED",
+                    "Utilization": "number"
+                },
+                "Reverse": {
+                    "BytesWritten": "text",
+                    "ChangeTime": "not-zero-number-text",
+                    "ClockSkewUs": "text",
+                    "ConnectStatus": "Green",
+                    "ConnectTime": "not-zero-number-text",
+                    "Connected": true,
+                    "PeerName": "text",
+                    "PeerNodeId": 1,
+                    "PingTimeUs": "text",
+                    "SessionState": "CONNECTED",
+                    "Utilization": "number"
+                },
+                "SystemState": {
+                    "ChangeTime": "not-zero-number-text",
+                    "CoresTotal": "not-zero-number",
+                    "CoresUsed": "not-zero-number",
+                    "Endpoints": [
+                        {
+                            "Address": "text",
+                            "Name": "grpc"
+                        },
+                        {
+                            "Address": "text",
+                            "Name": "http-mon"
+                        },
+                        {
+                            "Address": "text",
+                            "Name": "ic"
+                        }
+                    ],
+                    "Host": "text",
+                    "LoadAverage": "not-empty-array",
+                    "Location": {},
+                    "MemoryLimit": "not-zero-number-text",
+                    "NetworkUtilization": "number",
+                    "NodeId": 50001,
+                    "NumberOfCpus": "not-zero-number",
+                    "RealNumberOfCpus": "not-zero-number",
+                    "Roles": "not-empty-array",
+                    "StartTime": "not-zero-number-text",
+                    "SystemState": "Green",
+                    "Tenants": [
+                        "/Root/shared_db"
+                    ],
+                    "TotalSessions": "number"
+                }
+            }
+        ],
+        "TotalPeers": "2"
+    },
     "test.TestViewer.test_viewer_query": {
         "/Root": {
             "result": [

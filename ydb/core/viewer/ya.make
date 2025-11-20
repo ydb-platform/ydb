@@ -86,6 +86,7 @@ SRCS(
     viewer_nodelist.h
     viewer_nodes.h
     viewer_pdiskinfo.h
+    viewer_peers.h
     viewer_pqconsumerinfo.h
     viewer_put_record.h
     viewer_query.h

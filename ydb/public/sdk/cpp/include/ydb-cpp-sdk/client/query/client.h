@@ -27,7 +27,9 @@ namespace NYdb::inline Dev {
 namespace NYdb::inline Dev::NQuery {
 
 struct TCreateSessionSettings : public TSimpleRequestSettings<TCreateSessionSettings> {
-    TCreateSessionSettings();
+    TCreateSessionSettings() {
+        ClientTimeout(TDuration::Seconds(5));
+    }
 };
 
 using TAsyncCreateSessionResult = NThreading::TFuture<TCreateSessionResult>;

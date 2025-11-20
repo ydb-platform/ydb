@@ -11,7 +11,7 @@ class TBackupPathTestFixture : public TS3BackupTestFixture {
     void SetUp(NUnitTest::TTestContext& /* context */) override {
         using namespace fmt::literals;
         const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
-   
+
         auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
             CREATE TABLE `/Root/RecursiveFolderProcessing/Table0` (
                 key Uint32 NOT NULL,

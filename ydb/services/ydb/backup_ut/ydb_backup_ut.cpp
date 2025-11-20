@@ -336,7 +336,7 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                 case EIndexType::Unknown: {
                     UNIT_ASSERT(false);
                 }
-            }            
+            }
             return true;
         }
         return false;
@@ -734,7 +734,7 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
             return NYdb::NTable::EIndexType::Unknown;
     }
 }
-    
+
 void TestRestoreTableWithIndex(
     const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, bool prefix, TSession& session,
     TBackupFunction&& backup, TRestoreFunction&& restore, const bool isOlap
@@ -992,7 +992,7 @@ void TestViewDependentOnAnotherViewIsRestored(
     restore();
     CompareResults(GetTableContent(session, dependentView), originalContent);
 }
-    
+
 void TestViewRelativeReferencesArePreserved(
     const char* view, const char* table, const char* restoredView, NQuery::TSession& session,
     TBackupFunction&& backup, TRestoreFunction&& restore, const bool isOlap, const TMaybe<TString>& pathPrefix = Nothing()
@@ -1486,13 +1486,13 @@ void TestReplicationSettingsArePreserved(
 TString CanonizeString(const TString& sourceString) {
     TString canonizedString;
     canonizedString.reserve(sourceString.size());
-    
+
     for (size_t i = 0; i < sourceString.size(); ++i) {
         if (const char c = sourceString[i]; !IsSpace(c)) {
             canonizedString += ToUpper(c);
         }
     }
-    
+
     return canonizedString;
 }
 
@@ -1546,16 +1546,16 @@ void TestTransferSettingsArePreserved(
     if (config.UseUserLogin) {
         ExecuteQuery(session, "CREATE USER `transferuser` PASSWORD 'root@builtin';", true);
     }
-    
+
     const TString& lambdaBodyQuery = !config.ComplexLambda ?
             "$test_lambda = ($msg) -> { return [<| k:CAST($msg._offset AS Uint32), v: CAST($msg._data AS Utf8) |>]; };" :
             R"(
                 $f = ($data) -> {
                     return CAST($data AS Utf8);
                 };
-                
+
                 $test_lambda = ($msg) -> {
-                    return [<| k:CAST($msg._offset AS Uint32), v: $f($msg._data) |>]; 
+                    return [<| k:CAST($msg._offset AS Uint32), v: $f($msg._data) |>];
                 };
             )";
 
@@ -1628,7 +1628,7 @@ void TestTransferSettingsArePreserved(
             i.ForceDelete();
         }
     };
-    
+
     checkDescription();
 
     size_t attempt = 0;
@@ -2642,13 +2642,13 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
-        
+
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
         if (config.UseSecret || config.UseUserLogin) {
             driverConfig.SetAuthToken("root@builtin");
         }
-        
+
         auto driver = TDriver(driverConfig);
         TSchemeClient schemeClient(driver);
         NQuery::TQueryClient queryClient(driver);
@@ -2669,7 +2669,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
         const auto restorationSettings = NDump::TRestoreSettings().Replace(config.Replace);
-        
+
         TestTransferSettingsArePreserved(
             endpoint, session, replicationClient,
             CreateBackupLambda(driver, pathToBackup),
@@ -3110,7 +3110,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestTopicSettingsArePreserved(topic, querySession, topicClient,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
         );
-                
+
         cleanup();
         TestTransferSettingsArePreserved(endpoint, querySession, transferClient,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), pathToBackup,
@@ -3147,7 +3147,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         if (IsOlap) {
             return; // TODO: fix me issue@26498
         }
-        TestTableWithIndexBackupRestore(IsOlap, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
+        TestTableWithIndexBackupRestore(IsOlap, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
     }
 
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllPrimitiveTypes, Ydb::Type::PrimitiveTypeId, IsOlap) {
@@ -3169,14 +3169,14 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             session,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup),
-            false // TODO
+            IsOlap
         );
     }
 
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
         TestReplicationBackupRestore(false);
     }
-    
+
     Y_UNIT_TEST(BackupRestoreTransfer_UseSecret) {
         TestTransferBackupRestore(TTransferTestConfig {
             .UseSecret = true,
@@ -3937,13 +3937,13 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
         switch (Value) {
             case EPathTypeTable:
-                TestTableBackupRestore(false); // TODO: fix me
+                TestTableBackupRestore(IsOlap);
                 break;
             case EPathTypeTableIndex:
-                TestTableWithIndexBackupRestore(false); // TODO: fix me
+                TestTableWithIndexBackupRestore(IsOlap);
                 break;
             case EPathTypeSequence:
-                TestTableWithSerialBackupRestore(false); // TODO: fix me
+                TestTableWithSerialBackupRestore(IsOlap);
                 break;
             case EPathTypeDir:
                 break; // https://github.com/ydb-platform/ydb/issues/10430
@@ -3956,7 +3956,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 TestViewBackupRestore();
                 break;
             case EPathTypeCdcStream:
-                TestChangefeedBackupRestore(false); // TODO: fix me
+                TestChangefeedBackupRestore(IsOlap);
                 break;
             case EPathTypeReplication:
             case EPathTypeTransfer:

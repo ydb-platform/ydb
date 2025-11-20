@@ -156,9 +156,9 @@ runs:
       run: |
         set -ex
         
-        ulimit -c 0
+        sudo ulimit -c 0
         if [ "$COLLECT_COREDUMPS" = "true" ]; then
-          ulimit -c unlimited
+          sudo ulimit -c unlimited
         fi
 
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py

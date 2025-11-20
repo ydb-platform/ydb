@@ -86,6 +86,7 @@ namespace NTable {
 
         explicit TSelectRowVersionResult(EReady ready)
             : Ready(ready)
+            , RowVersion()
         { }
 
         explicit TSelectRowVersionResult(const TRowVersion& rowVersion)

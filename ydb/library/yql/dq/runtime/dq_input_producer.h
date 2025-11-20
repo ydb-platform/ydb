@@ -1,8 +1,9 @@
 #pragma once
 
-#include "dq_input_channel.h"
+#include "dq_input.h"
 #include "dq_columns_resolve.h"
 
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
 namespace NKikimr::NMiniKQL {
@@ -55,9 +56,7 @@ NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
     TDqMeteringStats::TInputStatsMeter,
     TInstant& startTs,
     bool& inputConsumed,
-    NUdf::IPgBuilder* pgBuilder = nullptr,
-    NKikimr::NMiniKQL::TWatermark* watermark = nullptr,
-    TDqComputeActorWatermarks* watermarksTracker = nullptr
+    NUdf::IPgBuilder* pgBuilder = nullptr
 );
 
 } // namespace NYql::NDq

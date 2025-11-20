@@ -4,6 +4,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
+#include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/mkql_node.h>
@@ -22,6 +23,11 @@ using namespace NMiniKQL;
 using namespace NUdf;
 
 namespace {
+
+struct TPartitionKey {
+    ui64 InputId;
+    bool IsChannel;
+};
 
 template<bool IsWide>
 class TDqInputUnionStreamValue : public TComputationValue<TDqInputUnionStreamValue<IsWide>> {
@@ -46,40 +52,32 @@ public:
         , InputConsumed(inputConsumed)
         , WatermarkStorage(watermark)
         , WatermarksTracker(watermarksTracker)
-    {}
+    {
+        InputKeys.reserve(Inputs.size());
+        for (const auto& input : Inputs) {
+            if (const auto* inputChannel = dynamic_cast<const IDqInputChannel*>(input.Get())) {
+                InputKeys.emplace_back(inputChannel->GetChannelId(), true);
+            } else if (const auto* asyncInputBuffer = dynamic_cast<const IDqAsyncInputBuffer*>(input.Get())) {
+                InputKeys.emplace_back(asyncInputBuffer->GetInputIndex(), false);
+            } else {
+                Y_ENSURE(false, "Unknown IDqInput type");
+            }
+        }
+    }
 
 private:
     NUdf::EFetchStatus Fetch(NKikimr::NUdf::TUnboxedValue& result) final {
         MKQL_ENSURE(!IsWide, "Using Fetch() on wide input");
 
-        // wait for drain only if watermarks enabled (if WatermarksTracker)
-        if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
+        // wait for drain only if watermarks enabled
+        if (WatermarksEnabled() && WatermarksTracker->HasPendingWatermark()) {
             return NUdf::EFetchStatus::Yield;
         }
 
         if (Batch.empty()) {
-            // pass watermark and wait for drain only if watermarks enabled (if WatermarksTracker)
-            if (WatermarksTracker && WatermarkStorage && Watermark && !IsFinished_) {
-                const auto watermarkChanged = [&]() {
-                    if (const auto* asyncInputBuffer = dynamic_cast<IDqAsyncInputBuffer*>(Input.Get())) {
-                        return WatermarksTracker->NotifyAsyncInputWatermarkReceived(
-                            asyncInputBuffer->GetInputIndex(), *Watermark
-                        );
-                    } else if (const auto* inputChannel = dynamic_cast<IDqInputChannel*>(Input.Get())) {
-                        return WatermarksTracker->NotifyInChannelWatermarkReceived(
-                            inputChannel->GetChannelId(), *Watermark
-                        );
-                    } else {
-                        Y_ENSURE(false, "Unknown IDqInput type");
-                        return false;
-                    }
-                }();
-
-                if (watermarkChanged) {
-                    Y_DEBUG_ABORT_UNLESS(WatermarksTracker->HasPendingWatermark());
-                    WatermarkStorage->WatermarkIn = WatermarksTracker->GetPendingWatermark();
-                    return NUdf::EFetchStatus::Yield;
-                }
+            // pass watermark and wait for drain only if watermarks enabled
+            if (WatermarksEnabled() && TrySendWatermark()) {
+                return NUdf::EFetchStatus::Yield;
             }
 
             auto status = FindBuffer();
@@ -90,10 +88,14 @@ private:
                     if (Y_UNLIKELY(!StartTs)) {
                         StartTs = Now();
                     }
-                    IsFinished_ = true;
                     [[fallthrough]];
                 case NUdf::EFetchStatus::Yield:
                     return status;
+            }
+
+            // pass watermark and wait for drain only if watermarks enabled and batch is still empty
+            if (Batch.empty() && WatermarksEnabled() && TrySendWatermark()) {
+                return NUdf::EFetchStatus::Yield;
             }
         }
 
@@ -112,7 +114,18 @@ private:
 
     NUdf::EFetchStatus WideFetch(NKikimr::NUdf::TUnboxedValue* result, ui32 width) final {
         YQL_ENSURE(IsWide, "Using WideFetch() on narrow input");
+
+        // wait for drain only if watermarks enabled
+        if (WatermarksEnabled() && WatermarksTracker->HasPendingWatermark()) {
+            return NUdf::EFetchStatus::Yield;
+        }
+
         if (Batch.empty()) {
+            // pass watermark and wait for drain only if watermarks enabled
+            if (WatermarksEnabled() && TrySendWatermark()) {
+                return NUdf::EFetchStatus::Yield;
+            }
+
             auto status = FindBuffer();
             switch (status) {
                 case NUdf::EFetchStatus::Ok:
@@ -124,6 +137,11 @@ private:
                     [[fallthrough]];
                 case NUdf::EFetchStatus::Yield:
                     return status;
+            }
+
+            // pass watermark and wait for drain only if watermarks enabled and batch is still empty
+            if (Batch.empty() && WatermarksEnabled() && TrySendWatermark()) {
+                return NUdf::EFetchStatus::Yield;
             }
         }
 
@@ -142,6 +160,7 @@ private:
         return NUdf::EFetchStatus::Ok;
     }
 
+private:
     NUdf::EFetchStatus FindBuffer() {
         Batch.clear();
 
@@ -150,13 +169,14 @@ private:
 
         while (i < Alive) {
             auto currentIndex = (startIndex + i) % Alive;
-            Input = Inputs[currentIndex];
-
-            if (Input->Pop(Batch, Watermark)) {
+            auto& input = Inputs[currentIndex];
+            if (input->Pop(Batch, Watermark)) {
+                InputKey = InputKeys[currentIndex];
                 return NUdf::EFetchStatus::Ok;
             }
-            if (Input->IsFinished()) {
+            if (input->IsFinished()) {
                 std::swap(Inputs[currentIndex], Inputs[Alive - 1]);
+                std::swap(InputKeys[currentIndex], InputKeys[Alive - 1]);
                 --Alive;
             } else {
                 ++i;
@@ -166,19 +186,45 @@ private:
         return Alive == 0 ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
     }
 
+    [[nodiscard]] bool WatermarksEnabled() const {
+        return WatermarksTracker && WatermarkStorage;
+    }
+
+    [[nodiscard]] bool NotifyWatermarkTracker(const TPartitionKey& inputKey, TInstant watermark) {
+        Y_DEBUG_ABORT_UNLESS(WatermarksEnabled());
+        if (inputKey.IsChannel) {
+            return WatermarksTracker->NotifyInChannelWatermarkReceived(inputKey.InputId, watermark);
+        } else {
+            return WatermarksTracker->NotifyAsyncInputWatermarkReceived(inputKey.InputId, watermark);
+        }
+    }
+
+    [[nodiscard]] bool TrySendWatermark() {
+        Y_DEBUG_ABORT_UNLESS(WatermarksEnabled());
+        if (!Watermark || !NotifyWatermarkTracker(InputKey, *Watermark)) {
+            return false;
+        }
+        Y_DEBUG_ABORT_UNLESS(WatermarksTracker->HasPendingWatermark());
+        WatermarkStorage->WatermarkIn = WatermarksTracker->GetPendingWatermark();
+        return true;
+    }
+
 private:
-    IDqInput::TPtr Input;
     TVector<IDqInput::TPtr> Inputs;
+    TVector<TPartitionKey> InputKeys;
+
     size_t Alive;
     size_t Index = 0;
+    TPartitionKey InputKey;
     TUnboxedValueBatch Batch;
     TMaybe<TInstant> Watermark;
+
     TDqMeteringStats::TInputStatsMeter Stats;
     TInstant& StartTs;
     bool& InputConsumed;
+
     NKikimr::NMiniKQL::TWatermark* WatermarkStorage;
     TDqComputeActorWatermarks* WatermarksTracker;
-    bool IsFinished_ = false;
 };
 
 template<bool IsWide>
@@ -591,14 +637,14 @@ private:
         bool operator<(const TDqInputBatchIterator& other) const {
             Y_DEBUG_ABORT_UNLESS(&Data_->Parent() == &other.Data_->Parent());
             const auto& comparators = Data_->Parent().Comparators_;
-            ui32 comporatorIndex = 0;
+            ui32 comparatorIndex = 0;
             for (auto& sortCol : Data_->Parent().SortCols_) {
                 ui32 idx = sortCol.Index;
 
                 TBlockItem myValue = GetItem(idx);
                 TBlockItem otherValue = other.GetItem(idx);
 
-                i64 compare = comparators[comporatorIndex++]->Compare(myValue, otherValue);
+                i64 compare = comparators[comparatorIndex++]->Compare(myValue, otherValue);
                 if (!sortCol.Ascending) {
                     compare = -compare;
                 }
@@ -863,9 +909,7 @@ NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
     TDqMeteringStats::TInputStatsMeter stats,
     TInstant& startTs,
     bool& inputConsumed,
-    NUdf::IPgBuilder* pgBuilder,
-    NKikimr::NMiniKQL::TWatermark* watermark,
-    TDqComputeActorWatermarks* watermarksTracker
+    NUdf::IPgBuilder* pgBuilder
 ) {
     ValidateInputTypes(type, inputs);
     YQL_ENSURE(!inputs.empty());
@@ -874,7 +918,7 @@ NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
             // we can ignore scalar columns, since all they have exactly the same value in all inputs
             EraseIf(sortCols, [](const auto& sortCol) { return *sortCol.IsScalar; });
             if (sortCols.empty()) {
-                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputConsumed, watermark, watermarksTracker);
+                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputConsumed, nullptr, nullptr);
             }
             return factory.Create<TDqInputMergeBlockStreamValue>(type, std::move(inputs), std::move(sortCols), factory, stats, startTs, inputConsumed, pgBuilder);
         }

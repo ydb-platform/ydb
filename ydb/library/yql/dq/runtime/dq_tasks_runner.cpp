@@ -167,7 +167,7 @@ NUdf::TUnboxedValue DqBuildInputValue(
             GetSortColumnsInfo(type, protoSortCols, sortColsInfo);
             YQL_ENSURE(!sortColsInfo.empty());
 
-            return CreateInputMergeValue(type, std::move(inputs), std::move(sortColsInfo), holderFactory, stats, startTs, inputConsumed, pgBuilder, watermark, watermarksTracker);
+            return CreateInputMergeValue(type, std::move(inputs), std::move(sortColsInfo), holderFactory, stats, startTs, inputConsumed, pgBuilder);
         }
         default:
             YQL_ENSURE(false, "Unknown input type: " << (ui32) inputDesc.GetTypeCase());

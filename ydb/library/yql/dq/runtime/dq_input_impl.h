@@ -261,7 +261,7 @@ public:
 private:
     void AddBatchCounts() {
         auto& barrier = PendingBarriers.empty() ? BeforeBarrier : PendingBarriers.back();
-        barrier.BatchesCount ++;
+        barrier.BatchesCount++;
     }
 
     void PopReadyCounts() {

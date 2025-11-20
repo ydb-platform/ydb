@@ -665,7 +665,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         CreateShardedTable(server, sender, "/Root", "Table", TableWithIndex(SimpleAsyncIndex()));
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (1, 10);");
-        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (2, 20);", true, Ydb::StatusIds::OVERLOADED);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (2, 20);", true, Ydb::StatusIds::TIMEOUT);
 
         sendEnqueued();
         WaitForContent(server, "/Root/Table/by_ikey/indexImplTable",

@@ -178,12 +178,9 @@ void ArePermissionsEqual(const THashMap<TString, THashSet<TString>>& lhs, const 
             for (int i = 0; i < enumDescriptor->value_count(); ++i) { \
                 const auto* valueDescriptor = enumDescriptor->value(i); \
                 const auto value = static_cast<ENUM_TYPE>(valueDescriptor->number()); \
-                TCurrentTest::AddTest([value] { return TTestCase##N::Create(value, true); }); \
-            } \
-            for (int i = 0; i < enumDescriptor->value_count(); ++i) { \
-                const auto* valueDescriptor = enumDescriptor->value(i); \
-                const auto value = static_cast<ENUM_TYPE>(valueDescriptor->number()); \
-                TCurrentTest::AddTest([value] { return TTestCase##N::Create(value, false); }); \
+                for (bool flag : {false, true}) { \
+                    TCurrentTest::AddTest([value, flag] { return TTestCase##N::Create(value, flag); }); \
+                } \
             } \
         } \
     }; \

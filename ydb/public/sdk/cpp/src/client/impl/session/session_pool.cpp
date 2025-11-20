@@ -292,8 +292,7 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakC
             std::vector<std::unique_ptr<IGetSessionCtx>> waitersToReplyError;
             waitersToReplyError.reserve(sessionCountToProcess);
             const auto now = TDeadline::Now();
-            const std::uint64_t nowUs = std::chrono::duration_cast<std::chrono::microseconds>(
-                now.GetTimePoint().time_since_epoch()).count();
+            const auto nowUtil = TInstant::Now();
             {
                 std::lock_guard guard(Mtx_);
                 {
@@ -301,7 +300,7 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakC
 
                     auto it = sessions.begin();
                     while (it != sessions.end() && sessionCountToProcess--) {
-                        if (nowUs < it->second->GetTimeToTouchFast().MicroSeconds()) {
+                        if (nowUtil < it->second->GetTimeToTouchFast()) {
                             break;
                         }
 

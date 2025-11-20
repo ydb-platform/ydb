@@ -11,9 +11,9 @@ namespace {
     constexpr TStringBuf YC_RESERVED_PREFIX = "YC.";
     constexpr TStringBuf YANDEX_RESERVED_PREFIX = "Yandex.";
 
-    TMessageAttributeCheckResult CheckMessageAttributeNameImpl(TStringBuf name, bool willcard, bool allowYandexPrefix, bool allowAmazonPrefix) {
+    TMessageAttributeCheckResult CheckMessageAttributeNameImpl(TStringBuf name, bool wildcard, bool allowYandexPrefix, bool allowAmazonPrefix) {
         TMessageAttributeCheckResult result{
-            .IsWildcard = willcard,
+            .IsWildcard = wildcard,
             .HasYandexPrefix = name.StartsWith(YA_RESERVED_PREFIX) || name.StartsWith(YC_RESERVED_PREFIX) || name.StartsWith(YANDEX_RESERVED_PREFIX),
             .HasAmazonPrefix = name.StartsWith(AMAZON_RESERVED_PREFIX) || name.StartsWith(AWS_RESERVED_PREFIX),
         };
@@ -31,7 +31,7 @@ namespace {
         */
 
         do {
-            if (name.empty() && !willcard) {
+            if (name.empty() && !wildcard) {
                 result.ErrorMessage = "Message attribute name is empty";
                 break;
             }

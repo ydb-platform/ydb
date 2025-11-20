@@ -92,14 +92,14 @@ namespace NKikimr::NSqsTopic::V1 {
                 if (!ids.insert(id).second) {
                     return this->ReplyWithError(MakeError(NSQS::NErrors::BATCH_ENTRY_IDS_NOT_DISTINCT));
                 }
-                auto reciept = DeserializeReceipt(entry.receipt_handle());
-                if (!reciept.has_value()) {
+                auto receipt = DeserializeReceipt(entry.receipt_handle());
+                if (!receipt.has_value()) {
                     Failed_[id] = MakeError(NSQS::NErrors::RECEIPT_HANDLE_IS_INVALID);
                     continue;
                 }
-                requestList.push_back(reciept.value());
-                if (!PositionToIdMap_.try_emplace(reciept.value(), id).second) {
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_COMBINATION, "Two or more batch entries in the request have the same reciept."));
+                requestList.push_back(receipt.value());
+                if (!PositionToIdMap_.try_emplace(receipt.value(), id).second) {
+                    return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_COMBINATION, "Two or more batch entries in the request have the same receipt."));
                 }
             }
 

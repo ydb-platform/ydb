@@ -25,7 +25,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 return std::unexpected("Protobuf deserialization failed");
             }
             if (!proto.HasPartition()) {
-                return std::unexpected("Invalid receipt, ParitionId missing");
+                return std::unexpected("Invalid receipt, PartitionId missing");
             }
             if (!proto.HasOffset()) {
                 return std::unexpected("Invalid receipt, Offset missing");

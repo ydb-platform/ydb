@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.oss.canonical import set_canondata_root
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 import os
@@ -22,8 +21,6 @@ def ydb_bin():
 class BaseTestToolsService(object):
     @classmethod
     def setup_class(cls):
-        set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
-
         cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.root_dir = "/Root"

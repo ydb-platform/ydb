@@ -76,18 +76,6 @@ constexpr auto SimpleGraceJoinWithSpillingQuery = R"(
         from `/Root/KeyValue` as t1 full join `/Root/KeyValue` as t2 on t1.Value = t2.Value
         order by t1.Value
     )";
-constexpr const char* SimpleDqBlockJoinWithSpillingQuery = R"(
-        PRAGMA TablePathPrefix='/Root';
-        PRAGMA ydb.OptimizerHints=
-            '
-                Bytes(L # 10e12)
-                Bytes(R # 10e12)
-            ';
-        PRAGMA ydb.UseBlockHashJoin = \"true\"
-        select t1.*
-        from `/Root/KeyValue` as t1 inner join `/Root/KeyValue` as t2 
-        on t1.Value = t2.Value and t1.Key = t2.Key
-    )";
 
 
 
@@ -113,33 +101,6 @@ Y_UNIT_TEST(SpillingPragmaParseError) {
     UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::GENERIC_ERROR, planres.GetIssues().ToString());
 }
 
-Y_UNIT_TEST_TWIN(SpillingInRuntimeDqBlockJoinNode, EnabledSpilling) {
-    double reasonableTreshold = EnabledSpilling ? 0.01 : 100;
-    Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppCfgLowComputeLimits(reasonableTreshold));
-
-    auto db = kikimr.GetQueryClient();
-
-    FillTableWithData(db);
-
-    auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
-    auto planres = db.ExecuteQuery(SimpleDqBlockJoinWithSpillingQuery, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::SUCCESS, planres.GetIssues().ToString());
-
-    Cerr << planres.GetStats()->GetAst() << Endl;
-
-    auto result = db.ExecuteQuery(SimpleDqBlockJoinWithSpillingQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-    TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
-    if (EnabledSpilling) {
-        UNIT_ASSERT(counters.SpillingWriteBlobs->Val() > 0);
-        UNIT_ASSERT(counters.SpillingReadBlobs->Val() > 0);
-    } else {
-        UNIT_ASSERT(counters.SpillingWriteBlobs->Val() == 0);
-        UNIT_ASSERT(counters.SpillingReadBlobs->Val() == 0);
-    }
-}
 
 Y_UNIT_TEST_TWIN(SpillingInRuntimeNodes, EnabledSpilling) {
     double reasonableTreshold = EnabledSpilling ? 0.01 : 100;

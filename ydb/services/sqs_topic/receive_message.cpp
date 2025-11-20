@@ -212,7 +212,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
-            result.receipt_handle();
+            result.set_receipt_handle(SerializeReceipt(message.MessageId));
 
             return result;
         }

@@ -537,8 +537,8 @@ void TListJobsCommand::Register(TRegistrar registrar)
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<TJobId>(
-        "main_job_id",
-        [] (TThis* command) -> auto& { return command->Options.MainJobId; })
+        "distributed_group_main_job_id",
+        [] (TThis* command) -> auto& { return command->Options.DistributedGroupMainJobId; })
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<TJobId>(

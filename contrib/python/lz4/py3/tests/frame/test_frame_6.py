@@ -1,5 +1,6 @@
 import os
 import pytest
+import threading
 import lz4.frame as lz4frame
 
 test_data = [
@@ -33,40 +34,45 @@ def compression_level(request):
     return request.param
 
 
-def test_lz4frame_open_write(data):
-    with lz4frame.open('testfile', mode='wb') as fp:
+def test_lz4frame_open_write(tmp_path, data):
+    thread_id = threading.get_native_id()
+    with lz4frame.open(tmp_path / f'testfile_{thread_id}', mode='wb') as fp:
         fp.write(data)
 
 
-def test_lz4frame_open_write_read_defaults(data):
-    with lz4frame.open('testfile', mode='wb') as fp:
+def test_lz4frame_open_write_read_defaults(tmp_path, data):
+    thread_id = threading.get_native_id()
+    with lz4frame.open(tmp_path / f'testfile_{thread_id}', mode='wb') as fp:
         fp.write(data)
-    with lz4frame.open('testfile', mode='r') as fp:
+    with lz4frame.open(tmp_path / f'testfile_{thread_id}', mode='r') as fp:
         data_out = fp.read()
     assert data_out == data
 
 
-def test_lz4frame_open_write_read_text():
+def test_lz4frame_open_write_read_text(tmp_path):
     data = u'This is a test string'
-    with lz4frame.open('testfile', mode='wt') as fp:
+    thread_id = threading.get_native_id()
+    with lz4frame.open(tmp_path / f'testfile_{thread_id}', mode='wt') as fp:
         fp.write(data)
-    with lz4frame.open('testfile', mode='rt') as fp:
+    with lz4frame.open(tmp_path / f'testfile_{thread_id}', mode='rt') as fp:
         data_out = fp.read()
     assert data_out == data
 
 
-def test_lz4frame_open_write_read_text_iter():
+def test_lz4frame_open_write_read_text_iter(tmp_path):
     data = u'This is a test string'
-    with lz4frame.open('testfile', mode='wt') as fp:
+    thread_id = threading.get_native_id()
+    with lz4frame.open(tmp_path / f'testfile_{thread_id}', mode='wt') as fp:
         fp.write(data)
     data_out = ''
-    with lz4frame.open('testfile', mode='rt') as fp:
+    with lz4frame.open(tmp_path / f'testfile_{thread_id}', mode='rt') as fp:
         for line in fp:
             data_out += line
     assert data_out == data
 
 
 def test_lz4frame_open_write_read(
+        tmp_path,
         data,
         compression_level,
         block_linked,
@@ -91,29 +97,31 @@ def test_lz4frame_open_write_read(
     kwargs['return_bytearray'] = return_bytearray
     kwargs['mode'] = 'wb'
 
-    with lz4frame.open('testfile', **kwargs) as fp:
+    thread_id = threading.get_native_id()
+    with lz4frame.open(tmp_path / f'testfile_{thread_id}', **kwargs) as fp:
         fp.write(data)
 
-    with lz4frame.open('testfile', mode='r') as fp:
+    with lz4frame.open(tmp_path / f'testfile_{thread_id}', mode='r') as fp:
         data_out = fp.read()
 
     assert data_out == data
 
 
-def test_lz4frame_flush():
+def test_lz4frame_flush(tmp_path):
     data_1 = b"This is a..."
     data_2 = b" test string!"
+    thread_id = threading.get_native_id()
 
-    with lz4frame.open("testfile", mode="w") as fp_write:
+    with lz4frame.open(tmp_path / f"testfile_{thread_id}", mode="w") as fp_write:
         fp_write.write(data_1)
         fp_write.flush()
 
         fp_write.write(data_2)
 
-        with lz4frame.open("testfile", mode="r") as fp_read:
+        with lz4frame.open(tmp_path / f"testfile_{thread_id}", mode="r") as fp_read:
             assert fp_read.read() == data_1
 
         fp_write.flush()
 
-        with lz4frame.open("testfile", mode="r") as fp_read:
+        with lz4frame.open(tmp_path / f"testfile_{thread_id}", mode="r") as fp_read:
             assert fp_read.read() == data_1 + data_2

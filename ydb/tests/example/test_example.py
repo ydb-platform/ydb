@@ -7,7 +7,7 @@ from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.test_meta import skip_with_issue, link_test_case
 
 import ydb
-
+import time
 
 class TestExample:
     """
@@ -19,7 +19,7 @@ class TestExample:
         # TODO: remove comment below
         # This cluster will be initialized before all tests in current suite and will be stopped after all tests
         # See KikimrConfigGenerator for full possibilities (feature flags, configs, erasure, etc.)
-        self.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.NONE))
+        self.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC))
         self.cluster.start()
 
         self.driver = ydb.Driver(
@@ -40,7 +40,7 @@ class TestExample:
         Test description
         TODO: change description to yours
         """
-
+        time.sleep(10000)
         with ydb.QuerySessionPool(self.driver) as session_pool:
             table_name = "unique_table_name_for_test"
             value = 42

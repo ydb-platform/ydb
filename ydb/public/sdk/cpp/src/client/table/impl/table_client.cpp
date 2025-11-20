@@ -991,6 +991,9 @@ bool TTableClient::TImpl::ReturnSession(TKqpSessionCommon* sessionImpl) {
     // Also removes NeedUpdateActiveCounter flag
     sessionImpl->MarkIdle();
     sessionImpl->SetTimeInterval(TDuration::Zero());
+    // Update TimeToTouch and TimeInPast when returning session to pool
+    // so periodic task can correctly calculate idle time
+    sessionImpl->ScheduleTimeToTouchFast(GetMinTimeToTouch(Settings_.SessionPoolSettings_), true);
     if (!SessionPool_.ReturnSession(sessionImpl, needUpdateCounter)) {
         sessionImpl->SetNeedUpdateActiveCounter(needUpdateCounter);
         return false;

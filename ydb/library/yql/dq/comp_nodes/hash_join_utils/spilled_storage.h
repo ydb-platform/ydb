@@ -58,11 +58,11 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
     std::optional<int> FindInMemoryBucketWithMostPages() const {
         std::optional<int> resIndex;
         for (int index = 0; index < std::ssize(Buckets_); ++index) {
-            if (!Buckets_[index].IsSpilled() && !Buckets_[index].InMemoryPages.empty()) {
+            if (!Buckets_[index].IsSpilled() && !Buckets_[index].InMemoryPages().empty()) {
                 if (resIndex == std::nullopt) {
                     resIndex = index;
                 } else {
-                    if (Buckets_[*resIndex].InMemoryPages.size() < Buckets_[index].InMemoryPages.size()) {
+                    if (Buckets_[*resIndex].InMemoryPages().size() < Buckets_[index].InMemoryPages().size()) {
                         resIndex = index;
                     }
                 }
@@ -83,7 +83,7 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
         int num = 0;
         for (auto& bucket : Buckets_) {
 
-            num += bucket.InMemoryPages.size();
+            num += bucket.InMemoryPages().size();
             MKQL_ENSURE(bucket.BuildingPage.AllocatedBytes() < Settings.BucketSizeBytes, "sanity check");
             num += bucket.BuildingPage.AllocatedBytes() > 0;
         }
@@ -121,7 +121,7 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
             } else {
 
                 while (std::accumulate(Buckets_.begin(), Buckets_.end(), 0, [&](int pages, const TBucket& bucket) {
-                           return pages + (bucket.IsSpilled() ? std::ssize(bucket.InMemoryPages) : 0);
+                           return pages + (bucket.IsSpilled() ? std::ssize(bucket.InMemoryPages()) : 0);
                        }) < Settings.SpillingPagesAtTime) {
                     std::optional<int> bucketIndex = FindInMemoryBucketWithMostPages();
                     if (!bucketIndex) {
@@ -134,12 +134,11 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
                 int totalSpillingPages = Settings.SpillingPagesAtTime;
                 for (int index = 0; index < std::ssize(Buckets_); ++index) {
                     auto& bucket = Buckets_[index];
-                    while (bucket.IsSpilled() && !bucket.InMemoryPages.empty() && totalSpillingPages != 0) {
+                    while (bucket.IsSpilled() && !bucket.InMemoryPages().empty() && totalSpillingPages != 0) {
                         totalSpillingPages--;
                         SpillingPages_->push_back(
-                            {.BlobId = SpillPage(*Spiller_, std::move(bucket.InMemoryPages.back())),
+                            {.BlobId = SpillPage(*Spiller_, *bucket.ReleaseAtMostOnePage()),
                              .BucketIndex = index});
-                        bucket.InMemoryPages.pop_back();
                     }
                 }
                 MKQL_ENSURE(totalSpillingPages == 0, "not enough pages for spilling?");
@@ -184,10 +183,9 @@ template <TSpillerSettings Settings> class TProbeSpiller {
             if (thisBucket) {
                 ForEachSide([&](ESide side){
                     thisBucket->SelectSide(side).DetatchBuildingPage();
-                    for(auto& page: thisBucket->SelectSide(side).InMemoryPages) {
+                    thisBucket->SelectSide(side).ForEachPage([&](TPackResult page){
                         State_.InMemoryPages.push_back(TValueAndLocation<TPackResult>{.Val = std::move(page), .Side = side, .BucketIndex = index});
-                    }
-                    thisBucket->SelectSide(side).InMemoryPages.clear();
+                    });
                 });
             }
         }
@@ -216,10 +214,9 @@ template <TSpillerSettings Settings> class TProbeSpiller {
                 }
                 SpillingPages_.emplace();
                 for (int index = 0; index < Settings.SpillingPagesAtTime; ++index) {
-                    auto& page = State_.InMemoryPages.back();
+                    auto page = *GetBackOrNull(State_.InMemoryPages);
                     SpillingPages_->push_back({.Val = SpillPage(*Spiller_, std::move(page.Val)), .Side = page.Side,
                                                .BucketIndex = page.BucketIndex});
-                    State_.InMemoryPages.pop_back();
                 }
             }
         }
@@ -232,10 +229,10 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         MKQL_ENSURE(thisBucket, "spilling row that should be looked up?");
         thisBucket->Probe.BuildingPage.AppendTuple(tuple.Val, Layout_);
         if (thisBucket->Probe.template DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>()) {
-            for (auto& page : thisBucket->Probe.InMemoryPages) {
+            thisBucket->Probe.ForEachPage([&](TPackResult page){
                 State_.InMemoryPages.push_back(
                     {.Val = std::move(page), .Side = tuple.Side, .BucketIndex = tuple.BucketIndex});
-            }
+            });
         }
     }
 

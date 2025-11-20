@@ -34,6 +34,8 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
     return appCfg;
 }
 
+// Y_UNIT_TEST_SUITE_F(DqHashJoinSpilling)
+
 Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
     Y_UNIT_TEST(Spilling) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
@@ -98,7 +100,8 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                     '
                         Bytes(L # 10e12)
                         Bytes(R # 10e12)
-                    ';
+                        ';
+                
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
             TString select = R"(
@@ -189,6 +192,9 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                         Bytes(L # 10e12)
                         Bytes(R1 # 10e12)
                         Bytes(R2 # 10e12)
+                        Rows(L # 10e12)
+                        Rows(R1 # 10e12)
+                        Rows(R2 # 10e12)
                     ';
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";

@@ -522,7 +522,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                 TBucket& bucket = state.Spiller.GetBuckets()[index];
                 bucket.DetatchBuildingPage();
                 if (!bucket.Empty() && !bucket.IsSpilled()) {
-                    if (!smallestBucket || state.Spiller.GetBuckets()[*smallestBucket].InMemoryPages.size() > bucket.InMemoryPages.size()) {
+                    if (!smallestBucket || state.Spiller.GetBuckets()[*smallestBucket].InMemoryPages().size() > bucket.InMemoryPages().size()) {
                         smallestBucket = index;
                     }
                 }
@@ -546,7 +546,8 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                 TTable* table = std::get_if<TTable>(&state.ProbeState.Buckets[*smallestBucket]);
                 MKQL_ENSURE(table, "sanity check");
                 TBucket& buildBucket = state.Spiller.GetBuckets()[*smallestBucket];
-                table->BuildWith(Flatten(std::move(buildBucket.InMemoryPages)));
+
+                table->BuildWith(Flatten(buildBucket.ReleaseInMemoryPages()));
                 MKQL_ENSURE(state.Spiller.GetBuckets()[*smallestBucket].Empty(), "this bucket should be empty now");
             }
 
@@ -569,11 +570,11 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                             ForEachSide([&](ESide side) {
                                 TBucket& thisBucket = thisPair.SelectSide(side);
                                 thisBucket.DetatchBuildingPage();
-                                for (TPackResult& page : thisBucket.InMemoryPages) {
+                                thisBucket.ForEachPage([&](TPackResult page){
                                     futures.push_back(TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>{
                                         .Val = SpillPage(*Spiller_, std::move(page)), .Side = side,
                                         .BucketIndex = index});
-                                }
+                                });
                                 alreadyDumped[index].SelectSide(side) = std::move(*thisBucket.SpilledPages);
                                 thisBucket.SpilledPages = std::nullopt;
                             });

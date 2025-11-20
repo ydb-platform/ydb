@@ -831,6 +831,13 @@ After resolving conflicts, mark this PR as ready for review.
                 self.git_run("commit", "-m", f"BACKPORT-CONFLICT: manual resolution required for commit {commit_sha[:7]}")
                 self.logger.info(f"Conflict committed for commit {commit_sha[:7]}")
                 return True, conflict_files
+            else:
+                # Working tree is clean - this shouldn't happen if there's a real conflict
+                # If git status is empty, the conflict may have been auto-resolved or something else happened
+                # Return False to let the caller handle it (it will check for "nothing to commit" in the output)
+                self.logger.warning(f"Working tree is clean after conflict detection for commit {commit_sha[:7]}. "
+                                  f"This is unexpected - conflict may have been auto-resolved or state is inconsistent.")
+                return False, []
         except Exception as e:
             self.logger.error(f"Error handling conflict for commit {commit_sha[:7]}: {e}")
         
@@ -1045,7 +1052,7 @@ After resolving conflicts, mark this PR as ready for review.
                     self.logger.info(f"Commit {commit_sha[:7]} changes is already in branch {target_branch}, skipping")
                     # Quit cherry-pick operation to clean up state before next commit
                     try:
-                        self.git_run("cherry-pick", "--quit")
+                        self.git_run("cherry-pick", "--skip")
                     except subprocess.CalledProcessError:
                         # If --quit fails, we're probably not in cherry-pick state, continue anyway
                         pass

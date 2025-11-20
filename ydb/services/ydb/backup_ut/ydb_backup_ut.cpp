@@ -755,7 +755,7 @@ void TestRestoreTableWithIndex(
                 ) WITH (
                     STORE = {store}
                 );
-            )", "table"_a = table, "index"_a = index, "index_type"_a =ConvertIndexTypeToSQL(indexType), "store"_a = isOlap ? "COLUMN" : "ROW");
+            )", "table"_a = table, "index"_a = index, "index_type"_a = ConvertIndexTypeToSQL(indexType), "store"_a = isOlap ? "COLUMN" : "ROW");
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             if (prefix) {
@@ -2928,6 +2928,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalVectorKmeansTree:
             case EIndexTypeGlobalFulltext:
                 TestTableWithIndexBackupRestore(IsOlap, Value);
+                break;
             case EIndexTypeInvalid:
                 break; // not applicable
             default:

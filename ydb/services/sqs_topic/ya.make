@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     actor.cpp
     error.cpp
+    delete_message.cpp
     receipt.cpp
     receive_message.cpp
     send_message.cpp

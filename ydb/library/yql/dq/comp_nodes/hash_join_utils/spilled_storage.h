@@ -1,5 +1,6 @@
 #pragma once
 #include <library/cpp/threading/future/wait/wait.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_hash_join_table.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/join_defs.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
@@ -159,18 +160,37 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
     const NPackedTuple::TTupleLayout* Layout_;
 };
 
-template <TSpillerSettings Settings> class TSimpleSpiller {
+template <TSpillerSettings Settings> class TProbeSpiller {
   public:
+    struct EmptyBucket {};
+    using Bucket = 
+        std::variant<NJoinTable::TNeumannJoinTable, TSides<TBucket>>;
+    
+    static bool IsBucketSpilled(const Bucket& bucket) {
+        return std::holds_alternative<TSides<TBucket>>(bucket);
+    }
     struct State {
-        TPairOfBuckets SpilledBuckets_;
-        TMKQLVector<TValueAndLocation<TPackResult>> InMemoryPages_;
+        TMKQLVector<Bucket> Buckets;
+        TMKQLVector<TValueAndLocation<TPackResult>> InMemoryPages;
     };
 
-    TSimpleSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout)
-        : Layout_(layout)
+    TProbeSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout, State state)
+        : State_(std::move(state))
+        , Layout_(layout)
         , Spiller_(spiller)
     {
-        State_.SpilledBuckets_.resize(Settings.Buckets);
+        for(int index = 0; index < std::ssize(State_.Buckets); ++index) {
+            TSides<TBucket>* thisBucket = std::get_if<TSides<TBucket>>(&State_.Buckets[index]);
+            if (thisBucket) {
+                ForEachSide([&](ESide side){
+                    thisBucket->SelectSide(side).DetatchBuildingPage();
+                    for(auto& page: thisBucket->SelectSide(side).InMemoryPages) {
+                        State_.InMemoryPages.push_back(TValueAndLocation<TPackResult>{.Val = std::move(page), .Side = side, .BucketIndex = index});
+                    }
+                    thisBucket->SelectSide(side).InMemoryPages.clear();
+                });
+            }
+        }
     }
 
     [[nodiscard]] ESpillResult SpillWhile(std::predicate auto condition) {
@@ -184,24 +204,22 @@ template <TSpillerSettings Settings> class TSimpleSpiller {
                 }
                 for (auto& future : *SpillingPages_) {
                     MKQL_ENSURE(future.Val.IsReady(), "no blocking wait");
-                    MKQL_ENSURE(State_.SpilledBuckets_[future.BucketIndex].SelectSide(future.Side).IsSpilled(),
-                                "spilling page from in memory bucket?");
-                    State_.SpilledBuckets_[future.BucketIndex]
-                        .SelectSide(future.Side)
+                    TSides<TBucket>* thisBucket = std::get_if<TSides<TBucket>>(&State_.Buckets[future.BucketIndex]);
+                    MKQL_ENSURE(thisBucket, "spilling page from in memory bucket?");
+                    thisBucket->SelectSide(future.Side)
                         .SpilledPages->push_back(future.Val.ExtractValueSync());
                 }
                 SpillingPages_ = std::nullopt;
             } else {
-
-                if (State_.InMemoryPages_.size() < Settings.SpillingPagesAtTime) {
+                if (State_.InMemoryPages.size() < Settings.SpillingPagesAtTime) {
                     return ESpillResult::DontHavePages;
                 }
                 SpillingPages_.emplace();
                 for (int index = 0; index < Settings.SpillingPagesAtTime; ++index) {
-                    auto& page = State_.InMemoryPages_.back();
+                    auto& page = State_.InMemoryPages.back();
                     SpillingPages_->push_back({.Val = SpillPage(*Spiller_, std::move(page.Val)), .Side = page.Side,
                                                .BucketIndex = page.BucketIndex});
-                    State_.InMemoryPages_.pop_back();
+                    State_.InMemoryPages.pop_back();
                 }
             }
         }
@@ -210,24 +228,19 @@ template <TSpillerSettings Settings> class TSimpleSpiller {
 
     void AddRow(TValueAndLocation<TSingleTuple> tuple) {
         MKQL_ENSURE(tuple.Side == ESide::Probe, "this spiller is for probe rows");
-        TBucket& thisBucket = State_.SpilledBuckets_[tuple.BucketIndex].Probe;
-        MKQL_ENSURE(thisBucket.InMemoryPages.empty(), "buckets in TSimpleSpiller should not contain in memory pages");
-        MKQL_ENSURE(thisBucket.IsSpilled(), "spilling row of in memory bucket?");
-        thisBucket.BuildingPage.AppendTuple(tuple.Val, Layout_);
-        if (thisBucket.template DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>()) {
-            for (auto& page : thisBucket.InMemoryPages) {
-                State_.InMemoryPages_.push_back(
+        TSides<TBucket>* thisBucket = std::get_if<TSides<TBucket>>(&State_.Buckets[tuple.BucketIndex]);
+        MKQL_ENSURE(thisBucket, "spilling row that should be looked up?");
+        thisBucket->Probe.BuildingPage.AppendTuple(tuple.Val, Layout_);
+        if (thisBucket->Probe.template DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>()) {
+            for (auto& page : thisBucket->Probe.InMemoryPages) {
+                State_.InMemoryPages.push_back(
                     {.Val = std::move(page), .Side = tuple.Side, .BucketIndex = tuple.BucketIndex});
             }
         }
     }
 
     bool IsBucketSpilled(int index) {
-        TSides<bool> answers;
-        ForEachSide(
-            [&](ESide side) { answers.SelectSide(side) = State_.SpilledBuckets_[index].SelectSide(side).IsSpilled(); });
-        MKQL_ENSURE(answers.Build == answers.Probe, "pair of buckets should be in 1 state");
-        return answers.Build;
+        return std::holds_alternative<TSides<TBucket>>(State_.Buckets[index]);
     }
 
     State& GetState() {

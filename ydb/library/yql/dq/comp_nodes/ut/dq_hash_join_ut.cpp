@@ -569,12 +569,7 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
 
     Y_UNIT_TEST(TestBlockSpilling) { 
-        try {
-            Test(SpillingTestData(), true);
-        } catch (...) {
-            Cout << "TestBlockSpilling failed with unknown exception" << Endl;
-            throw;
-        }
+        Test(SpillingTestData(), true);
     }
 }
 } // namespace NKikimr::NMiniKQL

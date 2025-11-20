@@ -1,0 +1,16 @@
+{
+    "typeCheckingMode": "off",
+    "pythonVersion": "3.12",
+    "reportMissingImports": "warning",
+    "reportUndefinedVariable": "error",
+    "extraPaths": [
+        "/home/becalm/ydbwork/ydb",
+        "/home/becalm/ydbwork/ydb/contrib/python/Jinja2/py3",
+        "/home/becalm/ydbwork/ydb/contrib/python/MarkupSafe/py3",
+        "/home/becalm/ydbwork/ydb/contrib/tools/python3/Lib",
+        "/home/becalm/ydbwork/ydb/contrib/tools/python3/Modules/_sqlite",
+        "/home/becalm/ydbwork/ydb/contrib/tools/python3/lib2/py",
+        "/home/becalm/ydbwork/ydb/library/python/runtime_py3",
+        "/home/becalm/ydbwork/ydb/library/python/symbols/module"
+    ]
+}

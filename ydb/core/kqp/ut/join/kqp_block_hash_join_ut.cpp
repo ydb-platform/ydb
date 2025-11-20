@@ -6,8 +6,133 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool enableSpilling=true, bool limitFileSize=false) {
+    NKikimrConfig::TAppConfig appCfg;
+    auto* entry = appCfg.MutableLogConfig()->AddEntry();
+    entry->SetComponent(NKikimrServices::EServiceKikimr_Name(NKikimrServices::EServiceKikimr::KQP_COMPUTE));
+    entry->SetLevel(NActors::NLog::PRI_DEBUG);
+
+    auto* ts = appCfg.MutableTableServiceConfig();
+    ts->SetEnableQueryServiceSpilling(enableSpilling);
+    ts->SetEnableSpillingInHashJoinShuffleConnections(false);
+
+    auto* rm = ts->MutableResourceManager();
+    rm->SetMkqlLightProgramMemoryLimit(100);
+    rm->SetMkqlHeavyProgramMemoryLimit(300);
+    rm->SetSpillingPercent(reasonableTreshold);
+
+    auto* spilling = ts->MutableSpillingServiceConfig()->MutableLocalFileConfig();
+    // appCfg.MutableTableServiceConfig().
+
+    spilling->SetRoot("./spilling/");
+    if (limitFileSize) {
+        spilling->SetMaxFileSize(1);
+    }
+
+    return appCfg;
+}
 
 Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
+    Y_UNIT_TEST(Spilling) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig = AppCfgLowComputeLimits(0.01);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/left_table` (
+                        id Int32 NOT NULL,
+                        data String NOT NULL,
+                        PRIMARY KEY (id, data)
+                    )
+                    WITH (STORE = COLUMN);
+
+                    CREATE TABLE `/Root/right_table` (
+                        id Int32 NOT NULL,
+                        data String NOT NULL,
+                        PRIMARY KEY (id, data)
+                    )
+                    WITH (STORE = COLUMN);
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+        for (ui32 i = 0; i < 300; ++i) {
+            auto str = TString(20000, 'a' + (i / 20));
+            auto result = queryClient.ExecuteQuery(Sprintf(R"(
+                --!syntax_v1
+                INSERT INTO `/Root/left_table` (id, data) VALUES (%d, "%s");
+                INSERT INTO `/Root/right_table` (id, data) VALUES (%d, "%s");
+            )", i, str.data(), i, str.data()), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // {
+        //     auto status = queryClient.ExecuteQuery(
+        //         R"(
+        //             INSERT INTO `/Root/left_table` (id, data) VALUES
+        //                 (1, "1"),
+        //                 (2, "2"),
+        //                 (3, "3");
+
+        //             INSERT INTO `/Root/right_table` (id, data) VALUES
+        //                 (1, "1"),
+        //                 (2, "2"),
+        //                 (3, "3");
+        //         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+        //     ).GetValueSync();
+        //     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        // }
+
+        {
+
+            TString hints = R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.OptimizerHints=
+                    '
+                        Bytes(L # 10e12)
+                        Bytes(R # 10e12)
+                    ';
+            )";
+            TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
+            TString select = R"(
+                SELECT count(*)
+                FROM `left_table` AS L
+                INNER JOIN `right_table` AS R1
+                ON L.data = R1.data
+            )";
+
+                // inner join `right_table` AS R2
+                // ON L.data = R2.data
+            TString joinQuery = TStringBuilder() << hints << blocks << select;
+
+            auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto resultSet = status.GetResultSets()[0];
+            auto expectedRowsCount = 300*20*20;
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), expectedRowsCount);
+
+            auto explainResult = queryClient.ExecuteQuery(
+                joinQuery, 
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+            auto astOpt = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(astOpt.has_value());
+            TString ast = TString(*astOpt);
+            Cout << "AST (UseBlockHashJoin=true): " << ast << Endl;
+
+            UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
+                TStringBuilder() << "AST should contain BlockHashJoin when enabled! Actual AST: " << ast);
+        }
+    }
     Y_UNIT_TEST_TWIN(BlockHashJoinTest, UseBlockHashJoin) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

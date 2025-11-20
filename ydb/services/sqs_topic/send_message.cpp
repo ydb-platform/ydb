@@ -11,6 +11,7 @@
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/error/error.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
+#include <ydb/services/sqs_topic/queue_url/holder/queue_url_holder.h>
 
 #include <ydb/core/grpc_services/service_sqs_topic.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
@@ -254,37 +255,9 @@ namespace NKikimr::NSqsTopic::V1 {
     };
 
     template <class TProtoRequest>
-    std::expected<TRichQueueUrl, TString> ParseQueueUrlFromRequest(NKikimr::NGRpcService::IRequestOpCtx* request) {
+    static std::expected<TRichQueueUrl, TString> ParseQueueUrlFromRequest(NKikimr::NGRpcService::IRequestOpCtx* request) {
         return ParseQueueUrl(GetRequest<TProtoRequest>(request).queue_url());
     }
-
-    class TQueueUrlHolder {
-    public:
-        explicit TQueueUrlHolder(std::expected<TRichQueueUrl, TString> queueUrl)
-            : QueueUrl_(std::move(queueUrl))
-        {
-            if (FormalValidQueueUrl()) {
-                FullTopicPath_ = CanonizePath(NKikimr::JoinPath({QueueUrl_->Database, QueueUrl_->TopicPath}));
-            }
-        }
-
-        template <class TProtoRequest>
-        static TQueueUrlHolder MakeQueueUrlHolder(NKikimr::NGRpcService::IRequestOpCtx* request) {
-            return TQueueUrlHolder(ParseQueueUrlFromRequest<TProtoRequest>(request));
-        }
-
-        std::expected<TString, TString> GetTopicPath() const {
-            return QueueUrl_.transform([](const TRichQueueUrl& r) { return r.TopicPath; });
-        }
-
-        bool FormalValidQueueUrl() const {
-            return QueueUrl_.has_value() && !QueueUrl_.value().TopicPath.empty();
-        }
-
-    protected:
-        std::expected<TRichQueueUrl, TString> QueueUrl_;
-        TString FullTopicPath_;
-    };
 
     template <class TDerived, class TServiceRequest>
     class TSendMessageActorBase: public TQueueUrlHolder, public TGrpcActorBase<TSendMessageActorBase<TDerived, TServiceRequest>, TServiceRequest> {
@@ -294,7 +267,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
     public:
         TSendMessageActorBase(NKikimr::NGRpcService::IRequestOpCtx* request)
-            : TQueueUrlHolder(TQueueUrlHolder::MakeQueueUrlHolder<TProtoRequest>(request))
+            : TQueueUrlHolder(ParseQueueUrlFromRequest<TProtoRequest>(request))
             , TBase(request, GetTopicPath().value_or(""))
         {
         }

@@ -12,6 +12,142 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
 {% list tabs %}
 
+- C++
+
+  In the {{ ydb-short-name }} C++ SDK, correct error handling is implemented by several programming interfaces:
+
+  {% cut "Retry attempts when working with Query Service" %}
+
+  The `RetryQuerySync` method is used to execute queries with automatic retries in Query Service.
+  The method accepts a lambda function that receives a session object and returns the query result.
+  {{ ydb-short-name }} C++ SDK automatically analyzes errors and performs retries according to their type.
+
+  Example code using `RetryQuerySync`:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  using namespace NYdb;
+  using namespace NYdb::NQuery;
+
+  void ExecuteQueryWithRetry(TQueryClient client) {
+      auto result = client.RetryQuerySync([](TSession session) {
+          auto query = R"(
+              SELECT series_id, title
+              FROM series
+              WHERE series_id = 1;
+          )";
+          
+          return session.ExecuteQuery(
+              query,
+              TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+          ).GetValueSync();
+      });
+      
+      if (!result.IsSuccess()) {
+          // Handle error after all retry attempts
+          std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Retry attempts when working with Table Service" %}
+
+  The `RetryOperationSync` method is used to execute operations with automatic retries in Table Service.
+  The method accepts a lambda function that receives a session object and returns the operation result.
+  {{ ydb-short-name }} C++ SDK automatically manages sessions and performs retries when retryable errors occur.
+
+  Example code using `RetryOperationSync`:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/table/table.h>
+
+  using namespace NYdb;
+  using namespace NYdb::NTable;
+
+  void ExecuteDataQueryWithRetry(TTableClient client) {
+      auto result = client.RetryOperationSync([](TSession session) {
+          auto query = R"(
+              DECLARE $seriesId AS Uint64;
+              DECLARE $seasonId AS Uint64;
+              
+              SELECT title, air_date
+              FROM episodes
+              WHERE series_id = $seriesId AND season_id = $seasonId;
+          )";
+          
+          auto params = TParamsBuilder()
+              .AddParam("$seriesId")
+                  .Uint64(1)
+                  .Build()
+              .AddParam("$seasonId")
+                  .Uint64(1)
+                  .Build()
+              .Build();
+          
+          auto prepareResult = session.PrepareDataQuery(query).GetValueSync();
+          if (!prepareResult.IsSuccess()) {
+              return prepareResult;
+          }
+          
+          auto dataQuery = prepareResult.GetQuery();
+          return dataQuery.Execute(
+              TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+              params
+          ).GetValueSync();
+      });
+      
+      if (!result.IsSuccess()) {
+          // Handle error after all retry attempts
+          std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Configuring retry parameters" %}
+
+  Users can configure the behavior of the retry mechanism using the `TRetryOperationSettings` class:
+
+  * `MaxRetries(uint32_t)` - maximum number of retry attempts (default is 10)
+  * `Idempotent(bool)` - indicates whether the operation is idempotent. Idempotent operations are retried for a broader range of errors
+  * `RetryNotFound(bool)` - whether to retry operations that returned a `NOT_FOUND` status (default is true)
+  * `MaxTimeout(TDuration)` - maximum time for all retry attempts
+  * `FastBackoffSettings(TBackoffSettings)` - settings for fast retries
+  * `SlowBackoffSettings(TBackoffSettings)` - settings for slow retries
+
+  Example of using retry settings:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/table/table.h>
+  #include <ydb-cpp-sdk/client/retry/retry.h>
+
+  using namespace NYdb;
+  using namespace NYdb::NTable;
+  using namespace NYdb::NRetry;
+
+  void BulkUpsertWithCustomRetry(TTableClient client, const TString& tablePath, TValue rows) {
+      TRetryOperationSettings retrySettings;
+      retrySettings
+          .Idempotent(true)
+          .MaxRetries(20)
+          .MaxTimeout(TDuration::Seconds(30));
+      
+      auto result = client.RetryOperationSync([tablePath, rows](TSession session) {
+          return session.BulkUpsert(tablePath, std::move(rows)).GetValueSync();
+      }, retrySettings);
+      
+      if (!result.IsSuccess()) {
+          std::cerr << "Bulk upsert failed: " << result.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
 - Go (native)
 
   In the {{ ydb-short-name }} Go SDK, correct error handling is implemented by several programming interfaces:

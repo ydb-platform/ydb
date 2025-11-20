@@ -38,14 +38,6 @@ class StreamingTestBase:
         )
 
     def create_topics(self):
-
-        # TODO: bug (Resource pool default not found or you don't have access permissions)
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            query = """
-                GRANT ALL ON `/Root` TO ``;
-            """
-            session_pool.execute_with_retries(query)
-
         logger.debug("create_topics")
         self.input_topic = 'streaming_recipe/input_topic'
         self.output_topic = 'streaming_recipe/output_topic'
@@ -195,6 +187,7 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
         self.change_cluster_version()
         self.do_test_part2()
 
+
 class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
@@ -204,12 +197,12 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
     def test_rolling_upgrage(self):
         self.create_topics()
         self.create_external_data_source()
-        self.create_simple_streaming_query();
+        self.create_simple_streaming_query()
 
         for _ in self.roll():  # every iteration is a step in rolling upgrade process
             #
             # 2. check written data is correct during rolling upgrade
             #
             input = ['{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-2"}']
-            expected_data =['{"host":"host-2","level":"error","time":"2025-01-01T00:15:00.000000Z"}']
+            expected_data = ['{"host":"host-2","level":"error","time":"2025-01-01T00:15:00.000000Z"}']
             self.do_write_read(input, expected_data)

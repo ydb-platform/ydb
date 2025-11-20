@@ -477,7 +477,7 @@ public:                                                                         
         ///////////////////////////////////////////////////////////////////////////////////
         class TLsmAllLevelsStat {
         public:
-            static constexpr ui32 MaxCounterLevels = 20;
+            static constexpr ui32 MaxCounterLevels = 24;
 
             TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
             // per-level information

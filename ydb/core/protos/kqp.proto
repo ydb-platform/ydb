@@ -856,6 +856,14 @@ message TKqpTableSinkSettings {
     optional bool IsIndexImplTable = 21;
 }
 
+message TReadVectorTopK {
+    // Top-K pushdown by vector distance between Column and TargetVector
+    optional uint32 Column = 1;
+    optional Ydb.Table.VectorIndexSettings Settings = 2;
+    optional string TargetVector = 3;
+    optional uint32 Limit = 4;
+}
+
 message TKqpStreamLookupSettings {
     optional NKqpProto.TKqpPhyTableId Table = 1;
     repeated TKqpColumnMetadataProto KeyColumns = 2;
@@ -873,6 +881,9 @@ message TKqpStreamLookupSettings {
     optional NKikimrDataEvents.ELockMode LockMode = 14;
     optional bool AllowUseFollowers = 15;
     optional bool IsTableImmutable = 16;
+    optional EIsolationLevel IsolationLevel = 17 [default = ISOLATION_LEVEL_UNDEFINED];
+    optional string Database = 18;
+    optional TReadVectorTopK VectorTopK = 19;
 }
 
 message TKqpSequencerSettings {

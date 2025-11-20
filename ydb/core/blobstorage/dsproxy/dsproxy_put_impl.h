@@ -328,7 +328,7 @@ protected:
         Y_ABORT_UNLESS(record.HasStatus());
         Y_ABORT_UNLESS(record.HasBlobID());
 
-        const NKikimrProto::EReplyStatus replyStatus = record.GetStatus();
+        const NKikimrProto::EReplyStatus status = record.GetStatus();
         const TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(record.GetBlobID());
 
         const size_t blobIdx = GetBlobIdx(blobId);
@@ -337,7 +337,7 @@ protected:
             return;
         }
 
-        switch (replyStatus) {
+        switch (status) {
             case NKikimrProto::ERROR:
             case NKikimrProto::VDISK_ERROR_STATE:
             case NKikimrProto::OUT_OF_SPACE:
@@ -349,7 +349,7 @@ protected:
                 WrittenBeyondBarrier[blobIdx] = record.GetWrittenBeyondBarrier();
                 break;
             default:
-                Y_ABORT("unexpected status# %s", NKikimrProto::EReplyStatus_Name(replyStatus).data());
+                Y_ABORT("unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
         }
     }
 

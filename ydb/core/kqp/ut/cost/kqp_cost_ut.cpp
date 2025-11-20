@@ -1809,12 +1809,18 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             CreateTestTable(session, isOlap);
         });
 
+        size_t messages = 0;
+
         auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
             if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                ++messages;
                 auto* msg = ev->Get<NEvents::TDataEvents::TEvWriteResult>();
-                auto copy = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
-                copy->Record = msg->Record;
-                runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, copy.release(), ev->Flags, ev->Cookie));
+                for (size_t index = 0; index < 3; ++index) {
+                    // Send several duplicates
+                    auto copy = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
+                    copy->Record = msg->Record;
+                    runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, copy.release(), ev->Flags, ev->Cookie));
+                }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         };
@@ -1850,6 +1856,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Deletes = 0,
                 });
         }
+
+        UNIT_ASSERT_EQUAL(messages, isOlap ? 4 : 1);
     }
 
 }

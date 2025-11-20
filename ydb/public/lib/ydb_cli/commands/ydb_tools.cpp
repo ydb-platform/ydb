@@ -311,7 +311,7 @@ TCommandCopy::TCommandCopy()
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Source table path", true}},
         {"Destination", {{"destination", "dst", "d"}, "Destination table path", true}},
-        {"OmitIndexes", {{"omit-indexes"}, "Omit indexes when copying table, no omit by default", false}}
+        {"OmitIndexes", {{"omit-indexes"}, "Omit indexes when copying table; indexes are copied by default", false}}
     });
 }
 

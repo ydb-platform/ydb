@@ -323,7 +323,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
         NUdf::TLogComponentId LogComponent_;
 
         void LogDebug(TStringRef msg) const {
-            UDF_LOG(Logger_, LogComponent_, NYql::NUdf::ELogLevel::Error, msg);
+            UDF_LOG(Logger_, LogComponent_, NYql::NUdf::ELogLevel::Fatal, msg);
         }
     };
 

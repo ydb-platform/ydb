@@ -1,11 +1,38 @@
+import io
 import logging
 import pytest
 import ydb
+
+import pyarrow.parquet as pq
 
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.olap.s3_import.base import S3ImportTestBase
 
 logger = logging.getLogger(__name__)
+
+YQL_TO_ARROW_TYPE_MAPPING = {
+    "Bool": ("UINT8", ["BOOL", "UINT8"]),
+    "Int8": ("INT8", ["INT8"]),
+    "Int16": ("INT16", ["INT16"]),
+    "Int32": ("INT32", ["INT32"]),
+    "Int64": ("INT64", ["INT64"]),
+    "Uint8": ("UINT8", ["UINT8", "INT8", "INT16", "INT32", "INT64"]),
+    "Uint16": ("UINT16", ["UINT16", "INT16", "INT32", "INT64"]),
+    "Uint32": ("UINT32", ["UINT32", "INT32", "INT64"]),
+    "Uint64": ("UINT64", ["UINT64", "INT64"]),
+    "Float": ("FLOAT32", ["FLOAT32"]),
+    "Double": ("FLOAT64", ["FLOAT64"]),
+    "String": ("BINARY", ["BINARY"]),
+    "Utf8": ("BINARY", ["BINARY"]),
+    "Json": ("BINARY", ["BINARY"]),
+    "Date": ("UINT16", ["UINT16", "INT32", "UINT32", "INT64", "UINT64", "DATE", "TIMESTAMP"]),
+    "Date32": ("DATE", ["DATE"]),
+    "Datetime": ("UINT32", ["UINT16", "INT32", "UINT32", "INT64", "UINT64", "DATE", "TIMESTAMP"]),
+    "Datetime64": ("TIMESTAMP", ["TIMESTAMP"]),
+    "Timestamp": ("TIMESTAMP", ["TIMESTAMP"]),
+    "Timestamp64": ("TIMESTAMP", ["TIMESTAMP"]),
+    "Decimal": ("DECIMAL", ["DECIMAL"]),
+}
 
 
 class TestTypesAndFormats(S3ImportTestBase):
@@ -28,6 +55,128 @@ class TestTypesAndFormats(S3ImportTestBase):
         original_table_result = result_sets[1].rows[0]
         assert check_result.check_size == original_table_result.olap_size
         assert check_result.check_hash == original_table_result.olap_hash
+
+    def _check_arrow_types_in_parquet(self, bucket_name, yql_column_name_to_type):
+        bucket = self.s3_client.s3.Bucket(bucket_name)
+        parquet_files = [obj for obj in bucket.objects.all() if obj.key.endswith('.parquet')]
+
+        assert len(parquet_files) > 0, f"No parquet files found in bucket {bucket_name}"
+
+        for parquet_file in parquet_files:
+            obj = self.s3_client.client.get_object(Bucket=bucket_name, Key=parquet_file.key)
+            parquet_data = io.BytesIO(obj['Body'].read())
+            parquet_file_obj = pq.ParquetFile(parquet_data)
+            schema = parquet_file_obj.schema_arrow
+
+            logger.info(f"Checking Arrow types in {parquet_file.key}")
+            logger.info(f"Schema: {schema}")
+            schema_fields_info = [(f.name, str(f.type), f.type.__class__.__name__ if hasattr(f.type, '__class__') else 'N/A') for f in schema]
+            logger.info(f"Schema fields: {schema_fields_info}")
+
+            for field in schema:
+                column_name = field.name
+                arrow_type = field.type
+
+                if column_name not in yql_column_name_to_type:
+                    continue
+
+                yql_type = yql_column_name_to_type[column_name]
+
+                if yql_type not in YQL_TO_ARROW_TYPE_MAPPING:
+                    logger.warning(f"Unknown YQL type {yql_type} for column {column_name}, skipping")
+                    continue
+
+                expected_export_type, expected_import_types = YQL_TO_ARROW_TYPE_MAPPING[yql_type]
+
+                arrow_type_str = str(arrow_type)
+                if hasattr(arrow_type, '__class__'):
+                    type_class_name = arrow_type.__class__.__name__
+                    if type_class_name.endswith('Type'):
+                        type_class_name = type_class_name[:-4]
+                    type_class_name_lower = type_class_name.lower()
+                else:
+                    type_class_name_lower = arrow_type_str.lower()
+
+                logger.debug(f"Column {column_name}: type_class_name={type_class_name if hasattr(arrow_type, '__class__') else 'N/A'}, "
+                             f"type_class_name_lower={type_class_name_lower}, arrow_type_str={arrow_type_str}")
+
+                arrow_type_mapping = {
+                    'float32': 'FLOAT32',
+                    'float64': 'FLOAT64',
+                    'int8': 'INT8',
+                    'int16': 'INT16',
+                    'int32': 'INT32',
+                    'int64': 'INT64',
+                    'uint8': 'UINT8',
+                    'uint16': 'UINT16',
+                    'uint32': 'UINT32',
+                    'uint64': 'UINT64',
+                    'float': 'FLOAT32',
+                    'double': 'FLOAT64',
+                    'large_binary': 'BINARY',
+                    'binary': 'BINARY',
+                    'string': 'BINARY',
+                    'utf8': 'BINARY',
+                    'large_string': 'BINARY',
+                    'bool': 'BOOL',
+                    'date32': 'DATE',
+                    'date64': 'DATE64',
+                    'date': 'DATE',
+                    'timestamp': 'TIMESTAMP',
+                    'decimal128': 'DECIMAL',
+                    'decimal256': 'DECIMAL',
+                    'decimal': 'DECIMAL',
+                }
+
+                normalized_arrow_type = arrow_type_mapping.get(type_class_name_lower)
+
+                if normalized_arrow_type is None:
+                    arrow_type_lower = arrow_type_str.lower()
+                    priority_keys = ['float32', 'float64', 'uint8', 'uint16', 'uint32', 'uint64',
+                                     'int8', 'int16', 'int32', 'int64', 'large_binary', 'large_string',
+                                     'date32', 'date64', 'decimal128', 'decimal256']
+                    for key in priority_keys:
+                        if arrow_type_lower == key or arrow_type_lower.startswith(key + '[') or arrow_type_lower.startswith(key + '('):
+                            normalized_arrow_type = arrow_type_mapping.get(key)
+                            if normalized_arrow_type:
+                                break
+
+                    if normalized_arrow_type is None:
+                        for key, value in arrow_type_mapping.items():
+                            if key not in priority_keys:
+                                if arrow_type_lower == key or arrow_type_lower.startswith(key + '[') or arrow_type_lower.startswith(key + '('):
+                                    normalized_arrow_type = value
+                                    break
+
+                if normalized_arrow_type is None:
+                    if hasattr(arrow_type, '__class__'):
+                        type_name = arrow_type.__class__.__name__
+                        if type_name.endswith('Type'):
+                            type_name = type_name[:-4]
+                        normalized_arrow_type = type_name.upper()
+                    else:
+                        normalized_arrow_type = arrow_type_str.upper()
+                        if '[' in normalized_arrow_type:
+                            normalized_arrow_type = normalized_arrow_type.split('[')[0]
+                        if '(' in normalized_arrow_type:
+                            normalized_arrow_type = normalized_arrow_type.split('(')[0]
+                        normalized_arrow_type = normalized_arrow_type.strip()
+
+                expected_export_upper = expected_export_type.upper()
+                expected_import_uppers = [t.upper() for t in expected_import_types]
+                is_valid = (normalized_arrow_type == expected_export_upper or
+                            normalized_arrow_type in expected_import_uppers)
+
+                assert is_valid, \
+                    f"Column {column_name} (YQL type: {yql_type}): " \
+                    f"expected Arrow export type {expected_export_upper} or import types {expected_import_types}, " \
+                    f"got {normalized_arrow_type} (raw type: {arrow_type}, type_str: {arrow_type_str})"
+
+                if normalized_arrow_type == expected_export_upper:
+                    logger.info(f"Column {column_name}: YQL {yql_type} -> Arrow {normalized_arrow_type} (export)")
+                else:
+                    logger.info(f"Column {column_name}: YQL {yql_type} -> Arrow {normalized_arrow_type} "
+                                f"(export expected: {expected_export_upper}, but got valid import type)")
 
     @link_test_case("#18784")
     @pytest.mark.parametrize(
@@ -285,6 +434,32 @@ class TestTypesAndFormats(S3ImportTestBase):
             INSERT INTO {s3_table_name} SELECT * FROM {olap_table_name};
         """)
         logger.info(f"Exporting finished, bucket stats: {self.s3_client.get_bucket_stat(test_bucket)}")
+
+        yql_column_types = {
+            "c_int8": "Int8",
+            "c_int16": "Int16",
+            "c_int32": "Int32",
+            "c_int64": "Int64",
+            "c_uint8": "Uint8",
+            "c_uint16": "Uint16",
+            "c_uint32": "Uint32",
+            "c_uint64": "Uint64",
+            "c_float": "Float",
+            "c_double": "Double",
+            "c_string": "String",
+            "c_utf8": "Utf8",
+            "c_json": "Json",
+            "c_date": "Date",
+            "c_date32": "Date32",
+            "c_datetime": "Datetime",
+            "c_datetime64": "Datetime64",
+            "c_timestamp": "Timestamp",
+            "c_timestamp64": "Timestamp64",
+            "c_decimal": "Decimal",
+            "c_bool": "Bool",
+        }
+
+        self._check_arrow_types_in_parquet(test_bucket, yql_column_types)
 
         logger.info("Importing into ydb...")
         self.ydb_client.query(f"""

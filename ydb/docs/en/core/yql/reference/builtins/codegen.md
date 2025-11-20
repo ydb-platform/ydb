@@ -1,6 +1,6 @@
 # Functions for code generation
 
-When running calculations, you can generate the code including [S-expressions](/docs/s_expressions) nodes. This uses a mechanism for packing the code in the [resource](../types/special.md). After building the code, you can insert it into the main program using the [EvaluateCode](#evaluatecode) function. For debugging purposes, you can convert the code to a string using the [FormatCode](#formatcode) function.
+When running calculations, you can generate the code including [S-expressions](../builtins/basic.md#yql-s-expressions-s-expressions) nodes. This uses a mechanism for packing the code in the [resource](../types/special.md). After building the code, you can insert it into the main program using the [EvaluateCode](#evaluatecode) function. For debugging purposes, you can convert the code to a string using the [FormatCode](#formatcode) function.
 
 Possible node types in S-expressions that can be used for code generation:
 

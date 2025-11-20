@@ -69,10 +69,10 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
                 Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::SUCCESS), response->ErrorDescription);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
             auto& msg = response->Messages[0];
-            UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.PartitionId, 0);
-            UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.Offset, 0);
+            UNIT_ASSERT(msg.MessageId.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->PartitionId, 0);
+            UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->Offset, 0);
             UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id");
-            UNIT_ASSERT_VALUES_EQUAL(msg.Status, Ydb::StatusIds::SUCCESS);
         }
 
         CreateReaderActor(runtime, {
@@ -125,17 +125,17 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             {
                 auto& msg = response->Messages[0];
-                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.PartitionId, 0);
-                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.Offset, 0);
+                UNIT_ASSERT(msg.MessageId.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->PartitionId, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->Offset, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id_1");
-                UNIT_ASSERT_VALUES_EQUAL(msg.Status, Ydb::StatusIds::SUCCESS);
             }
             {
                 auto& msg = response->Messages[1];
-                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.PartitionId, 0);
-                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.Offset, 1);
+                UNIT_ASSERT(msg.MessageId.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->PartitionId, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->Offset, 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id_2");
-                UNIT_ASSERT_VALUES_EQUAL(msg.Status, Ydb::StatusIds::SUCCESS);
             }
         }
     }
@@ -172,17 +172,17 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             {
                 auto& msg = response->Messages[0];
-                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.PartitionId, 0);
-                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.Offset, 0);
+                UNIT_ASSERT(msg.MessageId.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->PartitionId, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->Offset, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id_1");
-                UNIT_ASSERT_VALUES_EQUAL(msg.Status, Ydb::StatusIds::SUCCESS);
             }
             {
                 auto& msg = response->Messages[1];
-                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.PartitionId, 1);
-                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.Offset, 0);
+                UNIT_ASSERT(msg.MessageId.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->PartitionId, 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->Offset, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id_2");
-                UNIT_ASSERT_VALUES_EQUAL(msg.Status, Ydb::StatusIds::SUCCESS);
             }
         }
     }

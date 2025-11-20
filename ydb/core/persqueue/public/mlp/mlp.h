@@ -35,9 +35,9 @@ struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, EEv::EvW
     TString ErrorDescription;
 
     struct TMessage {
-        TMessageId MessageId;
+        // if message was written successfully, it will be set
+        std::optional<TMessageId> MessageId;
         TString BatchId;
-        Ydb::StatusIds::StatusCode Status;
     };
     std::vector<TMessage> Messages;
 };

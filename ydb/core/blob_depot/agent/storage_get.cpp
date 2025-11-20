@@ -28,18 +28,6 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
 
-                if (const auto& blk = Request.ForceBlockTabletData; blk && blk->Generation) {
-                    ui32 blockedGeneration;
-                    if (CheckBlockForTablet(blk->Id, std::nullopt, &blockedGeneration) != NKikimrProto::OK) {
-                        return;
-                    }
-                    if (blockedGeneration != blk->Generation) {
-                        // this can happen only in distributed storage, but not possible in BlobDepot
-                        return EndWithError(NKikimrProto::ERROR, "incorrect blocked generation provided for"
-                            " ForceBlockTabletData in TEvGet query to BlobDepot");
-                    }
-                }
-
                 if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (ui32 i = 0; i < Request.QuerySize; ++i) {
                         const auto& q = Request.Queries[i];

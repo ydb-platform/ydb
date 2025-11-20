@@ -23,11 +23,6 @@
 Команда / подкоманда | Краткое описание
 --- | ---
 admin cluster bootstrap | Инициализация подготовленного [кластера](../../../concepts/glossary.md#cluster)
-[admin cluster bridge failover](../commands/bridge/failover.md) | Аварийное переключение при недоступности [pile](../../../concepts/glossary.md#pile)
-[admin cluster bridge list](../commands/bridge/list.md) | Список состояния каждого [pile](../../../concepts/glossary.md#pile) в [режиме bridge](../../../concepts/bridge.md)
-[admin cluster bridge rejoin](../commands/bridge/rejoin.md) | Возвращение [pile](../../../concepts/glossary.md#pile) в [кластер](../../../concepts/glossary.md#cluster) после обслуживания или восстановления
-[admin cluster bridge switchover](../commands/bridge/switchover.md) | Плановая смена `PRIMARY` [pile](../../../concepts/glossary.md#pile)
-[admin cluster bridge takedown](../commands/bridge/takedown.md) | Вывод [pile](../../../concepts/glossary.md#pile) из [кластера](../../../concepts/glossary.md#cluster) для обслуживания
 [admin cluster config fetch](../commands/configuration/cluster/fetch.md) | Получение текущей динамической конфигурации [кластера](../../../concepts/glossary.md#cluster)
 [admin cluster config generate](../commands/configuration/cluster/generate.md) | Генерация динамической конфигурации из статической конфигурации запуска
 [admin cluster config replace](../commands/configuration/cluster/replace.md) | Замена динамической конфигурации [кластера](../../../concepts/glossary.md#cluster)
@@ -97,7 +92,6 @@ debug ping | Проверка доступности {{ ydb-short-name }}
 [table ttl reset](../table-ttl-reset.md) | Сброс параметров [TTL](../../../concepts/glossary.md#ttl) для строковых и колоночных [таблиц](../../../concepts/glossary.md#table)
 [tools copy](../tools-copy.md) | Копирование [таблиц](../../../concepts/glossary.md#table)
 [tools dump](../export-import/tools-dump.md#schema-objects) | Выгрузка отдельных схемных объектов в файловую систему
-[tools infer csv](../tools-infer.md) | Генерация текста запроса `CREATE TABLE SQL` из CSV файла
 {% if ydb-cli == "ydb" %}
 [tools pg-convert](../../../postgresql/import.md#pg-convert) | Конвертация дампа PostgreSQL, полученного утилитой pg_dump, в формат, понятный YDB
 {% endif %}

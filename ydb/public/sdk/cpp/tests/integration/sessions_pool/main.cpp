@@ -86,7 +86,7 @@ void RunPlan(const TPlan& plan, NYdb::NTable::TTableClient& client) {
                 // Note: We cannot reliably assert that HasValue() is false here because:
                 // 1. Sessions from the pool are returned via scheduled tasks that may execute within 1ms
                 // 2. Session creation may complete very quickly on fast/local connections
-                // The subsequent assertions (lines 102-104) are sufficient to verify pool behavior
+                // The subsequent assertions (lines 105-107) are sufficient to verify pool behavior
                 break;
             }
             case EAction::ExtractValue: {

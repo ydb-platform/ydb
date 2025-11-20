@@ -2927,8 +2927,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
             case EIndexTypeGlobalFulltext:
-                TestTableWithIndexBackupRestore(IsOlap, Value);
-                break;
+                return TestTableWithIndexBackupRestore(IsOlap, Value);
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -3175,7 +3174,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
-        TestReplicationBackupRestore(false);
+        TestReplicationBackupRestore(false, false);
     }
 
     Y_UNIT_TEST(BackupRestoreTransfer_UseSecret) {

@@ -11,6 +11,142 @@
 
 {% list tabs %}
 
+- C++
+
+  В {{ ydb-short-name }} C++ SDK корректная обработка ошибок реализована в нескольких программных интерфейсах:
+
+  {% cut "Выполнение повторных попыток при работе с Query Service" %}
+
+  Для выполнения запросов с автоматическими повторными попытками в Query Service используется метод `RetryQuerySync`.
+  Метод принимает лямбда-функцию, которая получает объект сессии и возвращает результат запроса.
+  {{ ydb-short-name }} C++ SDK автоматически анализирует ошибки и выполняет повторные попытки в соответствии с их типом.
+
+  Пример кода, использующего `RetryQuerySync`:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  using namespace NYdb;
+  using namespace NYdb::NQuery;
+
+  void ExecuteQueryWithRetry(TQueryClient client) {
+      auto result = client.RetryQuerySync([](TSession session) {
+          auto query = R"(
+              SELECT series_id, title
+              FROM series
+              WHERE series_id = 1;
+          )";
+          
+          return session.ExecuteQuery(
+              query,
+              TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+          ).GetValueSync();
+      });
+      
+      if (!result.IsSuccess()) {
+          // Обработка ошибки после всех попыток
+          std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Выполнение повторных попыток при работе с Table Service" %}
+
+  Для выполнения операций с автоматическими повторными попытками в Table Service используется метод `RetryOperationSync`.
+  Метод принимает лямбда-функцию, которая получает объект сессии и возвращает результат операции.
+  {{ ydb-short-name }} C++ SDK автоматически управляет сессиями и выполняет повторные попытки при возникновении ретраибельных ошибок.
+
+  Пример кода, использующего `RetryOperationSync`:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/table/table.h>
+
+  using namespace NYdb;
+  using namespace NYdb::NTable;
+
+  void ExecuteDataQueryWithRetry(TTableClient client) {
+      auto result = client.RetryOperationSync([](TSession session) {
+          auto query = R"(
+              DECLARE $seriesId AS Uint64;
+              DECLARE $seasonId AS Uint64;
+              
+              SELECT title, air_date
+              FROM episodes
+              WHERE series_id = $seriesId AND season_id = $seasonId;
+          )";
+          
+          auto params = TParamsBuilder()
+              .AddParam("$seriesId")
+                  .Uint64(1)
+                  .Build()
+              .AddParam("$seasonId")
+                  .Uint64(1)
+                  .Build()
+              .Build();
+          
+          auto prepareResult = session.PrepareDataQuery(query).GetValueSync();
+          if (!prepareResult.IsSuccess()) {
+              return prepareResult;
+          }
+          
+          auto dataQuery = prepareResult.GetQuery();
+          return dataQuery.Execute(
+              TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+              params
+          ).GetValueSync();
+      });
+      
+      if (!result.IsSuccess()) {
+          // Обработка ошибки после всех попыток
+          std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Настройка параметров повторных попыток" %}
+
+  Пользователь может настраивать поведение механизма повторных попыток с помощью класса `TRetryOperationSettings`:
+
+  * `MaxRetries(uint32_t)` - максимальное количество повторных попыток (по умолчанию 10)
+  * `Idempotent(bool)` - признак идемпотентности операции. Идемпотентные операции повторяются для более широкого списка ошибок
+  * `RetryNotFound(bool)` - повторять ли операции, вернувшие статус `NOT_FOUND` (по умолчанию true)
+  * `MaxTimeout(TDuration)` - максимальное время выполнения всех попыток
+  * `FastBackoffSettings(TBackoffSettings)` - настройки быстрых повторов
+  * `SlowBackoffSettings(TBackoffSettings)` - настройки медленных повторов
+
+  Пример использования настроек повторных попыток:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/table/table.h>
+  #include <ydb-cpp-sdk/client/retry/retry.h>
+
+  using namespace NYdb;
+  using namespace NYdb::NTable;
+  using namespace NYdb::NRetry;
+
+  void BulkUpsertWithCustomRetry(TTableClient client, const TString& tablePath, TValue rows) {
+      TRetryOperationSettings retrySettings;
+      retrySettings
+          .Idempotent(true)
+          .MaxRetries(20)
+          .MaxTimeout(TDuration::Seconds(30));
+      
+      auto result = client.RetryOperationSync([tablePath, rows](TSession session) {
+          return session.BulkUpsert(tablePath, std::move(rows)).GetValueSync();
+      }, retrySettings);
+      
+      if (!result.IsSuccess()) {
+          std::cerr << "Bulk upsert failed: " << result.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
 - Go (native)
 
   В {{ ydb-short-name }} Go SDK корректная обработка ошибок закреплена в нескольких программных интерфейсах:

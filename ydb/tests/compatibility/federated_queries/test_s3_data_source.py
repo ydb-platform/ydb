@@ -10,7 +10,7 @@ from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, Restar
 from ydb.export import ExportToS3Settings
 
 
-class ExternalDataTableTestBase:
+class S3DataSourceTestBase:
     def setup_cluster(self):
         if min(self.versions) < (25, 1):
             pytest.skip("Only available since 25-1")
@@ -88,7 +88,7 @@ class ExternalDataTableTestBase:
             assert isinstance(data, bytes) and data.decode() == 'Hello S3!'
 
 
-class TestExternalDataTableMixedCluster(ExternalDataTableTestBase, MixedClusterFixture):
+class TestS3DataSourceMixedCluster(S3DataSourceTestBase, MixedClusterFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster()
@@ -98,7 +98,7 @@ class TestExternalDataTableMixedCluster(ExternalDataTableTestBase, MixedClusterF
         self.do_test_external_data()
 
 
-class TestExternalDataTableRestartToAnotherVersion(ExternalDataTableTestBase, RestartToAnotherVersionFixture):
+class TestS3DataSourceRestartToAnotherVersion(S3DataSourceTestBase, RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster()
@@ -109,7 +109,7 @@ class TestExternalDataTableRestartToAnotherVersion(ExternalDataTableTestBase, Re
         self.do_test_external_data()
 
 
-class TestExternalDataTableRollingUpgradeAndDowngrade(ExternalDataTableTestBase, RollingUpgradeAndDowngradeFixture):
+class TestS3DataSourceRollingUpgradeAndDowngrade(S3DataSourceTestBase, RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster()

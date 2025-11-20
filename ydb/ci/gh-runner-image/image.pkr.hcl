@@ -84,6 +84,8 @@ echo "DefaultLimitMEMLOCK=8589934592" >> /etc/systemd/system.conf
 echo "*  hard memlock  8388608" >> /etc/security/limits.conf
 echo "*  soft memlock  8388608" >> /etc/security/limits.conf
 
+echo "/coredumps/%p.%s" | sudo tee /proc/sys/kernel/core_pattern
+
 echo "vm.max_map_count = 1048576" >> /etc/sysctl.d/30-vm.conf
 
 npm install -g @testmo/testmo-cli

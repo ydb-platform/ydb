@@ -17,9 +17,9 @@ using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NOpt;
 
-class TKqpPgRewriteTransformer : public TSyncTransformerBase {
+class TKqpRewriteSelectTransformer : public TSyncTransformerBase {
   public:
-    TKqpPgRewriteTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx)
+    TKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx)
         : TypeCtx(typeCtx), KqpCtx(*kqpCtx) {}
 
     // Main method of the transformer
@@ -31,7 +31,7 @@ class TKqpPgRewriteTransformer : public TSyncTransformerBase {
     const TKqpOptimizeContext &KqpCtx;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
+TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
                                                           TTypeAnnotationContext &typeCtx);
 
 class TKqpNewRBOTransformer : public TSyncTransformerBase {
@@ -80,6 +80,8 @@ class TKqpRBOCleanupTransformer : public TSyncTransformerBase {
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext &typeCtx);
+
+TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, bool pgSyntax=false);
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -2,6 +2,7 @@
 #include "log.h"
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <util/generic/overloaded.h>
 
 namespace NKikimr::NViewer {
 

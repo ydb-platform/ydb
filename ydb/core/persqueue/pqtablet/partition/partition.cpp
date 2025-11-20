@@ -21,12 +21,12 @@
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/wilson_ids/wilson.h>
-#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/public/lib/base/msgbus.h>
 
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <util/generic/overloaded.h>
 
 namespace NKafka {
 

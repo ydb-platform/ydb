@@ -129,7 +129,7 @@ public:
         {TopQueryColumns, ".sys/top_queries_by_request_units_one_minute" },
     };
     ui32 QueryIdx = 0;
-    TVector<TVector<TString>> Counters;
+    TVector<TVector<std::pair<TString, TInstant>>> Counters;
     TVector<TEvInterconnect::TNodeInfo> Nodes;
     NKikimrClusterStateInfoProto::TClusterStateInfo State;
     TInstant Started;
@@ -277,7 +277,7 @@ public:
 
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
         ui32 idx = ev.Get()->Cookie;
-        Counters[idx].push_back(std::move(ev->Get()->Record.GetResponse()));
+        Counters[idx].push_back(std::make_pair(std::move(ev->Get()->Record.GetResponse()), TInstant::Now()));
         NodeStateInfoReceived(idx);
     }
 
@@ -371,28 +371,40 @@ public:
         }
     }
 
+    void AddBlock(Ydb::Monitoring::ClusterStateResult& result, const TString& name, const auto& obj) {
+        google::protobuf::util::JsonPrintOptions jsonOpts;
+        jsonOpts.add_whitespace = true;
+        TString data;
+        google::protobuf::util::MessageToJsonString(obj, &data, jsonOpts);
+        auto* block = result.Addblocks();
+        block->Setname(name);
+        block->Setcontent(data);
+        block->Mutabletimestamp()->set_seconds(TInstant::Now().Seconds());
+    }
+
     void ReplyAndPassAway() {
         CloseSession();
         TResponse response;
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         operation.set_ready(true);
         operation.set_status(Ydb::StatusIds::SUCCESS);
-        google::protobuf::util::JsonPrintOptions jsonOpts;
-        jsonOpts.add_whitespace = true;
-        TString data;
-        google::protobuf::util::MessageToJsonString(State, &data, jsonOpts);
-        Ydb::Monitoring::ClusterStateResult result;
-        auto* block = result.Addblocks();
-        block->Setname("cluster_state.json");
-        block->Setcontent(data);
 
+        Ydb::Monitoring::ClusterStateResult result;
+        AddBlock(result, "cluster_state.json", State);
+        NKikimrClusterStateInfoProto::TClusterStateInfoParameters params;
+        params.SetStartedAt(Started.ToStringUpToSeconds());
+        params.SetDurationSeconds(Duration.Seconds());
+        params.SetPeriodSeconds(Period.Seconds());
+        AddBlock(result, "cluster_state_fetch_parameters.json", params);
         for (ui32 node : xrange(Counters.size())) {
             for (ui32 i : xrange(Counters[node].size())) {
                 auto* counterBlock = result.Addblocks();
                 TStringBuilder sb;
-                sb << "node_" << node << "_counters_" << i << ".json";
+                auto nodeId = Nodes[node].NodeId;
+                sb << "node_" << nodeId << "_counters_" << i << ".json";
                 counterBlock->Setname(sb);
-                counterBlock->Setcontent(Counters[node][i]);
+                counterBlock->Setcontent(Counters[node][i].first);
+                counterBlock->Mutabletimestamp()->set_seconds(Counters[node][i].second.Seconds());
             }
         }
         operation.mutable_result()->PackFrom(result);

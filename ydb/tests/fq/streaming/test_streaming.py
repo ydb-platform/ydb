@@ -8,6 +8,7 @@ from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wra
 
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics
+from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
 logger = logging.getLogger(__name__)
 
@@ -388,6 +389,32 @@ class TestStreamingInYdb(TestYdsBase):
 
         kikimr.YdbClient.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
 
+    def test_pragma(self, kikimr):
+        sourceName = "test_pragma"
+        self.init_topics(sourceName, partitions_count=10)
+        self.create_source(kikimr, sourceName)
+        create_read_rule(self.input_topic, self.consumer_name)
+
+        query_name = "test_pragma1"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.DisableCheckpoints="true";
+                PRAGMA ydb.MaxTasksPerStage = "1";
+                PRAGMA pq.Consumer = "{consumer_name}";
+                $in = SELECT time FROM {source_name}.`{input_topic}`
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(time String NOT NULL));
+                INSERT INTO {source_name}.`{output_topic}` SELECT time FROM $in;
+            END DO;'''
+
+        kikimr.YdbClient.query(sql.format(query_name=query_name, consumer_name=self.consumer_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        self.write_stream(['{"time": "lunch time"}'])
+        assert self.read_stream(1, topic_path=self.output_topic) == ['lunch time']
+
+        kikimr.YdbClient.query(f"DROP STREAMING QUERY `{query_name}`")
+
     def test_types(self, kikimr):
         sourceName = "test_types"
         self.init_topics(sourceName, partitions_count=1)
@@ -491,4 +518,5 @@ class TestStreamingInYdb(TestYdsBase):
         self.write_stream(data)
 
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+
         kikimr.YdbClient.query(f"DROP STREAMING QUERY `{query_name}`")

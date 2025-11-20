@@ -38,7 +38,7 @@ public:
 
     TFuture<void> Flush() override;
 
-    std::optional<NCrypto::TMD5Hash> GetDigest() const override;
+    std::optional<NTableClient::TRowsDigest> GetDigest() const override;
 
 protected:
     const NTableClient::TNameTablePtr NameTable_;

@@ -515,7 +515,7 @@ public:
     i64 GetWrittenSize() const override;
     TFuture<void> Close() override;
     TFuture<void> Flush() override;
-    std::optional<TMD5Hash> GetDigest() const override;
+    std::optional<TRowsDigest> GetDigest() const override;
 
 private:
     const TWebJsonFormatConfigPtr Config_;
@@ -760,7 +760,7 @@ void TWriterForWebJson<TValueWriter>::DoClose()
 }
 
 template <typename TValueWriter>
-std::optional<TMD5Hash> TWriterForWebJson<TValueWriter>::GetDigest() const
+std::optional<TRowsDigest> TWriterForWebJson<TValueWriter>::GetDigest() const
 {
     return std::nullopt;
 }

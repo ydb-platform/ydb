@@ -681,7 +681,11 @@ private:
         NYql::IssuesFromMessage(issueMessage, issues);
         Issues.AddIssues(TruncateIssues(issues));
 
-        LOG_I("Script query finished from " << ev->Sender << " " << record.GetYdbStatus() << ", Issues: " << Issues.ToOneLineString());
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            LOG_I("Script query successfully finished from " << ev->Sender << ", Issues: " << Issues.ToOneLineString());
+        } else {
+            LOG_W("Script query failed from " << ev->Sender << " " << record.GetYdbStatus() << ", Issues: " << Issues.ToOneLineString());
+        }
 
         if (record.GetYdbStatus() == Ydb::StatusIds::TIMEOUT) {
             const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig);

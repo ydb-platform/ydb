@@ -11,7 +11,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct_all"};
+THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct"};
 
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
@@ -60,7 +60,9 @@ TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
     TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> newItemTypes;
     for (auto t : structItemTypes) {
-        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>("_alias_" + read->Alias + "." + t->GetName(), t->GetItemType()));
+        TString columnName = TString(t->GetName());
+        TString fullName = read->Alias != "" ? ( "_alias_" + read->Alias + "." + columnName ) : columnName;
+        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, t->GetItemType()));
     }
 
     auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
@@ -237,10 +239,16 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
         aggTraitsMap[originalColName] = {resultColName, funcName};
     }
 
+    THashSet<TString> keyColumns;
+    for (const auto& key : aggregate->KeyColumns) {
+        keyColumns.insert(key.GetFullName());
+    }
+
     TVector<const TItemExprType*> newItemTypes;
     for (const auto* itemType : structType->GetItems()) {
         // The type of the column could be changed after aggregation.
-        if (auto it = aggTraitsMap.find(itemType->GetName()); it != aggTraitsMap.end()) {
+        const auto itemName = itemType->GetName();
+        if (auto it = aggTraitsMap.find(itemName); it != aggTraitsMap.end()) {
             const auto& resultColName = it->second.first;
             const auto& aggFunction = it->second.second;
             Y_ENSURE(SupportedAggregationFunctions.count(aggFunction), "Unsupported aggregation function " + aggFunction);
@@ -254,7 +262,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
                          "Unsupported type for sum aggregation function");
             }
             newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(resultColName, aggFieldType));
-        } else {
+        } else if (keyColumns.contains(itemName)) {
             newItemTypes.push_back(itemType);
         }
     }

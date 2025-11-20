@@ -21,9 +21,9 @@ namespace NYdb::NConsoleClient {
         TColor number;
         TColor comment;
         TColor unknown;
-
-        static TColorSchema Monaco();
-        static TColorSchema Debug();
     };
+
+
+    TColorSchema GetColorSchema(const std::string& name = "");
 
 } // namespace NYdb::NConsoleClient

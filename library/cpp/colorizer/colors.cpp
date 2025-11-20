@@ -1,6 +1,7 @@
 #include "colors.h"
 
 #include <util/stream/output.h>
+#include <util/generic/maybe.h>
 #include <util/generic/singleton.h>
 #include <util/system/env.h>
 
@@ -451,11 +452,14 @@ TColors& NColorizer::StdOut() {
 }
 
 TColors& NColorizer::AutoColors(IOutputStream& os) {
-    if (&os == &Cerr) {
-        return StdErr();
-    }
-    if (&os == &Cout) {
-        return StdOut();
+    // no-color.org
+    if (!TryGetEnv("NO_COLOR").Defined()) {
+        if (&os == &Cerr) {
+            return StdErr();
+        }
+        if (&os == &Cout) {
+            return StdOut();
+        }
     }
     return *Singleton<TDisabledColors>();
 }

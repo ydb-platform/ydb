@@ -35,10 +35,9 @@ struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, EEv::EvW
     TString ErrorDescription;
 
     struct TMessage {
-        TString MessageId;
+        TMessageId MessageId;
         TString BatchId;
         Ydb::StatusIds::StatusCode Status;
-        ui64 Offset;
     };
     std::vector<TMessage> Messages;
 };

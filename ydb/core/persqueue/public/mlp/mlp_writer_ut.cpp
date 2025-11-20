@@ -69,10 +69,10 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
                 Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::SUCCESS), response->ErrorDescription);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
             auto& msg = response->Messages[0];
-            UNIT_ASSERT_VALUES_EQUAL(msg.MessageId, "message_id");
+            UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.PartitionId, 0);
+            UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.Offset, 0);
             UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id");
             UNIT_ASSERT_VALUES_EQUAL(msg.Status, Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(msg.Offset, 0);
         }
 
         CreateReaderActor(runtime, {
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
     Y_UNIT_TEST(WriteTwoMessage_OnePartition) {
         auto setup = CreateSetup();
         
-        CreateTopic(setup, "/Root/topic1", "mlp-consumer", 2);
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1);
 
         auto& runtime = setup->GetRuntime();
         CreateWriterActor(runtime, {
@@ -106,11 +106,13 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
                 {
                     .MessageBody = "message_body_1",
                     .MessageId = "message_id_1",
+                    .MessageGroupId = "message_group_id_1",
                     .BatchId = "batch_id_1"
                 },
                 {
                     .MessageBody = "message_body_2",
                     .MessageId = "message_id_2",
+                    .MessageGroupId = "message_group_id_2",
                     .BatchId = "batch_id_2"
                 }
             }
@@ -123,17 +125,64 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             {
                 auto& msg = response->Messages[0];
-                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId, "message_id_1");
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.PartitionId, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.Offset, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id_1");
                 UNIT_ASSERT_VALUES_EQUAL(msg.Status, Ydb::StatusIds::SUCCESS);
-                UNIT_ASSERT_VALUES_EQUAL(msg.Offset, 0);
             }
             {
                 auto& msg = response->Messages[1];
-                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId, "message_id_2");
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.PartitionId, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.Offset, 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id_2");
                 UNIT_ASSERT_VALUES_EQUAL(msg.Status, Ydb::StatusIds::SUCCESS);
-                UNIT_ASSERT_VALUES_EQUAL(msg.Offset, 0); // other partition
+            }
+        }
+    }
+
+    Y_UNIT_TEST(WriteTwoMessage_TwoPartition) {
+        auto setup = CreateSetup();
+        
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer", 2);
+
+        auto& runtime = setup->GetRuntime();
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Messages = {
+                {
+                    .MessageBody = "message_body_1",
+                    .MessageId = "message_id_1",
+                    .MessageGroupId = "message_group_id_1",
+                    .BatchId = "batch_id_1"
+                },
+                {
+                    .MessageBody = "message_body_2",
+                    .MessageId = "message_id_2",
+                    .MessageGroupId = "message_group_id_2",
+                    .BatchId = "batch_id_2"
+                }
+            }
+        });
+
+        {
+            auto response = GetWriteResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
+                Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::SUCCESS), response->ErrorDescription);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
+            {
+                auto& msg = response->Messages[0];
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.PartitionId, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.Offset, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id_1");
+                UNIT_ASSERT_VALUES_EQUAL(msg.Status, Ydb::StatusIds::SUCCESS);
+            }
+            {
+                auto& msg = response->Messages[1];
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.PartitionId, 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId.Offset, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg.BatchId, "batch_id_2");
+                UNIT_ASSERT_VALUES_EQUAL(msg.Status, Ydb::StatusIds::SUCCESS);
             }
         }
     }

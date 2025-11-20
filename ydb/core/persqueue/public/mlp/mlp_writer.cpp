@@ -281,10 +281,12 @@ void TWriterActor::ReplyIfPossible() {
     auto response = std::make_unique<TEvWriteResponse>(ResponseStatus, std::move(ErrorMessage));
     for (auto& message : PendingMessages) {
         response->Messages.push_back({
-            .MessageId = std::move(message.MessageId),
+            .MessageId = {
+                .PartitionId = message.PartitionId,
+                .Offset = message.Offset
+            },
             .BatchId = message.BatchId,
             .Status = message.Status,
-            .Offset = message.Offset,
         });
     }
 

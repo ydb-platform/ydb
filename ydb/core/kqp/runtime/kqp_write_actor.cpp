@@ -1466,13 +1466,21 @@ public:
         IDataBatchProjectionPtr Projection = nullptr;
         IDataBatchProjectionPtr DeleteProjection = nullptr;
         TKqpTableWriteActor* WriteActor = nullptr;
+
+        std::vector<ui32> NewColumnsIndexes;
+        std::vector<ui32> OldColumnsIndexes;
+        std::vector<NScheme::TTypeInfo> ColumnTypes;
+        bool SkipEqualRows = false;
     };
 
     struct TPathLookupInfo {
         std::vector<ui32> KeyIndexes;
         std::vector<ui32> FullKeyIndexes;
-        std::vector<ui32> PkInFullKeyIndexes;
+        std::vector<ui32> PrimaryInFullKeyIndexes; // primary key in full secondary table keys
+        std::vector<ui32> OldKeyIndexes;
+
         IKqpBufferTableLookup* Lookup = nullptr;
+        bool SkipEqualRowsForUniqCheck = false;
     };
 
 private:
@@ -1508,6 +1516,9 @@ public:
 
         for (const auto& write : writes) {
             AFL_ENSURE(write.Projection || write.WriteActor->GetTableId().PathId == pathId);
+            AFL_ENSURE(write.NewColumnsIndexes.size() == write.OldColumnsIndexes.size());
+            AFL_ENSURE(write.NewColumnsIndexes.empty() || write.NewColumnsIndexes.size() == write.ColumnTypes.size());
+            AFL_ENSURE(write.OldColumnsIndexes.empty() || write.OldColumnsIndexes.size() == write.ColumnTypes.size());
             PathWriteInfo[write.WriteActor->GetTableId().PathId] = write;
         }
         for (const auto& lookup : lookups) {
@@ -1515,6 +1526,15 @@ public:
 
             if (lookup.Lookup->GetTableId().PathId == PathId) {
                 AFL_ENSURE(lookup.Lookup->GetKeyColumnTypes().size() == KeyColumnTypes.size());
+                AFL_ENSURE(lookup.KeyIndexes.empty());
+                AFL_ENSURE(lookup.OldKeyIndexes.empty());
+                AFL_ENSURE(lookup.FullKeyIndexes.empty());
+                AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.empty());
+                AFL_ENSURE(!lookup.SkipEqualRowsForUniqCheck);
+            } else {
+                AFL_ENSURE(lookup.OldKeyIndexes.size() == lookup.KeyIndexes.size());
+                AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.size() == KeyColumnTypes.size());
+                AFL_ENSURE(lookup.FullKeyIndexes.size() >= KeyColumnTypes.size());
             }
         }
     }
@@ -1657,7 +1677,7 @@ private:
                     lookupInfo.Lookup->GetKeyColumnTypes(),
                     lookupInfo.KeyIndexes,
                     lookupInfo.FullKeyIndexes,
-                    lookupInfo.PkInFullKeyIndexes);
+                    lookupInfo.PrimaryInFullKeyIndexes);
                 for (const auto& write : Writes) {
                     for (const auto& row : GetRows(write.Batch)) {
                         if (!collector.AddRow(row)) {
@@ -1711,6 +1731,9 @@ private:
             AFL_ENSURE(keyToReadCellsIndex.emplace(key, readCells.size() - 1).second);
         });
 
+        const auto& mainWriteInfo = PathWriteInfo.at(PathId);
+        THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> keyChanged;
+
         std::vector<bool> existsMask;
         existsMask.reserve(ProcessCells.size());
         for (size_t index = 0; index < ProcessCells.size(); ++index) {
@@ -1719,19 +1742,30 @@ private:
 
             const auto keyIt = keyToReadCellsIndex.find(key);
             if (keyIt != keyToReadCellsIndex.end()) {
+                const auto& newCells = TConstArrayRef<TCell>(readCells[keyIt->second]).last(readCells[keyIt->second].size() - KeyColumnTypes.size());
+                AFL_ENSURE(lookupColumnsCount == newCells.size());
+
+                if (mainWriteInfo.SkipEqualRows && !keyChanged.contains(key) && IsEqual(
+                        processCells,
+                        newCells,
+                        mainWriteInfo.NewColumnsIndexes,
+                        mainWriteInfo.OldColumnsIndexes,
+                        mainWriteInfo.ColumnTypes)) {
+                    // skip unchanged rows
+                    Memory -= EstimateSize(processCells);
+                    continue;
+                }
+                keyChanged.insert(key);
+
                 for (const auto& cell : processCells) {
                     rowsBatcher->AddCell(cell);
                 }
-
-                const auto& newCells = TConstArrayRef<TCell>(readCells[keyIt->second]).last(readCells[keyIt->second].size() - KeyColumnTypes.size());
-                AFL_ENSURE(lookupColumnsCount == newCells.size());
 
                 Memory += EstimateSize(newCells);
                 for (const auto& cell : newCells) {
                     rowsBatcher->AddCell(cell);
                 }
 
-                // TODO: skip unchanged rows?
                 rowsBatcher->AddRow();
                 existsMask.push_back(true);
             } else if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
@@ -1778,9 +1812,21 @@ private:
                         lookupInfo.Lookup->GetKeyColumnTypes(),
                         lookupInfo.KeyIndexes,
                         lookupInfo.FullKeyIndexes,
-                        lookupInfo.PkInFullKeyIndexes);
+                        lookupInfo.PrimaryInFullKeyIndexes);
 
+                AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
+                AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
                 for (const auto& row : writeRows) {
+                    if (lookupInfo.SkipEqualRowsForUniqCheck && IsEqual(
+                            row,
+                            {},
+                            lookupInfo.KeyIndexes,
+                            lookupInfo.OldKeyIndexes,
+                            TConstArrayRef<NScheme::TTypeInfo>(lookupInfo.Lookup->GetKeyColumnTypes())
+                                .first(lookupInfo.KeyIndexes.size()))) {
+                        // skip unchanged keys
+                        continue;
+                    }
                     if (!collector.AddRow(row)) {
                         Error = DuplicateKeyErrorText;
                         return false;
@@ -1825,7 +1871,7 @@ private:
                         lookupInfo.Lookup->GetKeyColumnTypes(),
                         lookupInfo.KeyIndexes,
                         lookupInfo.FullKeyIndexes,
-                        lookupInfo.PkInFullKeyIndexes);
+                        lookupInfo.PrimaryInFullKeyIndexes);
                 std::vector<TOwnedCellVec> extractedRows;
                 lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
                     extractedRows.emplace_back(cells);
@@ -1854,23 +1900,44 @@ private:
 
         if (PathWriteInfo.contains(PathId) ? PathWriteInfo.size() > 1 : PathWriteInfo.size() > 0) {
             // Secondary index exists
-            std::vector<NKikimr::NKqp::IDataBatchPtr> batches;
-            std::vector<TConstArrayRef<bool>> masks;
-            for (auto& write : Writes) {
-                batches.push_back(write.Batch);
-                masks.emplace_back(write.ExistsMask);
+            THashMap<
+                TConstArrayRef<TCell>,
+                std::pair<TConstArrayRef<TCell>, bool>,
+                NKikimr::TCellVectorsHash,
+                NKikimr::TCellVectorsEquals> keyToRow;
+
+            for (int batchIndex = static_cast<int>(Writes.size()) - 1; batchIndex >= 0; --batchIndex) {
+                const auto& write = Writes[batchIndex];
+                const auto rows = GetRows(write.Batch);
+                AFL_ENSURE(rows.size() == write.ExistsMask.size());
+                for (int index = static_cast<int>(rows.size()) - 1; index >= 0; --index) {
+                    keyToRow.emplace(
+                        rows[index].first(KeyColumnTypes.size()),
+                        std::make_pair(rows[index], write.ExistsMask[index]));
+                }
             }
-            const auto deleteRows = GetSortedUniqueRows(batches, masks, KeyColumnTypes);
-            const auto writeRows = GetSortedUniqueRows(batches, {}, KeyColumnTypes);
 
             for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
                 // At first, write to indexes
                 if (PathId != actorPathId) {
-                    // TODO: skip unchanged rows for UPSERT/REPLACE/UPDATE
                     if (actorInfo.DeleteProjection) {
+                        AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
+                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
                         {
-                            actorInfo.DeleteProjection->Fill(deleteRows);
+                            for (const auto& [key, rowAndExists] : keyToRow) {
+                                if (rowAndExists.second && (
+                                        !actorInfo.SkipEqualRows
+                                        || !IsEqual(
+                                            rowAndExists.first,
+                                            {},
+                                            actorInfo.NewColumnsIndexes,
+                                            actorInfo.OldColumnsIndexes,
+                                            actorInfo.ColumnTypes))) {
+                                    actorInfo.DeleteProjection->AddRow(rowAndExists.first);
+                                }
+                            }
                             auto preparedKeyBatch = actorInfo.DeleteProjection->Flush();
+                            AFL_ENSURE(actorInfo.DeleteProjection->IsEmpty());
                             actorInfo.WriteActor->Write(
                                 DeleteCookie,
                                 std::move(preparedKeyBatch));
@@ -1879,8 +1946,18 @@ private:
                     }
 
                     AFL_ENSURE(actorInfo.Projection);
-                    actorInfo.Projection->Fill(writeRows);
+                    for (const auto& [key, rowAndExists] : keyToRow) {
+                        if (!rowAndExists.second || !actorInfo.SkipEqualRows || !IsEqual(
+                                rowAndExists.first,
+                                {},
+                                actorInfo.NewColumnsIndexes,
+                                actorInfo.OldColumnsIndexes,
+                                actorInfo.ColumnTypes)) {
+                            actorInfo.Projection->AddRow(rowAndExists.first);
+                        }
+                    }
                     auto preparedBatch = actorInfo.Projection->Flush();
+                    AFL_ENSURE(actorInfo.Projection->IsEmpty());
                     actorInfo.WriteActor->Write(
                         Cookie,
                         preparedBatch);
@@ -1896,7 +1973,9 @@ private:
 
             auto& actorInfo = PathWriteInfo.at(PathId);
             if (actorInfo.Projection) {
-                actorInfo.Projection->Fill(batch);
+                for (const auto& row : GetRows(batch)) {
+                    actorInfo.Projection->AddRow(row);
+                }
                 batch = actorInfo.Projection->Flush();
             }
             AFL_ENSURE(!actorInfo.DeleteProjection);
@@ -2793,7 +2872,8 @@ public:
                     settings.Priority);
 
                 const bool needAdditionalDelete = !isSubsetOfPrimaryKeyColumns(indexSettings.KeyColumns)
-                    && settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE;
+                    && settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
+                    && settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
 
                 if (needAdditionalDelete) {
                     writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
@@ -2809,13 +2889,38 @@ public:
                     .Projection = std::move(projection),
                     .DeleteProjection = needAdditionalDelete ? std::move(deleteProjection) : nullptr,
                     .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
+                    .NewColumnsIndexes = GetIndexes(
+                                settings.Columns,
+                                settings.WriteIndex,
+                                settings.LookupColumns,
+                                indexSettings.Columns,
+                                indexSettings.WriteIndex,
+                                /* preferAdditionalInputColumns */ false),
+                    .OldColumnsIndexes = GetIndexes(
+                                settings.Columns,
+                                settings.WriteIndex,
+                                settings.LookupColumns,
+                                indexSettings.Columns,
+                                indexSettings.WriteIndex,
+                                /* preferAdditionalInputColumns */ true),
+                    .ColumnTypes = [&]() {
+                        std::vector<NScheme::TTypeInfo> result(indexSettings.Columns.size());
+                        for (ui32 index = 0; index < indexSettings.Columns.size(); ++index) {
+                            const auto& column = indexSettings.Columns[index];
+                            result[indexSettings.WriteIndex[index]] = NScheme::TypeInfoFromProto(
+                                column.GetTypeId(), column.GetTypeInfo());
+                        }
+                        return result;
+                    }(),
+                    .SkipEqualRows = !settings.LookupColumns.empty()
+                        && (settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE),
                 });
 
                 if (indexSettings.IsUniq) {
                     auto lookupInfo = LookupInfos.at(indexSettings.TableId.PathId);
                     auto lookupActor = lookupInfo.Actors.at(indexSettings.TableId.PathId).LookupActor;
                     lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
-                        .KeyIndexes = GetKeyIndexes( // inserted secondary keys
+                        .KeyIndexes = GetIndexes( // inserted secondary keys
                             settings.Columns,
                             settings.WriteIndex,
                             settings.LookupColumns,
@@ -2826,14 +2931,14 @@ public:
                                 keyWriteIndex.data(),
                                 indexSettings.KeyPrefixSize},
                             /* preferAdditionalInputColumns */ false),
-                        .FullKeyIndexes = GetKeyIndexes( // full secondary table keys
+                        .FullKeyIndexes = GetIndexes( // full secondary table keys
                             settings.Columns,
                             settings.WriteIndex,
                             settings.LookupColumns,
                             indexSettings.KeyColumns,
                             keyWriteIndex,
                             /* preferAdditionalInputColumns */ false),
-                        .PkInFullKeyIndexes = [&](){ // primary key in full secondary table keys
+                        .PrimaryInFullKeyIndexes = [&](){ // primary key in full secondary table keys
                             THashMap<TStringBuf, ui32> ColumnNameToIndex;
                             for (ui32 index = 0; index < indexSettings.KeyColumns.size(); ++index) {
                                 ColumnNameToIndex[indexSettings.KeyColumns[index].GetName()] = index;
@@ -2844,7 +2949,19 @@ public:
                             }
                             return result;
                         }(),
+                        .OldKeyIndexes = GetIndexes( // old secondary keys
+                                settings.Columns,
+                                settings.WriteIndex,
+                                settings.LookupColumns,
+                                TConstArrayRef{
+                                    indexSettings.KeyColumns.data(),
+                                    indexSettings.KeyPrefixSize},
+                                TConstArrayRef{
+                                    keyWriteIndex.data(),
+                                    indexSettings.KeyPrefixSize},
+                                /* preferAdditionalInputColumns */ true),
                         .Lookup = lookupActor,
+                        .SkipEqualRowsForUniqCheck = !settings.LookupColumns.empty(),
                     });
 
                     lookupActor->SetLookupSettings(
@@ -2871,8 +2988,10 @@ public:
                 lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
                     .KeyIndexes = {},
                     .FullKeyIndexes = {},
-                    .PkInFullKeyIndexes = {},
+                    .PrimaryInFullKeyIndexes = {},
+                    .OldKeyIndexes = {},
                     .Lookup = lookupActor,
+                    .SkipEqualRowsForUniqCheck = false,
                 });
 
                 lookupActor->SetLookupSettings(
@@ -2888,13 +3007,41 @@ public:
                     ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT // Avoid unnecessary reads at datashard if we have already done lookup
                     : settings.OperationType,
                 settings.KeyColumns,
-                std::move(settings.Columns),
-                std::move(settings.WriteIndex),
+                settings.Columns,
+                settings.WriteIndex,
                 settings.Priority);
+
+            AFL_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
             writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
                 .Projection = std::move(projection),
                 .DeleteProjection = nullptr,
                 .WriteActor = writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
+
+                .NewColumnsIndexes = GetIndexes(
+                            settings.Columns,
+                            settings.WriteIndex,
+                            settings.LookupColumns,
+                            settings.Columns,
+                            settings.WriteIndex,
+                            /* preferAdditionalInputColumns */ false),
+                .OldColumnsIndexes = GetIndexes(
+                            settings.Columns,
+                            settings.WriteIndex,
+                            settings.LookupColumns,
+                            settings.Columns,
+                            settings.WriteIndex,
+                            /* preferAdditionalInputColumns */ true),
+                .ColumnTypes = [&]() {
+                    std::vector<NScheme::TTypeInfo> result(settings.Columns.size());
+                    for (ui32 index = 0; index < settings.Columns.size(); ++index) {
+                        const auto& column = settings.Columns[index];
+                        result[settings.WriteIndex[index]] = NScheme::TypeInfoFromProto(
+                            column.GetTypeId(), column.GetTypeInfo());
+                    }
+                    return result;
+                }(),
+                .SkipEqualRows = !settings.LookupColumns.empty()
+                    && (settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE),
             });
 
             WriteTasks.emplace(

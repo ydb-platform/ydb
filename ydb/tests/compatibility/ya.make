@@ -52,4 +52,5 @@ END()
 RECURSE(
     s3_backups
     olap
+    streaming
 )

@@ -7,16 +7,21 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
     auto setup = std::make_shared<TTopicSdkTestSetup>("TODO");
     setup->GetServer().EnableLogs({
             NKikimrServices::PQ_MLP_READER,
+            NKikimrServices::PQ_MLP_WRITER,
             NKikimrServices::PQ_MLP_COMMITTER,
             NKikimrServices::PQ_MLP_UNLOCKER,
             NKikimrServices::PQ_MLP_DEADLINER,
             NKikimrServices::PQ_MLP_CONSUMER,
             NKikimrServices::PQ_MLP_ENRICHER,
             NKikimrServices::PQ_MLP_DLQ_MOVER,
+        },
+        NActors::NLog::PRI_DEBUG
+    );
+    setup->GetServer().EnableLogs({
             NKikimrServices::PERSQUEUE,
             NKikimrServices::PERSQUEUE_READ_BALANCER,
         },
-        NActors::NLog::PRI_DEBUG
+        NActors::NLog::PRI_INFO
     );
     return setup;
 }
@@ -67,6 +72,15 @@ TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&
     return readerId;
 }
 
+TActorId CreateWriterActor(NActors::TTestActorRuntime& runtime, TWriterSettings&& settings) {
+    auto edgeId = runtime.AllocateEdgeActor();
+    auto actorId = runtime.Register(CreateWriter(edgeId, std::move(settings)));
+    runtime.EnableScheduleForActor(actorId);
+    runtime.DispatchEvents();
+
+    return actorId;
+}
+
 TActorId CreateCommitterActor(NActors::TTestActorRuntime& runtime, TCommitterSettings&& settings) {
     auto edgeId = runtime.AllocateEdgeActor();
     auto readerId = runtime.Register(CreateCommitter(edgeId, std::move(settings)));
@@ -111,6 +125,10 @@ THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TD
     return runtime.GrabEdgeEvent<TEvReadResponse>(timeout);
 }
 
+THolder<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+    return runtime.GrabEdgeEvent<TEvWriteResponse>(timeout);
+}
+
 THolder<TEvChangeResponse> GetChangeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return runtime.GrabEdgeEvent<TEvChangeResponse>(timeout);
 }
@@ -121,6 +139,17 @@ THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTe
 
 void AssertReadError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout) {
     auto response = GetReadResponse(runtime, timeout);
+    if (!response) {
+        UNIT_FAIL("Timeout");
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
+        Ydb::StatusIds::StatusCode_Name(errorCode), response->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(response->ErrorDescription, message);
+}
+
+void AssertWriteError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout) {
+    auto response = GetWriteResponse(runtime, timeout);
     if (!response) {
         UNIT_FAIL("Timeout");
     }

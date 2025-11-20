@@ -13,6 +13,7 @@ namespace NKikimr::NPQ::NMLP {
 
 enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::MLP),
+    EvWriteResponse,
     EvChangeResponse,
     EvEnd
 };
@@ -20,6 +21,26 @@ enum EEv : ui32 {
 struct TMessageId {
     ui32 PartitionId;
     ui64 Offset;
+};
+
+struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, EEv::EvWriteResponse> {
+
+    TEvWriteResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorDescription = {})
+        : Status(status)
+        , ErrorDescription(std::move(errorDescription))
+    {
+    }
+
+    Ydb::StatusIds::StatusCode Status;
+    TString ErrorDescription;
+
+    struct TMessage {
+        TString MessageId;
+        TString BatchId;
+        Ydb::StatusIds::StatusCode Status;
+        ui64 Offset;
+    };
+    std::vector<TMessage> Messages;
 };
 
 struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvReadResponse> {
@@ -38,7 +59,6 @@ struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvRea
         Ydb::Topic::Codec Codec;
         TString Data;
     };
-    // The original topic path (from request) -> TopicInfo
     std::vector<TMessage> Messages;
 };
 
@@ -58,11 +78,29 @@ struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::E
         TMessageId MessageId;
         bool Success = false;
     };
-    // The original topic path (from request) -> TopicInfo
     std::vector<TResult> Messages;
 };
 
+struct TMessage {
+    TString MessageBody;
+    TString MessageId;
+    std::optional<TString> MessageGroupId;
+    std::optional<TString> MessageDeduplicationId;
+    std::optional<TString> SerializedMessageAttributes;
+    TDuration Delay;
+    TString BatchId;
+};
 
+struct TWriterSettings {
+    TString DatabasePath;
+    TString TopicName;
+    std::vector<TMessage> Messages;
+    bool ShouldBeCharged = false;
+
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+};
+
+IActor* CreateWriter(const NActors::TActorId& parentId, TWriterSettings&& settings);
 
 struct TReaderSettings {
     TString DatabasePath;

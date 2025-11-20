@@ -99,6 +99,7 @@ public:
     NCommon::TConfSetting<ui32, Static> MaxSequentialReadsInFlight;
 
     NCommon::TConfSetting<ui32, Static> KMeansTreeSearchTopSize;
+    NCommon::TConfSetting<bool, Static> DisableCheckpoints;
 
     /* Runtime */
     NCommon::TConfSetting<bool, Dynamic> ScanQuery;

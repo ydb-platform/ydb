@@ -238,6 +238,13 @@ public:
         RuntimeFeatures &= (Max<TRuntimeFeatures>() - (TRuntimeFeatures)feature);
     }
 
+    bool IsDefaultTier(const TString& defaultTierName) const {
+        if (GetMeta().GetTierName()) {
+            return GetMeta().GetTierName() == defaultTierName;
+        }
+        return true;
+    }
+
     TString GetTierNameDef(const TString& defaultTierName) const {
         if (GetMeta().GetTierName()) {
             return GetMeta().GetTierName();
@@ -327,7 +334,7 @@ public:
         if (HasRemoveSnapshot()) {
             return NPortion::INACTIVE;
         }
-        if (GetTierNameDef(NBlobOperations::TGlobal::DefaultStorageId) != NBlobOperations::TGlobal::DefaultStorageId) {
+        if (!IsDefaultTier(NBlobOperations::TGlobal::DefaultStorageId)) {
             return NPortion::EVICTED;
         }
         return GetPortionType() == EPortionType::Compacted ? NPortion::EProduced::SPLIT_COMPACTED : NPortion::EProduced::INSERTED;

@@ -317,7 +317,7 @@ ui64 ResetRowSkips(NTable::TIteratorStats& stats)
         std::exchange(stats.InvisibleRowSkips, 0UL);
 }
 
-// nota that reader captures state reference and must be used only
+// note that reader captures state reference and must be used only
 // after checking that state is still alive, i.e. read can be aborted
 // between Execute() and Complete()
 class TReader {
@@ -331,7 +331,7 @@ class TReader {
 
     std::vector<NScheme::TTypeInfo> ColumnTypes;
 
-    ui32 FirstUnprocessedQuery; // must be unsigned
+    ui64 FirstUnprocessedQuery; // must be unsigned
     TString LastProcessedKey;
     bool LastProcessedKeyErased = false;
 
@@ -457,7 +457,7 @@ public:
     EReadStatus ReadKey(
         TTransactionContext& txc,
         const TSerializedCellVec& keyCells,
-        size_t keyIndex)
+        ui64 keyIndex)
     {
         if (keyCells.GetCells().size() != TableInfo.KeyColumnCount) {
             // key prefix, treat it as range [prefix, null, null] - [prefix, +inf, +inf]
@@ -524,19 +524,19 @@ public:
             // key prefix, treat it as range [prefix, null, null] - [prefix, +inf, +inf]
             auto minKey = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
             auto maxKey = ToRawTypeValue(keyCells.GetCells(), TableInfo, false);
-            return Precharge(txc.DB, minKey, maxKey, State.Reverse);
+            return Precharge(txc.DB, minKey, maxKey, State.Reverse).Ready;
         } else {
             auto key = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
-            return Precharge(txc.DB, key, key, State.Reverse);
+            return Precharge(txc.DB, key, key, State.Reverse).Ready;
         }
     }
 
     bool PrechargeKeysAfter(
         TTransactionContext& txc,
-        ui32 queryIndex)
+        ui64 queryIndex)
     {
         if (UsePrechargeForExtBlobs) {
-            // This is slower for a general case, but faster for the case when we know 
+            // This is slower for a general case, but faster for the case when we know
             // that we have external blobs.
             ui64 rowsLeft = GetRowsLeft();
             ui64 prechargedRowsSize = 0;
@@ -554,7 +554,7 @@ public:
                 if (!(queryIndex < State.Request->Keys.size())) {
                     break;
                 }
-                
+
                 const auto key = ToRawTypeValue(State.Request->Keys[queryIndex].GetCells(), TableInfo, true);
 
                 NTable::TRowState rowState;
@@ -564,7 +564,7 @@ public:
 
                 if (txc.Env.MissingReferencesSize()) {
                     ready = false;
-                    
+
                     prechargedRowsSize += EstimateSize(*rowState);
                 }
 
@@ -602,6 +602,59 @@ public:
         return ready;
     }
 
+    /**
+     * Precharges all remaining ranges in the request (after the current range).
+     *
+     * @param[in,out] txc The transaction context
+     * @param[in] currentRangeIndex The index of the current range (already processed)
+     *
+     * @return If true, all the necessary pages are already in the cache
+     */
+    bool PrechargeRangesAfter(TTransactionContext& txc, ui64 currentRangeIndex) {
+        ui64 prechargedItems = 0;
+        ui64 prechargedBytes = 0;
+        bool ready = true;
+
+        while (true) {
+            // Move to the next query according to the requested direction
+            if (!State.Reverse) {
+                ++currentRangeIndex;
+            } else {
+                --currentRangeIndex;
+            }
+
+            // This works even for the overflow from 0-- because the index is unsigned
+            if (currentRangeIndex >= State.Request->Ranges.size()) {
+                break;
+            }
+
+            // Precharge the current range
+            //
+            // NOTE: CheckRequestAndInit() already normalizes To/From fields
+            //       in all ranges to make sure each key is padded correctly
+            //       according to the FromInclusive and ToInclusive fields
+            const auto& range = State.Request->Ranges[currentRangeIndex];
+
+            const auto prechargeResult = Precharge(
+                txc.DB,
+                ToRawTypeValue(range.From.GetCells(), TableInfo, range.FromInclusive),
+                ToRawTypeValue(range.To.GetCells(), TableInfo, !range.ToInclusive),
+                State.Reverse
+            );
+
+            ready &= prechargeResult.Ready;
+            prechargedItems += prechargeResult.ItemsPrecharged;
+            prechargedBytes += prechargeResult.BytesPrecharged;
+
+            // Do not precharge more than the quota limits in the request
+            if (ShouldStop(prechargedItems, prechargedBytes)) {
+                break;
+            }
+        }
+
+        return ready;
+    }
+
     // TODO: merge ReadRanges and ReadKeys to single template Read?
 
     bool ReadRanges(TTransactionContext& txc) {
@@ -623,8 +676,7 @@ public:
             case EReadStatus::Done:
                 break;
             case EReadStatus::NeedData:
-                // Note: ReadRange has already precharged current range and
-                //       we don't precharge multiple ranges as opposed to keys
+                PrechargeRangesAfter(txc, FirstUnprocessedQuery);
                 return false;
             case EReadStatus::NeedContinue:
                 return true;
@@ -679,7 +731,6 @@ public:
     bool Read(TTransactionContext& txc) {
         // TODO: consider trying to precharge multiple records at once in case
         // when first precharge fails?
-
         if (!State.Request->Keys.empty()) {
             return ReadKeys(txc);
         }
@@ -795,7 +846,7 @@ public:
             record.SetRowCount(RowsRead);
         }
 
-        // not that in case of empty columns set, here we have 0 bytes
+        // note that in case of empty columns set, here we have 0 bytes
         // and if is false
         BytesInResult = BlockBuilder.Bytes();
         if (BytesInResult) {
@@ -951,7 +1002,7 @@ private:
         return bytesLeft;
     }
 
-    bool Precharge(
+    NTable::TPrechargeResult Precharge(
         NTable::TDatabase& db,
         NTable::TRawVals minKey,
         NTable::TRawVals maxKey,
@@ -2110,7 +2161,7 @@ public:
         for (size_t i = 0; i < request->Ranges.size(); ++i) {
             auto& range = request->Ranges[i];
             auto& keyFrom = range.From;
-            auto& keyTo = request->Ranges[i].To;
+            auto& keyTo = range.To;
 
             if (range.FromInclusive && keyFrom.GetCells().size() != TableInfo.KeyColumnCount) {
                 keyFrom = ExtendWithNulls(keyFrom, TableInfo.KeyColumnCount);
@@ -2218,7 +2269,7 @@ public:
                 << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
             Result->Record.SetReadId(state.ReadId.ReadId);
             Self->SendImmediateReadResult(state.ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
-            
+
             request->ReadSpan.EndError("Iterator aborted");
             Self->DeleteReadIterator(it);
             return;
@@ -3221,7 +3272,7 @@ public:
         } else {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
                 << " finished in ReadContinue");
-            
+
             state.Request->ReadSpan.EndOk();
             Self->DeleteReadIterator(it);
         }
@@ -3231,7 +3282,7 @@ public:
 void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ctx) {
     // Note that we mutate this request below
     auto* request = ev->Get();
-    
+
     if (ev->TraceId && !request->ReadSpan) {
         request->ReadSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
         if (request->ReadSpan) {
@@ -3244,7 +3295,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     const auto& record = request->Record;
     if (Y_UNLIKELY(!record.HasReadId())) {
         TString msg = TStringBuilder() << "Missing ReadId at shard " << TabletID();
-        
+
         auto result = MakeEvReadResult(ctx.SelfID.NodeId());
         SetStatusError(result->Record, Ydb::StatusIds::BAD_REQUEST, msg);
         ctx.Send(ev->Sender, result.release());
@@ -3264,7 +3315,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
 
     auto replyWithError = [&] (auto code, const auto& msg) {
         auto result = MakeEvReadResult(ctx.SelfID.NodeId());
-        
+
         SetStatusError(
             result->Record,
             code,

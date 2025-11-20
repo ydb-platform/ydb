@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(7.1.2)
+VERSION(7.1.3)
 
 LICENSE(BSD-3-Clause)
 
@@ -27,12 +27,14 @@ NO_CHECK_IMPORTS(
 NO_UTIL()
 
 CFLAGS(
-    -DPSUTIL_VERSION=712
+    -DPSUTIL_VERSION=713
 )
 
 SRCS(
+    psutil/arch/all/errors.c
     psutil/arch/all/init.c
     psutil/arch/all/pids.c
+    psutil/arch/all/str.c
 )
 
 IF (OS_LINUX)
@@ -49,6 +51,7 @@ IF (OS_LINUX)
         psutil/arch/linux/proc.c
         psutil/arch/posix/init.c
         psutil/arch/posix/net.c
+        psutil/arch/posix/pids.c
         psutil/arch/posix/proc.c
         psutil/arch/posix/sysctl.c
         psutil/arch/posix/users.c
@@ -79,10 +82,12 @@ IF (OS_DARWIN)
         psutil/arch/osx/net.c
         psutil/arch/osx/pids.c
         psutil/arch/osx/proc.c
+        psutil/arch/osx/proc_utils.c
         psutil/arch/osx/sensors.c
         psutil/arch/osx/sys.c
         psutil/arch/posix/init.c
         psutil/arch/posix/net.c
+        psutil/arch/posix/pids.c
         psutil/arch/posix/proc.c
         psutil/arch/posix/sysctl.c
         psutil/arch/posix/users.c

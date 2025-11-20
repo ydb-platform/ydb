@@ -757,6 +757,15 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
             kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
             break;
     }
+
+    switch(serviceConfig.GetBackportMode()) {
+        case NKikimrConfig::TTableServiceConfig_EBackportMode_Released:
+            kqpConfig.BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
+            break;
+        case NKikimrConfig::TTableServiceConfig_EBackportMode_All:
+            kqpConfig.BackportMode = NYql::EBackportCompatibleFeaturesMode::All;
+            break;
+    }
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,

@@ -26,7 +26,7 @@ TExprNode::TPtr AddRenames(TExprNode::TPtr input, TExprContext &ctx, TVector<TIn
     for (auto iu : renames) {
         // clang-format off
         auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
-            .Name().Build("_alias_" + iu.Alias + "." + iu.ColumnName)
+            .Name().Build(iu.GetFullName())
             .Value<TCoMember>()
                 .Struct(arg)
                 .Name().Build(iu.ColumnName)
@@ -668,6 +668,19 @@ TVector<TInfoUnit> TOpFilter::GetScalarSubplanIUs(TPlanProps& props) {
     return res;
 }
 
+bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& leftArg, TExprNode::TPtr& rightArg) {
+    if (pred->IsCallable("PgResolvedOp") && pred->Child(0)->Content() == "=") {
+        leftArg = pred->Child(2);
+        rightArg = pred->Child(3);
+        return true;
+    } else if (pred->IsCallable("==")) {
+        leftArg = pred->Child(0);
+        rightArg = pred->Child(1);
+        return true;
+    }
+    return false;
+}
+
 TConjunctInfo TOpFilter::GetConjunctInfo(TPlanProps& props) const {
     TConjunctInfo res;
 
@@ -686,9 +699,9 @@ TConjunctInfo TOpFilter::GetConjunctInfo(TPlanProps& props) const {
                 fromPg = true;
             }
 
-            if (conjObj->IsCallable("PgResolvedOp") && conjObj->Child(0)->Content() == "=") {
-                auto leftArg = conjObj->Child(2);
-                auto rightArg = conjObj->Child(3);
+            TExprNode::TPtr leftArg;
+            TExprNode::TPtr rightArg;
+            if (TestAndExtractEqualityPredicate(conjObj, leftArg, rightArg)) {
                 TVector<TInfoUnit> conjIUs;
                 GetAllMembers(conj, conjIUs, props);
 

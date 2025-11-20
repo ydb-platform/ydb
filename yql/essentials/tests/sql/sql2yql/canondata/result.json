@@ -4304,6 +4304,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_in-in_ansi_list_/sql.yql"
         }
     ],
+    "test_sql2yql.test[in-in_ansi_nothing_and_null]": [
+        {
+            "checksum": "2ae04bf30aa12283aa3b10ce835d161e",
+            "size": 6643,
+            "uri": "https://{canondata_backend}/1784826/ebd3ab929b20f7c20d6840d9bcef999862d5775a/resource.tar.gz#test_sql2yql.test_in-in_ansi_nothing_and_null_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[in-in_ansi_set]": [
         {
             "checksum": "a8bf214d8b2d219f192a981d662f7a04",
@@ -4337,6 +4344,13 @@
             "checksum": "eace7858aa30fa06b9f143b9957ca0b9",
             "size": 2677,
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_in-in_noansi_list_dict_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[in-in_noansi_nothing_and_null]": [
+        {
+            "checksum": "27f082b0244ea455deb0377cd5f88711",
+            "size": 6439,
+            "uri": "https://{canondata_backend}/1784826/ebd3ab929b20f7c20d6840d9bcef999862d5775a/resource.tar.gz#test_sql2yql.test_in-in_noansi_nothing_and_null_/sql.yql"
         }
     ],
     "test_sql2yql.test[in-in_nonliteral_tuple]": [
@@ -12125,6 +12139,11 @@
             "uri": "file://test_sql_format.test_in-in_ansi_list_/formatted.sql"
         }
     ],
+    "test_sql_format.test[in-in_ansi_nothing_and_null]": [
+        {
+            "uri": "file://test_sql_format.test_in-in_ansi_nothing_and_null_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[in-in_ansi_set]": [
         {
             "uri": "file://test_sql_format.test_in-in_ansi_set_/formatted.sql"
@@ -12148,6 +12167,11 @@
     "test_sql_format.test[in-in_noansi_list_dict]": [
         {
             "uri": "file://test_sql_format.test_in-in_noansi_list_dict_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[in-in_noansi_nothing_and_null]": [
+        {
+            "uri": "file://test_sql_format.test_in-in_noansi_nothing_and_null_/formatted.sql"
         }
     ],
     "test_sql_format.test[in-in_nonliteral_tuple]": [

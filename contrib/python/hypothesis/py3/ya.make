@@ -2,12 +2,11 @@
 
 PY3_LIBRARY()
 
-VERSION(6.143.0)
+VERSION(6.148.2)
 
 LICENSE(MPL-2.0)
 
 PEERDIR(
-    contrib/python/attrs
     contrib/python/sortedcontainers
 )
 

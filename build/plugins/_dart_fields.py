@@ -1152,6 +1152,23 @@ class TsStylelintConfig:
         return test_config
 
 
+class TsBiomeConfig:
+    KEY = 'TS_BIOME_CONFIG'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        # config can be empty
+        test_config = unit.get('_TS_BIOME_CONFIG')
+        abs_test_config = unit.resolve(unit.resolve_arc_path(test_config))
+        if not abs_test_config:
+            ymake.report_configure_error(
+                f"Config for biome not found: {test_config}.\n"
+                "Set the correct value in `TS_BIOME(<config_filename>)` macro in the `ya.make` file."
+            )
+
+        return {cls.KEY: test_config}
+
+
 class TsTestDataDirs:
     KEY = 'TS-TEST-DATA-DIRS'
 
@@ -1346,6 +1363,13 @@ class TestFiles:
     @classmethod
     def stylesheets(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, "_TS_STYLELINT_FILES")
+        test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
+        value = serialize_list(test_files)
+        return value
+
+    @classmethod
+    def ts_biome_srcs(cls, unit, flat_args, spec_args):
+        test_files = get_values_list(unit, "_TS_BIOME_FILES")
         test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
         value = serialize_list(test_files)
         return value

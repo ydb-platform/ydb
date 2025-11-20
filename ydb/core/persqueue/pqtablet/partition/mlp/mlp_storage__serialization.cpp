@@ -282,7 +282,7 @@ void DeserializeMetrics(TStorage::TMetrics& metrics, const NKikimrPQ::TMLPMetric
 bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     AFL_ENSURE(snapshot.GetFormatVersion() == 1)("v", snapshot.GetFormatVersion());
 
-    Messages.resize(snapshot.GetMessages().length() / sizeof(TMessage));
+    Messages.resize(snapshot.GetMessages().length() / (sizeof(TSnapshotMessage::Common) + 1));
 
     auto& meta = snapshot.GetMeta();
     FirstOffset = meta.GetFirstOffset();
@@ -296,12 +296,30 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 
     DeserializeMetrics(Metrics, snapshot.GetMetrics());
 
+    auto fromSnapshot = [](const TSnapshotMessage& message) -> TMessage {
+        return {
+            .Status = message.Common.Fields.Status,
+            .Reserve = message.Common.Fields.Reserve,
+            .ProcessingCount = message.Common.Fields.ProcessingCount,
+            .DeadlineDelta = message.Common.Fields.DeadlineDelta,
+            .HasMessageGroupId = message.Common.Fields.HasMessageGroupId,
+            .MessageGroupIdHash = message.Common.Fields.MessageGroupIdHash,
+            .WriteTimestampDelta = message.WriteTimestampDelta
+        };
+    };
+
     {
-        TDeserializer<TMessage> deserializer(snapshot.GetMessages());
-        TMessage message;
+        TDeserializer<TSnapshotMessage> deserializer(snapshot.GetMessages());
+        TSnapshotMessage snapshot;
         size_t i = 0;
-        while (deserializer.Next(message)) {
-            Messages[i++] = message;
+        while (deserializer.Next(snapshot)) {
+            if (i < Messages.size()) {
+                Messages[i] = fromSnapshot(snapshot);
+            } else {
+                Messages.push_back(fromSnapshot(snapshot));
+            }
+            auto& message = Messages[i];
+            ++i;
 
             switch(message.Status) {
                 case EMessageStatus::Locked:
@@ -311,6 +329,10 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
                         ++Metrics.LockedMessageGroupCount;
                     }
                     moveUncommittedOffset = false;
+                    break;
+                case EMessageStatus::Delayed:
+                    ++Metrics.DelayedMessageCount;
+                    moveUnlockedOffset = false;
                     break;
                 case EMessageStatus::Committed:
                     ++Metrics.CommittedMessageCount;
@@ -336,11 +358,11 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     }
 
     {
-        TDeserializerWithOffset<TMessage> deserializer(snapshot.GetSlowMessages());
+        TDeserializerWithOffset<TSnapshotMessage> deserializer(snapshot.GetSlowMessages());
         ui64 offset;
-        TMessage message;
-        while (deserializer.Next(offset, message)) {
-            SlowMessages[offset] = message;
+        TSnapshotMessage snapshot;
+        while (deserializer.Next(offset, snapshot)) {
+            auto& message = SlowMessages[offset] = fromSnapshot(snapshot);
 
             switch(message.Status) {
                 case EMessageStatus::Locked:
@@ -349,6 +371,9 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
                         LockedMessageGroupsId.insert(message.MessageGroupIdHash);
                         ++Metrics.LockedMessageGroupCount;
                     }
+                    break;
+                case EMessageStatus::Delayed:
+                    ++Metrics.DelayedMessageCount;
                     break;
                 case EMessageStatus::Committed:
                     ++Metrics.CommittedMessageCount;
@@ -494,6 +519,9 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
                             ++Metrics.LockedMessageGroupCount;
                         }
                         break;
+                    case EMessageStatus::Delayed:
+                        ++Metrics.DelayedMessageCount;
+                        break;
                     case EMessageStatus::Committed:
                         ++Metrics.CommittedMessageCount;
                         break;
@@ -571,19 +599,35 @@ bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 
     SerializeMetrics(Metrics, *snapshot.MutableMetrics());
 
+    auto ToSnapshot = [](const TMessage& message) -> TSnapshotMessage {
+        return {
+            .Common = {
+                .Fields = {
+                    .Status = message.Status,
+                    .Reserve = message.Reserve,
+                    .ProcessingCount = message.ProcessingCount,
+                    .DeadlineDelta = message.DeadlineDelta,
+                    .HasMessageGroupId = message.HasMessageGroupId,
+                    .MessageGroupIdHash = message.MessageGroupIdHash,
+                },
+            },
+            .WriteTimestampDelta = message.WriteTimestampDelta
+        };
+    };
+
     {
-        TSerializer<TMessage> serializer;
+        TSerializer<TSnapshotMessage> serializer;
         serializer.Reserve(Messages.size());
         for (auto& message : Messages) {
-            serializer.Add(message);
+            serializer.Add(ToSnapshot(message));
         }
         snapshot.SetMessages(std::move(serializer.Buffer));
     }
     {
-        TSerializerWithOffset<TMessage> serializer;
+        TSerializerWithOffset<TSnapshotMessage> serializer;
         serializer.Reserve(SlowMessages.size());
         for (auto& message : SlowMessages) {
-            serializer.Add(message.first, message.second);
+            serializer.Add(message.first, ToSnapshot(message.second));
         }
         snapshot.SetSlowMessages(std::move(serializer.Buffer));
     }

@@ -57,6 +57,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
     , FiltersCache(FILTER_CACHE_SIZE)
     , MaterializedBordersCache(BORDER_CACHE_SIZE_COUNT)
+    , AbortionFlag(std::make_shared<TAtomicCounter>(0))
 {
 }
 
@@ -167,9 +168,9 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
         }
 
         AFL_VERIFY(!constructor->IsDone());
-        TBuildFilterContext columnFetchingRequest(SelfId(), constructor->GetRequest()->Get()->GetAbortionFlag(),
-            constructor->GetRequest()->Get()->GetMaxVersion(), std::move(portionsToFetch), GetFetchingColumns(), PKSchema, LastSchema,
-            ColumnDataManager, DataAccessorsManager, Counters, std::move(requestGuard), memoryGuard);
+        TBuildFilterContext columnFetchingRequest(SelfId(), AbortionFlag, constructor->GetRequest()->Get()->GetMaxVersion(),
+            std::move(portionsToFetch), GetFetchingColumns(), PKSchema, LastSchema, ColumnDataManager, DataAccessorsManager, Counters,
+            std::move(requestGuard), memoryGuard);
         memoryGuard->Update(columnFetchingRequest.GetDataSize());
 
         for (const auto& interval : intervalsIterator.GetIntervals()) {

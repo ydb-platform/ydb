@@ -36,7 +36,7 @@ public:
         : CollectOnly(collectOnly) {}
 
     void AddShard(ui64 shardId, bool isOlap, const TString& path) override {
-        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
+        AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         ShardsIds.insert(shardId);
         auto& shardInfo = ShardsInfo[shardId];
         shardInfo.IsOlap = isOlap;
@@ -48,7 +48,7 @@ public:
     }
 
     void AddAction(ui64 shardId, ui8 action) override {
-        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
+        AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         ShardsInfo.at(shardId).Flags |= action;
         if (action & EAction::WRITE) {
             ReadOnly = false;
@@ -57,7 +57,7 @@ public:
     }
 
     void AddTopic(ui64 topicId, const TString& path) override {
-        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
+        AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         ShardsIds.insert(topicId);
         auto& shardInfo = ShardsInfo[topicId];
 
@@ -83,7 +83,7 @@ public:
     }
 
     bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lockProto) override {
-        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
+        AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         TKqpLock lock(lockProto);
         bool isError = (lock.Proto.GetCounter() >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin);
         bool isInvalidated = (lock.Proto.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken)

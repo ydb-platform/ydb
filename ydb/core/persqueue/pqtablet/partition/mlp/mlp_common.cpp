@@ -4,6 +4,27 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(
+    const TString& consumerName,
+    ui32 partitionId,
+    ui64 startOffset,
+    std::optional<ui64> count
+) {
+    auto request = std::make_unique<TEvPersQueue::TEvRequest>();
+
+    auto* partitionRequest = request->Record.MutablePartitionRequest();
+    partitionRequest->SetPartition(partitionId);
+    auto* read = partitionRequest->MutableCmdRead();
+    read->SetClientId(consumerName);
+    read->SetOffset(startOffset);
+    read->SetTimeoutMs(0);
+    if (count) {
+        read->SetCount(count.value());
+    }
+
+    return request;
+}
+
 std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
     const TActorId& selfId,
     const TString& consumerName,

@@ -26,6 +26,7 @@ PEERDIR(
 )
 
 SRCS(
+    ut_fulltext_index_build_reboots.cpp
     ut_index_build_reboots.cpp
 )
 

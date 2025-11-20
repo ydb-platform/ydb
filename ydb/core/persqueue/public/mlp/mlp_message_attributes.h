@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/persqueue/public/constants.h>
+
 #include <util/generic/strbuf.h>
 
 namespace NKikimr::NPQ::NMLP  {

@@ -70,7 +70,7 @@ size_t SerializeTo(TMessage& item, ::NKikimrClient::TPersQueuePartitionRequest::
     size_t totalSize = item.MessageBody.size() + (item.SerializedMessageAttributes.has_value() ? 
         item.SerializedMessageAttributes.value().size() : 0);
 
-    cmdWrite.SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(item.MessageGroupId.value_or("")));
+    cmdWrite.SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(""));
     cmdWrite.SetDisableDeduplication(true);
     cmdWrite.SetCreateTimeMS(TInstant::Now().MilliSeconds());
     cmdWrite.SetUncompressedSize(item.MessageBody.size());
@@ -85,6 +85,11 @@ size_t SerializeTo(TMessage& item, ::NKikimrClient::TPersQueuePartitionRequest::
         auto* m = proto.AddMessageMeta();
         m->set_key(NPQ::NMLP::NMessageConsts::MessageId);
         m->set_value(std::move(item.MessageId));
+    }
+    if (item.MessageGroupId) {
+        auto* m = proto.AddMessageMeta();
+        m->set_key(MESSAGE_KEY);
+        m->set_value(std::move(*item.MessageGroupId));
     }
     if (item.MessageDeduplicationId.has_value()) {
         auto* m = proto.AddMessageMeta();

@@ -89,6 +89,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             auto response = GetReadResponse(runtime);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "message_body");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageGroupId, "message_group_id");
         }
     }
 

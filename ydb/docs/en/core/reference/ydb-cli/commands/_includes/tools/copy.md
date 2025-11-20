@@ -24,7 +24,7 @@ View a description of the command to copy a table:
 | `--client-timeout <value>` | Client side operation timeout, ms. |
 | `--operation-timeout <value>` | Server side operation timeout, ms. |
 | `--cancel-after <value>` | Operation lifetime, after which the operation is canceled, ms. |
-| `--item <value>=<value>,...` | Operation parameters. Possible values:<br/><ul><li>`destination`, `dst`, or `d` — required parameter, the path of the destination table. If the destination path contains folders, they must be created in advance. The table with the destination name should not exist.</li><li>`source`, `src`, or `s` — required parameter, the path of the source table.</li><li>`omit-indexes` — optional parameter, omit indexes when copying table. No omit by default.</li></ul> |
+| `--item <value>=<value>,...` | Operation parameters. Possible values:<br/><ul><li>`destination`, `dst`, or `d` — required parameter, the path of the destination table. If the destination path contains folders, they must be created in advance. The table with the destination name should not exist.</li><li>`source`, `src`, or `s` — required parameter, the path of the source table.</li><li>`omit-indexes` — optional parameter, omit indexes when copying table. Indexes are copied by default.</li></ul> |
 
 ## Examples {#examples}
 

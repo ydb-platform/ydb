@@ -4,7 +4,7 @@ import os
 import pytest
 import time
 
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture  # RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -195,22 +195,21 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
         self.change_cluster_version()
         self.do_test_part2()
 
-# TODO: uncomment after stable-25.4
-# class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeAndDowngradeFixture):
-#     @pytest.fixture(autouse=True, scope="function")
-#     def setup(self):
-#         yield from self.setup_cluster()
+class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeAndDowngradeFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster()
 
-#     @link_test_case("#27924")
-#     def test_rolling_upgrage(self):
-#         self.create_topics()
-#         self.create_external_data_source()
-#         self.create_simple_streaming_query();
+    @link_test_case("#27924")
+    def test_rolling_upgrage(self):
+        self.create_topics()
+        self.create_external_data_source()
+        self.create_simple_streaming_query();
 
-#         for _ in self.roll():  # every iteration is a step in rolling upgrade process
-#             #
-#             # 2. check written data is correct during rolling upgrade
-#             #
-#             input = ['{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-2"}']
-#             expected_data =['{"time":"2025-01-01T00:15:00.000000Z","level":"error","host":"host-2"}']
-#             self.do_write_read(input, expected_data)
+        for _ in self.roll():  # every iteration is a step in rolling upgrade process
+            #
+            # 2. check written data is correct during rolling upgrade
+            #
+            input = ['{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-2"}']
+            expected_data =['{"host":"host-2","level":"error","time":"2025-01-01T00:15:00.000000Z"}']
+            self.do_write_read(input, expected_data)

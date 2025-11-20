@@ -2251,8 +2251,8 @@ TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ct
     return TStatus::Ok;
 }
 
-TStatus AnnotatePgExprSublink(const TExprNode::TPtr& node, TExprContext& ctx) {
-    auto expr = node->Child(TKqpPgExprSublink::idx_Expr);
+TStatus AnnotateExprSublink(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto expr = node->Child(TKqpExprSublink::idx_Expr);
     auto itemType = expr->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto valueType = itemType->GetItems()[0]->GetItemType();
     if (!valueType->IsOptionalOrNull()) {
@@ -2290,7 +2290,10 @@ TStatus AnnotateOpRead(const TExprNode::TPtr& node, TExprContext& ctx, const TSt
     TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> newItemTypes;
     for (auto t : structItemTypes ) {
-        newItemTypes.push_back(ctx.MakeType<TItemExprType>("_alias_" + TString(alias->Content()) + "." + t->GetName(), t->GetItemType()));
+        TString aliasName = TString(alias->Content());
+        TString columnName = TString(t->GetName());
+        TString fullName = aliasName != "" ? ( "_alias_" + aliasName + "." + columnName ) : columnName;
+        newItemTypes.push_back(ctx.MakeType<TItemExprType>(fullName, t->GetItemType()));
     }
 
     YQL_CLOG(TRACE, CoreDq) << "Row type:" << *rowType;
@@ -2710,8 +2713,8 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateTableSinkSettings(input, ctx);
             }
 
-            if (TKqpPgExprSublink::Match(input.Get())) {
-                return AnnotatePgExprSublink(input, ctx);
+            if (TKqpExprSublink::Match(input.Get())) {
+                return AnnotateExprSublink(input, ctx);
             }
 
             if (TKqpOpRead::Match(input.Get())) {

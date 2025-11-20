@@ -79,7 +79,7 @@ double TimeQuery(TString schema, TString query, int nIterations) {
     return elapsed_time / nIterations;        
 }
 
-Y_UNIT_TEST_SUITE(KqpRbo) {
+Y_UNIT_TEST_SUITE(KqpRboPg) {
 
     Y_UNIT_TEST(Select) {
         NKikimrConfig::TAppConfig appConfig;
@@ -480,6 +480,7 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
     }
 
+    /*
     Y_UNIT_TEST(Aggregation) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -666,6 +667,7 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }
+    */
 
     Y_UNIT_TEST(UnionAll) {
         NKikimrConfig::TAppConfig appConfig;

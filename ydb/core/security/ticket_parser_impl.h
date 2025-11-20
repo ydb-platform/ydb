@@ -2100,6 +2100,7 @@ protected:
         settings.Endpoint = Config.GetAccessServiceEndpoint();
         if (Config.GetUseAccessServiceTLS()) {
             settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
+            settings.SslTargetNameOverride = Config.GetAccessServiceSslTargetNameOverride();
         }
         settings.GrpcKeepAliveTimeMs = Config.GetAccessServiceGrpcKeepAliveTimeMs();
         settings.GrpcKeepAliveTimeoutMs = Config.GetAccessServiceGrpcKeepAliveTimeoutMs();
@@ -2146,6 +2147,7 @@ protected:
             settings.Endpoint = Config.GetUserAccountServiceEndpoint();
             if (Config.GetUseUserAccountServiceTLS()) {
                 settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
+                settings.SslTargetNameOverride = Config.GetUserAccountServiceSslTargetNameOverride();
             }
             UserAccountService = Register(CreateUserAccountService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheUserAccountService()) {
@@ -2162,6 +2164,7 @@ protected:
             settings.Endpoint = Config.GetServiceAccountServiceEndpoint();
             if (Config.GetUseServiceAccountServiceTLS()) {
                 settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
+                settings.SslTargetNameOverride = Config.GetServiceAccountServiceSslTargetNameOverride();
             }
             ServiceAccountService = Register(NCloud::CreateServiceAccountService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheServiceAccountService()) {

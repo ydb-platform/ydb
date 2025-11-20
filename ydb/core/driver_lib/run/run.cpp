@@ -149,6 +149,9 @@
 #include <library/cpp/sighandler/async_signals_handler.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/malloc/api/malloc.h>
+#include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/json_reader.h>
 
 #include <ydb/core/util/sig.h>
 #include <ydb/core/util/stlog.h>
@@ -1283,6 +1286,74 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
     return grpcServers;
 }
 
+void TKikimrRunner::InitializeXdsBootstrapConfig(const TKikimrRunConfig& runConfig) {
+    class TXdsBootstrapConfigBuilder {
+    private:
+        ::NKikimrConfig::TGRpcConfig::TXdsBootstrap ConfigYaml;
+        TString JsonConfig;
+
+    public:
+        TXdsBootstrapConfigBuilder(const ::NKikimrConfig::TGRpcConfig::TXdsBootstrap& config)
+            : ConfigYaml(config)
+        {
+            NJson::TJsonValue xdsBootstrapConfigJson;
+            NProtobufJson::Proto2Json(ConfigYaml, xdsBootstrapConfigJson, {.FieldNameMode = NProtobufJson::TProto2JsonConfig::FldNameMode::FieldNameSnakeCaseDense});
+            BuildFieldNode(&xdsBootstrapConfigJson);
+            BuildFieldXdsServers(&xdsBootstrapConfigJson);
+            JsonConfig = NJson::WriteJson(xdsBootstrapConfigJson, false);
+        }
+
+        TString Build() const {
+            return JsonConfig;
+        }
+
+    private:
+        void BuildFieldNode(NJson::TJsonValue* const json) const {
+            NJson::TJsonValue& nodeJson = (*json)["node"];
+            if (ConfigYaml.GetNode().HasMeta()) {
+                // Message in protobuf can not contain field with name "metadata", so
+                // Create field "meta" with string in JSON format
+                // Convert string from field "meta" to JsonValue struct and write to field "metadata"
+                ConvertStringToJsonValue(nodeJson["meta"].GetString(), &nodeJson["metadata"]);
+                nodeJson.EraseValue("meta");
+            }
+        }
+
+        void BuildFieldXdsServers(NJson::TJsonValue* const json) const {
+            NJson::TJsonValue& xdsServersJson = *json;
+            NJson::TJsonValue::TArray xdsServers;
+            xdsServersJson["xds_servers"].GetArray(&xdsServers);
+            xdsServersJson.EraseValue("xds_servers");
+            for (auto& xdsServerJson : xdsServers) {
+                NJson::TJsonValue::TArray channelCreds;
+                xdsServerJson["channel_creds"].GetArray(&channelCreds);
+                xdsServerJson.EraseValue("channel_creds");
+                for (auto& channelCredJson : channelCreds) {
+                    if (channelCredJson.Has("config")) {
+                        ConvertStringToJsonValue(channelCredJson["config"].GetString(), &channelCredJson["config"]);
+                    }
+                    xdsServerJson["channel_creds"].AppendValue(channelCredJson);
+                }
+                xdsServersJson["xds_servers"].AppendValue(xdsServerJson);
+            }
+        }
+
+        void ConvertStringToJsonValue(const TString& jsonString, NJson::TJsonValue* const out) const {
+            NJson::TJsonReaderConfig jsonConfig;
+            if (!NJson::ReadJsonTree(jsonString, &jsonConfig, out)) {
+                Cerr << "Warning: Failed to parse JSON string in ConvertStringToJsonValue: \"" << jsonString << "\"" << Endl;
+                *out = NJson::TJsonValue();
+            }
+        }
+    };
+
+    static const TString XDS_BOOTSTRAP_ENV = "GRPC_XDS_BOOTSTRAP";
+    static const TString XDS_BOOTSTRAP_CONFIG_ENV = "GRPC_XDS_BOOTSTRAP_CONFIG";
+    if (GetEnv(XDS_BOOTSTRAP_ENV).empty() && GetEnv(XDS_BOOTSTRAP_CONFIG_ENV).empty() && runConfig.AppConfig.GetGRpcConfig().HasXdsBootstrap()) {
+        SetEnv(XDS_BOOTSTRAP_CONFIG_ENV, TXdsBootstrapConfigBuilder(runConfig.AppConfig.GetGRpcConfig().GetXdsBootstrap()).Build());
+    }
+}
+
 void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
     const auto& cfg = runConfig.AppConfig;
     const auto& allocConfig = cfg.GetAllocatorConfig();
@@ -2287,6 +2358,7 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories) {
     TIntrusivePtr<TKikimrRunner> runner(new TKikimrRunner(factories));
+    runner->InitializeXdsBootstrapConfig(runConfig);
     runner->InitializeAllocator(runConfig);
     runner->InitializeRegistries(runConfig);
     runner->InitializeMonitoring(runConfig);

@@ -439,4 +439,11 @@ message TTableServiceConfig {
     optional bool EnableBuildAggregationResultStages = 106 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnforceSqlVersionV1 = 107 [default = true, (InvalidateCompileCache) = true];
+
+    enum EBackportMode {
+        Released = 0;
+        All = 1;
+    }
+
+    optional EBackportMode BackportMode = 108 [ default = Released, (InvalidateCompileCache) = true];
 };

@@ -58,6 +58,9 @@ struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvRea
         TMessageId MessageId;
         Ydb::Topic::Codec Codec;
         TString Data;
+        THashMap<TString, TString> MessageMetaAttributes;
+        TInstant SentTimestamp;
+        TString MessageGroupId;
     };
     std::vector<TMessage> Messages;
 };

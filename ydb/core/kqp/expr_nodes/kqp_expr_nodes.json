@@ -900,7 +900,8 @@
             "Match" : {"Type": "Callable", "Name": "KqpOpRoot"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"}
+                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "PgSyntax", "Type": "TCoAtom"}
             ]
         },
         {
@@ -930,9 +931,9 @@
             ]
         },
         {
-            "Name": "TKqpPgExprSublink",
+            "Name": "TKqpExprSublink",
             "Base": "TExprBase",
-            "Match" : {"Type": "Callable", "Name": "KqpPgExprSublink"},
+            "Match" : {"Type": "Callable", "Name": "KqpExprSublink"},
             "Children": [
                 {"Index": 0, "Name": "Expr", "Type": "TExprBase"}
             ]

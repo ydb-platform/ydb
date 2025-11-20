@@ -151,6 +151,11 @@ public:
         return *this;
     }
 
+    TKqpTranslationSettingsBuilder& SetBackportMode(NYql::EBackportCompatibleFeaturesMode backportMode) {
+        BackportMode = backportMode;
+        return *this;
+    }
+
     TKqpTranslationSettingsBuilder& SetIsAmbiguityError(bool isAmbiguityError) {
         IsAmbiguityError = isAmbiguityError;
         return *this;

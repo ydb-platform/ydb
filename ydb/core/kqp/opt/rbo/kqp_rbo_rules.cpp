@@ -67,14 +67,14 @@ TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
     return TExprNode::TPtr();
 }
 
-TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> conjuncts, TExprContext &ctx) {
+TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> conjuncts, TExprContext &ctx, bool pgSyntax) {
     auto arg = Build<TCoArgument>(ctx, pos).Name("lambda_arg").Done();
     TExprNode::TPtr lambda;
 
     if (conjuncts.size() == 1) {
         auto filterInfo = conjuncts[0];
         auto body = ReplaceArg(filterInfo.FilterBody, arg.Ptr(), ctx);
-        if (!filterInfo.FromPg) {
+        if (pgSyntax && !filterInfo.FromPg) {
             body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
         }
 
@@ -89,7 +89,7 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
 
         for (auto c : conjuncts) {
             auto body = ReplaceArg(c.FilterBody, arg.Ptr(), ctx);
-            if (!c.FromPg) {
+            if (pgSyntax && !c.FromPg) {
                 body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
             }
             newConjuncts.push_back(ReplaceArg(body, arg.Ptr(), ctx));
@@ -176,9 +176,10 @@ bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> &input
                 predicate = predicate->Child(0);
             }
 
-            if (predicate->IsCallable("PgResolvedOp") && predicate->Child(0)->Content() == "=") {
-                auto leftSide = predicate->Child(2);
-                auto rightSide = predicate->Child(3);
+            TExprNode::TPtr leftSide;
+            TExprNode::TPtr rightSide;
+
+            if (TestAndExtractEqualityPredicate(predicate, leftSide, rightSide)) {
 
                 if (leftSide->IsCallable("Member") && rightSide->IsCallable("Member")) {
                     continue;
@@ -489,7 +490,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     auto rightInput = join->GetRightInput();
 
     if (pushLeft.size()) {
-        auto leftLambda = BuildFilterLambdaFromConjuncts(leftInput->Pos, pushLeft, ctx.ExprCtx);
+        auto leftLambda = BuildFilterLambdaFromConjuncts(leftInput->Pos, pushLeft, ctx.ExprCtx, props.PgSyntax);
         leftInput = std::make_shared<TOpFilter>(leftInput, input->Pos, leftLambda);
     }
 
@@ -504,14 +505,14 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
                 }
             }
             if (predicatesForRightSide.size()) {
-                auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx);
+                auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx, props.PgSyntax);
                 rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightLambda);
                 join->JoinKind = "Inner";
             } else {
                 return input;
             }
         } else {
-            auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx);
+            auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx, props.PgSyntax);
             rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightLambda);
         }
     }
@@ -524,7 +525,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     join->Children[1] = rightInput;
 
     if (topLevelPreds.size()) {
-        auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Pos, topLevelPreds, ctx.ExprCtx);
+        auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Pos, topLevelPreds, ctx.ExprCtx, props.PgSyntax);
         output =  std::make_shared<TOpFilter>(join, input->Pos, topFilterLambda);
     } else {
         output = join;

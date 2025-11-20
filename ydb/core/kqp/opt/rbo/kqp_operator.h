@@ -234,6 +234,7 @@ struct TPlanProps {
     TStageGraph StageGraph;
     int InternalVarIdx = 1;
     TScalarSubplans ScalarSubplans;
+    bool PgSyntax = false;
 };
 
 
@@ -410,6 +411,8 @@ class TOpFilter : public IUnaryOperator {
 
     TExprNode::TPtr FilterLambda;
 };
+
+bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& leftArg, TExprNode::TPtr& rightArg);
 
 class TOpJoin : public IBinaryOperator {
   public:

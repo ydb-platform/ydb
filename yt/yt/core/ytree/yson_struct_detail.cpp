@@ -342,7 +342,7 @@ void TYsonStructMeta::SetUnrecognizedStrategy(EUnrecognizedStrategy strategy)
     MetaUnrecognizedStrategy_ = strategy;
 }
 
-void TYsonStructMeta::WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
+void TYsonStructMeta::WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
 {
     BuildYsonFluently(consumer)
         .BeginMap()
@@ -356,11 +356,12 @@ void TYsonStructMeta::WriteSchema(const TYsonStructBase* target, NYson::IYsonCon
                 fluent.Item("source_location_line").Value(i64{SourceLocation_.GetLine()});
             })
             .Item("members").DoListFor(InitialOrderParameters_, [&] (auto fluent, const auto& pair) {
+                const auto& [key, parameter] = pair;
                 auto defaultValueGetter = [&] {
-                    return DefaultStructNodeGetter_()->FindChild(pair.first);
+                    return DefaultStructNodeGetter_()->FindChild(key);
                 };
                 fluent.Item().Do([&] (auto fluent) {
-                    pair.second->WriteMemberSchema(target, fluent.GetConsumer(), defaultValueGetter, options);
+                    parameter->WriteMemberSchema(fluent.GetConsumer(), defaultValueGetter, options);
                 });
             })
         .EndMap();

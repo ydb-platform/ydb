@@ -115,16 +115,7 @@ void TDLQMoverActor::ProcessQueue() {
        return ReplySuccess();
     }
 
-    auto request = std::make_unique<TEvPersQueue::TEvRequest>();
-    auto* partitionRequest = request->Record.MutablePartitionRequest();
-    partitionRequest->SetPartition(Settings.PartitionId);
-    auto* read = partitionRequest->MutableCmdRead();
-    read->SetClientId(CLIENTID_WITHOUT_CONSUMER);
-    read->SetOffset(Queue.front().Offset);
-    read->SetTimeoutMs(0);
-    read->SetCount(1);
-
-    SendToPQTablet(std::move(request));
+    SendToPQTablet(MakeEvPQRead(Settings.ConsumerName, Settings.PartitionId, Queue.front().Offset, 1));
 }
 
 void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {

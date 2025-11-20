@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import pytest
-import yatest
 import os
 
 from ydb.library.yql.tools.solomon_emulator.client.client import cleanup_emulator, add_solomon_metrics
@@ -12,7 +11,7 @@ class SolomonDataSourceTestBase:
     def setup_cluster(self):
         if min(self.versions) < (25, 3):
             pytest.skip("Only available since 25-3")
-        
+
         self.solomon_config = self.setup_solomon()
 
         yield from super().setup_cluster(
@@ -46,9 +45,9 @@ class SolomonDataSourceTestBase:
 
         cleanup_emulator()
 
-        add_solomon_metrics("compatability_test", "my_cluster", "my_service", {"metrics": [
+        add_solomon_metrics("compatibility_test", "my_cluster", "my_service", {"metrics": [
             {
-                "labels"        : {"test_type": "compatability_test"},
+                "labels"        : {"test_type": "compatibility_test"},
                 "type"          : "DGAUGE",
                 "timestamps"    : [0],
                 "values"        : [123]
@@ -75,8 +74,8 @@ class SolomonDataSourceTestBase:
     def do_test_external_data(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = """
-            SELECT * FROM solomon_source.compatability_test WITH (
-                program = @@{cluster="my_cluster", service="my_service", test_type="compatability_test"}@@,
+            SELECT * FROM solomon_source.compatibility_test WITH (
+                program = @@{cluster="my_cluster", service="my_service", test_type="compatibility_test"}@@,
 
                 from = "1970-01-01T00:00:00Z",
                 to = "1970-01-01T00:01:00Z"
@@ -87,8 +86,8 @@ class SolomonDataSourceTestBase:
             assert isinstance(data, float) and int(data) == 123
 
             query = """
-            SELECT * FROM solomon_source.compatability_test WITH (
-                selectors = @@{cluster="my_cluster", service="my_service", test_type="compatability_test"}@@,
+            SELECT * FROM solomon_source.compatibility_test WITH (
+                selectors = @@{cluster="my_cluster", service="my_service", test_type="compatibility_test"}@@,
 
                 from = "1970-01-01T00:00:00Z",
                 to = "1970-01-01T00:01:00Z"

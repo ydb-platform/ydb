@@ -121,6 +121,19 @@ def test_create_eds_with_single_secret_with_success(db_fixture, ydb_cluster):
     run_with_assert(user2_config, query)
 
 
+def test_create_eds_with_old_secret_with_success(db_fixture, ydb_cluster):
+    user1_config = create_user(ydb_cluster, db_fixture, "user1")
+
+    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])
+
+    # create eds with own secret
+    secret_name = 'OldSecret'
+    query = f"CREATE OBJECT {secret_name} (TYPE SECRET) WITH value='';"
+    run_with_assert(user1_config, query)
+    query = get_eds_with_one_secret(secret_name)
+    run_with_assert(user1_config, query)
+
+
 def test_create_eds_with_many_secrets_with_success(db_fixture, ydb_cluster):
     user1_config = create_user(ydb_cluster, db_fixture, "user1")
     user2_config = create_user(ydb_cluster, db_fixture, "user2")

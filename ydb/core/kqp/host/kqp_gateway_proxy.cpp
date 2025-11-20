@@ -1842,12 +1842,6 @@ public:
     TFuture<TGenericResult> CreateObject(const TString& cluster, const TCreateObjectSettings& settings) override {
         CHECK_PREPARED_DDL(CreateObject);
 
-        if (AppData()->FeatureFlags.GetEnableSchemaSecrets() && to_lower(settings.GetTypeId()) == "secret") {
-            return MakeErrorFuture<IKikimrGateway::TGenericResult>(
-                std::make_exception_ptr(yexception() << "Old secrets creation syntax is disabled now. Please use the new one")
-            );
-        }
-
         if (IsPrepare()) {
             return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareCreateObjectSchemeOperation));
         } else {

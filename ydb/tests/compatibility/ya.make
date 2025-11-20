@@ -56,4 +56,5 @@ RECURSE(
     federated_queries
     s3_backups
     olap
+    streaming
 )

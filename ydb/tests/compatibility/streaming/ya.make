@@ -1,0 +1,32 @@
+PY3TEST()
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+
+
+FORK_TEST_FILES()
+FORK_TESTS()
+FORK_SUBTESTS()
+SPLIT_FACTOR(10)
+
+TEST_SRCS(
+    test_streaming.py
+)
+
+SIZE(LARGE)
+REQUIREMENTS(cpu:16)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
+
+DEPENDS(
+    ydb/tests/library/compatibility/binaries
+    ydb/tests/tools/pq_read
+)
+
+PEERDIR(
+    contrib/python/boto3
+    ydb/tests/library
+    ydb/tests/library/compatibility
+    ydb/tests/library/test_meta
+    ydb/tests/tools/datastreams_helpers
+)
+
+END()

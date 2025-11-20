@@ -2,6 +2,18 @@
 
 {{ ydb-short-name }} has a built-in self-diagnostic system, which can be used to get a brief report on the database status and information about existing issues.
 
+{% note warning %}
+
+Even if the database (cluster) is technically in good working order and is operating normally, successful execution of requests to it is not guaranteed - for example, there may be no network access to individual nodes.
+
+To check the availability of the database, it is recommended to implement the following actions at the application level:
+
+1. Execute the `SELECT 1` query using standard retrays for the application. This will ensure the basic availability of the database - that the application is able to establish a connection and receive a response within the accepted retray policy.
+
+2. For a more detailed check of the system’s performance, run queries against specific tables. This will make it possible to confirm the availability of access to the target data structures and evaluate the performance of the database at the level of interaction with tables.
+
+{% endnote %}
+
 To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` namespace in the SDK. You must also pass the name of the checked DB as usual.
 
 {% list tabs group=lang %}
@@ -101,7 +113,6 @@ message IssueLog {
     uint32 level = 7;
 }
 ```
-
 
 ### Description of fields in the response {#fields-description}
 

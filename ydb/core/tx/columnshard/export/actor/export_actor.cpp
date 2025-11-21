@@ -8,14 +8,8 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     auto data = ev->Get()->ArrowBatch;
     AFL_VERIFY(!!data || ev->Get()->Finished);
     if (data) {
-        CurrentData = NArrow::ToBatch(data);
-        CurrentDataBlob = ExportSession->GetTask().GetSerializer()->SerializeFull(CurrentData);
-        if (data) {
-            Send(new IEventHandle(Exporter, SelfId(), new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(CurrentData, ev->Get()->Finished)));
-        }
+        Send(new IEventHandle(Exporter, SelfId(), new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(NArrow::ToBatch(data), ev->Get()->Finished)));
     } else {
-        CurrentData = nullptr;
-        CurrentDataBlob = "";
         Send(new IEventHandle(Exporter, SelfId(), new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(nullptr, true)));
     }
     TOwnedCellVec lastKey = ev->Get()->LastKey;

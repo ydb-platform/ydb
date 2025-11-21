@@ -3734,7 +3734,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
             const auto& alt = rule.GetAlt_table_hint4();
             const auto pos = Ctx_.TokenPosition(alt.GetToken1());
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-            auto expr = Unwrap(TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr4()));
+            TNodePtr expr = Unwrap(TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr4()));
             if (!expr) {
                 return false;
             }
@@ -3746,7 +3746,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
             const auto& alt = rule.GetAlt_table_hint5();
             const auto pos = Ctx_.TokenPosition(alt.GetToken1());
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-            auto expr = TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr3());
+            TNodePtr expr = Unwrap(TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr3()));
             if (!expr) {
                 return false;
             }

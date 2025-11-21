@@ -477,56 +477,24 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
 
     auto versionCtx = BuildTableVersionContext(*txState, path, context);
     
-    // Strategy E: Detect if this is index impl table CDC during continuous backup
     bool isIndexImplTableCdc = versionCtx.IsPartOfContinuousBackup && versionCtx.IsIndexImplTable;
     
     if (isIndexImplTableCdc) {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "CDC on index impl table - using lock-free helping sync (Strategy E)"
-                    << ", implTablePathId: " << pathId
-                    << ", indexPathId: " << versionCtx.ParentPathId
-                    << ", parentTablePathId: " << versionCtx.GrandParentPathId
-                    << ", operationId: " << OperationId
-                    << ", at schemeshard: " << context.SS->SelfTabletId());
-        
-        // STEP 1: Increment self (atomic operation on this object)
         table->AlterVersion += 1;
         ui64 myIncrementedVersion = table->AlterVersion;
         
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Step 1: Incremented my version"
-                    << ", implTablePathId: " << pathId
-                    << ", newVersion: " << myIncrementedVersion
-                    << ", at schemeshard: " << context.SS->SelfTabletId());
-        
-        // STEP 2: Lock-free helping - synchronize all related objects to max version
         HelpSyncSiblingVersions(
-            pathId,                          // My impl table
-            versionCtx.ParentPathId,         // My index entity
-            versionCtx.GrandParentPathId,    // Parent table
-            myIncrementedVersion,            // My version after increment
+            pathId,
+            versionCtx.ParentPathId,
+            versionCtx.GrandParentPathId,
+            myIncrementedVersion,
             OperationId,
             context,
             db);
-        
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Completed lock-free helping coordination"
-                    << ", implTablePathId: " << pathId
-                    << ", finalVersion: " << table->AlterVersion
-                    << ", operationId: " << OperationId
-                    << ", at schemeshard: " << context.SS->SelfTabletId());
     } else {
-        // Non-index-impl case: simple increment
         table->AlterVersion += 1;
-        
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Normal CDC version increment (non-indexed)"
-                    << ", pathId: " << pathId
-                    << ", newVersion: " << table->AlterVersion
-                    << ", at schemeshard: " << context.SS->SelfTabletId());
     }
     
-    // Additional sync for main table CDC (non-index case)
     if (versionCtx.IsContinuousBackupStream && !versionCtx.IsIndexImplTable) {
         NCdcStreamState::SyncChildIndexes(path, table->AlterVersion, OperationId, context, db);
     }

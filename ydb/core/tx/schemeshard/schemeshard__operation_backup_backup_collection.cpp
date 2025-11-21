@@ -180,54 +180,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         return result;
     }
 
-    if (incrBackupEnabled && !omitIndexes) {
-        for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
-            const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
-            if (!tablePath.IsResolved()) {
-                continue;
-            }
-            
-            auto table = context.SS->Tables.at(tablePath.Base()->PathId);
-            
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Backup CDC creation completed for table: " << tablePath.PathString()
-                << ", MainTable AlterVersion: " << table->AlterVersion
-                << ", PathId: " << tablePath.Base()->PathId);
-            
-            for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-                auto childPath = context.SS->PathsById.at(childPathId);
-                
-                if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
-                    continue;
-                }
-                
-                if (childPath->Dropped()) {
-                    continue;
-                }
-                
-                auto indexInfo = context.SS->Indexes.at(childPathId);
-                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
-                    continue;
-                }
-                
-                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Index: " << childName 
-                    << ", Index AlterVersion: " << indexInfo->AlterVersion
-                    << ", Index PathId: " << childPathId);
-                
-                auto indexPath = TPath::Init(childPathId, context.SS);
-                Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
-                auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
-                
-                auto implTable = context.SS->Tables.at(implTablePathId);
-                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "IndexImplTable: " << implTableName
-                    << ", AlterVersion: " << implTable->AlterVersion
-                    << ", PathId: " << implTablePathId);
-            }
-        }
-    }
-
     if (incrBackupEnabled) {
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
             NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
@@ -269,27 +221,32 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
             NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, streamPath, streamName, table, boundaries, false);
         }
-        
+
         if (incrBackupEnabled && !omitIndexes) {
             for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
                 const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
                 
+                // Iterate through table's children to find indexes
                 for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
                     auto childPath = context.SS->PathsById.at(childPathId);
                     
+                    // Skip non-index children (CDC streams, etc.)
                     if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
                         continue;
                     }
                     
+                    // Skip deleted indexes
                     if (childPath->Dropped()) {
                         continue;
                     }
                     
+                    // Get index info and filter for global sync only
                     auto indexInfo = context.SS->Indexes.at(childPathId);
                     if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
                         continue;
                     }
                 
+                    // Get index implementation table (the only child of index)
                     auto indexPath = TPath::Init(childPathId, context.SS);
                     Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
                     auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
@@ -304,7 +261,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     indexStreamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
                     indexStreamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
                     
-                    // Create PQ part for index CDC stream
                     TVector<TString> indexBoundaries;
                     const auto& indexPartitions = indexTable->GetPartitions();
                     indexBoundaries.reserve(indexPartitions.size() - 1);

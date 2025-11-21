@@ -1,6 +1,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -252,7 +253,8 @@ private:
                     TString pathString = TPath::Init(pathId, Self).PathString();
                     // Check if this is an index implementation table under one of our restored tables
                     for (const auto& tablePath : op.GetTablePathList()) {
-                        if (pathString.StartsWith(tablePath + "/") && pathString.Contains("/indexImplTable")) {
+                        TString indexImplTableSuffix = TString("/") + NTableIndex::ImplTable;
+                        if (pathString.StartsWith(tablePath + "/") && pathString.Contains(indexImplTableSuffix)) {
                             finalize.AddTargetTablePaths(pathString);
                             break;
                         }

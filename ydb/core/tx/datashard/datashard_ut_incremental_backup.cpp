@@ -560,32 +560,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         
         // Wait for CDC streams to be fully created (AtTable phase completes async)
         SimulateSleep(server, TDuration::Seconds(5));
-        {
-            Cerr << "========== VERSION DIAGNOSTICS AFTER BACKUP ==========" << Endl;
-            
-            auto describeTable = Ls(runtime, edgeActor, "/Root/TableWithIndex");
-            if (!describeTable->ResultSet.empty() && describeTable->ResultSet[0].TableId) {
-                Cerr << "Main table SchemaVersion: " << describeTable->ResultSet[0].TableId.SchemaVersion << Endl;
-                if (describeTable->ResultSet[0].Self) {
-                    Cerr << "Main table PathVersion: " << describeTable->ResultSet[0].Self->Info.GetPathVersion() << Endl;
-                }
-            }
-            
-            auto describeIndex = Ls(runtime, edgeActor, "/Root/TableWithIndex/idx");
-            if (!describeIndex->ResultSet.empty() && describeIndex->ResultSet[0].Self) {
-                Cerr << "Index PathVersion: " << describeIndex->ResultSet[0].Self->Info.GetPathVersion() << Endl;
-            }
-            
-            auto describeImplTable = Ls(runtime, edgeActor, "/Root/TableWithIndex/idx/indexImplTable");
-            if (!describeImplTable->ResultSet.empty() && describeImplTable->ResultSet[0].TableId) {
-                Cerr << "Index impl table SchemaVersion: " << describeImplTable->ResultSet[0].TableId.SchemaVersion << Endl;
-                if (describeImplTable->ResultSet[0].Self) {
-                    Cerr << "Index impl table PathVersion: " << describeImplTable->ResultSet[0].Self->Info.GetPathVersion() << Endl;
-                }
-            }
-            
-            Cerr << "======================================================" << Endl;
-        }
 
         auto expectedData = KqpSimpleExecSuccess(runtime, R"(
             SELECT key, value, indexed FROM `/Root/TableWithIndex` ORDER BY key

@@ -169,7 +169,7 @@ bool CreateConsistentCopyTables(
         }
 
         // Log information about the table being copied
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "CreateConsistentCopyTables: Processing table"
             << ", srcPath: " << srcPath.PathString()
             << ", dstPath: " << dstPath.PathString()
@@ -181,14 +181,14 @@ bool CreateConsistentCopyTables(
         if (context.SS->Tables.contains(srcPath.Base()->PathId)) {
             TTableInfo::TPtr tableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
             const auto& tableDesc = tableInfo->TableDescription;
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateConsistentCopyTables: Table info"
                 << ", tableIndexesSize: " << tableDesc.TableIndexesSize()
                 << ", isBackup: " << tableInfo->IsBackup);
-            
+
             for (size_t i = 0; i < static_cast<size_t>(tableDesc.TableIndexesSize()); ++i) {
                 const auto& indexDesc = tableDesc.GetTableIndexes(i);
-                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Table has index in description"
                     << ", indexName: " << indexDesc.GetName()
                     << ", indexType: " << NKikimrSchemeOp::EIndexType_Name(indexDesc.GetType()));
@@ -200,8 +200,8 @@ bool CreateConsistentCopyTables(
             const auto& name = child.first;
             const auto& pathId = child.second;
             TPath childPath = srcPath.Child(name);
-            
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateConsistentCopyTables: Child found"
                 << ", name: " << name
                 << ", pathId: " << pathId
@@ -219,30 +219,30 @@ bool CreateConsistentCopyTables(
             TPath dstIndexPath = dstPath.Child(name);
 
             if (srcIndexPath.IsDeleted()) {
-                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Skipping deleted child: " << name);
                 continue;
             }
 
             if (srcIndexPath.IsSequence()) {
-                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Skipping sequence child: " << name);
                 continue;
             }
 
             if (descr.GetOmitIndexes()) {
-                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Skipping due to OmitIndexes: " << name);
                 continue;
             }
 
             if (!srcIndexPath.IsTableIndex()) {
-                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Skipping non-index child: " << name);
                 continue;
             }
 
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateConsistentCopyTables: Creating index copy operation for: " << name);
 
             Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
@@ -260,7 +260,7 @@ bool CreateConsistentCopyTables(
                 Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcImplTablePathId);
                 TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Creating index impl table copy"
                     << ", srcImplTable: " << srcImplTable.PathString()
                     << ", dstImplTable: " << dstImplTable.PathString());
@@ -268,7 +268,7 @@ bool CreateConsistentCopyTables(
                 // Check if we have CDC stream info for this index impl table in the descriptor
                 NKikimrSchemeOp::TCopyTableConfig indexDescr;
                 indexDescr.CopyFrom(descr);
-                
+
                 auto it = descr.GetIndexImplTableCdcStreams().find(srcImplTableName);
                 if (it != descr.GetIndexImplTableCdcStreams().end()) {
                     // CDC stream Impl was already created in the backup operation before copying

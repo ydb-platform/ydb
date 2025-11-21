@@ -3,6 +3,8 @@
 #include "schemeshard__operation_base.h"
 #include "schemeshard__operation_common.h"
 
+#include <ydb/core/base/table_index.h>
+
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_W(stream) LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -178,7 +180,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                                    THashSet<TPathId>& implTables) {
             for (const auto& tablePath : finalize.GetTargetTablePaths()) {
                 // Check if this path looks like an index implementation table
-                if (!tablePath.Contains("/indexImplTable")) {
+                TString indexImplTableSuffix = TString("/") + NTableIndex::ImplTable;
+                if (!tablePath.Contains(indexImplTableSuffix)) {
                     continue;
                 }
 
@@ -278,7 +281,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             // Iterate through all target table paths and finalize their alters
             for (const auto& tablePath : finalize.GetTargetTablePaths()) {
                 // Check if this path looks like an index implementation table
-                if (!tablePath.Contains("/indexImplTable")) {
+                TString indexImplTableSuffix = TString("/") + NTableIndex::ImplTable;
+                if (!tablePath.Contains(indexImplTableSuffix)) {
                     continue;
                 }
 

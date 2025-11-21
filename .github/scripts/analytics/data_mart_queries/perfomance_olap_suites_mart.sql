@@ -110,6 +110,7 @@ SELECT
     CASE
         WHEN s.Db LIKE '%sas%' THEN 'sas'
         WHEN s.Db LIKE '%vla%' THEN 'vla'
+        WHEN s.Db LIKE '%etn0vb1kg3p016q1tp3t%' THEN 'cloud'
         ELSE 'other'
     END AS DbDc,
 
@@ -129,6 +130,7 @@ SELECT
         WHEN s.Db LIKE '%vla4-8154%' THEN 'vla_8154_'
         WHEN s.Db LIKE '%vla4-8161%' THEN 'vla_8161_'
         WHEN s.Db LIKE '%vla%' THEN 'vla_'
+        WHEN s.Db LIKE '%etn0vb1kg3p016q1tp3t%b1ggceeul2pkher8vhb6/etn0vb1kg3p016q1tp3t%' THEN 'cloud_slonnn_'
         ELSE 'new_db_'
     END || CASE
         WHEN s.Db LIKE '%load%' THEN 'column'

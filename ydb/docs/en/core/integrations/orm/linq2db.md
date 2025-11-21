@@ -39,15 +39,6 @@ Configure LinqToDB to use {{ ydb-short-name }} in code:
 - C#
 
   ```csharp
-## Provider Configuration {#configuration-provider}
-
-Configure LinqToDB to use {{ ydb-short-name }} in code:
-
-{% list tabs group=lang %}
-
-- C#
-
-  ```csharp
 
   DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
 

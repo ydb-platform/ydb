@@ -22,6 +22,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/strip.h>
 
+#include <yql/essentials/minikql/jsonpath/parser/parser.h>
+
+
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapJson) {
@@ -1166,10 +1169,10 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             auto result = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
                 UPSERT INTO `/Root/olapTable` (id, json_payload)
-                VALUES (1, JsonDocument(@@{"":   null}@@));
-                       -- (2, JsonDocument(@@{"'":  null}@@)),
-                       -- (3, JsonDocument(@@{"\"": null}@@)),
-                       -- (4, JsonDocument(@@{".":  null}@@));
+                VALUES (1, JsonDocument(@@{"":   null}@@)),
+                       (2, JsonDocument(@@{"'":  null}@@)),
+                       (3, JsonDocument(@@{"\"": null}@@)),
+                       (4, JsonDocument(@@{".":  null}@@));
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         }
@@ -1183,9 +1186,118 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
-            CompareYson(result, R"([[1u;["{\"\":null}"]]])");
+            CompareYson(result, R"([[1u;["{\"\":null}"]];[2u;["{\"'\":null}"]];[3u;["{\"\\\"\":null}"]];[4u;["{\".\":null}"]]])");
 
         }
+    }
+
+    Y_UNIT_TEST(ScanFirstLevelOnly) {
+        auto settings = TKikimrSettings();
+        settings.AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetTableClient();
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        {
+            auto result = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                CREATE TABLE `/Root/olapTable` (
+                    id Uint32 NOT NULL,
+                    json_payload JsonDocument,
+                    PRIMARY KEY (id)
+                )
+                WITH (
+                    STORE = COLUMN,
+                    PARTITION_COUNT = 1
+                );
+
+                ALTER OBJECT `/Root/olapTable`
+                (TYPE TABLE)
+                SET (ACTION=ALTER_COLUMN, NAME=json_payload,
+                `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`true`,
+                `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`false`, `COLUMNS_LIMIT`=`1024`,
+                `SPARSED_DETECTOR_KFF`=`20`, `MEM_LIMIT_CHUNK`=`52428800`, `OTHERS_ALLOWED_FRACTION`=`0`,
+                `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`);
+                )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+
+        {
+            auto result = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                UPSERT INTO `/Root/olapTable` (id, json_payload)
+                VALUES (1, JsonDocument(@@{"a": {"b": {"c": 1}, "d": "e"}, "f": 3, "g": [1, 2, {"b": 3}]}@@));
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT id, json_payload FROM  `/Root/olapTable`;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(result, R"([[1u;["{\"a\":{\"b\":{\"c\":1},\"d\":\"e\"},\"f\":3,\"g\":[1,2,{\"b\":3}]}"]]])");
+        }
+
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT JSON_VALUE(json_payload, "$.a") FROM `/Root/olapTable`;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(result, R"([[["{\"b\":{\"c\":1},\"d\":\"e\"}"]]])");
+        }
+
+        // {
+        //     auto status = kikimr.GetQueryClient()
+        //                       .ExecuteQuery(R"(
+        //         SELECT JSON_VALUE(json_payload, "$.a.d") FROM `/Root/olapTable`;
+        //         )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        //     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+        //     TString result = FormatResultSetYson(status.GetResultSet(0));
+
+        //     CompareYson(result, R"([[["e"]]])");
+        // }
+    }
+
+
+
+    std::vector<TString> SplitJsonPaths(const std::string_view& svPath) {
+        NYql::TIssues issues;
+        auto path = NYql::NJsonPath::ParseJsonPath(svPath, issues, 1);
+        if (!path) {
+            return {};
+        }
+        NYql::NJsonPath::TJsonPathReader reader(path);
+        auto it = &reader.ReadFirst();
+        std::vector<TString> result;
+        while (it->Type == NYql::NJsonPath::EJsonPathItemType::MemberAccess) {
+            const auto& str = it->GetString();
+            result.push_back(TString(str));
+            it = &reader.ReadInput(*it);
+        }
+
+        std::ranges::reverse(result);
+
+        return result;
+    }
+
+    Y_UNIT_TEST(CheckSplitter) {
+        std::string path = R"($.a."b".'c'.'d"'."\"")";
+        auto subs = SplitJsonPaths(path);
+        Cerr << "START!!!" << Endl;
+        for (const auto& s : subs) {
+            Cerr << s << Endl;
+        }
+        Cerr << "END!!!" << Endl;
     }
 }
 

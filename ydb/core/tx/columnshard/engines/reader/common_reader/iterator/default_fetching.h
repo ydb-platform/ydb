@@ -60,7 +60,25 @@ private:
         }
 
         TPortionDataAccessor::TPreparedColumn column(std::move(chunks), GetColumnLoader(context.GetSource()));
-        context.GetAccessors().AddVerified(GetEntityId(), column.AssembleAccessor().DetachResult(), true);
+        auto res = column.AssembleAccessor();
+        if (!res.IsSuccess()) {
+            TString blobData;
+            for (auto&& i : ColumnChunks) {
+                auto& blobRange = i.GetBlobRangeOptional();
+                if (blobRange) {
+                    blobData.append(blobRange->ToString());
+                    blobData.append(" | ");
+                }
+            }
+            AFL_VERIFY(res.IsSuccess())("chunks", blobData)
+                ("metadata", context.GetSource()->GetContext()->DebugString())
+                ("source_schema", context.GetSource()->GetSourceSchema()->DebugString())
+                ("portion_accessor", context.GetSource()->GetPortionAccessor().DebugString())
+                ("portion_info", context.GetSource()->GetPortionAccessor().GetPortionInfo().DebugString())
+                ("entity", GetEntityId())
+                ("res.error", res.GetErrorMessage());
+        }
+        context.GetAccessors().AddVerified(GetEntityId(), res.DetachResult(), true);
     }
 
     virtual void DoOnDataReceived(TReadActionsCollection& /*nextRead*/, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {

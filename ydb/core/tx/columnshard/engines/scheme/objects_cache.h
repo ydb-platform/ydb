@@ -1,6 +1,7 @@
 #pragma once
 #include "column_features.h"
 
+#include <util/stream/format.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
 #include <ydb/core/tx/columnshard/engines/scheme/common/cache.h>
 
@@ -9,6 +10,26 @@
 #include <util/generic/hash.h>
 
 namespace NKikimr::NOlap {
+
+class TColumnOwnerId {
+public:
+    TPathId Tenant;
+    //Use SS path id here because two shards from different tables on a node may have the same internal path id
+    NColumnShard::TSchemeShardLocalPathId Owner;
+
+    TColumnOwnerId(const TPathId& tenant, const NColumnShard::TSchemeShardLocalPathId& owner)
+        : Tenant(tenant)
+        , Owner(owner) {
+        AFL_VERIFY(!!Owner);
+    }
+
+    operator size_t() const {
+        return CombineHashes(Owner.GetRawValue(), Tenant.Hash());
+    }
+    bool operator==(const TColumnOwnerId& other) const {
+        return Tenant == other.Tenant && Owner == other.Owner;
+    }
+};
 
 class TSchemaObjectsCache {
 private:
@@ -26,6 +47,8 @@ private:
     THashSet<TString> StringsCache;
     mutable TMutex StringsMutex;
 
+    TColumnOwnerId Owner;
+
 public:
     const TString& GetStringCache(const TString& original) {
         TGuard lock(StringsMutex);
@@ -34,6 +57,22 @@ public:
             it = StringsCache.emplace(original).first;
         }
         return *it;
+    }
+
+    TSchemaObjectsCache(const TColumnOwnerId& owner) :
+        Owner(owner) {
+        // AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_TSchemaObjectsCache")
+        //     ("ownerPathId", Owner.Owner.DebugString())
+        //     ("tenantPathId", Owner.Tenant.ToString())
+        // ;
+    }
+
+    TSchemaObjectsCache() :
+        Owner({}, {}) {
+        // AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_TSchemaObjectsCache")
+        //     ("ownerPathId", Owner.Owner.DebugString())
+        //     ("tenantPathId", Owner.Tenant.ToString())
+        // ;
     }
 
     std::shared_ptr<arrow::Field> GetOrInsertField(const std::shared_ptr<arrow::Field>& f) {
@@ -57,6 +96,11 @@ public:
         TGuard lock(FeaturesMutex);
         auto it = ColumnFeatures.find(fingerprint);
         if (it == ColumnFeatures.end()) {
+            // AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_GetOrCreateColumnFeatures_CREATE_NEW")
+            //     ("ownerPathId", Owner.Owner.DebugString())
+            //     ("tenantPathId", Owner.Tenant.ToString())
+            //     ("fingerprint", HexText(TStringBuf(fingerprint)))
+            //     ;
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_miss")("fp", UrlEscapeRet(fingerprint))(
                 "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
             TConclusion<std::shared_ptr<TColumnFeatures>> resultConclusion = constructor();
@@ -66,11 +110,33 @@ public:
             it = ColumnFeatures.emplace(fingerprint, resultConclusion.DetachResult()).first;
             AFL_VERIFY(it->second);
         } else {
+            // AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_GetOrCreateColumnFeatures_GET_EXISTING")
+            //     ("ownerPathId", Owner.Owner.DebugString())
+            //     ("tenantPathId", Owner.Tenant.ToString())
+            //     ("fingerprint", HexText(TStringBuf(fingerprint)))
+            // ;
             if (++AcceptionFeaturesCount % 1000 == 0) {
                 AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_accept")("fp", UrlEscapeRet(fingerprint))(
                     "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
             }
         }
+
+        // TString des;
+        // if (fingerprint.StartsWith("C:")) {
+        //     NKikimrSchemeOp::TOlapColumnDescription d;
+        //     if (d.ParseFromString(fingerprint.substr(2))) {
+        //         des = d.DebugString();
+        //     }
+        // }
+
+        // AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_GetOrCreateColumnFeatures_GetOrCreateColumnFeatures")
+        //     ("ownerPathId", Owner.Owner.DebugString())
+        //     ("tenantPathId", Owner.Tenant.ToString())
+        //     ("fingerprint", HexText(TStringBuf(fingerprint)))
+        //     ("fingerprint.des", des)
+        //     ("TColumnFeatures", it->second->DebugString())
+        // ;
+
         return it->second;
     }
 
@@ -79,27 +145,6 @@ public:
 
 class TSchemaCachesManager {
 private:
-    class TColumnOwnerId {
-    private:
-        TPathId Tenant;
-        //Use SS path id here because two shards from different tables on a node may have the same internal path id
-        NColumnShard::TSchemeShardLocalPathId Owner;
-
-    public:
-        TColumnOwnerId(const TPathId& tenant, const NColumnShard::TSchemeShardLocalPathId& owner)
-            : Tenant(tenant)
-            , Owner(owner) {
-            AFL_VERIFY(!!Owner);
-        }
-
-        operator size_t() const {
-            return CombineHashes(Owner.GetRawValue(), Tenant.Hash());
-        }
-        bool operator==(const TColumnOwnerId& other) const {
-            return Tenant == other.Tenant && Owner == other.Owner;
-        }
-    };
-
     THashMap<TColumnOwnerId, std::shared_ptr<TSchemaObjectsCache>> CacheByTableOwner;
     TMutex Mutex;
 
@@ -109,7 +154,7 @@ private:
         if (findCache) {
             return *findCache;
         }
-        return CacheByTableOwner.emplace(owner, std::make_shared<TSchemaObjectsCache>()).first->second;
+        return CacheByTableOwner.emplace(owner, std::make_shared<TSchemaObjectsCache>(owner)).first->second;
     }
 
     void DropCachesImpl() {
@@ -124,6 +169,10 @@ private:
 
 public:
     static std::shared_ptr<TSchemaObjectsCache> GetCache(const NColumnShard::TSchemeShardLocalPathId& ownerPathId, const TPathId& tenantPathId) {
+        // AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_GetCache")
+        //     ("ownerPathId", ownerPathId.DebugString())
+        //     ("tenantPathId", tenantPathId.ToString())
+        //     ;
         return Singleton<TSchemaCachesManager>()->GetCacheImpl(TColumnOwnerId(tenantPathId, ownerPathId));
     }
 

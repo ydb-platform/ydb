@@ -21,6 +21,10 @@ TConstructor::TConstructor(
     std::vector<ISnapshotSchema::TPtr> current;
     std::deque<TDataSourceConstructor> constructors;
     for (auto&& i : schemasAll) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_SCHEMA")
+            ("TabletId", TabletId)
+            ("schema", i->DebugString())
+        ;
         if (current.size() && current.back()->GetIndexInfo().GetPresetId() != i->GetIndexInfo().GetPresetId()) {
             constructors.emplace_back(TabletId, std::move(current));
             if (!pkFilter->IsUsed(

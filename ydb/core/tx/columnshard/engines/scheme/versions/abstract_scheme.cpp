@@ -327,12 +327,16 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     std::shared_ptr<TDefaultSchemaDetails> schemaDetails(
         new TDefaultSchemaDetails(selfPtr, std::make_shared<NArrow::NSplitter::TSerializationStats>()));
 
+    TString loaders;
+
     while (itIncoming != itIncomingEnd && itIndex != itIndexEnd) {
         if ((*itIncoming)->name() == (*itIndex)->name()) {
             const ui32 incomingIndex = itIncoming - incomingBatch->schema()->fields().begin();
             const ui32 columnIndex = itIndex - GetIndexInfo().ArrowSchema().begin();
             const ui32 columnId = GetIndexInfo().GetColumnIdByIndexVerified(columnIndex);
             auto loader = GetIndexInfo().GetColumnLoaderVerified(columnId);
+            loaders.append(loader->DebugString());
+            loaders.append("|");
             auto saver = GetIndexInfo().GetColumnSaver(columnId);
             saver.AddSerializerWithBorder(100, NArrow::NSerialization::TNativeSerializer::GetUncompressed());
             saver.AddSerializerWithBorder(100000000, NArrow::NSerialization::TNativeSerializer::GetFast());
@@ -369,6 +373,11 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     constructor.GetPortionConstructor().MutablePortionConstructor().AddMetadata(*this, deletionsCount, primaryKeys, std::nullopt);
     constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
     constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(0);
+
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event","VLAD_PREPARE_FOR_WRITE")
+        ("pathId", constructor.GetPortionConstructor().GetPortionConstructor().GetPathId().DebugString())
+        ("loaders", loaders)
+        ("schemaVersion", constructor.GetPortionConstructor().GetPortionConstructor().GetSchemaVersionVerified());
     return TWritePortionInfoWithBlobsResult(std::move(constructor));
 }
 

@@ -121,19 +121,30 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
 }
 
 std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {
-    if (key.find(".") != std::string::npos) {
-        if (currentPrefix.size()) {
-            return Sprintf("%.*s.\"%.*s\"", currentPrefix.size(), currentPrefix.data(), key.size(), key.data());
-        } else {
-            return Sprintf("\"%.*s\"", key.size(), key.data());
-        }
-    } else {
-        if (currentPrefix.size()) {
-            return Sprintf("%.*s.%.*s", currentPrefix.size(), currentPrefix.data(), key.size(), key.data());
-        } else {
-            return std::string(key.data(), key.size());
-        }
+    NJson::TJsonValue v;
+    std::string res;
+    res.reserve(currentPrefix.size() + key.size() + 3);
+    res.append(currentPrefix.data(), currentPrefix.size());
+    if (!res.empty()) {
+        res.append(1, '.');
     }
+    res.append(1, '"');
+    for (auto ch : key) {
+        if (ch == '\'' || ch =='"') {
+            res.append(1, '\\');
+        }
+        res.append(1, ch);
+    }
+    res.append(1, '"');
+
+    Cerr << "VLAD: | " << currentPrefix << (currentPrefix ? "." : "") << key << " | -> | " << res << " |" << Endl;
+
+    return res;
+    // if (currentPrefix.size()) {
+    //     return Sprintf("%.*s.\"%.*s\"", currentPrefix.size(), currentPrefix.data(), escapedKey.size(), escapedKey.data());
+    // } else {
+    //     return Sprintf("\"%.*s\"", escapedKey.size(), escapedKey.data());
+    // }
 }
 
 TStringBuf TDataBuilder::AddKeyOwn(const TStringBuf currentPrefix, std::string&& key) {

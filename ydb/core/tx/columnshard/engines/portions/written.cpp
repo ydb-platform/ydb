@@ -23,6 +23,11 @@ void TWrittenPortionInfo::DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>
             NIceDb::TUpdate<IndexPortions::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
             NIceDb::TUpdate<IndexPortions::MinSnapshotPlanStep>(1), NIceDb::TUpdate<IndexPortions::MinSnapshotTxId>(1),
             NIceDb::TUpdate<IndexPortions::Metadata>(metaProto.SerializeAsString()));
+
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event","VLAD_WRITE_INDEX")
+        ("pathId", GetPathId().DebugString())
+        ("portionId", GetPortionId())
+        ("schemaVersion", GetSchemaVersionVerified());
 }
 
 std::unique_ptr<TPortionInfoConstructor> TWrittenPortionInfo::BuildConstructor(const bool withMetadata) const {

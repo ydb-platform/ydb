@@ -120,4 +120,16 @@ public:
     }
 };
 
+class TJsonRestorer {
+private:
+    NJson::TJsonValue Result;
+
+public:
+    bool IsNull() const;
+
+    const NJson::TJsonValue& GetResult() const;
+
+    void SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue);
+};
+
 }   // namespace NKikimr::NArrow::NAccessor

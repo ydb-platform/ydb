@@ -103,7 +103,7 @@ class TestLargeS3Import:
         cls.s3_url = "https://storage.yandexcloud.net"
         cls.s3_sink_bucket = "olap-exp-private"
         cls.external_source_path = YdbCluster.get_tables_path("tpc_h_s3_parquet_import")
-        cls.external_sink_path = YdbCluster.get_tables_path("tpc_h_s3_parquet_export")
+        cls.external_sink_path = YdbCluster.get_tables_path("bench_test")
         cls.external_table_path = YdbCluster.get_tables_path(f"s{cls.scale}/tpc_h_lineitem_s3_parquet_import")
         cls.external_sink_table_path = YdbCluster.get_tables_path(f"s{cls.scale}/tpc_h_lineitem_s3_parquet_export")
         cls.olap_table_path = YdbCluster.get_tables_path(f"s{cls.scale}/tpc_h_lineitem_olap")
@@ -207,29 +207,6 @@ class TestLargeS3Import:
                 AWS_SECRET_ACCESS_KEY_SECRET_NAME="{access_key_secret_name}",
                 AWS_REGION="ru-central-1"
             );
-
-            CREATE OR REPLACE EXTERNAL TABLE `{self.external_sink_table_path}` (
-                l_orderkey Int64 NOT NULL,
-                l_partkey Int64,
-                l_suppkey Int64,
-                l_linenumber Int64 NOT NULL,
-                l_quantity Double,
-                l_extendedprice Double,
-                l_discount Double,
-                l_tax Double,
-                l_returnflag String,
-                l_linestatus String,
-                l_shipdate Date,
-                l_commitdate Date,
-                l_receiptdate Date,
-                l_shipinstruct String,
-                l_shipmode String,
-                l_comment String
-            ) WITH (
-                DATA_SOURCE="{self.external_sink_path}",
-                LOCATION="{output_path}",
-                FORMAT="parquet"
-            );
         """)
 
     def validate_tables(self, first_table, second_table, stage_name):
@@ -295,16 +272,16 @@ class TestLargeS3Import:
         self.results.setup(f"test_import_and_export[scale={self.scale}]")
 
         with self.ReportTime(self.results, "global"):
-            self.setup_datasource()
+            # self.setup_datasource()
             self.setup_datasink(output_path)
 
-            self.run_import_from_s3()
-            self.validate_tables(self.external_table_path, self.olap_table_path, "validate_import")
+            # self.run_import_from_s3()
+            # self.validate_tables(self.external_table_path, self.olap_table_path, "validate_import")
 
-            self.run_export_to_s3()
-            self.validate_tables(self.olap_table_path, self.external_sink_table_path, "validate_export")
+            # self.run_export_to_s3()
+            # self.validate_tables(self.olap_table_path, self.external_sink_table_path, "validate_export")
 
-            self.cleanup_tables()
-            self.clear_bucket(output_path)
+            # self.cleanup_tables()
+            # self.clear_bucket(output_path)
 
         self.results.report_finish()

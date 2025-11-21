@@ -13,6 +13,12 @@ void TInsertedPortion::Finalize(TColumnShard* shard, NTabletFlatExecutor::TTrans
     wrapper.WriteCounter(NOlap::TColumnEngineForLogs::LAST_PORTION, *lastPortionId);
     PortionInfo = PortionInfoConstructor->Build(true);
     PortionInfoConstructor = nullptr;
+    if (PortionInfo && (*PortionInfo)) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event","VLAD_WRITE_PORTION")
+            ("pathId", (*PortionInfo)->GetPortionInfo().GetPathId().DebugString())
+            ("portionId", (*PortionInfo)->GetPortionInfo().GetPortionId())
+            ("schemaVersion", (*PortionInfo)->GetPortionInfo().GetSchemaVersionVerified());
+    }
 }
 
 TWriteResult::TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMeta, const ui64 dataSize,

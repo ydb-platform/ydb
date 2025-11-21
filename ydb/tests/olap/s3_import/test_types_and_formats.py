@@ -129,7 +129,7 @@ class TestTypesAndFormats(S3ImportTestBase):
                 if normalized_arrow_type is None:
                     arrow_type_lower = arrow_type_str.lower()
                     priority_keys = ['float32', 'float64', 'uint8', 'uint16', 'uint32', 'uint64',
-                                     'int8', 'int16', 'int32', 'int64', 'date32', 'decimal128']
+                                     'int8', 'int16', 'int32', 'int64', 'date32', 'bool', 'decimal128']
                     for key in priority_keys:
                         if arrow_type_lower == key or arrow_type_lower.startswith(key + '[') or arrow_type_lower.startswith(key + '('):
                             normalized_arrow_type = arrow_type_mapping.get(key)

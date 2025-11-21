@@ -66,7 +66,7 @@ STFUNC(TWriterActor::DescribeState) {
 
 namespace {
 
-size_t SerializeTo(const TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmdWrite) {
+size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmdWrite) {
     size_t totalSize = item.MessageBody.size() + (item.SerializedMessageAttributes.has_value() ? 
         item.SerializedMessageAttributes.value().size() : 0);
 

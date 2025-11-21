@@ -455,15 +455,6 @@ class ParallelTestsInSingleNode:
         return value
 
 
-# TODO(bulatman) Temporary class for backward compatibility.
-class ParallelTestsInSingleNodeOnYt:
-    KEY = 'PARALLEL-TESTS-WITHIN-NODE-ON-YT'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        return ParallelTestsInSingleNode.get_value(unit, "PARALLEL_TESTS_ON_YT_WITHIN_NODE_WORKERS")
-
-
 class ForkMode:
     KEY = 'FORK-MODE'
 

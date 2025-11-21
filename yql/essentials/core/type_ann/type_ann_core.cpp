@@ -5294,6 +5294,11 @@ namespace NTypeAnnImpl {
                     }
                     return IGraphTransformer::TStatus::Repeat;
                 }
+
+                if (structType->GetSize() > 0 && !ctx.Types.DirectRowDependsOn) {
+                    output = ctx.Expr.ChangeChild(*input, 0, ctx.Expr.NewCallable(input->Pos(), "AsStruct", {}));
+                    return IGraphTransformer::TStatus::Repeat;
+                }
             }
         }
 
@@ -5397,6 +5402,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Seal()
                             .Build();
                     }
+                    return IGraphTransformer::TStatus::Repeat;
+                }
+
+                if (structType->GetSize() > 0 && !ctx.Types.DirectRowDependsOn) {
+                    output = ctx.Expr.ChangeChild(*input, 0, ctx.Expr.NewCallable(input->Pos(), "AsStruct", {}));
                     return IGraphTransformer::TStatus::Repeat;
                 }
             }

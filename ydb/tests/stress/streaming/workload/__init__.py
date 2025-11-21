@@ -73,7 +73,7 @@ class Workload(unittest.TestCase):
         result_sets = self.pool.execute_with_retries("SELECT Status FROM `.sys/streaming_queries`")
         status = result_sets[0].rows[0].Status
         if status != 'RUNNING':
-            raise Exception(f"Unexpected query status, expected 'RUNNING', actual {status}")
+            raise Exception(f"Unexpected query status: expected 'RUNNING', got '{status}'")
 
 
     def write_to_input_topic(self):

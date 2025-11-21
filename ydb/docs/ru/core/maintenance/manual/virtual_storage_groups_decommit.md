@@ -59,7 +59,7 @@
 3. Сгенерированный токен аутентификации для доступа к кластеру:
 
 ```bash
-{{ ydb-cli }} -e grpc://<cluster-endpoint> -d '<db_path>' --user <user> auth get-token -f > ~/ydb_token
+{{ ydb-cli }} -e grpc://<cluster-endpoint> -d <db_path> --user <user> auth get-token -f > ~/ydb_token
 ```
 
 Замените `<cluster-endpoint>` на адрес вашего кластера, `<db_path>` - путь к базе данных, `<user>` на имя пользователя для авторизации.
@@ -69,12 +69,17 @@
 Декомиссию можно проводить даже на пустом кластере, наличие данных не обязательно. Однако если в кластере есть данные, это позволит проверить их консистентность после декомиссии. При необходимости можно загрузить тестовые данные с помощью утилиты `ydb workload tpcc`:
 
 ```bash
-ydb workload tpcc --path tpcc/10wh init -w 100
-ydb workload tpcc --path tpcc/10wh import -w 100
-ydb workload tpcc --path tpcc/10wh run -w 100
+{{ ydb-cli }} workload tpcc --path tpcc/10wh init -w 100
+{{ ydb-cli }} workload tpcc --path tpcc/10wh import -w 100
 ```
 
-Подробнее о работе с тестовой нагрузкой см. в [документации по ydb workload tpcc](../../reference/ydb-cli/workload-tpcc.md).
+И запустить тест TPC-C до и после декомиссии:
+
+```bash
+{{ ydb-cli }} workload tpcc --path tpcc/10wh run -w 100
+```
+
+Подробнее о работе с тестовой нагрузкой в [документации по ydb workload tpcc](../../reference/ydb-cli/workload-tpcc.md).
 
 {% endnote %}
 
@@ -89,7 +94,7 @@ ydb workload tpcc --path tpcc/10wh run -w 100
 - UI (Веб-интерфейс)
   1. Откройте веб-интерфейс управления кластером `https://<cluster-endpoint>:8765`
   2. Откройте вкладку `Storage`
-  2. Выберите нужную вам группу и сохраните `Group ID`
+  3. Выберите нужную вам группу и сохраните `Group ID`
 
 - CLI
   1. Выполните команду получения списка групп хранения

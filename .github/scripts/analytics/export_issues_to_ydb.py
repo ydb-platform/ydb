@@ -850,9 +850,6 @@ def main():
             
             ydb_wrapper.bulk_upsert_batches(table_path, transformed_issues, column_types, batch_size)
             
-            upload_elapsed = time.time() - upload_start_time
-            print(f"All issues uploaded (total upload time: {upload_elapsed:.2f}s)")
-            
             script_elapsed = time.time() - script_start_time
             print(f"Script completed successfully (total time: {script_elapsed:.2f}s)")
             

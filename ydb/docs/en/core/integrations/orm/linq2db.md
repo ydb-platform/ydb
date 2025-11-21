@@ -88,16 +88,16 @@ Use the provider like any other Linq To DB provider: map your entity classes to 
 
 ### Type Mapping between .NET and {{ ydb-short-name }} {#types}
 
-| .NET type(s)                  | Linq To DB `DataType`                     | { ydb-short-name }} type | Notes                                                                                                                                                                                                                                              |
+| .NET type(s)                  | Linq To DB `DataType`                     | {{ ydb-short-name }} type | Notes                                                                                                                                                                                                                                              |
 |-------------------------------|-------------------------------------------|--------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `bool`                        | `Boolean`                                 | `Bool`                   | —                                                                                                                                                                                                                                                  |
-| `string`                      | `NVarChar` / `VarChar` / `Char` / `NChar` | `Text`                   | UTF-8 text. Text and Utf8 are the same in YDB; the DDL generator may output either                                                                                                                                                                 |
-| `byte[]`                      | `VarBinary` / `Binary` / `Blob`           | `Bytes`                  | Binary data. Bytes and String are equivalent in YDB; DDL may show either                                                                                                                                                                           |
+| `string`                      | `NVarChar` / `VarChar` / `Char` / `NChar` | `Text`                   | UTF-8 text. Text and Utf8 are the same in {{ ydb-short-name }}; the DDL generator may output either                                                                                                                                                                 |
+| `byte[]`                      | `VarBinary` / `Binary` / `Blob`           | `Bytes`                  | Binary data. Bytes and String are equivalent in {{ ydb-short-name }}; DDL may show either                                                                                                                                                                           |
 | `Guid`                        | `Guid`                                    | `Uuid`                   | 128-bit RFC 4122 UUID. No version enforcement (v1/v4/v7). Generate the desired version in the app                                                                                                                                                  |
-| `DateOnly` / `DateTime`       | `Date`                                    | `Date`                   | Date-only value stored as YDB `Date` in UTC, range `1970-01-01`..`2106-01-01`. .NET `DateOnly`/`DateTime` support a wider range (`0001`..`9999`), but values outside the YDB range cannot be stored.                                               |
-| `DateTime`                    | `DateTime`                                | `Datetime`               | YDB `Datetime` with second precision, UTC instant in the range `1970-01-01`..`2106-01-01`. .NET `DateTime` supports a wider range; values outside the YDB range are not supported. `DateTime.Kind` is not stored; the provider expects UTC values. |
-| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp`              | YDB `Timestamp` with microsecond precision, UTC instant `1970-01-01`..`2106-01-01`. When writing `DateTimeOffset`, the value is converted to UTC; the offset/time zone is not persisted.                                                           |
-| `TimeSpan`                    | `Interval`                                | `Interval`               | Duration with microsecond precision. .NET `TimeSpan` range is wider than YDB `Interval`; values outside the YDB range are not supported. Sub-microsecond ticks are truncated.                                                                      |
+| `DateOnly` / `DateTime`       | `Date`                                    | `Date`                   | Date-only value stored as {{ ydb-short-name }} `Date` in UTC, range `1970-01-01`..`2106-01-01`. .NET `DateOnly`/`DateTime` support a wider range (`0001`..`9999`), but values outside the {{ ydb-short-name }} range cannot be stored.                                               |
+| `DateTime`                    | `DateTime`                                | `Datetime`               | {{ ydb-short-name }} `Datetime` with second precision, UTC instant in the range `1970-01-01`..`2106-01-01`. .NET `DateTime` supports a wider range; values outside the {{ ydb-short-name }} range are not supported. `DateTime.Kind` is not stored; the provider expects UTC values. |
+| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp`              | {{ ydb-short-name }} `Timestamp` with microsecond precision, UTC instant `1970-01-01`..`2106-01-01`. When writing `DateTimeOffset`, the value is converted to UTC; the offset/time zone is not persisted.                                                           |
+| `TimeSpan`                    | `Interval`                                | `Interval`               | Duration with microsecond precision. .NET `TimeSpan` range is wider than {{ ydb-short-name }} `Interval`; values outside the {{ ydb-short-name }} range are not supported. Sub-microsecond ticks are truncated.                                                                      |
 | `decimal`                     | `Decimal`                                 | `Decimal(p,s)`           | Default: Decimal(22,9). To use custom precision/scale, specify Decimal(p,s).  [Example](#custom-precision-scale-example)                                                                                                                           |
 | `float`                       | `Single`                                  | `Float`                  | —                                                                                                                                                                                                                                                  |
 | `double`                      | `Double`                                  | `Double`                 | —                                                                                                                                                                                                                                                  |
@@ -120,7 +120,7 @@ You can set exact `Precision`/`Scale` with attributes: `[Column(DataType = DataT
 
 {% note info %}
 
-By default (when `DbType` is not specified), the provider uses legacy YDB temporal types: `Date`, `Datetime`, `Timestamp`, `Interval`. To opt in per column to extended types, set `DbType`, e.g. `[Column(DbType = "Date32")]`. Both families can coexist in the same table.
+By default (when `DbType` is not specified), the provider uses legacy {{ ydb-short-name }} temporal types: `Date`, `Datetime`, `Timestamp`, `Interval`. To opt in per column to extended types, set `DbType`, e.g. `[Column(DbType = "Date32")]`. Both families can coexist in the same table.
 
 {% endnote %}
 
@@ -238,7 +238,7 @@ ALTER TABLE Groups
 
 {% note info %}
 
-Linq To DB doesn’t manage migrations. The DDL below is illustrative—apply it with Liquibase/Flyway (recommended). For quick local changes you can also run it directly with db.Execute(...) or the YDB CLI.
+Linq To DB doesn't manage migrations. The DDL below is illustrative—apply it with Liquibase/Flyway (recommended). For quick local changes you can also run it directly with db.Execute(...) or the {{ ydb-short-name }} CLI.
 
 {% endnote %}
 
@@ -256,7 +256,7 @@ Linq To DB doesn’t manage migrations. The DDL below is illustrative—apply it
 
 {% endlist %}
 
-### YDB Indexes how to set parameters
+### {{ ydb-short-name }} Indexes how to set parameters
 
 With the [Index] attribute you can set name, columns, and uniqueness. The provider creates a GLOBAL secondary index.
 Parameters like ASYNC/SYNC and COVER(...) are not supported via the attribute; add them using a separate DDL statement after table creation.
@@ -474,7 +474,88 @@ CREATE TABLE Students (
 
 {% endlist %}
 
-### A complete example using all the constructions above.
+### Bulk operations: insert, update and delete
+
+**BulkCopy:**
+
+In the {{ ydb-short-name }} provider, `BulkCopy` uses the native `BulkUpsert API` and does not generate textual YQL. Rows are sent to {{ ydb-short-name }} as a stream of strongly-typed values over the SDK's binary protocol, so there are no DECLARE statements or ? placeholders
+
+{% list tabs group=lang %}
+
+- C#
+
+  ```csharp
+  var now  = DateTime.UtcNow;
+  var data = Enumerable.Range(0, 15_000).Select(i => new SimpleEntity
+  {
+      Id      = i,
+      IntVal  = i,
+      DecVal  = 0m,
+      StrVal  = $"Name {i}",
+      BoolVal = (i & 1) == 0,
+      DtVal   = now,
+  }); 
+    
+    db.BulkCopy(data)
+    ```
+
+{% endlist %}
+
+**Massive Update (WHERE IN):**
+
+{% list tabs group=lang %}
+
+- C#
+
+  ```csharp
+  var ids = Enumerable.Range(0, 15_000).ToArray();
+  
+  table.Where(t => ids.Contains(t.Id))
+      .Set(_ => _.DecVal, 1.23m)
+      .Set(_ => _.StrVal, "updated")
+      .Set(_ => _.BoolVal, true)
+      .Update();
+  ```
+
+- YQL
+
+  ```yql
+  DECLARE $Gen_List_Primitive_1 AS List<Int32>;
+  UPDATE
+      SimpleEntity
+  SET
+      DecVal = Decimal('1.23', 22, 9),
+      StrVal = 'updated'u,
+      BoolVal = true
+  WHERE
+      SimpleEntity.Id IN $Gen_List_Primitive_1
+  ```
+
+{% endlist %}
+
+**Mass deletion (WHERE IN):**
+
+{% list tabs group=lang %}
+
+- C#
+
+  ```csharp
+  table.Delete(t => ids.Contains(t.Id));
+  ```
+
+- YQL
+
+  ```yql
+  DECLARE $Gen_List_Primitive_1 AS List<Int32>;
+  DELETE FROM
+      SimpleEntity
+  WHERE
+      SimpleEntity.Id IN $Gen_List_Primitive_1
+  ```
+
+{% endlist %}
+
+### A complete example
 
 This section shows a practical, production-style entity from a typical domain. It demonstrates:
 
@@ -483,7 +564,7 @@ This section shows a practical, production-style entity from a typical domain. I
 - a GLOBAL secondary index on full_name for lookups and ordering;
 - end-to-end flow: mapping → table creation → CRUD with generated YQL/DDL.
 
-When you call `db.CreateTable<Employee>()`, Linq To DB creates the table and applies the [Index] attribute as a YDB GLOBAL index.
+When you call `db.CreateTable<Employee>()`, Linq To DB creates the table and applies the [Index] attribute as a {{ ydb-short-name }} GLOBAL index.
 
 {% list tabs group=lang %}
 
@@ -627,7 +708,7 @@ Usage example
 
 {% note info %}
 
-The provider emits parameters (?) because values and types are bound via the driver, not declared in the query text. When YQL requires typed parameters, the provider adds the necessary DECLARE statements automatically. For non-standard patterns such as upsert-style writes, use YDB’s UPSERT with parameter binding—the provider generates these statements as regular YQL with parameters.
+The provider emits parameters (?) because values and types are bound via the driver, not declared in the query text. When YQL requires typed parameters, the provider adds the necessary DECLARE statements automatically. For non-standard patterns such as upsert-style writes, use {{ ydb-short-name }}'s UPSERT with parameter binding—the provider generates these statements as regular YQL with parameters.
 
 {% endnote %}
 
@@ -637,83 +718,3 @@ The provider emits parameters (?) because values and types are bound via the dri
   ```yql
   DELETE FROM employee WHERE Id = ?;
   ```
-
-### Bulk operations: insert, update and delete
-
-**BulkCopy:**
-
-{% list tabs group=lang %}
-
-- C#
-
-  ```csharp
-  var now  = DateTime.UtcNow;
-  var data = Enumerable.Range(0, 15_000).Select(i => new SimpleEntity
-  {
-      Id      = i,
-      IntVal  = i,
-      DecVal  = 0m,
-      StrVal  = $"Name {i}",
-      BoolVal = (i & 1) == 0,
-      DtVal   = now,
-  }); 
-    
-    db.BulkCopy(data)
-    ```
-
-{% endlist %}
-
-**Massive Update (WHERE IN):**
-
-{% list tabs group=lang %}
-
-- C#
-
-  ```csharp
-  var ids = Enumerable.Range(0, 15_000).ToArray();
-  
-  table.Where(t => ids.Contains(t.Id))
-      .Set(_ => _.DecVal, 1.23m)
-      .Set(_ => _.StrVal, "updated")
-      .Set(_ => _.BoolVal, true)
-      .Update();
-  ```
-
-- YQL
-
-  ```yql
-  DECLARE $Gen_List_Primitive_1 AS List<Int32>;
-  UPDATE
-      SimpleEntity
-  SET
-      DecVal = Decimal('1.23', 22, 9),
-      StrVal = 'updated'u,
-      BoolVal = true
-  WHERE
-      SimpleEntity.Id IN $Gen_List_Primitive_1
-  ```
-
-{% endlist %}
-
-**Mass deletion (WHERE IN):**
-
-{% list tabs group=lang %}
-
-- C#
-
-  ```csharp
-  table.Delete(t => ids.Contains(t.Id));
-  ```
-
-- YQL
-
-  ```yql
-  DECLARE $Gen_List_Primitive_1 AS List<Int32>;
-  DELETE FROM
-      SimpleEntity
-  WHERE
-      SimpleEntity.Id IN $Gen_List_Primitive_1
-  ```
-
-{% endlist %}
----

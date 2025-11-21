@@ -189,7 +189,7 @@ public:
                     break;
                 case NDataShard::EExportOutcome::Error:
                     Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
-                    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
+                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
                         ("component", "TUploaderActor")
                         ("reason", "error")
                         ("error", scanProduct->Error)
@@ -198,7 +198,7 @@ public:
                     break;
                 case NDataShard::EExportOutcome::Aborted:
                     Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
-                    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
+                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
                         ("component", "TUploaderActor")
                         ("reason", "aborted")
                         ("error", scanProduct->Error)

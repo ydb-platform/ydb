@@ -17,11 +17,12 @@ class Workload(unittest.TestCase):
         self.output_topic = 'streaming_recipe/output_topic'
         self.query_name = 'my_queries/query_name'
         self.consumer_name = 'consumer_name'
+        self.partition_count = 10
 
     def create_topics(self):
         self.pool.execute_with_retries(
             f"""
-                CREATE TOPIC `{self.input_topic}`;
+                CREATE TOPIC `{self.input_topic}` WITH (min_active_partitions = {self.partition_count});
                 CREATE TOPIC `{self.output_topic}` (CONSUMER {self.consumer_name});
             """
         )
@@ -77,13 +78,20 @@ class Workload(unittest.TestCase):
 
     def write_to_input_topic(self):
         finished_at = time.time() + self.duration
-        self.message_count = 0
 
-        with self.driver.topic_client.writer(self.input_topic, producer_id="producer-id") as writer:
-            while time.time() < finished_at:
-                level = "error" if random.choice([True, False]) else "warn"
-                writer.write(ydb.TopicWriterMessage(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}'))
-                self.message_count += 1
+        writers = []
+        for i in range(self.partition_count):
+            writers.append(self.driver.topic_client.writer(self.input_topic, partition_id=i))
+        
+        while time.time() < finished_at:
+            for writer in writers:
+                messages = []
+                for i in range(100):
+                    level = "error" if random.choice([True, False]) else "warn"
+                    messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
+                writer.write(messages)
+        for writer in writers:
+            writer.close()  
 
     def read_from_output_topic(self):
         with self.driver.topic_client.reader(self.output_topic, self.consumer_name) as reader:

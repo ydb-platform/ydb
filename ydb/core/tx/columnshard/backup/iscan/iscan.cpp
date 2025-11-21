@@ -170,50 +170,49 @@ public:
             return;
         }
         DrainQueue();
-        SendResult(false);
+        SendIntermediateResult();
         MarkAsLast();
     }
 
-    void SendResult(bool isFinal) {
-        if (isFinal) {
-            auto result = Exporter->Finish(NTable::EStatus::Done);
-            auto* scanProduct = static_cast<NDataShard::TExportScanProduct*>(result.Get());
-            switch (scanProduct->Outcome) {
-                case NDataShard::EExportOutcome::Success:
-                    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
-                        ("component", "TUploaderActor")
-                        ("reason", "successfully finished")
-                        ("bytes_read", scanProduct->BytesRead)
-                        ("rows_read", scanProduct->RowsRead);
-                    Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(isFinal));
-                    break;
-                case NDataShard::EExportOutcome::Error:
-                    Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
-                        ("component", "TUploaderActor")
-                        ("reason", "error")
-                        ("error", scanProduct->Error)
-                        ("bytes_read", scanProduct->BytesRead)
-                        ("rows_read", scanProduct->RowsRead);
-                    break;
-                case NDataShard::EExportOutcome::Aborted:
-                    Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
-                        ("component", "TUploaderActor")
-                        ("reason", "aborted")
-                        ("error", scanProduct->Error)
-                        ("bytes_read", scanProduct->BytesRead)
-                        ("rows_read", scanProduct->RowsRead);
-                    break;
-            }
-            PassAway();
-            return;
-        }
-
-        if (!CurrentBatch.HasMoreRows() && (isFinal || !CurrentBatch.IsLast) && CurrentBatch.NeedResult) {
+    void SendIntermediateResult() {
+        if (!CurrentBatch.HasMoreRows() && !CurrentBatch.IsLast && CurrentBatch.NeedResult) {
             Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(isFinal));
             CurrentBatch.NeedResult = false;
         }
+    }
+    
+    void SendFinalResult() {
+        auto result = Exporter->Finish(NTable::EStatus::Done);
+        auto* scanProduct = static_cast<NDataShard::TExportScanProduct*>(result.Get());
+        switch (scanProduct->Outcome) {
+            case NDataShard::EExportOutcome::Success:
+                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
+                    ("component", "TUploaderActor")
+                    ("reason", "successfully finished")
+                    ("bytes_read", scanProduct->BytesRead)
+                    ("rows_read", scanProduct->RowsRead);
+                Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(isFinal));
+                break;
+            case NDataShard::EExportOutcome::Error:
+                Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+                    ("component", "TUploaderActor")
+                    ("reason", "error")
+                    ("error", scanProduct->Error)
+                    ("bytes_read", scanProduct->BytesRead)
+                    ("rows_read", scanProduct->RowsRead);
+                break;
+            case NDataShard::EExportOutcome::Aborted:
+                Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+                    ("component", "TUploaderActor")
+                    ("reason", "aborted")
+                    ("error", scanProduct->Error)
+                    ("bytes_read", scanProduct->BytesRead)
+                    ("rows_read", scanProduct->RowsRead);
+                break;
+        }
+        PassAway();
     }
 
     void DrainQueue() {
@@ -228,12 +227,12 @@ public:
             if (!CurrentBatch.HasMoreRows()) {
                 auto batch = DataQueue.front();
                 DataQueue.pop();
-                SendResult(false);
+                SendIntermediateResult();
 
                 if (!batch.Data) {
                     CurrentBatch.Clear();
                     CurrentBatch.IsLast = batch.IsLast;
-                    SendResult(false);
+                    SendIntermediateResult();
                     continue;
                 }
 
@@ -275,7 +274,7 @@ public:
     void Handle(const TEvPrivate::TEvBackupExportState::TPtr& ev) {
         const auto& event = *ev.Get()->Get();
         if (event.State == NTable::EScan::Final) {
-            SendResult(true);
+            SendFinalResult();
             return;
         }
         LastState = event.State;

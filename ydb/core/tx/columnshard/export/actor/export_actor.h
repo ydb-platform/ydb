@@ -33,36 +33,16 @@ private:
     std::shared_ptr<NExport::TSession> ExportSession;
     TActorId Exporter;
     static inline const ui64 FreeSpace = ((ui64)8) << 20;
-    void SwitchStage(const EStage from, const EStage to) {
-        AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
-        Stage = to;
-    }
+    void SwitchStage(const EStage from, const EStage to);
 
 protected:
-    void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
-        SwitchStage(EStage::Initialization, EStage::WaitData);
-        AFL_VERIFY(!ScanActorId);
-        auto& msg = ev->Get()->Record;
-        ScanActorId = ActorIdFromProto(msg.GetScanActorId());
-        TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, (ui64)TabletId, 1));
-    }
+    void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev);
 
     virtual void OnSessionStateSaved() override;
 
-    virtual void OnTxCompleted(const ui64 /*txId*/) override {
-        Session->FinishActor();
-    }
+    virtual void OnTxCompleted(const ui64 /*txId*/) override;
 
-    virtual void OnSessionProgressSaved() override {
-        SwitchStage(EStage::WaitSaveCursor, EStage::WaitData);
-        if (ExportSession->GetCursor().IsFinished()) {
-            ExportSession->Finish();
-            SaveSessionState();
-        } else {
-            AFL_VERIFY(ScanActorId);
-            TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, (ui64)TabletId, 1));
-        }
-    }
+    virtual void OnSessionProgressSaved() override;
 
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev);
 
@@ -70,36 +50,15 @@ protected:
         AFL_VERIFY(false);
     }
     
-    void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult::TPtr& /*ev*/) {
-        SwitchStage(EStage::WaitWriting, EStage::WaitSaveCursor);
-        AFL_VERIFY(ExportSession->GetCursor().HasLastKey());
-        SaveSessionProgress();
-    }
+    void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult::TPtr& /*ev*/);
     
     void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& /*ev*/);
 
-    virtual void OnBootstrap(const TActorContext& /*ctx*/) override {
-        NDataShard::IExport::TTableColumns columns;
-        int i = 0;
-        for (const auto& [name, type] : ExportSession->GetTask().GetColumns()) {
-            columns[i++] = NDataShard::TUserTable::TUserColumn(type, "", name, true);
-        }
-        auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(SelfId(), ExportSession->GetTask().GetBackupTask(), AppData()->DataShardExportFactory, columns, *ExportSession->GetTask().GetTxId());
-        Exporter = Register(actor.release());
-        auto evStart = ExportSession->GetTask().GetSelector()->BuildRequestInitiator(ExportSession->GetCursor());
-        evStart->Record.SetGeneration((ui64)TabletId);
-        evStart->Record.SetCSScanPolicy("PLAIN");
-        Send(TabletActorId, evStart.release());
-        Become(&TActor::StateFunc);
-    }
+    virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
 
 public:
     TActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter,
-        const std::shared_ptr<IBlobsStorageOperator>& blobsOperator)
-        : TBase(bgSession, adapter)
-        , BlobsOperator(blobsOperator) {
-        ExportSession = bgSession->GetLogicAsVerifiedPtr<NExport::TSession>();
-    }
+        const std::shared_ptr<IBlobsStorageOperator>& blobsOperator);
 
     STATEFN(StateFunc) {
         try {

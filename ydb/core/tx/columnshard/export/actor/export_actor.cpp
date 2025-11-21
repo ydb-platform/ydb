@@ -2,6 +2,62 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NOlap::NExport {
+    
+void TActor::SwitchStage(const EStage from, const EStage to) {
+    AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
+    Stage = to;
+}
+
+void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
+    SwitchStage(EStage::Initialization, EStage::WaitData);
+    AFL_VERIFY(!ScanActorId);
+    auto& msg = ev->Get()->Record;
+    ScanActorId = ActorIdFromProto(msg.GetScanActorId());
+    TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, (ui64)TabletId, 1));
+}
+
+void TActor::OnTxCompleted(const ui64 /*txId*/) {
+    Session->FinishActor();
+}
+
+void TActor::OnSessionProgressSaved() {
+    SwitchStage(EStage::WaitSaveCursor, EStage::WaitData);
+    if (ExportSession->GetCursor().IsFinished()) {
+        ExportSession->Finish();
+        SaveSessionState();
+    } else {
+        AFL_VERIFY(ScanActorId);
+        TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, (ui64)TabletId, 1));
+    }
+}
+
+void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult::TPtr& /*ev*/) {
+    SwitchStage(EStage::WaitWriting, EStage::WaitSaveCursor);
+    AFL_VERIFY(ExportSession->GetCursor().HasLastKey());
+    SaveSessionProgress();
+}
+
+void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
+    NDataShard::IExport::TTableColumns columns;
+    int i = 0;
+    for (const auto& [name, type] : ExportSession->GetTask().GetColumns()) {
+        columns[i++] = NDataShard::TUserTable::TUserColumn(type, "", name, true);
+    }
+    auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(SelfId(), ExportSession->GetTask().GetBackupTask(), AppData()->DataShardExportFactory, columns, *ExportSession->GetTask().GetTxId());
+    Exporter = Register(actor.release());
+    auto evStart = ExportSession->GetTask().GetSelector()->BuildRequestInitiator(ExportSession->GetCursor());
+    evStart->Record.SetGeneration((ui64)TabletId);
+    evStart->Record.SetCSScanPolicy("PLAIN");
+    Send(TabletActorId, evStart.release());
+    Become(&TActor::StateFunc);
+}
+
+TActor::TActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter,
+    const std::shared_ptr<IBlobsStorageOperator>& blobsOperator)
+    : TBase(bgSession, adapter)
+    , BlobsOperator(blobsOperator) {
+    ExportSession = bgSession->GetLogicAsVerifiedPtr<NExport::TSession>();
+}
 
 void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     SwitchStage(EStage::WaitData, EStage::WaitWriting);

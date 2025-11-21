@@ -29,7 +29,7 @@
 
 */
 
-#include "arrow/util/base64.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/base64.h"
 #include <iostream>
 
 namespace arrow20 {

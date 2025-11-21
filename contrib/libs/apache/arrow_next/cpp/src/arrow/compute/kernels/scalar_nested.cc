@@ -18,17 +18,17 @@
 // Vector kernels involving nested types
 
 #include <cmath>
-#include "arrow/array/array_base.h"
-#include "arrow/array/builder_nested.h"
-#include "arrow/compute/api_scalar.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/result.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/bit_block_counter.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/bitmap_generate.h"
-#include "arrow/util/string.h"
-#include "arrow/util/unreachable.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_nested.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_block_counter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_generate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/unreachable.h"
 
 namespace arrow20 {
 

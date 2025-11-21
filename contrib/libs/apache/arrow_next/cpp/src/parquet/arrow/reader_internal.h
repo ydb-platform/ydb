@@ -27,12 +27,12 @@
 #include <utility>
 #include <vector>
 
-#include "parquet/arrow/schema.h"
-#include "parquet/column_reader.h"
-#include "parquet/file_reader.h"
-#include "parquet/metadata.h"
-#include "parquet/platform.h"
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/file_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
 
 namespace arrow20 {
 

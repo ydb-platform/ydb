@@ -21,10 +21,10 @@
 #include <stdexcept>
 #include <string>
 
-#include "arrow/extension_type.h"
-#include "arrow/result.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20::extension {
 

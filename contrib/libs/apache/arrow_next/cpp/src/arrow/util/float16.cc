@@ -18,8 +18,8 @@
 #include <ostream>
 #include <type_traits>
 
-#include "arrow/util/float16.h"
-#include "arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/float16.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
 
 namespace arrow20 {
 namespace util {

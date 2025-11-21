@@ -22,11 +22,11 @@
 #include <cstring>
 #include <memory>
 
-#include "arrow/type_fwd.h"
-#include "arrow/util/compression.h"
-#include "parquet/exception.h"
-#include "parquet/platform.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 namespace arrow20 {
 

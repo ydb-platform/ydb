@@ -15,15 +15,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
 
 #include <cstdint>
 #include <memory>
 #include <utility>
 
-#include "arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
 
-#include "parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
 
 namespace parquet20 {
 

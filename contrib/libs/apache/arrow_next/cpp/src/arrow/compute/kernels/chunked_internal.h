@@ -24,10 +24,10 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/chunk_resolver.h"
-#include "arrow/compute/kernels/codegen_internal.h"
-#include "arrow/util/span.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunk_resolver.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/span.h"
 
 namespace arrow20::compute::internal {
 

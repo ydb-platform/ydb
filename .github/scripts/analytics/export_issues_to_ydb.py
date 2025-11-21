@@ -5,6 +5,7 @@ import ydb
 import configparser
 import time
 import json
+import argparse
 from datetime import datetime, timezone, timedelta
 import requests
 from typing import List, Dict, Any, Optional
@@ -89,6 +90,7 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
               title
               url
               state
+              stateReason
               body
               bodyText
               createdAt
@@ -132,6 +134,25 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
               }
               participants(first: 10) {
                 totalCount
+              }
+              timelineItems(first: 50, itemTypes: [MARKED_AS_DUPLICATE_EVENT]) {
+                nodes {
+                  __typename
+                  ... on MarkedAsDuplicateEvent {
+                    canonical {
+                      ... on Issue {
+                        number
+                        url
+                        title
+                      }
+                      ... on PullRequest {
+                        number
+                        url
+                        title
+                      }
+                    }
+                  }
+                }
               }
             }
             pageInfo {
@@ -407,6 +428,32 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         # Issue type from project fields
         issue_type = issue_project_fields.get('type') or issue_project_fields.get('Type')
         
+        # Extract state reason (e.g., COMPLETED, DUPLICATE, NOT_PLANNED)
+        state_reason = issue.get('stateReason')
+        
+        # Extract duplicate information from timeline items
+        duplicate_of = None
+        duplicate_of_number = None
+        duplicate_of_url = None
+        duplicate_of_title = None
+        timeline_items_data = issue.get('timelineItems', {})
+        timeline_items = timeline_items_data.get('nodes', []) if isinstance(timeline_items_data, dict) else []
+        
+        for item in timeline_items:
+            if item and isinstance(item, dict):
+                typename = item.get('__typename')
+                if typename == 'MarkedAsDuplicateEvent':
+                    # In MarkedAsDuplicateEvent:
+                    # - canonical: the original issue/PR that this duplicates
+                    canonical = item.get('canonical')
+                    if canonical and isinstance(canonical, dict):
+                        duplicate_of_number = canonical.get('number')
+                        duplicate_of_url = canonical.get('url')
+                        duplicate_of_title = canonical.get('title')
+                        if duplicate_of_url:
+                            duplicate_of = duplicate_of_url
+                        break
+        
         # Extract assignees
         assignees = []
         for assignee in issue.get('assignees', {}).get('nodes', []):
@@ -464,8 +511,15 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             'title': issue.get('title', ''),
             'url': issue.get('url', ''),
             'state': issue.get('state', ''),
+            'state_reason': state_reason,
             'body': issue.get('body', '') or '',
             'body_text': issue.get('bodyText', ''),
+            
+            # Duplicate information
+            'duplicate_of': duplicate_of,
+            'duplicate_of_number': duplicate_of_number,
+            'duplicate_of_url': duplicate_of_url,
+            'duplicate_of_title': duplicate_of_title,
             
             # Time dimensions
             'created_at': created_at,
@@ -528,8 +582,15 @@ def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
             `title` Utf8,
             `url` Utf8,
             `state` Utf8,
+            `state_reason` Utf8,  -- Reason for closing (COMPLETED, DUPLICATE, NOT_PLANNED)
             `body` Utf8,
             `body_text` Utf8,
+            
+            -- Duplicate information
+            `duplicate_of` Utf8,  -- URL of the canonical issue (if this is a duplicate)
+            `duplicate_of_number` Uint64,  -- Number of the canonical issue
+            `duplicate_of_url` Utf8,  -- URL of the canonical issue
+            `duplicate_of_title` Utf8,  -- Title of the canonical issue
             
             -- Time dimensions for BI (partitioning keys)
             `created_at` Timestamp NOT NULL,
@@ -588,6 +649,11 @@ def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
 
 def main():
     """Main function to export GitHub issues to YDB"""
+    parser = argparse.ArgumentParser(description='Export GitHub issues to YDB')
+    parser.add_argument('--full', action='store_true', 
+                        help='Perform full export of all issues (default: incremental update)')
+    args = parser.parse_args()
+    
     print("Starting GitHub issues export to YDB")
     script_start_time = time.time()
     
@@ -612,15 +678,19 @@ def main():
             create_issues_table(ydb_wrapper, table_path)
             
             # Check if this is an incremental update
-            last_update_time = get_last_update_time(ydb_wrapper, table_path)
-            
-            if last_update_time:
-                print(f"Incremental update: fetching issues updated since {last_update_time.isoformat()}")
-                # Add a small buffer to avoid missing issues due to timing issues
-                since_time = last_update_time - timedelta(minutes=5)
-            else:
-                print("Full export: fetching all issues")
+            if args.full:
+                print("Full export: fetching all issues (--full flag specified)")
                 since_time = None
+            else:
+                last_update_time = get_last_update_time(ydb_wrapper, table_path)
+                
+                if last_update_time:
+                    print(f"Incremental update: fetching issues updated since {last_update_time.isoformat()}")
+                    # Add a small buffer to avoid missing issues due to timing issues
+                    since_time = last_update_time - timedelta(minutes=5)
+                else:
+                    print("Full export: fetching all issues (no previous data found)")
+                    since_time = None
             
             # Fetch issues from GitHub
             issues = fetch_repository_issues(ORG_NAME, REPO_NAME, since_time)
@@ -659,8 +729,15 @@ def main():
                 .add_column("title", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("state_reason", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("body", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("body_text", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                
+                # Duplicate information
+                .add_column("duplicate_of", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("duplicate_of_number", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                .add_column("duplicate_of_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("duplicate_of_title", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 
                 # Time dimensions
                 .add_column("created_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))

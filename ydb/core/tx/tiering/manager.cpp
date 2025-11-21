@@ -124,7 +124,7 @@ public:
                       case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
                           return ERetryErrorClass::ShortRetry;
                   }
-              }, TDuration::MilliSeconds(10), TDuration::Seconds(30), TDuration::Seconds(30), 10000))
+              }, TDuration::MilliSeconds(10), TDuration::Seconds(29), TDuration::Seconds(30), 10000))
         , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
     {
     }

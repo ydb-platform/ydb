@@ -10,6 +10,7 @@
 #include <library/cpp/monlib/metrics/metric_sub_registry.h>
 
 #include <util/thread/lfqueue.h>
+#include <util/system/spinlock.h>
 #include <util/system/thread.h>
 
 #include <span>
@@ -39,6 +40,9 @@ private:
     };
     std::vector<TWrVerbData> WorkBuf;
 };
+
+void SetSigHandler() noexcept;
+
 class TCqCommon : public ICq {
 public:
     TCqCommon(NActors::TActorSystem* as)
@@ -46,7 +50,7 @@ public:
         , Cq(nullptr)
     {}
 
-    virtual ~TCqCommon();
+    virtual ~TCqCommon() = default;
 
     virtual void ReturnWr(IWr*) noexcept = 0;
 
@@ -54,8 +58,8 @@ public:
         return Cq;
     }
 
-    int Init(const TRdmaCtx* ctx, int maxCqe) noexcept {
-        Cq = ibv_create_cq(ctx->GetContext(), maxCqe, nullptr, nullptr, 0);
+    int Init(const TRdmaCtx* ctx, int maxCqe, struct ibv_comp_channel* ch) noexcept {
+        Cq = ibv_create_cq(ctx->GetContext(), maxCqe, nullptr, ch, 0);
         if (!Cq) {
             return errno;
         }
@@ -66,12 +70,17 @@ public:
         return ibv_poll_cq(Cq, wc.size(), &wc.front());
     }
 
-    void Idle() noexcept {
+    virtual void Idle() noexcept {
         SpinLockPause();
+    }
+
+    void DestroyCq () noexcept {
+        if (Cq) {
+            ibv_destroy_cq(Cq);
+        }
     }
 protected:
     NActors::TActorSystem* const As;
-private:
     ibv_cq* Cq;
 };
 
@@ -186,12 +195,6 @@ protected:
         std::unique_ptr<IIbVerbsBuilder> VerbsBuilder;
     };
 
-    void Stop() {
-        Cont.store(false, std::memory_order_relaxed);
-        if (Thread.Running())
-            Thread.Join();
-    }
-
 public:
     TSimpleCqBase(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c) noexcept
         : TCqCommon(as)
@@ -237,63 +240,78 @@ public:
             return TErr();
         }
         Waiters.Enqueue(new TWaiterCtx(std::move(qp), std::move(builder)));
+        if (VerbsBuildingState.Lock.TryAcquire()) {
+            ProcessWr(VerbsBuildingState.CurCtx, VerbsBuildingState.PreparedWr, true);
+            VerbsBuildingState.Lock.Release();
+        }
         return {};
     }
 
-    bool ProcessWr(std::unique_ptr<TWaiterCtx>& ctx, std::vector<TWr*>& preparedWr) noexcept {
-        if (ctx) {
-            TWr* wr = nullptr;
-            Queue.Dequeue(&wr);
-            if (wr) {
-                preparedWr.emplace_back(wr);
-                if (preparedWr.size() < ctx->GetVerbsNum()) {
-                    // we need more work requests
-                    return true;
-                }
-
-                ibv_send_wr* wrList = ctx->BuildListOfVerbs(preparedWr);
-
-                if (Err.load(std::memory_order_relaxed)) {
-                    for (auto x : preparedWr) {
-                        x->ReplyCqErr(As);
-                    }
-                } else {
-                    Allocated.fetch_add(preparedWr.size());
-                    ibv_send_wr* wrErr = nullptr;
-                    int err = ctx->Qp->PostSend(wrList, &wrErr);
-                    if (err) {
-                        while (wrErr) {
-                            TWr* x = &WrBuf[wrErr->wr_id];
-                            x->ReplyWrErr(As, err);
-                            wrErr = wrErr->next;
+    // Build RDMA verbs and post it
+    // Returns false if it safe to sleep to wait for cq event
+    bool ProcessWr(std::unique_ptr<TWaiterCtx>& ctx, std::vector<TWr*>& preparedWr, bool tryBuildAtOnce) noexcept {
+        while (true) {
+            if (ctx) {
+                TWr* wr = nullptr;
+                Queue.Dequeue(&wr);
+                if (wr) {
+                    preparedWr.emplace_back(wr);
+                    if (preparedWr.size() < ctx->GetVerbsNum()) {
+                        if (tryBuildAtOnce) {
+                            continue;
+                        } else {
+                            return true;
                         }
                     }
-                }
 
-                preparedWr.clear();
-                ctx.reset();
-                return true;
+                    ibv_send_wr* wrList = ctx->BuildListOfVerbs(preparedWr);
+
+                    if (Err.load(std::memory_order_relaxed)) {
+                        for (auto x : preparedWr) {
+                            x->ReplyCqErr(As);
+                        }
+                    } else {
+                        Allocated.fetch_add(preparedWr.size());
+                        ibv_send_wr* wrErr = nullptr;
+                        int err = ctx->Qp->PostSend(wrList, &wrErr);
+                        if (err) {
+                            while (wrErr) {
+                                TWr* x = &WrBuf[wrErr->wr_id];
+                                x->ReplyWrErr(As, err);
+                                wrErr = wrErr->next;
+                            }
+                        }
+                    }
+
+                    preparedWr.clear();
+                    ctx.reset();
+                    return true;
+                } else {
+                    return false;
+                }
             } else {
-                return false;
+                TWaiterCtx* p = nullptr;
+                Waiters.Dequeue(&p);
+                if (p == nullptr) {
+                    // No wr to build
+                    return false;
+                }
+                ctx.reset(p);
             }
-        } else {
-            TWaiterCtx* p = nullptr;
-            Waiters.Dequeue(&p);
-            ctx.reset(p);
-            return true;
         }
         return false;
     }
 
     static void* ThreadFunc(void* p) {
         TThread::SetCurrentThreadName("RdmaCqThread");
-        reinterpret_cast<TSimpleCqBase*>(p)->Loop();
+        SetSigHandler();
+        TSimpleCqBase* cq = reinterpret_cast<TSimpleCqBase*>(p);
+        cq->CqThreadId = pthread_self();
+        cq->Loop();
         return nullptr;
     }
 
     void Loop() noexcept {
-        std::unique_ptr<TWaiterCtx> curCtx;
-        std::vector<TWr*> preparedWr;
         while (Cont.load(std::memory_order_relaxed)) {
             const constexpr size_t wcBatchSize = 16;
             std::array<ibv_wc, wcBatchSize> wcs;
@@ -306,7 +324,12 @@ public:
                     //TODO: Is it correct err handling?
                     Err.store(true, std::memory_order_relaxed);
                 } else if (rv == 0) {
-                    if (!ProcessWr(curCtx, preparedWr)) {
+                    bool idleAllowed = false;
+                    if (VerbsBuildingState.Lock.TryAcquire()) {
+                        idleAllowed = !ProcessWr(VerbsBuildingState.CurCtx, VerbsBuildingState.PreparedWr, false);
+                        VerbsBuildingState.Lock.Release();
+                    }
+                    if (idleAllowed) {
                         Idle();
                     }
                 } else {
@@ -347,6 +370,10 @@ public:
         return 0;
     }
 
+    void Awake() noexcept {
+        pthread_kill(CqThreadId, SIGUSR1);
+    }
+
 protected:
     TThread Thread;
     std::atomic<bool> Cont;
@@ -359,9 +386,18 @@ protected:
     TLockFreeQueue<TWr*> Queue;
 
     TLockFreeQueue<TWaiterCtx*> Waiters;
+
+    struct {
+        std::unique_ptr<TWaiterCtx> CurCtx;
+        std::vector<TWr*> PreparedWr;
+        TSpinLock Lock;
+    } VerbsBuildingState;
+
     std::atomic<bool> Err;
     std::atomic<ui64> Allocated;
     NMonitoring::THistogramPtr RdmaDeviceVerbTimeUs;
+private:
+    pthread_t CqThreadId;
 };
 
 }

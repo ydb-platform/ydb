@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/debug/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <library/cpp/time_provider/monotonic.h>
 
@@ -61,7 +62,7 @@ TCommandPing::TCommandPing()
 void TCommandPing::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     TStringStream pingKindsDescription;
     pingKindsDescription << "Ping kind, available options:";
     for (size_t i = 0; i < PingKindDescriptions.size(); ++i) {

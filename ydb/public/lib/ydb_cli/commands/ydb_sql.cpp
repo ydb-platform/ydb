@@ -12,6 +12,7 @@
 #include <ydb/public/lib/ydb_cli/common/progress_indication.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <util/generic/queue.h>
 #include <util/string/escape.h>
@@ -48,7 +49,7 @@ void TCommandSql::Config(TConfig& config) {
     config.Opts->AddLongOption("tx-mode", "Transaction mode [serializable-rw, online-ro, stale-ro, snapshot-ro, snapshot-rw, no-tx]")
         .RequiredArgument("[String]").DefaultValue("no-tx").StoreResult(&TxMode);
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     TStringStream description;
     description << "Print progress of query execution. Requires non-none statistics collection mode. Available options: ";
     description << "\n  " << colors.BoldColor() << "tty" << colors.OldColor()

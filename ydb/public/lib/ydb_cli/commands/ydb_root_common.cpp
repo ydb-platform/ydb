@@ -19,6 +19,7 @@
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
@@ -120,7 +121,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     FillConfig(config);
     TClientCommandOptions& opts = *config.Opts;
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
 
     TStringBuilder endpointHelp;
     endpointHelp << "Endpoint to connect. Protocols: "

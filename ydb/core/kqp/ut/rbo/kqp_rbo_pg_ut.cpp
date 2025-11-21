@@ -824,6 +824,18 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
                 SELECT a FROM t1
+                ORDER BY a+1 DESC;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT a FROM t1
+                ORDER BY a+1 DESC, c ASC;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT a FROM t1
                 ORDER BY a DESC;
             )",
             R"(
@@ -843,6 +855,8 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         };
 
         std::vector<std::string> results = {
+            R"([["3"];["2"];["1"];["0"]])",
+            R"([["3"];["2"];["1"];["0"]])",
             R"([["3"];["2"];["1"];["0"]])",
             R"([["3";"4"];["2";"3"];["1";"2"];["0";"1"]])",
             R"([["3"];["2"];["2"];["1"];["1"];["0"];["0"]])"

@@ -19,7 +19,7 @@ def kikimr_udfs(request):
     )
     config.yaml_config["log_config"]["default_level"] = 8
 
-    kikimr = Kikimr(config)
+    kikimr = Kikimr(config, timeout_seconds=30)
     yield kikimr
     kikimr.stop()
 
@@ -58,4 +58,3 @@ def get_all_cgi_params(url):
         self.write_stream(['{"url": "http://kuibyshevsky.sam.sudrf.ru/modules.php?name=information"}'])
 
         assert future.result()[0].rows[0]["name"] == "information"
-

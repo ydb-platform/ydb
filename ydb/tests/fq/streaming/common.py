@@ -32,12 +32,12 @@ class YdbClient:
 
 
 class Kikimr:
-    def __init__(self, config: KikimrConfigGenerator):
+    def __init__(self, config: KikimrConfigGenerator, timeout_seconds: int = 240):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
 
         self.cluster = KiKiMR(config)
-        self.cluster.start()
+        self.cluster.start(timeout_seconds=timeout_seconds)
 
         first_node = list(self.cluster.nodes.values())[0]
         self.ydb_client = YdbClient(

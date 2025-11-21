@@ -15,7 +15,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-constexpr ui64 MAX_IN_FLIGHT_LIMIT = 500;
 constexpr ui64 SEQNO_SPACE = 40;
 constexpr ui64 MaxTaskId = (1ULL << (64 - SEQNO_SPACE));
 
@@ -323,7 +322,7 @@ public:
         ReadResults.emplace_back(std::move(result));
     }
 
-    std::optional<TString> IsOverloaded() final {
+    std::optional<TString> IsOverloaded(size_t) final {
         return std::nullopt;
     }
 
@@ -596,10 +595,10 @@ public:
         YQL_ENSURE(false);
     }
 
-    std::optional<TString> IsOverloaded() final {
-        if (UnprocessedRows.size() >= MAX_IN_FLIGHT_LIMIT ||
-            PendingLeftRowsByKey.size() >= MAX_IN_FLIGHT_LIMIT ||
-            ResultRowsBySeqNo.size() >= MAX_IN_FLIGHT_LIMIT)
+    std::optional<TString> IsOverloaded(size_t maxRowsProcessing) final {
+        if (UnprocessedRows.size() >= maxRowsProcessing ||
+            PendingLeftRowsByKey.size() >= maxRowsProcessing ||
+            ResultRowsBySeqNo.size() >= maxRowsProcessing)
         {
             TStringBuilder overloadDescriptor;
             overloadDescriptor << "unprocessed rows: " << UnprocessedRows.size()

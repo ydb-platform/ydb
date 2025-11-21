@@ -1845,7 +1845,6 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
     ui32 inputTasks = 0;
     bool isShuffle = false;
     bool forceMapTasks = false;
-    bool isParallelUnionAll = false;
     ui32 mapConnectionCount = 0;
 
     for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
@@ -1894,8 +1893,7 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
-                inputTasks += originStageInfo.Tasks.size();
-                isParallelUnionAll = true;
+                partitionsCount = std::max<ui64>(partitionsCount, originStageInfo.Tasks.size());
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kVectorResolve: {
@@ -1912,7 +1910,7 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
 
     Y_ENSURE(mapConnectionCount <= 1, "Only a single map connection is allowed");
 
-    if ((isShuffle || isParallelUnionAll) && !forceMapTasks) {
+    if (isShuffle && !forceMapTasks) {
         if (stage.GetTaskCount()) {
             partitionsCount = stage.GetTaskCount();
             intros.push_back("Manually overridden - " + ToString(partitionsCount));

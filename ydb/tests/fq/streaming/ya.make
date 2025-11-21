@@ -7,6 +7,7 @@ TEST_SRCS(
 )
 
 PY_SRCS(
+    common.py
     conftest.py
 )
 
@@ -25,6 +26,7 @@ PEERDIR(
 DEPENDS(
     ydb/apps/ydb
     ydb/tests/tools/pq_read
+    yql/essentials/udfs/common/python/python3_small
 )
 
 END()

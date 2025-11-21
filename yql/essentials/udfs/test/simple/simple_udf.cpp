@@ -176,8 +176,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("GenericAsStruct");
-        return name;
+        static auto Name = TStringRef::Of("GenericAsStruct");
+        return Name;
     }
 
     TGenericAsStruct(size_t argc)
@@ -248,8 +248,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Logging");
-        return name;
+        static auto Name = TStringRef::Of("Logging");
+        return Name;
     }
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {

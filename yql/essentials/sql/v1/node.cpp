@@ -3254,10 +3254,10 @@ TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNod
         return nullptr;
     }
 
-    static const THashSet<TStringBuf> nullSafeOps = {
+    static const THashSet<TStringBuf> NullSafeOps = {
         "IsDistinctFrom", "IsNotDistinctFrom",
         "EqualsIgnoreCase", "StartsWithIgnoreCase", "EndsWithIgnoreCase", "StringContainsIgnoreCase"};
-    if (!nullSafeOps.contains(opName)) {
+    if (!NullSafeOps.contains(opName)) {
         const bool bothArgNull = a->IsNull() && b->IsNull();
         const bool oneArgNull = a->IsNull() || b->IsNull();
 
@@ -3645,12 +3645,12 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
     return new TNamedExprNode(parent);
 }
 
-bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::TOperationMode mode) {
+bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode) {
     if (!Value) {
         ctx.Error(stmBeginPos) << "parameter VALUE must be set";
         return false;
     }
-    if (mode == TOperationMode::Alter) {
+    if (mode == EOperationMode::Alter) {
         if (InheritPermissions) {
             ctx.Error(stmBeginPos) << "parameter INHERIT_PERMISSIONS is not supported for alter operation";
             return false;

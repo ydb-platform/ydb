@@ -2194,7 +2194,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     stmBeginPos,
                     node.GetRule_with_secret_settings4(),
                     secretParams,
-                    TSecretParameters::TOperationMode::Create)) {
+                    TSecretParameters::EOperationMode::Create)) {
                 return false;
             }
 
@@ -2233,7 +2233,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     stmBeginPos,
                     node.GetRule_with_secret_settings4(),
                     secretParams,
-                    TSecretParameters::TOperationMode::Alter)) {
+                    TSecretParameters::EOperationMode::Alter)) {
                 return false;
             }
 
@@ -3680,7 +3680,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
     }
 
     const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf" || normalizedPragma == "layer";
-    static const THashSet<TStringBuf> lexicalScopePragmas = {
+    static const THashSet<TStringBuf> LexicalScopePragmas = {
         "classicdivision",
         "strictjoinkeytypes",
         "disablestrictjoinkeytypes",
@@ -3692,7 +3692,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
         "simplepg",
         "disablesimplepg",
     };
-    const bool hasLexicalScope = withConfigure || lexicalScopePragmas.contains(normalizedPragma);
+    const bool hasLexicalScope = withConfigure || LexicalScopePragmas.contains(normalizedPragma);
     const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";
     const bool allowTopLevelPragmas = TopLevel_ || AllowTopLevelPragmas_;
     for (auto pragmaValue : pragmaValues) {

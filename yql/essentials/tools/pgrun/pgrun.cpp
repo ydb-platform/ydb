@@ -67,7 +67,7 @@ bool IsEscapedChar(const TString& s, size_t pos) {
 
 class TStatementIterator final
     : public TInputRangeAdaptor<TStatementIterator> {
-    enum class State {
+    enum class EState {
         InOperator,
         EndOfOperator,
         LineComment,
@@ -86,21 +86,21 @@ public:
         : Program_(std::move(program))
         , Cur_()
         , Pos_(0)
-        , State_(State::InOperator)
+        , State_(EState::InOperator)
         , AtStmtStart_(true)
-        , Mode_(State::InOperator)
+        , Mode_(EState::InOperator)
         , Depth_(0)
         , Tag_()
         , StandardConformingStrings_(true)
     {
     }
 
-    static bool IsInWsSignificantState(State state) {
+    static bool IsInWsSignificantState(EState state) {
         switch (state) {
-            case State::QuotedIdentifier:
-            case State::StringLiteral:
-            case State::EscapedStringLiteral:
-            case State::DollarStringLiteral:
+            case EState::QuotedIdentifier:
+            case EState::StringLiteral:
+            case EState::EscapedStringLiteral:
+            case EState::DollarStringLiteral:
                 return true;
             default:
                 return false;
@@ -282,10 +282,10 @@ private:
 
     bool InOperatorParser(size_t startPos) {
         // need \ to detect psql meta-commands
-        static const TString midNextTokens{"'\";-/$\\"};
+        static const TString MidNextTokens{"'\";-/$\\"};
         // need : for basic psql-vars support
-        static const TString initNextTokens{"'\";-/$\\:"};
-        const auto& nextTokens = (AtStmtStart_) ? initNextTokens : midNextTokens;
+        static const TString InitNextTokens{"'\";-/$\\:"};
+        const auto& nextTokens = (AtStmtStart_) ? InitNextTokens : MidNextTokens;
 
         if (AtStmtStart_) {
             Pos_ = Program_.find_first_not_of(" \t\n\r\v", Pos_);
@@ -303,30 +303,30 @@ private:
         switch (Program_[Pos_]) {
             case '\'':
                 State_ = (!StandardConformingStrings_ || 0 < Pos_ && std::toupper(Program_[Pos_ - 1]) == 'E')
-                             ? State::EscapedStringLiteral
-                             : State::StringLiteral;
+                             ? EState::EscapedStringLiteral
+                             : EState::StringLiteral;
                 break;
 
             case '"':
-                State_ = State::QuotedIdentifier;
+                State_ = EState::QuotedIdentifier;
                 break;
 
             case ';':
                 State_ = Mode_ = IsCopyFromStdin(startPos, Pos_)
-                                     ? State::InCopyFromStdin
-                                     : State::EndOfOperator;
+                                     ? EState::InCopyFromStdin
+                                     : EState::EndOfOperator;
                 break;
 
             case '-':
                 if (Pos_ < Program_.length() && Program_[Pos_ + 1] == '-') {
-                    State_ = State::LineComment;
+                    State_ = EState::LineComment;
                     ++Pos_;
                 }
                 break;
 
             case '/':
                 if (Pos_ < Program_.length() && Program_[Pos_ + 1] == '*') {
-                    State_ = State::BlockComment;
+                    State_ = EState::BlockComment;
                     ++Depth_;
                     ++Pos_;
                 }
@@ -335,14 +335,14 @@ private:
             case '$':
                 if (Pos_ == 0 || std::isspace(Program_[Pos_ - 1])) {
                     if (SaveDollarTag()) {
-                        State_ = State::DollarStringLiteral;
+                        State_ = EState::DollarStringLiteral;
                     }
                 }
                 break;
 
             case '\\':
                 if (AtStmtStart_) {
-                    State_ = State::InMetaCommand;
+                    State_ = EState::InMetaCommand;
                 } else if (Program_.Contains("\\gexec", Pos_)) {
                     Pos_ += 6;
                     return Emit(Program_[Pos_] == '\n');
@@ -351,7 +351,7 @@ private:
 
             case ':':
                 if (Pos_ == 0 || Program_[Pos_ - 1] == '\n') {
-                    State_ = State::InVar;
+                    State_ = EState::InVar;
                 }
                 break;
         }
@@ -365,7 +365,7 @@ private:
     }
 
     bool Emit(bool atEol) {
-        State_ = Mode_ = State::InOperator;
+        State_ = Mode_ = EState::InOperator;
         AtStmtStart_ = true;
 
         if (atEol) {
@@ -395,14 +395,14 @@ private:
         switch (*p) {
             case '-':
                 if (Pos_ < Program_.length() && Program_[Pos_ + 1] == '-') {
-                    State_ = State::LineComment;
+                    State_ = EState::LineComment;
                     ++Pos_;
                 }
                 break;
 
             case '/':
                 if (Pos_ < Program_.length() && Program_[Pos_ + 1] == '*') {
-                    State_ = State::BlockComment;
+                    State_ = EState::BlockComment;
                     ++Depth_;
                     ++Pos_;
                 }
@@ -434,7 +434,7 @@ private:
             return true;
         }
 
-        if (Mode_ == State::EndOfOperator) {
+        if (Mode_ == EState::EndOfOperator) {
             return Emit(false);
         }
 
@@ -491,7 +491,7 @@ private:
             return true;
         }
 
-        State_ = State::InOperator;
+        State_ = EState::InOperator;
         AtStmtStart_ = false;
 
         return false;
@@ -510,7 +510,7 @@ private:
             return true;
         }
 
-        State_ = State::InOperator;
+        State_ = EState::InOperator;
         AtStmtStart_ = false;
 
         return false;
@@ -534,7 +534,7 @@ private:
             return true;
         }
 
-        State_ = State::InOperator;
+        State_ = EState::InOperator;
         AtStmtStart_ = false;
 
         return false;
@@ -557,7 +557,7 @@ private:
 
         Tag_.Clear();
 
-        State_ = State::InOperator;
+        State_ = EState::InOperator;
         AtStmtStart_ = false;
 
         return false;
@@ -610,37 +610,37 @@ private:
 
     bool CallParser(size_t startPos) {
         switch (State_) {
-            case State::InOperator:
+            case EState::InOperator:
                 return InOperatorParser(startPos);
 
-            case State::EndOfOperator:
+            case EState::EndOfOperator:
                 return EndOfOperatorParser();
 
-            case State::LineComment:
+            case EState::LineComment:
                 return LineCommentParser();
 
-            case State::BlockComment:
+            case EState::BlockComment:
                 return BlockCommentParser();
 
-            case State::QuotedIdentifier:
+            case EState::QuotedIdentifier:
                 return QuotedIdentifierParser();
 
-            case State::StringLiteral:
+            case EState::StringLiteral:
                 return StringLiteralParser();
 
-            case State::EscapedStringLiteral:
+            case EState::EscapedStringLiteral:
                 return EscapedStringLiteralParser();
 
-            case State::DollarStringLiteral:
+            case EState::DollarStringLiteral:
                 return DollarStringLiteralParser();
 
-            case State::InMetaCommand:
+            case EState::InMetaCommand:
                 return MetaCommandParser();
 
-            case State::InCopyFromStdin:
+            case EState::InCopyFromStdin:
                 return InCopyFromStdinParser();
 
-            case State::InVar:
+            case EState::InVar:
                 return VarParser();
 
             default:
@@ -661,10 +661,10 @@ private:
     TString Program_;
     TString Cur_;
     size_t Pos_;
-    State State_;
+    EState State_;
     bool AtStmtStart_;
 
-    State Mode_;
+    EState Mode_;
     ui16 Depth_;
     TStringBuf Tag_;
     bool StandardConformingStrings_;
@@ -768,15 +768,15 @@ inline const TString FormatNumeric(const TString& value)
 }
 
 const TString FormatFloat(const TString& value, std::function<TString(const TString&)> formatter) {
-    static const TString nan = "NaN";
-    static const TString inf = "Infinity";
-    static const TString minf = "-Infinity";
+    static const TString Nan = "NaN";
+    static const TString Inf = "Infinity";
+    static const TString Minf = "-Infinity";
 
     try {
         return (value == "")       ? ""
-               : (value == "nan")  ? nan
-               : (value == "inf")  ? inf
-               : (value == "-inf") ? minf
+               : (value == "Nan")  ? Nan
+               : (value == "Inf")  ? Inf
+               : (value == "-Inf") ? Minf
                                    : formatter(value);
     } catch (const std::exception& e) {
         Cerr << "Unexpected float value '" << value << "'\n";
@@ -1291,9 +1291,9 @@ int Main(int argc, char* argv[])
             PrintExprTo(program, Cerr);
         }
 
-        static const THashSet<TString> ignoredNodes{"CommitAll!", "Commit!"};
+        static const THashSet<TString> IgnoredNodes{"CommitAll!", "Commit!"};
         const auto opNode = NYql::FindNode(program->ExprRoot(),
-                                           [](const TExprNode::TPtr& node) { return !ignoredNodes.contains(node->Content()); });
+                                           [](const TExprNode::TPtr& node) { return !IgnoredNodes.contains(node->Content()); });
         if (opNode->IsCallable("Write!")) {
             Y_ENSURE(opNode->ChildrenSize() == 5);
 

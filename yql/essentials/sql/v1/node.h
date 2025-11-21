@@ -1362,7 +1362,7 @@ struct TSequenceParameters {
 
 class TSecretParameters {
 public:
-    enum class TOperationMode {
+    enum class EOperationMode {
         Create,
         Alter,
     };
@@ -1371,7 +1371,7 @@ public:
     TMaybe<TDeferredAtom> InheritPermissions;
 
 public:
-    bool ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::TOperationMode mode);
+    bool ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode);
 };
 
 struct TTopicConsumerSettings {

@@ -678,7 +678,7 @@ TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, cons
             // clang-format on
         }
 
-        static const THashMap<TStringBuf, TStringBuf> binOpsWithNegations = {
+        static const THashMap<TStringBuf, TStringBuf> BinOpsWithNegations = {
             {"<", ">="},
             {"<=", ">"},
             {">", "<="},
@@ -687,8 +687,8 @@ TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, cons
             {"!=", "=="},
         };
 
-        auto it = node->Head().IsCallable() ? binOpsWithNegations.find(node->Head().Content()) : binOpsWithNegations.end();
-        if (it != binOpsWithNegations.end() && (IsMemberBinOpNode(node->Head()) || IsMemberListBinOpNode(node->Head()))) {
+        auto it = node->Head().IsCallable() ? BinOpsWithNegations.find(node->Head().Content()) : BinOpsWithNegations.end();
+        if (it != BinOpsWithNegations.end() && (IsMemberBinOpNode(node->Head()) || IsMemberListBinOpNode(node->Head()))) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.RenameNode(node->Head(), it->second);
         }

@@ -272,14 +272,14 @@ Y_UNIT_TEST(QualifiedAsteriskBefore) {
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        static bool seenStar = false;
+        static bool SeenStar = false;
         if (word == "FlattenMembers") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table."));
         } else if (word == "SqlProjectItem") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("megahelpful_len")));
-            UNIT_ASSERT_VALUES_EQUAL(seenStar, true);
+            UNIT_ASSERT_VALUES_EQUAL(SeenStar, true);
         } else if (word == "SqlProjectStarItem") {
-            seenStar = true;
+            SeenStar = true;
         }
     };
     TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("SqlProjectItem"), 0}, {TString("SqlProjectStarItem"), 0}};
@@ -296,14 +296,14 @@ Y_UNIT_TEST(QualifiedAsteriskAfter) {
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        static bool seenStar = false;
+        static bool SeenStar = false;
         if (word == "FlattenMembers") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table."));
         } else if (word == "SqlProjectItem") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("megahelpful_len")));
-            UNIT_ASSERT_VALUES_EQUAL(seenStar, false);
+            UNIT_ASSERT_VALUES_EQUAL(SeenStar, false);
         } else if (word == "SqlProjectStarItem") {
-            seenStar = true;
+            SeenStar = true;
         }
     };
     TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("SqlProjectItem"), 0}, {TString("SqlProjectStarItem"), 0}};

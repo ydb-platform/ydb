@@ -541,16 +541,16 @@ enum class EBuilds {
 
 template <const char* TResourceName, typename TValue,
           typename TStorage = std::conditional_t<TResourceName == TMResourceName,
-                                                 NYql::DateTime::TTMStorage,
-                                                 NYql::DateTime::TTM64Storage>>
+                                                 NYql::NDateTime::TTMStorage,
+                                                 NYql::NDateTime::TTM64Storage>>
 TStorage& Reference(TValue& value) {
     return *reinterpret_cast<TStorage*>(value.GetRawPtr());
 }
 
 template <const char* TResourceName, typename TValue,
           typename TStorage = std::conditional_t<TResourceName == TMResourceName,
-                                                 NYql::DateTime::TTMStorage,
-                                                 NYql::DateTime::TTM64Storage>>
+                                                 NYql::NDateTime::TTMStorage,
+                                                 NYql::NDateTime::TTM64Storage>>
 const TStorage& Reference(const TValue& value) {
     return *reinterpret_cast<const TStorage*>(value.GetRawPtr());
 }

@@ -66,19 +66,19 @@ constexpr std::array<std::string_view, 5> TimestampFormatNames = {
     "UNIX_TIME_MICROSECONDS"sv};
 
 TCoAtom InferIndexName(TCoAtomList key, TExprContext& ctx) {
-    static const TString end = "_idx";
-    static const TString delimiter = "_";
+    static const TString End = "_idx";
+    static const TString Delimiter = "_";
 
-    size_t sz = end.size();
+    size_t sz = End.size();
     for (const auto& n : key) {
-        sz += n.Value().size() + delimiter.size();
+        sz += n.Value().size() + Delimiter.size();
     }
 
     TString name(Reserve(sz));
     for (const auto& n : key) {
-        name += n.Value() + delimiter;
+        name += n.Value() + Delimiter;
     }
-    name += end;
+    name += End;
 
     return Build<TCoAtom>(ctx, key.Pos())
         .Value(name)
@@ -404,7 +404,7 @@ TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContex
 
     TVector<TCoNameValueTuple> other;
 
-    const static std::unordered_set<TString> sequenceSettingNames =
+    const static std::unordered_set<TString> SequenceSettingNames =
         {"start", "increment", "cache", "minvalue", "maxvalue", "cycle", "restart"};
 
     for (auto child : node) {
@@ -420,7 +420,7 @@ TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContex
                 valueType = tuple.Value().Cast<TCoAtom>();
             } else if (name == "temporary") {
                 temporary = Build<TCoAtom>(ctx, node.Pos()).Value("true").Done();
-            } else if (sequenceSettingNames.contains(TString(name))) {
+            } else if (SequenceSettingNames.contains(TString(name))) {
                 sequenceSettings.push_back(tuple);
             } else {
                 other.push_back(tuple);

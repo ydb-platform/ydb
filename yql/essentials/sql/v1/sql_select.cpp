@@ -947,7 +947,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
         udf->SetLabel(Id(node.GetBlock10().GetRule_an_id2(), *this));
     }
 
-    const auto reduceMode = node.HasBlock8() ? ReduceMode::ByAll : ReduceMode::ByPartition;
+    const auto reduceMode = node.HasBlock8() ? EReduceMode::ByAll : EReduceMode::ByPartition;
 
     TVector<TSortSpecificationPtr> assumeOrderBy;
     if (node.HasBlock13()) {

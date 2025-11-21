@@ -1,0 +1,11 @@
+Checks: >
+  -*,
+CheckOptions:
+  - key: readability-identifier-naming.StructPrefix
+    value: T
+  - key: readability-identifier-naming.EnumPrefix
+    value: E
+  - key: readability-identifier-naming.NamespacePrefix
+    value: N
+  - key: readability-identifier-naming.StaticVariableCase
+    value: CamelCase

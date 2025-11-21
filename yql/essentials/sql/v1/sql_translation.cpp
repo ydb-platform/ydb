@@ -4034,8 +4034,8 @@ bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom&
     }
 
     if (auto literalName = result.GetLiteral(); literalName && !allowSystemRoles) {
-        static const THashSet<TStringBuf> systemRoles = {"current_role", "current_user", "session_user"};
-        if (systemRoles.contains(to_lower(*literalName))) {
+        static const THashSet<TStringBuf> SystemRoles = {"current_role", "current_user", "session_user"};
+        if (SystemRoles.contains(to_lower(*literalName))) {
             Ctx_.Error() << "System role " << to_upper(*literalName) << " can not be used here";
             return false;
         }
@@ -5348,7 +5348,7 @@ bool TSqlTranslation::ParseSecretSettings(
     const TPosition pos,
     const TRule_with_secret_settings& settingsNode,
     TSecretParameters& secretParams,
-    const TSecretParameters::TOperationMode mode) {
+    const TSecretParameters::EOperationMode mode) {
     // with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* RPAREN;
     auto tryStoreEntry = [&](const auto& entry) -> bool {
         return StoreSecretSettingEntry(
@@ -5387,7 +5387,7 @@ bool TSqlTranslation::ParseSecretId(const TRule_id_or_at& node, TString& objectI
 }
 
 bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result) {
-    const static TSet<TStringBuf> allAuthFields{
+    const static TSet<TStringBuf> AllAuthFields{
         "service_account_id",
         "service_account_secret_name",
         "login",
@@ -5396,7 +5396,7 @@ bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>&
         "aws_secret_access_key_secret_name",
         "aws_region",
         "token_secret_name"};
-    const static TMap<TStringBuf, TSet<TStringBuf>> authMethodFields{
+    const static TMap<TStringBuf, TSet<TStringBuf>> AuthMethodFields{
         {"NONE", {}},
         {"SERVICE_ACCOUNT", {"service_account_id", "service_account_secret_name"}},
         {"BASIC", {"login", "password_secret_name"}},
@@ -5409,13 +5409,13 @@ bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>&
         return false;
     }
     const auto& authMethod = *authMethodIt->second.GetLiteral();
-    auto it = authMethodFields.find(authMethod);
-    if (it == authMethodFields.end()) {
+    auto it = AuthMethodFields.find(authMethod);
+    if (it == AuthMethodFields.end()) {
         Ctx_.Error() << "Unknown AUTH_METHOD = " << authMethod;
         return false;
     }
     const auto& currentAuthFields = it->second;
-    for (const auto& authField : allAuthFields) {
+    for (const auto& authField : AllAuthFields) {
         if (currentAuthFields.contains(authField) && !result.contains(TString{authField})) {
             Ctx_.Error() << to_upper(TString{authField}) << " requires key";
             return false;
@@ -5563,7 +5563,7 @@ bool TSqlTranslation::ParseViewQuery(
 namespace {
 
 static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
-    static const TString statementSeparator = ";\n";
+    static const TString StatementSeparator = ";\n";
 
     TVector<TString> statements;
     NYql::TIssues issues;
@@ -5599,14 +5599,14 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
                 return {};
             }
 
-            result << "$__ydb_transfer_lambda = " << Ctx.Query.substr(begin, end - begin + endToken->value().size()) << statementSeparator;
+            result << "$__ydb_transfer_lambda = " << Ctx.Query.substr(begin, end - begin + endToken->value().size()) << StatementSeparator;
 
             return result;
         }
         case NSQLv1Generated::TRule_lambda_or_parameter::kAltLambdaOrParameter2: {
             const auto& valueBlock = lambdaOrParameter.GetAlt_lambda_or_parameter2().GetRule_bind_parameter1().GetBlock2();
             const auto id = Id(valueBlock.GetAlt1().GetRule_an_id_or_type1(), ctx);
-            result << "$__ydb_transfer_lambda = $" << id << statementSeparator;
+            result << "$__ydb_transfer_lambda = $" << id << StatementSeparator;
             return result;
         }
         case NSQLv1Generated::TRule_lambda_or_parameter::ALT_NOT_SET:

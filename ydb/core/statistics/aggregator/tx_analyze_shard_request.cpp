@@ -7,17 +7,17 @@
 
 namespace NKikimr::NStat {
 
-struct TStatisticsAggregator::TTxAnalyzeTableRequest : public TTxBase {
+struct TStatisticsAggregator::TTxAnalyzeShardRequest : public TTxBase {
     std::vector<std::unique_ptr<IEventBase>> Events;
     
-    TTxAnalyzeTableRequest(TSelf* self)
+    TTxAnalyzeShardRequest(TSelf* self)
         : TTxBase(self)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_ANALYZE_TABLE_REQUEST; }
+    TTxType GetTxType() const override { return TXTYPE_ANALYZE_SHARD_REQUEST; }
 
-    static std::unique_ptr<TEvStatistics::TEvAnalyzeTable> MakeRequest(const TString& operationId, const TForceTraversalTable& operationTable) {
-        auto request = std::make_unique<TEvStatistics::TEvAnalyzeTable>();
+    static std::unique_ptr<TEvStatistics::TEvAnalyzeShard> MakeRequest(const TString& operationId, const TForceTraversalTable& operationTable) {
+        auto request = std::make_unique<TEvStatistics::TEvAnalyzeShard>();
         auto& record = request->Record;
         record.SetOperationId(operationId);
         auto& table = *record.MutableTable();
@@ -28,7 +28,7 @@ struct TStatisticsAggregator::TTxAnalyzeTableRequest : public TTxBase {
     }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeTableRequest::Execute");
+        SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeShardRequest::Execute");
 
         for (TForceTraversalOperation& operation : Self->ForceTraversals) {
             for (TForceTraversalTable& operationTable : operation.Tables) {
@@ -53,10 +53,10 @@ struct TStatisticsAggregator::TTxAnalyzeTableRequest : public TTxBase {
 
     void Complete(const TActorContext& ctx) override {
         if (Events.size()) {
-            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTableRequest::Complete. Send " << Events.size() << " events.");
+            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeShardRequest::Complete. Send " << Events.size() << " events.");
         }
         else {
-            SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeTableRequest::Complete.");
+            SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeShardRequest::Complete.");
         }
 
         for (auto& ev : Events) {
@@ -72,7 +72,7 @@ struct TStatisticsAggregator::TTxAnalyzeTableRequest : public TTxBase {
 };
 
 void TStatisticsAggregator::Handle(TEvPrivate::TEvSendAnalyze::TPtr&) {
-    Execute(new TTxAnalyzeTableRequest(this),
+    Execute(new TTxAnalyzeShardRequest(this),
         TActivationContext::AsActorContext());
 }
 

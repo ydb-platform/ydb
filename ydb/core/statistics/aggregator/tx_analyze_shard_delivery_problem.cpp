@@ -7,15 +7,15 @@
 
 namespace NKikimr::NStat {
 
-struct TStatisticsAggregator::TTxAnalyzeTableDeliveryProblem : public TTxBase {
-    TTxAnalyzeTableDeliveryProblem(TSelf* self)
+struct TStatisticsAggregator::TTxAnalyzeShardDeliveryProblem : public TTxBase {
+    TTxAnalyzeShardDeliveryProblem(TSelf* self)
         : TTxBase(self)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_ANALYZE_TABLE_DELIVERY_PROBLEM; }
+    TTxType GetTxType() const override { return TXTYPE_ANALYZE_SHARD_DELIVERY_PROBLEM; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeTableDeliveryProblem::Execute");
+        SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeShardDeliveryProblem::Execute");
 
         for (TForceTraversalOperation& operation : Self->ForceTraversals) {
             for (TForceTraversalTable& operationTable : operation.Tables) {
@@ -32,14 +32,14 @@ struct TStatisticsAggregator::TTxAnalyzeTableDeliveryProblem : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeTableDeliveryProblem::Complete");
+        SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeShardDeliveryProblem::Complete");
 
         ctx.Schedule(AnalyzeDeliveryProblemPeriod, new TEvPrivate::TEvAnalyzeDeliveryProblem());
     }
 };
 
 void TStatisticsAggregator::Handle(TEvPrivate::TEvAnalyzeDeliveryProblem::TPtr&) {
-    Execute(new TTxAnalyzeTableDeliveryProblem(this),
+    Execute(new TTxAnalyzeShardDeliveryProblem(this),
         TActivationContext::AsActorContext());
 }
 

@@ -53,10 +53,9 @@ TStatus ExecuteGeneric(NYdb::NQuery::TQueryClient& queryClient, TSession& sessio
 }
 
 template<bool UseSchemaSecrets>
-void CreateSecret(TString& secretName, const TString& secretValue, TSession& session) {
+void CreateSecret(const TString& secretName, const TString& secretValue, TSession& session) {
     TString query;
     if constexpr (UseSchemaSecrets) {
-        secretName = "/Root/" + secretName;
         query = Sprintf("CREATE SECRET `%s` WITH (value=\"%s\")", secretName.c_str(), secretValue.c_str());
     } else {
         query = Sprintf("CREATE OBJECT %s (TYPE SECRET) WITH value=\"%s\"", secretName.c_str(), secretValue.c_str());
@@ -9295,7 +9294,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // ok
         {
-            TString secretId = "mysecretname";
+            const TString secretId = "mysecretname";
             const TString secretValue = "root@builtin";
             CreateSecret<UseSchemaSecrets>(secretId, secretValue, session);
 
@@ -9306,9 +9305,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root",
-                    TOKEN_SECRET_NAME = "%s"
+                    %s = "%s"
                 );
-            )", kikimr.GetEndpoint().c_str(), secretId.c_str());
+            )", kikimr.GetEndpoint().c_str(), UseSchemaSecrets ? "TOKEN_SECRET_PATH" : "TOKEN_SECRET_NAME", secretId.c_str());
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -9352,7 +9351,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAsyncReplicationWithPasswordSecret) {
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithPasswordSecret, UseSchemaSecrets) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -9367,16 +9366,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     ENDPOINT = "%s",
                     DATABASE = "/Root",
                     USER = "user",
-                    PASSWORD_SECRET_NAME = "password_secret_name"
+                    %s = "password_secret"
                 );
-            )", kikimr.GetEndpoint().c_str());
+            )", kikimr.GetEndpoint().c_str(), UseSchemaSecrets ? "PASSWORD_SECRET_PATH" : "PASSWORD_SECRET_NAME");
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
-    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithIamAuth, UseQueryService) {
+    Y_UNIT_TEST_QUAD(CreateAsyncReplicationWithIamAuth, UseQueryService, UseSchemaSecrets) {
         TKikimrRunner kikimr;
         auto queryClient = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();
@@ -9401,9 +9400,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 WITH (
                     CONNECTION_STRING = "grpcs://localhost:2135/?database=/Root",
                     SERVICE_ACCOUNT_ID = "foo",
-                    INITIAL_TOKEN_SECRET_NAME = "bar"
+                    %s = "bar"
                 );
-            )", kikimr.GetEndpoint().c_str());
+            )", UseSchemaSecrets ? "INITIAL_TOKEN_SECRET_PATH" : "INITIAL_TOKEN_SECRET_NAME");
 
             const auto result = executeQuery(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

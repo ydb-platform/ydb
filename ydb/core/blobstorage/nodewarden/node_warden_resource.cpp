@@ -92,6 +92,7 @@ void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
 void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     auto *msg = ev->Get();
     StorageConfig = std::move(msg->Config);
+    CommittedStorageConfig = std::move(msg->CommittedConfig);
     SelfManagementEnabled = msg->SelfManagementEnabled;
     BridgeInfo = std::move(msg->BridgeInfo);
 
@@ -111,7 +112,7 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     }
 
     for (const TActorId& subscriber : StorageConfigSubscribers) {
-        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
+        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo, CommittedStorageConfig));
     }
 
     if (StorageConfig->HasConfigComposite()) {

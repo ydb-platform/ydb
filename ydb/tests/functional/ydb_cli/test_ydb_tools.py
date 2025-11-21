@@ -5,7 +5,6 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 import os
 import logging
-import pytest
 
 import yatest
 
@@ -109,11 +108,13 @@ class TestToolsCopy(BaseTestToolsService):
             """.format(table_dir, table_name),
             commit_tx=True,
         )
-        
+
         rows = []
         for row in result[0].rows:
-            rows.append((row.key, row.id, row.value))
-        
+            # Decode bytes to string if needed
+            value = row.value.decode('utf-8') if isinstance(row.value, bytes) else row.value
+            rows.append((row.key, row.id, value))
+
         expected_rows = [
             (1, 1111, "one"),
             (2, 2222, "two"),
@@ -121,7 +122,7 @@ class TestToolsCopy(BaseTestToolsService):
             (5, 5555, "five"),
             (7, 7777, "seven")
         ]
-        
+
         assert rows == expected_rows, f"Data mismatch: expected {expected_rows}, got {rows}"
 
     def test_copy_table_with_indexes(self):
@@ -144,7 +145,7 @@ class TestToolsCopy(BaseTestToolsService):
         # Verify destination table has indexes
         desc = self.session.describe_table(dest_path)
         assert len(desc.indexes) == 2, f"Expected 2 indexes, got {len(desc.indexes)}"
-        
+
         index_names = sorted([idx.name for idx in desc.indexes])
         assert index_names == ['by_id', 'by_value'], f"Index names mismatch: {index_names}"
 

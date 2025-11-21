@@ -120,9 +120,9 @@ namespace NKikimr::NSqsTopic::V1 {
                 return;
             }
 
-            // auto toOptional = [](TMaybe<TString>&& value) {
-            //     return value.Empty() ? std::nullopt : std::make_optional(std::move(*value));
-            // };
+            auto toOptional = [](TMaybe<TString>&& value) {
+                return value.Empty() ? std::nullopt : std::make_optional(std::move(*value));
+            };
 
             TVector<NPQ::NMLP::TWriterSettings::TMessage> validItems(Reserve(Items.size()));
             for (const auto& item : Items) {
@@ -130,9 +130,9 @@ namespace NKikimr::NSqsTopic::V1 {
                     validItems.push_back(NPQ::NMLP::TWriterSettings::TMessage{
                         .Index = item.BatchIndex,
                         .MessageBody = std::move(item.MessageBody),
-                        .MessageGroupId = item.MessageGroupId.Empty() ? std::nullopt : std::make_optional(std::move(*item.MessageGroupId)),
-                        .MessageDeduplicationId = item.MessageDeduplicationId.Empty() ? std::nullopt : std::make_optional(std::move(*item.MessageDeduplicationId)),
-                        .SerializedMessageAttributes = item.SerializedMessageAttributes.Empty() ? std::nullopt : std::make_optional(std::move(*item.SerializedMessageAttributes)),
+                        .MessageGroupId = toOptional(std::move(item.MessageGroupId)),
+                        .MessageDeduplicationId = toOptional(std::move(item.MessageDeduplicationId)),
+                        .SerializedMessageAttributes = toOptional(std::move(item.SerializedMessageAttributes)),
                         .Delay = TDuration::Seconds(item.DelaySeconds),
                     });
                 }

@@ -3,6 +3,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
+ydb/core/blobstorage/ut_vdisk [*/*] chunk chunk
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/fq/libs/row_dispatcher/ut sole chunk chunk
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
@@ -12,6 +13,7 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
 ydb/core/kqp/ut/olap KqpOlapLocks.DeleteAbsentMultipleShards+Reboot
+ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
@@ -45,6 +47,7 @@ ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQCon
 ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/core/viewer/tests test.py.test_viewer_query_long
 ydb/core/viewer/tests test.py.test_viewer_query_long_multipart
+ydb/library/yql/dq/actors/spilling/ut DqSpillingFileTests.ThreadPoolQueueOverflow
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-kqprun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg_pg-kqprun]
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Query
@@ -141,3 +144,4 @@ ydb/tests/sql/large test_tiering.py.TestYdbS3TTL.test_basic_tiering_operations
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_pool_classifier_init[False]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-False]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-True]
+ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit

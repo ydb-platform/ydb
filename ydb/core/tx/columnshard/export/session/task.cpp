@@ -51,7 +51,7 @@ NBackground::TSessionControlContainer TExportTask::BuildAbortControl() const {
 }
 
 std::shared_ptr<NBackground::ISessionLogic> TExportTask::DoBuildSession() const {
-    auto result = std::make_shared<TSession>(std::make_shared<TExportTask>(Identifier, Selector, StorageInitializer, Serializer, TxId));
+    auto result = std::make_shared<TSession>(std::make_shared<TExportTask>(Identifier, Selector, StorageInitializer, Serializer, Columns, BackupTask, TxId));
     if (!!TxId) {
         result->Confirm();
     }

@@ -176,15 +176,42 @@ public:
 
     void SendResult(bool isFinal) {
         if (isFinal) {
-            AFL_VERIFY(!CurrentBatch.HasMoreRows() && CurrentBatch.NeedResult);
+            auto result = Exporter->Finish(NTable::EStatus::Done);
+            auto* scanProduct = static_cast<NDataShard::TExportScanProduct*>(result.Get());
+            switch (scanProduct->Outcome) {
+                case NDataShard::EExportOutcome::Success:
+                    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
+                        ("component", "TUploaderActor")
+                        ("reason", "successfully finished")
+                        ("bytes_read", scanProduct->BytesRead)
+                        ("rows_read", scanProduct->RowsRead);
+                    Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(isFinal));
+                    break;
+                case NDataShard::EExportOutcome::Error:
+                    Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
+                    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
+                        ("component", "TUploaderActor")
+                        ("reason", "error")
+                        ("error", scanProduct->Error)
+                        ("bytes_read", scanProduct->BytesRead)
+                        ("rows_read", scanProduct->RowsRead);
+                    break;
+                case NDataShard::EExportOutcome::Aborted:
+                    Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
+                    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
+                        ("component", "TUploaderActor")
+                        ("reason", "aborted")
+                        ("error", scanProduct->Error)
+                        ("bytes_read", scanProduct->BytesRead)
+                        ("rows_read", scanProduct->RowsRead);
+                    break;
+            }
+            PassAway();
+            return;
         }
-        
+    
         if (!CurrentBatch.HasMoreRows()  && (isFinal || !CurrentBatch.IsLast) && CurrentBatch.NeedResult) {
             Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(isFinal));
-            if (isFinal) {
-                Exporter->Finish(NTable::EStatus::Done);
-                PassAway();
-            }
             CurrentBatch.NeedResult = false;
         }
     }
@@ -249,7 +276,6 @@ public:
         const auto& event = *ev.Get()->Get();
         if (event.State == NTable::EScan::Final) {
             SendResult(true);
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("reason", "successfully finished");
             return;
         }
         LastState = event.State;

@@ -20,11 +20,14 @@ public:
         return "CS::EXPORT";
     }
 private:
+    using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
     TIdentifier Identifier = TIdentifier(TInternalPathId{});
     YDB_READONLY_DEF(TSelectorContainer, Selector);
     YDB_READONLY_DEF(TStorageInitializerContainer, StorageInitializer);
+    YDB_READONLY_DEF(NKikimrSchemeOp::TBackupTask, BackupTask);
     YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(std::optional<ui64>, TxId);
+    YDB_READONLY_DEF(std::vector<TNameTypeInfo>, Columns)
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TExportTask& proto) override;
     virtual NKikimrColumnShardExportProto::TExportTask DoSerializeToProto() const override;
@@ -32,9 +35,6 @@ private:
     virtual std::shared_ptr<NBackground::ISessionLogic> DoBuildSession() const override;
 
 public:
-
-
-
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
@@ -49,12 +49,14 @@ public:
     TExportTask() = default;
 
     TExportTask(const TIdentifier& id, const TSelectorContainer& selector, const TStorageInitializerContainer& storageInitializer, 
-        const NArrow::NSerialization::TSerializerContainer& serializer, const std::optional<ui64> txId = {})
+        const NArrow::NSerialization::TSerializerContainer& serializer, const std::vector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TBackupTask& backupTask, const std::optional<ui64> txId = {})
         : Identifier(id)
         , Selector(selector)
         , StorageInitializer(storageInitializer)
+        , BackupTask(backupTask)
         , Serializer(serializer)
         , TxId(txId)
+        , Columns(columns)
     {
     }
 

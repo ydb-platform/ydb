@@ -13,8 +13,9 @@ private:
     std::shared_ptr<NOlap::NExport::TExportTask> ExportTask;
     bool TaskExists = false;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTask;
-    std::unique_ptr<NTabletFlatExecutor::ITransaction> TxConfirm;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAbort;
+    NKikimrTxColumnShard::TBackupTxBody ExportTxBody;
+    THashSet<TActorId> NotifySubscribers;
     using TProposeResult = TTxController::TProposeResult;
     static inline auto Registrator = TFactory::TRegistrator<TBackupTransactionOperator>(NKikimrTxColumnShard::TX_KIND_BACKUP);
 
@@ -33,6 +34,10 @@ private:
     virtual bool DoParse(TColumnShard& owner, const TString& data) override;
     virtual TString DoDebugString() const override {
         return "BACKUP";
+    }
+    
+    virtual void RegisterSubscriber(const TActorId& actorId) override {
+        NotifySubscribers.insert(actorId);
     }
 
 public:

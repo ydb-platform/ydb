@@ -11,26 +11,20 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
         CurrentData = NArrow::ToBatch(data);
         CurrentDataBlob = ExportSession->GetTask().GetSerializer()->SerializeFull(CurrentData);
         if (data) {
-            auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), 
-                BlobsOperator->StartWritingAction(NBlobOperations::EConsumer::EXPORT), ExportSession->GetCursor(), TabletId, ExportSession->GetTask().GetSelector()->GetPathId());
-            Register(CreateWriteActor((ui64)TabletId, controller, TInstant::Max()));
+            Send(new IEventHandle(Exporter, SelfId(), new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(CurrentData, ev->Get()->Finished)));
         }
     } else {
         CurrentData = nullptr;
         CurrentDataBlob = "";
-        TBase::Send(SelfId(), new NEvents::TEvExportWritingFinished);
+        Send(new IEventHandle(Exporter, SelfId(), new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(nullptr, true)));
     }
     TOwnedCellVec lastKey = ev->Get()->LastKey;
     AFL_VERIFY(!ExportSession->GetCursor().IsFinished());
     ExportSession->MutableCursor().InitNext(ev->Get()->LastKey, ev->Get()->Finished);
 }
 
-void TActor::HandleExecute(NEvents::TEvExportWritingFailed::TPtr& /*ev*/) {
-    SwitchStage(EStage::WaitWriting, EStage::WaitWriting);
-    auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), 
-        BlobsOperator->StartWritingAction(NBlobOperations::EConsumer::EXPORT),
-        ExportSession->GetCursor(), TabletId, ExportSession->GetTask().GetSelector()->GetPathId());
-    Register(CreateWriteActor((ui64)TabletId, controller, TInstant::Max()));
+void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& /*ev*/) {
+    AFL_VERIFY(false);
 }
 
 class TTxProposeFinish: public NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard> {

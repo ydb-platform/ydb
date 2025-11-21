@@ -1,15 +1,15 @@
 #pragma once
-#include "write.h"
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/actor.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/export/common/identifier.h>
-#include <ydb/core/tx/columnshard/export/events/events.h>
 #include <ydb/core/tx/columnshard/export/session/selector/abstract/selector.h>
 #include <ydb/core/tx/columnshard/export/session/session.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/backup/iscan/iscan.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -33,6 +33,8 @@ private:
     std::shared_ptr<arrow::RecordBatch> CurrentData;
     TString CurrentDataBlob;
     std::shared_ptr<NExport::TSession> ExportSession;
+    TActorId Exporter;
+    TString ErrorMessage;
     static inline const ui64 FreeSpace = ((ui64)8) << 20;
     void SwitchStage(const EStage from, const EStage to) {
         AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
@@ -65,21 +67,28 @@ protected:
         }
     }
 
-    void HandleExecute(NEvents::TEvExportWritingFinished::TPtr& /*ev*/) {
-        SwitchStage(EStage::WaitWriting, EStage::WaitSaveCursor);
-        AFL_VERIFY(ExportSession->GetCursor().HasLastKey());
-        SaveSessionProgress();
-    }
-
-    void HandleExecute(NEvents::TEvExportWritingFailed::TPtr& ev);
-
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev);
 
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& /*ev*/) {
         AFL_VERIFY(false);
     }
+    
+    void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult::TPtr& /*ev*/) {
+        SwitchStage(EStage::WaitWriting, EStage::WaitSaveCursor);
+        AFL_VERIFY(ExportSession->GetCursor().HasLastKey());
+        SaveSessionProgress();
+    }
+    
+    void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& /*ev*/);
 
     virtual void OnBootstrap(const TActorContext& /*ctx*/) override {
+        NDataShard::IExport::TTableColumns columns;
+        int i = 0;
+        for (const auto& [name, type] : ExportSession->GetTask().GetColumns()) {
+            columns[i++] = NDataShard::TUserTable::TUserColumn(type, "", name, true);
+        }
+        auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(SelfId(), ExportSession->GetTask().GetBackupTask(), AppData()->DataShardExportFactory, columns, *ExportSession->GetTask().GetTxId());
+        Exporter = Register(actor.release());
         auto evStart = ExportSession->GetTask().GetSelector()->BuildRequestInitiator(ExportSession->GetCursor());
         evStart->Record.SetGeneration((ui64)TabletId);
         evStart->Record.SetCSScanPolicy("PLAIN");
@@ -101,8 +110,8 @@ public:
                 hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, HandleExecute);
                 hFunc(NKqp::TEvKqpCompute::TEvScanData, HandleExecute);
                 hFunc(NKqp::TEvKqpCompute::TEvScanError, HandleExecute);
-                hFunc(NEvents::TEvExportWritingFinished, HandleExecute);
-                hFunc(NEvents::TEvExportWritingFailed, HandleExecute);
+                hFunc(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult, HandleExecute);
+                hFunc(NColumnShard::TEvPrivate::TEvBackupExportError, HandleExecute);
                 default:
                     TBase::StateInProgress(ev);
             }

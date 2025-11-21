@@ -52,6 +52,7 @@ class TNodeState {
 public:
     void AddRequest(TNodeRequest&& request);
     bool HasRequest(ui64 txId) const;
+    void RemoveRequest(ui64 txId, TActorId executerId);
     std::vector<ui64 /* txId */> ClearExpiredRequests();
 
     bool OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId, TActorId executerId);
@@ -59,6 +60,9 @@ public:
 
     // Returns only started tasks
     std::vector<TNodeRequest::TTaskInfo> GetTasksByTxId(ui64 txId) const;
+    
+    // to filter whether new tasks duplicate with existing tasks
+    THashSet<ui64> GetTaskIdsByTxId(ui64 txId) const;
 
     void DumpInfo(TStringStream& str) const;
     bool ValidateComputeActorId(const TString& computeActorId, TActorId& id) const;

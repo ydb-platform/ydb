@@ -135,6 +135,8 @@ private:
     STATEFN(ShuttingDownState) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleShuttingDown);
+            hFunc(TEvKqpNode::TEvCancelKqpTasksRequest , HandleWork);
+
             // misc
             hFunc(TEvents::TEvWakeup, HandleShuttingDown);
             hFunc(TEvents::TEvPoison, HandleShuttingDown);
@@ -209,13 +211,44 @@ private:
         }
 
         if (State_->HasRequest(txId)) {
-            LOG_E("TxId: " << txId << ", requester: " << requester << ", request already exists");
-            co_return ReplyError(txId, request.ExecuterId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, ev->Cookie);
+            auto existingTaskIds = State_->GetTaskIdsByTxId(txId);
+            
+            TVector<ui64> newTaskIds;
+            for (const auto& dqTask : msg.GetTasks()) {
+                newTaskIds.push_back(dqTask.GetId());
+            }
+            
+            LOG_I("[SHUTDOWN] TxId: " << txId << ", requester: " << requester 
+                  << ", request already exists. Existing tasks: [" << JoinSeq(", ", existingTaskIds) << "]"
+                  << ", new tasks: [" << JoinSeq(", ", newTaskIds) << "]");
+            
+            bool hasOverlap = false;
+            TVector<ui64> overlappingTasks;
+            for (const auto& dqTask : msg.GetTasks()) {
+                if (existingTaskIds.contains(dqTask.GetId())) {
+                    hasOverlap = true;
+                    overlappingTasks.push_back(dqTask.GetId());
+                }
+            }
+            
+            if (hasOverlap) {
+                LOG_E("[SHUTDOWN] TxId: " << txId << ", requester: " << requester 
+                      << ", REJECTING retry: overlapping tasks found: [" << JoinSeq(", ", overlappingTasks) << "]");
+                co_return ReplyError(txId, executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, ev->Cookie);
+            } else {
+                LOG_I("[SHUTDOWN] TxId: " << txId << ", requester: " << requester 
+                      << ", ALLOWING retry: no overlapping tasks, will add as separate request");
+            }
         }
 
+        TVector<ui64> requestTaskIds;
         for (const auto& dqTask : msg.GetTasks()) {
             request.Tasks.emplace(dqTask.GetId(), std::nullopt);
+            requestTaskIds.push_back(dqTask.GetId());
         }
+        
+        LOG_D("[SHUTDOWN] TxId: " << txId << ", requester: " << requester 
+              << ", adding request to State with tasks: [" << JoinSeq(", ", requestTaskIds) << "]");
         State_->AddRequest(std::move(request));
 
         NRm::EKqpMemoryPool memoryPool;
@@ -292,6 +325,13 @@ private:
             // NOTE: keep in mind that a task can start, execute and finish before we reach the end of this method.
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
+                LOG_E("[SHUTDOWN] TxId: " << txId << ", taskId: " << taskId 
+                      << ", failed to create compute actor, status: " << static_cast<int>(rmResult->GetStatus()) 
+                      << ", reason: " << rmResult->GetFailReason());
+                
+                // Remove request from State since we're not sending SUCCESS response
+                State_->RemoveRequest(txId, executerId);
+                
                 ReplyError(txId, executerId, msg, rmResult->GetStatus(), ev->Cookie, rmResult->GetFailReason());
                 TerminateTx(txId, rmResult->GetFailReason());
                 co_return;
@@ -424,12 +464,10 @@ private:
 
     void HandleShuttingDown(TEvents::TEvWakeup::TPtr&) {
         LOG_D("[SHUTDOWN] Received TEvWakeup in ShuttingDownState, not rescheduling timer");
-        for (auto& bucket : State_->Buckets) {
-            auto expiredRequests = bucket.ClearExpiredRequests();
-            for (auto& cxt : expiredRequests) {
-                LOG_D("[SHUTDOWN] Terminating expired request, TxId: " << cxt.TxId);
-                TerminateTx(cxt.TxId, "reached execution deadline during shutdown", NYql::NDqProto::StatusIds::TIMEOUT);
-            }
+        auto expiredRequests = State_->ClearExpiredRequests();
+        for (auto& txId : expiredRequests) {
+            LOG_D("[SHUTDOWN] Terminating expired request, TxId: " << txId);
+            TerminateTx(txId, "reached execution deadline during shutdown", NYql::NDqProto::StatusIds::TIMEOUT);
         }
     }
     void HandleShuttingDown(TEvents::TEvPoison::TPtr&) {

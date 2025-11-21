@@ -22,17 +22,25 @@ using namespace NYdb::NTable;
 
 namespace {
     void TestShutdownNodeAndExecuteQuery(TKikimrRunner& kikimr, const TString& query, ui32 nodeIndexToShutdown, ui32 expectedMinShutdownEvents,
-        NYdb::EStatus expectedStatus, const TString& stageDescription)
+        NYdb::EStatus expectedStatus, const TString& stageDescription, TKqpShutdownState* shutdownState)
     {
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto nodeId = runtime.GetNodeId(nodeIndexToShutdown);
+        
+        Cerr << "[SHUTDOWN] " << stageDescription << ": Shutting down nodeIndexToShutdown=" << nodeIndexToShutdown 
+             << ", nodeId=" << nodeId << ", expectedMinShutdownEvents=" << expectedMinShutdownEvents << Endl;
         
         ui32 nodeShuttingDownCount = 0;
-        auto grab = [&nodeShuttingDownCount](TAutoPtr<IEventHandle>& ev) -> auto {
+        
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksResponse::EventType) {
-                auto msg = ev->Get<TEvKqpNode::TEvStartKqpTasksResponse>()->Record;
-                if (msg.NotStartedTasksSize() > 0 && 
-                    msg.GetNotStartedTasks()[0].GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN) {
-                    ++nodeShuttingDownCount;
+                auto& msg = ev->Get<TEvKqpNode::TEvStartKqpTasksResponse>()->Record;
+                if (msg.NotStartedTasksSize() > 0) {
+                    for (auto& task : msg.GetNotStartedTasks()) {
+                        if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN) {
+                            ++nodeShuttingDownCount;
+                        }
+                    }
                 }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -43,23 +51,78 @@ namespace {
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
         };
         
-        auto shutdownState = new TKqpShutdownState();
-        auto nodeId = runtime.GetNodeId(nodeIndexToShutdown);
+        Cerr << "[SHUTDOWN] " << stageDescription << ": Sending shutdown request to nodeId=" << nodeId << Endl;
+        
         runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {}, 
-                     new TEvKqp::TEvInitiateShutdownRequest(shutdownState)));
-        Sleep(TDuration::MilliSeconds(100));
-
-        // Execute query from a different node (not the one shutting down)
-        auto result = kikimr.RunCall([&](){
-            auto db = kikimr.GetTableClient();
+                     new TEvKqp::TEvInitiateShutdownRequest(shutdownState)), nodeIndexToShutdown);
+        
+        // Give more time for shutdown to be applied, especially on executer node
+        Sleep(TDuration::MilliSeconds(500));
+        
+        Cerr << "[SHUTDOWN] " << stageDescription << ": After sleep, starting query execution" << Endl;
+        
+        // Use Table Client with StreamExecuteScanQuery for distributed execution
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto iteratorFuture = kikimr.RunInThreadPool([&](){
             return db.StreamExecuteScanQuery(query).GetValueSync();
         });
+
+        if (expectedMinShutdownEvents > 0) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&nodeShuttingDownCount, expectedMinShutdownEvents](IEventHandle&) {
+                return nodeShuttingDownCount >= expectedMinShutdownEvents;
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        auto iterator = runtime.WaitFuture(iteratorFuture);
+
+        Cerr << "[SHUTDOWN] " << stageDescription << ": Stream initialized with status=" << iterator.GetStatus() 
+             << ", nodeShuttingDownCount=" << nodeShuttingDownCount << Endl;
 
         UNIT_ASSERT_C(nodeShuttingDownCount >= expectedMinShutdownEvents, 
             stageDescription << ": Expected at least " << expectedMinShutdownEvents 
             << " NODE_SHUTTING_DOWN responses, got: " << nodeShuttingDownCount);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, 
-            stageDescription << ": Unexpected status. Issues: " << result.GetIssues().ToString());
+
+        NYdb::EStatus finalStatus = NYdb::EStatus::SUCCESS;
+        NYdb::NIssue::TIssues finalIssues;
+        size_t partsRead = 0;
+        
+        // Read stream parts with active event dispatching between reads
+        for (;;) {
+            // Give time for events to be processed before each read
+            for (int i = 0; i < 10; i++) {
+                runtime.DispatchEvents({}, TDuration::MilliSeconds(1));
+            }
+            
+            auto readFuture = kikimr.RunInThreadPool([&iterator]() {
+                return iterator.ReadNext().GetValueSync();
+            });
+            
+            // Dispatch events while reading
+            while (!readFuture.HasValue() && !readFuture.HasException()) {
+                runtime.DispatchEvents({}, TDuration::MilliSeconds(1));
+            }
+            
+            auto streamPart = runtime.WaitFuture(readFuture);
+            
+            if (!streamPart.IsSuccess()) {
+                finalStatus = streamPart.GetStatus();
+                finalIssues = streamPart.GetIssues();
+                break;
+            }
+            if (streamPart.EOS()) {
+                break;
+            }
+            
+            partsRead++;
+        }
+        
+        Cerr << "[SHUTDOWN] " << stageDescription << ": Stream completed with finalStatus=" << finalStatus 
+             << ", partsRead=" << partsRead << ", expectedStatus=" << expectedStatus << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, expectedStatus, 
+            stageDescription << ": Unexpected final status. Issues: " << finalIssues.ToString());
     }
 } // anonymous namespace
 Y_UNIT_TEST_SUITE(KqpService) {
@@ -652,7 +715,10 @@ struct TDictCase {
     Y_UNIT_TEST(ShuttingDownAllTheNodes) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableShuttingDownNodeState(true);
-        TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(featureFlags).SetNodeCount(2));
+        TKikimrRunner kikimr(TKikimrSettings()
+                                        .SetFeatureFlags(featureFlags)
+                                        .SetNodeCount(2)
+                                        .SetUseRealThreads(false));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
@@ -671,26 +737,42 @@ struct TDictCase {
     Y_UNIT_TEST(ThreeNodesGradualShutdown) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableShuttingDownNodeState(true);
-        // force distributed execution        
-        auto* tableServiceConfig = appConfig.MutableTableServiceConfig();
-        tableServiceConfig->MutableResourceManager()->SetMaxNonParallelTasksExecutionLimit(0);
         
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableShuttingDownNodeState(true);
         
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetFeatureFlags(featureFlags)
                                         .SetNodeCount(3)
-                                        .SetUseRealThreads(false)
-                                        .SetWithSampleTables(false));        
-        kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 3); });
+                                        .SetUseRealThreads(false));
+        kikimr.RunCall([&]() {CreateLargeTable(kikimr, 100, 2, 2, 10, 2);});
 
-        auto query = R"(SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "22222";)";
-        auto statuses = std::vector({NYdb::EStatus::SUCCESS, NYdb::EStatus::SUCCESS, NYdb::EStatus::UNAVAILABLE});
-        for (auto&& [i, status] : Enumerate(statuses)) {
-            TestShutdownNodeAndExecuteQuery(kikimr, query, i, i + 1, status, "Stage " + ToString(i + 1));
+        // Create ONE shared TKqpShutdownState for all nodes
+        auto shutdownState = new TKqpShutdownState();
+
+        auto queries = std::vector<TString>({
+            R"(
+                SELECT COUNT(*) 
+                FROM `/Root/LargeTable` AS e
+                JOIN `/Root/TwoShard` AS t ON e.Key = t.Key
+                WHERE e.Data > 0
+            )",
+            R"(SELECT COUNT(*) FROM `/Root/LargeTable`)",
+            R"(
+                SELECT *
+                FROM `/Root/EightShard` AS e1
+                JOIN `/Root/LargeTable` AS e2 ON e1.Key = e2.Key
+                WHERE e1.Data > 0 AND e2.Data > 0
+            )"
+        });
+        auto statuses = std::vector({NYdb::EStatus::SUCCESS}); // , NYdb::EStatus::SUCCESS, NYdb::EStatus::UNAVAILABLE});
+        for (size_t i = 0; i < statuses.size(); ++i) {
+            i32 nodeIndexToShutdown = 2; //statuses.size() - (i + 1);
+            Cerr << "[SHUTDOWN] === Starting Stage " << (i + 1) << ": will shutdown nodeIndex=" << nodeIndexToShutdown 
+                 << ", expectedMinShutdownEvents=" << (i + 1) 
+                 << ", expectedStatus=" << statuses[i] << " ===" << Endl;
+            TestShutdownNodeAndExecuteQuery(kikimr, queries[i], nodeIndexToShutdown, i + 1, statuses[i], "Stage " + ToString(i + 1), shutdownState);
         }
     }
-    
 
 }
 

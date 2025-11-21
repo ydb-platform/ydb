@@ -888,6 +888,19 @@ protected:
                             "All compute node are shutting down"));
                         }
                     }
+                    
+                    // Получаем RequestId из первой задачи (у всех задач в response одинаковый RequestId)
+                    ui32 requestId = record.GetNotStartedTasks(0).GetRequestId();
+                    
+                    // Retry request ОДИН РАЗ для всех задач
+                    auto targetNode = MakeKqpNodeServiceID(SelfId().NodeId());
+                    LOG_I("[SHUTDOWN] Retrying request on local node"
+                        << ", RequestId: " << requestId
+                        << ", originalNode: " << ev->Sender.NodeId()
+                        << ", targetNode: " << targetNode
+                        << ", tasksCount: " << record.NotStartedTasksSize());
+                    
+                    Planner->SendStartKqpTasksRequest(requestId, targetNode);
                     break;
                 }
                 case NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR: {

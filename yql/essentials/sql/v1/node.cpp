@@ -423,6 +423,22 @@ void INode::DoAdd(TNodePtr node) {
     Y_DEBUG_ABORT_UNLESS(false, "Node is not expandable");
 }
 
+TNodeResult Wrap(TNodePtr node) {
+    if (!node) {
+        return std::unexpected(ESQLError::Basic);
+    }
+
+    return TNonNull(std::move(node));
+}
+
+TNodePtr Unwrap(TNodeResult result) {
+    EnsureUnwrappable(result);
+
+    return result
+               ? TNodePtr(std::move(*result))
+               : nullptr;
+}
+
 bool IProxyNode::IsNull() const {
     return Inner_->IsNull();
 }

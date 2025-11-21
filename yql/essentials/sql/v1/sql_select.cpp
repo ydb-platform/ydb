@@ -205,7 +205,7 @@ TNodePtr TSqlSelect::JoinExpr(ISource* join, const TRule_join_constraint& node) 
             Token(alt.GetToken1());
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
             TSqlExpression expr(Ctx_, Mode_);
-            return expr.Build(alt.GetRule_expr2());
+            return Unwrap(expr.Build(alt.GetRule_expr2()));
         }
         case TRule_join_constraint::kAltJoinConstraint2: {
             auto& alt = node.GetAlt_join_constraint2();
@@ -422,7 +422,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
             auto alt = node.GetAlt_result_column2();
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
             TSqlExpression expr(Ctx_, Mode_);
-            TNodePtr term(expr.Build(alt.GetRule_expr1()));
+            TNodePtr term(Unwrap(expr.Build(alt.GetRule_expr1())));
             if (!term) {
                 Ctx_.IncrementMonCounter("sql_errors", "NoTerm");
                 return false;
@@ -610,7 +610,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
                 sampleClause = ESampleClause::Sample;
                 mode = ESampleMode::Bernoulli;
                 const auto& sampleExpr = sampleBlock.GetAlt1().GetRule_sample_clause1().GetRule_expr2();
-                samplingRateNode = expr.Build(sampleExpr);
+                samplingRateNode = Unwrap(expr.Build(sampleExpr));
                 if (!samplingRateNode) {
                     return nullptr;
                 }
@@ -632,13 +632,13 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
                     return nullptr;
                 }
                 const auto& tableSampleExpr = tableSampleClause.GetRule_expr4();
-                samplingRateNode = expr.Build(tableSampleExpr);
+                samplingRateNode = Unwrap(expr.Build(tableSampleExpr));
                 if (!samplingRateNode) {
                     return nullptr;
                 }
                 if (tableSampleClause.HasBlock6()) {
                     const auto& repeatableExpr = tableSampleClause.GetBlock6().GetRule_repeatable_clause1().GetRule_expr3();
-                    samplingSeedNode = expr.Build(repeatableExpr);
+                    samplingSeedNode = Unwrap(expr.Build(repeatableExpr));
                     if (!samplingSeedNode) {
                         return nullptr;
                     }
@@ -776,7 +776,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     if (block5.HasBlock5()) {
         TSqlExpression expr(Ctx_, Mode_);
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-        TNodePtr where = expr.Build(block5.GetBlock5().GetRule_expr2());
+        TNodePtr where = Unwrap(expr.Build(block5.GetBlock5().GetRule_expr2()));
         if (!where || !source->AddFilter(Ctx_, where)) {
             return nullptr;
         }
@@ -895,7 +895,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
     if (node.HasBlock11()) {
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
         TSqlExpression expr(Ctx_, Mode_);
-        TNodePtr where = expr.Build(node.GetBlock11().GetRule_expr2());
+        TNodePtr where = Unwrap(expr.Build(node.GetBlock11().GetRule_expr2()));
         if (!where || !source->AddFilter(Ctx_, where)) {
             return nullptr;
         }
@@ -908,7 +908,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
     if (node.HasBlock12()) {
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
         TSqlExpression expr(Ctx_, Mode_);
-        having = expr.Build(node.GetBlock12().GetRule_expr2());
+        having = Unwrap(expr.Build(node.GetBlock12().GetRule_expr2()));
         if (!having) {
             return nullptr;
         }
@@ -1035,7 +1035,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         {
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
             TSqlExpression expr(Ctx_, Mode_);
-            where = expr.Build(block.GetRule_expr2());
+            where = Unwrap(expr.Build(block.GetRule_expr2()));
         }
         if (!where) {
             Ctx_.IncrementMonCounter("sql_errors", "WhereInvalid");
@@ -1080,7 +1080,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     if (node.HasBlock12()) {
         TSqlExpression expr(Ctx_, Mode_);
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-        having = expr.Build(node.GetBlock12().GetRule_expr2());
+        having = Unwrap(expr.Build(node.GetBlock12().GetRule_expr2()));
         if (!having) {
             return nullptr;
         }
@@ -1232,7 +1232,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
         }
 
         TSqlExpression takeExpr(Ctx_, Mode_);
-        auto take = takeExpr.Build(block.GetRule_expr2());
+        auto take = Unwrap(takeExpr.Build(block.GetRule_expr2()));
         if (!take) {
             return {};
         }
@@ -1240,7 +1240,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
         TNodePtr skip;
         if (block.HasBlock3()) {
             TSqlExpression skipExpr(Ctx_, Mode_);
-            skip = skipExpr.Build(block.GetBlock3().GetRule_expr2());
+            skip = Unwrap(skipExpr.Build(block.GetBlock3().GetRule_expr2()));
             if (!skip) {
                 return {};
             }

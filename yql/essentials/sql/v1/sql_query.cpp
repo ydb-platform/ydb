@@ -48,7 +48,7 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
                                           const TRule_replication_settings_entry& in, TSqlExpression& ctx, bool create)
 {
     auto key = IdEx(in.GetRule_an_id1(), ctx);
-    auto value = ctx.Build(in.GetRule_expr3());
+    TNodePtr value = Unwrap(ctx.Build(in.GetRule_expr3()));
 
     if (!value) {
         ctx.Context().Error() << "Invalid replication setting: " << key.Name;
@@ -152,7 +152,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
                                   const TRule_transfer_settings_entry& in, TSqlExpression& ctx, bool create)
 {
     auto key = IdEx(in.GetRule_an_id1(), ctx);
-    auto value = ctx.Build(in.GetRule_expr3());
+    TNodePtr value = Unwrap(ctx.Build(in.GetRule_expr3()));
 
     if (!value) {
         ctx.Context().Error() << "Invalid transfer setting: " << key.Name;
@@ -277,7 +277,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     blocks.emplace_back(std::move(*result));
                     break;
                 } else if (
-                    result.error() == EYqlSelectError::Unsupported &&
+                    result.error() == ESQLError::UnsupportedYqlSelect &&
                     Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force)
                 {
                     Error() << "Translation of the statement "
@@ -685,7 +685,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     blocks.emplace_back(std::move(*result));
                     break;
                 } else if (
-                    result.error() == EYqlSelectError::Unsupported &&
+                    result.error() == ESQLError::UnsupportedYqlSelect &&
                     Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force)
                 {
                     Error() << "Translation of the statement "
@@ -3923,7 +3923,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
 
                 TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
                 TSqlExpression sqlExpr(Ctx_, Mode_);
-                auto whereExpr = sqlExpr.Build(alt.GetRule_expr2());
+                auto whereExpr = Unwrap(sqlExpr.Build(alt.GetRule_expr2()));
                 if (!whereExpr) {
                     return nullptr;
                 }
@@ -3995,7 +3995,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
             if (alt.HasBlock3()) {
                 TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
                 TSqlExpression sqlExpr(Ctx_, Mode_);
-                auto whereExpr = sqlExpr.Build(alt.GetBlock3().GetRule_expr2());
+                auto whereExpr = Unwrap(sqlExpr.Build(alt.GetBlock3().GetRule_expr2()));
                 if (!whereExpr) {
                     return nullptr;
                 }
@@ -4045,7 +4045,7 @@ bool TSqlQuery::FillSetClause(const TRule_set_clause& node, TVector<TString>& ta
     targetList.push_back(ColumnNameAsSingleStr(*this, node.GetRule_set_target1().GetRule_column_name1()));
     TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
     TSqlExpression sqlExpr(Ctx_, Mode_);
-    if (!Expr(sqlExpr, values, node.GetRule_expr3())) {
+    if (!Unwrap(Expr(sqlExpr, values, node.GetRule_expr3()))) {
         return false;
     }
     return true;

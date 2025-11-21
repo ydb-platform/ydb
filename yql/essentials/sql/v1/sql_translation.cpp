@@ -953,7 +953,7 @@ TNodePtr TSqlTranslation::NamedExpr(
     if (nameTree) {
         expr.MarkAsNamed();
     }
-    TNodePtr exprNode = expr.Build(exprTree);
+    TNodePtr exprNode = Unwrap(expr.Build(exprTree));
     if (!exprNode) {
         Ctx_.IncrementMonCounter("sql_errors", "NamedExprInvalid");
         return nullptr;
@@ -1385,7 +1385,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                 values.push_back(new TAstAtomNodeImpl(Ctx_.Pos(), "world", TNodeFlags::Default));
 
                 TSqlExpression sqlExpr(Ctx_, Mode_);
-                if (alt.GetBlock2().HasBlock2() && !ExprList(sqlExpr, values, alt.GetBlock2().GetBlock2().GetRule_expr_list1())) {
+                if (alt.GetBlock2().HasBlock2() && !Unwrap(ExprList(sqlExpr, values, alt.GetBlock2().GetBlock2().GetRule_expr_list1()))) {
                     return false;
                 }
 
@@ -1666,7 +1666,7 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslati
 
                     ctx.Context().DisableLegacyNotNull = true;
 
-                    defaultExpr = expr.Build(opt.GetRule_expr2());
+                    defaultExpr = Unwrap(expr.Build(opt.GetRule_expr2()));
 
                     if (AnyOf(ctx.Context().Issues.begin(), ctx.Context().Issues.end(), [](const auto& issue) {
                             return issue.GetCode() == TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL;
@@ -2171,7 +2171,7 @@ bool StoreSplitBoundaries(const TRule_table_setting_value& from, TVector<TVector
 }
 
 bool FillTieringInterval(const TRule_expr& from, TNodePtr& tieringInterval, TSqlExpression& expr, TContext& ctx) {
-    auto exprNode = expr.Build(from);
+    auto exprNode = Unwrap(expr.Build(from));
     if (!exprNode) {
         return false;
     }
@@ -2574,7 +2574,7 @@ static bool StoreConsumerSettingsEntry(
     const TStringBuf statement = alter ? "ALTER CONSUMER"sv : "CONSUMER"sv;
     TNodePtr valueExprNode;
     if (value) {
-        valueExprNode = ctx.Build(value->GetRule_expr1());
+        valueExprNode = Unwrap(ctx.Build(value->GetRule_expr1()));
         if (!valueExprNode) {
             ctx.Error() << "invalid value for setting: " << id.Name;
             return false;
@@ -2748,7 +2748,7 @@ static bool StoreTopicSettingsEntry(
     YQL_ENSURE(value || reset);
     TNodePtr valueExprNode;
     if (value) {
-        valueExprNode = ctx.Build(value->GetRule_expr1());
+        valueExprNode = Unwrap(ctx.Build(value->GetRule_expr1()));
         if (!valueExprNode) {
             ctx.Error() << "invalid value for setting: " << id.Name;
             return false;
@@ -3499,7 +3499,7 @@ TNodePtr TSqlTranslation::ListLiteral(const TRule_list_literal& node) {
     values.push_back(new TAstAtomNodeImpl(Ctx_.Pos(), "AsListMayWarn", TNodeFlags::Default));
 
     TSqlExpression sqlExpr(Ctx_, Mode_);
-    if (node.HasBlock2() && !ExprList(sqlExpr, values, node.GetBlock2().GetRule_expr_list1())) {
+    if (node.HasBlock2() && !Unwrap(ExprList(sqlExpr, values, node.GetBlock2().GetRule_expr_list1()))) {
         return nullptr;
     }
 
@@ -3514,16 +3514,16 @@ TNodePtr TSqlTranslation::DictLiteral(const TRule_dict_literal& node) {
         values.push_back(new TAstAtomNodeImpl(Ctx_.Pos(), isSet ? "AsSet" : "AsDict", TNodeFlags::Default));
         TSqlExpression sqlExpr(Ctx_, Mode_);
         if (isSet) {
-            if (!Expr(sqlExpr, values, list.GetRule_expr1())) {
+            if (!Unwrap(Expr(sqlExpr, values, list.GetRule_expr1()))) {
                 return nullptr;
             }
         } else {
             TVector<TNodePtr> tupleItems;
-            if (!Expr(sqlExpr, tupleItems, list.GetRule_expr1())) {
+            if (!Unwrap(Expr(sqlExpr, tupleItems, list.GetRule_expr1()))) {
                 return nullptr;
             }
 
-            if (!Expr(sqlExpr, tupleItems, list.GetBlock2().GetRule_expr2())) {
+            if (!Unwrap(Expr(sqlExpr, tupleItems, list.GetBlock2().GetRule_expr2()))) {
                 return nullptr;
             }
 
@@ -3539,16 +3539,16 @@ TNodePtr TSqlTranslation::DictLiteral(const TRule_dict_literal& node) {
             }
 
             if (isSet) {
-                if (!Expr(sqlExpr, values, b.GetRule_expr2())) {
+                if (!Unwrap(Expr(sqlExpr, values, b.GetRule_expr2()))) {
                     return nullptr;
                 }
             } else {
                 TVector<TNodePtr> tupleItems;
-                if (!Expr(sqlExpr, tupleItems, b.GetRule_expr2())) {
+                if (!Unwrap(Expr(sqlExpr, tupleItems, b.GetRule_expr2()))) {
                     return nullptr;
                 }
 
-                if (!Expr(sqlExpr, tupleItems, b.GetBlock3().GetRule_expr2())) {
+                if (!Unwrap(Expr(sqlExpr, tupleItems, b.GetBlock3().GetRule_expr2()))) {
                     return nullptr;
                 }
 
@@ -3567,7 +3567,7 @@ bool TSqlTranslation::StructLiteralItem(TVector<TNodePtr>& labels, const TRule_e
     {
         TColumnRefScope scope(Ctx_, EColumnRefState::AsStringLiteral, /* topLevel */ false);
         TSqlExpression sqlExpr(Ctx_, Mode_);
-        if (!Expr(sqlExpr, labels, label)) {
+        if (!Unwrap(Expr(sqlExpr, labels, label))) {
             return false;
         }
 
@@ -3582,7 +3582,7 @@ bool TSqlTranslation::StructLiteralItem(TVector<TNodePtr>& labels, const TRule_e
     // value expr
     {
         TSqlExpression sqlExpr(Ctx_, Mode_);
-        if (!Expr(sqlExpr, values, value)) {
+        if (!Unwrap(Expr(sqlExpr, values, value))) {
             return false;
         }
     }
@@ -3734,7 +3734,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
             const auto& alt = rule.GetAlt_table_hint4();
             const auto pos = Ctx_.TokenPosition(alt.GetToken1());
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-            auto expr = TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr4());
+            auto expr = Unwrap(TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr4()));
             if (!expr) {
                 return false;
             }
@@ -3908,7 +3908,7 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
     switch (rule.GetBlock3().Alt_case()) {
         case TRule_named_nodes_stmt::TBlock3::kAlt1: {
             TSqlExpression expr(Ctx_, Mode_);
-            auto result = expr.BuildSourceOrNode(rule.GetBlock3().GetAlt1().GetRule_expr1());
+            TNodePtr result = Unwrap(expr.BuildSourceOrNode(rule.GetBlock3().GetAlt1().GetRule_expr1()));
             if (TSourcePtr source = MoveOutIfSource(result)) {
                 result = BuildSourceNode(Ctx_.Pos(), std::move(source));
             }
@@ -3978,7 +3978,7 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
     bool asc = true;
     TSqlExpression expr(Ctx_, Mode_);
     TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-    TNodePtr exprNode = expr.Build(node.GetRule_expr1());
+    TNodePtr exprNode = Unwrap(expr.Build(node.GetRule_expr1()));
     if (!exprNode) {
         return false;
     }
@@ -4617,7 +4617,7 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
             switch (block.Alt_case()) {
                 case TRule_window_frame_bound_TAlt2_TBlock1::kAlt1: {
                     TSqlExpression boundExpr(Ctx_, Mode_);
-                    bound->Bound = boundExpr.Build(block.GetAlt1().GetRule_expr1());
+                    bound->Bound = Unwrap(boundExpr.Build(block.GetAlt1().GetRule_expr1()));
                     if (!bound->Bound) {
                         return false;
                     }
@@ -4866,7 +4866,7 @@ TNodePtr TSqlTranslation::DoStatement(const TRule_do_stmt& stmt, bool makeLambda
             values.push_back(new TAstAtomNodeImpl(Ctx_.Pos(), "world", TNodeFlags::Default));
 
             TSqlExpression sqlExpr(Ctx_, Mode_);
-            if (callAction.HasBlock3() && !ExprList(sqlExpr, values, callAction.GetBlock3().GetRule_expr_list1())) {
+            if (callAction.HasBlock3() && !Unwrap(ExprList(sqlExpr, values, callAction.GetBlock3().GetRule_expr_list1()))) {
                 return nullptr;
             }
 
@@ -5035,7 +5035,7 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
 TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
     TSqlExpression expr(Ctx_, Mode_);
-    auto exprNode = expr.Build(stmt.GetRule_expr3());
+    auto exprNode = Unwrap(expr.Build(stmt.GetRule_expr3()));
     if (!exprNode) {
         return {};
     }
@@ -5066,7 +5066,7 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     }
     TPosition itemArgNamePos = Ctx_.Pos();
 
-    auto exprNode = expr.Build(stmt.GetRule_expr6());
+    auto exprNode = Unwrap(expr.Build(stmt.GetRule_expr6()));
     if (!exprNode) {
         return {};
     }

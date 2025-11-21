@@ -2794,7 +2794,8 @@ Y_UNIT_TEST(JoinByUdf) {
                "from T1 as a\n"
                "join T2 as b\n"
                "on Yson::SerializeJsonEncodeUtf8(a.align)=b.align;";
-    UNIT_ASSERT(SqlToYql(req).IsOk());
+    auto res = SqlToYql(req);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
 
 Y_UNIT_TEST(EscapedIdentifierAsLambdaArg) {

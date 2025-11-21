@@ -12,23 +12,17 @@
 namespace NYql {
 
 struct TMetaFieldDescriptor {
-public:
-    TMetaFieldDescriptor(TString key, TString sysColumn, NUdf::EDataSlot type)
-        : Key(key)
-        , SysColumn(sysColumn)
-        , Type(type)
-    { }
-
-public:
     const TString Key;
     const TString SysColumn;
     const NUdf::EDataSlot Type;
 };
 
-const TMetaFieldDescriptor* FindPqMetaFieldDescriptorByKey(const TString& key);
+std::optional<TString> SkipPqSystemPrefix(const TString& sysColumn, bool* isTransperent = nullptr);
 
-const TMetaFieldDescriptor* FindPqMetaFieldDescriptorBySysColumn(const TString& sysColumn);
+std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorByKey(const TString& key, bool allowTransperentColumns);
 
-std::vector<TString> AllowedPqMetaSysColumns();
+std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorBySysColumn(const TString& sysColumn);
 
-}
+std::vector<TString> AllowedPqMetaSysColumns(bool allowTransperentColumns);
+
+} // namespace NYql

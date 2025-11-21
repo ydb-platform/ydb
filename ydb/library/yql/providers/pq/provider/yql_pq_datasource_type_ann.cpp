@@ -205,7 +205,7 @@ public:
         if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(      // Rtmr has 3 field (key/subkey/value).
             format->Content(),
             schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
-            [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)); },
+            [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)).has_value(); },
             ctx)) {
             return TStatus::Error;
         }
@@ -407,7 +407,7 @@ public:
         }
 
         const auto metadataKey = TString(key->TailPtr()->Content());
-        const auto descriptor = FindPqMetaFieldDescriptorByKey(metadataKey);
+        const auto descriptor = FindPqMetaFieldDescriptorByKey(metadataKey, State_->AllowTransperentSystemColumns);
         if (!descriptor) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                 << "Metadata key " << metadataKey << " wasn't found"));
@@ -480,7 +480,7 @@ private:
     TPqState::TPtr State_;
 };
 
-}
+} // anonymous namespace
 
 THolder<TVisitorTransformerBase> CreatePqDataSourceTypeAnnotationTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqDataSourceTypeAnnotationTransformer>(state);

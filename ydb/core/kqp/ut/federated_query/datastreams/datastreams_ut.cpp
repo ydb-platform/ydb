@@ -3357,6 +3357,62 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CheckScriptExecutionsCount(0, 0);
         }
     }
+
+    Y_UNIT_TEST_F(WritingInLocalYdbTablesWithProjection, TStreamingTestFixture) {
+        constexpr char pqSourceName[] = "pqSource";
+        CreatePqSource(pqSourceName);
+
+        for (const bool rowTables : {true, false}) {
+            const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
+            CreateTopic(inputTopicName);
+
+            const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
+            ExecQuery(fmt::format(R"(
+                CREATE TABLE `{table}` (
+                    Key String NOT NULL,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key)
+                ) {settings})",
+                "table"_a = ydbTable,
+                "settings"_a = rowTables ? "" : "WITH (STORE = COLUMN)"
+            ));
+
+            const auto queryName = TStringBuilder() << "streamingQuery" << rowTables;
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    UPSERT INTO `{ydb_table}`
+                    SELECT (Key || "x") AS Key, Value FROM `{pq_source}`.`{input_topic}` WITH (
+                        FORMAT = json_each_row,
+                        SCHEMA (
+                            Key String NOT NULL,
+                            Value String NOT NULL
+                        )
+                    ) LIMIT 1
+                END DO;)",
+                "query_name"_a = queryName,
+                "pq_source"_a = pqSourceName,
+                "input_topic"_a = inputTopicName,
+                "ydb_table"_a = ydbTable
+            ));
+
+            CheckScriptExecutionsCount(1, 1);
+            Sleep(TDuration::Seconds(1));
+
+            WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
+            Sleep(TDuration::Seconds(1));
+            CheckTable(*this, ydbTable, {{"message1x", "value1"}});
+
+            Sleep(TDuration::Seconds(1));
+            CheckScriptExecutionsCount(1, 0);
+
+            ExecQuery(fmt::format(
+                "DROP STREAMING QUERY `{query_name}`",
+                "query_name"_a = queryName
+            ));
+            CheckScriptExecutionsCount(0, 0);
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {

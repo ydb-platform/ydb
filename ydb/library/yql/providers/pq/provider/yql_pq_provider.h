@@ -10,7 +10,7 @@
 
 namespace NKikimr::NMiniKQL {
 class IFunctionRegistry;
-}
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
 
@@ -46,6 +46,7 @@ public:
 public:
     bool SupportRtmrMode = false;
     bool UseActorSystemThreadsInTopicClient = true;
+    bool AllowTransperentSystemColumns = true;
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 

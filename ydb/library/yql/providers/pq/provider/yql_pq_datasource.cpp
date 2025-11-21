@@ -20,6 +20,8 @@ namespace NYql {
 
 using namespace NNodes;
 
+namespace {
+
 class TPqDataSourceProvider : public TDataProviderBase {
 public:
     TPqDataSourceProvider(TPqState::TPtr state, IPqGateway::TPtr gateway)
@@ -104,7 +106,7 @@ public:
         }
 
         TVector<TCoNameValueTuple> sourceMetadata;
-        for (auto sysColumn : AllowedPqMetaSysColumns()) {
+        for (auto sysColumn : AllowedPqMetaSysColumns(State_->AllowTransperentSystemColumns)) {
             sourceMetadata.push_back(Build<TCoNameValueTuple>(ctx, read.Pos())
                 .Name().Build("system")
                 .Value<TCoAtom>().Build(sysColumn)
@@ -276,6 +278,8 @@ private:
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<IGraphTransformer> IODiscoveryTransformer_;
 };
+
+} // anonymous namespace
 
 TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway) {
     return new TPqDataSourceProvider(state, gateway);

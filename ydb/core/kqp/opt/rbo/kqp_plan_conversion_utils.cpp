@@ -12,7 +12,7 @@ TExprNode::TPtr PlanConverter::RemoveScalarSubplans(TExprNode::TPtr node) {
     auto lambda = TCoLambda(node);
     auto lambdaBody = lambda.Body().Ptr();
 
-    auto exprSublinks = FindNodes(lambdaBody, [](const TExprNode::TPtr& n){return n->IsCallable("KqpPgExprSublink");});
+    auto exprSublinks = FindNodes(lambdaBody, [](const TExprNode::TPtr& n){return n->IsCallable("KqpExprSublink");});
     if (exprSublinks.empty()) {
         return node;
     }
@@ -26,7 +26,7 @@ TExprNode::TPtr PlanConverter::RemoveScalarSubplans(TExprNode::TPtr node) {
                     .Name<TCoAtom>().Value(sublinkVar.GetFullName()).Build()
                     .Done().Ptr();
             replaceMap[link.Get()] = member;
-            auto subplan = ExprNodeToOperator(TKqpPgExprSublink(link).Expr().Ptr());
+            auto subplan = ExprNodeToOperator(TKqpExprSublink(link).Expr().Ptr());
             PlanProps.ScalarSubplans.Add(sublinkVar, subplan);
         }
 
@@ -53,6 +53,7 @@ TOpRoot PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     auto res = TOpRoot(rootInput, node->Pos(), columnOrder);
     res.Node = node;
     res.PlanProps = PlanProps;
+    res.PlanProps.PgSyntax = std::stoi(opRoot.PgSyntax().StringValue());
     return res;
 }
 

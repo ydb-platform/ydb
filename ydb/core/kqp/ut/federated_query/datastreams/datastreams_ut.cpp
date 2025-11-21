@@ -3388,6 +3388,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         }, "Path = '/Root/C'");
     }
 
+    Y_UNIT_TEST_F(ReadWithoutAuth, TStreamingSysViewTestFixture) {
+        QueryClientSettings = TClientSettings();
+        Setup();
+
+        StartQuery("A");
+        StartQuery("B");
+        StartQuery("C");
+        Sleep(STATS_WAIT_DURATION);
+
+        CheckSysView({
+            {"A"}, {"B"}, {"C"}
+        });
+    }
+
     Y_UNIT_TEST_F(SortOrderForSysView, TStreamingSysViewTestFixture) {
         Setup();
 

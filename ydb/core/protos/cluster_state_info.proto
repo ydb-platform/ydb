@@ -27,6 +27,12 @@ message TClusterStateQueryInfo {
     optional NKikimrKqp.TQueryResponse Response = 3;
 }
 
+message TClusterStateInfoParameters {
+    optional uint32 DurationSeconds = 1;
+    optional uint32 PeriodSeconds = 2;
+    optional string StartedAt = 3;
+}
+
 message TClusterStateInfo {
     optional Ydb.Monitoring.SelfCheckResult SelfCheck = 1;
     repeated TNodeInfo NodeInfos = 2;

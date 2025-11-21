@@ -53,7 +53,7 @@ public:
         return DbDriverState_->DiscoveryCompleted();
     }
 
-    void ScheduleTask(const std::function<void()>& fn, TDeadline::Duration timeout) override {
+    void ScheduleTask(const std::function<void()>& fn, TDeadline::Duration delay) override {
         std::weak_ptr<IClientImplCommon> weak = this->shared_from_this();
         auto cbGuard = [weak, fn]() {
             auto strongClient = weak.lock();
@@ -61,7 +61,7 @@ public:
                 fn();
             }
         };
-        Connections_->ScheduleOneTimeTask(std::move(cbGuard), timeout);
+        Connections_->ScheduleDelayedTask(std::move(cbGuard), delay);
     }
 
 protected:

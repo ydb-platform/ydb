@@ -747,6 +747,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
         kqpConfig.FilterPushdownOverJoinOptionalSide = true;
         kqpConfig.YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
         kqpConfig.YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
+        kqpConfig.YqlCoreOptimizerFlags.insert("sqlinwithnothingornull");
     }
 
     switch(serviceConfig.GetDefaultHashShuffleFuncType()) {
@@ -755,6 +756,15 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
             break;
         case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2:
             kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
+            break;
+    }
+
+    switch(serviceConfig.GetBackportMode()) {
+        case NKikimrConfig::TTableServiceConfig_EBackportMode_Released:
+            kqpConfig.BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
+            break;
+        case NKikimrConfig::TTableServiceConfig_EBackportMode_All:
+            kqpConfig.BackportMode = NYql::EBackportCompatibleFeaturesMode::All;
             break;
     }
 }

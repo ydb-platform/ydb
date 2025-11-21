@@ -37,6 +37,9 @@ struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvRea
         TMessageId MessageId;
         Ydb::Topic::Codec Codec;
         TString Data;
+        THashMap<TString, TString> MessageMetaAttributes;
+        TInstant SentTimestamp;
+        TString MessageGroupId;
     };
     // The original topic path (from request) -> TopicInfo
     std::vector<TMessage> Messages;

@@ -38,38 +38,37 @@ Configure LinqToDB to use {{ ydb-short-name }} in code:
 
 - C#
 
-  ```csharp
-
-  DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
-
-  // Option 1: local YDB via connection string
-  //
-  // Example: local YDB running on localhost:2136 with database "/local"
-
-  using var localDb =  new DataConnection(new DataOptions().UseConnectionString(
-    "YDB", 
-    Host=localhost;Port=2136;Database=/local;UseTls=false
-    )
-  );
-
-  // Option 2: managed YDB in cloud only via YdbConnectionStringBuilder
-  //
-  // Example: connection built from explicit host/port/database settings.
-  static async Task<DataConnection> BuildYdbDataConnection()
-  {
-    var ydbConnectionBuilder = new YdbConnectionStringBuilder
+    ```csharp
+    DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
+    
+    // Option 1: local YDB via connection string
+    //
+    // Example: local YDB running on localhost:2136 with database "/local"
+    using var localDb = new DataConnection(
+        new DataOptions().UseConnectionString(
+            "YDB",
+            "Host=localhost;Port=2136;Database=/local;UseTls=false"
+        )
+    );
+    
+    // Option 2: managed YDB in cloud only via YdbConnectionStringBuilder
+    //
+    // Example: connection built from explicit host/port/database settings.
+    static async Task<DataConnection> BuildYdbDataConnection()
     {
-    Host = "server",
-    Port = 2135,
-    Database = "/ru-prestable/my-table",
-    UseTls = true
-    };
-
-      await using var ydbConnection = new YdbConnection(ydbConnectionBuilder);
-      return YdbTools.CreateDataConnection(ydbConnection);
-  }
-
-  ```
+        var ydbConnectionBuilder = new YdbConnectionStringBuilder
+        {
+            Host     = "server",
+            Port     = 2135,
+            Database = "/ru-prestable/my-table",
+            UseTls   = true
+        };
+    
+        await using var ydbConnection = new YdbConnection(ydbConnectionBuilder);
+        return YdbTools.CreateDataConnection(ydbConnection);
+    }
+    
+    ```
 
 {% endlist %}
 

@@ -38,16 +38,17 @@ linq2db — лёгкий и быстрый ORM/µ-ORM для .NET, предос�
 
 - C#
 
-  ```csharp
+    ```csharp
+    
     DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
     
     // Вариант 1: локальный YDB через строку подключения
     //
     // Пример: локальный YDB, работающий на localhost:2136 с базой "/local"
     using var localDb = new DataConnection(
-    new DataOptions().UseConnectionString(
-        "YDB",
-        "Host=localhost;Port=2136;Database=/local;UseTls=false"
+        new DataOptions().UseConnectionString(
+            "YDB",
+            "Host=localhost;Port=2136;Database=/local;UseTls=false"
         )
     );
     
@@ -56,19 +57,19 @@ linq2db — лёгкий и быстрый ORM/µ-ORM для .NET, предос�
     // Пример: подключение, собранное из явных значений host/port/database.
     static async Task<DataConnection> BuildYdbDataConnection()
     {
-    var ydbConnectionBuilder = new YdbConnectionStringBuilder
+        var ydbConnectionBuilder = new YdbConnectionStringBuilder
         {
-        Host     = "server",
-        Port     = 2135,
-        Database = "/ru-prestable/my-table",
-        UseTls   = true
+            Host     = "server",
+            Port     = 2135,
+            Database = "/ru-prestable/my-table",
+            UseTls   = true
         };
     
         await using var ydbConnection = new YdbConnection(ydbConnectionBuilder);
         return YdbTools.CreateDataConnection(ydbConnection);
     }
-
-  ```
+    
+    ```
 
 {% endlist %}
 

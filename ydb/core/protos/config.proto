@@ -2547,6 +2547,7 @@ message TSystemTabletBackupConfig {
     oneof Backend {
         TFilesystemBackend Filesystem = 1;
     }
+    repeated fixed64 ExcludeTabletIds = 2;
 }
 
 message TAppConfig {

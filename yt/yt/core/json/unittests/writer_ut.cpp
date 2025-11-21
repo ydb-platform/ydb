@@ -74,6 +74,18 @@ TEST(TJsonWriterTest, StartNextValue)
     EXPECT_EQ(outputStream.Str(), "[123,\"hello\"]\n{\"abc\":true,\"def\":-1.5}");
 }
 
+TEST(TJsonWriterTest, Raw)
+{
+    TStringStream outputStream;
+    {
+        auto writer = CreateJsonWriter(&outputStream);
+        writer->OnRaw(TYsonStringBuf("{hello=world}"));
+        writer->Flush();
+    }
+
+    EXPECT_EQ(outputStream.Str(), "{\"hello\":\"world\"}");
+}
+
 TEST(TJsonWriterTest, Errors)
 {
     TStringStream outputStream;
@@ -86,10 +98,6 @@ TEST(TJsonWriterTest, Errors)
     {
         auto writer = CreateJsonWriter(&outputStream);
         EXPECT_THROW(writer->OnBeginAttributes(), TErrorException);
-    }
-    {
-        auto writer = CreateJsonWriter(&outputStream);
-        EXPECT_THROW(writer->OnRaw("{x=3}", EYsonType::Node), TErrorException);
     }
 }
 

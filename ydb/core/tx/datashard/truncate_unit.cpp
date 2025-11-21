@@ -36,6 +36,7 @@ EExecutionStatus TTruncateUnit::Execute(
     Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto& schemeTx = tx->GetSchemeTx();
+
     if (!schemeTx.HasTruncateTable()) {
         return EExecutionStatus::Executed;
     }

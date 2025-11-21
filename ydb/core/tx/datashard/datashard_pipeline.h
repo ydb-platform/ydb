@@ -175,6 +175,7 @@ public:
     bool HasRotateCdcStream() const { return SchemaTx && SchemaTx->IsRotateCdcStream(); }
     bool HasCreateIncrementalRestoreSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalRestoreSrc(); }
     bool HasCreateIncrementalBackupSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalBackupSrc(); }
+    bool HasTruncate() const { return SchemaTx && SchemaTx->IsTruncate(); }
 
     ui64 CurrentSchemaTxId() const {
         if (SchemaTx)

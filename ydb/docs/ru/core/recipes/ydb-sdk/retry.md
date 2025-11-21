@@ -15,7 +15,7 @@
 
   В {{ ydb-short-name }} C++ SDK корректная обработка ошибок реализована в нескольких программных интерфейсах:
 
-  {% cut "Выполнение повторных попыток при работе с Query Service" %}
+  {% cut "Синхронное выполнение повторных попыток при работе с Query Service" %}
 
   Для выполнения запросов с автоматическими повторными попытками в Query Service используется метод `RetryQuerySync`.
   Метод принимает лямбда-функцию, которая получает объект сессии и возвращает результат запроса.
@@ -26,11 +26,8 @@
   ```c++
   #include <ydb-cpp-sdk/client/query/client.h>
 
-  using namespace NYdb;
-  using namespace NYdb::NQuery;
-
-  void ExecuteQueryWithRetry(TQueryClient client) {
-      auto result = client.RetryQuerySync([](TSession session) {
+  void ExecuteQueryWithRetry(NYdb::NQuery::TQueryClient client) {
+      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) {
           auto query = R"(
               SELECT series_id, title
               FROM series
@@ -39,7 +36,7 @@
           
           return session.ExecuteQuery(
               query,
-              TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
           ).GetValueSync();
       });
       
@@ -52,22 +49,57 @@
 
   {% endcut %}
 
-  {% cut "Выполнение повторных попыток при работе с Table Service" %}
+  {% cut "Асинхронное выполнение повторных попыток при работе с Query Service" %}
+
+  Для асинхронного выполнения запросов с автоматическими повторными попытками используется метод `RetryQuery`.
+  Метод возвращает `NThreading::TFuture`, что позволяет выполнять операции асинхронно.
+
+  Пример кода, использующего `RetryQuery`:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void ExecuteQueryWithRetryAsync(NYdb::NQuery::TQueryClient client) {
+      auto future = client.RetryQuery([](NYdb::NQuery::TSession session) {
+          auto query = R"(
+              SELECT series_id, title, release_date
+              FROM series
+              WHERE series_id = 1;
+          )";
+          
+          return session.ExecuteQuery(
+              query,
+              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+          );
+      });
+      
+      // Обработка результата асинхронно
+      future.Subscribe([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) {
+          auto result = asyncResult.GetValueSync();
+          if (result.IsSuccess()) {
+              std::cout << "Query executed successfully" << std::endl;
+          } else {
+              std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
+          }
+      });
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Синхронное выполнение повторных попыток при работе с Table Service" %}
 
   Для выполнения операций с автоматическими повторными попытками в Table Service используется метод `RetryOperationSync`.
   Метод принимает лямбда-функцию, которая получает объект сессии и возвращает результат операции.
   {{ ydb-short-name }} C++ SDK автоматически управляет сессиями и выполняет повторные попытки при возникновении ретраибельных ошибок.
 
-  Пример кода, использующего `RetryOperationSync`:
+  Пример кода, использующего `RetryOperationSync` с `ExecuteDataQuery`:
 
   ```c++
   #include <ydb-cpp-sdk/client/table/table.h>
 
-  using namespace NYdb;
-  using namespace NYdb::NTable;
-
-  void ExecuteDataQueryWithRetry(TTableClient client) {
-      auto result = client.RetryOperationSync([](TSession session) {
+  void ExecuteDataQueryWithRetry(NYdb::NTable::TTableClient client) {
+      auto result = client.RetryOperationSync([](NYdb::NTable::TSession session) {
           auto query = R"(
               DECLARE $seriesId AS Uint64;
               DECLARE $seasonId AS Uint64;
@@ -77,7 +109,7 @@
               WHERE series_id = $seriesId AND season_id = $seasonId;
           )";
           
-          auto params = TParamsBuilder()
+          auto params = NYdb::TParamsBuilder()
               .AddParam("$seriesId")
                   .Uint64(1)
                   .Build()
@@ -86,14 +118,9 @@
                   .Build()
               .Build();
           
-          auto prepareResult = session.PrepareDataQuery(query).GetValueSync();
-          if (!prepareResult.IsSuccess()) {
-              return prepareResult;
-          }
-          
-          auto dataQuery = prepareResult.GetQuery();
-          return dataQuery.Execute(
-              TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+          return session.ExecuteDataQuery(
+              query,
+              NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
               params
           ).GetValueSync();
       });
@@ -102,6 +129,55 @@
           // Обработка ошибки после всех попыток
           std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
       }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Асинхронное выполнение повторных попыток при работе с Table Service" %}
+
+  Для асинхронного выполнения операций используется метод `RetryOperation`.
+  Метод возвращает `NThreading::TFuture`, что позволяет выполнять операции асинхронно и эффективно использовать ресурсы.
+
+  Пример кода, использующего `RetryOperation`:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/table/table.h>
+
+  void ExecuteDataQueryWithRetryAsync(NYdb::NTable::TTableClient client) {
+      auto future = client.RetryOperation([](NYdb::NTable::TSession session) {
+          auto query = R"(
+              DECLARE $seriesId AS Uint64;
+              
+              SELECT title, series_info
+              FROM series
+              WHERE series_id = $seriesId;
+          )";
+          
+          auto params = NYdb::TParamsBuilder()
+              .AddParam("$seriesId")
+                  .Uint64(1)
+                  .Build()
+              .Build();
+          
+          return session.ExecuteDataQuery(
+              query,
+              NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
+              params
+          ).Apply([](const NYdb::NTable::TAsyncDataQueryResult& asyncResult) {
+              return asyncResult.ExtractValueSync();
+          });
+      });
+      
+      // Обработка результата асинхронно
+      future.Subscribe([](const NYdb::TAsyncStatus& asyncStatus) {
+          auto status = asyncStatus.GetValueSync();
+          if (status.IsSuccess()) {
+              std::cout << "Operation executed successfully" << std::endl;
+          } else {
+              std::cerr << "Operation failed: " << status.GetIssues().ToString() << std::endl;
+          }
+      });
   }
   ```
 
@@ -118,29 +194,46 @@
   * `FastBackoffSettings(TBackoffSettings)` - настройки быстрых повторов
   * `SlowBackoffSettings(TBackoffSettings)` - настройки медленных повторов
 
-  Пример использования настроек повторных попыток:
+  Пример использования настроек повторных попыток с `ExecuteDataQuery`:
 
   ```c++
   #include <ydb-cpp-sdk/client/table/table.h>
   #include <ydb-cpp-sdk/client/retry/retry.h>
 
-  using namespace NYdb;
-  using namespace NYdb::NTable;
-  using namespace NYdb::NRetry;
-
-  void BulkUpsertWithCustomRetry(TTableClient client, const TString& tablePath, TValue rows) {
-      TRetryOperationSettings retrySettings;
+  void ExecuteWithCustomRetry(NYdb::NTable::TTableClient client) {
+      NYdb::NRetry::TRetryOperationSettings retrySettings;
       retrySettings
           .Idempotent(true)
           .MaxRetries(20)
-          .MaxTimeout(TDuration::Seconds(30));
+          .MaxTimeout(NYdb::TDuration::Seconds(30));
       
-      auto result = client.RetryOperationSync([tablePath, rows](TSession session) {
-          return session.BulkUpsert(tablePath, std::move(rows)).GetValueSync();
+      auto result = client.RetryOperationSync([](NYdb::NTable::TSession session) {
+          auto query = R"(
+              DECLARE $seriesId AS Uint64;
+              DECLARE $title AS Utf8;
+              
+              UPSERT INTO series (series_id, title)
+              VALUES ($seriesId, $title);
+          )";
+          
+          auto params = NYdb::TParamsBuilder()
+              .AddParam("$seriesId")
+                  .Uint64(10)
+                  .Build()
+              .AddParam("$title")
+                  .Utf8("New Series")
+                  .Build()
+              .Build();
+          
+          return session.ExecuteDataQuery(
+              query,
+              NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
+              params
+          ).GetValueSync();
       }, retrySettings);
       
       if (!result.IsSuccess()) {
-          std::cerr << "Bulk upsert failed: " << result.GetIssues().ToString() << std::endl;
+          std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
       }
   }
   ```

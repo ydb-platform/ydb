@@ -26,10 +26,7 @@ namespace {
     {
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         auto nodeId = runtime.GetNodeId(nodeIndexToShutdown);
-        
-        Cerr << "[SHUTDOWN] " << stageDescription << ": Shutting down nodeIndexToShutdown=" << nodeIndexToShutdown 
-             << ", nodeId=" << nodeId << ", expectedMinShutdownEvents=" << expectedMinShutdownEvents << Endl;
-        
+
         ui32 nodeShuttingDownCount = 0;
         
         auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
@@ -61,10 +58,10 @@ namespace {
         
         Cerr << "[SHUTDOWN] " << stageDescription << ": After sleep, starting query execution" << Endl;
         
-        // Use Table Client with StreamExecuteScanQuery for distributed execution
-        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
-        auto iteratorFuture = kikimr.RunInThreadPool([&](){
-            return db.StreamExecuteScanQuery(query).GetValueSync();
+        auto queryClient = kikimr.GetQueryClient();
+        
+        auto queryFuture = kikimr.RunInThreadPool([&queryClient, &query](){
+            return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         });
 
         if (expectedMinShutdownEvents > 0) {
@@ -75,54 +72,14 @@ namespace {
             runtime.DispatchEvents(opts);
         }
 
-        auto iterator = runtime.WaitFuture(iteratorFuture);
-
-        Cerr << "[SHUTDOWN] " << stageDescription << ": Stream initialized with status=" << iterator.GetStatus() 
-             << ", nodeShuttingDownCount=" << nodeShuttingDownCount << Endl;
+        auto result = runtime.WaitFuture(queryFuture);
 
         UNIT_ASSERT_C(nodeShuttingDownCount >= expectedMinShutdownEvents, 
             stageDescription << ": Expected at least " << expectedMinShutdownEvents 
             << " NODE_SHUTTING_DOWN responses, got: " << nodeShuttingDownCount);
 
-        NYdb::EStatus finalStatus = NYdb::EStatus::SUCCESS;
-        NYdb::NIssue::TIssues finalIssues;
-        size_t partsRead = 0;
-        
-        // Read stream parts with active event dispatching between reads
-        for (;;) {
-            // Give time for events to be processed before each read
-            for (int i = 0; i < 10; i++) {
-                runtime.DispatchEvents({}, TDuration::MilliSeconds(1));
-            }
-            
-            auto readFuture = kikimr.RunInThreadPool([&iterator]() {
-                return iterator.ReadNext().GetValueSync();
-            });
-            
-            // Dispatch events while reading
-            while (!readFuture.HasValue() && !readFuture.HasException()) {
-                runtime.DispatchEvents({}, TDuration::MilliSeconds(1));
-            }
-            
-            auto streamPart = runtime.WaitFuture(readFuture);
-            
-            if (!streamPart.IsSuccess()) {
-                finalStatus = streamPart.GetStatus();
-                finalIssues = streamPart.GetIssues();
-                break;
-            }
-            if (streamPart.EOS()) {
-                break;
-            }
-            
-            partsRead++;
-        }
-        
-        Cerr << "[SHUTDOWN] " << stageDescription << ": Stream completed with finalStatus=" << finalStatus 
-             << ", partsRead=" << partsRead << ", expectedStatus=" << expectedStatus << Endl;
-
-        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, expectedStatus, 
-            stageDescription << ": Unexpected final status. Issues: " << finalIssues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, 
+            stageDescription << ": Unexpected final status. Issues: " << result.GetIssues().ToString());
     }
 } // anonymous namespace
 Y_UNIT_TEST_SUITE(KqpService) {
@@ -751,25 +708,32 @@ struct TDictCase {
 
         auto queries = std::vector<TString>({
             R"(
-                SELECT COUNT(*) 
-                FROM `/Root/LargeTable` AS e
-                JOIN `/Root/TwoShard` AS t ON e.Key = t.Key
-                WHERE e.Data > 0
+                SELECT Key, COUNT(*) AS cnt, SUM(Data) AS sum_data, MAX(DataText) AS max_text
+                FROM `/Root/LargeTable`
+                WHERE Data > 0
+                GROUP BY Key
+                ORDER BY cnt DESC
+                LIMIT 100
             )",
-            R"(SELECT COUNT(*) FROM `/Root/LargeTable`)",
             R"(
-                SELECT *
-                FROM `/Root/EightShard` AS e1
-                JOIN `/Root/LargeTable` AS e2 ON e1.Key = e2.Key
-                WHERE e1.Data > 0 AND e2.Data > 0
+                SELECT Key, COUNT(*) AS cnt, MIN(Data) AS min_data, MAX(Data) AS max_data
+                FROM `/Root/LargeTable`
+                GROUP BY Key
+                ORDER BY cnt DESC
+                LIMIT 100
+            )",
+            R"(
+                SELECT Key, COUNT(*) AS cnt, SUM(Data) AS sum_data
+                FROM `/Root/EightShard`
+                WHERE Data > 0
+                GROUP BY Key
+                ORDER BY cnt DESC
+                LIMIT 100
             )"
         });
-        auto statuses = std::vector({NYdb::EStatus::SUCCESS}); // , NYdb::EStatus::SUCCESS, NYdb::EStatus::UNAVAILABLE});
+        auto const statuses = std::vector({NYdb::EStatus::SUCCESS, NYdb::EStatus::SUCCESS, NYdb::EStatus::UNAVAILABLE});
         for (size_t i = 0; i < statuses.size(); ++i) {
-            i32 nodeIndexToShutdown = 2; //statuses.size() - (i + 1);
-            Cerr << "[SHUTDOWN] === Starting Stage " << (i + 1) << ": will shutdown nodeIndex=" << nodeIndexToShutdown 
-                 << ", expectedMinShutdownEvents=" << (i + 1) 
-                 << ", expectedStatus=" << statuses[i] << " ===" << Endl;
+            i32 nodeIndexToShutdown = statuses.size() - (i + 1);
             TestShutdownNodeAndExecuteQuery(kikimr, queries[i], nodeIndexToShutdown, i + 1, statuses[i], "Stage " + ToString(i + 1), shutdownState);
         }
     }

@@ -825,10 +825,10 @@ protected:
                     // Проверяем, можем ли делать retry (отправитель - не локальная нода)
                     if (ev->Sender.NodeId() == SelfId().NodeId()) {
                         LOG_W("[SHUTDOWN] Cannot retry: sender is local node"
-                            << ", senderNode: " << ev->Sender.NodeId()
-                            << ", selfNode: " << SelfId().NodeId());
-                        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, 
-                            MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, TStringBuilder() <<
+                                << ", senderNode: " << ev->Sender.NodeId()
+                                << ", selfNode: " << SelfId().NodeId());
+                            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, 
+                                MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, TStringBuilder() <<
                         "All compute nodes are shutting down"));
                         break;
                     }

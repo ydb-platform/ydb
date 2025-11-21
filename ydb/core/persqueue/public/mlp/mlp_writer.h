@@ -57,7 +57,7 @@ private:
         ui64 Offset = 0;
     };
     std::vector<TPendingMessage> PendingMessages;
-    NDescriber::EStatus DescribeStatus;
+    NDescriber::EStatus DescribeStatus = NDescriber::EStatus::UNKNOWN_ERROR;
 };
 
 } // namespace NKikimr::NPQ::NMLP

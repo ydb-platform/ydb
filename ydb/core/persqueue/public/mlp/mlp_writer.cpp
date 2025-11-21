@@ -129,6 +129,8 @@ void TWriterActor::DoWrite() {
             partition = TopicInfo->PartitionChooser->GetRandomPartition();
         }
 
+        AFL_ENSURE(partition)("t", TopicInfo->Description.GetName());
+
         PendingMessages.push_back({
             .Index = message.Index,
             .TabletId = partition->TabletId,

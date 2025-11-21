@@ -164,7 +164,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
             static_cast<TDerived*>(this)->ReplyAndDie(TlsActivationContext->AsActorContext());
         }
-        
+
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NPQ::NMLP::TEvWriteResponse, Handle);
@@ -222,10 +222,10 @@ namespace NKikimr::NSqsTopic::V1 {
                 result.set_id(item.BatchId);
             }
             result.set_sequence_number("0");
-    
+
             Y_ASSERT(result.IsInitialized());
         }
-    
+
     private:
         TVector<TSendMessageItem> ConvertRequestToWriteItems(const TProtoRequest& request) {
             return static_cast<TDerived*>(this)->ConvertRequestToWriteItemsImpl(request);
@@ -349,7 +349,7 @@ namespace NKikimr::NSqsTopic::V1 {
             for (const TSendMessageItem& item : Items) {
                 if (item.ValidationError.Defined()) {
                     FillSingleFailedMessage(*item.ValidationError, item, Method, *result.mutable_failed()->Add());
-                } else if (!item.MessageId.Defined()) {
+                } else if (item.MessageId.Empty()) {
                     FillSingleFailedMessage(MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Unavailable"), item, Method, *result.mutable_failed()->Add());
                 } else {
                     FillSingleSuccessMessage(item, *result.mutable_successful()->Add());

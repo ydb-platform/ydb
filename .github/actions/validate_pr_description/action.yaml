@@ -9,6 +9,8 @@ runs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
         PR_BODY: ${{ inputs.pr_body}}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        SHOW_ADDITIONAL_INFO_IN_PR: ${{ inputs.show_additional_info }}
       run: |
         python3 -m pip install PyGithub
         echo "$PR_BODY" | python3 ${{ github.action_path }}/validate_pr_description.py
@@ -17,6 +19,13 @@ inputs:
   pr_body:
     description: "The body of the pull request."
     required: true
+  pr_number:
+    description: "The number of the pull request."
+    required: true
+  show_additional_info:
+    description: "Whether to show additional info (backport section) in PR. Set to 'TRUE' to enable."
+    required: false
+    default: "FALSE"
 
 outputs:
   status:

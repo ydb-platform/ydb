@@ -10,6 +10,9 @@ on:
       - main
       - stable-*
 
+permissions:
+  pull-requests: write
+
 jobs:
   validate-pr-description:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]

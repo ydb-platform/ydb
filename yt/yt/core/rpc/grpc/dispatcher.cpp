@@ -66,6 +66,21 @@ public:
         }
 
         Config_ = config;
+        InternalMinLogLevel_.store(config->GrpcInternalMinLogLevel);
+    }
+
+    void Reconfigure(const TDispatcherConfigPtr& newConfig)
+    {
+        auto oldMinLogLevel = InternalMinLogLevel_.load();
+        auto newMinLogLevel = newConfig->GrpcInternalMinLogLevel;
+        if (oldMinLogLevel == newMinLogLevel) {
+            return;
+        }
+
+        InternalMinLogLevel_.store(newMinLogLevel);
+        YT_LOG_INFO("GRPC dispatcher reconfigured (NewMinLogLevel: %v, OldMinLogLevel: %v)",
+            newMinLogLevel,
+            oldMinLogLevel);
     }
 
     TGrpcLibraryLockPtr GetLibraryLock()
@@ -176,6 +191,9 @@ private:
         grpc_core::Executor::SetThreadsLimit(Config_->GrpcThreadCount);
         grpc_event_engine::experimental::ThreadPool::SetThreadsLimit(Config_->GrpcEventEngineThreadCount);
 
+        gpr_set_log_verbosity(GPR_LOG_SEVERITY_DEBUG);
+        gpr_set_log_function(ProcessGrpcLogEvent);
+
         // Initialize grpc only after configuration is done.
         auto grpcLock = New<TGrpcLibraryLock>();
         for (int index = 0; index < Config_->DispatcherThreadCount; ++index) {
@@ -187,8 +205,39 @@ private:
         Initialized_.store(true);
     }
 
+    static void ProcessGrpcLogEvent(gpr_log_func_args* args)
+    {
+        auto& self = *Get()->Impl_;
+
+        NLogging::ELogLevel level;
+        switch (args->severity) {
+            case GPR_LOG_SEVERITY_DEBUG:
+                level = NLogging::ELogLevel::Debug;
+                break;
+            case GPR_LOG_SEVERITY_INFO:
+                level = NLogging::ELogLevel::Info;
+                break;
+            case GPR_LOG_SEVERITY_ERROR:
+                level = NLogging::ELogLevel::Error;
+                break;
+        }
+
+        auto minLogLevel = self.InternalMinLogLevel_.load(std::memory_order::relaxed);
+        if (level < minLogLevel) {
+            return;
+        }
+
+        YT_LOG_EVENT(
+            GrpcInternalLogger,
+            level,
+            "%v (File: %qv, Line: %v)",
+            args->message,
+            args->file,
+            args->line);
+    }
 
     std::atomic<bool> Initialized_ = false;
+    std::atomic<NLogging::ELogLevel> InternalMinLogLevel_ = NLogging::ELogLevel::Maximum;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConfigLock_);
     TDispatcherConfigPtr Config_ = New<TDispatcherConfig>();
@@ -213,6 +262,11 @@ TDispatcher* TDispatcher::Get()
 void TDispatcher::Configure(const TDispatcherConfigPtr& config)
 {
     Impl_->Configure(config);
+}
+
+void TDispatcher::Reconfigure(const TDispatcherConfigPtr& newConfig)
+{
+    Impl_->Reconfigure(newConfig);
 }
 
 bool TDispatcher::IsInitialized() const noexcept

@@ -1285,9 +1285,9 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
 
     optional NKikimrSchemeOp.EPathState TargetPathTargetState = 8;
     
-    // Map from index impl table name to CDC stream config for incremental backups
-    // Key: index impl table name (e.g., "indexImplTable")
-    // Value: CDC stream configuration to create on that index impl table
+    // Map from index name to CDC stream config for incremental backups
+    // Key: index name (e.g., "age_index", "name_index")
+    // Value: CDC stream configuration to create on that index's impl table
     map<string, TCreateCdcStream> IndexImplTableCdcStreams = 9;
 }
 

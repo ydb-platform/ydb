@@ -188,7 +188,7 @@ void HelpSyncSiblingVersions(
         }
     }
     
-    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "Computed maximum version across all siblings"
                  << ", myVersion: " << myVersion
                  << ", maxVersion: " << maxVersion
@@ -207,7 +207,7 @@ void HelpSyncSiblingVersions(
             context.SS->ClearDescribePathCaches(myIndexPath);
             context.OnComplete.PublishToSchemeBoard(operationId, myIndexPathId);
             
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Updated my index entity"
                         << ", myIndexPathId: " << myIndexPathId
                         << ", newVersion: " << maxVersion
@@ -236,7 +236,7 @@ void HelpSyncSiblingVersions(
             
             indexesUpdated++;
             
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Updated sibling index entity"
                         << ", indexPathId: " << indexPathId
                         << ", newVersion: " << maxVersion
@@ -249,7 +249,7 @@ void HelpSyncSiblingVersions(
     // Bumping AlterVersion without TX_KIND_SCHEME_CHANGED causes "Wrong schema version" errors.
     // Each impl table must increment its own version when its CDC operation executes.
     
-    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "HelpSyncSiblingVersions COMPLETE"
                  << ", maxVersion: " << maxVersion
                  << ", indexesUpdated: " << indexesUpdated

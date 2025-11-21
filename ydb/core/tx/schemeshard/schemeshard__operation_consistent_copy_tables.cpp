@@ -269,7 +269,7 @@ bool CreateConsistentCopyTables(
                 NKikimrSchemeOp::TCopyTableConfig indexDescr;
                 indexDescr.CopyFrom(descr);
 
-                auto it = descr.GetIndexImplTableCdcStreams().find(srcImplTableName);
+                auto it = descr.GetIndexImplTableCdcStreams().find(name);
                 if (it != descr.GetIndexImplTableCdcStreams().end()) {
                     // CDC stream Impl was already created in the backup operation before copying
                     // Store the CDC info so the copy operation creates AtTable and PQ parts

@@ -148,7 +148,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     indexStreamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
                     
                     NCdc::DoCreateStreamImpl(result, indexCdcStreamOp, opId, indexTablePath, false, false);
-                    (*desc.MutableIndexImplTableCdcStreams())[implTableName].CopyFrom(indexCdcStreamOp);
+                    (*desc.MutableIndexImplTableCdcStreams())[childName].CopyFrom(indexCdcStreamOp);
                 }
             }
             

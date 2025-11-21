@@ -418,9 +418,8 @@ public:
                 .IsTable()
                 .NotAsyncReplicaTable()
                 .NotUnderDeleting();
-            
+
             // Allow restoring to private paths (e.g., index implementation tables)
-            // Skip IsCommonSensePath() check for tables inside index paths
             if (!dstTablePath.IsInsideTableIndexPath(false)) {
                 checks.IsCommonSensePath();
             }
@@ -564,9 +563,8 @@ bool CreateRestoreMultipleIncrementalBackups(
                 .NotDeleted()
                 .IsTable()
                 .NotUnderDeleting();
-            
+
             // Allow restoring to private paths (e.g., index implementation tables)
-            // Skip IsCommonSensePath() check for tables inside index paths
             if (!dstTablePath.IsInsideTableIndexPath(false)) {
                 checks.IsCommonSensePath();
             }

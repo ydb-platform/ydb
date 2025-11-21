@@ -62,6 +62,9 @@ public:
         auto guard = Guard(ConfigLock_);
 
         if (IsInitialized()) {
+            if (AreNodesEqual(ConvertToNode(config), ConvertToNode(Config_))) {
+                return;
+            }
             THROW_ERROR_EXCEPTION("GRPC dispatcher is already initialized and cannot be reconfigured");
         }
 

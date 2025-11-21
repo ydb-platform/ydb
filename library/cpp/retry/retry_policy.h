@@ -169,8 +169,8 @@ struct TExponentialBackoffPolicy : IRetryPolicy<TArgs...> {
         , RetryClassFunction(std::move(retryClassFunction))
     {
         Y_ASSERT(RetryClassFunction);
-        Y_ASSERT(MinDelay <= MaxDelay);
-        Y_ASSERT(MinLongRetryDelay <= MaxDelay);
+        Y_ASSERT(MinDelay < MaxDelay);
+        Y_ASSERT(MinLongRetryDelay < MaxDelay);
         Y_ASSERT(MinLongRetryDelay >= MinDelay);
         Y_ASSERT(ScaleFactor > 1.0);
         Y_ASSERT(MaxRetries > 0);

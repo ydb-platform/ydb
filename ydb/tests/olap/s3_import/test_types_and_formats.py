@@ -136,10 +136,10 @@ class TestTypesAndFormats(S3ImportTestBase):
 
     @link_test_case("#18784")
     def test_parquet_format(self):
-        olap_table_name = "olap_table"
-        s3_source_name = "s3_source"
-        s3_table_name = "s3_table"
-        from_s3_table_name = "from_s3"
+        olap_table_name = "olap_table_parquet"
+        s3_source_name = "s3_source_parquet"
+        s3_table_name = "s3_table_parquet"
+        from_s3_table_name = "from_s3_parquet"
 
         table_schema = """
             c_int8 Int8,
@@ -290,10 +290,10 @@ class TestTypesAndFormats(S3ImportTestBase):
 
     @link_test_case("#18784")
     def test_parquet_datetime_types(self):
-        olap_table_name = "olap_table"
-        s3_source_name = "s3_source"
-        s3_table_name = "s3_table"
-        from_s3_table_name = "from_s3"
+        olap_table_name = "olap_table_datetime"
+        s3_source_name = "s3_source_datetime"
+        s3_table_name = "s3_table_datetime"
+        from_s3_table_name = "from_s3_datetime"
 
         table_schema = """
             c_int32 Int32 NOT NULL,

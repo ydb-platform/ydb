@@ -349,7 +349,7 @@ namespace NKikimr::NSqsTopic::V1 {
             for (const TSendMessageItem& item : Items) {
                 if (item.ValidationError.Defined()) {
                     FillSingleFailedMessage(*item.ValidationError, item, Method, *result.mutable_failed()->Add());
-                } else if (item.MessageId.Defined()) {
+                } else if (!item.MessageId.Defined()) {
                     FillSingleFailedMessage(MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Unavailable"), item, Method, *result.mutable_failed()->Add());
                 } else {
                     FillSingleSuccessMessage(item, *result.mutable_successful()->Add());

@@ -464,6 +464,41 @@ TJoinTestData SpillingTestData() {
     td.Kind = EJoinKind::Inner;
     return td;
 }
+// TJoinTestData ALotOfStrings() {
+//     TJoinTestData td;
+//     auto& setup = *td.Setup;
+//     constexpr int leftSize = 100;
+//     TVector<ui64> leftKeys(leftSize);
+//     TVector<std::string> leftValues(leftSize);
+//     for (int index = 0; index < leftSize; ++index) {
+//         rightKeys[index] = 3 * index + 3;
+//         rightValues[index] = std::to_string(300+2*index%10, 'a' + index%10);
+//     }
+
+//     constexpr int rightSize = 200000;
+//     TVector<ui64> rightKeys(rightSize);
+//     TVector<std::string> rightValues(rightSize);
+//     for (int index = 0; index < rightSize; ++index) {
+//         rightKeys[index] = 2 * index + 3;
+//         rightValues[index] = std::to_string(300+2*index%10, 'a'+index%10);
+//     }
+
+//     TVector<ui64> expectedKeysLeft;
+//     TVector<ui64> expectedValuesLeft;
+//     TVector<ui64> expectedKeysRight;
+//     TVector<ui64> expectedValuesRight;
+//     td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+//     td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+//     td.Result =
+//         ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+
+//     constexpr int packedTupleSize = 2 * 8 + 5;
+//     constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
+//     [[maybe_unused]] constexpr ui64 rightSizeBytes = rightSize * packedTupleSize;
+//     td.JoinMemoryConstraint = joinMemory;
+//     td.Kind = EJoinKind::Inner;
+//     return td;
+// }
 
 void Test(TJoinTestData testData, bool blockJoin) {
     FilterRenamesForSemiAndOnlyJoins(testData);

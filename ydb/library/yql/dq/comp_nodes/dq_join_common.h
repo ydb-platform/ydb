@@ -323,7 +323,8 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
         NUdf::TLogComponentId LogComponent_;
 
         void LogDebug(TStringRef msg) const {
-            UDF_LOG(Logger_, LogComponent_, NYql::NUdf::ELogLevel::Fatal, msg);
+            Cerr << msg << Endl;
+            // UDF_LOG(Logger_, LogComponent_, NYql::NUdf::ELogLevel::Fatal, msg);
         }
     };
 
@@ -450,7 +451,8 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
         , Layouts_(layouts)
         , Spiller_(ctx.SpillerFactory->CreateSpiller())
         , Sources_(std::move(sources))
-    {}
+    {
+    }
 
     struct Finish {};
 
@@ -635,7 +637,6 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                     it->second.SelectSide(future.Side).push_back(ExtractReadyFuture(std::move(future.Val)));
                 }
                 State_ = JoinPairsOfPartitions{*this, std::move(state.AlreadyDumped)};
-                Logger_.LogDebug("started processing spilled buckets");
 
             } else {
                 return WaitWhileSpilling();

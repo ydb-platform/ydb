@@ -6,11 +6,6 @@
 
 namespace NKikimr::NMiniKQL {
 
-template <typename T> using TMKQLDeque = std::deque<T, TMKQLAllocator<T>>;
-
-using TFuturePage = NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>;
-
-enum class ESide { Probe, Build };
 #ifdef MKQL_ENSURE
 #undef MKQL_ENSURE
 #endif
@@ -22,6 +17,15 @@ enum class ESide { Probe, Build };
                                 << #condition << " failed. " << message); \
         }                                                                 \
     } while (0)
+
+
+template <typename T> using TMKQLDeque = std::deque<T, TMKQLAllocator<T>>;
+
+using TFuturePage = NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>;
+
+enum class ESide { Probe, Build };
+
+const char* AsString(ESide side);
 
 template <typename T> struct TSides {
     T Build;

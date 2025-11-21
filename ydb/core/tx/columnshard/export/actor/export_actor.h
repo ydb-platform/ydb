@@ -32,7 +32,6 @@ private:
     EStage Stage = EStage::Initialization;
     std::shared_ptr<NExport::TSession> ExportSession;
     TActorId Exporter;
-    TString ErrorMessage;
     static inline const ui64 FreeSpace = ((ui64)8) << 20;
     void SwitchStage(const EStage from, const EStage to) {
         AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);

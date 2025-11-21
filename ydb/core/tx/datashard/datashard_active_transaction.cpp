@@ -429,31 +429,9 @@ bool TActiveTransaction::BuildSchemeTx()
 {
     Y_ENSURE(TxBody);
     SchemeTx.Reset(new NKikimrTxDataShard::TFlatSchemeTransaction);
+
     bool res = SchemeTx->ParseFromArray(TxBody.data(), TxBody.size());
     if (!res)
-        return false;
-
-    ui32 count = (ui32)SchemeTx->HasCreateTable()
-        + (ui32)SchemeTx->HasDropTable()
-        + (ui32)SchemeTx->HasAlterTable()
-        + (ui32)SchemeTx->HasBackup()
-        + (ui32)SchemeTx->HasRestore()
-        + (ui32)SchemeTx->HasSendSnapshot()
-        + (ui32)SchemeTx->HasCreatePersistentSnapshot()
-        + (ui32)SchemeTx->HasDropPersistentSnapshot()
-        + (ui32)SchemeTx->HasInitiateBuildIndex()
-        + (ui32)SchemeTx->HasFinalizeBuildIndex()
-        + (ui32)SchemeTx->HasDropIndexNotice()
-        + (ui32)SchemeTx->HasMoveTable()
-        + (ui32)SchemeTx->HasCreateCdcStreamNotice()
-        + (ui32)SchemeTx->HasAlterCdcStreamNotice()
-        + (ui32)SchemeTx->HasDropCdcStreamNotice()
-        + (ui32)SchemeTx->HasRotateCdcStreamNotice()
-        + (ui32)SchemeTx->HasMoveIndex()
-        + (ui32)SchemeTx->HasCreateIncrementalRestoreSrc()
-        + (ui32)SchemeTx->HasCreateIncrementalBackupSrc()
-        ;
-    if (count != 1)
         return false;
 
     if (SchemeTx->HasCreateTable()) {
@@ -885,6 +863,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::DropCdcStream);
         plan.push_back(EExecutionUnitKind::RotateCdcStream);
         plan.push_back(EExecutionUnitKind::CreateIncrementalRestoreSrc);
+        plan.push_back(EExecutionUnitKind::Truncate);
         plan.push_back(EExecutionUnitKind::CompleteOperation);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     } else {

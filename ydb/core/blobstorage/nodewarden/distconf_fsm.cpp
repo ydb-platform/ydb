@@ -134,7 +134,9 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::UndoCurrentPropositionNodeChange(TProposition& proposition) {
         if (!proposition.AddedNodes.empty()) {
-            Send(GetNameserviceActorId(), new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
+            for (TActorId actorId : {MakeDistconfBridgeConnectionCheckerActorId(), GetNameserviceActorId()}) {
+                Send(actorId, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
+            }
             for (const auto& nodeId : proposition.AddedNodes) {
                 UnsubscribeInterconnect(nodeId.NodeId());
             }
@@ -163,15 +165,13 @@ namespace NKikimr::NStorage {
         SwitchToError("incorrect response from peer");
     }
 
-    bool TDistributedConfigKeeper::HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config,
-            bool local) const {
+    bool TDistributedConfigKeeper::HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config) const {
         std::vector<TNodeIdentifier> connected;
         connected.reserve(AllBoundNodes.size());
         for (const auto& [nodeId, node] : AllBoundNodes) {
             connected.push_back(nodeId);
         }
-        return HasNodeQuorum(config, connected, BridgePileNameMap, local && BridgeInfo ?
-            BridgeInfo->SelfNodePile->BridgePileId : TBridgePileId(), *Cfg, nullptr, true);
+        return HasNodeQuorum(config, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
     }
 
     TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
@@ -372,8 +372,7 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStorageConfig *proposedConfig = nullptr;
 
         if (persistedConfig) { // we have a committed config, apply and spread it
-            ApplyStorageConfig(*persistedConfig);
-            FanOutReversePush(persistedConfig); // notify all nodes about this config
+            ApplyCommittedStorageConfig(*persistedConfig);
         }
 
         NKikimrBlobStorage::TStorageConfig tempConfig;
@@ -457,8 +456,7 @@ namespace NKikimr::NStorage {
         if (TStringStream err; HasConfigQuorum(proposition.StorageConfig, successfulDisks, BridgePileNameMap, TBridgePileId(),
                 *Cfg, proposition.MindPrev, &err)) {
             // apply configuration and spread it
-            ApplyStorageConfig(proposition.StorageConfig);
-            FanOutReversePush(&proposition.StorageConfig);
+            ApplyCommittedStorageConfig(proposition.StorageConfig);
 
             // this proposition came from actor -- we notify that actor and finish operation
             Send(proposition.ActorId, new TEvPrivate::TEvConfigProposed(std::nullopt));
@@ -497,36 +495,32 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::PrepareScatterTask(ui64 cookie, TScatterTask& task) {
         switch (task.Request.GetRequestCase()) {
             case TEvScatter::kCollectConfigs: {
-                ReadConfig(GetDrivesToRead(false), cookie);
+                ReadConfig(GetDrives(*StorageConfig), cookie);
                 ++task.AsyncOperationsPending;
                 break;
             }
 
             case TEvScatter::kProposeStorageConfig:
-                if (ProposedStorageConfigCookie) {
+                if (PersistProposedStorageConfigInFlight) {
                     auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                     SelfNode.Serialize(status->MutableNodeId());
                     status->SetStatus(TEvGather::TProposeStorageConfig::RACE);
                 } else if (const auto& proposed = task.Request.GetProposeStorageConfig().GetConfig();
-                        proposed.GetGeneration() < StorageConfig->GetGeneration() || (
-                            proposed.GetGeneration() == StorageConfig->GetGeneration() &&
-                            proposed.GetFingerprint() != StorageConfig->GetFingerprint())) {
+                        proposed.GetGeneration() <= StorageConfig->GetGeneration()) {
                     auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                     SelfNode.Serialize(status->MutableNodeId());
                     status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
-                    STLOG(PRI_ERROR, BS_NODE, NWDC49, "ProposedStorageConfig generation/fingerprint mismatch",
+                    STLOG(PRI_ERROR, BS_NODE, NWDC49, "ProposedStorageConfig generation mismatch",
                         (StorageConfig, StorageConfig.get()), (Request, task.Request), (RootNodeId, GetRootNodeId()));
                     Y_DEBUG_ABORT();
-                } else if (proposed.HasClusterState() && (!BridgeInfo || !NBridge::PileStateTraits(proposed.GetClusterState().GetPerPileState(BridgeInfo->SelfNodePile->BridgePileId.GetPileIndex())).RequiresConfigQuorum)) {
+                } else if (proposed.HasClusterState() && (!BridgeInfo ||
+                        !NBridge::PileStateTraits(proposed.GetClusterState().GetPerPileState(
+                            BridgeInfo->SelfNodePile->BridgePileId.GetPileIndex())).RequiresConfigQuorum)) {
                     // won't persist proposed config when this node is not part of the quorum
                 } else {
-                    ProposedStorageConfigCookie.emplace(cookie);
-                    ProposedStorageConfig.emplace(proposed);
-
-                    PersistConfig([this, cookie](TEvPrivate::TEvStorageConfigStored& msg) {
-                        Y_ABORT_UNLESS(ProposedStorageConfigCookie);
-                        Y_ABORT_UNLESS(cookie == *ProposedStorageConfigCookie);
-                        ProposedStorageConfigCookie.reset();
+                    auto callback = [this, cookie](TEvPrivate::TEvStorageConfigStored& msg) {
+                        Y_ABORT_UNLESS(PersistProposedStorageConfigInFlight);
+                        PersistProposedStorageConfigInFlight = false;
 
                         if (auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {
                             TScatterTask& task = it->second;
@@ -550,7 +544,30 @@ namespace NKikimr::NStorage {
                         }
 
                         FinishAsyncOperation(cookie);
-                    });
+                    };
+
+                    Y_ABORT_UNLESS(!CommittedStorageConfig || CommittedStorageConfig->GetGeneration() <= proposed.GetGeneration());
+                    Y_ABORT_UNLESS(!LocalCommittedStorageConfig || LocalCommittedStorageConfig->GetGeneration() <= proposed.GetGeneration());
+
+                    std::vector<TString> drivesToWrite;
+
+                    for (const NKikimrBlobStorage::TStorageConfig *config : {LocalCommittedStorageConfig.get(), &proposed}) {
+                        if (config) {
+                            EnumerateConfigDrives(*config, SelfId().NodeId(), [&](auto& /*node*/, auto& drive) {
+                                const TString& path = drive.GetPath();
+                                drivesToWrite.push_back(path);
+                                NKikimrBlobStorage::TPDiskMetadataRecord& m = MetadataByPath[path];
+                                m.MutableProposedStorageConfig()->CopyFrom(proposed);
+                            });
+                        }
+                    }
+
+                    std::ranges::sort(drivesToWrite);
+                    const auto [begin, end] = std::ranges::unique(drivesToWrite);
+                    drivesToWrite.erase(begin, end);
+
+                    PersistConfig(callback, drivesToWrite);
+                    PersistProposedStorageConfigInFlight = true;
 
                     ++task.AsyncOperationsPending;
                 }
@@ -675,7 +692,11 @@ namespace NKikimr::NStorage {
         const ui32 rootNodeId = GetRootNodeId();
         for (auto& [nodeId, info] : DirectBoundNodes) {
             if (committedStorageConfig || info.LastReportedRootNodeId != rootNodeId) {
-                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(rootNodeId, committedStorageConfig));
+                auto ev = std::make_unique<TEvNodeConfigReversePush>(rootNodeId);
+                if (committedStorageConfig) {
+                    ev->Record.MutableCommittedStorageConfig()->CopyFrom(*committedStorageConfig);
+                }
+                SendEvent(nodeId, info, std::move(ev));
                 info.LastReportedRootNodeId = GetRootNodeId();
             }
         }
@@ -743,13 +764,15 @@ namespace NKikimr::NStorage {
         std::vector<TNodeIdentifier> addedNodes;
         std::ranges::set_difference(newNodes, currentNodes, std::back_inserter(addedNodes));
         if (!addedNodes.empty()) {
-            Send(GetNameserviceActorId(), new TEvNodeWardenStorageConfig(
-                std::make_shared<NKikimrBlobStorage::TStorageConfig>(CurrentProposition->StorageConfig),
-                SelfManagementEnabled,
-                Cfg->BridgeConfig
-                    ? GenerateBridgeInfo(CurrentProposition->StorageConfig)
-                    : nullptr
-            ));
+            for (TActorId actorId : {MakeDistconfBridgeConnectionCheckerActorId(), GetNameserviceActorId()}) {
+                Send(actorId, new TEvNodeWardenStorageConfig(
+                    std::make_shared<NKikimrBlobStorage::TStorageConfig>(CurrentProposition->StorageConfig),
+                    SelfManagementEnabled,
+                    Cfg->BridgeConfig
+                        ? GenerateBridgeInfo(CurrentProposition->StorageConfig)
+                        : nullptr
+                ));
+            }
             CurrentProposition->AddedNodes = {addedNodes.begin(), addedNodes.end()};
         }
 

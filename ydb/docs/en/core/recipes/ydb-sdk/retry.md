@@ -161,24 +161,21 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
                   .Build()
               .Build();
           
+          // Return future, RetryOperation automatically converts the result
           return session.ExecuteDataQuery(
               query,
               NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
               params
-          ).Apply([](const NYdb::NTable::TAsyncDataQueryResult& asyncResult) {
-              return asyncResult.ExtractValueSync();
-          });
+          );
       });
       
-      // Handle result asynchronously
-      future.Subscribe([](const NYdb::TAsyncStatus& asyncStatus) {
-          auto status = asyncStatus.GetValueSync();
-          if (status.IsSuccess()) {
-              std::cout << "Operation executed successfully" << std::endl;
-          } else {
-              std::cerr << "Operation failed: " << status.GetIssues().ToString() << std::endl;
-          }
-      });
+      // Wait for all retry attempts to complete
+      auto status = future.GetValueSync();
+      if (status.IsSuccess()) {
+          std::cout << "Operation executed successfully" << std::endl;
+      } else {
+          std::cerr << "Operation failed: " << status.GetIssues().ToString() << std::endl;
+      }
   }
   ```
 

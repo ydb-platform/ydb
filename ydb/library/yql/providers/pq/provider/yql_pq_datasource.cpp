@@ -106,7 +106,7 @@ public:
         }
 
         TVector<TCoNameValueTuple> sourceMetadata;
-        for (auto sysColumn : AllowedPqMetaSysColumns(State_->AllowTransperentSystemColumns)) {
+        for (auto sysColumn : AllowedPqMetaSysColumns(State_->AllowTransparentSystemColumns)) {
             sourceMetadata.push_back(Build<TCoNameValueTuple>(ctx, read.Pos())
                 .Name().Build("system")
                 .Value<TCoAtom>().Build(sysColumn)

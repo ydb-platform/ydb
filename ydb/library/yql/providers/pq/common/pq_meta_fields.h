@@ -17,12 +17,12 @@ struct TMetaFieldDescriptor {
     const NUdf::EDataSlot Type;
 };
 
-std::optional<TString> SkipPqSystemPrefix(const TString& sysColumn, bool* isTransperent = nullptr);
+std::optional<TString> SkipPqSystemPrefix(const TString& sysColumn, bool* isTransparent = nullptr);
 
-std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorByKey(const TString& key, bool allowTransperentColumns);
+std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorByKey(const TString& key, bool allowTransparentColumns);
 
 std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorBySysColumn(const TString& sysColumn);
 
-std::vector<TString> AllowedPqMetaSysColumns(bool allowTransperentColumns);
+std::vector<TString> AllowedPqMetaSysColumns(bool allowTransparentColumns);
 
 } // namespace NYql

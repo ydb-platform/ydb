@@ -10,38 +10,38 @@ namespace {
 class TPqMetadataField {
 public:
     static constexpr char SYS_PREFIX[] = "_yql_sys_";
-    static constexpr char TRANSPERENT_PREFIX[] = "tsp_";
+    static constexpr char TRANSPARENT_PREFIX[] = "tsp_";
 
-    explicit TPqMetadataField(NUdf::EDataSlot type, bool transperent = false)
+    explicit TPqMetadataField(NUdf::EDataSlot type, bool transparent = false)
         : Type(type)
-        , Transperent(transperent)
+        , Transparent(transparent)
     {}
 
-    TString GetSysColumn(const TString& key, bool allowTransperentColumns) const {
+    TString GetSysColumn(const TString& key, bool allowTransparentColumns) const {
         auto systemPrefix = TStringBuilder() << SYS_PREFIX;
-        if (Transperent && allowTransperentColumns) {
-            systemPrefix << TRANSPERENT_PREFIX;
+        if (Transparent && allowTransparentColumns) {
+            systemPrefix << TRANSPARENT_PREFIX;
         }
 
         return systemPrefix << key;
     }
 
-    TMetaFieldDescriptor GetDescriptor(const TString& key, bool allowTransperentColumns) const {
+    TMetaFieldDescriptor GetDescriptor(const TString& key, bool allowTransparentColumns) const {
         return {
             .Key = key,
-            .SysColumn = GetSysColumn(key, allowTransperentColumns),
+            .SysColumn = GetSysColumn(key, allowTransparentColumns),
             .Type = Type,
         };
     }
 
 public:
     const NUdf::EDataSlot Type;
-    const bool Transperent;
+    const bool Transparent;
 };
 
 const std::unordered_map<TString, TPqMetadataField> PqMetaFields = {
     {"create_time", TPqMetadataField(NUdf::EDataSlot::Timestamp)},
-    {"write_time", TPqMetadataField(NUdf::EDataSlot::Timestamp, /* transperent */ true)},
+    {"write_time", TPqMetadataField(NUdf::EDataSlot::Timestamp, /* transparent */ true)},
     {"partition_id", TPqMetadataField(NUdf::EDataSlot::Uint64)},
     {"offset", TPqMetadataField(NUdf::EDataSlot::Uint64)},
     {"message_group_id", TPqMetadataField(NUdf::EDataSlot::String)},
@@ -50,32 +50,32 @@ const std::unordered_map<TString, TPqMetadataField> PqMetaFields = {
 
 } // anonymous namespace
 
-std::optional<TString> SkipPqSystemPrefix(const TString& sysColumn, bool* isTransperent) {
+std::optional<TString> SkipPqSystemPrefix(const TString& sysColumn, bool* isTransparent) {
     TStringBuf keyBuf(sysColumn);
     if (!keyBuf.SkipPrefix(TPqMetadataField::SYS_PREFIX)) {
         return std::nullopt;
     }
 
-    const bool transperent = keyBuf.SkipPrefix(TPqMetadataField::TRANSPERENT_PREFIX);
-    if (isTransperent) {
-        *isTransperent = transperent;
+    const bool transparent = keyBuf.SkipPrefix(TPqMetadataField::TRANSPARENT_PREFIX);
+    if (isTransparent) {
+        *isTransparent = transparent;
     }
 
     return TString(keyBuf);
 }
 
-std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorByKey(const TString& key, bool allowTransperentColumns) {
+std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorByKey(const TString& key, bool allowTransparentColumns) {
     const auto it = PqMetaFields.find(key);
     if (it == PqMetaFields.end()) {
         return std::nullopt;
     }
 
-    return it->second.GetDescriptor(key, allowTransperentColumns);
+    return it->second.GetDescriptor(key, allowTransparentColumns);
 }
 
 std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorBySysColumn(const TString& sysColumn) {
-    bool transperent = false;
-    const auto key = SkipPqSystemPrefix(sysColumn, &transperent);
+    bool transparent = false;
+    const auto key = SkipPqSystemPrefix(sysColumn, &transparent);
     if (!key) {
         return std::nullopt;
     }
@@ -86,19 +86,19 @@ std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorBySysColumn(const T
     }
 
     const auto& metadata = it->second;
-    if (transperent && !metadata.Transperent) {
+    if (transparent && !metadata.Transparent) {
         return std::nullopt;
     }
 
-    return metadata.GetDescriptor(*key, transperent);
+    return metadata.GetDescriptor(*key, transparent);
 }
 
-std::vector<TString> AllowedPqMetaSysColumns(bool allowTransperentColumns) {
+std::vector<TString> AllowedPqMetaSysColumns(bool allowTransparentColumns) {
     std::vector<TString> res;
     res.reserve(PqMetaFields.size());
 
     for (const auto& [key, field] : PqMetaFields) {
-        res.emplace_back(field.GetSysColumn(key, allowTransperentColumns));
+        res.emplace_back(field.GetSysColumn(key, allowTransparentColumns));
     }
 
     return res;

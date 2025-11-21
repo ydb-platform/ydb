@@ -46,7 +46,7 @@ TConclusionStatus IJsonObjectExtractor::AddDataToBuilder(TDataBuilder& dataBuild
     if (value.GetType() == NBinaryJson::EEntryType::Container) {
         auto container = value.GetContainer();
         if (FirstLevelOnly || container.GetType() == NBinaryJson::EContainerType::Array) {
-            res = NBinaryJson::SerializeToBinaryJson(NBinaryJson::SerializeToJson(container), false);
+            res = NBinaryJson::SerializeToBinaryJson(value);
         // TODO: add support for arrays if needed
         // } else if (container.GetType() == NBinaryJson::EContainerType::Array) {
         //     iterators.emplace_back(std::make_unique<TArrayExtractor>(container.GetArrayIterator(), key));

@@ -1122,12 +1122,16 @@ Y_UNIT_TEST_SUITE(KqpCost) {
     }
     
 
-    Y_UNIT_TEST_TWIN(OltpWriteRow, isSink) {
+    Y_UNIT_TEST_QUAD(WriteRow, isSink, isOlap) {
+        if (isOlap) {
+            // TODO: same stats for olap?
+            return;
+        }
         TKikimrRunner kikimr(GetAppConfig(false, false, isSink));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session, false);
+        CreateTestTable(session, isOlap);
 
         {
             auto query = Q_(R"(
@@ -1143,7 +1147,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             Cerr << stats.DebugString() << Endl;
-            size_t phase = stats.query_phases_size() - 1;
+            size_t phase = isOlap ? 0 : stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
 
@@ -1176,7 +1180,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             Cerr << stats.DebugString() << Endl;
-            size_t phase = stats.query_phases_size() - 1;
+            size_t phase = isOlap ? 0 : stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
 
@@ -1387,13 +1391,17 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(OltpWriteRowInsertFails, isSink) {
+    Y_UNIT_TEST_QUAD(WriteRowInsertFails, isSink, isOlap) {
+        if (isOlap) {
+            // TODO: same stats for olap?
+            return;
+        }
         TKikimrRunner kikimr(GetAppConfig(false, false, isSink));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateTestTable(session, false);
-        CreateTestTable(session, false, "2");
+        CreateTestTable(session, isOlap);
+        CreateTestTable(session, isOlap, "2");
 
         {
             // Three inserts
@@ -1742,6 +1750,113 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Deletes = 0,
                 });
         }
+    }
+
+    Y_UNIT_TEST_TWIN(CTAS, isOlap) {
+        TKikimrRunner kikimr(GetAppConfig(false, false, true));
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, isOlap);
+
+        {
+            auto query = std::format(R"(
+                CREATE TABLE `/Root/TestTable2` (PRIMARY KEY (Group, Name)) WITH (STORE={}) AS SELECT * FROM `/Root/TestTable`;
+            )", isOlap ? "COLUMN" : "ROW");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            size_t phase = 0;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), isOlap ? 1472 : 80);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(1).reads().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(1).reads().bytes(), isOlap ? 144 : 80);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 4,
+                    .Reads = 4,
+                    .Deletes = 0,
+                });
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CTASWithRetry, isOlap) {
+        auto appConfig = GetAppConfig(false, false, true);
+        appConfig.MutableTableServiceConfig()->MutableWriteActorSettings()->SetInFlightMemoryLimitPerActorBytes(40);
+        // For executing REPLACE
+        appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(true);
+        TKikimrSettings settings(appConfig);
+        settings.SetUseRealThreads(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        kikimr.RunCall([&] {
+            CreateTestTable(session, isOlap);
+        });
+
+        size_t messages = 0;
+
+        auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+            if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                ++messages;
+                auto* msg = ev->Get<NEvents::TDataEvents::TEvWriteResult>();
+                for (size_t index = 0; index < 3; ++index) {
+                    // Send several duplicates
+                    auto copy = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
+                    copy->Record = msg->Record;
+                    runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, copy.release(), ev->Flags, ev->Cookie));
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(grab);
+
+        {
+            auto query = std::format(R"(
+                CREATE TABLE `/Root/TestTable2` (PRIMARY KEY (Group, Name)) WITH (STORE={}) AS SELECT * FROM `/Root/TestTable`;
+            )", isOlap ? "COLUMN" : "ROW");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+
+            auto result = kikimr.RunCall([&] { return session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            size_t phase = 0;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), isOlap ? 1472 : 80);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(1).reads().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(1).reads().bytes(), isOlap ? 144 : 80);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 4,
+                    .Reads = 4,
+                    .Deletes = 0,
+                });
+        }
+
+        UNIT_ASSERT_EQUAL(messages, isOlap ? 4 : 1);
     }
 
 }

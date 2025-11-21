@@ -273,6 +273,15 @@ struct TEvStatistics {
         NKikimrStat::TEvStatisticsResponse,
         EvStatisticsResponse>
     {};
+
+    struct TEvFinishTraversal : public TEventLocal<
+        TEvFinishTraversal, EvFinishTraversal>
+    {
+        // TODO: error conditions enum.
+        bool Success;
+
+        explicit TEvFinishTraversal(bool success) : Success(success) {}
+    };
 };
 
 } // NStat

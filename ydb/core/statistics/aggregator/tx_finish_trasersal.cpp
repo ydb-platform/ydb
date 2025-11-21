@@ -61,5 +61,9 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse
 void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr&) {
     Execute(new TTxFinishTraversal(this), TActivationContext::AsActorContext());
 }
+void TStatisticsAggregator::Handle(TEvStatistics::TEvFinishTraversal::TPtr&) {
+    // TODO: error handling
+    Execute(new TTxFinishTraversal(this), TActivationContext::AsActorContext());
+}
 
 } // NKikimr::NStat

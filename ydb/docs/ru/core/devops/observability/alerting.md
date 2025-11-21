@@ -21,8 +21,8 @@
 **Ключевые параметры правил:**
 
 ```yaml
-- alert: YDBHealthCheck -- Название алерта
-  expr: ydb_healthcheck{STATUS!="GOOD"} -- Условие срабатывания алерта
+- alert: YDBAuthTicketErrors -- Название алерта
+  expr: auth_TicketsErrors > 2 -- Условие срабатывания алерта
   for: 1m -- Время, в течение которого условие должно выполняться для активации алерта
   ...
 ```
@@ -39,38 +39,6 @@
 Более подробно об особенности системы и структуре правил смотрите в [официальной документации](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
 
 ## Примеры правил алертинга, которые рекомендуются к настройке для каждого кластера
-
-### {{ ydb-short-name }} Health Check
-
-**Описание:** Правило отслеживает общее состояние здоровья {{ ydb-short-name }} кластера. Срабатывает, когда статус здоровья отличается от `GOOD`, что может указывать на проблемы с доступностью или производительностью базы данных.
-**Что делать:** Это общий алерт системы самодиагностики, в сообщении будет указана причина, по которой сработал алерт. Подробнее про механизм Health Check можно прочитать [здесь](../../reference/ydb-sdk/health-check-api.md#selfcheck-result)
-
-```yaml
-- alert: YDBHealthCheck
-  expr: ydb_healthcheck{STATUS!="GOOD"}
-  for: 1m
-  labels:
-    severity: '{{ if or (eq $labels.STATUS "RED") (eq $labels.STATUS "DEGRADED") }} critical {{ else }} warning {{ end }}'
-    component: ydb
-    database: "{{ $labels.DATABASE }}"
-    type: "{{ $labels.TYPE }}"
-    instance: "{{ $labels.instance }}"
-  annotations:
-    summary: "YDB Health Issue in {{ $labels.DATABASE }} (Status: {{ $labels.STATUS }})"
-    description: |
-      Health check failed for YDB.
-      - Status: {{ $labels.STATUS }}
-      - Message: {{ $labels.MESSAGE }}
-      - Type: {{ $labels.TYPE }}
-      - Database: {{ $labels.DATABASE }}
-      - Domain: {{ $labels.DOMAIN }}
-      - Instance: {{ $labels.instance }}
-      This issue has been active for more than 1 minute.
-```
-
-**Пример сработавшего алерта:**
-
-![](../_assets/prometheus_health_check.png)
 
 ### {{ ydb-short-name }} ExecPool High Utilization
 

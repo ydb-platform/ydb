@@ -37,7 +37,44 @@ namespace {
         return state;
     }
 
-    void FillItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx,
+    ui32 GetPartsTotalFromSettings(const Ydb::Table::GlobalIndexSettings& settings) {
+        switch (settings.partitions_case()) {
+            case Ydb::Table::GlobalIndexSettings::PartitionsCase::kUniformPartitions:
+                return settings.uniform_partitions();
+            case Ydb::Table::GlobalIndexSettings::PartitionsCase::kPartitionAtKeys:
+                return settings.partition_at_keys().split_points_size() + 1;
+            default:
+                // Single table partitions as no partitions settings presented
+                return 1;
+        }
+    }
+
+    ui32 GetIndexPartsTotal(const Ydb::Table::TableIndex& index) {
+        Ydb::Table::GlobalIndexSettings settings;
+        switch (index.type_case()) {
+            case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
+                return GetPartsTotalFromSettings(index.global_index().settings());
+            case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
+                return GetPartsTotalFromSettings(index.global_unique_index().settings());
+            case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
+                return GetPartsTotalFromSettings(index.global_async_index().settings());
+            case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex:
+                return GetPartsTotalFromSettings(index.global_fulltext_index().settings());
+            case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
+                return GetPartsTotalFromSettings(index.global_vector_kmeans_tree_index().Getlevel_table_settings())
+                       + GetPartsTotalFromSettings(index.global_vector_kmeans_tree_index().Getposting_table_settings())
+                       + GetPartsTotalFromSettings(index.global_vector_kmeans_tree_index().Getprefix_table_settings());
+            default:
+                // Global index with 1 partition is default
+                return 1;
+        }
+    }
+
+    TString MakeIndexBuildUid(const TImportInfo& importInfo, ui32 itemIdx, i32 indexIdx) {
+        return TStringBuilder() << importInfo.Id << "-" << itemIdx << "-" << indexIdx;
+    }
+
+    void AddTransferringItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx,
         Ydb::Import::ImportItemProgress& itemProgress) {
 
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
@@ -50,8 +87,8 @@ namespace {
                 return;
             }
 
-            itemProgress.set_parts_total(txState.Shards.size());
-            itemProgress.set_parts_completed(txState.Shards.size() - txState.ShardsInProgress.size());
+            itemProgress.set_parts_total(itemProgress.parts_total() + txState.Shards.size());
+            itemProgress.set_parts_completed(itemProgress.parts_completed() + txState.Shards.size() - txState.ShardsInProgress.size());
             *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(txState.StartTime.Seconds());
         } else {
             if (!ss->Tables.contains(item.DstPathId)) {
@@ -60,9 +97,11 @@ namespace {
 
             auto table = ss->Tables.at(item.DstPathId);
             auto it = table->RestoreHistory.end();
-            if (item.WaitTxId != InvalidTxId) {
+            if (item.WaitTxId != InvalidTxId && table->RestoreHistory.contains(item.WaitTxId)) {
                 it = table->RestoreHistory.find(item.WaitTxId);
-            } else if (table->RestoreHistory.size() == 1) {
+            } else if (table->RestoreHistory.size() >= 1) {
+                // As restore operations always create new table, case table->RestoreHistory.size() > 1 is unexpected
+                // To return at least something in this case, we'll just pick one of items from RestoreHistory
                 it = table->RestoreHistory.begin();
             }
 
@@ -71,10 +110,55 @@ namespace {
             }
 
             const auto& restoreResult = it->second;
-            itemProgress.set_parts_total(restoreResult.TotalShardCount);
-            itemProgress.set_parts_completed(restoreResult.TotalShardCount);
+            itemProgress.set_parts_total(itemProgress.parts_total() + restoreResult.TotalShardCount);
+            itemProgress.set_parts_completed(itemProgress.parts_completed() + restoreResult.TotalShardCount);
             *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(restoreResult.StartDateTime);
+            // Update for case no index builds are required
             *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(restoreResult.CompletionDateTime);
+        }
+    }
+
+    void AddBuildIndexesItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx, 
+        i32 indexIdx, Ydb::Import::ImportItemProgress& itemProgress) {
+
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        const auto& item = importInfo.Items.at(itemIdx);
+
+        Y_ABORT_UNLESS(indexIdx < item.Table->indexes_size());
+
+        const auto buildUid = MakeIndexBuildUid(importInfo, itemIdx, indexIdx);
+        if (ss->IndexBuildsByUid.contains(buildUid)) {
+            const auto& indexBuild = ss->IndexBuildsByUid.FindPtr(buildUid)->Get();
+
+            itemProgress.set_parts_total(itemProgress.parts_total() + indexBuild->Shards.size());
+            itemProgress.set_parts_completed(itemProgress.parts_completed() + indexBuild->Shards.size() - indexBuild->InProgressShards.size());
+            *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(indexBuild->EndTime.Seconds());
+
+        } else {
+            const auto partsTotal = GetIndexPartsTotal(item.Table->indexes(indexIdx));
+            const auto partsCompleted = indexIdx >= item.NextIndexIdx ? 0 : partsTotal;
+
+            itemProgress.set_parts_total(itemProgress.parts_total() + partsTotal);
+            itemProgress.set_parts_completed(itemProgress.parts_completed() + partsCompleted);
+        }
+    }
+
+    void FillItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx,
+        Ydb::Import::ImportItemProgress& itemProgress) {
+
+        itemProgress.set_parts_total(0);
+        itemProgress.set_parts_completed(0);
+
+        AddTransferringItemProgress(ss, importInfo, itemIdx, itemProgress);
+
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        const auto& item = importInfo.Items.at(itemIdx);
+        if (!item.Table) {
+            return;
+        }
+
+        for (i32 indexIdx: xrange(item.Table->indexes_size())) {
+            AddBuildIndexesItemProgress(ss, importInfo, itemIdx, indexIdx, itemProgress);
         }
     }
 

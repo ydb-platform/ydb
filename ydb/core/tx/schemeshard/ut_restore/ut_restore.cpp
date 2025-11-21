@@ -4346,27 +4346,29 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
-        TBlockEvents<NWrappers::NExternalStorage::TEvGetObjectRequest> blockPartition01(runtime, [](const NWrappers::NExternalStorage::TEvGetObjectRequest::TPtr& ev) {
+        TBlockEvents<NWrappers::NExternalStorage::TEvGetObjectRequest> blockPartition01(runtime, [](const auto& ev) {
             return ev->Get()->Request.GetKey() == "/data_01.csv";
         });
 
         const auto data = GenerateTestData(R"(
-            columns {
-              name: "key"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            columns {
-              name: "value"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            partition_at_keys {
-                split_points {
-                    type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
-                    value { items { text_value: "b" } }
+                columns {
+                    name: "key"
+                    type { optional_type { item { type_id: UTF8 } } }
                 }
-            }
-            primary_key: "key"
-        )", {{"a", 1}, {"b", 1}});
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                partition_at_keys {
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "b" } }
+                    }
+                }
+                primary_key: "key"
+            )",
+            {{"a", 1}, {"b", 1}}
+        );
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -4416,6 +4418,114 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         const auto& item = entry.GetItemsProgress(0);
         UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
         UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 2);
+        UNIT_ASSERT(item.has_start_time());
+        UNIT_ASSERT(item.has_end_time());
+    }
+
+    Y_UNIT_TEST(CheckItemProgressWithIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        // Wait for 3'rd index processing
+        TBlockEvents<TEvIndexBuilder::TEvCreateRequest> block2rdIndexBuild(runtime, [&](const auto& ev) {
+            return ev->Get()->Record.GetSettings().Getindex().Getname() == "by_value_2";
+        });
+
+        const auto data = GenerateTestData(R"(
+                columns {
+                    name: "key"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                primary_key: "key"
+                partition_at_keys {
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "b" } }
+                    }
+                }
+                indexes {
+                    name: "by_value_1"
+                    index_columns: "value"
+                    global_index {
+                        settings {
+                            partition_at_keys {
+                                split_points {
+                                    type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                                    value { items { text_value: "b" } }
+                                }
+                            }
+                        }
+                    }
+                }
+                indexes {
+                    name: "by_value_2"
+                    index_columns: "value"
+                    global_index {
+                        settings {
+                            partition_at_keys {
+                                split_points {
+                                    type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                                    value { items { text_value: "b" } }
+                                }
+                            }
+                        }
+                    }
+                }
+            )",
+            {{"a", 1}, {"b", 1}}
+        );
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("2'nd index build start", [&]{ return block2rdIndexBuild.size() >= 1; });
+
+        const auto desc_blocked = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry_blocked = desc_blocked.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry_blocked.ItemsProgressSize(), 1);
+        // As only 1 item, it is guaranteed for entry to be in the build indexes state
+        UNIT_ASSERT_VALUES_EQUAL(entry_blocked.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES);
+
+        const auto& item_blocked = entry_blocked.GetItemsProgress(0);
+        // 2 table parts + 2 index parts + 2 index parts
+        UNIT_ASSERT_VALUES_EQUAL(item_blocked.parts_total(), 6);
+        // Table and 1'st index processed
+        UNIT_ASSERT_VALUES_EQUAL(item_blocked.parts_completed(), 4);
+        UNIT_ASSERT(item_blocked.has_start_time());
+
+        block2rdIndexBuild.Stop();
+        block2rdIndexBuild.Unblock();
+
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
+
+        const auto& item = entry.GetItemsProgress(0);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 6);
         UNIT_ASSERT(item.has_start_time());
         UNIT_ASSERT(item.has_end_time());
     }

@@ -82,6 +82,37 @@ namespace {
         return result;
     }
 
+    template <>
+    TString PrintProgress<NImport::EImportProgress>(const NImport::TImportFromS3Response::TMetadata& metadata) {
+        TStringBuilder result;
+
+        result << metadata.Progress;
+        if (metadata.Progress != NImport::EImportProgress::TransferData &&
+            metadata.Progress != NImport::EImportProgress::BuildIndexes) {
+            return result;
+        }
+
+        if (metadata.ItemsProgress.empty()) {
+            return result;
+        }
+
+        ui32 partsTotal = 0;
+        ui32 partsCompleted = 0;
+        for (const auto& item : metadata.ItemsProgress) {
+            if (!item.PartsTotal) {
+                return result;
+            }
+
+            partsTotal += item.PartsTotal;
+            partsCompleted += item.PartsCompleted;
+        }
+
+        float percentage = float(partsCompleted) / partsTotal * 100;
+        result << " (" << FloatToString(percentage, PREC_POINT_DIGITS, 2) + "%)";
+
+        return result;
+    }
+
     /// YT
     TPrettyTable MakeTable(const NExport::TExportToYtResponse&) {
         return TPrettyTable({"id", "ready", "status", "progress", "yt proxy"});

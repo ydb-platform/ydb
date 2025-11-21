@@ -16,7 +16,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/util/aws.h>
-#include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/ydb_convert/table_description.h>
 

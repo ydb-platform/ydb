@@ -176,7 +176,7 @@ public:
 
     void SendIntermediateResult() {
         if (!CurrentBatch.HasMoreRows() && !CurrentBatch.IsLast && CurrentBatch.NeedResult) {
-            Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(isFinal));
+            Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(false));
             CurrentBatch.NeedResult = false;
         }
     }
@@ -191,7 +191,7 @@ public:
                     ("reason", "successfully finished")
                     ("bytes_read", scanProduct->BytesRead)
                     ("rows_read", scanProduct->RowsRead);
-                Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(isFinal));
+                Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(true));
                 break;
             case NDataShard::EExportOutcome::Error:
                 Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));

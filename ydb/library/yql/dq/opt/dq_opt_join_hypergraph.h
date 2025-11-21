@@ -48,7 +48,7 @@ public:
             , RightJoinKeys(rightJoinKeys)
             , IsReversed(false)
         {
-            Y_ASSERT(LeftJoinKeys.size() == RightJoinKeys.size());
+            Y_ENSURE(LeftJoinKeys.size() == RightJoinKeys.size());
         }
 
         inline bool IsSimple() const {
@@ -498,6 +498,10 @@ private:
                             revEdge.RightJoinKeys.push_back(joinCondById[i]);
                         }
 
+                        Y_ENSURE(edge.LeftJoinKeys.size() == edge.RightJoinKeys.size());
+                        Y_ENSURE(revEdge.LeftJoinKeys.size() == revEdge.RightJoinKeys.size());
+
+                        Y_ENSURE(edge.LeftJoinKeys.size() == revEdge.RightJoinKeys.size());
                         continue;
                     }
 

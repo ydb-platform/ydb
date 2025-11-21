@@ -91,7 +91,7 @@ size_t MaxShardResolves() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxShardResolves;
 }
 
-size_t MaxShardRetries() {  
+size_t MaxShardRetries() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxShardAttempts;
 }
 
@@ -101,6 +101,14 @@ TMaybe<size_t> MaxTotalRetries() {
 
 TMaybe<TDuration> ShardTimeout() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->ReadResponseTimeout;
+}
+
+size_t MaxRowsProcessingStreamLookup() {
+    return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxRowsProcessingStreamLookup;
+}
+
+ui64 MaxTotalBytesQuotaStreamLookup() {
+    return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxTotalBytesQuotaStreamLookup;
 }
 
 } // namespace NKqp

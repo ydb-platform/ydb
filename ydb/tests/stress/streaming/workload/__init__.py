@@ -95,7 +95,6 @@ class Workload(unittest.TestCase):
 
     def read_from_output_topic(self):
         with self.driver.topic_client.reader(self.output_topic, self.consumer_name) as reader:
-            messages_info = defaultdict(list)
             count = 0
             while True:
                 try:

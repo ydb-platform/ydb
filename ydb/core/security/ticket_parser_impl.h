@@ -874,7 +874,7 @@ private:
                     BLOG_TRACE("CanInitLoginToken, database " << database << ", login state is not available yet, deffer token (" << MaskTicket(record.Ticket) << ")");
                     return true;
                 }
-                BLOG_TRACE("CanInitLoginToken, database " << database << ", A5 error");
+                BLOG_TRACE("CanInitLoginToken, database " << database << ", A6 error");
             }
         }
         return false;
@@ -2342,7 +2342,7 @@ void TTicketParserImpl<TDerived>::RefreshDeferredLoginTokens(const TInstant& now
     deferredLoginTokensMessage << "Finish waiting for login providers for " << finishWaitingForLoginProviders.size() << " databases: ";
     for (size_t i = 0; i < finishWaitingForLoginProviders.size() && i < FINISH_WAITING_FOR_LOGIN_PROVIDERS_NUM; ++i) {
         const TString& key = finishWaitingForLoginProviders[i];
-        deferredLoginTokensMessage << key;
+        deferredLoginTokensMessage << key << ", ";
         DeferredLoginTokens.erase(key);
     }
     if (!finishWaitingForLoginProviders.empty()) {

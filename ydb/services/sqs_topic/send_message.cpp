@@ -2,7 +2,6 @@
 #include "actor.h"
 #include "utils.h"
 #include "request.h"
-#include "events.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/events/global.h>

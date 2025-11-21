@@ -464,6 +464,8 @@ private:
             ptr->ReadResponseTimeout = TDuration::MilliSeconds(settings.GetIteratorResponseTimeoutMs());
         }
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxDelayMs());
+        ptr->MaxRowsProcessingStreamLookup = settings.GetMaxRowsProcessingStreamLookup();
+        ptr->MaxTotalBytesQuotaStreamLookup = settings.GetMaxTotalBytesQuotaStreamLookup();
         SetReadIteratorBackoffSettings(ptr);
     }
 

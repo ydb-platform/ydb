@@ -5,6 +5,15 @@ from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
+class RunConfigInfo:
+    test_start_time: int = None
+    nodes_percentage: float = None
+    nemesis_enabled: bool = None
+    table_type: str = None
+    stres_util_args: str = None
+    duration: float = None
+
+
 class StressUtilRunResult:
     run_config: dict = None
     is_success: bool = None
@@ -17,14 +26,13 @@ class StressUtilRunResult:
     execution_time: str = None
 
 
-class StressUtilResult:
+class StressUtilNodeResult:
     """Aggregates results of multiple runs for a single stress test
-    
+
     Attributes:
-        stress_name: Name of the stress test
+        stress_name: Name of stress util
         node: Node identifier where test ran
         host: Hostname where test ran
-        resolution: Final resolution of the test
         start_time: Timestamp when test started
         end_time: Timestamp when test ended
         total_execution_time: Total duration across all runs
@@ -35,22 +43,99 @@ class StressUtilResult:
     stress_name: str = None
     node: str = None
     host: str = None
-    resolution: str = None
     start_time: float = None
     end_time: float = None
     total_execution_time: str = None
-    successful_runs: int = None
-    total_runs: int = None
     runs: list[StressUtilRunResult] = []
 
     def __init__(self):
         """Initialize StressUtilResult with empty runs list"""
         self.runs = []
 
+    def __repr__(self):
+        return (f"StressUtilResult(stress_name={self.stress_name}, "
+                f"node={self.node}, host={self.host}, "
+                f"start_time={self.start_time}, "
+                f"end_time={self.end_time}, "
+                f"total_execution_time={self.total_execution_time}, "
+                f"runs={self.runs})")
+
+    def get_successful_runs(self) -> int:
+        """Get count of successful runs
+
+        Returns:
+            int: Total count of successful runs
+        """
+        return sum(run_result.is_success for run_result in self.runs)
+
+    def get_total_runs(self) -> int:
+        """Get total count of runs
+
+        Returns:
+            int: Total count of runs
+        """
+        return len(self.runs)
+
+    def is_all_success(self) -> bool:
+        """Check if all runs across all nodes were successful
+
+        Returns:
+            bool: True if all runs succeeded, False otherwise
+        """
+        return self.get_successful_runs() == self.get_total_runs()
+
+
+class StressUtilResult:
+    """Aggregates results of multiple runs for a single stress test
+
+    Attributes:
+        start_time: Timestamp when test started
+        end_time: Timestamp when test ended
+        total_execution_time: Total duration across all runs
+        runs: List of individual run results
+    """
+    start_time: float = None
+    end_time: float = None
+    total_execution_time: str = None
+    execution_args: list[str] = None
+    node_runs: dict[str, StressUtilNodeResult] = dict()
+
+    def __init__(self):
+        """Initialize StressUtilResult with empty runs list"""
+        self.node_runs = dict()
+        self.execution_args = []
+
+    def __repr__(self):
+        return f"StressUtilResult(start_time={self.start_time}, end_time={self.end_time}, total_execution_time={self.total_execution_time}, node_runs={self.node_runs})"
+
+    def get_successful_runs(self) -> int:
+        """Get count of successful runs
+
+        Returns:
+            int: Total count of successful runs
+        """
+        return sum(run_result.successful_runs for run_result in self.node_runs.values())
+
+    def get_total_runs(self) -> int:
+        """Get total count of runs
+
+        Returns:
+            int: Total count of runs
+        """
+        return sum(run_result.total_runs for run_result in self.node_runs.values())
+
+    def is_all_success(self) -> bool:
+        """Check if all runs across all nodes were successful
+
+        Returns:
+            bool: True if all runs succeeded, False otherwise
+        """
+        return self.get_total_runs() == self.get_successful_runs()
+
 
 class StressUtilDeployResult:
     """Stores deployment results for a stress test
-    
+
     Attributes:
         stress_name: Name of the stress test
         nodes: List of nodes where test was deployed
@@ -68,7 +153,7 @@ class StressUtilDeployResult:
 
 class StressUtilTestResults:
     """Aggregates results from all stress test runs
-    
+
     Attributes:
         start_time: Timestamp when testing started
         end_time: Timestamp when testing ended
@@ -79,7 +164,7 @@ class StressUtilTestResults:
     """
     start_time: float = None
     end_time: float = None
-    stress_util_runs: dict[str, list[StressUtilResult]] = dict()
+    stress_util_runs: dict[str, StressUtilResult] = dict()
     nemesis_deploy_results: dict[str, list[str]] = dict()
     errors: list[str] = []
     error_message: str = ''
@@ -95,10 +180,10 @@ class StressUtilTestResults:
 
     def add_error(self, msg: Optional[str]) -> bool:
         """Add an error message to the test results
-        
+
         Args:
             msg: Error message to add (can be None)
-            
+
         Returns:
             bool: True if message was added, False if msg was None
         """
@@ -113,33 +198,44 @@ class StressUtilTestResults:
 
     def get_stress_successful_runs(self, stress_name: str) -> int:
         """Get count of successful runs for a specific stress test
-        
+
         Args:
             stress_name: Name of the stress test to query
-            
+
         Returns:
             int: Total count of successful runs
         """
-        return sum(run_result.successful_runs for run_result in self.stress_util_runs[stress_name])
+        return self.stress_util_runs[stress_name].get_successful_runs()
 
     def get_stress_total_runs(self, stress_name: str) -> int:
         """Get total count of runs for a specific stress test
-        
+
         Args:
             stress_name: Name of the stress test to query
-            
-        Returns:
-            int: Total count of runs (successful + failed)
-        """
-        return sum(run_result.total_runs for run_result in self.stress_util_runs[stress_name])
 
-    def is_all_success(self) -> bool:
-        """Check if all runs across all stress tests were successful
-        
+        Returns:
+            int: Total count of runs
+        """
+        return self.stress_util_runs[stress_name].get_total_runs()
+
+    def is_success_for_a_stress(self, stress_name: str) -> bool:
+        """Check if all runs in a stress test were successful
+
+        Args:
+            stress_name: Name of the stress test to query
+
         Returns:
             bool: True if all runs succeeded, False otherwise
         """
-        return all(all(run_result.successful_runs == run_result.total_runs for run_result in result) for result in self.stress_util_runs.values())
+        return self.stress_util_runs[stress_name].is_all_success()
+
+    def is_all_success(self) -> bool:
+        """Check if all runs across all stress tests were successful
+
+        Returns:
+            bool: True if all runs succeeded, False otherwise
+        """
+        return all(result.is_all_success() for result in self.stress_util_runs.values())
 
     def __repr__(self):
         return (
@@ -149,60 +245,6 @@ class StressUtilTestResults:
             f"nemesis_deploy_results={self.nemesis_deploy_results}, "
             f"errors={self.errors})"
         )
-
-
-def process_single_run_result(
-    workload_name: str,
-    run_num: int,
-    run_config: dict,
-    success: bool,
-    execution_time: float,
-    start_time: float,
-    stdout: str,
-    stderr: str,
-    is_timeout: bool,
-    ignore_stderr_content: bool
-) -> YdbCliHelper.WorkloadRunResult:
-    """
-    Processes the result of a single workload run
-
-    Args:
-        overall_result: Overall result object to add information to
-        workload_name: Workload name
-        run_num: Run number
-        run_config: Run configuration
-        success: Whether the run was successful
-        execution_time: Execution time
-        stdout: Workload stdout output
-        stderr: Workload stderr output
-        is_timeout: Timeout flag
-    """
-    # Create result for the run
-    run_result = create_workload_result(
-        workload_name=f"{workload_name}_run_{run_num}",
-        stdout=stdout,
-        stderr=stderr,
-        success=success,
-        additional_stats={
-            "run_number": run_num,
-            "run_duration": run_config.get("duration"),
-            "run_execution_time": execution_time,
-            # Iteration number
-            "iteration_num": run_config.get("iteration_num", 1),
-            # Thread identifier
-            "thread_id": run_config.get("thread_id", ""),
-            "iter_prefix_added": run_config.get(
-                "iter_prefix_added", False
-            ),  # Flag indicating iter_ prefix was already added
-            **run_config,
-        },
-        is_timeout=is_timeout,
-        iteration_number=run_num,
-        actual_execution_time=execution_time,
-        start_time=start_time,
-        ignore_stderr_content=ignore_stderr_content,
-    )
-    return run_result
 
 
 def create_workload_result(
@@ -269,8 +311,7 @@ def create_workload_result(
     else:
         # Check for explicit errors (only if not timeout)
         if not success:
-            result.add_error(
-                f"Workload execution failed. stderr: {stderr}")
+            result.add_error(f"Workload execution failed. stderr: {stderr}")
             error_found = True
         elif not ignore_stderr_content:
             if "error" in str(stderr).lower():
@@ -462,7 +503,7 @@ def analyze_execution_results(
     use_iterations: bool,
 ):
     """Analyze execution results and add appropriate errors/warnings
-    
+
     Args:
         overall_result: Result object to modify
         successful_runs: Number of successful runs
@@ -579,7 +620,7 @@ def add_execution_statistics(
     use_iterations: bool,
 ):
     """Collect and add execution statistics to the result object
-    
+
     Args:
         overall_result: Result object to modify
         workload_name: Name of the workload

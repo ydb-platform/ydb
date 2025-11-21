@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from ydb.tests.library.stability.aggregate_results import (
     StressUtilDeployResult,
     StressUtilTestResults,
+    StressUtilNodeResult,
     StressUtilResult,
     StressUtilRunResult
 )
@@ -108,6 +109,7 @@ class StressRunExecutor:
         with allure.step("Phase 2: Execute workload runs in parallel"):
             deployed_nodes = preparation_result["deployed_nodes"]
             execution_result = StressUtilTestResults()
+
             execution_result.start_time = time_module.time()
             if not deployed_nodes:
                 logging.error("No deployed nodes available for execution")
@@ -141,18 +143,14 @@ class StressRunExecutor:
                     nemesis_thread.start()
                     logging.info("Scheduled nemesis to start in 15 seconds")
 
-                # Execution results for each node
-                node_results = []
-
                 # Function to execute workload on a single node
-                def execute_on_node(workload_config, stress_name, node) -> StressUtilResult:
+                def execute_on_node(workload_config, stress_name, node) -> StressUtilNodeResult:
                     node_host = node['node'].host
                     deployed_binary_path = node['binary_path']
 
-                    node_result = StressUtilResult()
-
-                    node_result.node = node['node']
+                    node_result = StressUtilNodeResult()
                     node_result.stress_name = stress_name
+                    node_result.node = node['node']
                     node_result.host = node_host
                     node_result.successful_runs = 0
                     node_result.total_runs = 0
@@ -214,7 +212,6 @@ class StressRunExecutor:
                         # Update node statistics
                         node_result.total_execution_time += execution_time
                         if success:
-                            node_result.successful_runs += 1
                             logging.info(
                                 f"Run {current_iteration} on {node_host} completed successfully"
                             )
@@ -228,7 +225,7 @@ class StressRunExecutor:
                     node_result.end_time = time_module.time()
                     logging.info(
                         f"Execution on {node_host} completed: "
-                        f"{node_result.successful_runs}/{node_result.total_runs} successful"
+                        f"{node_result.get_successful_runs()}/{node_result.get_total_runs()} successful"
                     )
 
                     return node_result
@@ -239,15 +236,17 @@ class StressRunExecutor:
                 ) as executor:
                     future_to_node = {}
                     for name, stress_config in workload_params.items():
-                        execution_result.stress_util_runs[name] = []
+                        execution_result.stress_util_runs[name] = StressUtilResult()
+                        execution_result.stress_util_runs[name].execution_args = stress_config['args']
+                        execution_result.stress_util_runs[name].start_time = time_module.time()
                         for node in deployed_nodes[name].nodes:
                             future_to_node[executor.submit(execute_on_node, stress_config, name, node)] = (name, node)
 
                     for future in as_completed(future_to_node):
                         try:
                             node_result = future.result()
-                            node_results.append(node_result)
-                            execution_result.stress_util_runs[node_result.stress_name].append(node_result)
+                            execution_result.stress_util_runs[name].end_time = time_module.time()
+                            execution_result.stress_util_runs[node_result.stress_name].node_runs[node_result.host] = node_result
                         except Exception as e:
                             node_plan = future_to_node[future]
                             node_host = node_plan[1]['node'].host
@@ -264,8 +263,7 @@ class StressRunExecutor:
                             error_result.total_runs = 1
                             error_result.runs = []
                             error_result.total_execution_time = 0
-                            node_results.append(error_result)
-                            execution_result.stress_util_runs[node_plan[0]] = [error_result]
+                            execution_result.stress_util_runs[node_plan[0]].node_runs[node_host] = error_result
 
                 # Process results from all nodes
                 successful_runs = sum(execution_result.get_stress_successful_runs(stress_name) for stress_name in execution_result.stress_util_runs.keys())
@@ -274,7 +272,7 @@ class StressRunExecutor:
 
                 logging.info(
                     f"Parallel execution completed: {successful_runs}/{total_runs} successful runs "
-                    f"on {len(node_results)} nodes"
+                    f"on {max(len(nodes.nodes) for nodes in deployed_nodes.values())} nodes"
                 )
                 execution_result.end_time = time_module.time()
                 return {
@@ -284,7 +282,6 @@ class StressRunExecutor:
                     "total_execution_time": total_execution_time,
                     "workload_start_time": workload_start_time,
                     "deployed_nodes": deployed_nodes,
-                    "node_results": node_results,
                 }
 
     def _execute_single_workload_run(

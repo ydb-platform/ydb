@@ -19,12 +19,10 @@ from ydb.tests.olap.lib.utils import external_param_is_true, get_ci_version, get
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
-def create_parallel_allure_report(result: StressUtilTestResults, workload_name, node_errors, verify_errors):
+def create_parallel_allure_report(result: StressUtilTestResults, node_errors, verify_errors):
     """Creates an Allure report for workload test results"""
     additional_table_strings = {}
     parallel_allure_test_description(
-        suite="Parallel tests",
-        test=workload_name,
         start_time=result.start_time,
         end_time=result.end_time,
         addition_table_strings=additional_table_strings,
@@ -35,8 +33,6 @@ def create_parallel_allure_report(result: StressUtilTestResults, workload_name, 
 
 
 def parallel_allure_test_description(
-    suite: str,
-    test: str,
     start_time: float,
     end_time: float,
     addition_table_strings: dict[str, any] = None,
@@ -83,7 +79,7 @@ def parallel_allure_test_description(
 
     _set_monitoring(test_info, start_time, end_time)
     _set_coredumps(test_info, start_time, end_time)
-    _set_results_plot(test_info, suite, test, refference_set)
+    # _set_results_plot(test_info, suite, test, refference_set)
     _set_logs_command(test_info, start_time, end_time)
 
     service_url = YdbCluster._get_service_url()
@@ -134,7 +130,7 @@ def parallel_allure_test_description(
     allure.attach(html, "description.html", allure.attachment_type.HTML)
 
 
-def __create_parallel_test_table(execution_result):
+def __create_parallel_test_table(execution_result: StressUtilTestResults):
     # Create table header with columns for each node
     table_html = """
     <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
@@ -164,30 +160,24 @@ def __create_parallel_test_table(execution_result):
         </tr>
     """
 
-    stress_grouped_results = defaultdict(lambda: [])
-    for stress_name, node_result in execution_result.stress_util_runs.items():
-        stress_grouped_results[stress_name] = node_result
-
-    for stress_name, stress_result in stress_grouped_results.items():
+    for stress_name, stress_result in execution_result.stress_util_runs.items():
         table_html += '<tr>'
         stress_color = '#ccffcc'
-        stress_sucesses_for_all_hosts = sum(map(lambda res: res.successful_runs, stress_result)) == sum(map(lambda res: res.total_runs, stress_result))
-        if stress_sucesses_for_all_hosts == 0:
+        if stress_result.is_all_success():
             stress_color = "#ffcccc"
-        elif stress_sucesses_for_all_hosts < len(unique_hosts):
+        elif stress_result.get_successful_runs() < len(unique_hosts):
             stress_color = "#fff4cc"
         table_html += f'<td style="background-color: {stress_color};">{stress_name}</td>'
 
-        hosts_stress_result = dict(map(lambda res: (res.host, res), stress_result))
-        logging.info(f"hosts_stress_result: {hosts_stress_result}")
+        logging.info(f"hosts_stress_result: {stress_result.node_runs}")
         for host in unique_hosts:
             color = '#ccffcc'
-            if host not in hosts_stress_result:
+            if host not in stress_result.node_runs:
                 color = "#ffcccc"
                 table_html += f'<td style="background-color: {color};">Not deployed</td>'
             else:
-                host_successes = sum(map(lambda res: res.successful_runs, filter(lambda res: res.host == host, stress_result)))
-                host_total = sum(map(lambda res: res.total_runs, filter(lambda res: res.host == host, stress_result)))
+                host_successes = stress_result.node_runs[host].get_successful_runs()
+                host_total = stress_result.node_runs[host].get_total_runs()
                 if host_successes == 0:
                     color = "#ffcccc"
                 elif host_successes != host_total:

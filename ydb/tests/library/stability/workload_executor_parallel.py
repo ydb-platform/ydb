@@ -5,6 +5,7 @@ import pytest
 
 from ydb.tests.library.stability.aggregate_results import StressUtilTestResults
 from ydb.tests.library.stability.build_report import create_parallel_allure_report
+from ydb.tests.library.stability.upload_results import RunConfigInfo, safe_upload_results
 from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 from ydb.tests.library.stability.run_stress import StressRunExecutor
@@ -104,9 +105,11 @@ class ParallelWorkloadTestBase:
                 f"nodes_percentage must be between 1 and 100, got: {nodes_percentage}"
             )
 
-        additional_stats = {}
-        additional_stats["nemesis_enabled"] = nemesis_enabled
-        additional_stats["nodes_percentage"] = nodes_percentage
+        additional_stats = RunConfigInfo()
+        additional_stats.nemesis_enabled = nemesis_enabled
+        additional_stats.nodes_percentage = nodes_percentage
+        additional_stats.test_start_time = int(time_module.time())
+        additional_stats.duration = duration_value
 
         logging.info("=== Starting environment preparation ===")
 
@@ -130,8 +133,7 @@ class ParallelWorkloadTestBase:
         self._finalize_workload_results(
             olap_load_base,
             execution_result,
-            additional_stats,
-            duration_value
+            additional_stats
         )
 
         logging.info("=== Workload test completed ===")
@@ -141,14 +143,12 @@ class ParallelWorkloadTestBase:
         self,
         olap_load_base: LoadSuiteBase,
         execution_result: dict,
-        additional_stats: dict,
-        duration_value: float
+        run_config: RunConfigInfo
     ):
         """
         PHASE 3: Finalizing results and diagnostics
 
         Args:
-            workload_name: Workload name for reports
             execution_result: Execution results
             additional_stats: Additional statistics
             duration_value: Execution time in seconds
@@ -163,21 +163,16 @@ class ParallelWorkloadTestBase:
             successful_runs = execution_result["successful_runs"]
             total_runs = execution_result["total_runs"]
 
-            # Analyze results and add errors/warnings
-            # analyze_execution_results(
-            #     overall_result, successful_runs, total_runs, False
-            # )
-
             # Final processing with diagnostics (prepares data for upload)
             overall_result.workload_start_time = execution_result["workload_start_time"]
-            node_errors, verify_errors = self.process_workload_result_with_diagnostics(olap_load_base, overall_result, 'parallel_run')
+            node_errors, verify_errors = self.process_workload_result_with_diagnostics(olap_load_base, overall_result)
 
             # Final status processing (may throw exception, but results are already uploaded)
             # Use node_errors saved from diagnostics
             self._handle_final_status(overall_result, 'parallel_run', node_errors, verify_errors)
 
             # Separate step for uploading results (AFTER all data preparation)
-            # self.__class__._safe_upload_results(overall_result, 'all')
+            safe_upload_results(overall_result, run_config, node_errors, verify_errors)
 
             logging.info(
                 f"Final result: successful_runs={successful_runs} / {total_runs}"
@@ -188,7 +183,6 @@ class ParallelWorkloadTestBase:
         self,
         olap_load_base: LoadSuiteBase,
         result: StressUtilTestResults,
-        workload_name: str
     ):
         """
         Processes workload result with diagnostic information
@@ -196,7 +190,6 @@ class ParallelWorkloadTestBase:
         Args:
             olap_load_base: Load test base configuration
             result: Workload execution results
-            workload_name: Name of workload for reporting
 
         Returns:
             Tuple containing:
@@ -208,7 +201,7 @@ class ParallelWorkloadTestBase:
             - Generates Allure report with detailed information
             - Handles error cases gracefully
         """
-        with allure.step(f"Process workload result for {workload_name}"):
+        with allure.step("Process workload result"):
             node_errors = []
             verify_errors = {}
 
@@ -216,14 +209,11 @@ class ParallelWorkloadTestBase:
             try:
                 # Use parent class method for node diagnostics
                 end_time = time_module.time()
-                diagnostics_start_time = getattr(
-                    result, "workload_start_time", result.start_time
-                )
+                diagnostics_start_time = result.start_time
                 verify_errors = olap_load_base.check_nodes_verifies_with_timing(diagnostics_start_time, end_time)
                 node_errors = olap_load_base.check_nodes_diagnostics_with_timing(
                     result, diagnostics_start_time, end_time
                 )
-
             except Exception as e:
                 logging.error(f"Error getting nodes state: {e}")
                 # Добавляем ошибку в результат
@@ -258,7 +248,7 @@ class ParallelWorkloadTestBase:
                         workload_error_messages.append(err)
 
             # 4. Generate allure report
-            create_parallel_allure_report(result, workload_name, node_errors, verify_errors)
+            create_parallel_allure_report(result, node_errors, verify_errors)
 
             # Save node_errors for use after upload
             # result._node_errors = node_errors

@@ -8963,9 +8963,9 @@ Y_UNIT_TEST_SUITE(THeavyPerfTest) {
         }
 
         auto rand = CreateDeterministicRandomProvider(9000);
-        for (size_t j = 0; j < 1000; ++j) {
+        for (size_t j = 0; j < 10000; ++j) {
             THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
-            for (size_t i = 0; i < 100; ++i) {
+            for (size_t i = 0; i < 1000; ++i) {
                 NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
                 metric->SetTabletID(0x10000 + (rand->GenRand() % 1'000'000));
                 metric->MutableResourceUsage()->SetCPU(rand->GenRand() % 1'000'000);

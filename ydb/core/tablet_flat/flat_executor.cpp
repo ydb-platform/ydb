@@ -5152,8 +5152,12 @@ void TExecutor::StartBackup() {
 
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         for (const auto& [tableId, table] : tables) {
-           auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
-           QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns), 0, opts);
+            if (table.NoBackup) {
+                continue;
+            }
+
+            auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
+            QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns), 0, opts);
         }
     }
 }

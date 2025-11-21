@@ -91,6 +91,8 @@ public:
         // When true this table has an in-memory caching enabled that has not been processed yet
         mutable bool PendingCacheEnable = false; // has unprocessed NPage::ECache change
         mutable bool PendingCacheModeChange = false; // has unprocessed NPage::ECacheMode change
+
+        bool NoBackup = false;
     };
 
     struct TRedo {
@@ -250,6 +252,7 @@ public:
     TAlter& SetByKeyFilter(ui32 tableId, bool enabled);
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
+    TAlter& SetNoBackup(ui32 tableId, bool noBackup);
     TAlter& SetRewrite();
 
     TAutoPtr<TSchemeChanges> Flush();

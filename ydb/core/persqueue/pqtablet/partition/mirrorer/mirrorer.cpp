@@ -41,6 +41,7 @@ TMirrorer::TMirrorer(
     , Config(config)
 {
     Counters.Populate(counters);
+    Counters.ResetToZero();
 }
 
 void TMirrorer::Bootstrap(const TActorContext& ctx) {
@@ -239,6 +240,7 @@ void TMirrorer::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext&
 void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorContext& ctx) {
     ctx.Schedule(UPDATE_COUNTERS_INTERVAL, new TEvPQ::TEvUpdateCounters);
     ctx.Send(PartitionActor, new TEvPQ::TEvMirrorerCounters(Counters));
+    Counters.ResetToZero();
 
     if (ctx.Now() - LastStateLogTimestamp > LOG_STATE_INTERVAL) {
         LastStateLogTimestamp = ctx.Now();

@@ -129,10 +129,16 @@ private:
     void Initialize(const TTabletCumulativeCounter& rp) {
         SetTo(rp);
     }
+
+    void Set(ui64 value) {
+        Value = value;
+    }
+
     void AdjustToBaseLine(const TTabletCumulativeCounter& baseLine) {
         Y_DEBUG_ABORT_UNLESS(Value >= baseLine.Value);
         Value -= baseLine.Value;
     }
+
     void SetTo(const TTabletCumulativeCounter& rp) {
         Value = rp.Value;
     }
@@ -393,6 +399,8 @@ private:
         }
     }
 
+    void ResetToZero();
+
     //
     void AdjustToBaseLine(const TCountersArray<T>& baseLine) {
         Y_DEBUG_ABORT_UNLESS(baseLine.CountersQnt == CountersQnt);
@@ -423,6 +431,24 @@ private:
     TCountersHolder CountersHolder;
     T* Counters;
 };
+
+template <>
+inline void TCountersArray<TTabletSimpleCounter>::ResetToZero() {
+}
+
+template <>
+inline void TCountersArray<TTabletCumulativeCounter>::ResetToZero() {
+    for (ui32 i = 0; i < CountersQnt; ++i) {
+        Counters[i].Set(0);
+    }
+}
+
+template <>
+inline void TCountersArray<TTabletPercentileCounter>::ResetToZero() {
+    for (ui32 i = 0; i < CountersQnt; ++i) {
+        Counters[i].Clear();
+    }
+}
 
 ////////////////////////////////////////////
 /// The TTabletCountersBase class
@@ -537,6 +563,11 @@ public:
             CumulativeCounters.Populate(rp.CumulativeCounters);
             PercentileCounters.Populate(rp.PercentileCounters);
         }
+    }
+
+    void ResetToZero() {
+        CumulativeCounters.ResetToZero();
+        PercentileCounters.ResetToZero();
     }
 
 private:

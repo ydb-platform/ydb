@@ -370,6 +370,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , SamplingControl(samplingControl)
 {
     TabletCounters.Populate(*Counters);
+    TabletCounters.ResetToZero();
 }
 
 void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
@@ -467,6 +468,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     ctx.Schedule(WAKE_TIMEOUT, new TEvents::TEvWakeup());
     ctx.Send(TabletActorId, new TEvPQ::TEvPartitionCounters(Partition, TabletCounters));
+    TabletCounters.ResetToZero();
 
     ui64 usedStorage = GetUsedStorage(now);
     if (usedStorage > 0) {

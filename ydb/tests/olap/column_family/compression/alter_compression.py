@@ -3,6 +3,7 @@ from .base import ColumnFamilyTestBase
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
 import pytest
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +143,7 @@ class TestAllCompression(TestCompressionBase):
 
     @classmethod
     def create_table_without_compression(cls):
-        table_path: str = f"{cls.test_dir}/off_compression"
+        table_path: str = f"{cls.test_dir}/off_compression_{random.randrange(99999)}"
         table_family: str = cls.add_family_in_create(name='default', settings='COMPRESSION = "off"')
 
         cls.ydb_client.query(
@@ -170,7 +171,7 @@ class TestAllCompression(TestCompressionBase):
     @pytest.mark.parametrize("suffix, family_settings", COMPRESSION_CASES)
     def test_all_supported_compression(self, suffix: str, family_settings: str):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13640 '''
-        table_path: str = f"{self.test_dir}/{suffix}"
+        table_path: str = f"{self.test_dir}/{suffix}_{random.randrange(99999)}"
         table_family: str = self.add_family_in_create(name='default', settings=family_settings)
 
         self.ydb_client.query(

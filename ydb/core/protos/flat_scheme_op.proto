@@ -346,6 +346,8 @@ message TTableDescription {
     optional bool AllowUnderSameOperation = 44 [default = false];
     // Create only as-well. Used for CopyTable to create table in desired state instead of default
     optional EPathState PathState = 46;
+    // Skip automatic index/impl table copying - indexes will be handled separately
+    optional bool OmitIndexes = 47 [default = false];
 }
 
 message TDictionaryEncodingSettings {
@@ -1282,6 +1284,11 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     optional bool AllowUnderSameOperation = 7 [default = false];
 
     optional NKikimrSchemeOp.EPathState TargetPathTargetState = 8;
+    
+    // Map from index impl table name to CDC stream config for incremental backups
+    // Key: index impl table name (e.g., "indexImplTable")
+    // Value: CDC stream configuration to create on that index impl table
+    map<string, TCreateCdcStream> IndexImplTableCdcStreams = 9;
 }
 
 message TConsistentTableCopyingConfig {

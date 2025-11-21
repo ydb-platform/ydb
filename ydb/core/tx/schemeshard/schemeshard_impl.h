@@ -1195,6 +1195,36 @@ public:
     void Handle(TEvDataShard::TEvIncrementalRestoreResponse::TPtr& ev, const TActorContext& ctx);
     void CreateIncrementalRestoreOperation(const TPathId& backupCollectionPathId, ui64 operationId, const TString& backupName, const TActorContext& ctx);
 
+    void DiscoverAndCreateIndexRestoreOperations(
+        const TPathId& backupCollectionPathId,
+        ui64 operationId,
+        const TString& backupName,
+        const TPath& bcPath,
+        const TBackupCollectionInfo::TPtr& backupCollectionInfo,
+        const TActorContext& ctx);
+
+    void DiscoverIndexesRecursive(
+        ui64 operationId,
+        const TString& backupName,
+        const TPath& bcPath,
+        const TBackupCollectionInfo::TPtr& backupCollectionInfo,
+        const TPath& currentPath,
+        const TString& accumulatedRelativePath,
+        const TActorContext& ctx);
+
+    void CreateSingleIndexRestoreOperation(
+        ui64 operationId,
+        const TString& backupName,
+        const TPath& bcPath,
+        const TString& relativeTablePath,
+        const TString& indexName,
+        const TString& targetTablePath,
+        const TActorContext& ctx);
+
+    TString FindTargetTablePath(
+        const TBackupCollectionInfo::TPtr& backupCollectionInfo,
+        const TString& relativeTablePath);
+
     void Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);

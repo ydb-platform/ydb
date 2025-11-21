@@ -117,6 +117,7 @@ message TNodeStateInfo {
 message TEvNodeStateRequest {
     optional uint64 ChangedSince = 1;
     repeated int32 FieldsRequired = 2 [packed = true];
+    repeated fixed64 FilterNodeId = 22;
 }
 
 message TEvNodeStateResponse {

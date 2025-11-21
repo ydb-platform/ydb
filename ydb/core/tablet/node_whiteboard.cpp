@@ -916,8 +916,8 @@ protected:
         }
     }
 
-    static std::unordered_set<TTabletId> BuildIndex(const ::google::protobuf::RepeatedField<::NProtoBuf::uint64>& array) {
-        std::unordered_set<TTabletId> result;
+    static std::unordered_set<ui64> BuildIndex(const ::google::protobuf::RepeatedField<::NProtoBuf::uint64>& array) {
+        std::unordered_set<ui64> result;
         result.reserve(array.size());
         for (auto id : array) {
             result.insert(id);
@@ -989,14 +989,20 @@ protected:
         ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev, const TActorContext& ctx) {
         const auto& request = ev->Get()->Record;
-        ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;
+        auto matchesFilter = [
+            changedSince = request.has_changedsince() ? request.changedsince() : 0,
+            filterNodeId = BuildIndex(request.filternodeid())
+        ](const NKikimrWhiteboard::TNodeStateInfo& nodeStateInfo) {
+            return nodeStateInfo.changetime() >= changedSince
+                && (filterNodeId.empty() || filterNodeId.count(nodeStateInfo.peernodeid()));
+        };
         TAutoPtr<TEvWhiteboard::TEvNodeStateResponse> response = new TEvWhiteboard::TEvNodeStateResponse();
         auto& record = response->Record;
         for (const auto& pr : NodeStateInfo) {
-            if (pr.second.GetChangeTime() >= changedSince) {
-                NKikimrWhiteboard::TNodeStateInfo &nodeStateInfo = *record.AddNodeStateInfo();
+            if (matchesFilter(pr.second)) {
+                NKikimrWhiteboard::TNodeStateInfo& nodeStateInfo = *record.AddNodeStateInfo();
                 Copy(nodeStateInfo, pr.second, request);
             }
         }

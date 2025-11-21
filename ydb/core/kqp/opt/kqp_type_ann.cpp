@@ -2496,21 +2496,38 @@ TStatus AnnotateOpSort(const TExprNode::TPtr& input, TExprContext& ctx) {
 TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto* inputType = input->ChildPtr(TKqpOpAggregate::idx_Input)->GetTypeAnn();
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto opAggregate = TKqpOpAggregate(input);
 
-    THashMap<TString, std::pair<TString, const TTypeAnnotationNode*>> aggTraitsMap;
-    for (const auto& item : TExprBase(input->ChildPtr(TKqpOpAggregate::idx_AggregationTraitsList)).Cast<TExprList>()) {
-        const auto aggTrait = TExprBase(item).Cast<TKqpOpAggregationTraits>();
-        const auto originalColName = TString(aggTrait.OriginalColName());
-        const auto resultColName = TString(aggTrait.ResultColName());
-        const auto* resultType = aggTrait.AggregationFunctionResultType().Ptr()->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        aggTraitsMap[originalColName] = {resultColName, resultType};
+    THashMap<TString, std::pair<TString, TString>> aggTraitsMap;
+    for (const auto& traits : opAggregate.AggregationTraitsList()) {
+        const auto originalColName = TString(traits.OriginalColName());
+        const auto aggFuncName = TString(traits.AggregationFunction());
+        const auto resultColName = TString(traits.ResultColName());
+        aggTraitsMap[originalColName] = {resultColName, aggFuncName};
+    }
+
+    THashSet<TString> keyColumns;
+    for (const auto& keyColumn : opAggregate.KeyColumns()) {
+        keyColumns.insert(TString(keyColumn));
     }
 
     TVector<const TItemExprType*> newItemTypes;
     for (const auto* itemType : structType->GetItems()) {
-        if (auto it = aggTraitsMap.find(TString(itemType->GetName())); it != aggTraitsMap.end()) {
-            newItemTypes.push_back(ctx.MakeType<TItemExprType>(it->second.first, it->second.second));
-        } else {
+        // The type of the column could be changed after aggregation.
+        const auto itemName = itemType->GetName();
+        if (auto it = aggTraitsMap.find(itemName); it != aggTraitsMap.end()) {
+            const auto& resultColName = it->second.first;
+            const auto& aggFunction = it->second.second;
+            const TTypeAnnotationNode* aggFieldType = itemType->GetItemType();
+            if (aggFunction == "count") {
+                aggFieldType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+            } else if (aggFunction == "sum") {
+                TPositionHandle dummyPos;
+                Y_ENSURE(GetSumResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx),
+                         "Unsupported type for sum aggregation function");
+            }
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(resultColName, aggFieldType));
+        } else if (keyColumns.contains(itemName)) {
             newItemTypes.push_back(itemType);
         }
     }

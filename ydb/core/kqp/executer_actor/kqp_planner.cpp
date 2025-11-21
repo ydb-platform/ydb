@@ -272,6 +272,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetUserToken(UserToken->SerializeAsString());
     }
 
+    request.SetEnableWatermarks(AppData()->FeatureFlags.GetEnableWatermarks());
+
     return result;
 }
 

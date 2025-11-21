@@ -399,7 +399,7 @@ private:
         }
     }
 
-    void ResetToZero();
+    void ResetCounter();
 
     //
     void AdjustToBaseLine(const TCountersArray<T>& baseLine) {
@@ -433,18 +433,21 @@ private:
 };
 
 template <>
-inline void TCountersArray<TTabletSimpleCounter>::ResetToZero() {
-}
-
-template <>
-inline void TCountersArray<TTabletCumulativeCounter>::ResetToZero() {
+inline void TCountersArray<TTabletSimpleCounter>::ResetCounter() {
     for (ui32 i = 0; i < CountersQnt; ++i) {
         Counters[i].Set(0);
     }
 }
 
 template <>
-inline void TCountersArray<TTabletPercentileCounter>::ResetToZero() {
+inline void TCountersArray<TTabletCumulativeCounter>::ResetCounter() {
+    for (ui32 i = 0; i < CountersQnt; ++i) {
+        Counters[i].Set(0);
+    }
+}
+
+template <>
+inline void TCountersArray<TTabletPercentileCounter>::ResetCounter() {
     for (ui32 i = 0; i < CountersQnt; ++i) {
         Counters[i].Clear();
     }
@@ -565,9 +568,22 @@ public:
         }
     }
 
-    void ResetToZero() {
-        CumulativeCounters.ResetToZero();
-        PercentileCounters.ResetToZero();
+    void ResetCounters() {
+        SimpleCounters.ResetCounter();
+        CumulativeCounters.ResetCounter();
+        PercentileCounters.ResetCounter();
+    }
+
+    void ResetSimpleCounters() {
+        SimpleCounters.ResetCounter();
+    }
+
+    void ResetCumulativeCounters() {
+        CumulativeCounters.ResetCounter();
+    }
+
+    void ResetPercentileCounters() {
+        PercentileCounters.ResetCounter();
     }
 
 private:

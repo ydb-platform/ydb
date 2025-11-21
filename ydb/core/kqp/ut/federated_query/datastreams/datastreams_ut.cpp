@@ -366,11 +366,12 @@ public:
                 DATABASE_NAME = "{pq_database_name}",
                 AUTH_METHOD = "BASIC",
                 LOGIN = "root",
-                PASSWORD_SECRET_NAME = "secret_local_password"
+                PASSWORD_SECRET_NAME = "{secret_name}"
             );)",
             "pq_source"_a = pqSourceName,
             "pq_location"_a = YDB_ENDPOINT,
-            "pq_database_name"_a = YDB_DATABASE
+            "pq_database_name"_a = YDB_DATABASE,
+            "secret_name"_a = secretName
         ));
     }
 
@@ -513,6 +514,7 @@ public:
         req.SetQuery(query);
         req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+        req.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
 
         auto ev = std::make_unique<TEvKqp::TEvScriptRequest>();
         ev->Record = queryProto;
@@ -522,6 +524,7 @@ public:
         ev->SaveQueryPhysicalGraph = settings.SaveState;
         ev->QueryPhysicalGraph = settings.PhysicalGraph;
         ev->CheckpointId = settings.CheckpointId;
+        ev->ProgressStatsPeriod = TDuration::Seconds(1);
 
         const auto edgeActor = runtime.AllocateEdgeActor();
         runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, ev.release());
@@ -1063,7 +1066,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CreatePqSourceBasicAuth(sourceName, useSchemaSecrets);
 
             const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
-                SELECT * FROM `{source}`.`{topic}`
+                SELECT key || "{id}", value FROM `{source}`.`{topic}`
                     WITH (
                         FORMAT="json_each_row",
                         SCHEMA=(
@@ -1073,19 +1076,25 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     LIMIT 1;
                 )",
                 "source"_a=sourceName,
-                "topic"_a=topicName
+                "topic"_a=topicName,
+                "id"_a = i
             ));
 
             WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
 
-            CheckScriptResult(scriptExecutionOperation, 2, 1, [](TResultSetParser& result) {
-                UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
+            CheckScriptResult(scriptExecutionOperation, 2, 1, [i](TResultSetParser& result) {
+                UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1" + ToString(i));
                 UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
             });
+
+            const auto metadata = GetScriptExecutionOperation(scriptExecutionOperation).Metadata();
+            const auto& plan = metadata.ExecStats.GetPlan();
+            UNIT_ASSERT(plan);
+            UNIT_ASSERT_STRING_CONTAINS(*plan, "Mkql_TotalNodes");
         }
     }
 
-    Y_UNIT_TEST_F(ExplainReadTopicBasic, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(ReadTopicExplainBasic, TStreamingTestFixture) {
         const TString sourceName = "sourceName";
         const TString topicName = "topicName";
         CreateTopic(topicName);
@@ -1476,6 +1485,17 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         CheckScriptResult(result[0], 1, 1, [](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 2);
+        });
+
+        WaitFor(TDuration::Seconds(5), "operation stats", [&](TString& error) {
+            const auto metadata = GetScriptExecutionOperation(operationId).Metadata();
+            const auto& plan = metadata.ExecStats.GetPlan();
+            if (plan && plan->contains("MultiHop_NewHopsCount")) {
+                return true;
+            }
+
+            error = TStringBuilder() << "plan is not available, status: " << metadata.ExecStatus << ", plan: " << plan.value_or("");
+            return false;
         });
     }
 

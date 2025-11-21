@@ -39,18 +39,45 @@ Configure LinqToDB to use {{ ydb-short-name }} in code:
 - C#
 
   ```csharp
-  // Option 1: quick initialization via connection string
-  using var db = YdbTools.CreateDataConnection(
-      "Endpoint=grpcs://<host>:2135;Database=/path/to/database;Token=<...>"
-  );
+## Provider Configuration {#configuration-provider}
+
+Configure LinqToDB to use {{ ydb-short-name }} in code:
+
+{% list tabs group=lang %}
+
+- C#
+
+  ```csharp
+
   DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
 
-  // Option 2: via DataOptions
-  var options = new DataOptions()
-      .UseConnectionString(YdbTools.GetDataProvider(),
-          "Endpoint=grpcs://<host>:2135;Database=/path/to/database;Token=<...>")
-  DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
-  using var db2 = new DataConnection(options);
+  // Option 1: local YDB via connection string
+  //
+  // Example: local YDB running on localhost:2136 with database "/local"
+
+  using var localDb =  new DataConnection(new DataOptions().UseConnectionString(
+    "YDB", 
+    Host=localhost;Port=2136;Database=/local;UseTls=false
+    )
+  );
+
+  // Option 2: managed YDB in cloud only via YdbConnectionStringBuilder
+  //
+  // Example: connection built from explicit host/port/database settings.
+  static async Task<DataConnection> BuildYdbDataConnection()
+  {
+    var ydbConnectionBuilder = new YdbConnectionStringBuilder
+    {
+    Host = "server",
+    Port = 2135,
+    Database = "/ru-prestable/my-table",
+    UseTls = true
+    };
+
+      await using var ydbConnection = new YdbConnection(ydbConnectionBuilder);
+      return YdbTools.CreateDataConnection(ydbConnection);
+  }
+
   ```
 
 {% endlist %}
@@ -524,7 +551,16 @@ Usage example
   using LinqToDB;
   using LinqToDB.Data;
 
-  using var db = new DataConnection("YDB");
+  // This example uses a direct connection string and is intended for local / test YDB instances.
+  // If you need to connect to managed YDB in Yandex Cloud , use YdbConnectionStringBuilder
+  // and YdbConnection instead (see the provider configuration section)
+
+  using var db = new DataConnection(
+    new DataOptions().UseConnectionString(
+      "YDB",
+      "Host=localhost;Port=2136;Database=/local;UseTls=false"
+    )
+  );
 
   // INSERT
   var employee = new Employee

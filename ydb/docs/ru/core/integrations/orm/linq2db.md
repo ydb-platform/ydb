@@ -39,18 +39,35 @@ linq2db — лёгкий и быстрый ORM/µ-ORM для .NET, предос�
 - C#
 
   ```csharp
-  // Вариант 1: быстрая инициализация по строке подключения
-  using var db = YdbTools.CreateDataConnection(
-      "Endpoint=grpcs://<host>:2135;Database=/path/to/database;Token=<...>"
-  );
-  DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
+    DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
+    
+    // Вариант 1: локальный YDB через строку подключения
+    //
+    // Пример: локальный YDB, работающий на localhost:2136 с базой "/local"
+    using var localDb = new DataConnection(
+    new DataOptions().UseConnectionString(
+        "YDB",
+        "Host=localhost;Port=2136;Database=/local;UseTls=false"
+        )
+    );
+    
+    // Вариант 2: YDB в облаке только через YdbConnectionStringBuilder
+    //
+    // Пример: подключение, собранное из явных значений host/port/database.
+    static async Task<DataConnection> BuildYdbDataConnection()
+    {
+    var ydbConnectionBuilder = new YdbConnectionStringBuilder
+        {
+        Host     = "server",
+        Port     = 2135,
+        Database = "/ru-prestable/my-table",
+        UseTls   = true
+        };
+    
+        await using var ydbConnection = new YdbConnection(ydbConnectionBuilder);
+        return YdbTools.CreateDataConnection(ydbConnection);
+    }
 
-  // Вариант 2: через DataOptions
-  var options = new DataOptions()
-      .UseConnectionString(YdbTools.GetDataProvider(),
-          "Endpoint=grpcs://<host>:2135;Database=/path/to/database;Token=<...>")
-  DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
-  using var db2 = new DataConnection(options);
   ```
 
 {% endlist %}
@@ -499,7 +516,16 @@ using System.Linq;
 using LinqToDB;
 using LinqToDB.Data;
 
-using var db = new DataConnection("YDB");
+// Этот пример использует прямую строку подключения и предназначен для локального / тестового YDB.
+// Если вам нужно подключиться к YDB в Yandex Cloud,
+// используйте YdbConnectionStringBuilder и YdbConnection (см. раздел про конфигурацию провайдера).
+
+using var db = new DataConnection(
+    new DataOptions().UseConnectionString(
+        "YDB",
+        "Host=localhost;Port=2136;Database=/local;UseTls=false"
+    )
+);
 
 // INSERT
 var employee = new Employee

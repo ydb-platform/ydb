@@ -295,7 +295,7 @@ public:
 
     ~TStateStorage() = default;
 
-    TFuture<TIssues> Init() override;
+    TFuture<TIssues> Init(const NACLib::TDiffACL& acl) override;
 
     TFuture<TSaveStateResult> SaveState(
         ui64 taskId,
@@ -365,7 +365,7 @@ TStateStorage::TStateStorage(
 {
 }
 
-TFuture<TIssues> TStateStorage::Init() {
+TFuture<TIssues> TStateStorage::Init(const NACLib::TDiffACL& acl) {
     auto stateDesc = TTableBuilder()
         .AddNullableColumn("graph_id", EPrimitiveType::String)
         .AddNullableColumn("task_id", EPrimitiveType::Uint64)
@@ -379,7 +379,7 @@ TFuture<TIssues> TStateStorage::Init() {
 
     auto promise = NThreading::NewPromise<TIssues>();
 
-    CreateTable(YdbConnection, StatesTable, std::move(stateDesc))
+    CreateTable(YdbConnection, StatesTable, std::move(stateDesc), acl)
         .Subscribe([promise](const auto& f) mutable {
             auto status = f.GetValue();
             if (!IsTableCreated(status)) {

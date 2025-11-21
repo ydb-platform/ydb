@@ -19,10 +19,12 @@ public:
         const std::string& db,
         const std::string& path,
         NYdb::NTable::TTableDescription&& tableDesc,
+        const NACLib::TDiffACL& acl,
         NThreading::TPromise<NYdb::TStatus> promise)
         : Db(db)
         , Path(path)
         , TableDesc(std::move(tableDesc))
+        , Acl(acl)
         , Promise(promise) {
     }
 
@@ -56,6 +58,7 @@ public:
             desc.SetNotNull(!optional); 
             columns.push_back(desc);
         }
+        Cerr << "CreateTableCreator: Db " << Db << " Path " <<  Path << " " << Endl;
         Register(
             NKikimr::CreateTableCreator(
                 pathComponents,
@@ -63,7 +66,10 @@ public:
                 keyColumns,
                 NKikimrServices::STREAMS_STORAGE_SERVICE,
                 Nothing(),
-                Db.c_str()
+                Db.c_str(),
+                false,
+                Nothing(),
+                Acl 
             )
         );
     }
@@ -86,6 +92,7 @@ private:
     const std::string Db;
     const std::string Path;
     const NYdb::NTable::TTableDescription TableDesc;
+    NACLib::TDiffACL Acl;
     NThreading::TPromise<NYdb::TStatus> Promise;
 };
 
@@ -127,9 +134,9 @@ struct TLocalSession : public ISession {
         return NThreading::MakeFuture(NYdb::TStatus{NYdb::EStatus::SUCCESS, {}});
     }
 
-    NYdb::TAsyncStatus CreateTable(const TString& db, const TString& path, NYdb::NTable::TTableDescription&& tableDesc) override {
+    NYdb::TAsyncStatus CreateTable(const TString& db, const TString& path, NYdb::NTable::TTableDescription&& tableDesc, const NACLib::TDiffACL& acl) override {
         auto promise = NThreading::NewPromise<NYdb::TStatus>();
-        NActors::TActivationContext::Register(new TTableCreator(db, path, std::move(tableDesc), promise));
+        NActors::TActivationContext::Register(new TTableCreator(db, path, std::move(tableDesc), acl, promise));
         return promise.GetFuture();
     }
 

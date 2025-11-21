@@ -1,7 +1,8 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <library/cpp/threading/future/core/future.h>
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 
@@ -34,7 +35,7 @@ struct ISession : public TThrRefBase{
     
     virtual NYdb::TAsyncStatus Rollback() = 0;
 
-    virtual NYdb::TAsyncStatus CreateTable(const TString& db, const TString& path, NYdb::NTable::TTableDescription&& tableDesc) = 0;
+    virtual NYdb::TAsyncStatus CreateTable(const TString& db, const TString& path, NYdb::NTable::TTableDescription&& tableDesc, const NACLib::TDiffACL& acl) = 0;
     
     virtual NYdb::TAsyncStatus DropTable(const TString& path) = 0;
 

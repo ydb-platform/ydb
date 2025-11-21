@@ -3,6 +3,9 @@
 #include "gc.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
@@ -15,6 +18,8 @@
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/ydb/util.h>
+
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
@@ -117,8 +122,8 @@ private:
         Finished,
     };
     EInitStatus InitStatus = EInitStatus::NotStarted;
-   // std::deque<TDatabasesCache::TDelayedEvent> DelayedEventsQueue;
     std::deque<THolder<IEventHandle>> DelayedEventsQueue;
+    NKikimrConfig::TFeatureFlags FeatureFlags;
 
 public:
     explicit TStorageProxy(
@@ -146,6 +151,9 @@ private:
         hFunc(NYql::NDq::TEvDqCompute::TEvGetTaskState, Handle);
         hFunc(TEvPrivate::TEvInitResult, Handle);
         hFunc(TEvPrivate::TEvInitialize, Handle);
+
+        hFunc(NKikimr::NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        hFunc(NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
     )
 
     void Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev);
@@ -161,6 +169,8 @@ private:
     void Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev);
     void Handle(TEvPrivate::TEvInitResult::TPtr& ev);
     void Handle(TEvPrivate::TEvInitialize::TPtr& ev);
+    void Handle(NKikimr::NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
+    void Handle(NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
 
     template<typename TEvent>
     bool CheckStatus(TEvent& ev);
@@ -195,7 +205,8 @@ TStorageProxy::TStorageProxy(
         TDuration::MilliSeconds(100), 
         TDuration::MilliSeconds(100),
         TDuration::Seconds(10)
-        )) {
+        ))
+    , FeatureFlags(NKikimr::AppData()->FeatureFlags) {
     FillDefaultParameters(Config, StorageConfig);
 }
 
@@ -216,7 +227,10 @@ void TStorageProxy::Bootstrap() {
         const auto& gcConfig = Config.GetCheckpointGarbageConfig();
         ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
     }
-   // StartInitialization();
+      
+    Send(NKikimr::NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+        new NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::FeatureFlagsItem}));
+
     Become(&TStorageProxy::StateFunc);
 
     LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped TStorageProxy " << SelfId() << " with connection to "
@@ -227,8 +241,12 @@ void TStorageProxy::Bootstrap() {
 void TStorageProxy::StartInitialization() {
     LOG_STREAMS_STORAGE_SERVICE_INFO("StartInitialization");
 
-    auto storageInitFuture = CheckpointStorage->Init();
-    auto stateInitFuture = StateStorage->Init();
+    NACLib::TDiffACL acl;
+    acl.ClearAccess();
+    acl.SetInterruptInheritance(false); //FeatureFlags.GetEnableSecureScriptExecutions());
+
+    auto storageInitFuture = CheckpointStorage->Init(acl);
+    auto stateInitFuture = StateStorage->Init(acl);
 
     std::vector<NThreading::TFuture<NYql::TIssues>> futures{storageInitFuture, stateInitFuture};
     auto voidFuture = NThreading::WaitAll(futures);
@@ -565,31 +583,24 @@ bool TStorageProxy::CheckStatus(TEvent& ev) {
     //     return false;
     // }
 
-    // // TODO: add database to scheduler
-
     switch (InitStatus) {
         case EInitStatus::NotStarted:
             StartInitialization();
             InitStatus = EInitStatus::Pending;
             [[fallthrough]];
         case EInitStatus::Pending:
-            
             if (DelayedEventsQueue.size() < DELAYED_EVENTS_QUEUE_LIMIT) {
-                DelayedEventsQueue.emplace_back(ev);
+                LOG_STREAMS_STORAGE_SERVICE_WARN("Add to delayed");
+                DelayedEventsQueue.emplace_back(ev.Release());
             } else {
                 NYql::TIssues issues;
-                issues.AddIssue("Too many queued requests");
-                //HandleDelayedRequestError(ev, std::move(issues));
+                auto evHolder = THolder<IEventHandle>(ev.Release());
+                HandleDelayedRequestError(evHolder, NYql::TIssues{NYql::TIssue{"Too many queued requests"}});
             }
             return false;
         case EInitStatus::Finished:
             return true;
     }
-//     DelayedEventsQueue.emplace_back(ev);
-
-//     auto ev1 = std::move(DelayedEventsQueue.back());
-//     HandleDelayedRequestError(ev1, NYql::TIssues());
-// return false;
 }
 
 void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::TIssues issues) {
@@ -605,12 +616,10 @@ void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::T
             auto event = IEventHandle::Release<TEvCheckpointStorage::TEvCreateCheckpointRequest>(ev);
             auto response = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointResponse>(event->CheckpointId, std::move(issues), TString());
             Send(ev->Sender, response.release(), 0, ev->Cookie);
-            //LOG_STREAMS_STORAGE_SERVICE_WARN("Send TEvCreateCheckpointResponse with issues: " << event->CheckpointId);
             break;
         }
         case TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest::EventType: {
             LOG_STREAMS_STORAGE_SERVICE_WARN("Send TEvGetCheckpointsMetadataResponse with issues: " << issues.ToOneLineString());
-         //   auto event = IEventHandle::Release<TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest>(ev);
             auto response = std::make_unique<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(TVector<TCheckpointMetadata>{}, std::move(issues));
             Send(ev->Sender, response.release(), 0, ev->Cookie);
             break;
@@ -636,12 +645,30 @@ void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::T
             Send(ev->Sender, response.release(), 0, ev->Cookie);
             break;
         }
-
         default:
             Y_ABORT("no way!");
     }
 }
 
+void TStorageProxy::Handle(NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+    LOG_STREAMS_STORAGE_SERVICE_INFO("Subscribed for config changes.");
+}
+
+void TStorageProxy::Handle(NKikimr::NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    LOG_STREAMS_STORAGE_SERVICE_INFO("Updated config.");
+    auto &event = ev->Get()->Record;
+
+    auto* newFeatureFlags = event.MutableConfig()->MutableFeatureFlags();
+    if (newFeatureFlags->GetEnableSecureScriptExecutions() != FeatureFlags.GetEnableSecureScriptExecutions()) {
+        if (InitStatus != EInitStatus::NotStarted) {
+            // TODO Pending?
+            InitStatus = EInitStatus::NotStarted;
+
+            StartInitialization();
+        }
+    }
+    FeatureFlags.Swap(newFeatureFlags);
+}
 
 } // namespace
 

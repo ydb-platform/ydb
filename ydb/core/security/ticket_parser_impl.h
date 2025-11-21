@@ -858,7 +858,7 @@ private:
                     auto it = DeferredLoginTokens.find(database);
                     if (it != DeferredLoginTokens.end()) {
                         auto& tokenKeys = it->second.second;
-                        static constexpr ui64 MAX_NUMBER_DEFERRED_TOKENS = 1'000'000;
+                        static constexpr ui64 MAX_NUMBER_DEFERRED_TOKENS = 100'000;
                         if (tokenKeys.size() < MAX_NUMBER_DEFERRED_TOKENS) {
                             tokenKeys.insert(key);
                         } else {

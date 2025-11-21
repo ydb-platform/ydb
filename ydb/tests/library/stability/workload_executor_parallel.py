@@ -3,7 +3,7 @@ import logging
 import time as time_module
 import pytest
 
-from ydb.tests.library.stability.aggregate_results import StressUtilTestResults
+from ydb.tests.library.stability.aggregate_results import StressUtilDeployResult, StressUtilTestResults
 from ydb.tests.library.stability.build_report import create_parallel_allure_report
 from ydb.tests.library.stability.upload_results import RunConfigInfo, safe_upload_results
 from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
@@ -133,6 +133,7 @@ class ParallelWorkloadTestBase:
         self._finalize_workload_results(
             olap_load_base,
             execution_result,
+            preparation_result['deployed_nodes'],
             additional_stats
         )
 
@@ -143,6 +144,7 @@ class ParallelWorkloadTestBase:
         self,
         olap_load_base: LoadSuiteBase,
         execution_result: dict,
+        preparation_result: dict[str, StressUtilDeployResult],
         run_config: RunConfigInfo
     ):
         """
@@ -169,7 +171,7 @@ class ParallelWorkloadTestBase:
 
             # Final status processing (may throw exception, but results are already uploaded)
             # Use node_errors saved from diagnostics
-            self._handle_final_status(overall_result, 'parallel_run', node_errors, verify_errors)
+            self._handle_final_status(overall_result, preparation_result, node_errors, verify_errors)
 
             # Separate step for uploading results (AFTER all data preparation)
             safe_upload_results(overall_result, run_config, node_errors, verify_errors)
@@ -236,8 +238,12 @@ class ParallelWorkloadTestBase:
                         node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
                 if node_error.was_oom:
                     node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
-                if hasattr(node_error, 'verifies') and node_error.verifies > 0:
-                    node_error_messages.append(f"Node {node_error.node.host} had {node_error.verifies} VERIFY fails")
+                verify_fails_count = 0
+                for verify_summary, verify_errors in verify_errors:
+                    if node_error.node.host in verify_errors.hosts_count:
+                        verify_fails_count += verify_errors.hosts_count[node_error.node.host]
+                if verify_fails_count:
+                    node_error_messages.append(f"Node {node_error.node.host} had {verify_fails_count} VERIFY fails")
                 if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:
                     node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
 
@@ -256,13 +262,12 @@ class ParallelWorkloadTestBase:
             # Data is ready, now we can upload results
             return node_errors, verify_errors
 
-    def _handle_final_status(self, result: StressUtilTestResults, workload_name, node_errors, verify_errors):
+    def _handle_final_status(self, result: StressUtilTestResults, preparation_result: dict[str, StressUtilDeployResult], node_errors, verify_errors):
         """
         Handles final test status (fail, broken, etc.)
 
         Args:
             result: Test results object
-            workload_name: Name of workload
             node_errors: List of node errors
             verify_errors: Verification errors
 
@@ -279,18 +284,16 @@ class ParallelWorkloadTestBase:
 
         # --- Переключатель: если cluster_log=all, то всегда прикладываем логи ---
         cluster_log_mode = get_external_param('cluster_log', 'default')
-        attach_logs_method = getattr(type(self), "_LoadSuiteBase__attach_logs", None)
-        if attach_logs_method:
-            try:
-                if cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors:
-                    attach_logs_method(
-                        start_time=getattr(result, "start_time", None),
-                        attach_name="kikimr",
-                        query_text="",
-                        ignore_roles=True  # Collect logs from all unique hosts
-                    )
-            except Exception as e:
-                logging.warning(f"Failed to attach kikimr logs: {e}")
+        try:
+            if cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors:
+                LoadSuiteBase.__attach_logs(
+                    start_time=result.start_time,
+                    attach_name="kikimr",
+                    query_text="",
+                    ignore_roles=True  # Collect logs from all unique hosts
+                )
+        except Exception as e:
+            logging.warning(f"Failed to attach kikimr logs: {e}")
 
         # --- FAIL TEST IF CORES OR OOM FOUND ---
         if nodes_with_issues > 0:
@@ -304,64 +307,43 @@ class ParallelWorkloadTestBase:
         if not result.is_all_success() and result.error_message:
             # Создаем детальное сообщение об ошибке с контекстом
             error_details = []
-            error_details.append(f"WORKLOAD EXECUTION FAILED: {workload_name}")
+            error_details.append("TEST EXECUTION FAILED: ")
             error_details.append(f"Main error: {result.error_message}")
-            if result.iterations:
+            if result.stress_util_runs:
                 error_details.append("\nExecution details:")
                 error_details.append(f"Total iterations attempted: {len(result.iterations)}")
                 failed_iterations = []
                 successful_iterations = []
-                for iter_num, iteration in result.iterations.items():
-                    if iteration.error_message:
+                for workload_name, workload_run_info in result.stress_util_runs.items():
+                    if workload_run_info.get_successful_runs == 0:
                         failed_iterations.append({
-                            'iteration': iter_num,
-                            'error': iteration.error_message,
-                            'time': iteration.time
+                            'iteration': workload_name,
+                            'error': "All runs on all nodes have failed",
                         })
                     else:
                         successful_iterations.append({
-                            'iteration': iter_num,
-                            'time': iteration.time
+                            'iteration': workload_name,
                         })
                 if failed_iterations:
-                    error_details.append(f"\nFAILED ITERATIONS ({len(failed_iterations)}):")
+                    error_details.append(f"\nFAILED RUNS ({len(failed_iterations)}):")
                     for fail_info in failed_iterations:
-                        error_details.append(f"  - Iteration {fail_info['iteration']}: {fail_info['error']} (time: {fail_info['time']:.1f}s)")
+                        error_details.append(f"  - Stress util {fail_info['iteration']}: {fail_info['error']}")
                 if successful_iterations:
-                    error_details.append(f"\nSuccessful iterations ({len(successful_iterations)}):")
+                    error_details.append(f"\nSuccessful runs: ({len(successful_iterations)}):")
                     for success_info in successful_iterations:
-                        error_details.append(f"  - Iteration {success_info['iteration']}: OK (time: {success_info['time']:.1f}s)")
-            if result.stderr and result.stderr.strip():
-                stderr_preview = result.stderr.strip()
-                if len(stderr_preview) > 500:
-                    stderr_preview = "..." + stderr_preview[-500:]
-                error_details.append(f"\nSTDERR (last 500 chars):\n{stderr_preview}")
-            if result.stdout and "error" in result.stdout.lower():
-                stdout_lines = result.stdout.split('\n')
-                error_lines = [line for line in stdout_lines if 'error' in line.lower()]
-                if error_lines:
-                    error_details.append("\nError lines from STDOUT:")
-                    for line in error_lines[:5]:
-                        error_details.append(f"  {line.strip()}")
-            stats = result.get_stats(workload_name)
-            if stats:
-                if 'successful_runs' in stats and 'total_runs' in stats:
-                    error_details.append("\nRUN STATISTICS:")
-                    error_details.append(f"  Successful runs: {stats['successful_runs']}/{stats['total_runs']}")
-                    if 'failed_runs' in stats:
-                        error_details.append(f"  Failed runs: {stats['failed_runs']}")
-                    if 'success_rate' in stats:
-                        error_details.append(f"  Success rate: {stats['success_rate']:.1%}")
-                if any(key.startswith('deployment_') for key in stats.keys()):
-                    deployment_info = {k: v for k, v in stats.items() if k.startswith('deployment_')}
-                    if deployment_info:
-                        error_details.append("\nDEPLOYMENT INFO:")
-                        for key, value in deployment_info.items():
-                            error_details.append(f"  {key}: {value}")
+                        error_details.append(f"  - Iteration {success_info['iteration']}: OK")
+            error_details.append("\nRUN STATISTICS:")
+            error_details.append(f"  Successful runs: {result.get_successful_runs()}/{result.get_total_runs()}")
+            error_details.append(f"  Successful runs: {result.get_successful_runs()}")
+            error_details.append(f"  Failed runs: {result.get_total_runs() - result.get_successful_runs()}")
+            error_details.append(f"  Success rate: {(result.get_successful_runs() / result.get_total_runs()):.1%}")
+            error_details.append("\nDEPLOYMENT INFO:")
+            for stress_name, deploy_info in preparation_result.items():
+                error_details.append(f"  {stress_name}:")
+                for host_info in deploy_info.hosts:
+                    error_details.append(f"    {host_info}")
             detailed_error_message = "\n".join(error_details)
             exc = pytest.fail.Exception(detailed_error_message)
-            if result.traceback is not None:
-                exc = exc.with_traceback(result.traceback)
             raise exc
         # if result.warning_message:
         #     logging.warning(f"Workload completed with warnings: {result.warning_message}")

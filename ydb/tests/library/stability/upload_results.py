@@ -2,11 +2,12 @@ from datetime import datetime
 import json
 import logging
 import allure
+from ydb.tests.olap.lib.allure_utils import NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.library.stability.aggregate_results import StressUtilResult, StressUtilTestResults, RunConfigInfo
 
 
-def safe_upload_results(result: StressUtilTestResults, run_config: RunConfigInfo, node_errors, verify_errors):
+def safe_upload_results(result: StressUtilTestResults, run_config: RunConfigInfo, node_errors: list[NodeErrors], verify_errors):
     """Safe results upload with error handling and Allure reporting"""
     with allure.step("Upload results to YDB"):
         # if not ResultsProcessor.send_results:
@@ -55,7 +56,7 @@ def safe_upload_results(result: StressUtilTestResults, run_config: RunConfigInfo
                           "Upload error details", allure.attachment_type.TEXT)
 
 
-def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_errors, verify_errors, suite_name, workload_name):
+def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_errors: list[NodeErrors], verify_errors, suite_name, workload_name):
     """Overridden method for workload tests"""
     stats = {}
     # stats = result.get_stats(workload_name)
@@ -77,7 +78,7 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
         stats["failed_iterations"] = stats["total_runs"] - stats["successful_runs"]
         stats["planned_duration"] = run_config.duration
         stats["actual_duration"] = result.end_time - result.start_time
-        stats["total_execution_time"] = result.total_execution_time
+        stats["total_execution_time"] = sum(run.total_execution_time for run in result.node_runs.values())
         stats["success_rate"] = stats["successful_runs"] / stats["total_runs"]
         # obsolete
         stats["avg_threads_per_iteration"] = 0
@@ -91,16 +92,30 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
         stats["workload_type"] = workload_name
         stats["test_timestamp"] = result.start_time
 
-        stats["errors"] = False
-        stats["with_errors"] = False
+        stats["errors"] = {'other': True} if not result.is_all_success() else None
+        stats["with_errors"] = not result.is_all_success()
         stats["with_warnings"] = False
-        stats["node_errors"] = 'TODO FILL'
-        stats["workload_errors"] = 'TODO FILL'
-        stats["workload_warnings"] = 'TODO FILL'
-        stats["nodes_with_issues"] = 'TODO FILL'
-        stats["node_error_messages"] = 'TODO FILL'
-        stats["workload_error_messages"] = 'TODO FILL'
-        stats["workload_warning_messages"] = 'TODO FILL'
+
+        aggregated_errors = []
+        nodes_with_issues = set()
+        for error in node_errors:
+            nodes_with_issues.add(error.node)
+            aggregated_errors.append(error.message)
+
+        for error_summary, detailed_info in verify_errors.items():
+            aggregated_errors.append(f'VERIFY {error_summary} appeared on')
+            for host, host_count in detailed_info['host_count']:
+                aggregated_errors.append(f'  {host}: {host_count}')
+
+        stats["node_errors"] = aggregated_errors
+
+        stats["nodes_with_issues"] = list(node.host for node in nodes_with_issues)
+        stats["node_error_messages"] = aggregated_errors
+
+        stats["workload_errors"] = None
+        stats["workload_warnings"] = None
+        stats["workload_error_messages"] = None
+        stats["workload_warning_messages"] = None
 
     end_time = datetime.now().timestamp()
 
@@ -121,4 +136,4 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
         allure.attachment_type.JSON
     )
 
-    # ResultsProcessor.upload_results(**upload_data)
+    ResultsProcessor.upload_results(**upload_data)

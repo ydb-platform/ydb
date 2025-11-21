@@ -96,7 +96,6 @@ class StressUtilResult:
     """
     start_time: float = None
     end_time: float = None
-    total_execution_time: str = None
     execution_args: list[str] = None
     node_runs: dict[str, StressUtilNodeResult] = dict()
 
@@ -106,7 +105,7 @@ class StressUtilResult:
         self.execution_args = []
 
     def __repr__(self):
-        return f"StressUtilResult(start_time={self.start_time}, end_time={self.end_time}, total_execution_time={self.total_execution_time}, node_runs={self.node_runs})"
+        return f"StressUtilResult(start_time={self.start_time}, end_time={self.end_time}, node_runs={self.node_runs})"
 
     def get_successful_runs(self) -> int:
         """Get count of successful runs
@@ -236,6 +235,22 @@ class StressUtilTestResults:
             bool: True if all runs succeeded, False otherwise
         """
         return all(result.is_all_success() for result in self.stress_util_runs.values())
+
+    def get_successful_runs(self) -> int:
+        """Get count of successful runs
+
+        Returns:
+            int: Total count of successful runs
+        """
+        return sum(stress_info.get_successful_runs() for stress_info in self.stress_util_runs.values())
+
+    def get_total_runs(self) -> int:
+        """Get total count of runs
+
+        Returns:
+            int: Total count of runs
+        """
+        return sum(stress_info.get_total_runs() for stress_info in self.stress_util_runs.values())
 
     def __repr__(self):
         return (

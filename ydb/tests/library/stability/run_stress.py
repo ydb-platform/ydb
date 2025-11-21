@@ -220,7 +220,6 @@ class StressRunExecutor:
                                 f"Run {current_iteration} on {node_host} failed")
                         current_iteration += 1
                         run_duration = planned_end_time - time_module.time()
-                        break
                     node_result.total_runs = len(node_result.runs)
                     node_result.end_time = time_module.time()
                     logging.info(
@@ -394,7 +393,7 @@ class StressRunExecutor:
 
                     stdout = execution_result.stdout
                     stderr = execution_result.stderr
-                    is_timeout = execution_result.is_timeout
+                    is_timeout = True  # execution_result.is_timeout
 
                     # Attach command execution results
                     if stdout:

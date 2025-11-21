@@ -1,6 +1,6 @@
 # CREATE RESOURCE POOL CLASSIFIER
 
-`CREATE RESOURCE POOL CLASSIFIER` создаёт [пул классификаторов ресурсов](../../../../core/concepts/glossary.md#классификатор-пулов-ресурсов-resource-pool-classifier).
+`CREATE RESOURCE POOL CLASSIFIER` создаёт [пул классификаторов ресурсов](../../../concepts/glossary.md#классификатор-пулов-ресурсов-resource-pool-classifier).
 
 ## Синтаксис
 

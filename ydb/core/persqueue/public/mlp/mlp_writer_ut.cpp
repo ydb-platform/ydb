@@ -19,8 +19,8 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             }
         });
 
-        AssertWriteError(runtime, Ydb::StatusIds::SCHEME_ERROR,
-            "You do not have access or the '/Root/topic_not_exists' does not exist");
+        auto response = GetWriteResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::NOT_FOUND);
     }
 
     Y_UNIT_TEST(EmptyWrite) {
@@ -36,8 +36,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
         });
 
         auto response = GetWriteResponse(runtime);
-        UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
-            Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::SUCCESS), response->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
     }
 
@@ -63,8 +62,6 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
 
         {
             auto response = GetWriteResponse(runtime);
-            UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
-                Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::SUCCESS), response->ErrorDescription);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
             auto& msg = response->Messages[0];
             UNIT_ASSERT_VALUES_EQUAL(msg.Index, 3);
@@ -116,8 +113,6 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
 
         {
             auto response = GetWriteResponse(runtime);
-            UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
-                Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::SUCCESS), response->ErrorDescription);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             {
                 auto& msg = response->Messages[0];
@@ -161,8 +156,6 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
 
         {
             auto response = GetWriteResponse(runtime);
-            UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
-                Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::SUCCESS), response->ErrorDescription);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             {
                 auto& msg = response->Messages[0];

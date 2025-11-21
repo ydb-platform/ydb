@@ -11,6 +11,10 @@ namespace NKikimr::NGrpcService {
     class IRequestOpCtx;
 } // namespace NKikimr::NGrpcService
 
+namespace NKikimr::NPQ::NMLP {
+    struct TMessageId;
+} // namespace NKikimr::NPQ::NMLP
+
 namespace NKikimr::NSqsTopic {
 
     struct TQueueNameWithConsumer {
@@ -23,4 +27,6 @@ namespace NKikimr::NSqsTopic {
     const NKikimrConfig::TSqsConfig& Cfg();
 
     TString GetEndpoint(const NKikimrConfig::TSqsConfig& config);
+
+    TString GenerateMessageId(const TString& database, const TString& topicPath, const NPQ::NMLP::TMessageId& pos);
 } // namespace NKikimr::NSqsTopic

@@ -31,7 +31,7 @@ private:
     STFUNC(WriteState);
 
     void SendToTablet(ui64 tabletId, IEventBase *ev);
-    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage);
+    void ReplyErrorAndDie();
 
     bool OnUnhandledException(const std::exception&) override;
     bool IsSuccess(const NKikimrClient::TResponse& ev);
@@ -57,8 +57,7 @@ private:
         ui64 Offset = 0;
     };
     std::vector<TPendingMessage> PendingMessages;
-    Ydb::StatusIds::StatusCode ResponseStatus = Ydb::StatusIds::SUCCESS;
-    TString ErrorMessage;
+    NDescriber::EStatus DescribeStatus;
 };
 
 } // namespace NKikimr::NPQ::NMLP

@@ -3,6 +3,7 @@
 #include "error.h"
 #include "request.h"
 #include "receipt.h"
+#include "utils.h"
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
@@ -36,7 +37,6 @@
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
 #include <ydb/library/actors/core/log.h>
-
 #include <library/cpp/digest/md5/md5.h>
 
 using namespace NActors;
@@ -139,28 +139,7 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         TString GenerateMessageId(const NPQ::NMLP::TMessageId& pos) const {
-            MD5 md5;
-            md5.Init();
-            md5.Update(QueueUrl_->Database);
-            md5.Update("/");
-            md5.Update(FullTopicPath_);
-            md5.Update("/");
-            md5.Update(ToString(pos.PartitionId));
-            md5.Update("/");
-            md5.Update(ToString(pos.Offset));
-            ui8 digest[16];
-            md5.Final(digest);
-            // make guid v3 like
-            digest[8] &= 0b10111111;
-            digest[8] |= 0b10000000;
-            digest[6] &= 0b01011111;
-            digest[6] |= 0b01010000;
-
-            TStringBuilder res;
-            for (int i = 0; i < std::ssize(digest); ++i) {
-                res << (EqualToOneOf(i, 4, 6, 8, 10) ? "-" : "") << Hex(digest[i], HF_FULL);
-            }
-            return res;
+            return NKikimr::NSqsTopic::GenerateMessageId(QueueUrl_->Database, FullTopicPath_, pos);
         }
 
         Ydb::Ymq::V1::Message ConvertMessage(NKikimr::NPQ::NMLP::TEvReadResponse::TMessage&& message, const TActorContext& ctx) const {

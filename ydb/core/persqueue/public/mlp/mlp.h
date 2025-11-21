@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/events/events.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
@@ -25,14 +26,7 @@ struct TMessageId {
 
 struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, EEv::EvWriteResponse> {
 
-    TEvWriteResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorDescription = {})
-        : Status(status)
-        , ErrorDescription(std::move(errorDescription))
-    {
-    }
-
-    Ydb::StatusIds::StatusCode Status;
-    TString ErrorDescription;
+    NDescriber::EStatus DescribeStatus;
 
     struct TMessage {
         size_t Index;

@@ -15,6 +15,7 @@ namespace NKikimr::NSqsTopic::V1 {
             EvPartitionActorResult,
         };
 
+        // TODO Remove
         struct TEvPartitionActorResult: public NActors::TEventLocal<TEvPartitionActorResult, EvPartitionActorResult> {
             struct TMessage {
                 i64 Offset;

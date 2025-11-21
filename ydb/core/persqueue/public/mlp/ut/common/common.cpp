@@ -149,17 +149,6 @@ void AssertReadError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::Status
     UNIT_ASSERT_VALUES_EQUAL(response->ErrorDescription, message);
 }
 
-void AssertWriteError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout) {
-    auto response = GetWriteResponse(runtime, timeout);
-    if (!response) {
-        UNIT_FAIL("Timeout");
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
-        Ydb::StatusIds::StatusCode_Name(errorCode), response->ErrorDescription);
-    UNIT_ASSERT_VALUES_EQUAL(response->ErrorDescription, message);
-}
-
 void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount) {
     TTopicClient client(setup->MakeDriver());
 

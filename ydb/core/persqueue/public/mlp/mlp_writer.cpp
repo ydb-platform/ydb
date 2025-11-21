@@ -45,14 +45,14 @@ void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     AFL_ENSURE(topics.size() == 1)("s", topics.size());
 
     auto& topic = topics.begin()->second;
+    DescribeStatus = topic.Status;
     switch(topic.Status) {
         case NDescriber::EStatus::SUCCESS: {
             TopicInfo = topic.Info;
             return DoWrite();
         }
         default: {
-            ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
-                NDescriber::Description(Settings.TopicName, topic.Status));
+            ReplyErrorAndDie();
         }
     }
 }
@@ -237,9 +237,6 @@ bool TWriterActor::OnUnhandledException(const std::exception& exc) {
         << TBackTrace::FromCurrentException().PrintToString());
 
     PendingRequests = 0;
-
-    ResponseStatus = Ydb::StatusIds::INTERNAL_ERROR;
-    ErrorMessage = TStringBuilder() << "Unhandled exception: " << exc.what();
     ReplyIfPossible();
 
     return true;
@@ -258,10 +255,7 @@ bool TWriterActor::IsSuccess(const NKikimrClient::TResponse& record) {
     return true;
 }
 
-void TWriterActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    ResponseStatus = errorCode;
-    ErrorMessage = std::move(errorMessage);
-
+void TWriterActor::ReplyErrorAndDie() {
     PendingRequests = 0;
     ReplyIfPossible();
 }
@@ -271,7 +265,8 @@ void TWriterActor::ReplyIfPossible() {
         return;
     }
 
-    auto response = std::make_unique<TEvWriteResponse>(ResponseStatus, std::move(ErrorMessage));
+    auto response = std::make_unique<TEvWriteResponse>();
+    response->DescribeStatus = DescribeStatus;
     for (auto& message : PendingMessages) {
         std::optional<TMessageId> messageId;
         if (message.Status == Ydb::StatusIds::SUCCESS) {

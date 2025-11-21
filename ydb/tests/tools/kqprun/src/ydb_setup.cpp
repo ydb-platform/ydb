@@ -560,21 +560,25 @@ private:
 private:
     void FillQueryRequest(const TRequestOptions& query, NKikimrKqp::EQueryType type, ui32 targetNodeIndex, NKikimrKqp::TEvQueryRequest& event) {
         event.SetTraceId(query.TraceId);
-        event.SetUserToken(NACLib::TUserToken(
-            Settings_.YqlToken,
-            query.UserSID,
-            query.GroupSIDs ? *query.GroupSIDs : TVector<NACLib::TSID>{GetRuntime()->GetAppData(targetNodeIndex).AllAuthenticatedUsers}
-        ).SerializeAsString());
+
+        if (query.UserSID) {
+            event.SetUserToken(NACLib::TUserToken(
+                Settings_.YqlToken,
+                query.UserSID,
+                query.GroupSIDs ? *query.GroupSIDs : TVector<NACLib::TSID>{GetRuntime()->GetAppData(targetNodeIndex).AllAuthenticatedUsers}
+            ).SerializeAsString());
+        }
 
         const auto& database = GetDatabasePath(query.Database);
         auto request = event.MutableRequest();
         request->SetQuery(query.Query);
         request->SetType(type);
         request->SetAction(query.Action);
-        request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
+        request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
         request->SetDatabase(database);
         request->SetPoolId(query.PoolId);
         request->MutableYdbParameters()->insert(query.Params.begin(), query.Params.end());
+        request->MutableQueryCachePolicy()->set_keep_in_cache(IsIn({NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}, type));
 
         if (query.Timeout) {
             request->SetTimeoutMs(query.Timeout.MilliSeconds());

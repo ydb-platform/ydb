@@ -706,7 +706,7 @@ TExprNode::TPtr PropagateCoalesceWithConstIntoLogicalOps(const TExprNode::TPtr& 
 bool IsPullJustFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
     static const char optName[] = "PullJustFromLogicalOps";
     YQL_ENSURE(optCtx.Types);
-    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+    return !IsOptimizerDisabled<optName>(*optCtx.Types);
 }
 
 TExprNode::TPtr PullJustFromLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx, const TOptimizeContext& optCtx) {
@@ -3468,7 +3468,8 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
         .FinishHandler(finishLambda)
         .SaveHandler(saveLambda)
         .LoadHandler(loadLambda)
-        .template WatermarkMode<TCoAtom>().Build(ToString(false));
+        .WatermarkMode<TCoAtom>().Build(ToString(false))
+        .HoppingColumn<TCoAtom>().Build(hopTraits.Column);
 
     return Build<TCoPartitionsByKeys>(ctx, pos)
         .Input(aggregate.Input())
@@ -3481,10 +3482,10 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
         .SortKeySelectorLambda(timeExtractorLambda)
         .ListHandlerLambda()
             .Args(streamArg)
-            .template Body<TCoForwardList>()
+            .Body<TCoForwardList>()
                 .Stream(Build<TCoMap>(ctx, pos)
                     .Input(multiHoppingCoreBuilder
-                        .template Input<TCoIterator>()
+                        .Input<TCoIterator>()
                             .List(streamArg)
                             .Build()
                         .Done())
@@ -3844,8 +3845,8 @@ TExprNode::TPtr OptimizeMerge(const TExprNode::TPtr& node, TExprContext& ctx, TO
 
 bool IsEarlyExpandOfSkipNullAllowed(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const TString skipNullFlags = to_lower(TString("EarlyExpandSkipNull"));
-    return optCtx.Types->OptimizerFlags.contains(skipNullFlags);
+    static const char optName[] = "EarlyExpandSkipNull";
+    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
 }
 
 TExprNode::TPtr ReplaceFuncWithImpl(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -3949,6 +3950,12 @@ TExprNode::TPtr MemberOverFilterSkipNullMembers(const TExprNode::TPtr& node, TEx
     }
 
     return node;
+}
+
+bool IsSqlWithNothingOrNullOpsEnabled(const TOptimizeContext& optCtx) {
+    static const char optName[] = "SqlInWithNothingOrNull";
+    YQL_ENSURE(optCtx.Types);
+    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
 }
 
 } // namespace
@@ -4473,7 +4480,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             .Build();
     };
 
-    map["SqlIn"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
+    map["SqlIn"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& opCtx) {
         auto collection = node->HeadPtr();
         auto lookup = node->ChildPtr(1);
         auto options = node->ChildPtr(2);
@@ -4592,10 +4599,12 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             }
         }
 
-        if (isAnsi) {
-            auto lookupTypeNoOpt = RemoveAllOptionals(lookup->GetTypeAnn());
-            if (lookupTypeNoOpt->GetKind() == ETypeAnnotationKind::Null) {
-                YQL_CLOG(DEBUG, Core) << "NULL IN";
+        auto lookupTypeNoOpt = RemoveAllOptionals(lookup->GetTypeAnn());
+        if ((lookupTypeNoOpt->GetKind() == ETypeAnnotationKind::Null) ||
+            (lookup->IsCallable("Nothing") && IsSqlWithNothingOrNullOpsEnabled(opCtx))) {
+            const auto logString = lookupTypeNoOpt->GetKind() == ETypeAnnotationKind::Null ? "NULL IN" : "Nothing IN";
+            if (isAnsi) {
+                YQL_CLOG(DEBUG, Core) << logString;
                 return ctx.Builder(node->Pos())
                     .Callable("If")
                         .Add(0, BuildSqlInCollectionEmptyPred(TCoSqlIn(node), ctx))
@@ -4604,6 +4613,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                         .Seal()
                     .Seal()
                     .Build();
+            } else if (IsSqlWithNothingOrNullOpsEnabled(opCtx)) {
+                YQL_CLOG(DEBUG, Core) << logString;
+                return MakeBoolNothing(node->Pos(), ctx);
             }
         }
 

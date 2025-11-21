@@ -634,7 +634,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(0)] = &bridgeInfo->Piles[0];
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(1)] = &bridgeInfo->Piles[1];
 
-        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), nullptr, false, nullptr);
+        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, nullptr);
         nodeWardenStorageConfig->BridgeInfo = bridgeInfo;
         runtime.Send(new IEventHandle(GetNameserviceActorId(), runtime.AllocateEdgeActor(), nodeWardenStorageConfig));
 
@@ -702,6 +702,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         TLocationFilter& Pile(const TString& name) {
             Filters.emplace_back([=](auto&& location) { return location.storage().pool().group().pile().name() == name || location.compute().pile().name() == name; });
+            return *this;
+        }
+
+        TLocationFilter& TabletType(const TString& type) {
+            Filters.emplace_back([=](auto&& location) { return location.compute().tablet().type() == type; });
             return *this;
         }
     };
@@ -2233,7 +2238,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(0)] = &bridgeInfo->Piles[0];
 
-        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), nullptr, false, nullptr);
+        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, nullptr);
         nodeWardenStorageConfig->BridgeInfo = bridgeInfo;
         runtime.Send(new IEventHandle(GetNameserviceActorId(), runtime.AllocateEdgeActor(), nodeWardenStorageConfig));
 
@@ -2285,6 +2290,51 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT(bscTabletIssueFoundInResult);
 
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("static").Pile("pile0"));
+    }
+
+    Y_UNIT_TEST(TestNoSchemeShardResponse) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        auto &dynamicNameserviceConfig = runtime.GetAppData().DynamicNameserviceConfig;
+        dynamicNameserviceConfig->MaxStaticNodeId = runtime.GetNodeId(server.StaticNodes() - 1);
+        dynamicNameserviceConfig->MinDynamicNodeId = runtime.GetNodeId(server.StaticNodes());
+        dynamicNameserviceConfig->MaxDynamicNodeId = runtime.GetNodeId(server.StaticNodes() + server.DynamicNodes() - 1);
+
+        TBlockEvents<TEvSchemeShard::TEvDescribeScheme> blockSS(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        request->Database = "/Root";
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+
+        Ctest << result.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::EMERGENCY);
+        CheckHcResultHasIssuesWithStatus(result, "SYSTEM_TABLET", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().TabletType("SchemeShard"));
+
+        UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
+        const auto &database_status = result.database_status(0);
+
+        UNIT_ASSERT_VALUES_EQUAL(database_status.name(), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::RED);
+
+        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().overall(), Ydb::Monitoring::StatusFlag::RED);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREY);
     }
 
     Y_UNIT_TEST(ShardsLimit999) {
@@ -2994,7 +3044,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(2)] = &bridgeInfo->Piles[1];
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(3)] = &bridgeInfo->Piles[1];
 
-        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), nullptr, false, nullptr);
+        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, nullptr);
         nodeWardenStorageConfig->BridgeInfo = bridgeInfo;
         runtime.Send(new IEventHandle(GetNameserviceActorId(), runtime.AllocateEdgeActor(), nodeWardenStorageConfig));
 
@@ -3040,7 +3090,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
 
         Ctest << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "CLOCK_SKEW", Ydb::Monitoring::StatusFlag::YELLOW, 1, TLocationFilter().Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "CLOCK_SKEW", Ydb::Monitoring::StatusFlag::YELLOW, 2, TLocationFilter().Pile("pile0"));
     }
 }
 }

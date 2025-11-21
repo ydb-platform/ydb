@@ -118,6 +118,10 @@ enum class ERequestType: size_t {
     BRIDGE_GETCLUSTERSTATE,
     BRIDGE_UPDATECLUSTERSTATE,
 
+    // TestShard requests
+    TESTSHARD_CREATETESTSHARD,
+    TESTSHARD_DELETETESTSHARD,
+
     REQUEST_TYPES_CNT, // Add new types above this line
 };
 

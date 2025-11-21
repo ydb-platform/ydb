@@ -1,3 +1,5 @@
+#pragma clang system_header
+
 //
 // coroutine.hpp
 // ~~~~~~~~~~~~~

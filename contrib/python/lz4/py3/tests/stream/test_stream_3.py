@@ -71,6 +71,7 @@ def data(request):
     return request.param
 
 
+@pytest.mark.thread_unsafe
 def test_block_decompress_mem_usage(data, buffer_size):
     kwargs = {
         'strategy': "double_buffer",

@@ -5,12 +5,15 @@ on:
     - cron: "30 23 * * *"  # At 23:30 every day
   workflow_dispatch:
     inputs:
+      pull_request_input:
+        description: 'Pull request, overrides default branches, use with pull/* prefix, ex. pull/12345'
+        required: false
+        default: ''
       use_default_branches:
         description: 'If true, start main and all current stable branches. If false, start only the selected branch.'
         type: boolean
         required: false
         default: true
-
 jobs:
   main:
     name: Regression-run_Large
@@ -23,6 +26,6 @@ jobs:
     with:
       test_targets: ydb/
       test_size: large
-      branches: ${{ startsWith(inputs.use_default_branches, 'false') && github.ref_name || '' }}
+      branches: ${{ inputs.pull_request_input || (startsWith(inputs.use_default_branches, 'false') && github.ref_name || '') }}
       branches_config_path: '.github/config/stable_tests_branches.json'
       build_preset: ${{ matrix.build_preset }}

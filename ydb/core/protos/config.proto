@@ -183,6 +183,7 @@ message TStaticNameserviceConfig {
     optional bool KeepSocket = 6 [default = true];
     optional bool ForceTcp = 7 [default = false];
     optional EDnsResolverType DnsResolverType = 8 [default = ARES];
+    optional bool AddTrailingDot = 9 [default = false];
 }
 
 message TDynamicNameserviceConfig {
@@ -502,6 +503,9 @@ message TInterconnectConfig {
     optional bool ValidateIncomingPeerViaDirectLookup = 44;
     optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
     optional ESocketSendOptimization SocketSendOptimization = 51 [default = IC_SO_DISABLED];
+    optional bool UseRdma = 52;
+    optional uint32 RdmaMaxWr = 53 [default = 4096];
+    optional bool RdmaChecksum = 54 [default = true];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -808,6 +812,7 @@ message TGRpcConfig {
     }
 
     optional YdbGrpcCompressionLevel DefaultCompressionLevel = 31 [default = YDB_GRPC_COMPRESS_LEVEL_NONE];
+    optional TXdsBootstrap XdsBootstrap = 32;
 
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
@@ -823,6 +828,44 @@ message TGRpcConfig {
     optional string EndpointId = 108;
 
     repeated TGRpcConfig ExtEndpoints = 200; // run specific services on separate endpoints
+
+    // TXdsBootstrap is used to configure XDS (Envoy's discovery service) support for gRPC endpoints.
+    // This enables dynamic service discovery, load balancing, and configuration via an XDS server.
+    // Configure these fields when you want your gRPC endpoints to use XDS for advanced traffic management.
+    // For more details, see: https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/bootstrap/v3/bootstrap.proto
+    // Format XDS bootstrap file: https://grpc.github.io/grpc/core/md_doc_grpc_xds_bootstrap_format.html
+    message TXdsBootstrap {
+        // TXdsServer describes an XDS server to connect to for configuration and service discovery.
+        message TXdsServer {
+            // TChannelCred specifies the credentials used to connect to the XDS server.
+            message TChannelCred {
+                optional string Type = 1; // Type of channel credentials (e.g., "insecure", "tls")
+                optional string Config = 2; // String in JSON format containing config for the type
+            }
+
+            optional string ServerUri = 1; // URI of the XDS server (e.g., "xds.example.com:443")
+            repeated TChannelCred ChannelCreds = 2; // Credentials for connecting to the XDS server
+            repeated string ServerFeatures = 3; // List of supported XDS server features (e.g., "xds_v3")
+        }
+
+        // TNode describes the node identity and locality information sent to the XDS server.
+        message TNode {
+            // TLocality specifies the region, zone, and subzone of the node.
+            message TLocality {
+                optional string Region = 1;
+                optional string Zone = 2;
+                optional string SubZone = 3;
+            }
+
+            optional string Id = 1; // Unique node identifier (e.g., "node-123")
+            optional string Cluster = 2; // Cluster name (e.g., "my-grpc-cluster")
+            optional TLocality Locality = 3; // Locality information for the node
+            optional string Meta = 4; // String in JSON format containing opaque metadata extending the node identifier. This field will be converted to 'metadata' in XDS bootstrap config
+        }
+
+        repeated TXdsServer XdsServers = 1; // List of XDS servers to connect to
+        optional TNode Node = 2; // Node identity and locality information
+    }
 }
 
 message TDynamicNodeConfig {
@@ -852,6 +895,7 @@ message THttpProxyConfig {
     optional bool YandexCloudMode = 11 [default = false];
     optional bool DataStreamsEnabled = 12 [default = true];
     optional bool YmqEnabled = 13 [default = false];
+    optional bool SqsTopicEnabled = 14 [default = false];
 }
 
 message TS3ProxyResolverConfig {
@@ -1745,6 +1789,13 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 10000000000, // 10 GB/s
             DefaultValue: 0 }];
+
+        optional uint64 EnablePhantomFlagStorage = 38 [(ControlOptions) = {
+            Description: "Enable new FullSync protocol which allows to send PhantomFlags",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {
@@ -1753,6 +1804,12 @@ message TImmediateControlsConfig {
             MinValue: 8,
             MaxValue: 4096,
             DefaultValue: 256 }];
+
+        optional uint64 MaxTxInFly = 2 [(ControlOptions) = {
+            Description: "Maximum tx queue size for all tablets",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 10000 }];
     }
 
     message TDSProxyControls {
@@ -2063,6 +2120,7 @@ message TAuditConfig {
         optional EFormat Format = 1 [default = JSON];
         optional string LogName = 2;
         optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
+        optional TUAClientConfig UAClientConfig = 4; // If not specified, the configuration is taken from common TLogConfig section
     }
 
     message TLogClassConfig {
@@ -2243,10 +2301,10 @@ message THiveConfig {
     reserved 66;
     optional double ObjectImbalanceToBalance = 67 [default = 0.02];
     optional EHiveChannelBalanceStrategy ChannelBalanceStrategy = 68 [default = HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM];
-    optional uint64 MaxChannelHistorySize = 69 [default = 200];
+    optional uint64 MaxChannelHistorySize = 69 [default = 10];
     optional uint64 StorageInfoRefreshFrequency = 70 [default = 600000]; // send a query to BSC every x milliseconds
-    optional double MinStorageScatterToBalance = 71 [default = 999]; // storage balancer trigger is disabled by default
-    optional double MinGroupUsageToBalance = 72 [default = 0.1];
+    optional double MinStorageScatterToBalance = 71 [default = 0.5]; // storage balancer trigger threshold (enabled by default)
+    optional double MinGroupUsageToBalance = 72 [default = 0.05];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
     optional bool EnableDestroyOperations = 74 [default = false];
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
@@ -2367,6 +2425,13 @@ message TColumnShardConfig {
     optional bool CombineChunksInResult = 54 [default = true];
     optional bool EnableDiagnostics = 55 [default = true];
     optional bool EnableParallelCompaction = 56 [default = true];
+
+    message TStatistics {
+        optional uint32 ReportBaseStatisticsPeriodMs = 1 [default = 60000];
+        optional uint32 ReportExecutorStatisticsPeriodMs = 2 [default = 60000];
+    }
+
+    optional TStatistics Statistics = 57;
 }
 
 message TSchemeShardConfig {
@@ -2697,6 +2762,28 @@ message TAwsCompatibilityConfig {
     optional string AwsRegion = 1;
 }
 
+message TAwsClientConfig {
+    message TLogConfig {
+        // Equivalent of Aws::Utils::Logging::LogLevel.
+        // Off = 0 (default)
+        // Fatal = 1
+        // Error = 2
+        // Warn = 3
+        // Info = 4
+        // Debug = 5
+        // Trace = 6
+        optional int32 LogLevel = 1;
+
+        // By default, logs will be written to standard output if they are enabled.
+        // To write to a file in the format YYYY-MM-DD-HH.log, specify the filename prefix.
+        // The resulting log file is '<FilenamePrefix> + YYYY-MM-DD-HH.log'
+        optional string FilenamePrefix = 2;
+    }
+
+    // Logging options
+    optional TLogConfig LogConfig = 1;
+}
+
 message TMetadataCacheConfig {
     optional uint64 RefreshPeriodMs = 1 [default = 15000];
 }
@@ -2704,6 +2791,7 @@ message TMetadataCacheConfig {
 message TShutdownConfig {
     optional uint32 MinDelayBeforeShutdownSeconds = 1;
     optional uint32 DrainTimeoutSeconds = 2;
+    optional uint32 CheckForStopIntervalMilliseconds = 3;
 }
 
 message TBridgeConfig {
@@ -2745,6 +2833,7 @@ message TSystemTabletBackupConfig {
     oneof Backend {
         TFilesystemBackend Filesystem = 1;
     }
+    repeated fixed64 ExcludeTabletIds = 2;
 }
 
 message TAppConfig {
@@ -2854,6 +2943,9 @@ message TAppConfig {
     optional TStatisticsConfig StatisticsConfig = 113;
     optional TMetricsConfig MetricsConfig = 114;
     optional TSystemTabletBackupConfig SystemTabletBackupConfig = 115;
+
+    // Built-in AWS client options (used, for example, to interact with S3).
+    optional TAwsClientConfig AwsClientConfig = 116;
 }
 
 message TYdbVersion {

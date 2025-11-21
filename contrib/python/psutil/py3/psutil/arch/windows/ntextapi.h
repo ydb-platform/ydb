@@ -5,14 +5,11 @@
  * Define Windows structs and constants which are considered private.
  */
 
+// clang-format off
 #if !defined(__NTEXTAPI_H__)
 #define __NTEXTAPI_H__
 #include <winternl.h>
 #include <iphlpapi.h>
-
-#ifndef PSUTIL_MAYBE_EXTERN
-#define PSUTIL_MAYBE_EXTERN extern
-#endif
 
 typedef LONG NTSTATUS;
 
@@ -664,6 +661,12 @@ PSUTIL_MAYBE_EXTERN ULONGLONG (CALLBACK *_GetTickCount64) (
 
 #define GetTickCount64 _GetTickCount64
 
+PSUTIL_MAYBE_EXTERN VOID(CALLBACK *_QueryInterruptTime) (
+    PULONGLONG lpInterruptTime
+);
+
+#define QueryInterruptTime _QueryInterruptTime
+
 PSUTIL_MAYBE_EXTERN NTSTATUS (NTAPI *_NtQueryObject) (
     HANDLE Handle,
     OBJECT_INFORMATION_CLASS ObjectInformationClass,
@@ -709,3 +712,4 @@ PSUTIL_MAYBE_EXTERN ULONG (WINAPI *_RtlNtStatusToDosErrorNoTeb) (
 #define RtlNtStatusToDosErrorNoTeb _RtlNtStatusToDosErrorNoTeb
 
 #endif // __NTEXTAPI_H__
+// clang-format on

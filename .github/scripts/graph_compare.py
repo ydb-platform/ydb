@@ -6,8 +6,7 @@
 
 import os
 import tempfile
-import sys
-import json
+import argparse
 
 
 def exec(command: str):
@@ -15,24 +14,15 @@ def exec(command: str):
     rc = os.system(command)
     if rc != 0:
         print(f'failed, return code {rc}')
-        exit(rc)
+        exit(1)
 
 
 def log(msg: str):
     print(msg)
 
 
-def do_compare():
-    if len(sys.argv) < 3:
-        print('base or head commit not set')
-        exit(1)
-    base_commit = sys.argv[1]
-    head_commit = sys.argv[2]
-
-    ya_make_command = os.getenv('YA_MAKE_COMMAND')
-    if not ya_make_command:
-        print('YA_MAKE_COMMAND not set')
-        exit(1)
+def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: str, head_commit: str) -> None:
+    ya = ya_make_command.split(' ')[0]
 
     workdir = os.getenv('workdir')
     if not workdir:
@@ -42,57 +32,41 @@ def do_compare():
     log('Checkout base commit...')
     exec(f'git checkout {base_commit}')
     log('Build graph for base commit...')
-    exec(f'{ya_make_command} ydb -k -A --cache-tests -Gj0 > {workdir}/graph_base.json')
+    exec(f'{ya_make_command} ydb -k --cache-tests --save-graph-to {workdir}/graph_base.json --save-context-to {workdir}/context_base.json')
 
     log('Checkout head commit...')
     exec(f'git checkout {head_commit}')
     log('Build graph for head commit...')
-    exec(f'{ya_make_command} ydb -k -A --cache-tests -Gj0 > {workdir}/graph_head.json')
+    exec(f'{ya_make_command} ydb -k --cache-tests --save-graph-to {workdir}/graph_head.json --save-context-to {workdir}/context_head.json')
 
     log('Generate diff graph...')
-    exec(f'./ya tool ygdiff --old {workdir}/graph_base.json --new {workdir}/graph_head.json --cut {workdir}/graph_diff.json --dump-uids-for-affected-nodes {workdir}/affected_uids.json')
+    exec(f'{ya} tool ygdiff --old {workdir}/graph_base.json --new {workdir}/graph_head.json --cut {graph_path} --dump-uids {workdir}/uids.json')
 
-    log('Read diff graph...')
-    with open(f'{workdir}/graph_diff.json', 'r') as f:
-        diff_graph = json.load(f)
-
-    with open(f'{workdir}/affected_uids.json', 'r') as f:
-        uids = set(json.load(f))
-
-    tests = set()
-    modules = set()
-
-    log('Scan diff graph...')
-    for target in diff_graph.get('graph', []):
-        if target.get('uid') not in uids:
-            continue
-        if target.get('node-type') == 'test':
-            path = target.get('kv', {}).get('path')
-            if path is not None:
-                tests.add(os.path.dirname(path))
-        tp = target.get('target_properties')
-        if (
-            tp is not None
-            and tp.get('module_type') is not None
-            and tp.get('module_dir', '').startswith('ydb')
-            and tp.get('module_tag', '').find('proto') < 0
-        ):
-            modules.add(tp.get('module_dir'))
-
-    log('Create ya.make')
-
-    with open('ya.make', 'w') as ya_make:
-        ya_make.write('RECURSE_FOR_TESTS(\n')
-        for test in sorted(tests):
-            ya_make.write(f'    {test}\n')
-        ya_make.write(')\n\nRECURSE (\n')
-        for module in sorted(modules):
-            ya_make.write(f'    {module}\n')
-        ya_make.write(')\n')
-    log('ya.make content:')
-    exec('cat ya.make')
-    exit(0)
+    log('Generate diff context...')
+    exec(f'{ya} tool context_difference {workdir}/context_base.json {workdir}/context_head.json {context_path} {workdir}/uids.json {graph_path}')
 
 
 if __name__ == '__main__':
-    do_compare()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--result-graph-path', '-g', type=str, dest='result_graph_path', required=True,
+        help='Path to result graph'
+    )
+    parser.add_argument(
+        '--result-context-path', '-c', type=str, dest='result_context_path', required=True,
+        help='Path to result context'
+    )
+    parser.add_argument(
+        '--ya-make-command', '-y', type=str, dest='ya_make_command', required=True,
+        help='Ya make command'
+    )
+    parser.add_argument(dest='base_commit', help='Base commit')
+    parser.add_argument(dest='head_commit', help='Head commit')
+    opts = parser.parse_args()
+    main(
+        ya_make_command=opts.ya_make_command,
+        graph_path=opts.result_graph_path,
+        context_path=opts.result_context_path,
+        base_commit=opts.base_commit,
+        head_commit=opts.head_commit
+    )

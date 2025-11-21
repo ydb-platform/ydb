@@ -562,6 +562,7 @@ public:
                         .Columns<TCoVoid>().Build()
                         .Ranges<TCoVoid>().Build()
                         .Stat<TCoVoid>().Build()
+                        .QLFilter<TCoVoid>().Build()
                         .Done();
                     tables.push_back(path);
                 }
@@ -1105,6 +1106,7 @@ private:
                 .Columns<TCoVoid>().Build()
                 .Ranges<TCoVoid>().Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
             .Build()
             .Done().Ptr();
         res->ChildRef(4) = Build<TCoNameValueTupleList>(ctx, read.Pos())
@@ -1170,6 +1172,7 @@ private:
                 .Columns<TCoVoid>().Build()
                 .Ranges<TCoVoid>().Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
                 .Done();
             tables.push_back(path);
         }

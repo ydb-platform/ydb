@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:10:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    	SELECT $serialize(ReservoirSampling::Add(ReservoirSampling::Create("abc", 123ul), 123));
+	^
+        <tmp_path>/program.sql:<main>:10:8: Error: At function: SqlCall, At tuple, At function: PositionalArgs
+        	SELECT $serialize(ReservoirSampling::Add(ReservoirSampling::Create("abc", 123ul), 123));
+	       ^
+            <tmp_path>/program.sql:<main>:10:38: Error: At function: Apply, At function: Udf, At ReservoirSampling.Add
+            	SELECT $serialize(ReservoirSampling::Add(ReservoirSampling::Create("abc", 123ul), 123));
+	                                     ^
+                <tmp_path>/program.sql:<main>:10:38: Error: Failed to find UDF function: ReservoirSampling.Add, reason: Error: Module: ReservoirSampling, function: Add, error: Expected Resource<'ReservoirSampling_Int32> as first argument, but gotResource<'ReservoirSampling_String'>
+                	SELECT $serialize(ReservoirSampling::Add(ReservoirSampling::Create("abc", 123ul), 123));
+	                                     ^

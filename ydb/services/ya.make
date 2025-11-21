@@ -22,7 +22,9 @@ RECURSE(
     persqueue_v1
     rate_limiter
     replication
+    sqs_topic
     tablet
+    test_shard
     view
     ydb
     ymq

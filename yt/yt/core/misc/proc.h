@@ -224,7 +224,7 @@ using TNetworkInterfaceStatisticsMap = THashMap<TString, TNetworkInterfaceStatis
 TNetworkInterfaceStatisticsMap GetNetworkInterfaceStatistics();
 
 void SendSignal(const std::vector<int>& pids, const TString& signalName);
-std::optional<int> FindSignalIdBySignalName(const TString& signalName);
+std::optional<int> FindSignalIdBySignalName(std::string_view signalName);
 void ValidateSignalName(const TString& signalName);
 
 ////////////////////////////////////////////////////////////////////////////////

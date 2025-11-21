@@ -1254,7 +1254,7 @@ size_t GetMaxFamilySize(const std::unordered_map<size_t, const std::unique_ptr<T
 
 void TConsumer::Balance(const TActorContext& ctx) {
     PQ_LOG_D("balancing. Sessions=" << Sessions.size() << ", Families=" << Families.size()
-            << ", UnradableFamilies=" << UnreadableFamilies.size() << " [" << DebugStr(UnreadableFamilies)
+            << ", UnreadableFamilies=" << UnreadableFamilies.size() << " [" << DebugStr(UnreadableFamilies)
             << "], RequireBalancing=" << FamiliesRequireBalancing.size() << " [" << DebugStr(FamiliesRequireBalancing) << "]");
 
     if (Sessions.empty()) {
@@ -1359,6 +1359,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
 
             if (!family->SpecialSessions.contains(family->Session->Pipe)) {
                 family->Release(ctx);
+                it = FamiliesRequireBalancing.erase(it);
                 continue;
             }
 

@@ -33,10 +33,6 @@ NYdb::NRetry::TRetryOperationSettings GetRetrySettings(TDuration timeout, bool i
         .MaxTimeout(timeout);
 }
 
-TCreateSessionSettings::TCreateSessionSettings() {
-    ClientTimeout_ = TDuration::Seconds(5);
-};
-
 static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::TransactionSettings* proto)
 {
     switch (txSettings.GetMode()) {
@@ -190,6 +186,7 @@ public:
 
     TAsyncCommitTransactionResult CommitTransaction(const std::string& txId, const NYdb::NQuery::TCommitTxSettings& settings, const TSession& session) {
         using namespace Ydb::Query;
+        auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey());
         auto request = MakeRequest<Ydb::Query::CommitTransactionRequest>();
         request.set_session_id(TStringType{session.GetId()});
         request.set_tx_id(TStringType{txId});
@@ -220,7 +217,7 @@ public:
             responseCb,
             &V1::QueryService::Stub::AsyncCommitTransaction,
             DbDriverState_,
-            TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey()));
+            rpcSettings);
 
         return promise.GetFuture();
     }
@@ -229,6 +226,7 @@ public:
         const TBeginTxSettings& settings, const TSession& session)
     {
         using namespace Ydb::Query;
+        auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey());
         auto request = MakeRequest<Ydb::Query::BeginTransactionRequest>();
         request.set_session_id(TStringType{session.GetId()});
         SetTxSettings(txSettings, request.mutable_tx_settings());
@@ -261,13 +259,14 @@ public:
             responseCb,
             &V1::QueryService::Stub::AsyncBeginTransaction,
             DbDriverState_,
-            TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey()));
+            rpcSettings);
 
         return promise.GetFuture();
     }
 
     TAsyncFetchScriptResultsResult FetchScriptResultsImpl(Ydb::Query::FetchScriptResultsRequest&& request, const TFetchScriptResultsSettings& settings) {
-        using namespace Ydb::Query;
+        auto rpcSettings = TRpcRequestSettings::Make(settings);
+
         if (!settings.FetchToken_.empty()) {
             request.set_fetch_token(TStringType{settings.FetchToken_});
         }
@@ -276,7 +275,7 @@ public:
         auto promise = NThreading::NewPromise<TFetchScriptResultsResult>();
 
         auto extractor = [promise]
-            (FetchScriptResultsResponse* response, TPlainStatus status) mutable {
+            (Ydb::Query::FetchScriptResultsResponse* response, TPlainStatus status) mutable {
                 if (response) {
                     NYdb::NIssue::TIssues opIssues;
                     NYdb::NIssue::IssuesFromMessage(response->issues(), opIssues);
@@ -300,13 +299,10 @@ public:
                 }
             };
 
-        TRpcRequestSettings rpcSettings;
-        rpcSettings.ClientTimeout = TDuration::Seconds(60);
-
-        Connections_->Run<V1::QueryService, FetchScriptResultsRequest, FetchScriptResultsResponse>(
+        Connections_->Run<Ydb::Query::V1::QueryService, Ydb::Query::FetchScriptResultsRequest, Ydb::Query::FetchScriptResultsResponse>(
             std::move(request),
             extractor,
-            &V1::QueryService::Stub::AsyncFetchScriptResults,
+            &Ydb::Query::V1::QueryService::Stub::AsyncFetchScriptResults,
             DbDriverState_,
             rpcSettings);
 
@@ -383,7 +379,7 @@ public:
         rpcSettings);
     }
 
-    TAsyncCreateSessionResult CreateAttachedSession(TDuration timeout) {
+    TAsyncCreateSessionResult CreateAttachedSession(const TRpcRequestSettings& rpcSettings) {
         using namespace Ydb::Query;
 
         Ydb::Query::CreateSessionRequest request;
@@ -408,9 +404,6 @@ public:
             }
         };
 
-        TRpcRequestSettings rpcSettings;
-        rpcSettings.ClientTimeout = timeout;
-
         Connections_->Run<V1::QueryService, CreateSessionRequest, CreateSessionResponse>(
             std::move(request),
             extractor,
@@ -422,14 +415,14 @@ public:
     }
 
     TAsyncCreateSessionResult GetSession(const TCreateSessionSettings& settings) {
-        using namespace NSessionPool;
+        auto rpcSettings = TRpcRequestSettings::Make(settings);
 
-        class TQueryClientGetSessionCtx : public IGetSessionCtx {
+        class TQueryClientGetSessionCtx : public NSessionPool::IGetSessionCtx {
         public:
-            TQueryClientGetSessionCtx(std::shared_ptr<TQueryClient::TImpl> client, TDuration timeout)
+            TQueryClientGetSessionCtx(std::shared_ptr<TQueryClient::TImpl> client, const TRpcRequestSettings& settings)
                 : Promise(NThreading::NewPromise<TCreateSessionResult>())
                 , Client(client)
-                , ClientTimeout(timeout)
+                , RpcSettings(settings)
             {}
 
             TAsyncCreateSessionResult GetFuture() {
@@ -454,23 +447,37 @@ public:
             }
 
             void ReplyNewSession() override {
-                Client->CreateAttachedSession(ClientTimeout).Subscribe(
+                Client->CreateAttachedSession(RpcSettings).Subscribe(
                     [promise{std::move(Promise)}](TAsyncCreateSessionResult future) mutable
                 {
                     promise.SetValue(future.ExtractValue());
                 });
             }
 
+            void ScheduleOnDeadlineWaiterCleanup() override {
+                Client->Connections_->ScheduleDelayedTask(
+                    [client = Client]() {
+                        client->SessionPool_.ClearOldWaiters();
+                    },
+                    GetDeadline()
+                );
+            }
+
+            TDeadline GetDeadline() const override {
+                return std::min(RpcSettings.Deadline, TDeadline::AfterDuration(NSessionPool::MAX_WAIT_SESSION_TIMEOUT));
+            }
+
         private:
             void ScheduleReply(TCreateSessionResult val) {
                 Promise.SetValue(std::move(val));
             }
+
             NThreading::TPromise<TCreateSessionResult> Promise;
             std::shared_ptr<TQueryClient::TImpl> Client;
-            TDuration ClientTimeout;
+            const TRpcRequestSettings RpcSettings;
         };
 
-        auto ctx = std::make_unique<TQueryClientGetSessionCtx>(shared_from_this(), settings.ClientTimeout_);
+        auto ctx = std::make_unique<TQueryClientGetSessionCtx>(shared_from_this(), rpcSettings);
         auto future = ctx->GetFuture();
         SessionPool_.GetSession(std::move(ctx));
         return future;

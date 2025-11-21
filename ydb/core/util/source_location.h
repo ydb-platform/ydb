@@ -11,7 +11,7 @@ using TSourceLocation = std::source_location;
 
 constexpr inline bool HasSourceLocation = true;
 
-} // namespace NCompat
+} // namespace NKikimr::NCompat
 #else
 namespace NKikimr::NCompat {
 
@@ -30,15 +30,19 @@ struct TSourceLocation {
     constexpr uint_least32_t line() const noexcept {
         return 0;
     }
+
+    constexpr const char* function_name() const noexcept {
+        return "";
+    }
 };
 
 constexpr inline bool HasSourceLocation = false;
 
-} // namespace NCompat
+} // namespace NKikimr::NCompat
 #endif
 
 namespace NKikimr::NUtil {
 
 TString TrimSourceFileName(const char* fileName);
 
-} // namespace NKikimrNUtil
+} // namespace NKikimr::NUtil

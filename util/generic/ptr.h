@@ -381,7 +381,7 @@ private:
     T* T_;
 };
 
-template <typename T, typename... Args>
+template <typename T, typename... Args, class = std::enable_if_t<std::is_constructible_v<T, Args...>>>
 [[nodiscard]] THolder<T> MakeHolder(Args&&... args) {
     return THolder<T>(new T(std::forward<Args>(args)...));
 }
@@ -405,13 +405,11 @@ public:
     inline void Ref(intptr_t d) noexcept {
         auto resultCount = Counter_.Add(d);
         Y_ASSERT(resultCount >= d);
-        (void)resultCount;
     }
 
     inline void Ref() noexcept {
         auto resultCount = Counter_.Inc();
         Y_ASSERT(resultCount != 0);
-        (void)resultCount;
     }
 
     inline void UnRef(intptr_t d) noexcept {
@@ -433,7 +431,6 @@ public:
     inline void DecRef() noexcept {
         auto resultCount = Counter_.Dec();
         Y_ASSERT(resultCount >= 0);
-        (void)resultCount;
     }
 
     TRefCounted(const TRefCounted&)

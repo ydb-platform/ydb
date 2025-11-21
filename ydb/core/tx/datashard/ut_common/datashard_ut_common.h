@@ -10,6 +10,8 @@
 #include <ydb/core/testlib/minikql_compile.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/datashard/datashard_active_transaction.h>
+#include <ydb/library/ut/ut.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -808,7 +810,8 @@ void ExecSQL(Tests::TServer::TPtr server,
              TActorId sender,
              const TString &sql,
              bool dml = true,
-             Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS);
+             Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS,
+             NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext());
 
 TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& databaseName, ui32 nodeIndex = 0);
 
@@ -866,7 +869,7 @@ class TEvWriteRows : public std::vector<TEvWriteRow> {
     }
 };
 
-void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values);
+void UploadRows(TTestActorRuntime& runtime, const TString& database, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values);
 
 struct TSendProposeToCoordinatorOptions {
     const ui64 TxId;

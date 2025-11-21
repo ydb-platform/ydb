@@ -46,8 +46,8 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
                 });
             }
         }
-        
-        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::ExecuteAnalyze. Table OperationId " << Self->NavigateAnalyzeOperationId << ", PathId " << Self->NavigatePathId 
+
+        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::ExecuteAnalyze. Table OperationId " << Self->NavigateAnalyzeOperationId << ", PathId " << Self->NavigatePathId
             << ", AnalyzedShards " << forceTraversalTable->AnalyzedShards.size());
 
         Self->UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::AnalyzeStarted, Self->NavigateAnalyzeOperationId, *forceTraversalTable,  db);
@@ -112,7 +112,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
         case ENavigateType::Traversal:
             return ExecuteTraversal(entry, db);
         };
-        
+
     }
 
     void CompleteTraversal(const TActorContext& ctx) {
@@ -141,6 +141,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
         };
 
         Self->NavigateAnalyzeOperationId.clear();
+        Self->NavigateDatabase = "";
         Self->NavigatePathId = {};
     }
 };

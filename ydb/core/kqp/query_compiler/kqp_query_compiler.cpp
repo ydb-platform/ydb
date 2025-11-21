@@ -230,6 +230,16 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
     }
 }
 
+void FillExternalSource(const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyTable& tableProto) {
+    THashSet<TStringBuf> columns;
+    columns.reserve(tableMeta.Columns.size());
+    for (const auto& [col, _] : tableMeta.Columns){
+        columns.emplace(col);
+    }
+
+    FillTable(tableMeta, std::move(columns), tableProto);
+}
+
 template <typename TProto, typename TContainer>
 void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMeta,
     TProto& opProto, bool allowSystemColumns)
@@ -471,21 +481,21 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
     CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx);
 }
 
-THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& SecretNames) {
+THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& secretNames) {
     THashMap<TString, TString> secureParams;
     NYql::NCommon::FillSecureParams(node, typesCtx, secureParams);
 
     for (auto& [secretName, structuredToken] : secureParams) {
         const auto& tokenParser = CreateStructuredTokenParser(structuredToken);
-        tokenParser.ListReferences(SecretNames);
+        tokenParser.ListReferences(secretNames);
         structuredToken = tokenParser.ToBuilder().RemoveSecrets().ToJson();
     }
 
     return secureParams;
 }
 
-std::optional<std::pair<TString, TString>> FindOneSecureParam(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, const TString& nodeName, TSet<TString>& SecretNames) {
-    const auto& secureParams = FindSecureParams(node, typesCtx, SecretNames);
+std::optional<std::pair<TString, TString>> FindOneSecureParam(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, const TString& nodeName, TSet<TString>& secretNames) {
+    const auto& secureParams = FindSecureParams(node, typesCtx, secretNames);
     if (secureParams.empty()) {
         return std::nullopt;
     }
@@ -599,17 +609,18 @@ TStringBuf RemoveJoinAliases(TStringBuf keyName) {
 
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
-    TKqpQueryCompiler(const TString& cluster, const TString& database, const TIntrusivePtr<TKikimrTablesData> tablesData,
-        const NMiniKQL::IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config)
+    TKqpQueryCompiler(const TString& cluster, const TString& database, const NMiniKQL::IFunctionRegistry& funcRegistry,
+        TTypeAnnotationContext& typesCtx, NOpt::TKqpOptimizeContext& optimizeCtx, NYql::TKikimrConfiguration::TPtr config)
         : Cluster(cluster)
         , Database(database)
-        , TablesData(tablesData)
+        , TablesData(optimizeCtx.Tables)
         , FuncRegistry(funcRegistry)
         , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
         , TypeEnv(Alloc)
-        , KqlCtx(cluster, tablesData, TypeEnv, FuncRegistry)
+        , KqlCtx(cluster, optimizeCtx.Tables, TypeEnv, FuncRegistry)
         , KqlCompiler(CreateKqlCompiler(KqlCtx, typesCtx))
         , TypesCtx(typesCtx)
+        , OptimizeCtx(optimizeCtx)
         , Config(config)
     {
         Alloc.Release();
@@ -636,6 +647,7 @@ public:
         queryProto.SetForceImmediateEffectsExecution(
             Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
 
+        queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
             if (queryBlockSettings.HasUncommittedChangesRead) {
@@ -1073,15 +1085,16 @@ private:
             FillTable(*tableMeta, std::move(tableColumns), *txProto.AddTables());
         }
 
-        for (const auto& [a, desc] : TablesData->GetTables()) {
-            auto tableMeta = desc.Metadata;
-            YQL_ENSURE(tableMeta);
-            if (desc.Metadata->Kind == NYql::EKikimrTableKind::External) {
-                THashSet<TStringBuf> columns;
-                for (const auto& [col, _]: tableMeta->Columns){
-                    columns.emplace(col);
+        for (const auto& [path, desc] : TablesData->GetTables()) {
+            const auto tableMeta = desc.Metadata;
+            Y_ENSURE(tableMeta, path.first << ":" << path.second);
+
+            if (tableMeta->Kind == NYql::EKikimrTableKind::External) {
+                FillExternalSource(*tableMeta, *txProto.AddTables());
+
+                if (const auto sourceMeta = tableMeta->ExternalSource.UnderlyingExternalSourceMetadata) {
+                    FillExternalSource(*sourceMeta, *txProto.AddTables());
                 }
-                FillTable(*tableMeta, std::move(columns), *txProto.AddTables());
             }
         }
 
@@ -1335,27 +1348,104 @@ private:
 
                 settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
 
-                AFL_ENSURE(settings.InconsistentWrite().Cast().StringValue() == "false");
-                settingsProto.SetInconsistentTx(false);
+                const bool inconsistentWrite = settings.InconsistentWrite().Cast().Value() == "true"sv;
+                AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
+                settingsProto.SetInconsistentTx(inconsistentWrite);
 
-                if (Config->EnableIndexStreamWrite && settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                if (Config->EnableIndexStreamWrite) {
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
-                    for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
-                        const auto& indexDescription = tableMeta->Indexes[index];
 
+                    std::vector<size_t> affectedIndexes;
+                    THashSet<size_t> affectedKeysIndexes;
+                    TVector<TStringBuf> lookupColumns;
+                    {
+                        THashSet<TStringBuf> columnsSet;
+                        for (const auto& columnName : columns) {
+                            columnsSet.insert(columnName);
+                        }
+                        THashSet<TStringBuf> mainKeyColumnsSet;
+                        for (const auto& columnName : tableMeta->KeyColumnNames) {
+                            mainKeyColumnsSet.insert(columnName);
+                            AFL_ENSURE(columnsSet.contains(columnName));
+                        }
+
+                        for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+                            const auto& indexDescription = tableMeta->Indexes[index];
+
+                            if (indexDescription.Type == TIndexDescription::EType::GlobalSync
+                                || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
+                                const auto& implTable = tableMeta->ImplTables[index];
+                                
+                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
+                                    if (std::any_of(implTable->Columns.begin(), implTable->Columns.end(), [&](const auto& column) {
+                                            return columnsSet.contains(column.first) && !mainKeyColumnsSet.contains(column.first);
+                                        })) {
+                                            affectedIndexes.push_back(index);
+                                    }
+
+                                    if (std::any_of(implTable->KeyColumnNames.begin(), implTable->KeyColumnNames.end(), [&](const auto& column) {
+                                            return columnsSet.contains(column) && !mainKeyColumnsSet.contains(column);
+                                        })) {
+                                            affectedKeysIndexes.insert(index);
+                                    }
+                                } else {
+                                    affectedIndexes.push_back(index);
+                                    affectedKeysIndexes.insert(index);
+                                }
+                            }
+                        }
+
+                        const bool needLookup = std::any_of(affectedIndexes.begin(), affectedIndexes.end(), [&](size_t index) {
+                            const auto& indexDescription = tableMeta->Indexes[index];
+
+                            if (indexDescription.Type != TIndexDescription::EType::GlobalSync
+                                && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
+                                return false;
+                            }
+                            const auto& implTable = tableMeta->ImplTables[index];
+
+                            AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+
+                            for (const auto& columnName : implTable->KeyColumnNames) {
+                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                                    AFL_ENSURE(columnsSet.contains(columnName));
+                                } else if (!mainKeyColumnsSet.contains(columnName)) {
+                                    return true;
+                                }
+                            }
+
+                            return false;
+                        });
+
+                        if (needLookup) {
+                            for (const auto& [columnName, columnMeta] : tableMeta->Columns) {
+                                if (!mainKeyColumnsSet.contains(columnName)) {
+                                    lookupColumns.push_back(columnName);
+                                    auto columnProto = settingsProto.AddLookupColumns();
+                                    fillColumnProto(columnName, &columnMeta, columnProto);
+                                }
+                            }
+                        }
+                    }
+
+                    // Fill indexes write settings
+                    for (size_t index : affectedIndexes) {
+                        const auto& indexDescription = tableMeta->Indexes[index];
                         if (indexDescription.Type != TIndexDescription::EType::GlobalSync
                                && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
                             continue;
                         }
                         const auto& implTable = tableMeta->ImplTables[index];
 
-                        AFL_ENSURE(indexDescription.Type == TIndexDescription::EType::GlobalSync);
                         AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
 
                         auto indexSettings = settingsProto.AddIndexes();
                         FillTableId(*implTable, *indexSettings->MutableTable());
 
-                        indexSettings->SetIsUniq(indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique);
+                        indexSettings->SetIsUniq(
+                            indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique
+                            && settingsProto.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
+                            && affectedKeysIndexes.contains(index));
 
                         for (const auto& columnName : implTable->KeyColumnNames) {
                             const auto columnMeta = implTable->Columns.FindPtr(columnName);
@@ -1365,16 +1455,21 @@ private:
                             fillColumnProto(columnName, columnMeta, keyColumnProto);
                         }
 
+                        indexSettings->SetKeyPrefixSize(indexDescription.KeyColumns.size());
+
                         TVector<TStringBuf> indexColumns;
+                        THashSet<TStringBuf> indexColumnsSet;
                         indexColumns.reserve(implTable->Columns.size());
 
-                        for (const auto& columnName : columns) {
-                            const auto columnMeta = implTable->Columns.FindPtr(columnName);
-                            if (columnMeta) {
-                                indexColumns.emplace_back(columnName);
+                        for (const auto& columnsList : {columns, lookupColumns}) {
+                            for (const auto& columnName : columnsList) {
+                                const auto columnMeta = implTable->Columns.FindPtr(columnName);
+                                if (columnMeta && indexColumnsSet.insert(columnName).second) {
+                                    indexColumns.emplace_back(columnName);
 
-                                auto columnProto = indexSettings->AddColumns();
-                                fillColumnProto(columnName, columnMeta, columnProto);
+                                    auto columnProto = indexSettings->AddColumns();
+                                    fillColumnProto(columnName, columnMeta, columnProto);
+                                }
                             }
                         }
 
@@ -1453,6 +1548,64 @@ private:
                 externalSink.SetSinkName(secureParams->first);
                 externalSink.SetAuthInfo(secureParams->second);
             }
+        }
+    }
+
+    void FillStreamLookupVectorTop(NKqpProto::TKqpPhyCnStreamLookup& streamLookupProto,
+        const TKqpCnStreamLookup& streamLookup, const TKqpStreamLookupSettings& settings) {
+        NKqpProto::TKqpPhyVectorTopK& vectorTopK = *streamLookupProto.MutableVectorTopK();
+        const auto implTablePath = streamLookup.Table().Path();
+        const auto mainTableFromImpl = TablesData->GetMainTableIfTableIsImplTableOfIndex(Cluster, implTablePath);
+        const auto mainTable = mainTableFromImpl ? mainTableFromImpl : &TablesData->ExistingTable(Cluster, implTablePath);
+
+        const TIndexDescription *indexDesc = nullptr;
+        for (const auto& index: mainTable->Metadata->Indexes) {
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree &&
+                index.Name == settings.VectorTopIndex) {
+                indexDesc = &index;
+            }
+        }
+        YQL_ENSURE(indexDesc);
+
+        // Index settings
+        auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
+        *vectorTopK.MutableSettings() = kmeansDesc.GetSettings().Getsettings();
+
+        // Column index
+        ui32 columnIdx = 0;
+        for (const auto& column: streamLookupProto.GetColumns()) {
+            if (column == settings.VectorTopColumn) {
+                break;
+            }
+            columnIdx++;
+        }
+        YQL_ENSURE(columnIdx < streamLookup.Columns().Size());
+        vectorTopK.SetColumn(columnIdx);
+
+        // Limit - may be a parameter which will be linked later
+        TExprBase expr(settings.VectorTopLimit);
+        if (expr.Maybe<TCoUint64>()) {
+            auto* literal = vectorTopK.MutableLimit()->MutableLiteralValue();
+            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+            literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+        } else if (expr.Maybe<TCoParameter>()) {
+            vectorTopK.MutableLimit()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+        } else {
+            YQL_ENSURE(false, "Unexpected Limit callable " << expr.Ref().Content());
+        }
+
+        // Target vector - may be a parameter which will be linked later
+        expr = TExprBase(settings.VectorTopTarget);
+        if (expr.Maybe<TCoString>()) {
+            auto* literal = vectorTopK.MutableTargetVector()->MutableLiteralValue();
+            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
+            literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+        } else if (expr.Maybe<TCoParameter>()) {
+            vectorTopK.MutableTargetVector()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+        } else {
+            YQL_ENSURE(false, "Unexpected TargetVector callable " << expr.Ref().Content());
         }
     }
 
@@ -1715,6 +1868,9 @@ private:
                     YQL_ENSURE(false, "Unexpected lookup strategy for stream lookup: " << settings.Strategy);
             }
 
+            if (settings.VectorTopColumn) {
+                FillStreamLookupVectorTop(streamLookupProto, streamLookup, settings);
+            }
 
             return;
         }
@@ -1849,6 +2005,11 @@ private:
             YQL_ENSURE(!lookupSourceSettings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" did't fill dq source settings for its dq source node");
             YQL_ENSURE(lookupSourceType, "Data source provider \"" << dataSourceCategory << "\" did't fill dq source settings type for its dq source node");
 
+            if (const auto& secureParams = FindOneSecureParam(lookupSourceWrap.Ptr(), TypesCtx, "streamLookupSource", SecretNames)) {
+                lookupSource.SetSourceName(secureParams->first);
+                lookupSource.SetAuthInfo(secureParams->second);
+            }
+
             const auto& streamLookupOutput = streamLookup.Output();
             const auto connectionInputRowType = GetSeqItemType(streamLookupOutput.Ref().GetTypeAnn());
             YQL_ENSURE(connectionInputRowType->GetKind() == ETypeAnnotationKind::Struct);
@@ -1910,6 +2071,7 @@ private:
     TKqlCompileContext KqlCtx;
     TIntrusivePtr<NCommon::IMkqlCallableCompiler> KqlCompiler;
     TTypeAnnotationContext& TypesCtx;
+    NOpt::TKqpOptimizeContext& OptimizeCtx;
     TKikimrConfiguration::TPtr Config;
     TSet<TString> SecretNames;
 };
@@ -1917,10 +2079,10 @@ private:
 } // namespace
 
 TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster, const TString& database,
-    const TIntrusivePtr<TKikimrTablesData> tablesData, const IFunctionRegistry& funcRegistry,
-    TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config)
+    const IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx,
+    NOpt::TKqpOptimizeContext& optimizeCtx, NYql::TKikimrConfiguration::TPtr config)
 {
-    return MakeIntrusive<TKqpQueryCompiler>(cluster, database, tablesData, funcRegistry, typesCtx, config);
+    return MakeIntrusive<TKqpQueryCompiler>(cluster, database, funcRegistry, typesCtx, optimizeCtx, config);
 }
 
 } // namespace NKqp

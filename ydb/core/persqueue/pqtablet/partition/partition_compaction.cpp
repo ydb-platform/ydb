@@ -82,7 +82,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     auto newWrite = CompactionBlobEncoder.PartitionedBlob.Add(std::move(blob));
 
     if (newWrite && !newWrite->Value.empty()) {
-        AddCmdWrite(newWrite, request, blobCreationUnixTime, ctx);
+        AddCmdWrite(newWrite, request, blobCreationUnixTime, ctx, false);
 
         LOG_D("Topic '" << TopicName() <<
                 "' partition " << Partition <<
@@ -400,7 +400,7 @@ void TPartition::RenameCompactedBlob(TDataKey& k,
     auto write = CompactionBlobEncoder.PartitionedBlob.Add(k.Key, size, k.Timestamp, false);
     if (write && !write->Value.empty()) {
         // надо записать содержимое головы перед первым большим блобом
-        AddCmdWrite(write, compactionRequest, k.Timestamp, ctx);
+        AddCmdWrite(write, compactionRequest, k.Timestamp, ctx, false);
         CompactionBlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());
     }
 

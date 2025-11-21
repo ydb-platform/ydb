@@ -535,10 +535,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     TxSourceIdForPostPersist.clear();
     TxInflightMaxSeqNoPerSourceId.clear();
 
-    TxAffectedSourcesIds.clear();
-    WriteAffectedSourcesIds.clear();
-    TxAffectedConsumers.clear();
-    SetOffsetAffectedConsumers.clear();
     if (UserActionAndTransactionEvents.empty()) {
         WriteInfosToTx.clear();
     }
@@ -590,6 +586,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
+    NotifyEndOffsetChanged();
 
     ChangeScaleStatusIfNeeded(AutopartitioningManager->GetScaleStatus(ScaleStatus));
 
@@ -896,7 +893,9 @@ void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
     StartProcessChangeOwnerRequests(ctx);
 }
 
-TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMsg& msg) {
+TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMsg& msg,
+                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -911,7 +910,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMs
     if (TxAffectedSourcesIds.contains(msg.Body.SourceId)) {
         return EProcessResult::Blocked;
     }
-    WriteAffectedSourcesIds.insert(msg.Body.SourceId);
+    affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(msg.Body.SourceId);
     return EProcessResult::Continue;
 }
 
@@ -928,7 +927,9 @@ void TPartition::ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& p
     parameters.SourceIdBatch.RegisterSourceId(body.SourceId, body.SeqNo, parameters.CurOffset, CurrentTimestamp, std::move(keyRange));
 }
 
-TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroupMsg& msg) {
+TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroupMsg& msg,
+                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -942,7 +943,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroup
     if (TxAffectedSourcesIds.contains(msg.Body.SourceId)) {
         return EProcessResult::Blocked;
     }
-    WriteAffectedSourcesIds.insert(msg.Body.SourceId);
+    affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(msg.Body.SourceId);
     return EProcessResult::Continue;
 }
 
@@ -951,7 +952,9 @@ void TPartition::ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters&
 }
 
 
-TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& msg) {
+TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& msg,
+                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -967,16 +970,16 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& 
         if (TxAffectedSourcesIds.contains(body.SourceId)) {
             return EProcessResult::Blocked;
         }
-        WriteAffectedSourcesIds.insert(body.SourceId);
+        affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(body.SourceId);
     }
     for (auto& body : msg.Deregistrations) {
         if (TxAffectedSourcesIds.contains(body.SourceId)) {
             return EProcessResult::Blocked;
         }
-        WriteAffectedSourcesIds.insert(body.SourceId);
+        affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(body.SourceId);
     }
-    return EProcessResult::Continue;
 
+    return EProcessResult::Continue;
 }
 
 
@@ -996,7 +999,9 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
     }
 }
 
-TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
+TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,
+                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
     if (!CanWrite()) {
         WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
@@ -1022,7 +1027,8 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
             return EProcessResult::Blocked;
         }
     }
-    WriteAffectedSourcesIds.insert(p.Msg.SourceId);
+    affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(p.Msg.SourceId);
+
     return EProcessResult::Continue;
 }
 
@@ -1206,6 +1212,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             LOG_D("Already written message. Topic: '" << TopicName()
                     << "' Partition: " << Partition << " SourceId: '" << EscapeC(p.Msg.SourceId)
                     << "'. Message seqNo: " << p.Msg.SeqNo
+                    << ". InitialSeqNo: " << p.InitialSeqNo
                     << ". Committed seqNo: " << sourceId.CommittedSeqNo()
                     << ". Writing seqNo: " << sourceId.UpdatedSeqNo()
                     << ". EndOffset: " << BlobEncoder.EndOffset << ". CurOffset: " << curOffset << ". Offset: " << poffset

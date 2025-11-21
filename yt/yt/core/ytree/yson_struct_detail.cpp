@@ -324,7 +324,7 @@ IMapNodePtr TYsonStructMeta::GetRecursiveUnrecognized(const TYsonStructBase* tar
 void TYsonStructMeta::RegisterParameter(std::string key, IYsonStructParameterPtr parameter)
 {
     InitialOrderParameters_.emplace_back(key, parameter);
-    YT_VERIFY(Parameters_.template emplace(std::move(key), std::move(parameter)).second);
+    YT_VERIFY(Parameters_.template try_emplace(std::move(key), std::move(parameter)).second, key);
 }
 
 void TYsonStructMeta::RegisterPreprocessor(std::function<void(TYsonStructBase*)> preprocessor)
@@ -342,7 +342,7 @@ void TYsonStructMeta::SetUnrecognizedStrategy(EUnrecognizedStrategy strategy)
     MetaUnrecognizedStrategy_ = strategy;
 }
 
-void TYsonStructMeta::WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
+void TYsonStructMeta::WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
 {
     BuildYsonFluently(consumer)
         .BeginMap()
@@ -356,11 +356,12 @@ void TYsonStructMeta::WriteSchema(const TYsonStructBase* target, NYson::IYsonCon
                 fluent.Item("source_location_line").Value(i64{SourceLocation_.GetLine()});
             })
             .Item("members").DoListFor(InitialOrderParameters_, [&] (auto fluent, const auto& pair) {
+                const auto& [key, parameter] = pair;
                 auto defaultValueGetter = [&] {
-                    return DefaultStructNodeGetter_()->FindChild(pair.first);
+                    return DefaultStructNodeGetter_()->FindChild(key);
                 };
                 fluent.Item().Do([&] (auto fluent) {
-                    pair.second->WriteMemberSchema(target, fluent.GetConsumer(), defaultValueGetter, options);
+                    parameter->WriteMemberSchema(fluent.GetConsumer(), defaultValueGetter, options);
                 });
             })
         .EndMap();

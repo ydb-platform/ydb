@@ -72,7 +72,7 @@ public:
         NYdb::TDbDriverStatePtr driverState = Connections->GetDriverState(database, {}, {}, {}, {});
 
         NYdb::TRpcRequestSettings rpcSettings;
-        rpcSettings.ClientTimeout = TDuration::Seconds(60);
+        rpcSettings.Deadline = NYdb::TDeadline::AfterDuration(std::chrono::seconds(60));
 
         NYdb::TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<Ydb::Auth::V1::AuthService, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>(
             driverState,

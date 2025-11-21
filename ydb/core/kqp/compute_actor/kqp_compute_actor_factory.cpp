@@ -2,6 +2,7 @@
 #include "kqp_compute_actor.h"
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/node_service/kqp_node_state.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -11,24 +12,17 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 
     TMemoryQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager
         , NRm::EKqpMemoryPool memoryPool
-        , std::shared_ptr<IKqpNodeState> state
         , TIntrusivePtr<NRm::TTxState> tx
         , TIntrusivePtr<NRm::TTaskState> task
         , ui64 limit)
     : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
     , ResourceManager(std::move(resourceManager))
     , MemoryPool(memoryPool)
-    , State(std::move(state))
     , Tx(std::move(tx))
     , Task(std::move(task))
-    {
-    }
+    {}
 
     ~TMemoryQuotaManager() override {
-        if (State) {
-            State->OnTaskTerminate(Tx->TxId, Task->TaskId, Success);
-        }
-
         ResourceManager->FreeResources(Tx, Task);
     }
 
@@ -71,7 +65,6 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager;
     NRm::EKqpMemoryPool MemoryPool;
-    std::shared_ptr<IKqpNodeState> State;
     TIntrusivePtr<NRm::TTxState> Tx;
     TIntrusivePtr<NRm::TTaskState> Task;
     bool Success = true;
@@ -169,7 +162,6 @@ public:
         memoryLimits.MemoryQuotaManager = std::make_shared<TMemoryQuotaManager>(
             ResourceManager_,
             args.MemoryPool,
-            std::move(args.State),
             std::move(args.TxInfo),
             std::move(task),
             limit);
@@ -193,11 +185,13 @@ public:
         }
 
         NYql::NDq::IMemoryQuotaManager::TWeakPtr memoryQuotaManager = memoryLimits.MemoryQuotaManager;
-        runtimeSettings.TerminateHandler = [memoryQuotaManager]
+        runtimeSettings.TerminateHandler = [memoryQuotaManager, state=args.State, txId=args.TxId, taskId=args.Task->GetId()]
             (bool success, const NYql::TIssues& issues) {
-                auto manager = memoryQuotaManager.lock();
-                if (manager) {
+                if (auto manager = memoryQuotaManager.lock()) {
                     static_cast<TMemoryQuotaManager*>(manager.get())->TerminateHandler(success, issues);
+                }
+                if (state) {
+                    state->OnTaskFinished(txId, taskId, success);
                 }
             };
 
@@ -224,8 +218,7 @@ public:
             YQL_ENSURE(args.ComputesByStages);
             auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta);
             IActor* computeActor = CreateKqpScanComputeActor(
-                args.ExecuterId, args.TxId,
-                args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
+                args.ExecuterId, args.TxId, args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
                 std::move(schedulableOptions), args.BlockTrackingMode);
             TActorId result = TlsActivationContext->Register(computeActor);
@@ -236,8 +229,10 @@ public:
             if (!args.SerializedGUCSettings.empty()) {
                 GUCSettings = std::make_shared<TGUCSettings>(args.SerializedGUCSettings);
             }
-            IActor* computeActor = ::NKikimr::NKqp::CreateKqpComputeActor(args.ExecuterId, args.TxId, args.Task, AsyncIoFactory,
-                runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, GUCSettings,
+            IActor* computeActor = NKqp::CreateKqpComputeActor(
+                args.ExecuterId, args.TxId, args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
+                std::move(args.TraceId), std::move(args.Arena),
+                FederatedQuerySetup, GUCSettings,
                 std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);

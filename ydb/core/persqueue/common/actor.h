@@ -23,6 +23,8 @@ namespace NPrivate {
     protected:
         ~ILogPrefixBase() = default;
     };
+
+    void IncrementUnhandledExceptionCounter(const NActors::TActorContext& ctx);
 };
 
 template<typename TDerived>
@@ -42,8 +44,8 @@ public:
         LOG_C("unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
                 << TBackTrace::FromCurrentException().PrintToString());
 
-        TDerived& self = static_cast<TDerived&>(*this);
-        self.PassAway();
+        NPrivate::IncrementUnhandledExceptionCounter(this->ActorContext());
+        this->PassAway();
 
         return true;
     }
@@ -81,7 +83,6 @@ public:
     bool OnUnhandledException(const std::exception& exc) override  {
         TDerived& self = static_cast<TDerived&>(*this);
         self.Send(TabletActorId, new NActors::TEvents::TEvPoison());
-        self.PassAway();
 
         return TBase::OnUnhandledException(exc);
     }

@@ -57,13 +57,14 @@ class IAutopartitioningManager;
 class TPartitionCompaction;
 
 struct TTransaction {
-
-    explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> tx,
-                          TMaybe<bool> predicate = Nothing())
+    TTransaction(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> tx,
+                 TInstant calcPredicateTimestamp,
+                 TMaybe<bool> predicate = Nothing())
         : Tx(tx)
         , Predicate(predicate)
         , SupportivePartitionActor(tx->SupportivePartitionActor)
         , CalcPredicateSpan(std::move(tx->Span))
+        , CalcPredicateTimestamp(calcPredicateTimestamp)
     {
         AFL_ENSURE(Tx);
     }
@@ -123,6 +124,7 @@ struct TTransaction {
     NWilson::TSpan CommitSpan;
 
     TInstant WriteInfoResponseTimestamp;
+    TInstant CalcPredicateTimestamp;
 };
 class TPartitionCompaction;
 
@@ -352,11 +354,31 @@ private:
     TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished = false);
 
     void ProcessTxsAndUserActs(const TActorContext& ctx);
-    void ContinueProcessTxsAndUserActs(const TActorContext& ctx);
-    void ProcessCommitQueue();
     void RunPersist();
 
-    void MoveUserActOrTxToCommitState();
+    enum class EProcessResult;
+    struct TAffectedSourceIdsAndConsumers;
+
+    void ProcessUserActionAndTxEvents();
+    EProcessResult ProcessUserActionAndTxEvent(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event,
+                                               TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult ProcessUserActionAndTxEvent(TSimpleSharedPtr<TTransaction>& tx,
+                                               TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult ProcessUserActionAndTxEvent(TMessage& msg,
+                                               TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+
+    void MoveUserActionAndTxToPendingCommitQueue();
+
+    void ProcessUserActionAndTxPendingCommits();
+    void ProcessUserActionAndTxPendingCommit(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event,
+                                             TEvKeyValue::TEvRequest* request);
+    void ProcessUserActionAndTxPendingCommit(TSimpleSharedPtr<TTransaction>& tx,
+                                             TEvKeyValue::TEvRequest* request);
+    void ProcessUserActionAndTxPendingCommit(TMessage& msg,
+                                             TEvKeyValue::TEvRequest* request);
+
+    bool WritingCycleDoesNotExceedTheLimits() const;
+
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event);
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
     void PushFrontDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
@@ -438,14 +460,13 @@ private:
                                                                         const TString& reason);
     THolder<TEvPQ::TEvTxCommitDone> MakeCommitDone(ui64 step, ui64 txId);
 
-    bool BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event);
+    bool BeginTransactionConfig();
 
     void CommitTransaction(TSimpleSharedPtr<TTransaction>& t);
     void RollbackTransaction(TSimpleSharedPtr<TTransaction>& t);
 
 
-    void BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
-                                    const TActorContext& ctx);
+    void BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
     void ExecChangePartitionConfig();
 
     void OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx);
@@ -605,6 +626,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
+            hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -678,6 +700,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
+            hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -748,10 +771,10 @@ private:
         TMaybe<i16> KafkaProducerEpoch = 0;
     };
 
-    THashSet<TString> TxAffectedSourcesIds;
-    THashSet<TString> WriteAffectedSourcesIds;
-    THashSet<TString> TxAffectedConsumers;
-    THashSet<TString> SetOffsetAffectedConsumers;
+    THashMap<TString, size_t> TxAffectedSourcesIds;
+    THashMap<TString, size_t> WriteAffectedSourcesIds;
+    THashMap<TString, size_t> TxAffectedConsumers;
+    THashMap<TString, size_t> SetOffsetAffectedConsumers;
     THashMap<TString, TSourceIdPostPersistInfo> TxSourceIdForPostPersist;
     THashMap<TString, TSeqNoProducerEpoch> TxInflightMaxSeqNoPerSourceId;
 
@@ -798,45 +821,60 @@ private:
     mutable TMaybe<TString> InitLogPrefix;
     mutable TMaybe<TString> UnknownLogPrefix;
 
-    // template <class T> T& GetUserActionAndTransactionEventsFront();
-    // template <class T> T& GetCurrentEvent();
-    //TSimpleSharedPtr<TTransaction>& GetCurrentTransaction();
+    struct TAffectedSourceIdsAndConsumers {
+        TVector<TString> TxWriteSourcesIds;
+        TVector<TString> WriteSourcesIds;
+        TVector<TString> TxReadConsumers;
+        TVector<TString> ReadConsumers;
+        ui32 WriteKeysSize = 0;
+    };
 
-    EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event);
-    EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>& event);
-    EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx);
-    EProcessResult PreProcessUserActionOrTransaction(TMessage& msg);
+    void AppendAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+
+    void DeleteAffectedSourceIdsAndConsumers();
+    void DeleteAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    void DeleteFromSet(const TVector<TString>& p, THashMap<TString, size_t>& q) const;
+
+    EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event,
+                                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx,
+                                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult PreProcessUserActionOrTransaction(TMessage& msg,
+                                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
     bool ExecUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event, TEvKeyValue::TEvRequest* request);
-
-    bool ExecUserActionOrTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>& event,
-                                     TEvKeyValue::TEvRequest* request);
     bool ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx, TEvKeyValue::TEvRequest* request);
     bool ExecUserActionOrTransaction(TMessage& msg, TEvKeyValue::TEvRequest* request);
 
-    [[nodiscard]] EProcessResult PreProcessUserAct(TEvPQ::TEvSetClientInfo& act, const TActorContext& ctx);
+    [[nodiscard]] EProcessResult PreProcessUserAct(TEvPQ::TEvSetClientInfo& act,
+                                                   TAffectedSourceIdsAndConsumers* affectedSourceIdsAndConsumers);
     void CommitUserAct(TEvPQ::TEvSetClientInfo& act);
 
 
-    [[nodiscard]] EProcessResult PreProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx);
+    [[nodiscard]] EProcessResult PreProcessImmediateTx(TTransaction& t,
+                                                       TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
     void ExecImmediateTx(TTransaction& tx);
 
-    EProcessResult PreProcessRequest(TRegisterMessageGroupMsg& msg);
-    EProcessResult PreProcessRequest(TDeregisterMessageGroupMsg& msg);
-    EProcessResult PreProcessRequest(TSplitMessageGroupMsg& msg);
-    EProcessResult PreProcessRequest(TWriteMsg& msg);
+    EProcessResult PreProcessRequest(TRegisterMessageGroupMsg& msg,
+                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult PreProcessRequest(TDeregisterMessageGroupMsg& msg,
+                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult PreProcessRequest(TSplitMessageGroupMsg& msg,
+                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult PreProcessRequest(TWriteMsg& msg,
+                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
     void ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters);
     void ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters);
     void ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
     bool ExecRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request);
 
-    [[nodiscard]] EProcessResult BeginTransaction(const TEvPQ::TEvTxCalcPredicate& event,
-                                                  TMaybe<bool>& predicate, TString& issueMsg);
+    [[nodiscard]] EProcessResult BeginTransactionData(TTransaction& t,
+                                                      TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
-    EProcessResult ApplyWriteInfoResponse(TTransaction& tx);
+    EProcessResult ApplyWriteInfoResponse(TTransaction& tx,
+                                          TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
-    bool FirstEvent = true;
     bool HaveWriteMsg = false;
     bool HaveCheckDisk = false;
     bool HaveDrop = false;
@@ -856,13 +894,12 @@ private:
     void BeginAppendHeadWithNewWrites(const TActorContext& ctx);
     void EndAppendHeadWithNewWrites(const TActorContext& ctx);
 
+    bool HasPendingCommitsOrPendingWrites() const;
+
     //
     // user actions and transactions
     //
     struct TUserActionAndTransactionEvent {
-        std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
-                     TSimpleSharedPtr<TTransaction>,                        // distributed transaction or update config
-                     TMessage> Event;
         TUserActionAndTransactionEvent(TSimpleSharedPtr<TTransaction>&& transaction)
             : Event(std::move(transaction))
         {}
@@ -872,10 +909,16 @@ private:
         TUserActionAndTransactionEvent(TMessage&& message)
             : Event(std::move(message))
         {}
+
+        std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
+                     TSimpleSharedPtr<TTransaction>,                        // distributed transaction or update config
+                     TMessage> Event;
+        TAffectedSourceIdsAndConsumers AffectedSourceIdsAndConsumers;
     };
 
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
     std::deque<TUserActionAndTransactionEvent> UserActionAndTxPendingCommit;
+    std::deque<TUserActionAndTransactionEvent> UserActionAndTxPendingWrite;
     TVector<THolder<TEvPQ::TEvGetWriteInfoResponse>> WriteInfosApplied;
 
     THashMap<ui64, TSimpleSharedPtr<TTransaction>> TransactionsInflight;
@@ -898,15 +941,6 @@ private:
     TMessageQueue Responses;
     ui64 CurrentBatchSize = 0;
 
-    enum class ETxBatchingState{
-        PreProcessing,
-        Executing,
-        Finishing
-    };
-    ETxBatchingState BatchingState = ETxBatchingState::PreProcessing;
-    //
-    //
-    //
     std::deque<std::pair<TString, ui64>> UpdateUserInfoTimestamp;
     bool ReadingTimestamp;
     TString ReadingForUser;
@@ -1122,7 +1156,7 @@ private:
     size_t WriteNewSizeFromSupportivePartitions = 0;
 
     bool TryAddDeleteHeadKeysToPersistRequest();
-    void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
+    void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request) const;
 
     TBlobKeyTokenPtr MakeBlobKeyToken(const TString& key);
 
@@ -1142,6 +1176,7 @@ private:
     size_t CompactionBlobsCount = 0;
 
     void DumpZones(const char* file = nullptr, unsigned line = 0) const;
+    void DumpTheSizeOfInternalQueues() const;
 
     const TPartitionBlobEncoder& GetBlobEncoder(ui64 offset) const;
 
@@ -1160,7 +1195,6 @@ private:
     TDeque<NWilson::TTraceId> TxForPersistTraceIds;
     TDeque<NWilson::TSpan> TxForPersistSpans;
 
-    bool CanProcessUserActionAndTransactionEvents() const;
     ui64 GetCompactedBlobSizeLowerBound() const;
 
     bool CompactRequestedBlob(const TRequestedBlob& requestedBlob,
@@ -1195,16 +1229,19 @@ private:
     void HandleOnInit(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void HandleOnInit(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
 
     void ProcessMLPPendingEvents();
     template<typename TEventHandle>
     void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
 
     void InitializeMLPConsumers();
+    void NotifyEndOffsetChanged();
 
     struct TMLPConsumerInfo {
         TActorId ActorId;
@@ -1215,9 +1252,11 @@ private:
         TEvPQ::TEvMLPReadRequest::TPtr,
         TEvPQ::TEvMLPCommitRequest::TPtr,
         TEvPQ::TEvMLPUnlockRequest::TPtr,
-        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr
+        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr,
+        TEvPQ::TEvGetMLPConsumerStateRequest::TPtr
     >;
     std::deque<TMLPPendingEvent> MLPPendingEvents;
+    ui64 LastNotifiedEndOffset = 0;
 };
 
 inline ui64 TPartition::GetStartOffset() const {
@@ -1230,5 +1269,7 @@ inline ui64 TPartition::GetStartOffset() const {
 inline ui64 TPartition::GetEndOffset() const {
     return BlobEncoder.EndOffset;
 }
+
+bool IsImportant(const NKikimrPQ::TPQTabletConfig::TConsumer& consumer);
 
 } // namespace NKikimr::NPQ

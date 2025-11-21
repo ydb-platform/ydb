@@ -19,15 +19,12 @@ jobs:
   ydb-slo-action:
     name: Run YDB SLO Tests
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
 
     strategy:
       matrix:
         include:
           - workload: table
-            global-args: --connection-string grpc://localhost:2135/?database=/Root/testdb
+            global-args: --connection-string grpc://localhost:2136/?database=/Root/testdb
             run-args: |
               --metrics-push-url http://localhost:9090/api/v1/otlp/v1/metrics \
               --time ${{inputs.slo_workload_duration_seconds || 600}} \
@@ -83,9 +80,3 @@ jobs:
         name: Cleanup SLO Database
         run: |
           ./ydb/public/sdk/cpp/tests/slo_workloads/key_value/key_value ${{ matrix.global-args }} cleanup
-
-      - name: Publish YDB SLO Report
-        uses: ydb-platform/ydb-slo-action/report@main
-        with:         
-          github_run_id: ${{ github.event.workflow_run.id }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}

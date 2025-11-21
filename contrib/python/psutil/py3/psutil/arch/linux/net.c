@@ -12,21 +12,20 @@
 #include <linux/version.h>
 #include <unistd.h>
 
+#include "../../arch/all/init.h"
+
 // see: https://github.com/giampaolo/psutil/issues/659
 #ifdef PSUTIL_ETHTOOL_MISSING_TYPES
-    #include <linux/types.h>
-    typedef __u64 u64;
-    typedef __u32 u32;
-    typedef __u16 u16;
-    typedef __u8 u8;
+#include <linux/types.h>
+typedef __u64 u64;
+typedef __u32 u32;
+typedef __u16 u16;
+typedef __u8 u8;
 #endif
 
 // Avoid redefinition of struct sysinfo with musl libc.
 #define _LINUX_SYSINFO_H
 #include <linux/ethtool.h>
-
-#include "../../_psutil_common.h"
-
 
 // * defined in linux/ethtool.h but not always available (e.g. Android)
 // * #ifdef check needed for old kernels, see:
@@ -43,19 +42,19 @@ psutil_ethtool_cmd_speed(const struct ethtool_cmd *ecmd) {
 // May happen on old RedHat versions, see:
 // https://github.com/giampaolo/psutil/issues/607
 #ifndef DUPLEX_UNKNOWN
-    #define DUPLEX_UNKNOWN 0xff
-#endif
-// https://github.com/giampaolo/psutil/pull/2156
-#ifndef SPEED_UNKNOWN
-    #define SPEED_UNKNOWN -1
+#define DUPLEX_UNKNOWN 0xff
 #endif
 
+// https://github.com/giampaolo/psutil/pull/2156
+#ifndef SPEED_UNKNOWN
+#define SPEED_UNKNOWN -1
+#endif
 
 // References:
 // * https://github.com/dpaleino/wicd/blob/master/wicd/backends/be-ioctl.py
 // * http://www.i-scream.org/libstatgrab/
-PyObject*
-psutil_net_if_duplex_speed(PyObject* self, PyObject* args) {
+PyObject *
+psutil_net_if_duplex_speed(PyObject *self, PyObject *args) {
     char *nic_name;
     int sock = 0;
     int ret;
@@ -66,13 +65,14 @@ psutil_net_if_duplex_speed(PyObject* self, PyObject* args) {
     struct ethtool_cmd ethcmd;
     PyObject *py_retlist = NULL;
 
-    if (! PyArg_ParseTuple(args, "s", &nic_name))
+    if (!PyArg_ParseTuple(args, "s", &nic_name))
         return NULL;
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock == -1)
-        return psutil_PyErr_SetFromOSErrnoWithSyscall("socket()");
-    PSUTIL_STRNCPY(ifr.ifr_name, nic_name, sizeof(ifr.ifr_name));
+        return psutil_oserror_wsyscall("socket()");
+    str_copy(ifr.ifr_name, sizeof(ifr.ifr_name), nic_name);
+
 
     // duplex and speed
     memset(&ethcmd, 0, sizeof ethcmd);
@@ -102,7 +102,7 @@ psutil_net_if_duplex_speed(PyObject* self, PyObject* args) {
             speed = 0;
         }
         else {
-            psutil_PyErr_SetFromOSErrnoWithSyscall("ioctl(SIOCETHTOOL)");
+            psutil_oserror_wsyscall("ioctl(SIOCETHTOOL)");
             goto error;
         }
     }

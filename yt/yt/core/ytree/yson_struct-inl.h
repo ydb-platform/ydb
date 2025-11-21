@@ -290,7 +290,7 @@ void TYsonStructRegistrar<TStruct>::UnrecognizedStrategy(EUnrecognizedStrategy s
 }
 
 template <class TStruct>
-template<class TBase>
+template <class TBase>
 TYsonStructRegistrar<TStruct>::operator TYsonStructRegistrar<TBase>()
 {
     static_assert(std::derived_from<TStruct, TBase>);

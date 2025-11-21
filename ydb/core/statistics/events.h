@@ -75,8 +75,8 @@ struct TEvStatistics {
         EvAnalyzeStatus,
         EvAnalyzeStatusResponse,
 
-        EvAnalyzeTable,
-        EvAnalyzeTableResponse,
+        EvAnalyzeShard,
+        EvAnalyzeShardResponse,
 
         EvStatisticsRequest,
         EvStatisticsResponse,
@@ -240,16 +240,16 @@ struct TEvStatistics {
         EvAnalyzeStatusResponse>
     {};
 
-    struct TEvAnalyzeTable : public TEventPB<
-        TEvAnalyzeTable,
-        NKikimrStat::TEvAnalyzeTable,
-        EvAnalyzeTable>
+    struct TEvAnalyzeShard : public TEventPB<
+        TEvAnalyzeShard,
+        NKikimrStat::TEvAnalyzeShard,
+        EvAnalyzeShard>
     {};
 
-    struct TEvAnalyzeTableResponse : public TEventPB<
-        TEvAnalyzeTableResponse,
-        NKikimrStat::TEvAnalyzeTableResponse,
-        EvAnalyzeTableResponse>
+    struct TEvAnalyzeShardResponse : public TEventPB<
+        TEvAnalyzeShardResponse,
+        NKikimrStat::TEvAnalyzeShardResponse,
+        EvAnalyzeShardResponse>
     {};
 
     struct TEvStatisticsRequest : public TEventPB<

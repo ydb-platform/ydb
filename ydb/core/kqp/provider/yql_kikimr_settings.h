@@ -92,12 +92,14 @@ public:
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> ColumnShardHashShuffleFuncType;
 
     NCommon::TConfSetting<ui32, Static> MaxDPHypDPTableSize;
+    NCommon::TConfSetting<ui32, Static> ShuffleEliminationJoinNumCutoff;
 
     NCommon::TConfSetting<ui32, Static> MaxTasksPerStage;
     NCommon::TConfSetting<ui64, Static> DataSizePerPartition;
     NCommon::TConfSetting<ui32, Static> MaxSequentialReadsInFlight;
 
     NCommon::TConfSetting<ui32, Static> KMeansTreeSearchTopSize;
+    NCommon::TConfSetting<bool, Static> DisableCheckpoints;
 
     /* Runtime */
     NCommon::TConfSetting<bool, Dynamic> ScanQuery;

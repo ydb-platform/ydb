@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "context.h"
+#include "executor.h"
 
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/rows/view.h>
@@ -12,6 +13,32 @@
 #include <ydb/library/actors/interconnect/types.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
+
+class TBuildFilterTaskContext {
+private:
+    TBuildFilterContext Context;
+    YDB_READONLY_DEF(std::shared_ptr<TBuildFilterTaskExecutor>, Executor);
+    YDB_READONLY_DEF(std::vector<TIntervalInfo>, Intervals);
+    YDB_READONLY_DEF(THashSet<ui64>, RequiredPortions);
+
+public:
+    TBuildFilterTaskContext(
+        TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor, std::vector<TIntervalInfo>&& intervals, THashSet<ui64>&& portions)
+        : Context(std::move(context))
+        , Executor(executor)
+        , Intervals(std::move(intervals))
+        , RequiredPortions(std::move(portions))
+    {
+    }
+
+    const TBuildFilterContext& GetGlobalContext() const {
+        return Context;
+    }
+
+    TBuildFilterContext&& ExtractGlobalContext() {
+        return std::move(Context);
+    }
+};
 
 class TBuildDuplicateFilters: public NConveyor::ITask {
 private:
@@ -56,7 +83,7 @@ private:
     };
 
 private:
-    TBuildFilterContext Context;
+    TBuildFilterTaskContext Context;
     TDuplicateSourceCacheResult ColumnData;
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
     NArrow::NMerger::TCursor ScanSnapshotBatch;
@@ -83,13 +110,13 @@ private:
     };
 
 public:
-    TBuildDuplicateFilters(TBuildFilterContext&& context,
+    TBuildDuplicateFilters(TBuildFilterTaskContext&& context,
         THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& columns,
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard)
         : Context(std::move(context))
         , ColumnData(std::move(columns))
         , AllocationGuard(allocationGuard)
-        , ScanSnapshotBatch(GetVersionBatch(Context.GetContext()->GetRequest()->Get()->GetMaxVersion(), std::numeric_limits<ui64>::max()))
+        , ScanSnapshotBatch(GetVersionBatch(Context.GetGlobalContext().GetMaxVersion(), std::numeric_limits<ui64>::max()))
         , MinUncommittedSnapshotBatch(GetVersionBatch(TSnapshot::Max(), 0))
     {
     }
@@ -97,7 +124,7 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << '{';
-        sb << "context=" << Context.DebugString();
+        sb << "context=" << Context.GetGlobalContext().DebugString();
         sb << '}';
         return sb;
     }

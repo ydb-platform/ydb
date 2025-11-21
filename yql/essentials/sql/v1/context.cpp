@@ -126,6 +126,10 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
         DisableLegacyNotNull = true;
     }
 
+    if (settings.Flags.contains("AutoYqlSelect")) {
+        SetYqlSelectMode(EYqlSelectMode::Auto);
+    }
+
     for (auto lib : settings.Libraries) {
         Libraries.emplace(lib, TLibraryStuff());
     }

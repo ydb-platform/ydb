@@ -858,6 +858,7 @@ def onadd_check_py_imports(fields, unit, *args):
         df.BinaryPath.stripped,
         df.TestRunnerBin.value,
         df.DockerImage.value,
+        df.ParallelTestsInSingleNode.value,
     )
 )
 def onadd_pytest_bin(fields, unit, *args):
@@ -1056,7 +1057,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
         "NAME": 1,
         "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
-        "CONFIGS": 1,
+        "DEFAULT_CONFIGS": 1,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
         "CONFIG_TYPE": 1,
@@ -1097,7 +1098,7 @@ def on_add_py_linter_check(fields, unit, *args):
         "NAME": 1,
         "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
-        "CONFIGS": 1,
+        "DEFAULT_CONFIGS": 1,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
         "FLAKE_MIGRATIONS_CONFIG": 1,
@@ -1126,7 +1127,7 @@ def on_add_py_linter_check(fields, unit, *args):
     )
     + LINTER_FIELDS_BASE
 )
-def on_add_json_explicit_linter_check(fields, unit, *args):
+def on_add_custom_explicit_linter_check(fields, unit, *args):
     if unit.get("TIDY") == "yes":
         return
     no_lint_value = _common.get_no_lint_value(unit)
@@ -1140,7 +1141,7 @@ def on_add_json_explicit_linter_check(fields, unit, *args):
         "DEPENDS": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
-        "CONFIGS": 1,
+        "DEFAULT_CONFIGS": 1,
         "GLOBAL_RESOURCES": unlimited,
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)

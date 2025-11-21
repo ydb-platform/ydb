@@ -19,6 +19,7 @@ namespace NKikimr {
         TIntrusivePtr<THullCtx> HullCtx;
         TVDiskID SelfVDiskId;
         const TActorId ParentId;
+        const TActorId SyncLogActorId;
         std::shared_ptr<THull> Hull;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         std::shared_ptr<NMonGroup::TFullSyncGroup> FullSyncGroup;
@@ -31,14 +32,16 @@ namespace NKikimr {
         friend class TActorBootstrapped<TVSyncFullHandler>;
 
         struct TEventInfo {
-            TEventInfo(TEvBlobStorage::TEvVSyncFull::TPtr& ev)
+            TEventInfo(TEvBlobStorage::TEvVSyncFull::TPtr& ev, bool enablePhantomFlagStorage)
                 : Event(ev)
                 , Record(ev->Get()->Record)
                 , SourceVDisk(VDiskIDFromVDiskID(Record.GetSourceVDiskID()))
                 , TargetVDisk(VDiskIDFromVDiskID(Record.GetTargetVDiskID()))
                 , SessionKey(SourceVDisk, TargetVDisk)
                 , ClientSyncState(SyncStateFromSyncState(Record.GetSyncState()))
-                , Protocol(ev->Get()->GetProtocol())
+                , Protocol(enablePhantomFlagStorage
+                        ? ev->Get()->GetProtocol()
+                        : NKikimrBlobStorage::EFullSyncProtocol::Legacy)
                 , Now(TActivationContext::Now())
             {}
 
@@ -58,7 +61,8 @@ namespace NKikimr {
                     NKikimrProto::EReplyStatus status) {
             auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(status, SelfVDiskId,
                     syncState, evInfo.Record.GetCookie(), evInfo.Now,
-                    IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, evInfo.Event->GetChannel());
+                    IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, evInfo.Event->GetChannel(),
+                    evInfo.Protocol);
             SendVDiskResponse(TActivationContext::AsActorContext(), evInfo.Event->Sender, result.release(),
                     evInfo.Event->Cookie, HullCtx->VCtx, {});
         }
@@ -158,6 +162,7 @@ namespace NKikimr {
                     Db->Config,
                     HullCtx,
                     SelfId(),
+                    SyncLogActorId,
                     Hull->GetIndexSnapshot(),
                     newSyncState,
                     SelfVDiskId,
@@ -218,7 +223,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
-            TEventInfo evInfo(ev);
+            TEventInfo evInfo(ev, HullCtx->VCfg->EnablePhantomFlagStorage);
             LOG_DEBUG_S(TActivationContext::AsActorContext(), BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
                     << "TVSyncFullHandler: Handle TEvVSyncFull, ev# " << ev->ToString()
                     << " From SyncState# " << evInfo.ClientSyncState.ToString()
@@ -235,22 +240,23 @@ namespace NKikimr {
             switch (evInfo.Protocol) {
                 case NKikimrBlobStorage::EFullSyncProtocol::Legacy: {
                     if (ev->Get()->IsInitial()) {
-                        HandleInitialEventLegacyProtocol(ev);
+                        HandleInitialEventLegacyProtocol(evInfo);
                     } else {
-                        HandleConsequentEventLegacyProtocol(ev);
+                        HandleConsequentEventLegacyProtocol(evInfo);
                     }
                     break;
+
                 }
                 case NKikimrBlobStorage::EFullSyncProtocol::UnorderedData:
                     if (ev->Get()->IsInitial()) {
-                        HandleInitialEventUnorderedDataProtocol(ev);
+                        HandleInitialEventUnorderedDataProtocol(evInfo);
                     } else {
-                        HandleConsequentEventUnorderedDataProtocol(ev);
+                        HandleConsequentEventUnorderedDataProtocol(evInfo);
                     }
                     break;
                 default:
                     // unknown protocol, respond with erroneous status
-                    RespondWithErroneousStatus(ev, {}, NKikimrProto::ERROR);
+                    RespondWithErroneousStatus(evInfo, {}, NKikimrProto::ERROR);
                     
             }
         }
@@ -279,6 +285,7 @@ namespace NKikimr {
                           const TIntrusivePtr<THullCtx> &hullCtx,
                           const TVDiskID &selfVDiskId,
                           const TActorId &parentId,
+                          const TActorId& syncLogActorId,
                           const std::shared_ptr<THull> &hull,
                           const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
                           const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
@@ -288,6 +295,7 @@ namespace NKikimr {
             , HullCtx(hullCtx)
             , SelfVDiskId(selfVDiskId)
             , ParentId(parentId)
+            , SyncLogActorId(syncLogActorId)
             , Hull(hull)
             , IFaceMonGroup(ifaceMonGroup)
             , FullSyncGroup(fullSyncGroup)
@@ -305,11 +313,12 @@ namespace NKikimr {
                                       const TIntrusivePtr<THullCtx> &hullCtx,
                                       const TVDiskID &selfVDiskId,
                                       const TActorId &parentId,
+                                      const TActorId& syncLogActorId,
                                       const std::shared_ptr<THull> &hull,
                                       const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
                                       const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
                                       ui64 dbBirthLsn) {
-        return new TVSyncFullHandler(db, hullCtx, selfVDiskId, parentId, hull,
+        return new TVSyncFullHandler(db, hullCtx, selfVDiskId, parentId, syncLogActorId, hull,
                     ifaceMonGroup, fullSyncGroup, dbBirthLsn);
     }
 

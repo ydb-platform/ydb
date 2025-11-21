@@ -2943,23 +2943,25 @@ namespace NKikimr {
 
         TEvVSyncFullResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TSyncState &syncState,
                 ui64 cookie, const TInstant &now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel, NKikimrBlobStorage::EFullSyncProtocol protocol)
             : TEvVResultBasePB(now, counterPtr, histoPtr, channel)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             Record.SetCookie(cookie);
             SyncStateFromSyncState(syncState, Record.MutableSyncState());
+            Record.SetProtocol(protocol);
         }
 
         TEvVSyncFullResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, ui64 cookie,
                 const TInstant &now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel, NKikimrBlobStorage::EFullSyncProtocol protocol)
             : TEvVResultBasePB(now, counterPtr, histoPtr, channel)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             Record.SetCookie(cookie);
+            Record.SetProtocol(protocol);
         }
 
         TString ToString() const override {

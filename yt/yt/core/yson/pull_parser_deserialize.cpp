@@ -162,30 +162,33 @@ void Deserialize(char& value, TYsonPullParserCursor* cursor)
 void Deserialize(TDuration& value, TYsonPullParserCursor* cursor)
 {
     switch ((*cursor)->GetType()) {
-        case EYsonItemType::Int64Value:
-            value = TDuration::MilliSeconds((*cursor)->UncheckedAsInt64());
+        case EYsonItemType::Int64Value: {
+            auto ms = (*cursor)->UncheckedAsInt64();
+            THROW_ERROR_EXCEPTION_IF(ms < 0, "Duration can not be negative (Value: %v)", ms);
+            value = TDuration::MilliSeconds(static_cast<ui64>(ms));
             cursor->Next();
             break;
+        }
 
-        case EYsonItemType::Uint64Value:
+        case EYsonItemType::Uint64Value: {
             value = TDuration::MilliSeconds((*cursor)->UncheckedAsUint64());
             cursor->Next();
             break;
+        }
+
+        case EYsonItemType::DoubleValue: {
+            auto ms = (*cursor)->UncheckedAsDouble();
+            THROW_ERROR_EXCEPTION_IF(!std::isfinite(ms), "Duration must be finite");
+            THROW_ERROR_EXCEPTION_IF(ms < 0, "Duration can not be negative (Value: %v)", ms);
+            value = TDuration::MilliSeconds(ms);
+            cursor->Next();
+            break;
+        }
 
         case EYsonItemType::StringValue:
             value = TDuration::Parse((*cursor)->UncheckedAsString());
             cursor->Next();
             break;
-
-        case EYsonItemType::DoubleValue: {
-            auto ms = (*cursor)->UncheckedAsDouble();
-            if (ms < 0) {
-                THROW_ERROR_EXCEPTION("Duration cannot be negative");
-            }
-            value = TDuration::MicroSeconds(static_cast<ui64>(ms * 1000.0));
-            cursor->Next();
-            break;
-        }
 
         case EYsonItemType::BeginAttributes:
             SkipAttributes(cursor);

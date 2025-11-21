@@ -100,7 +100,7 @@ int TQueuePair::ToResetState() noexcept {
     return ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE);
 }
 
-int TQueuePair::ToRtsState(ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept {
+int TQueuePair::ToRtsState(const THandshakeData& hd) noexcept {
     // ibv_modify_qp() returns 0 on success, or the value of errno on
     //  failure (which indicates the failure reason).
     {   // modify QP to INIT
@@ -123,9 +123,10 @@ int TQueuePair::ToRtsState(ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcep
         memset(&qpAttr, 0, sizeof(qpAttr));
 
         qpAttr.qp_state = IBV_QPS_RTR;
-        qpAttr.path_mtu = (ibv_mtu)mtuIndex;
-        qpAttr.dest_qp_num = qpNum;
-        qpAttr.ah_attr.grh.dgid = gid;
+        qpAttr.path_mtu = (ibv_mtu)hd.MtuIndex;
+        qpAttr.dest_qp_num = hd.QpNum;
+        qpAttr.ah_attr.grh.dgid.global.subnet_prefix = hd.SubnetPrefix;
+        qpAttr.ah_attr.grh.dgid.global.interface_id = hd.InterfaceId;
         qpAttr.ah_attr.grh.sgid_index = Ctx->GetGidIndex();
         qpAttr.ah_attr.grh.hop_limit = 1;
         qpAttr.ah_attr.is_global = 1;
@@ -202,6 +203,28 @@ TQueuePair::TQpState TQueuePair::GetState(bool forseUpdate) const noexcept {
 
 TRdmaCtx* TQueuePair::GetCtx() const noexcept {
     return Ctx;
+}
+
+ui32 TQueuePair::GetMinMtuIndex(ui32 mtuIndex) const noexcept {
+    return std::min(mtuIndex, (ui32)Ctx->GetPortAttr().active_mtu);
+}
+
+size_t TQueuePair::GetDeviceIndex() const noexcept {
+    return Ctx->GetDeviceIndex();
+}
+
+bool TQueuePair::IsRtsState(TQpS state) {
+     enum ibv_qp_state qpState = static_cast<enum ibv_qp_state>(state.State);
+     return qpState == IBV_QPS_RTS;
+}
+
+THandshakeData TQueuePair::GetHandshakeData() const noexcept {
+    return THandshakeData {
+        .QpNum = GetQpNum(),
+        .SubnetPrefix = Ctx->GetGid().global.subnet_prefix,
+        .InterfaceId = Ctx->GetGid().global.interface_id,
+        .MtuIndex = Ctx->GetPortAttr().active_mtu
+    };
 }
 
 void TIbVerbsBuilderImpl::AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize,
@@ -324,5 +347,18 @@ void Out<std::shared_ptr<NInterconnect::NRdma::TQueuePair>>(IOutputStream& os, c
 
 IOutputStream& operator<<(IOutputStream& os, const std::shared_ptr<NInterconnect::NRdma::TQueuePair>& qp) {
     Out<std::shared_ptr<NInterconnect::NRdma::TQueuePair>>(os, qp);
+    return os;
+}
+
+template<>
+void Out<NInterconnect::NRdma::THandshakeData>(IOutputStream& os, const NInterconnect::NRdma::THandshakeData& hd) {
+    ibv_gid gid;
+    gid.global.subnet_prefix = hd.SubnetPrefix;
+    gid.global.interface_id = hd.InterfaceId; 
+    os << "[" << hd.QpNum << ", " << gid << ", " << hd.MtuIndex << "]";
+}
+
+IOutputStream& operator<<(IOutputStream& os, const NInterconnect::NRdma::THandshakeData& hd) {
+    Out<NInterconnect::NRdma::THandshakeData>(os, hd);
     return os;
 }

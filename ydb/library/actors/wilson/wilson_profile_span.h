@@ -2,6 +2,8 @@
 #include "wilson_span.h"
 #include <library/cpp/json/writer/json_value.h>
 
+#include <util/string/cast.h>
+
 namespace NWilson {
 
 class TProfileSpan: public TSpan {

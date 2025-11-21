@@ -33,7 +33,7 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
     auto schema = owner.TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(NKikimr::NOlap::TSnapshot{ExportTxBody.GetBackupTask().GetSnapshotStep(), ExportTxBody.GetBackupTask().GetSnapshotTxId()});
     auto columns = schema->GetIndexInfo().GetColumns();
     ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), selector.DetachResult(), storeInitializer.DetachResult(), serializer, columns, txBody.GetBackupTask(), GetTxId());
-    NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetPathId()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);    
+    NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetPathId()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);
     if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {
         TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
         if (!TxAddTask) {

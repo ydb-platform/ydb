@@ -35,7 +35,7 @@ private:
     virtual TString DoDebugString() const override {
         return "BACKUP";
     }
-    
+
     virtual void RegisterSubscriber(const TActorId& actorId) override {
         NotifySubscribers.insert(actorId);
     }

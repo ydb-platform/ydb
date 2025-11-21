@@ -96,18 +96,18 @@ public:
         TVector<TSerializedCellVec> Batch;
         bool IsLast = false;
         bool NeedResult = false;
-        
+
         void Clear() {
             Batch.clear();
             Position = 0;
             IsLast = false;
             NeedResult = true;
         }
-        
+
         TSerializedCellVec& GetRow() {
             return Batch[Position];
         }
-        
+
         bool HasMoreRows() const {
             return Position < Batch.size();
         }
@@ -209,8 +209,8 @@ public:
             PassAway();
             return;
         }
-    
-        if (!CurrentBatch.HasMoreRows()  && (isFinal || !CurrentBatch.IsLast) && CurrentBatch.NeedResult) {
+
+        if (!CurrentBatch.HasMoreRows() && (isFinal || !CurrentBatch.IsLast) && CurrentBatch.NeedResult) {
             Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(isFinal));
             CurrentBatch.NeedResult = false;
         }
@@ -242,19 +242,19 @@ public:
                     Fail(result.GetErrorMessage());
                     return;
                 }
-                
+
                 CurrentBatch.Clear();
                 CurrentBatch.IsLast = batch.IsLast;
                 CurrentBatch.Batch = result.DetachResult();
             }
-            
+
             FeedRowsToExporter();
             if (LastState == NTable::EScan::Sleep) {
                 return;
             }
         }
     }
-    
+
     void FeedRowsToExporter() {
         while (CurrentBatch.HasMoreRows()) {
             auto& row = CurrentBatch.GetRow();
@@ -311,7 +311,7 @@ private:
         }
         return columnTypes;
     }
-    
+
 
 
 private:

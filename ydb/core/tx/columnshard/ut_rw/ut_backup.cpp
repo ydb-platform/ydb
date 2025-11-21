@@ -105,12 +105,12 @@ Y_UNIT_TEST_SUITE(Backup) {
         backupTask.SetSnapshotTxId(backupSnapshot.GetTxId());
         backupTask.MutableS3Settings()->SetEndpoint(GetEnv("S3_ENDPOINT"));
         backupTask.MutableS3Settings()->SetBucket("test");
-        
+
         auto& table = *backupTask.MutableTable();
         auto& tableDescription = *table.MutableColumnTableDescription();
         tableDescription.SetColumnShardCount(4);
         auto& schemaBackup = *tableDescription.MutableSchema();
-        
+
         auto& col1 = *schemaBackup.MutableColumns()->Add();
         col1.SetName("key1");
         col1.SetType("Uint64");
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         auto& col2 = *schemaBackup.MutableColumns()->Add();
         col2.SetName("key2");
         col2.SetType("Uint64");
-        
+
         auto& col3 = *schemaBackup.MutableColumns()->Add();
         col3.SetName("field");
         col3.SetType("Utf8");
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false);
         TestWaitCondition(runtime, "export",
-            [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() != 6; });
+            [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() == 6; });
     }
 }
 

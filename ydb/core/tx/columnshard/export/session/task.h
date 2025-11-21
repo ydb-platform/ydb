@@ -27,7 +27,7 @@ private:
     YDB_READONLY_DEF(NKikimrSchemeOp::TBackupTask, BackupTask);
     YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(std::optional<ui64>, TxId);
-    YDB_READONLY_DEF(std::vector<TNameTypeInfo>, Columns)
+    YDB_READONLY_DEF(std::vector<TNameTypeInfo>, Columns);
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TExportTask& proto) override;
     virtual NKikimrColumnShardExportProto::TExportTask DoSerializeToProto() const override;
@@ -48,7 +48,7 @@ public:
 
     TExportTask() = default;
 
-    TExportTask(const TIdentifier& id, const TSelectorContainer& selector, const TStorageInitializerContainer& storageInitializer, 
+    TExportTask(const TIdentifier& id, const TSelectorContainer& selector, const TStorageInitializerContainer& storageInitializer,
         const NArrow::NSerialization::TSerializerContainer& serializer, const std::vector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TBackupTask& backupTask, const std::optional<ui64> txId = {})
         : Identifier(id)
         , Selector(selector)

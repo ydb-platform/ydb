@@ -9,6 +9,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
 ydb/core/blobstorage/ut_blobstorage/ut_statestorage TStateStorageRingGroupState.TestProxyConfigMismatch
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
+ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.WrongJson
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
@@ -20,13 +21,14 @@ ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
+ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelShouldSucceedOnSingleShardTableWithUniqueIndex
 ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.ShouldSucceedOnSingleShardTableWithChangefeed
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.test_topic_data
 ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_50k_100times_50tx
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_And_Read_Small_Messages_2
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_And_Read_Gigant_Messages_1
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0
@@ -44,6 +46,8 @@ ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_p
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-25-3-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-25-3_and_stable-25-2-1-row]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_prestable-25-3_to_current]
+ydb/tests/datashard/vector_index/large test_vector_index.py.TestVectorIndex.test_vector_index
+ydb/tests/datashard/vector_index/large test_vector_index_large_levels_and_clusters.py.TestVectorIndexLargeLevelsAndClusters.test_vecot_index_large_levels_and_clusters
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/multi_plane py3test.[test_retry.py] chunk
 ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]

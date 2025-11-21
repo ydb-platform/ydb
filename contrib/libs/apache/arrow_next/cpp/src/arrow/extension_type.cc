@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
 
 #include <memory>
 #include <mutex>
@@ -24,20 +24,20 @@
 #include <unordered_map>
 #include <utility>
 
-#include "arrow/array/util.h"
-#include "arrow/chunked_array.h"
-#include "arrow/config.h"
-#include "arrow/extension/bool8.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension/bool8.h"
 #ifdef ARROW_JSON
-#  include "arrow/extension/fixed_shape_tensor.h"
-#  include "arrow/extension/opaque.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension/fixed_shape_tensor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension/opaque.h"
 #endif
-#include "arrow/extension/json.h"
-#include "arrow/extension/uuid.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension/json.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension/uuid.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 

@@ -704,9 +704,9 @@ TExprNode::TPtr PropagateCoalesceWithConstIntoLogicalOps(const TExprNode::TPtr& 
 }
 
 bool IsPullJustFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
-    static const char optName[] = "PullJustFromLogicalOps";
+    static const char OptName[] = "PullJustFromLogicalOps";
     YQL_ENSURE(optCtx.Types);
-    return !IsOptimizerDisabled<optName>(*optCtx.Types);
+    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 TExprNode::TPtr PullJustFromLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx, const TOptimizeContext& optCtx) {
@@ -1905,8 +1905,8 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
     auto inputRowType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
     YQL_ENSURE(inputRowType->GetKind() == ETypeAnnotationKind::Struct);
 
-    static const TStringBuf inputTable = "_yql_injoin_input";
-    auto inputTableAtom = ctx.NewAtom(input->Pos(), inputTable, TNodeFlags::Default);
+    static const TStringBuf InputTable = "_yql_injoin_input";
+    auto inputTableAtom = ctx.NewAtom(input->Pos(), InputTable, TNodeFlags::Default);
 
     size_t startColumnIndex = 0;
     for (;;) {
@@ -1969,7 +1969,7 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
             auto rename = ctx.Builder(pos)
                 .List()
                     .Atom(0, "rename", TNodeFlags::Default)
-                    .Atom(1, FullColumnName(inputTable, columnName))
+                    .Atom(1, FullColumnName(InputTable, columnName))
                     .Atom(2, "")
                 .Seal()
                 .Build();
@@ -1989,7 +1989,7 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
         auto rename = ctx.Builder(input->Pos())
             .List()
                 .Atom(0, "rename", TNodeFlags::Default)
-                .Atom(1, FullColumnName(inputTable, i->GetName()))
+                .Atom(1, FullColumnName(InputTable, i->GetName()))
                 .Atom(2, i->GetName())
             .Seal()
             .Build();
@@ -3547,8 +3547,8 @@ TExprNode::TPtr PullAssumeColumnOrderOverEquiJoin(const TExprNode::TPtr& node, T
 
 bool IsDropAnyOverEquiJoinInputsEnabled(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "DropAnyOverEquiJoinInputs";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "DropAnyOverEquiJoinInputs";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 TExprNode::TPtr DropAnyOverEquiJoinInputs(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -3638,18 +3638,18 @@ TExprNode::TPtr FoldParseAfterSerialize(const TExprNode::TPtr& node, const TStri
 }
 
 TExprNode::TPtr FoldYsonParseAfterSerialize(const TExprNode::TPtr& node) {
-    static const THashSet<TStringBuf> serializeUdfNames = {"Yson.Serialize", "Yson.SerializeText", "Yson.SerializePretty"};
-    return FoldParseAfterSerialize(node, "Yson.Parse", serializeUdfNames);
+    static const THashSet<TStringBuf> SerializeUdfNames = {"Yson.Serialize", "Yson.SerializeText", "Yson.SerializePretty"};
+    return FoldParseAfterSerialize(node, "Yson.Parse", SerializeUdfNames);
 }
 
 TExprNode::TPtr FoldYson2ParseAfterSerialize(const TExprNode::TPtr& node) {
-    static const THashSet<TStringBuf> serializeUdfNames = {"Yson2.Serialize", "Yson2.SerializeText", "Yson2.SerializePretty"};
-    return FoldParseAfterSerialize(node, "Yson2.Parse", serializeUdfNames);
+    static const THashSet<TStringBuf> SerializeUdfNames = {"Yson2.Serialize", "Yson2.SerializeText", "Yson2.SerializePretty"};
+    return FoldParseAfterSerialize(node, "Yson2.Parse", SerializeUdfNames);
 }
 
 TExprNode::TPtr FoldJsonParseAfterSerialize(const TExprNode::TPtr& node) {
-    static const THashSet<TStringBuf> serializeUdfNames = {"Json2.Serialize"};
-    return FoldParseAfterSerialize(node, "Json2.Parse", serializeUdfNames);
+    static const THashSet<TStringBuf> SerializeUdfNames = {"Json2.Serialize"};
+    return FoldParseAfterSerialize(node, "Json2.Parse", SerializeUdfNames);
 }
 
 TExprNode::TPtr FoldSeralizeAfterParse(const TExprNode::TPtr& node, const TStringBuf parseUdfName, const TStringBuf serializeUdfName) {
@@ -3845,8 +3845,8 @@ TExprNode::TPtr OptimizeMerge(const TExprNode::TPtr& node, TExprContext& ctx, TO
 
 bool IsEarlyExpandOfSkipNullAllowed(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const char optName[] = "EarlyExpandSkipNull";
-    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+    static const char OptName[] = "EarlyExpandSkipNull";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 TExprNode::TPtr ReplaceFuncWithImpl(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -3953,9 +3953,9 @@ TExprNode::TPtr MemberOverFilterSkipNullMembers(const TExprNode::TPtr& node, TEx
 }
 
 bool IsSqlWithNothingOrNullOpsEnabled(const TOptimizeContext& optCtx) {
-    static const char optName[] = "SqlInWithNothingOrNull";
+    static const char OptName[] = "SqlInWithNothingOrNull";
     YQL_ENSURE(optCtx.Types);
-    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 } // namespace

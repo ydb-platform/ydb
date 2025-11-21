@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "arrow/c/helpers.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/c/helpers.h"
 
 namespace arrow20 {
 namespace internal {

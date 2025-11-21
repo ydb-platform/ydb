@@ -370,14 +370,14 @@ bool TGroupByClause::HoppingWindow(const TRule_hopping_window_specification& nod
     {
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
         TSqlExpression expr(Ctx_, Mode_);
-        LegacyHoppingWindowSpec_->TimeExtractor = expr.Build(node.GetRule_expr3());
+        LegacyHoppingWindowSpec_->TimeExtractor = Unwrap(expr.Build(node.GetRule_expr3()));
         if (!LegacyHoppingWindowSpec_->TimeExtractor) {
             return false;
         }
     }
     auto processIntervalParam = [&](const TRule_expr& rule) -> TNodePtr {
         TSqlExpression expr(Ctx_, Mode_);
-        auto node = expr.Build(rule);
+        auto node = Unwrap(expr.Build(rule));
         if (!node) {
             return nullptr;
         }

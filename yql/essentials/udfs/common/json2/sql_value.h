@@ -109,7 +109,7 @@ TUnboxedValue TryConvertJson<bool>(const IValueBuilder* valueBuilder, const TUnb
 template <EDataSlot InputType, class TValueType, bool ForceConvert = false>
 class TSqlValue: public TBoxedValue {
 public:
-    enum class TErrorCode: ui8 {
+    enum class EErrorCode: ui8 {
         Empty = 0,
         Error = 1
     };
@@ -165,7 +165,7 @@ public:
     }
 
 private:
-    TUnboxedValue BuildErrorResult(const IValueBuilder* valueBuilder, TErrorCode code, const TStringBuf message) const {
+    TUnboxedValue BuildErrorResult(const IValueBuilder* valueBuilder, EErrorCode code, const TStringBuf message) const {
         TUnboxedValue* items = nullptr;
         auto errorTuple = valueBuilder->NewArray(2, items);
         items[0] = TUnboxedValuePod(static_cast<ui8>(code));
@@ -199,22 +199,22 @@ private:
             const auto result = ExecuteJsonPath(jsonPath, jsonDom, variables, valueBuilder);
 
             if (result.IsError()) {
-                return BuildErrorResult(valueBuilder, TErrorCode::Error, TStringBuilder() << "Error executing jsonpath:" << Endl << result.GetError() << Endl);
+                return BuildErrorResult(valueBuilder, EErrorCode::Error, TStringBuilder() << "Error executing jsonpath:" << Endl << result.GetError() << Endl);
             }
 
             const auto& nodes = result.GetNodes();
             if (nodes.empty()) {
-                return BuildErrorResult(valueBuilder, TErrorCode::Empty, "Result is empty");
+                return BuildErrorResult(valueBuilder, EErrorCode::Empty, "Result is empty");
             }
 
             if (nodes.size() > 1) {
-                return BuildErrorResult(valueBuilder, TErrorCode::Error, "Result consists of multiple items");
+                return BuildErrorResult(valueBuilder, EErrorCode::Error, "Result consists of multiple items");
             }
 
             const auto& value = nodes[0];
             if (value.Is(EValueType::Array) || value.Is(EValueType::Object)) {
                 // SqlValue can return only scalar values
-                return BuildErrorResult(valueBuilder, TErrorCode::Error, "Extracted JSON value is either object or array");
+                return BuildErrorResult(valueBuilder, EErrorCode::Error, "Extracted JSON value is either object or array");
             }
 
             if (value.Is(EValueType::Null)) {
@@ -226,7 +226,7 @@ private:
             TUnboxedValue convertedValue = TryConvertJson<TValueType, ForceConvert>(valueBuilder, source);
             if (!convertedValue) {
                 // error while converting JSON value type to TValueType
-                return BuildErrorResult(valueBuilder, TErrorCode::Error, "Cannot convert extracted JSON value to target type");
+                return BuildErrorResult(valueBuilder, EErrorCode::Error, "Cannot convert extracted JSON value to target type");
             }
 
             return BuildSuccessfulResult(valueBuilder, std::move(convertedValue));

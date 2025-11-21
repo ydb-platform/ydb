@@ -1879,7 +1879,7 @@ private:
     }
 
     const TString& FindColumnTypeAlias(const TString& colType, bool& isTypeSerial) {
-        const static std::unordered_map<TString, TString> aliasMap{
+        const static std::unordered_map<TString, TString> AliasMap{
             {"smallserial", "int2"},
             {"serial2", "int2"},
             {"serial", "int4"},
@@ -1887,8 +1887,8 @@ private:
             {"bigserial", "int8"},
             {"serial8", "int8"},
         };
-        const auto aliasIt = aliasMap.find(to_lower(colType));
-        if (aliasIt == aliasMap.end()) {
+        const auto aliasIt = AliasMap.find(to_lower(colType));
+        if (aliasIt == AliasMap.end()) {
             isTypeSerial = false;
             return colType;
         }

@@ -38,7 +38,7 @@ public:
     {
     }
 
-    inline TPyObjectPtr(PyObject* p, AddRef)
+    inline TPyObjectPtr(PyObject* p, EAddRef)
         : TSelf(p)
     {
     }

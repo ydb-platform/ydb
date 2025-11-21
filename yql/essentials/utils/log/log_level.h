@@ -18,7 +18,10 @@ enum class ELevel {
     TRACE = TLOG_RESOURCES,
 };
 
-struct ELevelHelpers {
+class TLevelHelpers {
+public:
+    TLevelHelpers() = delete;
+
     static constexpr bool Lte(ELevel l1, ELevel l2) {
         return ToInt(l1) <= ToInt(l2);
     }
@@ -110,14 +113,17 @@ struct ELevelHelpers {
 
     template <typename TFunctor>
     static void ForEach(TFunctor&& f) {
-        static const int minValue = ToInt(ELevel::FATAL);
-        static const int maxValue = ToInt(ELevel::TRACE);
+        static const int MinValue = ToInt(ELevel::FATAL);
+        static const int MaxValue = ToInt(ELevel::TRACE);
 
-        for (int l = minValue; l <= maxValue; l++) {
+        for (int l = MinValue; l <= MaxValue; l++) {
             f(FromInt(l));
         }
     }
 };
+
+// TODO(YQL-20086): Migrate YDB to TLevelHelpers
+using ELevelHelpers = TLevelHelpers;
 
 } // namespace NLog
 } // namespace NYql

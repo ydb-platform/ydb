@@ -25,10 +25,10 @@
 #include <limits>
 #include <type_traits>
 
-#include "arrow/util/endian.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/ubsan.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/endian.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 namespace util {

@@ -90,9 +90,9 @@ TString ExtractSharedObjectNameFromErrorMessage(const char* message) {
 
     // example:
     // util/system/dynlib.cpp:56: libcuda.so.1: cannot open shared object file: No such file or directory
-    static std::regex re(".*: (.+): cannot open shared object file: No such file or directory");
+    static std::regex Re(".*: (.+): cannot open shared object file: No such file or directory");
     std::cmatch match;
-    if (!std::regex_match(message, match, re)) {
+    if (!std::regex_match(message, match, Re)) {
         return "";
     }
 

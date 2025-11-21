@@ -453,8 +453,7 @@ namespace NKikimr::NStorage {
 
         // update config if needed, or just fan-out binding changes
         if (record.HasCommittedStorageConfig()) {
-            ApplyStorageConfig(record.GetCommittedStorageConfig());
-            FanOutReversePush(&record.GetCommittedStorageConfig());
+            ApplyCommittedStorageConfig(record.GetCommittedStorageConfig());
         } else if (bindingUpdate) {
             FanOutReversePush(nullptr); // no configuration change, but root node has been updated
         }
@@ -495,7 +494,7 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TDistributedConfigKeeper::UpdateBound(ui32 refererNodeId, TNodeIdentifier nodeId, const TStorageConfigMeta& meta, TEvNodeConfigPush *msg) {
+    bool TDistributedConfigKeeper::UpdateBound(ui32 refererNodeId, TNodeIdentifier nodeId, const TStorageConfigMeta& meta, TEvNodeConfigPush *msg) {
         STLOG(PRI_DEBUG, BS_NODE, NWDC18, "UpdateBound", (RefererNodeId, refererNodeId), (NodeId, nodeId), (Meta, meta));
 
         const auto [it, inserted] = AllBoundNodes.try_emplace(std::move(nodeId));
@@ -521,7 +520,11 @@ namespace NKikimr::NStorage {
             refIt->second = node.Configs.emplace(node.Configs.end(), meta);
         } else { // update meta (even if it didn't change)
             refIt->second->CopyFrom(meta);
-            node.Configs.splice(node.Configs.end(), node.Configs, refIt->second);
+            Y_ABORT_UNLESS(!node.Configs.empty());
+            if (node.Configs.back().GetGeneration() <= meta.GetGeneration()) {
+                // move it to the end as it supersedes existing one
+                node.Configs.splice(node.Configs.end(), node.Configs, refIt->second);
+            }
         }
 
         if (msg && prev != node.Configs.back()) { // update config for this node
@@ -529,6 +532,8 @@ namespace NKikimr::NStorage {
             it->first.Serialize(boundNode->MutableNodeId());
             boundNode->MutableMeta()->CopyFrom(node.Configs.back());
         }
+
+        return prev != node.Configs.back();
     }
 
     void TDistributedConfigKeeper::DeleteBound(ui32 refererNodeId, const TNodeIdentifier& nodeId, TEvNodeConfigPush *msg) {
@@ -569,15 +574,12 @@ namespace NKikimr::NStorage {
         auto& record = ev->Get()->Record;
 
         bool knownNode = false;
-        bool needToSendConfig = false;
         if (const auto it = AllNodeIds.find(senderNodeId); it != AllNodeIds.end() && IsSelfStatic) {
             Y_ABORT_UNLESS(StorageConfig); // we must have the storage configuration by the time we can process this message
             if (record.GetInitial()) {
                 for (const auto& item : record.GetBoundNodes()) {
-                    if (item.GetNodeId().GetNodeId() == senderNodeId) {
-                        // ensure that whole node identifier tuple matches
+                    if (item.GetNodeId().GetNodeId() == senderNodeId) { // ensure that whole node identifier tuple matches
                         knownNode = it->second == TNodeIdentifier(item.GetNodeId());
-                        needToSendConfig = item.GetMeta().GetGeneration() < StorageConfig->GetGeneration();
                         break;
                     }
                 }
@@ -654,8 +656,7 @@ namespace NKikimr::NStorage {
             GetRootNodeId());
         TBoundNode& info = it->second;
         if (inserted) {
-            auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(),
-                needToSendConfig ? StorageConfig.get() : nullptr);
+            auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId());
             if (record.GetInitial()) {
                 auto *cache = record.MutableCacheUpdate();
 
@@ -697,10 +698,19 @@ namespace NKikimr::NStorage {
         }
 
         // process updates
+        bool fanOutCommittedStorageConfig = false;
         for (const auto& item : record.GetBoundNodes()) {
             const auto& nodeId = item.GetNodeId();
-            UpdateBound(senderNodeId, nodeId, item.GetMeta(), getPushEv());
+            const bool configUpdated = UpdateBound(senderNodeId, nodeId, item.GetMeta(), getPushEv());
             info.BoundNodeIds.insert(nodeId);
+
+            if (Scepter && configUpdated && item.GetMeta().GetGeneration() < StorageConfig->GetGeneration()) {
+                // a new node has arrived with stale configuration: we have to update it
+                fanOutCommittedStorageConfig = true;
+            }
+        }
+        if (fanOutCommittedStorageConfig) {
+            FanOutReversePush(StorageConfig.get());
         }
 
         // process deleted items
@@ -787,23 +797,10 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        THashSet<ui32> nodesToUpdate;
-        for (auto& [nodeId, node] : AllBoundNodes) {
-            if (!node.Configs.empty()) {
-                auto& last = node.Configs.back();
-                if (last.GetGeneration() < StorageConfig->GetGeneration()) {
-                    nodesToUpdate.insert(nodeId.NodeId());
-                }
-            }
-        }
-
         std::vector<ui32> goingToUnbind;
         for (const auto& [nodeId, info] : DirectBoundNodes) {
             if (BridgeInfo->GetPileForNode(nodeId) != BridgeInfo->SelfNodePile) {
                 auto ev = TEvNodeConfigReversePush::MakeRejected();
-                if (nodesToUpdate.contains(nodeId)) {
-                    ev->Record.MutableCommittedStorageConfig()->CopyFrom(*StorageConfig);
-                }
                 if (Binding && Binding->RootNodeId) { // inform about new root, if we have it
                     ev->Record.SetRootNodeId(Binding->RootNodeId);
                 }

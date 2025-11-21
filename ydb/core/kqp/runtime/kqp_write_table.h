@@ -68,9 +68,9 @@ IDataBatcherPtr CreateColumnDataBatcher(
 
 class IDataBatchProjection : public TThrRefBase {
 public:
-    virtual void Fill(const IDataBatchPtr& data) = 0;
-    virtual void Fill(const TRowsRef& data) = 0;
+    virtual void AddRow(TConstArrayRef<TCell> row) = 0;
     virtual IDataBatchPtr Flush() = 0;
+    virtual bool IsEmpty() const = 0;
 };
 
 using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
@@ -84,7 +84,7 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
     const bool preferAdditionalInputColumns,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
-std::vector<ui32> GetKeyIndexes(
+std::vector<ui32> GetIndexes(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
     const TConstArrayRef<ui32> inputWriteIndex,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
@@ -92,12 +92,15 @@ std::vector<ui32> GetKeyIndexes(
     const TConstArrayRef<ui32> outputWriteIndex,
     const bool preferAdditionalInputColumns);
 
+bool IsEqual(
+    TConstArrayRef<TCell> firstCells,
+    TConstArrayRef<TCell> secondCells,
+    const std::vector<ui32>& newIndexes,
+    const std::vector<ui32>& oldIndexes,
+    TConstArrayRef<NScheme::TTypeInfo> types);
+
 std::vector<TConstArrayRef<TCell>> GetRows(
     const NKikimr::NKqp::IDataBatchPtr& batch);
-std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
-    const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
-    const std::vector<TConstArrayRef<bool>>& masks,
-    const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes);
 
 std::vector<TConstArrayRef<TCell>> CutColumns(
     const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);
@@ -129,8 +132,8 @@ private:
 
     std::vector<std::vector<TCell>> Cells;
     TKeysSet UniqueCellsSet;
-    THashMap<std::vector<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PrimaryToSecondary;
-    THashMap<std::vector<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> SecondaryToPrimary;
+    THashMap<TConstArrayRef<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PrimaryToSecondary;
+    THashMap<TConstArrayRef<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> SecondaryToPrimary;
 };
 
 class IShardedWriteController : public TThrRefBase {

@@ -1,5 +1,74 @@
 # Changelog
 
+## [12.21.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.20.0...v12.21.0) (2025-11-18)
+
+
+### Features
+
+* support streaming query in autocomplete ([#3097](https://github.com/ydb-platform/ydb-embedded-ui/issues/3097)) ([96ceae4](https://github.com/ydb-platform/ydb-embedded-ui/commit/96ceae472eb1fa94e8306dc3cb71bcc8ca48292b))
+
+
+### Bug Fixes
+
+* progress is not shown for export ([#3092](https://github.com/ydb-platform/ydb-embedded-ui/issues/3092)) ([11c971a](https://github.com/ydb-platform/ydb-embedded-ui/commit/11c971acc15d0fcbf51661812c5b0339df6ec901))
+* **QueryEditor:** pass base64 from settings ([#3093](https://github.com/ydb-platform/ydb-embedded-ui/issues/3093)) ([eb54851](https://github.com/ydb-platform/ydb-embedded-ui/commit/eb54851545fb05d26aaa8f8892a0dec4a99205b9))
+* **TopicData:** scroll to offset on load ([#3085](https://github.com/ydb-platform/ydb-embedded-ui/issues/3085)) ([9d0de26](https://github.com/ydb-platform/ydb-embedded-ui/commit/9d0de26404fcede56f8f1814d58b921bd1eb570e))
+
+## [12.20.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.19.1...v12.20.0) (2025-11-14)
+
+
+### Features
+
+* configure meta settings, use for table columns width ([#3068](https://github.com/ydb-platform/ydb-embedded-ui/issues/3068)) ([56f1fc6](https://github.com/ydb-platform/ydb-embedded-ui/commit/56f1fc66747a1919418d71ff120c700929469125))
+
+
+### Bug Fixes
+
+* monitoring link ([#3086](https://github.com/ydb-platform/ydb-embedded-ui/issues/3086)) ([4ef5cc0](https://github.com/ydb-platform/ydb-embedded-ui/commit/4ef5cc01e49b92c39298152be15167716c7b86cc))
+
+## [12.19.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.19.0...v12.19.1) (2025-11-14)
+
+
+### Bug Fixes
+
+* check for correct controlPlane id ([#3081](https://github.com/ydb-platform/ydb-embedded-ui/issues/3081)) ([590fa2d](https://github.com/ydb-platform/ydb-embedded-ui/commit/590fa2d216258f447508e2b2b36429e9742473eb))
+
+## [12.19.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.18.0...v12.19.0) (2025-11-14)
+
+
+### Features
+
+* add streaming query snippets ([#3076](https://github.com/ydb-platform/ydb-embedded-ui/issues/3076)) ([5e503fc](https://github.com/ydb-platform/ydb-embedded-ui/commit/5e503fc445abad1a6ca66f258b8cc642a4353560))
+* show streaming query stats in Info tab ([#3060](https://github.com/ydb-platform/ydb-embedded-ui/issues/3060)) ([2a05ad5](https://github.com/ydb-platform/ydb-embedded-ui/commit/2a05ad5a177f71dc56b5759fcb21d5588561e0ee))
+
+
+### Bug Fixes
+
+* **Healthcheck:** sort issues ([#3079](https://github.com/ydb-platform/ydb-embedded-ui/issues/3079)) ([c9733a7](https://github.com/ydb-platform/ydb-embedded-ui/commit/c9733a752a8ccf55493352168cf1563817fc95b8))
+* monitoring show conditions ([#3080](https://github.com/ydb-platform/ydb-embedded-ui/issues/3080)) ([88d731f](https://github.com/ydb-platform/ydb-embedded-ui/commit/88d731f6749c5f471d796866316c35c5610fdf50))
+* show truthful percents on doughnuts ([#3077](https://github.com/ydb-platform/ydb-embedded-ui/issues/3077)) ([9c2fb00](https://github.com/ydb-platform/ydb-embedded-ui/commit/9c2fb001f9637a8450b628782c9f8ac7a2dc4236))
+
+## [12.18.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.17.1...v12.18.0) (2025-11-12)
+
+
+### Features
+
+* pass controlplane and userattributes to get links ([#3074](https://github.com/ydb-platform/ydb-embedded-ui/issues/3074)) ([44c82d9](https://github.com/ydb-platform/ydb-embedded-ui/commit/44c82d9e14c3bb804907fbed3483b2f2225e4eac))
+
+## [12.17.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.17.0...v12.17.1) (2025-11-11)
+
+
+### Bug Fixes
+
+* downgrade shiki to 3.14.0 ([#3066](https://github.com/ydb-platform/ydb-embedded-ui/issues/3066)) ([c558b29](https://github.com/ydb-platform/ydb-embedded-ui/commit/c558b29f179d5a101cae09f64f343f680d7bcc2c))
+
+## [12.17.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.16.1...v12.17.0) (2025-11-11)
+
+
+### Features
+
+* use shiki for syntax highlight ([#3052](https://github.com/ydb-platform/ydb-embedded-ui/issues/3052)) ([b6a2d5a](https://github.com/ydb-platform/ydb-embedded-ui/commit/b6a2d5a0137a01cc78f2ad0cd180f0bd4d838c76))
+
 ## [12.16.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.16.0...v12.16.1) (2025-11-11)
 
 

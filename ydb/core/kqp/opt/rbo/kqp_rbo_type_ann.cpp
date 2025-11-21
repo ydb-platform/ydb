@@ -60,7 +60,9 @@ TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
     TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> newItemTypes;
     for (auto t : structItemTypes) {
-        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>("_alias_" + read->Alias + "." + t->GetName(), t->GetItemType()));
+        TString columnName = TString(t->GetName());
+        TString fullName = read->Alias != "" ? ( "_alias_" + read->Alias + "." + columnName ) : columnName;
+        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, t->GetItemType()));
     }
 
     auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);

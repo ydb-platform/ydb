@@ -26,6 +26,7 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <util/generic/overloaded.h>
 
 namespace NKafka {
 

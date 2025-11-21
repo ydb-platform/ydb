@@ -1,4 +1,7 @@
 #include "fulltext.h"
+
+#include <contrib/libs/snowball/include/libstemmer.h>
+
 #include <util/charset/utf8.h>
 #include <util/generic/xrange.h>
 
@@ -172,8 +175,32 @@ namespace {
             return false;
         }
 
-        if (settings.has_language()) {
-            error = "Unsupported language setting";
+        if (settings.use_filter_snowball()) {
+            if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
+                error = "cannot set use_filter_snowball with use_filter_ngram or use_filter_edge_ngram at the same time";
+                return false;
+            }
+
+            if (!settings.has_language()) {
+                error = "language required when use_filter_snowball is set";
+                return false;
+            }
+
+            bool supportedLanguage = false;
+            for (auto ptr = sb_stemmer_list(); *ptr != nullptr; ++ptr) {
+                if (settings.language() == *ptr) {
+                    supportedLanguage = true;
+                    break;
+                }
+            }
+            if (!supportedLanguage) {
+                error = "language is not supported by snowball";
+                return false;
+            }
+        } else if (settings.has_language()) {
+            // Currently, language is only used for stemming (use_filter_snowball).
+            // In the future, it may be used for other language-sensitive operations (e.g., stopword filtering).
+            error = "language setting is only supported with use_filter_snowball at present; other uses may be supported in the future";
             return false;
         }
 
@@ -266,6 +293,28 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
             }
             return false;
         }), tokens.end());
+    }
+
+    if (settings.use_filter_snowball()) {
+        struct sb_stemmer* stemmer = sb_stemmer_new(settings.language().c_str(), nullptr);
+        if (Y_UNLIKELY(stemmer == nullptr)) {
+            ythrow yexception() << "sb_stemmer_new returned nullptr";
+        }
+        Y_DEFER { sb_stemmer_delete(stemmer); };
+
+        for (auto& token : tokens) {
+            const sb_symbol* stemmed = sb_stemmer_stem(
+                stemmer,
+                reinterpret_cast<const sb_symbol*>(token.data()),
+                token.size()
+            );
+            if (Y_UNLIKELY(stemmed == nullptr)) {
+                ythrow yexception() << "unable to allocate memory for sb_stemmer_stem result";
+            }
+
+            const size_t resultLength = sb_stemmer_length(stemmer);
+            token = std::string(reinterpret_cast<const char*>(stemmed), resultLength);
+        }
     }
 
     if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
@@ -367,6 +416,8 @@ bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nam
         analyzers->set_filter_length_min(ParseInt32(name, value, error));
     } else if (nameLower == "filter_length_max") {
         analyzers->set_filter_length_max(ParseInt32(name, value, error));
+    } else if (nameLower == "use_filter_snowball") {
+        analyzers->set_use_filter_snowball(ParseBool(name, value, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << name;
         return false;

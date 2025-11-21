@@ -1,7 +1,9 @@
 #include "sqs_topic_proxy.h"
 #include "actor.h"
 #include "error.h"
+#include "delete_message.h"
 #include "request.h"
+#include "receive_message.h"
 #include "send_message.h"
 #include "utils.h"
 
@@ -136,15 +138,12 @@ namespace NKikimr::NGRpcService {
 
     DECLARE_RPC(GetQueueUrl);
     DECLARE_RPC_NI(CreateQueue);
-    DECLARE_RPC_NI(ReceiveMessage);
     DECLARE_RPC_NI(GetQueueAttributes);
     DECLARE_RPC_NI(ListQueues);
-    DECLARE_RPC_NI(DeleteMessage);
     DECLARE_RPC_NI(PurgeQueue);
     DECLARE_RPC_NI(DeleteQueue);
     DECLARE_RPC_NI(ChangeMessageVisibility);
     DECLARE_RPC_NI(SetQueueAttributes);
-    DECLARE_RPC_NI(DeleteMessageBatch);
     DECLARE_RPC_NI(ChangeMessageVisibilityBatch);
     DECLARE_RPC_NI(ListDeadLetterSourceQueues);
     DECLARE_RPC_NI(ListQueueTags);
@@ -159,6 +158,21 @@ namespace NKikimr::NGRpcService {
     template <>
     IActor* TEvSqsTopicSendMessageBatchRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
         return CreateSendMessageBatchActor(msg).release();
+    }
+
+    template <>
+    IActor* TEvSqsTopicReceiveMessageRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+        return CreateReceiveMessageActor(msg).release();
+    }
+
+    template <>
+    IActor* TEvSqsTopicDeleteMessageRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+        return CreateDeleteMessageActor(msg).release();
+    }
+
+    template <>
+    IActor* TEvSqsTopicDeleteMessageBatchRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+        return CreateDeleteMessageBatchActor(msg).release();
     }
 
 } // namespace NKikimr::NGRpcService

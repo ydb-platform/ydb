@@ -626,7 +626,18 @@ grpc_socket_mutator* NImpl::CreateGRpcKeepAliveSocketMutator(const TTcpKeepAlive
     return nullptr;
 }
 
-gpr_timespec DurationToTimespec(const NYdb::TDeadline::Duration& duration) noexcept {
+}
+
+grpc::TimePoint<NYdb::TDeadline>::TimePoint(const NYdb::TDeadline& deadline)
+    : time_(DeadlineToTimespec(deadline))
+{
+}
+
+gpr_timespec grpc::TimePoint<NYdb::TDeadline>::raw_time() const noexcept {
+    return time_;
+}
+
+gpr_timespec grpc::TimePoint<NYdb::TDeadline>::DurationToTimespec(const NYdb::TDeadline::Duration& duration) noexcept {
     const auto secs = std::chrono::floor<std::chrono::seconds>(duration);
     if (duration == NYdb::TDeadline::Duration::max() || secs.count() >= gpr_inf_future(GPR_CLOCK_MONOTONIC).tv_sec) {
         return gpr_inf_future(GPR_TIMESPAN);
@@ -643,10 +654,8 @@ gpr_timespec DurationToTimespec(const NYdb::TDeadline::Duration& duration) noexc
     return t;
 }
 
-gpr_timespec DeadlineToTimespec(const NYdb::TDeadline& deadline) {
+gpr_timespec grpc::TimePoint<NYdb::TDeadline>::DeadlineToTimespec(const NYdb::TDeadline& deadline) {
     gpr_timespec t =
         DurationToTimespec(deadline.GetTimePoint() != NYdb::TDeadline::TimePoint::max() ? deadline.GetTimePoint() - NYdb::TDeadline::Clock::now() : NYdb::TDeadline::Duration::max());
     return gpr_convert_clock_type(t, GPR_CLOCK_MONOTONIC);
-}
-
 }

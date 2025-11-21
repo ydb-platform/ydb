@@ -4,7 +4,6 @@
 
 namespace NKikimr::NPQ::NMLP  {
     namespace NMessageConsts {
-
         constexpr TStringBuf MessageDeduplicationId = "__MessageDeduplicationId";
         constexpr TStringBuf MessageAttributes = "__MessageAttributes";
         constexpr TStringBuf DelaySeconds = "__DelaySeconds";

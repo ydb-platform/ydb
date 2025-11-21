@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     attributes_md5.cpp
+    attribute_name.cpp
 )
 
 PEERDIR(

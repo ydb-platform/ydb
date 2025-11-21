@@ -230,7 +230,7 @@ struct TListJobsOptions
 {
     // NB(bystrovserg): Do not forget to add new options to continuation token serializer!
     NJobTrackerClient::TJobId JobCompetitionId;
-    NJobTrackerClient::TJobId MainJobId;
+    NJobTrackerClient::TJobId DistributedGroupMainJobId;
     std::optional<NJobTrackerClient::EJobType> Type;
     std::optional<NJobTrackerClient::EJobState> State;
     std::optional<std::string> Address;
@@ -408,7 +408,7 @@ struct TJob
     std::optional<bool> HasSpec;
     std::optional<bool> HasCompetitors;
     std::optional<bool> HasProbingCompetitors;
-    NJobTrackerClient::TJobId MainJobId;
+    NJobTrackerClient::TJobId DistributedGroupMainJobId;
     NJobTrackerClient::TJobId JobCompetitionId;
     NJobTrackerClient::TJobId ProbingJobCompetitionId;
     NYson::TYsonString Error;
@@ -424,7 +424,7 @@ struct TJob
     std::optional<TString> Pool;
     std::optional<TString> MonitoringDescriptor;
     std::optional<ui64> JobCookie;
-    std::optional<ui64> JobCookieGroupIndex;
+    std::optional<ui64> DistributedGroupJobIndex;
     NYson::TYsonString ArchiveFeatures;
     std::optional<std::string> OperationIncarnation;
     std::optional<NScheduler::TAllocationId> AllocationId;

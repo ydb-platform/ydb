@@ -2,6 +2,8 @@
 
 #include "yson_struct.h"
 
+#include "yson_schema.h"
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -205,6 +207,10 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+    requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
+void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options);
 
 template <CPolymorphicEnumMapping TMapping>
 void Serialize(const TPolymorphicYsonStruct<TMapping>& value, NYson::IYsonConsumer* consumer);

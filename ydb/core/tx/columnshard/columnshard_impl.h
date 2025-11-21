@@ -279,7 +279,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
-    void Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const TActorContext& ctx);
+    void Handle(NStat::TEvStatistics::TEvAnalyzeShard::TPtr& ev, const TActorContext& ctx);
     void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&);
@@ -446,7 +446,7 @@ protected:
             HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
             HFunc(TEvPrivate::TEvTieringModified, Handle);
 
-            HFunc(NStat::TEvStatistics::TEvAnalyzeTable, Handle);
+            HFunc(NStat::TEvStatistics::TEvAnalyzeShard, Handle);
             HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
 
             HFunc(NActors::TEvents::TEvUndelivered, Handle);

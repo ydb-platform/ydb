@@ -3,6 +3,9 @@ LIBRARY()
 SRCS(
     actor.cpp
     error.cpp
+    delete_message.cpp
+    receipt.cpp
+    receive_message.cpp
     send_message.cpp
     sqs_topic_proxy.cpp
     statuses.cpp
@@ -24,6 +27,8 @@ PEERDIR(
     ydb/services/lib/sharding
     ydb/services/persqueue_v1
     ydb/services/sqs_topic/queue_url
+    ydb/services/sqs_topic/queue_url/holder
+    ydb/services/sqs_topic/protos/receipt
     ydb/services/ydb
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/mlp
@@ -34,4 +39,7 @@ PEERDIR(
 
 END()
 
-RECURSE(queue_url)
+RECURSE(
+    protos
+    queue_url
+)

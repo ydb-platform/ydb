@@ -3952,6 +3952,12 @@ TExprNode::TPtr MemberOverFilterSkipNullMembers(const TExprNode::TPtr& node, TEx
     return node;
 }
 
+bool IsSqlWithNothingOrNullOpsEnabled(const TOptimizeContext& optCtx) {
+    static const char optName[] = "SqlInWithNothingOrNull";
+    YQL_ENSURE(optCtx.Types);
+    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+}
+
 } // namespace
 
 void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
@@ -4474,7 +4480,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             .Build();
     };
 
-    map["SqlIn"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
+    map["SqlIn"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& opCtx) {
         auto collection = node->HeadPtr();
         auto lookup = node->ChildPtr(1);
         auto options = node->ChildPtr(2);
@@ -4593,10 +4599,12 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             }
         }
 
-        if (isAnsi) {
-            auto lookupTypeNoOpt = RemoveAllOptionals(lookup->GetTypeAnn());
-            if (lookupTypeNoOpt->GetKind() == ETypeAnnotationKind::Null) {
-                YQL_CLOG(DEBUG, Core) << "NULL IN";
+        auto lookupTypeNoOpt = RemoveAllOptionals(lookup->GetTypeAnn());
+        if ((lookupTypeNoOpt->GetKind() == ETypeAnnotationKind::Null) ||
+            (lookup->IsCallable("Nothing") && IsSqlWithNothingOrNullOpsEnabled(opCtx))) {
+            const auto logString = lookupTypeNoOpt->GetKind() == ETypeAnnotationKind::Null ? "NULL IN" : "Nothing IN";
+            if (isAnsi) {
+                YQL_CLOG(DEBUG, Core) << logString;
                 return ctx.Builder(node->Pos())
                     .Callable("If")
                         .Add(0, BuildSqlInCollectionEmptyPred(TCoSqlIn(node), ctx))
@@ -4605,6 +4613,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                         .Seal()
                     .Seal()
                     .Build();
+            } else if (IsSqlWithNothingOrNullOpsEnabled(opCtx)) {
+                YQL_CLOG(DEBUG, Core) << logString;
+                return MakeBoolNothing(node->Pos(), ctx);
             }
         }
 

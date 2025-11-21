@@ -5,6 +5,8 @@
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_data.h"
 
+#include <util/generic/overloaded.h>
+
 namespace NKikimr::NPDisk {
 
     class TRequestBase;

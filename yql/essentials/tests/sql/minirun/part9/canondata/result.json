@@ -821,6 +821,20 @@
             "uri": "https://{canondata_backend}/1942173/f37f53f2bdf2e81f0ffdb8cf146faecaff60e7af/resource.tar.gz#test.test_in-in_ansi_dict-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[in-in_noansi_nothing_and_null-default.txt-Debug]": [
+        {
+            "checksum": "fa180952aa71062063bebce12c8210ef",
+            "size": 695,
+            "uri": "https://{canondata_backend}/1924537/36c6c49367e1708bf165e9c2557f24813d599ea4/resource.tar.gz#test.test_in-in_noansi_nothing_and_null-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[in-in_noansi_nothing_and_null-default.txt-Results]": [
+        {
+            "checksum": "b943c7317fb95ff0aad8b8dcc53454c7",
+            "size": 7514,
+            "uri": "https://{canondata_backend}/1130705/3265a3fb703daa3e2b546f76a517ffaad9b23407/resource.tar.gz#test.test_in-in_noansi_nothing_and_null-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[in-in_with_literal_list_of_structs_ansi-default.txt-Debug]": [
         {
             "checksum": "0108368ef6b818a91be74cde58fcc55a",

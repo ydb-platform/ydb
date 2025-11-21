@@ -21,6 +21,7 @@
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 #include <ydb/core/protos/cluster_state_info.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <google/protobuf/util/json_util.h>
 
@@ -148,7 +149,6 @@ public:
         request(TEvTabletStateRequest);
         request(TEvBSGroupStateRequest);
         request(TEvSystemStateRequest);
-        request(TEvBridgeInfoRequest);
         request(TEvNodeStateRequest);
 #undef request
     }
@@ -157,6 +157,7 @@ public:
         RequestSession();
         RequestHealthCheck();
         RequestBaseConfig();
+        RequestStorageConfig();
         Nodes = ev->Get()->Nodes;
         NodeReceived.resize(Nodes.size());
         NodeRequested.resize(Nodes.size());
@@ -243,8 +244,20 @@ public:
         Requested++;
     }
 
+    void RequestStorageConfig() {
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NKikimr::TEvNodeWardenQueryStorageConfig(/*subscribe=*/false));
+        Requested++;
+    }
+
     void Handle(NKikimr::NStorage::TEvNodeWardenBaseConfig::TPtr ev) {
         State.MutableBaseConfig()->CopyFrom(ev->Get()->BaseConfig);
+        ++Received;
+        CheckReply();
+    }
+
+    void Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr ev) {
+        State.MutableBridgeClusterState()->CopyFrom(ev->Get()->Config->GetClusterState());
+        State.MutableBridgeClusterStateDetails()->CopyFrom(ev->Get()->Config->GetClusterStateDetails());
         ++Received;
         CheckReply();
     }
@@ -272,7 +285,6 @@ public:
     HandleWhiteboard(TEvTabletStateResponse, TabletInfo)
     HandleWhiteboard(TEvBSGroupStateResponse, BSGroupInfo)
     HandleWhiteboard(TEvSystemStateResponse, SystemInfo)
-    HandleWhiteboard(TEvBridgeInfoResponse, BridgeInfo)
     HandleWhiteboard(TEvNodeStateResponse, NodeStateInfo)
 
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
@@ -359,16 +371,27 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
-            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvNodeStateResponse, Handle);
             hFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle)
             hFunc(NKikimr::NStorage::TEvNodeWardenBaseConfig, Handle);
+            hFunc(NKikimr::TEvNodeWardenStorageConfig, Handle);
             hFunc(NKikimr::NCountersInfo::TEvCountersInfoResponse, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, Wakeup);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
         }
+    }
+
+    void AddBlock(Ydb::Monitoring::ClusterStateResult& result, const TString& name, const auto& obj) {
+        google::protobuf::util::JsonPrintOptions jsonOpts;
+        jsonOpts.add_whitespace = true;
+        TString data;
+        google::protobuf::util::MessageToJsonString(obj, &data, jsonOpts);
+        auto* block = result.Addblocks();
+        block->Setname(name);
+        block->Setcontent(data);
+        block->Mutabletimestamp()->set_seconds(TInstant::Now().Seconds());
     }
 
     void ReplyAndPassAway() {
@@ -377,21 +400,20 @@ public:
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         operation.set_ready(true);
         operation.set_status(Ydb::StatusIds::SUCCESS);
-        google::protobuf::util::JsonPrintOptions jsonOpts;
-        jsonOpts.add_whitespace = true;
-        TString data;
-        google::protobuf::util::MessageToJsonString(State, &data, jsonOpts);
-        Ydb::Monitoring::ClusterStateResult result;
-        auto* block = result.Addblocks();
-        block->Setname("cluster_state.json");
-        block->Setcontent(data);
-        block->Mutabletimestamp()->set_seconds(TInstant::Now().Seconds());
 
+        Ydb::Monitoring::ClusterStateResult result;
+        AddBlock(result, "cluster_state.json", State);
+        NKikimrClusterStateInfoProto::TClusterStateInfoParameters params;
+        params.SetStartedAt(Started.ToStringUpToSeconds());
+        params.SetDurationSeconds(Duration.Seconds());
+        params.SetPeriodSeconds(Period.Seconds());
+        AddBlock(result, "cluster_state_fetch_parameters.json", params);
         for (ui32 node : xrange(Counters.size())) {
             for (ui32 i : xrange(Counters[node].size())) {
                 auto* counterBlock = result.Addblocks();
                 TStringBuilder sb;
-                sb << "node_" << node << "_counters_" << i << ".json";
+                auto nodeId = Nodes[node].NodeId;
+                sb << "node_" << nodeId << "_counters_" << i << ".json";
                 counterBlock->Setname(sb);
                 counterBlock->Setcontent(Counters[node][i].first);
                 counterBlock->Mutabletimestamp()->set_seconds(Counters[node][i].second.Seconds());

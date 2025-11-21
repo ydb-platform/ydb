@@ -364,7 +364,7 @@ class TestTypesAndFormats(S3ImportTestBase):
                 )
         """)
 
-        test_bucket = "parquet_bucket"
+        test_bucket = "datetime_bucket"
         self.s3_client.create_bucket(test_bucket)
 
         access_key_id_secret_name = f"{test_bucket}_key_id"

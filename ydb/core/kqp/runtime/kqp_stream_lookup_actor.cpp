@@ -48,6 +48,8 @@ public:
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
         , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TaskId, args.TypeEnv, args.HolderFactory, args.InputDesc))
+        , MaxTotalBytesQuota(MaxTotalBytesQuotaStreamLookup())
+        , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -306,7 +308,7 @@ private:
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
 
-        auto overloaded = StreamLookupWorker->IsOverloaded();
+        auto overloaded = StreamLookupWorker->IsOverloaded(MaxRowsProcessing);
         if (!overloaded.has_value()) {
             FetchInputRows();
         } else {
@@ -446,6 +448,9 @@ private:
             }
         }
 
+        TotalBytesQuota -= MaxBytesDefaultQuota;
+        Counters->StreamLookupIteratorTotalQuotaBytesInFlight->Sub(MaxBytesDefaultQuota);
+
         if (!Snapshot.IsValid()) {
             Snapshot = IKqpGateway::TKqpSnapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
         }
@@ -503,6 +508,7 @@ private:
             }
         }
 
+
         YQL_ENSURE(read.LastSeqNo < record.GetSeqNo());
         read.LastSeqNo = record.GetSeqNo();
 
@@ -515,8 +521,14 @@ private:
             request->Record.SetSeqNo(record.GetSeqNo());
 
             auto defaultSettings = GetDefaultReadAckSettings()->Record;
-            request->Record.SetMaxRows(defaultSettings.GetMaxRows());
-            request->Record.SetMaxBytes(defaultSettings.GetMaxBytes());
+            request->Record.SetMaxRows(MaxRowsDefaultQuota);
+            request->Record.SetMaxBytes(MaxBytesDefaultQuota);
+
+            TotalBytesQuota += MaxBytesDefaultQuota;
+            Counters->StreamLookupIteratorTotalQuotaBytesInFlight->Add(MaxBytesDefaultQuota);
+            if (TotalBytesQuota > MaxTotalBytesQuota) {
+                Counters->StreamLookupIteratorTotalQuotaBytesExceeded->Inc();
+            }
 
             const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
 
@@ -658,9 +670,21 @@ private:
         }
 
         auto defaultSettings = GetDefaultReadSettings()->Record;
-        record.SetMaxRows(defaultSettings.GetMaxRows());
-        record.SetMaxBytes(defaultSettings.GetMaxBytes());
+        if (!MaxRowsDefaultQuota || !MaxBytesDefaultQuota) {
+            MaxRowsDefaultQuota = defaultSettings.GetMaxRows();
+            MaxBytesDefaultQuota = defaultSettings.GetMaxBytes();
+        }
+
+        record.SetMaxRows(MaxRowsDefaultQuota);
+        record.SetMaxBytes(MaxBytesDefaultQuota);
         record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+
+        TotalBytesQuota += MaxBytesDefaultQuota;
+        Counters->StreamLookupIteratorTotalQuotaBytesInFlight->Add(MaxBytesDefaultQuota);
+
+        if (TotalBytesQuota > MaxTotalBytesQuota) {
+            Counters->StreamLookupIteratorTotalQuotaBytesExceeded->Inc();
+        }
 
         CA_LOG_D(TStringBuilder() << "Send EvRead (stream lookup) to shardId=" << shardId
             << ", readId = " << record.GetReadId()
@@ -829,6 +853,12 @@ private:
     // stats
     ui64 ReadRowsCount = 0;
     ui64 ReadBytesCount = 0;
+
+    size_t TotalBytesQuota = 0;
+    ui64 MaxTotalBytesQuota = 0;
+    size_t MaxRowsProcessing = 0;
+    size_t MaxBytesDefaultQuota = 0;
+    size_t MaxRowsDefaultQuota = 0;
 
     TIntrusivePtr<TKqpCounters> Counters;
     NWilson::TSpan LookupActorSpan;

@@ -134,8 +134,8 @@ private:
 
 class TAnalyzeActor::TScanActor : public TQueryBase {
 public:
-    TScanActor(TActorId parent, TString query, size_t columnCount)
-        : TQueryBase(NKikimrServices::STATISTICS)
+    TScanActor(TActorId parent, TString Database, TString query, size_t columnCount)
+        : TQueryBase(NKikimrServices::STATISTICS, {}, std::move(Database))
         , Parent(parent)
         , Query(std::move(query))
         , ColumnCount(columnCount)
@@ -265,7 +265,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 
     Become(&TThis::StateQuery);
     auto actor = std::make_unique<TScanActor>(
-        SelfId(), builder.Build(table), builder.ColumnCount());
+        SelfId(), DatabaseName, builder.Build(table), builder.ColumnCount());
     Register(actor.release());
 }
 

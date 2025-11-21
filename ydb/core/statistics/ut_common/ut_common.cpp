@@ -482,18 +482,23 @@ void TAnalyzedTable::ToProto(NKikimrStat::TTable& tableProto) const {
     tableProto.MutableColumnTags()->Add(ColumnTags.begin(), ColumnTags.end());
 }
 
-std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const std::vector<TAnalyzedTable>& tables, const TString operationId) {
+std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(
+        const std::vector<TAnalyzedTable>& tables,
+        const TString operationId, TString databaseName) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
     NKikimrStat::TEvAnalyze& record = ev->Record;
     record.SetOperationId(operationId);
+    record.SetDatabase(std::move(databaseName));
     record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
     for (const TAnalyzedTable& table : tables)
         table.ToProto(*record.AddTables());
     return ev;
 }
 
-void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& tables, const TString operationId) {
-    auto ev = MakeAnalyzeRequest(tables, operationId);
+void Analyze(
+        TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& tables,
+        const TString operationId, TString databaseName) {
+    auto ev = MakeAnalyzeRequest(tables, operationId, databaseName);
 
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(saTabletId, sender, ev.release());

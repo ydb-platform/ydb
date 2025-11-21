@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto databaseInfo = PrepareServerlessDatabaseColumnTables(env, 1, 1);
         const auto& tableInfo = databaseInfo.Tables[0];
 
-        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId}, "operationId", "/Root/Database");
     }
 
     Y_UNIT_TEST(AnalyzeAnalyzeOneColumnTableSpecificColumns) {

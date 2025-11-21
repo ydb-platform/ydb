@@ -95,11 +95,11 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
 
         // Same SA tablet for both serverless databases
         ui64 saTabletId = 0;
-        auto pathId1 = ResolvePathId(runtime, "/Root/Serverless1/Table1");
+        auto pathId1 = ResolvePathId(runtime, "/Root/Serverless1/Table1", nullptr, &saTabletId);
         auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");
 
-        Analyze(runtime, saTabletId, {pathId1});
-        Analyze(runtime, saTabletId, {pathId2});
+        Analyze(runtime, saTabletId, {pathId1}, "opId1", "/Root/Serverless1");
+        Analyze(runtime, saTabletId, {pathId2}, "opId1", "/Root/Serverless2");
 
         auto sender = runtime.AllocateEdgeActor();
         std::vector<TColumnStatisticsProbes> expected = {

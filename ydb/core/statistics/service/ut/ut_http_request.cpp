@@ -54,7 +54,8 @@ void ProbeTest(bool isServerless) {
     runtime.WaitFor("TEvSchemeShardStats 2", [&]{ return secondStatsToSA; });
 
     const auto operationId = TULIDGenerator().Next(TInstant::Now()).ToBinary();
-    auto analyzeRequest = MakeAnalyzeRequest({{tableInfo.PathId, {1, 2}}}, operationId);
+    auto analyzeRequest = MakeAnalyzeRequest(
+        {{tableInfo.PathId, {1, 2}}}, operationId, "/Root/Database");
     runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
     runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 

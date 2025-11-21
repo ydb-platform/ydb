@@ -9882,6 +9882,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 ALTER ASYNC REPLICATION `/Root/replication`
                 SET (
+                    PASSWORD_SECRET_PATH = "password_secret_path"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER ASYNC REPLICATION `/Root/replication`
+                SET (
                     USER = "new_user",
                     PASSWORD = "new_password"
                 );

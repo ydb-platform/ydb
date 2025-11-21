@@ -30,7 +30,7 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
     //    runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NLog::PRI_DEBUG);
-    
+
 
     NOlap::TSchemaCachesManager::DropCaches();
 

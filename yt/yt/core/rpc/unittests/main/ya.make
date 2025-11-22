@@ -24,6 +24,10 @@ PEERDIR(
 
 SIZE(MEDIUM)
 
+SIZE(LARGE)
+
+TAG(ya:fat)
+
 IF (OS_DARWIN)
     SIZE(LARGE)
     TAG(

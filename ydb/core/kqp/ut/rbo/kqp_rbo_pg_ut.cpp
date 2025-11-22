@@ -480,7 +480,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
     }
 
-    /*
     Y_UNIT_TEST(Aggregation) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -635,6 +634,27 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 SET TablePathPrefix = "/Root/";
                 select sum(t1.a) + 1, t1.b from t1 group by t1.b order by t1.b;
             )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select
+                       sum(case when t1.a > 0
+                            then 1
+                            else 0 end) +
+                       sum(case when t1.a < 0
+                            then 1
+                            else 0 end) + 1, sum(t1.a) as r, t1.b + 2 as group_key from t1 group by t1.b + 2 order by r;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select distinct t1.b from t1;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select count(distinct t1.a), t1.b from t1 group by t1.b, t1.c order by t1.b;
+            )"
         };
 
         std::vector<std::string> results = {
@@ -656,7 +676,10 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             R"([["4";"2";"4"];["6";"3";"4"]])",
             R"([["4"];["8"];["8"]])",
             R"([["1";"1"];["1";"3"];["2";"0"];["2";"2"];["2";"4"]])",
-            R"([["5";"1"];["7";"2"]])"
+            R"([["5";"1"];["7";"2"]])",
+            R"([["3";"4";"3"];["3";"6";"4"]])",
+            R"([["2"];["1"]])",
+            R"([["2";"1"];["3";"2"]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -667,7 +690,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }
-    */
 
     Y_UNIT_TEST(UnionAll) {
         NKikimrConfig::TAppConfig appConfig;

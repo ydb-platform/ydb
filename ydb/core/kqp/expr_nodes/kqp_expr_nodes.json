@@ -911,8 +911,7 @@
             "Children": [
                 {"Index": 0, "Name": "OriginalColName", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "AggregationFunction", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "AggregationFunctionResultType", "Type": "TExprBase"}
+                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"}
             ]
         },
         {

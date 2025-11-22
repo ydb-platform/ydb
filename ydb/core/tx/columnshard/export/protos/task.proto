@@ -1,4 +1,3 @@
-import "ydb/core/tx/columnshard/export/protos/selector.proto";
 package NKikimrColumnShardExportProto;
 
 message TIdentifier {
@@ -7,7 +6,6 @@ message TIdentifier {
 
 message TExportTask {
     optional TIdentifier Identifier = 1;
-    optional TSelectorContainer Selector = 2;
     optional uint64 TxId = 5;
 }
 

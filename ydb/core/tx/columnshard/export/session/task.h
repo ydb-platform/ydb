@@ -1,5 +1,4 @@
 #pragma once
-#include "selector/abstract/selector.h"
 
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/control.h>
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/task.h>
@@ -21,7 +20,6 @@ public:
 private:
     using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
     TIdentifier Identifier = TIdentifier(TInternalPathId{});
-    YDB_READONLY_DEF(TSelectorContainer, Selector);
     YDB_READONLY_DEF(NKikimrSchemeOp::TBackupTask, BackupTask);
     YDB_READONLY_DEF(std::optional<ui64>, TxId);
     YDB_READONLY_DEF(std::vector<TNameTypeInfo>, Columns);
@@ -45,9 +43,8 @@ public:
 
     TExportTask() = default;
 
-    TExportTask(const TIdentifier& id, const TSelectorContainer& selector, const std::vector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TBackupTask& backupTask, const std::optional<ui64> txId = {})
+    TExportTask(const TIdentifier& id, const std::vector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TBackupTask& backupTask, const std::optional<ui64> txId = {})
         : Identifier(id)
-        , Selector(selector)
         , BackupTask(backupTask)
         , TxId(txId)
         , Columns(columns)
@@ -55,7 +52,7 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "{task_id=" << Identifier.DebugString() << ";selector=" << Selector.DebugString() << ";}";
+        return TStringBuilder() << "{task_id=" << Identifier.DebugString() << ";}";
     }
 };
 }

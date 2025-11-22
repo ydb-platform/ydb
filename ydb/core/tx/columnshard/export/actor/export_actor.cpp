@@ -45,7 +45,7 @@ void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
     }
     auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(SelfId(), ExportSession->GetTask().GetBackupTask(), AppData()->DataShardExportFactory, columns, *ExportSession->GetTask().GetTxId());
     Exporter = Register(actor.release());
-    auto evStart = ExportSession->GetTask().GetSelector()->BuildRequestInitiator(ExportSession->GetCursor());
+    auto evStart = BuildRequestInitiator(ExportSession->GetCursor());
     evStart->Record.SetGeneration((ui64)TabletId);
     evStart->Record.SetCSScanPolicy("PLAIN");
     Send(TabletActorId, evStart.release());
@@ -73,6 +73,31 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
 
 void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& /*ev*/) {
     AFL_VERIFY(false);
+}
+
+std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TActor::BuildRequestInitiator(const TCursor& cursor) const {
+    const auto& backupTask = ExportSession->GetTask().GetBackupTask();
+    auto tablePathId = TInternalPathId::FromRawValue(backupTask.GetTableId());
+    auto ev = std::make_unique<NKikimr::TEvDataShard::TEvKqpScan>();
+    ev->Record.SetLocalPathId(tablePathId.GetRawValue());
+
+    auto protoRanges = ev->Record.MutableRanges();
+
+    if (cursor.HasLastKey()) {
+        auto* newRange = protoRanges->Add();
+        TSerializedTableRange(TSerializedCellVec::Serialize(*cursor.GetLastKey()), {}, false, false).Serialize(*newRange);
+    }
+
+    ev->Record.MutableSnapshot()->SetStep(backupTask.GetSnapshotStep());
+    ev->Record.MutableSnapshot()->SetTxId(backupTask.GetSnapshotTxId());
+    ev->Record.SetScanId(tablePathId.GetRawValue());
+    ev->Record.SetTxId(tablePathId.GetRawValue());
+    ev->Record.SetTablePath(backupTask.GetTableName());
+    ev->Record.SetSchemaVersion(0);
+
+    ev->Record.SetReverse(false);
+    ev->Record.SetDataFormat(NKikimrDataEvents::EDataFormat::FORMAT_ARROW);
+    return ev;
 }
 
 class TTxProposeFinish: public NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard> {

@@ -12,13 +12,8 @@ NKikimr::TConclusionStatus TExportTask::DoDeserializeFromProto(const NKikimrColu
     if (!selector) {
         return selector;
     }
-    auto serializer = NArrow::NSerialization::TSerializerContainer::BuildFromProto(proto.GetSerializer());
-    if (!serializer) {
-        return serializer;
-    }
     Identifier = id.DetachResult();
     Selector = selector.DetachResult();
-    Serializer = serializer.DetachResult();
     if (proto.HasTxId()) {
         TxId = proto.GetTxId();
     }
@@ -29,7 +24,6 @@ NKikimrColumnShardExportProto::TExportTask TExportTask::DoSerializeToProto() con
     NKikimrColumnShardExportProto::TExportTask result;
     *result.MutableIdentifier() = Identifier.SerializeToProto();
     *result.MutableSelector() = Selector.SerializeToProto();
-    *result.MutableSerializer() = Serializer.SerializeToProto();
     if (TxId) {
         result.SetTxId(*TxId);
     }
@@ -45,7 +39,7 @@ NBackground::TSessionControlContainer TExportTask::BuildAbortControl() const {
 }
 
 std::shared_ptr<NBackground::ISessionLogic> TExportTask::DoBuildSession() const {
-    auto result = std::make_shared<TSession>(std::make_shared<TExportTask>(Identifier, Selector, Serializer, Columns, BackupTask, TxId));
+    auto result = std::make_shared<TSession>(std::make_shared<TExportTask>(Identifier, Selector, Columns, BackupTask, TxId));
     if (!!TxId) {
         result->Confirm();
     }

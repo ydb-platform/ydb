@@ -23,7 +23,6 @@ private:
     TIdentifier Identifier = TIdentifier(TInternalPathId{});
     YDB_READONLY_DEF(TSelectorContainer, Selector);
     YDB_READONLY_DEF(NKikimrSchemeOp::TBackupTask, BackupTask);
-    YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(std::optional<ui64>, TxId);
     YDB_READONLY_DEF(std::vector<TNameTypeInfo>, Columns);
 
@@ -46,12 +45,10 @@ public:
 
     TExportTask() = default;
 
-    TExportTask(const TIdentifier& id, const TSelectorContainer& selector,
-        const NArrow::NSerialization::TSerializerContainer& serializer, const std::vector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TBackupTask& backupTask, const std::optional<ui64> txId = {})
+    TExportTask(const TIdentifier& id, const TSelectorContainer& selector, const std::vector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TBackupTask& backupTask, const std::optional<ui64> txId = {})
         : Identifier(id)
         , Selector(selector)
         , BackupTask(backupTask)
-        , Serializer(serializer)
         , TxId(txId)
         , Columns(columns)
     {

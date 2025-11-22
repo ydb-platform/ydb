@@ -10,21 +10,13 @@ class TConfirmSessionControl: public NBackgroundTasks::TInterfaceProtoAdapter<NK
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoAdapter<NKikimrColumnShardExportProto::TSessionControlContainer, NBackground::ISessionLogicControl>;
 public:
-    static TString GetClassNameStatic() {
-        return "CS::EXPORT::CONFIRM";
-    }
+  static TString GetClassNameStatic();
+
 private:
     virtual TConclusionStatus DoApply(const std::shared_ptr<NBackground::ISessionLogic>& session) const override;
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer& /*proto*/) override {
-        return TConclusionStatus::Success();
-    }
-    virtual NKikimrColumnShardExportProto::TSessionControlContainer DoSerializeToProto() const override {
-        NKikimrColumnShardExportProto::TSessionControlContainer result;
-        return result;
-    }
-    virtual TString GetClassName() const override {
-        return GetClassNameStatic();
-    }
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer& /*proto*/) override;
+    virtual NKikimrColumnShardExportProto::TSessionControlContainer DoSerializeToProto() const override;
+    virtual TString GetClassName() const override;
     static const inline TFactory::TRegistrator<TConfirmSessionControl> Registrator = TFactory::TRegistrator<TConfirmSessionControl>(GetClassNameStatic());
 public:
     using TBase::TBase;
@@ -34,21 +26,13 @@ class TAbortSessionControl: public NBackgroundTasks::TInterfaceProtoAdapter<NKik
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoAdapter<NKikimrColumnShardExportProto::TSessionControlContainer, NBackground::ISessionLogicControl>;
 public:
-    static TString GetClassNameStatic() {
-        return "CS::EXPORT::ABORT";
-    }
+  static TString GetClassNameStatic();
+
 private:
     virtual TConclusionStatus DoApply(const std::shared_ptr<NBackground::ISessionLogic>& session) const override;
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer& /*proto*/) override {
-        return TConclusionStatus::Success();
-    }
-    virtual NKikimrColumnShardExportProto::TSessionControlContainer DoSerializeToProto() const override {
-        NKikimrColumnShardExportProto::TSessionControlContainer result;
-        return result;
-    }
-    virtual TString GetClassName() const override {
-        return GetClassNameStatic();
-    }
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer& /*proto*/) override;
+    virtual NKikimrColumnShardExportProto::TSessionControlContainer DoSerializeToProto() const override;
+    virtual TString GetClassName() const override;
     static const inline TFactory::TRegistrator<TAbortSessionControl> Registrator = TFactory::TRegistrator<TAbortSessionControl>(GetClassNameStatic());
 public:
     using TBase::TBase;

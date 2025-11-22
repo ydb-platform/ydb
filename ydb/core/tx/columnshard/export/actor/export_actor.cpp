@@ -16,6 +16,9 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
     TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, (ui64)TabletId, 1));
 }
 
+void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& /*ev*/) {
+}
+
 void TActor::OnTxCompleted(const ui64 /*txId*/) {
     Session->FinishActor();
 }

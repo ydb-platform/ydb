@@ -71,4 +71,29 @@ bool TBackupTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlat
     return TxAbort->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
+bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard & /*owner*/, const TActorContext & /*ctx*/) {
+  return true;
 }
+void TBackupTransactionOperator::RegisterSubscriber(const TActorId &actorId) {
+  NotifySubscribers.insert(actorId);
+}
+
+TString TBackupTransactionOperator::DoDebugString() const { 
+    return "BACKUP"; 
+}
+
+bool TBackupTransactionOperator::DoIsAsync() const { 
+    return true; 
+}
+
+TString TBackupTransactionOperator::DoGetOpType() const { 
+    return "Backup"; 
+}
+
+void TBackupTransactionOperator::DoFinishProposeOnComplete(TColumnShard & /*owner*/, const TActorContext & /*ctx*/) {
+}
+
+void TBackupTransactionOperator::DoFinishProposeOnExecute(TColumnShard & /*owner*/, NTabletFlatExecutor::TTransactionContext & /*txc*/) {
+}
+
+} // namespace NKikimr::NColumnShard

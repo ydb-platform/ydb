@@ -44,9 +44,7 @@ protected:
 
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev);
 
-    void HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& /*ev*/) {
-        AFL_VERIFY(false);
-    }
+    void HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& /*ev*/);
     
     void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult::TPtr& /*ev*/);
     

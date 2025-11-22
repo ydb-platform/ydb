@@ -3322,7 +3322,7 @@ void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
     for (auto& pair : TxWrites) {
         if (txnExpired(pair.second)) {
             PQ_LOG_D("Transaction for Kafka producer " << pair.first.KafkaProducerInstanceId << " is expired");
-            BeginDeletePartitions(pair.second);
+            BeginDeletePartitions(pair.first, pair.second);
         }
     }
 }
@@ -5420,7 +5420,7 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
     }
 
     PQ_LOG_TX_I("delete partitions for WriteId " << writeId << " (longTxService lost tx)");
-    BeginDeletePartitions(writeInfo);
+    BeginDeletePartitions(writeId, writeInfo);
 }
 
 void TPersQueue::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx)
@@ -5470,6 +5470,14 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
     DeletePartition(partitionId, ctx);
 
     writeInfo.Partitions.erase(partitionId.OriginalPartitionId);
+    TryDeleteWriteId(writeId, writeInfo, ctx);
+    TxWritesChanged = true;
+
+    TryWriteTxs(ctx);
+}
+
+void TPersQueue::TryDeleteWriteId(const TWriteId& writeId, const TTxWriteInfo& writeInfo, const TActorContext& ctx)
+{
     if (writeInfo.Partitions.empty()) {
         if (!writeInfo.KafkaTransaction) {
             UnsubscribeWriteId(writeId, ctx);
@@ -5481,14 +5489,15 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
                     (tx->State == NKikimrPQ::TTransaction::CANCELED)) {
                     TryExecuteTxs(ctx, *tx);
                 }
+            } else {
+                // if the transaction is not in Txs, then it is an immediate transaction
+                DeleteWriteId(writeId);
             }
-        } else if (writeInfo.KafkaTransaction) { // case when kafka transaction haven't even started in KQP, but data for it was already written in partition
+        } else {
+            // this is kafka transaction or immediate transaction
             DeleteWriteId(writeId);
         }
     }
-    TxWritesChanged = true;
-
-    TryWriteTxs(ctx);
 }
 
 void TPersQueue::Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorContext&)
@@ -5508,20 +5517,24 @@ void TPersQueue::Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorCo
     TTxWriteInfo& writeInfo = TxWrites.at(writeId);
     Y_ABORT_UNLESS(writeInfo.Partitions.size() == 1);
 
-    BeginDeletePartitions(writeInfo);
+    BeginDeletePartitions(writeId, writeInfo);
 }
 
-void TPersQueue::BeginDeletePartitions(TTxWriteInfo& writeInfo)
+void TPersQueue::BeginDeletePartitions(const TWriteId& writeId, TTxWriteInfo& writeInfo)
 {
     if (writeInfo.Deleting) {
         PQ_LOG_TX_D("Already deleting WriteInfo");
         return;
     }
-    for (auto& [_, partitionId] : writeInfo.Partitions) {
-        Y_ABORT_UNLESS(Partitions.contains(partitionId));
-        const TPartitionInfo& partition = Partitions.at(partitionId);
-        PQ_LOG_TX_D("send TEvPQ::TEvDeletePartition to partition " << partitionId);
-        Send(partition.Actor, new TEvPQ::TEvDeletePartition);
+    if (writeInfo.Partitions.empty()) {
+        TryDeleteWriteId(writeId, writeInfo, ActorContext());
+    } else {
+        for (auto& [_, partitionId] : writeInfo.Partitions) {
+            Y_ABORT_UNLESS(Partitions.contains(partitionId));
+            const TPartitionInfo& partition = Partitions.at(partitionId);
+            PQ_LOG_TX_D("send TEvPQ::TEvDeletePartition to partition " << partitionId);
+            Send(partition.Actor, new TEvPQ::TEvDeletePartition);
+        }
     }
     writeInfo.Deleting = true;
 }
@@ -5533,7 +5546,7 @@ void TPersQueue::BeginDeletePartitions(const TDistributedTransaction& tx)
     }
 
     TTxWriteInfo& writeInfo = TxWrites.at(*tx.WriteId);
-    BeginDeletePartitions(writeInfo);
+    BeginDeletePartitions(*tx.WriteId, writeInfo);
 }
 
 TString TPersQueue::LogPrefix() const {

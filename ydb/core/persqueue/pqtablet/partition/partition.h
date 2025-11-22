@@ -110,6 +110,7 @@ struct TTransaction {
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
     bool SendReply;
     TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> ProposeConfig;
+    TEvPQ::TMessageGroupsPtr ExplicitMessageGroups;
     TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> ProposeTransaction;
 
     //Data Tx

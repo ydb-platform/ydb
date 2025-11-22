@@ -66,7 +66,7 @@ std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
         consumer.GetGeneration(),
         0, // step
         TActorId{} // pipeClient
-    );    
+    );
 }
 
 std::unique_ptr<TEvPersQueue::TEvHasDataInfo> MakeEvHasData(

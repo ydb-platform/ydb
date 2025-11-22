@@ -6,7 +6,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
 
     Y_UNIT_TEST(TopicNotExists) {
         auto setup = CreateSetup();
-        
+
         auto& runtime = setup->GetRuntime();
         CreateWriterActor(runtime, {
             .DatabasePath = "/Root",
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
 
     Y_UNIT_TEST(EmptyWrite) {
         auto setup = CreateSetup();
-        
+
         CreateTopic(setup, "/Root/topic1", "mlp-consumer");
 
         auto& runtime = setup->GetRuntime();
@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
 
     Y_UNIT_TEST(WriteOneMessage) {
         auto setup = CreateSetup();
-        
+
         CreateTopic(setup, "/Root/topic1", "mlp-consumer");
 
         auto& runtime = setup->GetRuntime();
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
 
     Y_UNIT_TEST(WriteTwoMessage_OnePartition) {
         auto setup = CreateSetup();
-        
+
         CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1);
 
         auto& runtime = setup->GetRuntime();
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
 
     Y_UNIT_TEST(WriteTwoMessage_TwoPartition) {
         auto setup = CreateSetup();
-        
+
         CreateTopic(setup, "/Root/topic1", "mlp-consumer", 2);
 
         auto& runtime = setup->GetRuntime();

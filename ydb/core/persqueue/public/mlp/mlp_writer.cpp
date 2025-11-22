@@ -67,7 +67,7 @@ STFUNC(TWriterActor::DescribeState) {
 namespace {
 
 size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmdWrite) {
-    size_t totalSize = item.MessageBody.size() + (item.SerializedMessageAttributes.has_value() ? 
+    size_t totalSize = item.MessageBody.size() + (item.SerializedMessageAttributes.has_value() ?
         item.SerializedMessageAttributes.value().size() : 0);
 
     cmdWrite.SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(""));

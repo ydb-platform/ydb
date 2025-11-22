@@ -669,7 +669,7 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 
 void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvProxyResponse");
-    
+
     AFL_ENSURE(IsSucess(ev))("e", ev->Get()->Response->DebugString());
 }
 

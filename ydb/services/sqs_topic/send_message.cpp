@@ -125,7 +125,7 @@ namespace NKikimr::NSqsTopic::V1 {
             };
 
             TVector<NPQ::NMLP::TWriterSettings::TMessage> validItems(Reserve(Items.size()));
-            for (const auto& item : Items) {
+            for (auto& item : Items) {
                 if (item.ValidationError.Empty()) {
                     validItems.push_back(NPQ::NMLP::TWriterSettings::TMessage{
                         .Index = item.BatchIndex,

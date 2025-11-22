@@ -15,6 +15,12 @@ def wait_for_undetermined_ok(action, timeout_seconds=60, step_seconds=1):
             return True
         except ydb.issues.Undetermined:
             return False
+        except ydb.issues.SchemeError as e:
+            error_msg = str(e).lower()
+            if "cannot find table" in error_msg or "does not exist" in error_msg:
+                logger.debug(f"Got temporary SchemeError, will retry: {e}")
+                return False
+            raise
 
     return wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=step_seconds)
 
@@ -157,7 +163,12 @@ class TestRenameTableRollingUpdate(RollingUpgradeAndDowngradeFixture):
                 """,
                 {"$data": (rows, ydb.ListType(data_struct_type))}
             ))
-            logger.info(f"Iteration {iteration} about to rename")
+            logger.info(f"Iteration {iteration} about to rename table_{iteration} to table_{iteration + 1}")
+            wait_for_undetermined_ok(lambda: session_pool.execute_with_retries(
+                f"""
+                    select count(*) as cnt from `{self.get_table_name(iteration)}`;
+                """
+            ))
             session_pool.execute_with_retries(
                 f"""
                     ALTER TABLE `{self.get_table_name(iteration)}` RENAME TO `{self.get_table_name(iteration + 1)}`;

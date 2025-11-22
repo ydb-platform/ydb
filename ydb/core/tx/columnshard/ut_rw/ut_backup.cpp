@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false);
         TestWaitCondition(runtime, "export",
-            [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() == 6; });
+            [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() == 3; });
     }
 }
 

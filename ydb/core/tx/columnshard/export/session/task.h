@@ -1,6 +1,5 @@
 #pragma once
 #include "selector/abstract/selector.h"
-#include "storage/abstract/storage.h"
 
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/control.h>
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/task.h>
@@ -23,7 +22,6 @@ private:
     using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
     TIdentifier Identifier = TIdentifier(TInternalPathId{});
     YDB_READONLY_DEF(TSelectorContainer, Selector);
-    YDB_READONLY_DEF(TStorageInitializerContainer, StorageInitializer);
     YDB_READONLY_DEF(NKikimrSchemeOp::TBackupTask, BackupTask);
     YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(std::optional<ui64>, TxId);
@@ -48,11 +46,10 @@ public:
 
     TExportTask() = default;
 
-    TExportTask(const TIdentifier& id, const TSelectorContainer& selector, const TStorageInitializerContainer& storageInitializer,
+    TExportTask(const TIdentifier& id, const TSelectorContainer& selector,
         const NArrow::NSerialization::TSerializerContainer& serializer, const std::vector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TBackupTask& backupTask, const std::optional<ui64> txId = {})
         : Identifier(id)
         , Selector(selector)
-        , StorageInitializer(storageInitializer)
         , BackupTask(backupTask)
         , Serializer(serializer)
         , TxId(txId)

@@ -26,7 +26,6 @@ private:
     };
 
     using TBase = NBackground::TSessionActor;
-    std::shared_ptr<IBlobsStorageOperator> BlobsOperator;
     std::optional<TActorId> ScanActorId;
 
     EStage Stage = EStage::Initialization;
@@ -57,8 +56,7 @@ protected:
     virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
 
 public:
-    TActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter,
-        const std::shared_ptr<IBlobsStorageOperator>& blobsOperator);
+    TActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter);
 
     STATEFN(StateFunc) {
         try {

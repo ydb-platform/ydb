@@ -1,5 +1,4 @@
 import "ydb/core/tx/columnshard/export/protos/selector.proto";
-import "ydb/core/tx/columnshard/export/protos/storage.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 
 package NKikimrColumnShardExportProto;
@@ -11,7 +10,6 @@ message TIdentifier {
 message TExportTask {
     optional TIdentifier Identifier = 1;
     optional TSelectorContainer Selector = 2;
-    optional TStorageInitializerContainer StorageInitializer = 3;
     optional NKikimrSchemeOp.TOlapColumn.TSerializer Serializer = 4;
     optional uint64 TxId = 5;
 }

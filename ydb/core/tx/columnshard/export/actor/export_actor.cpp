@@ -52,10 +52,8 @@ void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
     Become(&TActor::StateFunc);
 }
 
-TActor::TActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter,
-    const std::shared_ptr<IBlobsStorageOperator>& blobsOperator)
-    : TBase(bgSession, adapter)
-    , BlobsOperator(blobsOperator) {
+TActor::TActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter)
+    : TBase(bgSession, adapter) {
     ExportSession = bgSession->GetLogicAsVerifiedPtr<NExport::TSession>();
 }
 

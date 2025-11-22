@@ -46,7 +46,7 @@ TFuture<TSharedRef> TAttachmentsInputStream::Read()
 
     // Failure here indicates an attempt to read past EOSs.
     if (Closed_) {
-        return MakeFuture<TSharedRef>(TError("Stream is already closed") << GetErrorAttributes());
+        return {};
     }
 
     if (!Error_.IsOK()) {

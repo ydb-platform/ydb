@@ -239,9 +239,9 @@ class ParallelWorkloadTestBase:
                 if node_error.was_oom:
                     node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
                 verify_fails_count = 0
-                for verify_summary, verify_errors in verify_errors:
-                    if node_error.node.host in verify_errors.hosts_count:
-                        verify_fails_count += verify_errors.hosts_count[node_error.node.host]
+                for verify_summary, verify_errors in verify_errors.items():
+                    if node_error.node.host in verify_errors['hosts_count']:
+                        verify_fails_count += verify_errors['hosts_count'][node_error.node.host]
                 if verify_fails_count:
                     node_error_messages.append(f"Node {node_error.node.host} had {verify_fails_count} VERIFY fails")
                 if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:

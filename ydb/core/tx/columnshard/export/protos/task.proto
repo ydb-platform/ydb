@@ -1,5 +1,4 @@
 import "ydb/core/tx/columnshard/export/protos/selector.proto";
-
 package NKikimrColumnShardExportProto;
 
 message TIdentifier {

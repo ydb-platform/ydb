@@ -139,7 +139,7 @@ namespace NTable {
                 Key.insert(Key.end(), (**KeyCellDefaults).begin() + len, (**KeyCellDefaults).end());
             }
 
-            return { KeyCellDefaults->BasicTypes().begin(), Key.begin(), ui32(Key.size()) };
+            return { KeyCellDefaults->BasicTypes().data(), Key.data(), ui32(Key.size()) };
         }
 
         bool IsDelta() const

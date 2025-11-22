@@ -453,36 +453,46 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
 }
 
 std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
-    TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const {
+    TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions) const {
     std::vector<std::shared_ptr<TPortionInfo>> out;
     auto spg = GranulesStorage->GetGranuleOptional(pathId);
     if (!spg) {
         return out;
     }
 
-    for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
-        if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
+    for (const auto& [writeId, portion] : spg->GetInsertedPortions()) {
+        if (portion->IsRemovedFor(snapshot)) {
             continue;
         }
-        const bool skipPortion = !pkRangesFilter.IsUsed(*portionInfo);
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
-            "portion", portionInfo->DebugString());
-        if (skipPortion) {
+        // visible in the snapshot or own portions are not conflicting
+        auto nonconflicting = portion->IsVisible(snapshot, true) || (ownPortions.has_value() && ownPortions->contains(writeId));
+
+        if (nonconflicting && !withNonconflicting || !nonconflicting && !withConflicting) {
             continue;
         }
-        out.emplace_back(portionInfo);
+
+        const bool takePortion = pkRangesFilter.IsUsed(*portion);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
+        if (takePortion) {
+            out.emplace_back(portion);
+        }
     }
-    for (const auto& [_, portionInfo] : spg->GetPortions()) {
-        if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
+    for (const auto& [_, portion] : spg->GetPortions()) {
+        if (portion->IsRemovedFor(snapshot)) {
             continue;
         }
-        const bool skipPortion = !pkRangesFilter.IsUsed(*portionInfo);
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
-            "portion", portionInfo->DebugString());
-        if (skipPortion) {
+
+        auto nonconflicting = portion->IsVisible(snapshot, true); 
+
+        if (nonconflicting && !withNonconflicting || !nonconflicting && !withConflicting) {
             continue;
         }
-        out.emplace_back(portionInfo);
+
+        const bool takePortion = pkRangesFilter.IsUsed(*portion);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
+        if (takePortion) {
+            out.emplace_back(portion);
+        }
     }
 
     return out;

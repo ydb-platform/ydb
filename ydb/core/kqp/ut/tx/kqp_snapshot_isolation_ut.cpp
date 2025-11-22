@@ -235,6 +235,64 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         tester.SetIsOlap(true);
         tester.Execute();
     }
+
+    class TReadOwnChanges : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+
+            // tx1 reads KV2
+            auto result = session1.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/KV2`;
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            auto tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+
+            // tx1 upserts a row
+            result = session1.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/KV2` (Key, Value)
+                VALUES (1U, "val1");
+            )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+
+            // tx1 reads KV2 and sees the row
+            result = session1.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/KV2`;
+            )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[1u;["val1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            tx1 = result.GetTransaction();
+
+            // tx1 commits
+            result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(TReadOwnChangesOltp) {
+        return;
+        TReadOwnChanges tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TReadOwnChangesOltpNoSink) {
+        return;
+        TReadOwnChanges tester;
+        tester.SetIsOlap(false);
+        tester.SetDisableSinks(true);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TReadOwnChangesOlap) {
+        TReadOwnChanges tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

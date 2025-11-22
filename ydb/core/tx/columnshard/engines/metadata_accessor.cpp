@@ -39,10 +39,18 @@ TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnSh
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const {
+    const NReader::TReadDescription& readDescription, const bool isPlain) const {
     AFL_VERIFY(readDescription.PKRangesFilter);
+    // here we select portions for a read
     std::vector<std::shared_ptr<TPortionInfo>> portions =
-        context.GetEngine().Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, withUncommitted);
+        context.GetEngine().Select(
+            PathId.InternalPathId, 
+            readDescription.GetSnapshot(), 
+            *readDescription.PKRangesFilter, 
+            readDescription.readNonconflictingPortions,
+            readDescription.readConflictingPortions,
+            readDescription.ownPortions
+        );
     if (!isPlain) {
         std::deque<NReader::NSimple::TSourceConstructor> sources;
         for (auto&& i : portions) {
@@ -55,7 +63,7 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::SelectMetadata(const TSelectMetadataContext& /*context*/,
-    const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/, const bool /*isPlain*/) const {
+    const NReader::TReadDescription& /*readDescription*/, const bool /*isPlain*/) const {
     return NReader::NSimple::TPortionsSources::BuildEmpty();
 }
 

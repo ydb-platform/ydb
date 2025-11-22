@@ -56,6 +56,11 @@ public:
         return TabletId;
     }
 
+    bool NeedToDetectConflicts() const {
+        // do not detect conflicts for snapshot isolated transactions or txs with no lock
+        return LockId.has_value() && LockMode.value_or(NKikimrDataEvents::OPTIMISTIC) != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
+    }
+
     void SetRequestedLimit(const ui64 value) {
         AFL_VERIFY(!RequestedLimit);
         if (value == 0 || value >= Max<i64>()) {

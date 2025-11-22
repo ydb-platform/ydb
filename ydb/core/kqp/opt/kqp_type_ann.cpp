@@ -510,6 +510,11 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
         if (settings.Strategy == EStreamLookupStrategyType::LookupJoinRows
             || settings.Strategy == EStreamLookupStrategyType::LookupSemiJoinRows) {
 
+            if (settings.VectorTopColumn) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "VectorTop is not supported in Join mode"));
+                return TStatus::Error;
+            }
+
             if (!EnsureTupleType(node->Pos(), *lookupType, ctx)) {
                 return TStatus::Error;
             }
@@ -550,6 +555,24 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
             }
 
             structType = lookupType->Cast<TStructExprType>();
+
+            if (settings.VectorTopColumn || settings.VectorTopIndex || settings.VectorTopTarget || settings.VectorTopLimit) {
+                if (!settings.VectorTopColumn || !settings.VectorTopIndex || !settings.VectorTopTarget || !settings.VectorTopLimit) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "VectorTop requires Column, Index, Target and Limit"));
+                    return TStatus::Error;
+                }
+                bool found = false;
+                for (const auto& item : columns) {
+                    if (item.Value() == settings.VectorTopColumn) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "VectorTopColumn is not in the StreamLookup result column list"));
+                    return TStatus::Error;
+                }
+            }
         }
     } else {
         if (!EnsureStructType(node->Pos(), *lookupType, ctx)) {
@@ -2228,6 +2251,17 @@ TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ct
     return TStatus::Ok;
 }
 
+TStatus AnnotateExprSublink(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto expr = node->Child(TKqpExprSublink::idx_Expr);
+    auto itemType = expr->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto valueType = itemType->GetItems()[0]->GetItemType();
+    if (!valueType->IsOptionalOrNull()) {
+        valueType = ctx.MakeType<TOptionalExprType>(valueType);
+    }
+    node->SetTypeAnn(valueType);
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOpRead(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
@@ -2256,7 +2290,10 @@ TStatus AnnotateOpRead(const TExprNode::TPtr& node, TExprContext& ctx, const TSt
     TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> newItemTypes;
     for (auto t : structItemTypes ) {
-        newItemTypes.push_back(ctx.MakeType<TItemExprType>("_alias_" + TString(alias->Content()) + "." + t->GetName(), t->GetItemType()));
+        TString aliasName = TString(alias->Content());
+        TString columnName = TString(t->GetName());
+        TString fullName = aliasName != "" ? ( "_alias_" + aliasName + "." + columnName ) : columnName;
+        newItemTypes.push_back(ctx.MakeType<TItemExprType>(fullName, t->GetItemType()));
     }
 
     YQL_CLOG(TRACE, CoreDq) << "Row type:" << *rowType;
@@ -2459,21 +2496,38 @@ TStatus AnnotateOpSort(const TExprNode::TPtr& input, TExprContext& ctx) {
 TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto* inputType = input->ChildPtr(TKqpOpAggregate::idx_Input)->GetTypeAnn();
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto opAggregate = TKqpOpAggregate(input);
 
-    THashMap<TStringBuf, std::pair<TStringBuf, const TTypeAnnotationNode*>> aggTraitsMap;
-    for (const auto& item : TExprBase(input->ChildPtr(TKqpOpAggregate::idx_AggregationTraitsList)).Cast<TExprList>()) {
-        const auto aggTrait = TExprBase(item).Cast<TKqpOpAggregationTraits>();
-        const auto originalColName = aggTrait.OriginalColName();
-        const auto resultColName = aggTrait.ResultColName();
-        const auto* resultType = aggTrait.AggregationFunctionResultType().Ptr()->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        aggTraitsMap[originalColName] = {resultColName, resultType};
+    THashMap<TString, std::pair<TString, TString>> aggTraitsMap;
+    for (const auto& traits : opAggregate.AggregationTraitsList()) {
+        const auto originalColName = TString(traits.OriginalColName());
+        const auto aggFuncName = TString(traits.AggregationFunction());
+        const auto resultColName = TString(traits.ResultColName());
+        aggTraitsMap[originalColName] = {resultColName, aggFuncName};
+    }
+
+    THashSet<TString> keyColumns;
+    for (const auto& keyColumn : opAggregate.KeyColumns()) {
+        keyColumns.insert(TString(keyColumn));
     }
 
     TVector<const TItemExprType*> newItemTypes;
     for (const auto* itemType : structType->GetItems()) {
-        if (auto it = aggTraitsMap.find(itemType->GetName()); it != aggTraitsMap.end()) {
-            newItemTypes.push_back(ctx.MakeType<TItemExprType>(it->second.first, it->second.second));
-        } else {
+        // The type of the column could be changed after aggregation.
+        const auto itemName = itemType->GetName();
+        if (auto it = aggTraitsMap.find(itemName); it != aggTraitsMap.end()) {
+            const auto& resultColName = it->second.first;
+            const auto& aggFunction = it->second.second;
+            const TTypeAnnotationNode* aggFieldType = itemType->GetItemType();
+            if (aggFunction == "count") {
+                aggFieldType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+            } else if (aggFunction == "sum") {
+                TPositionHandle dummyPos;
+                Y_ENSURE(GetSumResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx),
+                         "Unsupported type for sum aggregation function");
+            }
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(resultColName, aggFieldType));
+        } else if (keyColumns.contains(itemName)) {
             newItemTypes.push_back(itemType);
         }
     }
@@ -2674,6 +2728,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpTableSinkSettings::Match(input.Get())) {
                 return AnnotateTableSinkSettings(input, ctx);
+            }
+
+            if (TKqpExprSublink::Match(input.Get())) {
+                return AnnotateExprSublink(input, ctx);
             }
 
             if (TKqpOpRead::Match(input.Get())) {

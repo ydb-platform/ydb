@@ -116,6 +116,7 @@ public:
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, StaticPerCluster> JobBlockOutputSupportedDataTypes;
     NCommon::TConfSetting<bool, StaticPerCluster> ValidatePool;
     NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpFolder;
+    NCommon::TConfSetting<bool, StaticPerCluster> _EnableDynamicTablesWrite;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;

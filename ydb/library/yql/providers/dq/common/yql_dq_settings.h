@@ -50,6 +50,7 @@ struct TDqSettings {
         static constexpr ui64 OutputChunkMaxSize = 4_MB;
         static constexpr ui64 ChunkSizeLimit = 128_MB;
         static constexpr bool EnableDqReplicate = false;
+        static constexpr ui64 WatermarksIdleTimeoutMs = 5000;
         static constexpr ui64 WatermarksGranularityMs = 1000;
         static constexpr ui64 WatermarksLateArrivalDelayMs = 5000;
         static constexpr ui64 ParallelOperationsLimit = 16;
@@ -64,6 +65,7 @@ struct TDqSettings {
         static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::Disable;
         static constexpr ui32 CostBasedOptimizationLevel = 4;
         static constexpr ui32 MaxDPHypDPTableSize = 95'000U;
+        static constexpr ui32 ShuffleEliminationJoinNumCutoff = 14;
         static constexpr ui64 MaxAttachmentsSize = 2_GB;
         static constexpr bool SplitStageOnDqReplicate = true;
         static constexpr ui64 EnableSpillingNodes = 0;
@@ -122,6 +124,8 @@ public:
     NCommon::TConfSetting<bool, Static> EnableDqReplicate;
     NCommon::TConfSetting<TString, Static> WatermarksMode;
     NCommon::TConfSetting<bool, Static> WatermarksEnableIdlePartitions;
+
+    NCommon::TConfSetting<ui64, Static> WatermarksIdleTimeoutMs;
     NCommon::TConfSetting<ui64, Static> WatermarksGranularityMs;
     NCommon::TConfSetting<ui64, Static> WatermarksLateArrivalDelayMs;
     NCommon::TConfSetting<bool, Static> UseAggPhases;

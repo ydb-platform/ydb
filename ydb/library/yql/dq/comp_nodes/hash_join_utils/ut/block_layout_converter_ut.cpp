@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         Y_ENSURE(datum.is_array());
         TVector<arrow::Datum> columns{datum};
 
-        IBlockLayoutConverter::TPackResult packRes;
+        TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
             Y_ENSURE(datum.is_array());
         }
 
-        IBlockLayoutConverter::TPackResult packRes;
+        TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         Y_ENSURE(datum.is_array());
         TVector<arrow::Datum> columns{datum};
 
-        IBlockLayoutConverter::TPackResult packRes;
+        TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
             Y_ENSURE(datum.is_array());
         }
 
-        IBlockLayoutConverter::TPackResult packRes;
+        TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -286,7 +286,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
             }
         }
 
-        IBlockLayoutConverter::TPackResult packRes;
+        TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -344,7 +344,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         Y_ENSURE(datum.is_array());
         TVector<arrow::Datum> columns{datum};
 
-        IBlockLayoutConverter::TPackResult packRes;
+        TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -406,7 +406,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         Y_ENSURE(datum.is_array());
         TVector<arrow::Datum> columns{datum};
 
-        IBlockLayoutConverter::TPackResult packRes;
+        TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -462,7 +462,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         Y_ENSURE(datum.is_array());
         TVector<arrow::Datum> columns{datum};
 
-        IBlockLayoutConverter::TPackResult packRes;
+        TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -483,7 +483,6 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
             UNIT_ASSERT_VALUES_EQUAL_C(lhs.GetTimezoneId(), rhs.GetTimezoneId(), "Expected the same data after conversion");
         }
     }
-
 
     Y_UNIT_TEST(TestBuckets) {
         TBlockLayoutConverterTestData data;
@@ -508,15 +507,15 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         Y_ENSURE(datum.is_array());
         TVector<arrow::Datum> columns{datum};
 
-        IBlockLayoutConverter::TPackResult packRes;
+        TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
         static constexpr ui32 bucketsLogNum = 5;
-        auto packReses = std::array<IBlockLayoutConverter::TPackResult, 1u << bucketsLogNum>{};
+        auto packReses = std::array<TPackResult, 1u << bucketsLogNum>{};
         converter->BucketPack(columns, packReses.data(), bucketsLogNum);
         
-        const ui32 bucketedTuplesNum = std::accumulate(packReses.begin(), packReses.end(), 0, [](size_t lhs, const IBlockLayoutConverter::TPackResult& rhs) {
+        const ui32 bucketedTuplesNum = std::accumulate(packReses.begin(), packReses.end(), 0, [](size_t lhs, const TPackResult& rhs) {
             return lhs + rhs.NTuples;
         });
         UNIT_ASSERT_EQUAL(testSize, bucketedTuplesNum);

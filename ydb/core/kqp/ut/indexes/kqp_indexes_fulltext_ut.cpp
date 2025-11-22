@@ -61,6 +61,25 @@ void AddIndex(NQuery::TQueryClient& db) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
+void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, const size_t nGramMaxLength = 3, const bool edgeNGram = false) {
+    const TString query = Sprintf(R"sql(
+        ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+            GLOBAL USING fulltext
+            ON (Text)
+            WITH (
+                layout=flat,
+                tokenizer=standard,
+                use_filter_lowercase=true,
+                use_filter_ngram=%d,
+                use_filter_edge_ngram=%d,
+                filter_ngram_min_length=%d,
+                filter_ngram_max_length=%d
+            );
+    )sql", !edgeNGram, edgeNGram, nGramMinLength, nGramMaxLength);
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
 void AddIndexCovered(NQuery::TQueryClient& db) {
     TString query = R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
@@ -68,6 +87,23 @@ void AddIndexCovered(NQuery::TQueryClient& db) {
             ON (Text) COVER (Data)
             WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true)
     )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+void AddIndexSnowball(NQuery::TQueryClient& db, const TString& language) {
+    TString query = Sprintf(R"sql(
+        ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+            GLOBAL USING fulltext
+            ON (Text)
+            WITH (
+                layout=flat,
+                tokenizer=standard,
+                use_filter_lowercase=true,
+                use_filter_snowball=true,
+                language=%s
+            )
+    )sql", language.c_str());
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
@@ -129,6 +165,115 @@ Y_UNIT_TEST(AddIndexCovered) {
         [["cats data"];[100u];"small"];
         [["dogs data"];[200u];"small"]
     ])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(AddIndexNGram) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndexNGram(db);
+
+    const auto index = ReadIndex(db);
+
+    CompareYson(R"([
+        [[100u];"all"];
+        [[200u];"all"];
+        [[100u];"als"];
+        [[100u];"ani"];
+        [[100u];"ase"];
+        [[200u];"ase"];
+        [[100u];"ats"];
+        [[200u];"ats"];
+        [[300u];"ats"];
+        [[100u];"cat"];
+        [[200u];"cat"];
+        [[300u];"cat"];
+        [[100u];"cha"];
+        [[200u];"cha"];
+        [[200u];"dog"];
+        [[400u];"dog"];
+        [[400u];"fox"];
+        [[100u];"has"];
+        [[200u];"has"];
+        [[100u];"ima"];
+        [[300u];"lov"];
+        [[400u];"lov"];
+        [[100u];"mal"];
+        [[200u];"mal"];
+        [[100u];"nim"];
+        [[200u];"ogs"];
+        [[400u];"ogs"];
+        [[300u];"ove"];
+        [[400u];"ove"];
+        [[400u];"oxe"];
+        [[100u];"sma"];
+        [[200u];"sma"];
+        [[400u];"xes"]
+    ])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(AddIndexEdgeNGram) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndexNGram(db, 3, 3, true);
+
+    const auto index = ReadIndex(db);
+    Cerr << NYdb::FormatResultSetYson(index) << Endl;
+    CompareYson(R"([
+        [[100u];"ani"];
+        [[100u];"cat"];
+        [[200u];"cat"];
+        [[300u];"cat"];
+        [[100u];"cha"];
+        [[200u];"cha"];
+        [[200u];"dog"];
+        [[400u];"dog"];
+        [[400u];"fox"];
+        [[300u];"lov"];
+        [[400u];"lov"];
+        [[100u];"sma"];
+        [[200u];"sma"]
+    ])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(AddIndexSnowball) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndexSnowball(db, "english");
+    const auto index = ReadIndex(db);
+    CompareYson(R"([
+        [[100u];"anim"];
+        [[100u];"cat"];
+        [[200u];"cat"];
+        [[300u];"cat"];
+        [[100u];"chase"];
+        [[200u];"chase"];
+        [[200u];"dog"];
+        [[400u];"dog"];
+        [[400u];"fox"];
+        [[300u];"love"];
+        [[400u];"love"];
+        [[100u];"small"];
+        [[200u];"small"]
+    ])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(AddIndexSnowballWithWrongLanguage) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertTexts(db);
+
+    UNIT_ASSERT_TEST_FAILS(AddIndexSnowball(db, "klingon"));
 }
 
 Y_UNIT_TEST(InsertRow) {

@@ -136,6 +136,11 @@ public:
         return !Data || Data->num_rows() == 0;
     }
 
+    size_t GetRowsCount() const override {
+        AFL_ENSURE(!Extracted);
+        return Data ? Data->num_rows() : 0;
+    }
+
     TRecordBatchPtr Extract() {
         AFL_ENSURE(!Extracted);
         Extracted = true;
@@ -215,6 +220,11 @@ public:
     bool IsEmpty() const override {
         AFL_ENSURE(!Extracted);
         return Rows.empty();
+    }
+
+    size_t GetRowsCount() const override {
+        AFL_ENSURE(!Extracted);
+        return Rows.Size();
     }
 
     TOwnedCellVecBatch Extract() {
@@ -707,7 +717,7 @@ public:
             return res;
         }
 
-        auto poolAlloc = CreateOffloadedPoolAllocator(std::move(Alloc));
+        auto poolAlloc = CreateOffloadedPoolAllocator(Alloc);
         return MakeIntrusive<TRowBatch>(TOwnedCellVecBatch(poolAlloc->CreateMemoryPool()), poolAlloc);
     }
 
@@ -719,7 +729,7 @@ public:
         if (Batches.empty() || (MaxBytesPerBatch && newMemorySerialized + Batches.back()->GetMemorySerialized() > *MaxBytesPerBatch)) {
             Batches.emplace_back(std::make_unique<TBatch>(Alloc));
         }
-        
+
         AFL_ENSURE(newMemory == Batches.back()->AddRow(std::move(row)));
         Memory += newMemory;
     }
@@ -800,6 +810,7 @@ public:
                     Columns[index].PTypeMod);
             }
             auto cells = rowBuilder.BuildCells();
+            AFL_ENSURE(cells.size() == Columns.size());
             RowBatcher.AddRow(cells);
         });
     }
@@ -860,6 +871,7 @@ public:
                 TRowsBatcher(Columns.size(), DataShardMaxOperationBytes, Alloc));
         }
 
+        AFL_ENSURE(row.size() == Columns.size());
         Batchers.at(shardIter->ShardId).AddRow(row);
         ShardIds.insert(shardIter->ShardId);
     }
@@ -875,6 +887,7 @@ public:
         auto rows = datashardBatch->Extract();
 
         for (const auto& row : rows) {
+            AFL_ENSURE(row.size() == Columns.size());
             AddRow(
                 row,
                 Partitioning);
@@ -987,37 +1000,23 @@ public:
             , RowBatcher(ColumnsMapping.size(), std::nullopt, Alloc) {
     }
 
-    void Fill(const IDataBatchPtr& data) override {
-        YQL_ENSURE(RowBatcher.IsEmpty());
-        auto* batch = dynamic_cast<TRowBatch*>(data.Get());
-        AFL_ENSURE(batch);
-        const auto& rows = batch->GetRows();
-        AddDataShard(rows.begin(), rows.end());
-    }
-
-    void Fill(const TRowsRef& data) override {
-        YQL_ENSURE(RowBatcher.IsEmpty());
-        AddDataShard(data.begin(), data.end());
-    }
-
-    void AddDataShard(
-            TVector<TConstArrayRef<TCell>>::const_iterator begin,
-            TVector<TConstArrayRef<TCell>>::const_iterator end) {
+    void AddRow(TConstArrayRef<TCell> row) override {
         const size_t columnsCount = ColumnsMapping.size();
         std::vector<TCell> cells(columnsCount);
-        for (auto it = begin; it != end; ++it) {
-            const auto& row = *it;
-            for (size_t index = 0; index < columnsCount; ++index) {
-                cells[index] = row[ColumnsMapping[index]];
-            }
-            RowBatcher.AddRow(cells);
+        for (size_t index = 0; index < columnsCount; ++index) {
+            cells[index] = row[ColumnsMapping[index]];
         }
+        RowBatcher.AddRow(std::move(cells));
     }
 
     IDataBatchPtr Flush() override {
         auto result = RowBatcher.Flush(true);
         YQL_ENSURE(RowBatcher.IsEmpty());
         return result;
+    }
+
+    bool IsEmpty() const override {
+        return RowBatcher.IsEmpty();
     }
 
 private:
@@ -1034,26 +1033,33 @@ IRowsBatcherPtr CreateRowsBatcher(
     return MakeIntrusive<TRowsBatcherProxy>(columnsCount, std::move(alloc));
 }
 
-IDataBatchProjectionPtr CreateDataBatchProjection(
+std::vector<ui32> CreateMapping(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const TConstArrayRef<ui32> inputWriteIndex,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
         const TConstArrayRef<ui32> outputWriteIndex,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+        const bool preferAdditionalInputColumns) {
     // inputColumns (reordered using inputWriteIndex) + additionalInputColumns 
     // -> outputColumns (reordered using outputWriteIndex)
 
     AFL_ENSURE(inputColumns.size() == inputWriteIndex.size());
     AFL_ENSURE(outputColumns.size() == outputWriteIndex.size());
-    AFL_ENSURE(outputColumns.size() <= inputColumns.size());
+    AFL_ENSURE(outputColumns.size() <= inputColumns.size() + additionalInputColumns.size());
 
-    THashMap<TString, ui32> InputColumnNameToIndex;
-    for (size_t index = 0; index < inputColumns.size(); ++index) {
-        InputColumnNameToIndex[inputColumns[index].GetName()] = index;
-    }
-    for (size_t index = 0; index < additionalInputColumns.size(); ++index) {
-        InputColumnNameToIndex[additionalInputColumns[index].GetName()] = inputColumns.size() + index;
+    THashMap<TString, ui32> inputColumnNameToIndex;
+    auto fillInputColumnNameToIndex = [&](const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>& columns, size_t shift) {
+        for (size_t index = 0; index < columns.size(); ++index) {
+            inputColumnNameToIndex[columns[index].GetName()] = shift + index;
+        }
+    };
+
+    if (preferAdditionalInputColumns) {
+        fillInputColumnNameToIndex(inputColumns, 0);
+        fillInputColumnNameToIndex(additionalInputColumns, inputColumns.size());
+    } else {
+        fillInputColumnNameToIndex(additionalInputColumns, inputColumns.size());
+        fillInputColumnNameToIndex(inputColumns, 0);
     }
 
     std::vector<ui32> outputOrder(outputWriteIndex.size());
@@ -1065,7 +1071,7 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
     for (size_t index = 0; index < outputColumns.size(); ++index) {
         const auto& outputColumnIndex = outputOrder.at(index);
         const auto& outputColumnName = outputColumns.at(outputColumnIndex).GetName();
-        const auto& inputColumnIndex = InputColumnNameToIndex.at(outputColumnName);
+        const auto& inputColumnIndex = inputColumnNameToIndex.at(outputColumnName);
         const auto& inputIndex = inputColumnIndex < inputWriteIndex.size()
             ? inputWriteIndex.at(inputColumnIndex)
             : inputColumnIndex;
@@ -1073,49 +1079,74 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
         columnsMapping[index] = inputIndex;
     }
 
+    return columnsMapping;
+}
+
+std::vector<ui32> GetIndexes(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const TConstArrayRef<ui32> inputWriteIndex,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
+        const TConstArrayRef<ui32> outputWriteIndex,
+        const bool preferAdditionalInputColumns) {
+    auto columnsMapping = CreateMapping(
+        inputColumns,
+        inputWriteIndex,
+        additionalInputColumns,
+        outputColumns,
+        outputWriteIndex,
+        preferAdditionalInputColumns);
+    return columnsMapping;
+}
+
+bool IsEqual(
+        TConstArrayRef<TCell> firstCells,
+        TConstArrayRef<TCell> secondCells,
+        const std::vector<ui32>& newIndexes,
+        const std::vector<ui32>& oldIndexes,
+        TConstArrayRef<NScheme::TTypeInfo> types) {
+    AFL_ENSURE(newIndexes.size() == types.size());
+    AFL_ENSURE(oldIndexes.size() == types.size());
+    auto getCell = [&](const size_t index) {
+        if (index < firstCells.size()) {
+            return firstCells[index];
+        }
+        AFL_ENSURE(secondCells.size() + firstCells.size() > index);
+        return secondCells[index - firstCells.size()];
+    };
+    for (size_t index = 0; index < types.size(); ++index) {
+        if (0 != CompareTypedCells(getCell(newIndexes[index]), getCell(oldIndexes[index]), types[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+IDataBatchProjectionPtr CreateDataBatchProjection(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const TConstArrayRef<ui32> inputWriteIndex,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
+        const TConstArrayRef<ui32> outputWriteIndex,
+        const bool preferAdditionalInputColumns,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    auto columnsMapping = CreateMapping(
+        inputColumns,
+        inputWriteIndex,
+        additionalInputColumns,
+        outputColumns,
+        outputWriteIndex,
+        preferAdditionalInputColumns);
+
     return MakeIntrusive<TDataBatchProjection>(
         std::move(columnsMapping), std::move(alloc));
 }
 
-std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
-        const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
-        const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes) {
-    size_t totalRows = 0;
-    for (const auto& batch : batches) {
-        auto* data = dynamic_cast<TRowBatch*>(batch.Get());
-        AFL_ENSURE(data);
-        totalRows += data->GetRows().Size();
-    }
-
-    std::vector<TConstArrayRef<TCell>> rows;
-    rows.reserve(totalRows);
-
-    // We need only last written row for each key
-    for (auto it = batches.rbegin(); it != batches.rend(); ++it) {
-        auto* data = dynamic_cast<TRowBatch*>(it->Get());
-        AFL_ENSURE(data);
-        const auto& batchRows = data->GetRows();
-        rows.insert(rows.end(), batchRows.begin(), batchRows.end());
-    }
-
-    std::stable_sort(
-        rows.begin(),
-        rows.end(),
-        [&keyColumnTypes](const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
-            AFL_ENSURE(lhs.size() == rhs.size());
-            return CompareTypedCellVectors(lhs.data(), rhs.data(), keyColumnTypes.data(), lhs.size()) < 0;
-        });
-
-    auto rowsToEraseBegin = std::unique(
-        rows.begin(),
-        rows.end(),
-        [&keyColumnTypes](const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
-            AFL_ENSURE(lhs.size() == rhs.size());
-            return CompareTypedCellVectors(lhs.data(), rhs.data(), keyColumnTypes.data(), lhs.size()) == 0;
-        });
-
-    rows.erase(rowsToEraseBegin, rows.end());
-    return rows;
+std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch) {
+    auto* data = dynamic_cast<TRowBatch*>(batch.Get());
+    AFL_ENSURE(data);
+    const auto& batchRows = data->GetRows();
+    return std::vector<TConstArrayRef<TCell>>(batchRows.begin(), batchRows.end());
 }
 
 std::vector<TConstArrayRef<TCell>> CutColumns(
@@ -1126,6 +1157,115 @@ std::vector<TConstArrayRef<TCell>> CutColumns(
         result.emplace_back(row.data(), columnsCount);
     }
     return result;
+}
+
+TUniqueSecondaryKeyCollector::TUniqueSecondaryKeyCollector(
+    const TConstArrayRef<NScheme::TTypeInfo> primaryKeyColumnTypes,
+    const TConstArrayRef<NScheme::TTypeInfo> secondaryKeyColumnTypes,
+    const TConstArrayRef<ui32> secondaryKeyColumns,
+    const TConstArrayRef<ui32> secondaryTableKeyColumns,
+    const TConstArrayRef<ui32> primaryKeyInSecondaryTableKeyColumns)
+        : PrimaryKeyColumnTypes(primaryKeyColumnTypes)
+        , SecondaryKeyColumnTypes(secondaryKeyColumnTypes)
+        , SecondaryKeyColumns(secondaryKeyColumns)
+        , SecondaryTableKeyColumns(secondaryTableKeyColumns)
+        , PrimaryKeyInSecondaryTableKeyColumns(primaryKeyInSecondaryTableKeyColumns) {
+    AFL_ENSURE(PrimaryKeyInSecondaryTableKeyColumns.size() == PrimaryKeyColumnTypes.size());
+    AFL_ENSURE(PrimaryKeyInSecondaryTableKeyColumns.size() <= SecondaryKeyColumnTypes.size());
+    AFL_ENSURE(SecondaryTableKeyColumns.size() == SecondaryKeyColumnTypes.size());
+    AFL_ENSURE(SecondaryKeyColumns.size() <= SecondaryTableKeyColumns.size());
+    AFL_ENSURE(SecondaryTableKeyColumns.size() <= PrimaryKeyColumnTypes.size() + SecondaryKeyColumnTypes.size());
+}
+
+bool TUniqueSecondaryKeyCollector::AddRow(const TConstArrayRef<TCell> row) {
+    Cells.emplace_back();
+    Cells.back().reserve(SecondaryTableKeyColumns.size() + PrimaryKeyColumnTypes.size());
+    for (const auto& index : SecondaryTableKeyColumns) {
+        Cells.back().push_back(row[index]);
+    }
+    for (size_t index = 0; index < PrimaryKeyColumnTypes.size(); ++index) {
+        Cells.back().push_back(Cells.back()[PrimaryKeyInSecondaryTableKeyColumns[index]]);
+    }
+
+    return AddRowImpl();
+}
+
+bool TUniqueSecondaryKeyCollector::AddSecondaryTableRow(const TConstArrayRef<TCell> row) {
+    AFL_ENSURE(row.size() == SecondaryTableKeyColumns.size());
+    Cells.emplace_back();
+    Cells.back().reserve(SecondaryTableKeyColumns.size() + PrimaryKeyColumnTypes.size());
+    for (const auto& cell : row) {
+        Cells.back().push_back(cell);
+    }
+    for (size_t index = 0; index < PrimaryKeyColumnTypes.size(); ++index) {
+        Cells.back().push_back(Cells.back()[PrimaryKeyInSecondaryTableKeyColumns[index]]);
+    }
+
+    return AddRowImpl();
+}
+
+bool TUniqueSecondaryKeyCollector::AddRowImpl() {
+    const auto& row = TConstArrayRef<TCell>(Cells.back());
+
+    const auto primaryKey = row.last(PrimaryKeyColumnTypes.size());
+    const auto secondaryKey = row.first(SecondaryKeyColumns.size());
+    const auto iterPrimary = PrimaryToSecondary.find(primaryKey);
+
+    // In case on unique indexes NULL != NULL,
+    // so we don't need to check if rows with NULLs are unique. 
+    const bool secondaryKeyHasNull = std::any_of(
+        secondaryKey.begin(),
+        secondaryKey.end(),
+        [](const TCell& cell) { return cell.IsNull(); });
+    if (secondaryKeyHasNull) {
+        // Can't conflict with other keys
+        if (iterPrimary != PrimaryToSecondary.end()) {
+            const auto& oldSecondaryKey = TConstArrayRef<TCell>(Cells.at(iterPrimary->second))
+                .first(SecondaryKeyColumns.size());
+            SecondaryToPrimary.erase(oldSecondaryKey);
+            PrimaryToSecondary.erase(primaryKey);
+        }
+    } else {
+        const auto iterSecondary = SecondaryToPrimary.find(secondaryKey);
+
+        if (iterSecondary != SecondaryToPrimary.end()) {
+            const auto oldPrimaryKey = TConstArrayRef<TCell>(Cells.at(iterSecondary->second))
+                .last(PrimaryKeyColumnTypes.size());
+            if (0 != CompareTypedCellVectors(
+                            oldPrimaryKey.data(),
+                            primaryKey.data(),
+                            PrimaryKeyColumnTypes.data(),
+                            PrimaryKeyColumnTypes.size())) {
+                // Error: duplicate secondary key
+                return false;
+            }
+        }
+
+        if (iterPrimary != PrimaryToSecondary.end()) {
+            const auto& oldSecondaryKey = TConstArrayRef<TCell>(Cells.at(iterPrimary->second))
+                .first(SecondaryKeyColumns.size());
+            if (0 == CompareTypedCellVectors(
+                    secondaryKey.data(),
+                    oldSecondaryKey.data(),
+                    SecondaryKeyColumnTypes.data(),
+                    secondaryKey.size())) {
+                // Nothing changed. Skip this row.
+                return true;
+            }
+            SecondaryToPrimary.erase(oldSecondaryKey);
+        }
+
+        PrimaryToSecondary[primaryKey] = Cells.size() - 1;
+        SecondaryToPrimary[secondaryKey] = Cells.size() - 1;
+
+        UniqueCellsSet.insert(secondaryKey);
+    }
+
+    return true;
+}
+
+TUniqueSecondaryKeyCollector::TKeysSet TUniqueSecondaryKeyCollector::BuildUniqueSecondaryKeys() {
+    return std::move(UniqueCellsSet);
 }
 
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
@@ -1182,8 +1322,9 @@ class TShardsInfo {
 public:
     class TShardInfo {
         friend class TShardsInfo;
-        TShardInfo(i64& memory, ui64& nextCookie, bool& closed)
+        TShardInfo(i64& memory, ui64& pendingBatches, ui64& nextCookie, bool& closed)
             : Memory(memory)
+            , PendingBatches(pendingBatches)
             , NextCookie(nextCookie)
             , Cookie(NextCookie++)
             , Closed(closed) {
@@ -1238,6 +1379,7 @@ public:
                     const i64 batchMemory = Batches.front().GetMemory();
                     result.DataSize += batchMemory;
                     Memory -= batchMemory;
+                    PendingBatches--;
                     Batches.pop_front();
                 }
 
@@ -1254,6 +1396,7 @@ public:
             AFL_ENSURE(!IsClosed());
             Batches.emplace_back(std::move(batch));
             Memory += Batches.back().GetMemory();
+            PendingBatches++;
             HasReadInBatch |= Batches.back().HasRead;
         }
 
@@ -1292,6 +1435,7 @@ public:
     private:
         std::deque<TBatchWithMetadata> Batches;
         i64& Memory;
+        ui64& PendingBatches;
         bool HasReadInBatch = false;
 
         ui64& NextCookie;
@@ -1310,7 +1454,7 @@ public:
             return it->second;
         }
 
-        auto [insertIt, _] = ShardsInfo.emplace(shard, TShardInfo(Memory, NextCookie, Closed));
+        auto [insertIt, _] = ShardsInfo.emplace(shard, TShardInfo(Memory, PendingBatches, NextCookie, Closed));
         return insertIt->second;
     }
 
@@ -1330,12 +1474,7 @@ public:
     }
 
     bool IsEmpty() const {
-        for (const auto& [_, shard] : ShardsInfo) {
-            if (!shard.IsEmpty()) {
-                return false;
-            }
-        }
-        return true;
+        return PendingBatches == 0;
     }
 
     bool IsFinished() const {
@@ -1373,6 +1512,7 @@ private:
     THashMap<ui64, TShardInfo> ShardsInfo;
     i64 Memory = 0;
     ui64 NextCookie = 1;
+    ui64 PendingBatches = 0;
     bool Closed = false;
 };
 
@@ -1442,10 +1582,12 @@ public:
     void Open(
         const TWriteToken token,
         const TTableId tableId,
+        const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         std::vector<ui32>&& writeIndex,
         const i64 priority) override {
+        AFL_ENSURE(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
         auto [iter, inserted] = WriteInfos.emplace(
             token,
             TWriteInfo {
@@ -1455,7 +1597,7 @@ public:
                     .InputColumnsMetadata = std::move(inputColumns),
                     .WriteIndex = std::move(writeIndex),
                     .Priority = priority,
-                    .OperationType = NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED,
+                    .OperationType = operationType,
                 },
                 .Serializer = nullptr,
                 .Closed = false,
@@ -1480,14 +1622,11 @@ public:
 
     void Write(
             const TWriteToken token,
-            const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
             IDataBatchPtr&& data) override {
         auto& info = WriteInfos.at(token);
         AFL_ENSURE(!info.Closed);
         AFL_ENSURE(info.Serializer);
-        AFL_ENSURE(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
-        AFL_ENSURE(info.Metadata.OperationType == operationType || info.Serializer->IsEmpty());
-        info.Metadata.OperationType = operationType;
+        AFL_ENSURE(info.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
 
         if (!data->AttachedAlloc()) {
             AFL_ENSURE(!Settings.Inconsistent);
@@ -1516,11 +1655,6 @@ public:
 
     void FlushBuffer(const TWriteToken token) override {
         FlushSerializer(token, true);
-        const auto& writeInfo = WriteInfos.at(token);
-        if (writeInfo.Metadata.Priority != 0) {
-            AFL_ENSURE(writeInfo.Closed);
-            AFL_ENSURE(writeInfo.Serializer->IsFinished());
-        }
     }
 
     void FlushBuffers() override {
@@ -1542,11 +1676,6 @@ public:
         
         for (const TWriteToken token : writeTokensFoFlush) {
             FlushSerializer(token, true);
-            const auto& writeInfo = WriteInfos.at(token);
-            if (writeInfo.Metadata.Priority != 0) {
-                AFL_ENSURE(writeInfo.Closed);
-                AFL_ENSURE(writeInfo.Serializer->IsFinished());
-            }
         }
     }
 

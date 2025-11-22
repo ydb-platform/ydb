@@ -82,7 +82,7 @@ void SetGlobalTracer(const ITracerPtr& tracer)
     }
 
     if (oldTracer) {
-        oldTracer->Stop();
+        GetFinalizerInvoker()->Invoke(BIND(&ITracer::Stop, oldTracer));
     }
 }
 

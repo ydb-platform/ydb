@@ -212,7 +212,7 @@ void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSessio
     Locations.emplace(partitionSession.PartitionSessionId, partitionSession.Location);
 }
 
-// Delete a partition session from a node (TDirectReadSession), and if there are no more
+// Delete partition session from the node (TDirectReadSession), and if there are no more
 // partition sessions on the node, drop connection to it.
 void TDirectReadSessionManager::DeletePartitionSession(TPartitionSessionId partitionSessionId, TNodeSessionsMap::iterator it) {
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSession " << partitionSessionId);
@@ -228,7 +228,7 @@ void TDirectReadSessionManager::DeletePartitionSession(TPartitionSessionId parti
             NodeSessions.erase(it);
         }
     } else {
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSession " << partitionSessionId << " not found in NodeSessions");
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSession " << partitionSessionId << " could not LockShared");
     }
     if (directReadSessionContextPtr) {
         directReadSessionContextPtr->Cancel();
@@ -276,25 +276,6 @@ void TDirectReadSessionManager::UpdatePartitionSession(TPartitionSessionId parti
         .NextDirectReadId = next,
         .LastDirectReadId = last,
     });
-}
-
-TDirectReadSessionContextPtr TDirectReadSessionManager::ErasePartitionSession(TPartitionSessionId partitionSessionId) {
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "ErasePartitionSession " << partitionSessionId);
-
-    auto locIt = Locations.find(partitionSessionId);
-    Y_ABORT_UNLESS(locIt != Locations.end());
-    auto nodeId = locIt->second.GetNodeId();
-
-    auto sessionIt = NodeSessions.find(nodeId);
-    Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
-    TDirectReadSessionContextPtr directReadSessionContextPtr = sessionIt->second;
-
-    // Still need to Cancel the TCallbackContext<TDirectReadSession>.
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "ErasePartitionSession " << partitionSessionId << " erase");
-    NodeSessions.erase(sessionIt);
-    Locations.erase(partitionSessionId);
-
-    return directReadSessionContextPtr;
 }
 
 void TDirectReadSessionManager::StopPartitionSession(TPartitionSessionId partitionSessionId) {

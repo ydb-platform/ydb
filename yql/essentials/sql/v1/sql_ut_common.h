@@ -5151,6 +5151,18 @@ Y_UNIT_TEST(SelectJoinEmptyCorrNames) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:45: Error: At least one correlation name is required in join\n");
 }
 
+Y_UNIT_TEST(SelectJoinSameTables) {
+    NYql::TAstParseResult res = SqlToYql("Select a.key FROM plato.Input JOIN plato.Input ON Input.key == Input.subkey\n");
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:61: Error: JOIN: different correlation names are required for joined tables\n");
+}
+
+Y_UNIT_TEST(SelectJoinSameCorrLabels) {
+    NYql::TAstParseResult res = SqlToYql("Select a.key FROM plato.Input as a JOIN plato.Input1 as a ON a.key == a.subkey\n");
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:68: Error: JOIN: different correlation names are required for joined tables\n");
+}
+
 Y_UNIT_TEST(SelectJoinSameCorrNames) {
     NYql::TAstParseResult res = SqlToYql("SELECT Input.key FROM plato.Input JOIN plato.Input1 ON Input.key == Input.subkey\n");
     UNIT_ASSERT(!res.Root);
@@ -5454,7 +5466,13 @@ Y_UNIT_TEST(ReplaceIntoMapReduce) {
 Y_UNIT_TEST(UpsertIntoMapReduce) {
     NYql::TAstParseResult res = SqlToYql("UPSERT INTO plato.Output SELECT key FROM plato.Input");
     UNIT_ASSERT(!res.Root);
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: UPSERT INTO is not supported for yt tables\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: UPSERT is not available before language version 2025.04\n");
+
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    res = SqlToYqlWithSettings("UPSERT INTO plato.Output SELECT key FROM plato.Input", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
 
 Y_UNIT_TEST(UpdateMapReduce) {
@@ -10941,6 +10959,92 @@ Y_UNIT_TEST(FromSubquery) {
     };
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+}
+
+Y_UNIT_TEST(Join2) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT id FROM xx JOIN yy ON xx.id = yy.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(AsteriskJoin) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT * FROM xx JOIN yy ON xx.id = yy.id;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToOneLineString(),
+        "YqlSelect unsupported: JOIN with an asterisk projection");
+}
+
+Y_UNIT_TEST(QualifiedAsteriskJoin) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT xx.* FROM xx JOIN yy ON xx.id = yy.id;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToOneLineString(),
+        "YqlSelect unsupported: an_id DOT ASTERISK");
+}
+
+Y_UNIT_TEST(Join2Alias) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT id
+        FROM xx AS x
+        JOIN yy AS y ON x.id = y.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(Join3) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT id
+        FROM xx AS x
+        JOIN yy AS y ON x.id = y.id
+        JOIN zz AS z ON y.id = z.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(Join3Mix) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT id
+        FROM (VALUES (1)) AS x(id)
+        JOIN (SELECT * FROM yy) AS y ON x.id = y.id
+        JOIN zz AS z ON y.id = z.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
 
 Y_UNIT_TEST(OrderBy) {

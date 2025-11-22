@@ -202,7 +202,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         EXPECTED: false
     )";
     Y_UNIT_TEST_STRING_VARIATOR(SimplificationWithWrite, scriptSimplificationWithWrite) {
-        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableCSSchemasCollapsing(true);
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute(settings);
     }
 
     TString scriptSimplificationEmptyTable = R"(
@@ -254,7 +257,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         EXPECTED: false
     )";
     Y_UNIT_TEST_STRING_VARIATOR(SimplificationEmptyTable, scriptSimplificationEmptyTable) {
-        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableCSSchemasCollapsing(true);
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute(settings);
     }
 
     Y_UNIT_TEST(TierDraftsGCWithRestart) {

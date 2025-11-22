@@ -380,14 +380,15 @@ public:
         }
 
         void ReportStatus(Ydb::Monitoring::StatusFlag::Status status,
-                          const TString& message = {},
-                          ETags setTag = ETags::None,
-                          std::initializer_list<ETags> includeTags = {}) {
+                          const TString& message,
+                          ETags setTag,
+                          std::initializer_list<ETags> includeTags,
+                          const TList<TIssueRecord>& includeRecords) {
             OverallStatus = MaxStatus(OverallStatus, status);
             if (IsErrorStatus(status)) {
                 std::vector<TString> reason;
                 if (includeTags.size() != 0) {
-                    for (const TIssueRecord& record : IssueRecords) {
+                    for (const TIssueRecord& record : includeRecords) {
                         for (const ETags& tag : includeTags) {
                             if (record.Tag == tag) {
                                 reason.push_back(record.IssueLog.id());
@@ -421,6 +422,13 @@ public:
             }
         }
 
+        void ReportStatus(Ydb::Monitoring::StatusFlag::Status status,
+                          const TString& message = {},
+                          ETags setTag = ETags::None,
+                          std::initializer_list<ETags> includeTags = {}) {
+            ReportStatus(status, message, setTag, includeTags, IssueRecords);
+        }
+
         bool HasTags(std::initializer_list<ETags> tags) const {
             for (const TIssueRecord& record : IssueRecords) {
                 for (const ETags tag : tags) {
@@ -444,12 +452,14 @@ public:
             return status;
         }
 
-        void ReportWithMaxChildStatus(const TString& message = {},
+        bool ReportWithMaxChildStatus(const TString& message = {},
                                         ETags setTag = ETags::None,
                                         std::initializer_list<ETags> includeTags = {}) {
             if (HasTags(includeTags)) {
                 ReportStatus(FindMaxStatus(includeTags), message, setTag, includeTags);
+                return true;
             }
+            return false;
         }
 
         Ydb::Monitoring::StatusFlag::Status GetOverallStatus() const {
@@ -841,6 +851,7 @@ public:
             TabletRequests.TabletStates[RootSchemeShardId].Database = DomainPath;
             TabletRequests.TabletStates[RootSchemeShardId].Type = TTabletTypes::SchemeShard;
             DescribeByPath[DomainPath] = RequestDescribe(RootSchemeShardId, DomainPath);
+            DatabaseState[DomainPath].SchemeShardId = RootSchemeShardId;
         }
 
         if (BsControllerId) {
@@ -2192,9 +2203,9 @@ public:
                 ui64 clockSkew = abs(databaseState.MaxClockSkewNodeAvgUs);
                 clockSkewStatus.set_clock_skew(-databaseState.MaxClockSkewNodeAvgUs / 1000); // in ms
                 if (clockSkew >= HealthCheckConfig.GetThresholds().GetNodesTimeDifferenceOrange()) {
-                    tdContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Clock skew exceeds threshold", ETags::NodeClockSkew);
+                    tdContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Node clock skew exceeds threshold", ETags::NodeClockSkew);
                 } else if (clockSkew >= HealthCheckConfig.GetThresholds().GetNodesTimeDifferenceYellow()) {
-                    tdContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Clock skew above recommended limit", ETags::NodeClockSkew);
+                    tdContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Node clock skew above recommended limit", ETags::NodeClockSkew);
                 } else {
                     tdContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 }
@@ -2225,10 +2236,13 @@ public:
             FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
 
         }
+        FillComputeDatabaseClockSkew(databaseState, computeStatus, {&context, "CLOCK_SKEW"}, context);
         context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::PileComputeState, {ETags::Uptime});
         context.ReportWithMaxChildStatus("Compute is overloaded", ETags::PileComputeState, {ETags::OverloadState});
         context.ReportWithMaxChildStatus("Compute quota usage", ETags::PileComputeState, {ETags::QuotaUsage});
-        context.ReportWithMaxChildStatus("Clock skew issues", ETags::PileComputeState, {ETags::NodeClockSkew});
+        if (!context.ReportWithMaxChildStatus("Clock skew issues", ETags::PileComputeState, {ETags::DatabaseClockSkew})) {
+            context.ReportWithMaxChildStatus("Clock skew issues", ETags::PileComputeState, {ETags::NodeClockSkew});
+        }
     }
 
     void FillComputeDatabaseQuota(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
@@ -2264,12 +2278,12 @@ public:
         }
     }
 
-    void FillComputeDatabaseClockSkew(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
+    void FillComputeDatabaseClockSkew(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context, const TSelfCheckContext& relatedContext) {
         ui64 clockSkew = databaseState.MaxClockSkewUs;
         if (clockSkew >= HealthCheckConfig.GetThresholds().GetNodesTimeDifferenceOrange()) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Clock skew exceeds threshold", ETags::DatabaseClockSkew, {ETags::NodeClockSkew});
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Database clock skew exceeds threshold", ETags::DatabaseClockSkew, {ETags::NodeClockSkew}, relatedContext.IssueRecords);
         } else if (clockSkew >= HealthCheckConfig.GetThresholds().GetNodesTimeDifferenceYellow()) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Clock skew above recommended limit", ETags::DatabaseClockSkew, {ETags::NodeClockSkew});
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Database clock skew above recommended limit", ETags::DatabaseClockSkew, {ETags::NodeClockSkew}, relatedContext.IssueRecords);
         } else {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
         }
@@ -2356,10 +2370,13 @@ public:
                     auto& computeNode = *computeStatus.add_nodes();
                     FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
                 }
+                FillComputeDatabaseClockSkew(databaseState, computeStatus, {&context, "CLOCK_SKEW"}, context);
                 context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::Uptime});
                 context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
                 context.ReportWithMaxChildStatus("Compute quota usage", ETags::ComputeState, {ETags::QuotaUsage});
-                context.ReportWithMaxChildStatus("Clock skew issues", ETags::ComputeState, {ETags::NodeClockSkew});
+                if (!context.ReportWithMaxChildStatus("Clock skew issues", ETags::ComputeState, {ETags::DatabaseClockSkew})) {
+                    context.ReportWithMaxChildStatus("Clock skew issues", ETags::ComputeState, {ETags::NodeClockSkew});
+                }
             }
         }
         Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets(databaseState, {&context, "SYSTEM_TABLET"});
@@ -2367,7 +2384,6 @@ public:
             context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
         }
         FillComputeDatabaseQuota(databaseState, computeStatus, {&context, "COMPUTE_QUOTA"});
-        FillComputeDatabaseClockSkew(databaseState, computeStatus, {&context, "CLOCK_SKEW"});
         Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
         computeNodeIds->push_back(0); // for tablets without node
         for (TNodeId nodeId : *computeNodeIds) {
@@ -3412,7 +3428,11 @@ public:
 
     void FillStorage(TDatabaseState& databaseState, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckContext context) {
         if (HaveAllBSControllerInfo() && databaseState.StoragePools.empty()) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools", ETags::StorageState);
+            if (TabletRequests.TabletStates[databaseState.SchemeShardId].IsUnresponsive) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREY, "Could not get data on storage", ETags::StorageState);
+            } else {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools", ETags::StorageState);
+            }
         } else {
             if (HaveAllBSControllerInfo()) {
                 for (const ui64 poolId : databaseState.StoragePools) {

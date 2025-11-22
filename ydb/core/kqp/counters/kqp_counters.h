@@ -101,6 +101,8 @@ protected:
     void ReportCompileRequestRejected();
     void ReportCompileRequestTimeout();
     void ReportCompileDurations(TDuration duration, TDuration cpuTime);
+    void ReportCompileEnforceConfigSuccess();
+    void ReportCompileEnforceConfigFailed();
     void ReportRecompileRequestGet();
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
 
@@ -206,6 +208,8 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileTotal;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileActive;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileEnforceConfigSuccess;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileEnforceConfigFailed;
     NMonitoring::THistogramPtr CompileCpuTime;
     NMonitoring::THistogramPtr YdbCompileDuration;
 };
@@ -331,6 +335,8 @@ public:
     void ReportCompileRequestRejected(TKqpDbCountersPtr dbCounters);
     void ReportCompileRequestTimeout(TKqpDbCountersPtr dbCounters);
     void ReportCompileDurations(TKqpDbCountersPtr dbCounters, TDuration duration, TDuration cpuTime);
+    void ReportCompileEnforceConfigSuccess(TKqpDbCountersPtr dbCounters);
+    void ReportCompileEnforceConfigFailed(TKqpDbCountersPtr dbCounters);
     void ReportRecompileRequestGet(TKqpDbCountersPtr dbCounters);
     void ReportCompileQueueWaitTime(const TDuration& duration);
 
@@ -409,6 +415,8 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorRetries;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorFails;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupIteratorTotalQuotaBytesInFlight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupIteratorTotalQuotaBytesExceeded;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
 
     // Sink write counters
@@ -436,6 +444,7 @@ public:
     NMonitoring::THistogramPtr BufferActorPrepareLatencyHistogram;
     NMonitoring::THistogramPtr BufferActorCommitLatencyHistogram;
     NMonitoring::THistogramPtr BufferActorFlushLatencyHistogram;
+    NMonitoring::THistogramPtr BufferActorRollbackLatencyHistogram;
 
     NMonitoring::THistogramPtr ForwardActorWritesSizeHistogram;
     NMonitoring::THistogramPtr ForwardActorWritesLatencyHistogram;
@@ -487,9 +496,7 @@ public:
 
     // Statistics batch operations
     ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateRows;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteRows;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationRetries;
 };
 

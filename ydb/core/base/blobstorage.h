@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "blobstorage_pdisk_category.h"
+#include "boot_type.h"
 #include "events.h"
 #include "tablet_types.h"
 #include "logoblob.h"
@@ -330,16 +331,17 @@ struct TTabletChannelInfo {
 
 class TTabletStorageInfo : public TThrRefBase {
 public:
-    //
     TTabletStorageInfo()
         : TabletID(Max<ui64>())
         , TabletType(TTabletTypes::TypeInvalid)
         , Version(0)
+        , BootType(ETabletBootType::Normal)
     {}
     TTabletStorageInfo(ui64 tabletId, TTabletTypes::EType tabletType)
         : TabletID(tabletId)
         , TabletType(tabletType)
         , Version(0)
+        , BootType(ETabletBootType::Normal)
     {}
     virtual ~TTabletStorageInfo() {}
 
@@ -381,6 +383,7 @@ public:
         str << "}";
         if (TenantPathId)
             str << " Tenant: " << TenantPathId;
+        str << " BootType: " << BootType;
         return str.Str();
     }
 
@@ -412,6 +415,7 @@ public:
     ui32 Version;
     TPathId TenantPathId;
     ui64 HiveId = 0;
+    ETabletBootType BootType = ETabletBootType::Normal;
 };
 
 inline TActorId TTabletStorageInfo::BSProxyIDForChannel(ui32 channel, ui32 generation) const {
@@ -767,6 +771,10 @@ struct TEvBlobStorage {
         EvBSQueueResetConnection, // for test purposes
         EvYardResize,                                           // 268 636 340
         EvChangeExpectedSlotCount,
+        EvPhantomFlagStorageAddFlagsFromSnapshot,
+        EvPhantomFlagStorageGetSnapshot,
+        EvPhantomFlagStorageGetSnapshotResult,
+        EvSyncLogUpdateNeighbourSyncedLsn,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

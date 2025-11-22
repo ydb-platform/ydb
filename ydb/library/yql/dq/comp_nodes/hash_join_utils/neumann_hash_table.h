@@ -177,23 +177,37 @@ class TNeumannHashTable {
 
     TNeumannHashTable(const TNeumannHashTable &) = delete;
     TNeumannHashTable &operator=(const TNeumannHashTable &) = delete;
+    TNeumannHashTable(TNeumannHashTable &&) = default;
+    TNeumannHashTable &operator=(TNeumannHashTable &&) = default;
+
+    static ui32 EstimateLogSize(int nItems) {
+        int estimated = 32 - std::countl_zero<ui32>(nItems);
+        return std::max(1, std::min(24, estimated > 2 ? estimated - 2 : estimated));
+    }
+
+
+
+
+    int64_t RequiredMemoryForBuild(int nItems) const {
+        return sizeof(TDirectory)*EstimateLogSize(nItems)+BufferSlotSize_ * nItems;
+    }
 
     void Build(const ui8 *const tuples, const ui8 *const overflow, int nItems,
-               ui32 estimatedLogSize = 0) {
+               std::optional<ui32> estimatedLogSize = std::nullopt) {
         MKQL_ENSURE_S(Layout_ != nullptr);
         MKQL_ENSURE_S(Directories_.empty() && Buffer_.empty() &&
                  Tuples_ == nullptr && Overflow_ == nullptr);
 
-        if (estimatedLogSize == 0) {
-            estimatedLogSize = 32 - std::countl_zero<ui32>(nItems);
-            estimatedLogSize = estimatedLogSize > 2 ? estimatedLogSize - 2 : estimatedLogSize;
+        if (!estimatedLogSize.has_value()) {
+            estimatedLogSize = EstimateLogSize(nItems);
         }
-        estimatedLogSize = std::max(1u, std::min(24u, estimatedLogSize));
+        MKQL_ENSURE(*estimatedLogSize >= 1, "estimated directories size shouldn't be less than 1");
+        MKQL_ENSURE(*estimatedLogSize <= 24, "estimated directories size shouldn't be too big");
 
         Tuples_ = tuples;
         Overflow_ = overflow;
 
-        DirectoryHashBits_ = estimatedLogSize;
+        DirectoryHashBits_ = *  estimatedLogSize;
         DirectoryHashShift_ = sizeof(Hash) * 8 - kBloomHashBits >= DirectoryHashBits_
                                 ? kBloomHashBits
                                 : sizeof(Hash) * 8 - DirectoryHashBits_;
@@ -434,14 +448,14 @@ class TNeumannHashTable {
 
         return iters;
     }
-    bool Empty(){
+    bool Empty() const{
         return Buffer_.empty();
     }
 
     void Apply(const ui8 *const row, const ui8 *const overflow,
                std::invocable<const ui8*> auto onMatch) const {
-        Y_ASSERT(Layout_ != nullptr);
-        Y_ASSERT(!Directories_.empty() && Tuples_ != nullptr);
+        MKQL_ENSURE(Layout_ != nullptr, "sanity check");
+        MKQL_ENSURE(!Directories_.empty() && Tuples_ != nullptr, "lookup to empty table?");
 
         const THash &thash = reinterpret_cast<const THash &>(row[0]);
         const TBloom hashBloomTag = kBloomTags[thash.BloomTagSlot];

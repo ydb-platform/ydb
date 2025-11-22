@@ -43,6 +43,7 @@
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisrunner.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogrecovery.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 #include <ydb/core/blobstorage/vdisk/defrag/defrag_actor.h>
@@ -1610,7 +1611,9 @@ namespace NKikimr {
 
             auto traceId = ev->TraceId.Clone();
             TString data = ev->Get()->Serialize();
-            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecLocalSyncData(seg, false, std::move(result), ev));
+            Y_ABORT_UNLESS(Db->SyncLogID);
+            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecLocalSyncData(seg, false, std::move(result), ev,
+                    Db->SyncLogID));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureLocalSyncData, data, seg,
@@ -1829,7 +1832,7 @@ namespace NKikimr {
             // which makes VDisk unable to sync with at all
             if (DbBirthLsn) {
                 Db->SyncFullHandlerID.Set(ctx.RegisterWithSameMailbox(CreateHullSyncFullHandler(Db, HullCtx,
-                    SelfVDiskId, ctx.SelfID, Hull, IFaceMonGroup, FullSyncGroup, *DbBirthLsn)));
+                    SelfVDiskId, ctx.SelfID, Db->SyncLogID, Hull, IFaceMonGroup, FullSyncGroup, *DbBirthLsn)));
                 ActiveActors.Insert(Db->SyncFullHandlerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
 
@@ -1928,6 +1931,17 @@ namespace NKikimr {
             ApplyHugeBlobSize(Config->MinHugeBlobInBytes);
             Y_VERIFY_S(MinHugeBlobInBytes, VCtx->VDiskLogPrefix);
 
+            if (Config->GroupSizeInUnits != GInfo->GroupSizeInUnits) {
+                Config->GroupSizeInUnits = GInfo->GroupSizeInUnits;
+                Y_VERIFY(PDiskCtx);
+                Y_VERIFY(PDiskCtx->Dsk);
+                ctx.Send(PDiskCtx->PDiskId,
+                    new NPDisk::TEvYardResize(
+                        PDiskCtx->Dsk->Owner,
+                        PDiskCtx->Dsk->OwnerRound,
+                        Config->GroupSizeInUnits));
+            }
+
             // handle special case when donor disk starts and finds out that it has been wiped out
             if (ev->Get()->LsnMngr->GetOriginallyRecoveredLsn() == 0 && Config->BaseInfo.DonorMode) {
                 // send drop donor cmd to NodeWarden
@@ -2012,7 +2026,8 @@ namespace NKikimr {
                     Config->SyncLogMaxMemAmount,
                     Config->MaxResponseSize,
                     Db->SyncLogFirstLsnToKeep,
-                    Config->BaseInfo.ReadOnly);
+                    Config->BaseInfo.ReadOnly,
+                    Config->EnablePhantomFlagStorage);
             Db->SyncLogID.Set(ctx.Register(CreateSyncLogActor(slCtx, GInfo, SelfVDiskId, std::move(repairedSyncLog))));
             ActiveActors.Insert(Db->SyncLogID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
@@ -2445,10 +2460,11 @@ namespace NKikimr {
             GInfo = msg->NewInfo;
             SelfVDiskId = msg->NewVDiskId;
 
-            if (Config->GroupSizeInUnits != GInfo->GroupSizeInUnits) {
+            if (PDiskCtx && Config->GroupSizeInUnits != GInfo->GroupSizeInUnits) {
                 Config->GroupSizeInUnits = GInfo->GroupSizeInUnits;
                 UpdateWhiteboard(ctx);
 
+                Y_VERIFY(PDiskCtx->Dsk);
                 ctx.Send(PDiskCtx->PDiskId,
                     new NPDisk::TEvYardResize(
                         PDiskCtx->Dsk->Owner,

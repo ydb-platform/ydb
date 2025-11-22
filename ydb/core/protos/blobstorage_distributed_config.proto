@@ -44,19 +44,6 @@ message TPDiskMetadataRecord {
     TStorageConfig ProposedStorageConfig = 2; // proposed storage config
 }
 
-message TStorageFileContent {
-    message TRecord {
-        string Path = 1;
-        fixed64 PDiskGuid = 2;
-        uint64 Timestamp = 3;
-        fixed64 Key = 4;
-        TPDiskMetadataRecord Meta = 5;
-        bool Unformatted = 6;
-    }
-
-    repeated TRecord Record = 1;
-}
-
 message TCacheUpdate {
     message TKeyValuePair {
         string Key = 1; // unique cache item key
@@ -78,7 +65,7 @@ message TEvNodeConfigPush {
     repeated TBoundNode BoundNodes = 2; // a list of bound node updates (including itself)
     repeated TNodeIdentifier DeletedBoundNodeIds = 3; // a list of detached nodes
     TCacheUpdate CacheUpdate = 4;
-    TStorageConfig StorageConfig = 5;
+    reserved 5;
 }
 
 // Used to reverse-propagate configuration and to confirm/reject initial TEvNodePushBinding query.
@@ -86,9 +73,9 @@ message TEvNodeConfigReversePush {
     uint32 RootNodeId = 1; // current tree root as known by the sender, always nonzero
     bool Rejected = 2; // is the request rejected due to cyclic graph?
     TStorageConfig CommittedStorageConfig = 3; // last known committed storage configuration
-    bool RecurseConfigUpdate = 4;
+    reserved 4;
     TCacheUpdate CacheUpdate = 5;
-    optional uint64 RequestStorageConfigGeneration = 6;
+    reserved 6;
 }
 
 // Remove node from bound list.
@@ -106,6 +93,7 @@ message TEvNodeConfigScatter {
 
     optional uint64 Cookie = 1;
     optional fixed64 TaskId = 4; // random (and not necessarily unique) identifier
+    optional bool Targeted = 5; // set when issuing updates to newly added nodes
 
     oneof Request {
         TCollectConfigs CollectConfigs = 2;
@@ -302,6 +290,10 @@ message TEvNodeConfigInvokeOnRoot {
         uint32 PileId = 2; // pile to convert from SUSPENDED to DISCONNECTED
     }
 
+    message TDescendCommittedStorageConfig {
+        TStorageConfig CommittedStorageConfig = 1;
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -321,6 +313,7 @@ message TEvNodeConfigInvokeOnRoot {
         TSelfHealNodesStateUpdate SelfHealNodesStateUpdate = 19;
         TUpdateBridgeGroupInfo UpdateBridgeGroupInfo = 20;
         TNotifyBridgeSuspended NotifyBridgeSuspended = 21;
+        TDescendCommittedStorageConfig DescendCommittedStorageConfig = 22;
     }
 }
 
@@ -375,4 +368,5 @@ message TEvNodeWardenDynamicConfigPush {
 message TConnectivityPayload {
     TStorageConfig StorageConfig = 1; // storage config of a sender
     optional uint32 BridgePileId = 2; // bridge pile id of a sender
+    TStorageConfig CommittedStorageConfig = 3; // committed version of storage config
 }

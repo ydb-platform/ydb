@@ -395,6 +395,7 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChildOrChildValue(
             int maxKeyLength = GetMaxKeyLength();
             NYTree::ValidateYTreeKey(key, maxKeyLength);
             tokenizer.Advance();
+            tokenizer.Skip(NYPath::ETokenType::Ampersand);
 
             bool lastStep = (tokenizer.GetType() == NYPath::ETokenType::EndOfStream);
             if (!recursive && !lastStep) {

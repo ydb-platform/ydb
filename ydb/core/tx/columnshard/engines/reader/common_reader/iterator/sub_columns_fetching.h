@@ -79,7 +79,7 @@ public:
             const std::shared_ptr<NArrow::NAccessor::IChunkedArray> arrOriginal =
                 deserialize ? columnLoader->ApplyVerified(i.second.GetBlobDataVerified(), GetRecordsCount())
                             : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(
-                                  GetRecordsCount(), columnLoader, i.second.GetBlobDataVerified(), true);
+                                  GetRecordsCount(), columnLoader, i.second.GetBlobDataVerified(), source->GetSourceId(), source->GetPortionAccessor().GetPortionInfo().GetPathId().DebugString(), true);
             if (applyFilter) {
                 PartialArray->AddColumn(i.first, applyFilter->Apply(arrOriginal));
             } else {
@@ -178,8 +178,13 @@ private:
         } else {
             ui32 pos = 0;
             for (auto&& i : ColumnChunks) {
-                i.Finish(std::make_shared<NArrow::TColumnFilter>(context.GetAccessors().GetAppliedFilter()->Slice(pos, i.GetRecordsCount())),
-                    context.GetSource());
+                const auto& appliedFilter = context.GetAccessors().GetAppliedFilter();
+                if (appliedFilter) {
+                    i.Finish(std::make_shared<NArrow::TColumnFilter>(appliedFilter->Slice(pos, i.GetRecordsCount())),
+                        context.GetSource());
+                } else {
+                    i.Finish(nullptr, context.GetSource());
+                }
                 pos += i.GetRecordsCount();
             }
         }

@@ -6,6 +6,10 @@
 #include "blobstorage_synclogrecovery.h"
 #include "blobstorage_synclogkeeper_committer.h"
 
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flags.h>
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_state.h>
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_snapshot.h>
+
 namespace NKikimr {
     namespace NSyncLog {
 
@@ -103,11 +107,12 @@ namespace NKikimr {
         class TSyncLogKeeperState {
         public:
             TSyncLogKeeperState(
-                    TIntrusivePtr<TVDiskContext> vctx,
+                    TIntrusivePtr<TSyncLogCtx> slCtx,
                     std::unique_ptr<TSyncLogRepaired> repaired,
                     ui64 syncLogMaxMemAmount,
                     ui64 syncLogMaxDiskAmount,
-                    ui64 syncLogMaxEntryPointSize);
+                    ui64 syncLogMaxEntryPointSize,
+                    const TActorId& selfId);
 
             void Init(std::shared_ptr<IActorNotify> notifier, std::shared_ptr<ILoggerCtx> loggerCtx) {
                 Notifier = std::move(notifier);
@@ -156,9 +161,17 @@ namespace NKikimr {
 
             void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
+            void UpdateNeighbourSyncedLsn(ui32 orderNumber, ui64 syncedLsn);
+
+            // Add flags from cut sync log snapshot
+            void PrunePhantomFlagStorage();
+            void AddFlagsToPhantomFlagStorage(TPhantomFlags&& flags);
+            TPhantomFlagStorageSnapshot GetPhantomFlagStorageSnapshot() const;
+            void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
+
         private:
             // VDisk Context
-            TIntrusivePtr<TVDiskContext> VCtx;
+            TIntrusivePtr<TSyncLogCtx> SlCtx;
             // SyncLog data structres
             TSyncLogPtr SyncLogPtr;
             // chunks we can and must delete for the next commit message
@@ -185,7 +198,19 @@ namespace NKikimr {
             const ui64 SyncLogMaxEntryPointSize;
             // does it need initial commit?
             bool NeedsInitialCommit;
+            // Snapshot that can be used by Commiter and PhantomFlagStorageBuilder actors
+            TSyncLogSnapshotPtr Snapshot;
+            // Id of Keeper actor which possesses the state
+            const TActorId SelfId;
 
+            // synced lsns of neighbours
+            std::vector<ui64> SyncedLsns;
+
+            // phantom flag storage
+            TPhantomFlagStorageState PhantomFlagStorageState;
+            TMemorizableControlWrapper EnablePhantomFlagStorage;
+
+        private:
             // Fix Disk overflow, i.e. remove some chunks from SyncLog
             TVector<ui32> FixDiskOverflow(ui32 numChunksToAdd);
             // Build Snapshot of memory pages for swapping to disk

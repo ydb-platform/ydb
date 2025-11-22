@@ -127,8 +127,10 @@ class KikimrConfigGenerator(object):
             domain_name='Root',
             suppress_version_check=True,
             static_pdisk_size=PDISK_SIZE,
+            static_pdisk_config=None,
             dynamic_pdisk_size=PDISK_SIZE,
             dynamic_pdisks=[],
+            dynamic_pdisks_config=None,
             dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0)],
             state_storage_rings=None,
             n_to_select=None,
@@ -187,7 +189,10 @@ class KikimrConfigGenerator(object):
             enable_static_auth=False,
             cms_config=None,
             explicit_statestorage_config=None,
-            protected_mode=False
+            system_tablets=None,
+            protected_mode=False,
+            tiny_mode=False,
+            module=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -211,10 +216,13 @@ class KikimrConfigGenerator(object):
             self.explicit_hosts_and_host_configs = True
         self._pdisk_store_path = pdisk_store_path
         self.static_pdisk_size = static_pdisk_size
+        self.static_pdisk_config = static_pdisk_config
         self.app_config = config_pb2.TAppConfig()
         self.port_allocator = KikimrPortManagerPortAllocator() if port_allocator is None else port_allocator
         erasure = Erasure.NONE if erasure is None else erasure
+        self.system_tablets = system_tablets
         self.protected_mode = protected_mode
+        self.module = module
         self.__grpc_ssl_enable = grpc_ssl_enable or protected_mode
         self.__grpc_tls_data_path = None
         self.__grpc_tls_ca = None
@@ -256,6 +264,7 @@ class KikimrConfigGenerator(object):
 
         self.dynamic_pdisk_size = dynamic_pdisk_size
         self.dynamic_storage_pools = dynamic_storage_pools
+        self.dynamic_pdisks_config = dynamic_pdisks_config
 
         self.__dynamic_pdisks = dynamic_pdisks
 
@@ -272,6 +281,8 @@ class KikimrConfigGenerator(object):
         self.node_kind = node_kind
         self.yq_tenant = yq_tenant
         self.dc_mapping = dc_mapping
+
+        self.tiny_mode = tiny_mode
 
         self.__bs_cache_file_path = bs_cache_file_path
 
@@ -607,6 +618,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["domains_config"]["explicit_state_storage_board_config"] = self.explicit_statestorage_config["explicit_state_storage_board_config"]
             self.yaml_config["domains_config"]["explicit_scheme_board_config"] = self.explicit_statestorage_config["explicit_scheme_board_config"]
 
+        if self.system_tablets:
+            self.yaml_config["system_tablets"] = self.system_tablets
+
         if metadata_section:
             self.full_config["metadata"] = metadata_section
             self.full_config["config"] = self.yaml_config
@@ -807,12 +821,19 @@ class KikimrConfigGenerator(object):
         for ring in self.state_storage_rings:
             self.yaml_config["domains_config"]["state_storage"][0]["ring"]["ring"].append({"node" : ring if isinstance(ring, list) else [ring], "use_ring_specific_node_selection" : True})
 
-    def _add_pdisk_to_static_group(self, pdisk_id, path, node_id, pdisk_category, ring):
+    def _add_pdisk_to_static_group(self, pdisk_id, path, node_id, pdisk_category, ring, pdisk_config=None):
         domain_id = len(
             self.yaml_config['blob_storage_config']["service_set"]["groups"][0]["rings"][ring]["fail_domains"])
-        self.yaml_config['blob_storage_config']["service_set"]["pdisks"].append(
-            {"node_id": node_id, "pdisk_id": pdisk_id, "path": path, "pdisk_guid": pdisk_id,
-             "pdisk_category": pdisk_category})
+        pdisk_entry = {
+            "node_id": node_id,
+            "pdisk_id": pdisk_id,
+            "path": path,
+            "pdisk_guid": pdisk_id,
+            "pdisk_category": pdisk_category
+        }
+        if pdisk_config:
+            pdisk_entry["pdisk_config"] = pdisk_config
+        self.yaml_config['blob_storage_config']["service_set"]["pdisks"].append(pdisk_entry)
         self.yaml_config['blob_storage_config']["service_set"]["vdisks"].append(
             {
                 "vdisk_id": {"group_id": 0, "group_generation": 1, "ring": ring, "domain": domain_id, "vdisk": 0},
@@ -835,6 +856,9 @@ class KikimrConfigGenerator(object):
                     'disk_size', self.dynamic_pdisk_size)
                 pdisk_user_kind = 0 if pdisk_id <= 1 else self.__dynamic_pdisks[pdisk_id - 2].get('user_kind', 0)
 
+                # Get pdisk config based on whether it's static or dynamic
+                pdisk_config = self.static_pdisk_config if pdisk_id <= 1 else self.dynamic_pdisks_config
+
                 if self.__use_in_memory_pdisks:
                     pdisk_size_gb = disk_size / (1024 * 1024 * 1024)
                     pdisk_path = "SectorMap:%d:%d" % (pdisk_id, pdisk_size_gb)
@@ -845,8 +869,17 @@ class KikimrConfigGenerator(object):
                                                            dir=self._pdisk_store_path)
                     pdisk_path = tmp_file.name
 
-                self._pdisks_info.append({'pdisk_path': pdisk_path, 'node_id': node_id, 'disk_size': disk_size,
-                                          'pdisk_user_kind': pdisk_user_kind})
+                pdisk_info = {
+                    'pdisk_path': pdisk_path,
+                    'node_id': node_id,
+                    'disk_size': disk_size,
+                    'pdisk_user_kind': pdisk_user_kind,
+                    'pdisk_id': pdisk_id
+                }
+                if pdisk_config:
+                    pdisk_info['pdisk_config'] = pdisk_config
+
+                self._pdisks_info.append(pdisk_info)
                 if not self.use_self_management and pdisk_id == 1 and node_id <= self.static_erasure.min_fail_domains * self._rings_count:
                     self._add_pdisk_to_static_group(
                         pdisk_id,
@@ -854,6 +887,7 @@ class KikimrConfigGenerator(object):
                         node_id,
                         pdisk_user_kind,
                         datacenter_id - 1,
+                        pdisk_config=pdisk_config,
                     )
 
     def _add_host_config_and_hosts(self):

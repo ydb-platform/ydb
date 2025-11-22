@@ -215,7 +215,7 @@ message TFeatureFlags {
     optional bool RequireDbPrefixInSecretName = 189 [default = false];
     optional bool EnableSystemNamesProtection = 190 [default = false];
     optional bool EnableRealSystemViewPaths = 191 [default = false, (RequireRestart) = true];
-    optional bool EnableCSSchemasCollapsing = 192 [default = true];
+    optional bool EnableCSSchemasCollapsing = 192 [default = false];
     optional bool EnableMoveColumnTable = 193 [default = true];
     optional bool EnableArrowResultSetFormat = 194 [default = false];
     optional bool EnableCsOverloadsSubscriptionRetries = 195 [default = true];
@@ -236,7 +236,7 @@ message TFeatureFlags {
     optional bool EnableSecureScriptExecutions = 210 [default = false];
     optional bool EnableColumnshardBool = 211 [default = false];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
-    optional bool EnableOlapRejectProbability = 213 [default = false];
+    optional bool EnableOlapRejectProbability = 213 [default = true];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
-    optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = false];
+    optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
 }

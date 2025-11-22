@@ -6,6 +6,7 @@ SRCS(
     ydb_dynamic_config.cpp
     ydb_replication.cpp
     ydb_scripting.cpp
+    ydb_test_shard.cpp
     ydb_view.cpp
 )
 

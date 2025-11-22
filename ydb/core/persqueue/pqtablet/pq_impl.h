@@ -97,6 +97,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
 
     template<typename TEventHandle>
     bool ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
@@ -261,7 +262,8 @@ private:
         TEvPQ::TEvMLPReadRequest::TPtr,
         TEvPQ::TEvMLPCommitRequest::TPtr,
         TEvPQ::TEvMLPUnlockRequest::TPtr,
-        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr
+        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr,
+        TEvPQ::TEvGetMLPConsumerStateRequest::TPtr
     >;
     TDeque<TMLPRequest> MLPRequests;
 
@@ -566,7 +568,7 @@ private:
     void Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorContext& ctx);
 
-    void BeginDeletePartitions(TTxWriteInfo& writeInfo);
+    void BeginDeletePartitions(const TWriteId& writeId, TTxWriteInfo& writeInfo);
     void BeginDeletePartitions(const TDistributedTransaction& tx);
 
     bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
@@ -599,6 +601,7 @@ private:
 
     bool AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const;
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
+    void TryDeleteWriteId(const TWriteId& writeId, const TTxWriteInfo& writeInfo, const TActorContext& ctx);
 
     void UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg);
 

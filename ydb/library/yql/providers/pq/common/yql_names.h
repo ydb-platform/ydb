@@ -15,8 +15,10 @@ constexpr TStringBuf AddBearerToTokenSetting = "AddBearerToToken";
 constexpr TStringBuf WatermarksEnableSetting = "WatermarksEnable";
 constexpr TStringBuf WatermarksGranularityUsSetting = "WatermarksGranularityUs";
 constexpr TStringBuf WatermarksLateArrivalDelayUsSetting = "WatermarksLateArrivalDelayUs";
+constexpr TStringBuf WatermarksIdleTimeoutUsSetting = "WatermarksIdleTimeoutUs";
 constexpr TStringBuf WatermarksIdlePartitionsSetting = "WatermarksIdlePartitions";
 constexpr TStringBuf ReconnectPeriod = "ReconnectPeriod";
 constexpr TStringBuf ReadGroup = "ReadGroup";
+constexpr TStringBuf SkipJsonErrors = "SkipJsonErrors";
 
 } // namespace NYql

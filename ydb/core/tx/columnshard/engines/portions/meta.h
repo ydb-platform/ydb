@@ -117,7 +117,7 @@ private:
         , LastPKRow(pk.GetLast().GetContent())
         , RecordSnapshotMin(min)
         , RecordSnapshotMax(max) {
-        AFL_VERIFY(IndexKeyStart() <= IndexKeyEnd())("start", IndexKeyStart().DebugString())("end", IndexKeyEnd().DebugString());
+        AFL_VERIFY_DEBUG(IndexKeyStart() <= IndexKeyEnd())("start", IndexKeyStart().DebugString())("end", IndexKeyEnd().DebugString());
     }
     TSnapshot RecordSnapshotMin;
     TSnapshot RecordSnapshotMax;

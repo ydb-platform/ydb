@@ -176,7 +176,7 @@ protected:
             if (name) {
                 DatabaseName_.emplace(std::move(*name));
             } else {
-                DatabaseName_.emplace(DatabaseFromDomain(AppData()));
+                DatabaseName_.emplace("");
             }
         }
         return *DatabaseName_;

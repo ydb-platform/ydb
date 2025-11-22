@@ -16,14 +16,14 @@ message TRowDispatcherCoordinatorConfig {
     // Topic partitions will be distributed uniformly up to TopicPartitionsLimitPerNode
     // if (number nodes) * TopicPartitionsLimitPerNode < (number topic partitions)
     // Request will hang up infinitely, disabled by default
-    uint64 TopicPartitionsLimitPerNode = 4;  
+    uint64 TopicPartitionsLimitPerNode = 4; // deprecated
+    uint64 RebalancingTimeoutSec = 5;       // Automatic rebalancing partition after new nodes connected / nodes disconnected.
 }
 
 message TJsonParserConfig {
     uint64 BatchSizeBytes = 1;  // default 1 MiB
     uint64 BatchCreationTimeoutMs = 2;
     uint64 BufferCellCount = 3;  // (number rows) * (number columns) limit, default 10^6
-    bool SkipErrors = 4;
 }
 
 message TCompileServiceConfig {

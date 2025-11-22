@@ -18,6 +18,7 @@ public:
     virtual i64 GetSerializedMemory() const = 0;
     virtual i64 GetMemory() const = 0;
     virtual bool IsEmpty() const = 0;
+    virtual size_t GetRowsCount() const = 0;
 
     virtual std::shared_ptr<void> ExtractBatch() = 0;
 
@@ -67,9 +68,9 @@ IDataBatcherPtr CreateColumnDataBatcher(
 
 class IDataBatchProjection : public TThrRefBase {
 public:
-    virtual void Fill(const IDataBatchPtr& data) = 0;
-    virtual void Fill(const TRowsRef& data) = 0;
+    virtual void AddRow(TConstArrayRef<TCell> row) = 0;
     virtual IDataBatchPtr Flush() = 0;
+    virtual bool IsEmpty() const = 0;
 };
 
 using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
@@ -80,14 +81,60 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
     const TConstArrayRef<ui32> outputWriteIndex,
+    const bool preferAdditionalInputColumns,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
-std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
-    const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
-    const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes);
+std::vector<ui32> GetIndexes(
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+    const TConstArrayRef<ui32> inputWriteIndex,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
+    const TConstArrayRef<ui32> outputWriteIndex,
+    const bool preferAdditionalInputColumns);
+
+bool IsEqual(
+    TConstArrayRef<TCell> firstCells,
+    TConstArrayRef<TCell> secondCells,
+    const std::vector<ui32>& newIndexes,
+    const std::vector<ui32>& oldIndexes,
+    TConstArrayRef<NScheme::TTypeInfo> types);
+
+std::vector<TConstArrayRef<TCell>> GetRows(
+    const NKikimr::NKqp::IDataBatchPtr& batch);
 
 std::vector<TConstArrayRef<TCell>> CutColumns(
     const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);
+
+class TUniqueSecondaryKeyCollector {
+public:
+    TUniqueSecondaryKeyCollector(
+        const TConstArrayRef<NScheme::TTypeInfo> primaryKeyColumnTypes,
+        const TConstArrayRef<NScheme::TTypeInfo> secondaryKeyColumnTypes,
+        const TConstArrayRef<ui32> secondaryKeyColumns,
+        const TConstArrayRef<ui32> secondaryTableKeyColumns,
+        const TConstArrayRef<ui32> primaryKeyInSecondaryTableKeyColumns);
+
+    bool AddRow(const TConstArrayRef<TCell> row);
+    bool AddSecondaryTableRow(const TConstArrayRef<TCell> row);
+
+    using TKeysSet = THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals>;
+
+    TKeysSet BuildUniqueSecondaryKeys();
+
+private:
+    bool AddRowImpl();
+
+    const TConstArrayRef<NScheme::TTypeInfo> PrimaryKeyColumnTypes;
+    const TConstArrayRef<NScheme::TTypeInfo> SecondaryKeyColumnTypes;
+    const TConstArrayRef<ui32> SecondaryKeyColumns;
+    const TConstArrayRef<ui32> SecondaryTableKeyColumns;
+    const TConstArrayRef<ui32> PrimaryKeyInSecondaryTableKeyColumns;
+
+    std::vector<std::vector<TCell>> Cells;
+    TKeysSet UniqueCellsSet;
+    THashMap<TConstArrayRef<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PrimaryToSecondary;
+    THashMap<TConstArrayRef<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> SecondaryToPrimary;
+};
 
 class IShardedWriteController : public TThrRefBase {
 public:
@@ -105,13 +152,13 @@ public:
     virtual void Open(
         const TWriteToken token,
         const TTableId TableId,
+        const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         std::vector<ui32>&& writeIndexes,
         const i64 priority) = 0;
     virtual void Write(
         const TWriteToken token,
-        const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         IDataBatchPtr&& data) = 0;
     virtual void Close(TWriteToken token) = 0;
 

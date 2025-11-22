@@ -352,6 +352,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvGetInternalStateRequest::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset::TPtr& ev);
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev);
@@ -377,6 +378,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateRequest, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset, Handle);
 
         hFunc(NActors::TEvents::TEvPong, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -404,6 +406,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateRequest, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset, Handle);
 
         hFunc(NActors::TEvents::TEvPong, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -540,9 +543,8 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , MaxBufferSize(bufferSize)
 {
-
     SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
-        << ", partitions: " << JoinSeq(',', GetPartitionsToRead()));
+        << ", partitions: " << JoinSeq(',', GetPartitionsToRead()) << ", skip json errors: " << SourceParams.GetSkipJsonErrors());
     if (Parent != this) {
         return;
     }
@@ -568,7 +570,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     InputDataType = programBuilder->NewMultiType(inputTypeParts);
     DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
 
-    InitWatermarkTracker();
+    InitWatermarkTracker(); // non-virtual!
     IngressStats.Level = statsLevel;
 }
 
@@ -824,10 +826,13 @@ void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
     auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
-    auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
+    auto idleTimeoutUs = // TODO remove fallback
+        SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
+        SourceParams.GetWatermarks().GetIdleTimeoutUs() :
+        lateArrivalDelayUs;
     TDqPqReadActorBase::InitWatermarkTracker(
             TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
-            TDuration::MicroSeconds(idleDelayUs));
+            TDuration::MicroSeconds(idleTimeoutUs));
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
@@ -912,6 +917,16 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvGetInternalStateRequest:
     auto response = std::make_unique<NFq::TEvRowDispatcher::TEvGetInternalStateResponse>();
     response->Record.SetInternalState(GetInternalState());
     Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset::TPtr& ev) {
+    if (CoordinatorActorId != ev->Sender) {
+        SRC_LOG_I("Ignore TEvCoordinatorDistributionReset, sender is not active coordinator (sender " << ev->Sender << ", current coordinator " << CoordinatorActorId << ")");
+        return;
+    }
+    SRC_LOG_I("Received TEvCoordinatorDistributionReset from " << ev->Sender);
+    ReInit("Distribution changed");
+    ScheduleProcessState();
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {
@@ -1540,7 +1555,7 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvNotifyCA::TPtr&) {
 }
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
-    if (RemoveExpiredPartitionIdlenessCheck(ev->Get()->NotifyTime)) {
+    if (WatermarkTracker->ProcessIdlenessCheck(ev->Get()->NotifyTime)) {
         NotifyCA();
     }
 }

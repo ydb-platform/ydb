@@ -66,6 +66,8 @@ PEERDIR(
     ydb/library/actors/helpers
     ydb/library/actors/interconnect/address
     ydb/library/actors/interconnect/poller
+    ydb/library/actors/interconnect/rdma
+    ydb/library/actors/interconnect/rdma/cq_actor
     ydb/library/actors/prof
     ydb/library/actors/protos
     ydb/library/actors/util
@@ -86,6 +88,10 @@ END()
 IF (OS_LINUX)
     RECURSE(
         rdma
+    )
+
+    RECURSE_FOR_TESTS(
+        ut_rdma
     )
 ENDIF()
 

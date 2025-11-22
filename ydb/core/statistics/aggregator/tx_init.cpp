@@ -242,7 +242,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 TForceTraversalTable::EStatus status = (TForceTraversalTable::EStatus)rowset.GetValue<Schema::ForceTraversalTables::Status>();
 
                 if (status == TForceTraversalTable::EStatus::AnalyzeStarted) {
-                    // Resent TEvAnalyzeTable to shards
+                    // Resent TEvAnalyzeShard to shards
                     status = TForceTraversalTable::EStatus::None;
                 } else if (status == TForceTraversalTable::EStatus::TraversalStarted) {
                     // Reset traversal
@@ -257,11 +257,11 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     .Status = status,
                 };
                 auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);
-                if (!forceTraversalOperation) {
+                if (forceTraversalOperation) {
+                    forceTraversalOperation->Tables.emplace_back(operationTable);
+                } else {
                     SA_LOG_E("[" << Self->TabletID() << "] ForceTraversalTables contains unknown operationId: " << operationId);
-                    continue;
                 }
-                forceTraversalOperation->Tables.emplace_back(operationTable);
 
                 if (!rowset.Next()) {
                     return false;

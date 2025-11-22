@@ -899,7 +899,9 @@
             "Base": "TCallable",
             "Match" : {"Type": "Callable", "Name": "KqpOpRoot"},
             "Children": [
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "PgSyntax", "Type": "TCoAtom"}
             ]
         },
         {
@@ -909,8 +911,7 @@
             "Children": [
                 {"Index": 0, "Name": "OriginalColName", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "AggregationFunction", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "AggregationFunctionResultType", "Type": "TExprBase"}
+                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"}
             ]
         },
         {
@@ -924,7 +925,16 @@
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "AggregationTraitsList", "Type": "TKqpOpAggregationTraitsList"},
-                {"Index": 2, "Name": "KeyColumns", "Type": "TCoAtomList"}
+                {"Index": 2, "Name": "KeyColumns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "DistinctAll", "Type" : "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpExprSublink",
+            "Base": "TExprBase",
+            "Match" : {"Type": "Callable", "Name": "KqpExprSublink"},
+            "Children": [
+                {"Index": 0, "Name": "Expr", "Type": "TExprBase"}
             ]
         }
     ]

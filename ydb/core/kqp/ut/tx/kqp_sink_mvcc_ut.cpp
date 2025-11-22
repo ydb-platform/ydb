@@ -147,6 +147,79 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.Execute();
     }
 
+    class TTxDeleteOwnUncommitted : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+    
+            // tx1 writes (1, 1)
+            auto result = session1.ExecuteQuery(Q1_(R"(
+                upsert into KV2 (Key, Value) values (1u, "1");
+                )"), TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto tx1 = result.GetTransaction();
+
+            // tx1 writes (1, 2)
+            result = session1.ExecuteQuery(R"(
+                upsert into KV2 (Key, Value) values (1u, "2");
+                )", TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+
+            // this read is very important for reproducing the issue in Column Shards,
+            // if we comment it out, the test will pass
+            // tx1 reads (1, 2)
+            result = session1.ExecuteQuery(Q1_(R"(
+                select * from KV2;
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[1u;["2"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            tx1 = result.GetTransaction();
+
+            // tx1 removes 1
+            result = session1.ExecuteQuery(Q1_(R"(
+                delete from KV2 where Key = 1u;
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+
+            // if we uncomment this read, the test will pass
+            // so this read somehow fixes the visibility of the deleted change
+
+            // tx1 reads 1 and sees nothing
+            // result = session1.ExecuteQuery(Q1_(R"(
+            //     select * from KV2;
+            //     )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            // UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            // CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            // tx1 = result.GetTransaction();
+
+            // tx1 commits
+            result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            // tx2 reads 1, sees nothing
+            result = session1.ExecuteQuery(Q1_(R"(
+                select * from KV2 where Key = 1u;
+                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    };
+    
+    Y_UNIT_TEST_TWIN(TxDeleteOwnUncommitted, IsOlap) {
+        if (IsOlap) {
+            // muted until this is fixed: https://github.com/ydb-platform/ydb/issues/28447
+            return;
+        }
+        TTxDeleteOwnUncommitted tester;
+        tester.SetIsOlap(IsOlap);
+        tester.Execute();
+    }
+
     class TDirtyReads : public TTableDataModificationTester {
     protected:
         void DoExecute() override {

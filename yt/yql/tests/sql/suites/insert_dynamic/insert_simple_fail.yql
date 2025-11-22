@@ -1,0 +1,9 @@
+/* postgres can not */
+/* kikimr can not */
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+/* custom error:Modification of dynamic table "Output" is supported only by UPSERT or INSERT WITH TRUNCATE*/
+use plato;
+
+insert into Output
+select "x" as key;

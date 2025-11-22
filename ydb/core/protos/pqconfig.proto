@@ -371,6 +371,12 @@ message TPQTabletConfig {
         CONSUMER_TYPE_MLP = 1;
     }
 
+    enum EDeadLetterPolicy {
+        DEAD_LETTER_POLICY_UNSPECIFIED = 0;
+        DEAD_LETTER_POLICY_DELETE = 1;
+        DEAD_LETTER_POLICY_MOVE = 2;
+    }
+
     message TConsumer {
         optional string Name = 1;
         optional uint64 ReadFromTimestampsMs = 2 [default = 0];
@@ -383,9 +389,12 @@ message TPQTabletConfig {
         optional bool Important = 9 [default = false];
         optional uint64 AvailabilityPeriodMs = 10 [default = 0];
         optional EConsumerType Type = 11 [default = CONSUMER_TYPE_STREAMING];
-        optional bool KeepMessageOrder = 13 [default = false]; // For MLP consumers
-        optional uint32 MaxMessageReceiveCount = 14 [default = 1000]; // For MLP consumers
-        optional uint32 DefaultVisibilityTimeoutSeconds = 15 [default = 30]; // For MLP consumers
+        optional bool KeepMessageOrder = 12 [default = false]; // For MLP consumers
+        optional bool DeadLetterPolicyEnabled = 13 [default = false]; // For MLP consumers
+        optional EDeadLetterPolicy DeadLetterPolicy = 14 [default = DEAD_LETTER_POLICY_UNSPECIFIED]; // For MLP consumers
+        optional uint32 MaxProcessingAttempts = 15 [default = 1000]; // For MLP consumers
+        optional uint32 DefaultProcessingTimeoutSeconds = 16 [default = 30]; // For MLP consumers
+        optional string DeadLetterQueue = 17; // For MLP consumers
     }
 
     repeated TConsumer Consumers = 37;
@@ -1351,6 +1360,10 @@ message TEvMLPChangeMessageDeadlineRequest {
 message TEvMLPChangeMessageDeadlineResponse {
 }
 
+message TMLPMetrics {
+    optional uint64 TotalScheduledToDLQMessageCount = 1;
+}
+
 message TMLPStorageSnapshot {
     message TConfiguration {
         optional string ConsumerName = 1;
@@ -1358,14 +1371,46 @@ message TMLPStorageSnapshot {
     }
     optional TConfiguration Configuration = 1;
 
+    optional uint64 FormatVersion = 2;
+
+    optional uint64 WALIndex = 3;
+
     message TMeta {
         optional uint64 FirstOffset = 1;
         optional uint64 FirstUncommittedOffset = 2;
-        optional uint64 BaseDeadlineMilliseconds = 3;
+        optional uint64 BaseDeadlineSeconds = 3;
+        optional uint64 BaseWriteTimestampSeconds = 4;
     }
-    optional TMeta Meta = 2;
+    optional TMeta Meta = 4;
 
-    optional uint64 FormatVersion = 3;
-    optional bytes Messages = 4;
+
+    optional TMLPMetrics Metrics = 5;
+
+    optional bytes Messages = 6;
+    optional bytes SlowMessages = 7;
+    optional bytes DLQMessages = 8;
+}
+
+message TMLPStorageWAL {
+    optional uint64 Generation = 1;
+    optional uint64 FormatVersion = 2;
+    optional uint64 WALIndex = 3;
+
+    optional TMLPMetrics Metrics = 4;
+
+    optional uint64 BaseDeadlineSeconds = 5;
+    optional uint64 BaseWriteTimestampSeconds = 6;
+
+    optional uint64 FirstOffset = 7;
+    optional bytes ChangedMessages = 8;
+    optional uint64 FirstAddedOffset = 9;
+    optional bytes AddedMessages = 10;
+
+    optional uint64 SlowFirstOffset = 11;
+    repeated uint64 MovedToSlowZone = 12;
+    repeated uint64 DeletedFromSlowZone = 13;
+
+    optional bytes AddedToDLQMessages = 14;
+    optional uint64 FirstDLQSeqNo = 15;
 }
 

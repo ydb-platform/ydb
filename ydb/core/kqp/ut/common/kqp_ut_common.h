@@ -95,6 +95,7 @@ public:
     NKikimrConfig::TImmediateControlsConfig Controls;
     TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
     bool EnableStorageProxy = false;
+    bool UseLocalCheckpointsInStreamingQueries = false;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     std::optional<TTestLogSettings> LogSettings;
 
@@ -136,6 +137,7 @@ public:
     }
     TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
     TKikimrSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; };
+    TKikimrSettings& SetUseLocalCheckpointsInStreamingQueries(bool value) { UseLocalCheckpointsInStreamingQueries = value; return *this; };
     TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
     TKikimrSettings& SetLogSettings(TTestLogSettings value) { LogSettings = value; return *this; };
 };
@@ -164,15 +166,28 @@ public:
     ~TKikimrRunner() {
         Server->GetRuntime()->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 
-        RunCall([&] { Driver->Stop(true); return false; });
+        // Now stop the driver after server has stopped accepting connections
+        RunCall([&] { Driver->Stop(true); Driver.Reset(); return false; });
+
         if (ThreadPoolStarted_) {
             ThreadPool.Stop();
         }
+
+        // Shutdown gRPC servers first to stop accepting new connections
+        // This prevents memory leaks from connections being established during shutdown
+        Server->ShutdownGRpc();
+
+        // Wait a bit to ensure gRPC shutdown completes and all server threads finish
+        // The Shutdown() method already waits internally, but we add extra time
+        // to ensure all resources are fully cleaned up
+        Sleep(TDuration::MilliSeconds(100));
 
         if (!WaitHttpGatewayFinalization(CountersRoot)) {
             Cerr << "Failed to finalize http gateway before destruction" << Endl;
         }
 
+        // Server.Reset() will call ShutdownGRpc() again in TServer destructor,
+        // but it's safe to call multiple times as Shutdown() is idempotent
         Server.Reset();
         Client.Reset();
     }

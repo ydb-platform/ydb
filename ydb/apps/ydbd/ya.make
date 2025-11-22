@@ -33,27 +33,30 @@ ENDIF()
 
 PEERDIR(
     ydb/apps/version
+    ydb/apps/ydbd/export
     ydb/core/driver_lib/run
     ydb/core/protos
     ydb/core/security
     ydb/core/tx/schemeshard
     ydb/core/ymq/actor
     ydb/core/ymq/base
+    ydb/library/breakpad
     ydb/library/folder_service/mock
     ydb/library/keys
     ydb/library/pdisk_io
     ydb/library/security
+    ydb/library/yql/udfs/common/clickhouse/client
+    ydb/library/yql/udfs/common/knn
+    ydb/library/yql/udfs/common/roaring
+    ydb/library/yql/udfs/statistics_internal
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
-    ydb/library/yql/udfs/common/clickhouse/client
     yql/essentials/udfs/common/compress_base
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/histogram
     yql/essentials/udfs/common/hyperloglog
     yql/essentials/udfs/common/ip_base
-    ydb/library/yql/udfs/common/knn
-    ydb/library/yql/udfs/common/roaring
     yql/essentials/udfs/common/json
     yql/essentials/udfs/common/json2
     yql/essentials/udfs/common/math
@@ -68,7 +71,6 @@ PEERDIR(
     yql/essentials/udfs/common/url_base
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/logs/dsv
-    ydb/library/breakpad
 )
 
 YQL_LAST_ABI_VERSION()

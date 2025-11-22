@@ -73,6 +73,7 @@ namespace NKikimr::NStorage {
         // Configuration update
 
         void UpdateConfig(TQuery::TUpdateConfig *request);
+        void DescendCommittedStorageConfig(const TQuery::TDescendCommittedStorageConfig& request);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Reassign group disk logic
@@ -114,6 +115,7 @@ namespace NKikimr::NStorage {
         void GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool getNodesState);
         bool GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool pileupReplicas, ui32 overrideReplicasInRingCount, ui32 overrideRingsCount, ui32 replicasSpecificVolume);
         void AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation
 
@@ -160,8 +162,7 @@ namespace NKikimr::NStorage {
         // Configuration proposition
 
         void AdvanceGeneration();
-        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum = false,
-            bool requireScepter = true, bool mindPrev = true,
+        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev = true,
             const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr, bool fromBootstrap = false);
         void Handle(TEvPrivate::TEvConfigProposed::TPtr ev);
 

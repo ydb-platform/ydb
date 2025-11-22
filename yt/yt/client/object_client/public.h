@@ -223,7 +223,7 @@ DEFINE_ENUM(EObjectType,
     ((Uint64Node)                                   (306))
     ((DoubleNode)                                   (302))
     ((MapNode)                                      (303))
-    ((ListNode)                                     (304))
+    ((DeprecatedListNode)                           (304))
     ((BooleanNode)                                  (305))
 
     // Dynamic nodes

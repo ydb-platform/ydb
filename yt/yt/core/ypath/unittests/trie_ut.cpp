@@ -147,8 +147,11 @@ TEST_P(TTrieTest, FlatTraversalFrame)
     ASSERT_EQ(std::ssize(rootFrame.GetUnvisitedTokens()), 1);
     EXPECT_EQ(rootFrame.GetUnvisitedTokens()[0], "a");
 
-    auto aView = rootFrame.Visit("a");
+    std::string token = "a";
+    auto aView = rootFrame.Visit(token);
     EXPECT_EQ(aView.GetType(), ETrieNodeType::Leaf);
+
+    token.clear();
     EXPECT_EQ(std::ssize(rootFrame.GetUnvisitedTokens()), 0);
 }
 
@@ -160,13 +163,19 @@ TEST_P(TTrieTest, BranchedTraversalFrame)
     EXPECT_EQ(rootFrame.GetUnvisitedTokens()[0], "a");
     EXPECT_EQ(rootFrame.GetUnvisitedTokens()[1], "b");
 
-    auto aView = rootFrame.Visit("a");
+    std::string token = "a";
+    auto aView = rootFrame.Visit(token);
     EXPECT_EQ(aView.GetType(), ETrieNodeType::Leaf);
     ASSERT_EQ(std::ssize(rootFrame.GetUnvisitedTokens()), 1);
+
+    token.clear();
     EXPECT_EQ(rootFrame.GetUnvisitedTokens()[0], "b");
 
+    token = "b";
     auto bView = rootFrame.Visit("b");
     EXPECT_EQ(bView.GetType(), ETrieNodeType::Leaf);
+
+    token.clear();
     EXPECT_EQ(std::ssize(rootFrame.GetUnvisitedTokens()), 0);
 }
 

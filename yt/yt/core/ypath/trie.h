@@ -41,6 +41,8 @@ public:
     ETrieNodeType GetType() const;
 
 protected:
+    friend class TTrieTraversalFrame;
+
     struct TNode
     {
         TCompactFlatMap<TStringBuf, TNode*, 1> Next;
@@ -52,8 +54,7 @@ protected:
 
     TState ViewState_;
 
-private:
-    TTrieView& VisitInplace(TStringBuf token);
+    TStringBuf VisitInplace(TStringBuf token);
 };
 
 class TTrie
@@ -90,7 +91,6 @@ private:
 };
 
 class TTrieTraversalFrame
-    : private TTrieView
 {
 public:
     explicit TTrieTraversalFrame(TTrieView trie);
@@ -99,6 +99,7 @@ public:
     TCompactVector<TStringBuf, 1> GetUnvisitedTokens() const;
 
 private:
+    TTrieView View_;
     TCompactSet<TStringBuf, 1> VisitedTokens_;
 };
 

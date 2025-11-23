@@ -56,22 +56,32 @@ TTrieView::TTrieView()
 
 TTrieView TTrieView::Visit(TStringBuf token) const
 {
-    return TTrieView(*this).VisitInplace(token);
+    TTrieView view(*this);
+    view.VisitInplace(token);
+    return view;
 }
 
-TTrieView& TTrieView::VisitInplace(TStringBuf token)
+// Returns an owned buffer for a copy of the `token` unless GetType() becomes `ETrieNodeType::Outlier`
+// or `ETrieNode::AfterLeaf` after the call. Helpful for maintaining visited tokens without allocations,
+// since after the call, the argument token could be deallocated. Instead, the wrapping code should use `ownedToken`.
+TStringBuf TTrieView::VisitInplace(TStringBuf token)
 {
+    TStringBuf ownedToken;
+
     NYT::Visit(ViewState_,
-        [token] (const TStringBuf*& nextToken) {
+        [token, &ownedToken] (const TStringBuf*& nextToken) {
             if (nextToken->begin() == AfterLeafSentinel.begin() || nextToken->begin() == OutlierSentinel.begin()) {
                 return;
-            } else if (nextToken->begin() == LeafSentinel.begin() || *nextToken == token) {
+            } else if (nextToken->begin() == LeafSentinel.begin()) {
+                ++nextToken;
+            } else if (*nextToken == token) {
+                ownedToken = *nextToken;
                 ++nextToken;
             } else {
                 nextToken = &OutlierSentinel;
             }
         },
-        [token] (const TNode*& currentNode) {
+        [token, &ownedToken] (const TNode*& currentNode) {
             if (currentNode == nullptr || currentNode == &TNode::AfterLeafSentinel) {
                 return;
             }
@@ -79,13 +89,14 @@ TTrieView& TTrieView::VisitInplace(TStringBuf token)
             auto nextNode = currentNode->Next.find(token);
             if (nextNode != currentNode->Next.end()) {
                 currentNode = nextNode->second;
+                ownedToken = nextNode->first;
             } else if (currentNode->Next.empty()) {
                 currentNode = &TNode::AfterLeafSentinel;
             } else {
                 currentNode = nullptr;
             }
         });
-    return *this;
+    return ownedToken;
 }
 
 TTrieView TTrieView::VisitPath(const TYPath& path) const
@@ -281,38 +292,39 @@ void TTrie::UpdateRoot()
 ////////////////////////////////////////////////////////////////////////////////
 
 TTrieTraversalFrame::TTrieTraversalFrame(TTrieView trie)
-    : TTrieView(trie)
+    : View_(trie)
 { }
 
 TTrieView TTrieTraversalFrame::Visit(TStringBuf token)
 {
-    auto view = TTrieView::Visit(token);
-    if (view.GetType() != ETrieNodeType::Outlier) {
-        VisitedTokens_.insert(token);
+    auto view = View_;
+    auto ownedToken = view.VisitInplace(token);
+    if (view.GetType() != ETrieNodeType::Outlier && view.GetType() != ETrieNodeType::AfterLeaf) {
+        VisitedTokens_.insert(ownedToken);
     }
     return view;
 }
 
 TCompactVector<TStringBuf, 1> TTrieTraversalFrame::GetUnvisitedTokens() const
 {
-    if (GetType() != ETrieNodeType::Intermediary) {
+    if (View_.GetType() != ETrieNodeType::Intermediary) {
         return {};
     }
 
-    return NYT::Visit(ViewState_,
+    return NYT::Visit(View_.ViewState_,
         [this] (const TStringBuf* nextToken) {
             return VisitedTokens_.empty()
                 ? TCompactVector<TStringBuf, 1>{*nextToken}
                 : TCompactVector<TStringBuf, 1>{};
         },
-        [this] (const TNode* currentNode) -> TCompactVector<TStringBuf, 1> {
+        [this] (const TTrieView::TNode* currentNode) -> TCompactVector<TStringBuf, 1> {
             TCompactVector<TStringBuf, 1> unvisitedTokens;
             if (currentNode->Next.size() == VisitedTokens_.size()) {
                 return unvisitedTokens;
             }
 
             for (const auto& [token, _] : currentNode->Next) {
-                if (!VisitedTokens_.contains(token)) {
+                if (!VisitedTokens_.contains(ToString(token))) {
                     unvisitedTokens.push_back(token);
                 }
             }

@@ -239,5 +239,5 @@ message TFeatureFlags {
     optional bool EnableOlapRejectProbability = 213 [default = true];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
-    optional bool EnableBackupColumnTables = 216 [default = true];
+    optional bool EnableColumnTablesBackup = 216 [default = true];
 }

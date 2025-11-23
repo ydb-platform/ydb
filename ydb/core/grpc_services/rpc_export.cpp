@@ -58,7 +58,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             case NSchemeCache::TSchemeCacheNavigate::KindTopic:
                 return true;
             case NSchemeCache::TSchemeCacheNavigate::KindColumnTable:
-                return AppData()->FeatureFlags.GetEnableBackupColumnTables();
+                return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
             case NSchemeCache::TSchemeCacheNavigate::KindView:
                 return AppData()->FeatureFlags.GetEnableViewExport();
             default:

@@ -1,6 +1,7 @@
 #include "ydb_ai.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_ai/line_reader.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_ai/models/model_anthropic.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_ai/models/model_openai.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_ai/tools/exec_query_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_ai/tools/list_directory_tool.h>
@@ -35,19 +36,26 @@ int TCommandAi::Run(TConfig& config) {
 
     // AI-TODO: KIKIMR-24202 - robust file creation
     NAi::TLineReader lineReader("ydb-ai> ", (TFsPath(HomeDir) / ".ydb-ai/history").GetPath());
-    
+
     // DeepSeek
     // const auto model = NAi::CreateOpenAiModel({
-    //     .BaseUrl = "https://api.eliza.yandex.net/raw/internal/deepseek/v1", // AI-TODO: KIKIMR-24214 -- configure it
+    //     .BaseUrl = "https://api.eliza.yandex.net/raw/internal/deepseek", // AI-TODO: KIKIMR-24214 -- configure it
     //     .ModelId = "deepseek-0324", // AI-TODO: KIKIMR-24214 -- configure it
     //     .ApiKey = GetEnv("MODEL_TOKEN"), // AI-TODO: KIKIMR-24214 -- configure it
     // });
 
-    // YandexGPT Pro
-    const auto model = NAi::CreateOpenAiModel({
-        .BaseUrl = "https://api.eliza.yandex.net/internal/zeliboba/32b_aligned_quantized_202506/generative/v1", // AI-TODO: KIKIMR-24214 -- configure it
+    const auto model = NAi::CreateAnthropicModel({
+        .BaseUrl = "https://api.eliza.yandex.net/anthropic", // AI-TODO: KIKIMR-24214 -- configure it
+        .ModelId = "claude-3-5-haiku-20241022",
         .ApiKey = GetEnv("MODEL_TOKEN"), // AI-TODO: KIKIMR-24214 -- configure it
+        .MaxTokens = 2048,   // AI-TODO configure it
     });
+
+    // YandexGPT Pro
+    // const auto model = NAi::CreateOpenAiModel({
+    //     .BaseUrl = "https://api.eliza.yandex.net/internal/zeliboba/32b_aligned_quantized_202506/generative", // AI-TODO: KIKIMR-24214 -- configure it
+    //     .ApiKey = GetEnv("MODEL_TOKEN"), // AI-TODO: KIKIMR-24214 -- configure it
+    // });
 
     std::unordered_map<TString, NAi::ITool::TPtr> tools;
 

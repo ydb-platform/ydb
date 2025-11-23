@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    model_anthropic.cpp
     model_openai.cpp
 )
 

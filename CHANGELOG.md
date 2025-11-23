@@ -2,8 +2,7 @@
 
 ### Functionality
 
-* Added support for creating unique indexes on existing tables. This feature is enabled by setting the `enable_add_unique_index` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
-* Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
+* None:Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 15186:Increased [the query text limit size](../dev/system-views#query-metrics) in system views from 4 KB to 10 KB. [#15186](https://github.com/ydb-platform/ydb/pull/15186) ([spuchin](https://github.com/spuchin))
 * 15693:Added a health check configuration that administrators can customize: the number of node restarts, tablets, the time difference between database dynodes,
 and timeout (by default, the maximum response time from healthcheck). Documentation is under construction. [#15693](https://github.com/ydb-platform/ydb/pull/15693) ([Andrei Rykov](https://github.com/StekPerepolnen))
@@ -132,6 +131,9 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20670:Resolved the issue with DDL errors for external sources and added more information to the `ALTER TABLE ... RENAME TO` error. [#20670](https://github.com/ydb-platform/ydb/pull/20670) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20519:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20520) that caused VDisk to freeze in infinite local recovery mode when a ChunkRead request failed. This change will allow loader actor to terminate properly on PDisk errors, and LocalRecovery to get notified about this error and to finish with proper status. [#20519](https://github.com/ydb-platform/ydb/pull/20519) ([Sergey Belyakov](https://github.com/serbel324))
 * 22298:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20812) where attach streams remained active after session shutdown, causing unexpected BadSession errors. [#22298](https://github.com/ydb-platform/ydb/pull/22298) ([Kirill Kurdyukov](https://github.com/KirillKurdyukov))
+* 29308:https://st.yandex-team.ru/YQL-20627 [#29308](https://github.com/ydb-platform/ydb/pull/29308) ([Denis Khalikov](https://github.com/denis0x0D))
+* 29151:Fixed datashards losing lock conflicts during some in-memory migrations which could allow non-serializable ordering of transactions. Fixes #27123. [#29151](https://github.com/ydb-platform/ydb/pull/29151) ([Aleksei Borzenkov](https://github.com/snaury))
+* 28998:Harden decommission checks for BlobDepot (#28216) [#28998](https://github.com/ydb-platform/ydb/pull/28998) ([mregrock](https://github.com/mregrock))
 
 ### YDB UI
 
@@ -157,3 +159,5 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
+* 28994:Improve performance of indexed vector search by pushing distance calculation to datashards, thus reducing the amount of data exchange between datashards and KQP. [#28994](https://github.com/ydb-platform/ydb/pull/28994) ([Vitaliy Filippov](https://github.com/vitalif))
+

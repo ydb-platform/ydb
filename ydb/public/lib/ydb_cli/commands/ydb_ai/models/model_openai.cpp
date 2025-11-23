@@ -15,16 +15,50 @@ namespace NYdb::NConsoleClient::NAi {
 namespace {
 
 class TModelOpenAi final : public IModel {
+    class TToolInfo {
+    public:
+        TToolInfo(const TString& name, const NJson::TJsonValue& parametersSchema, const TString& description)
+            : Name(name)
+            , ParametersSchema(parametersSchema)
+            , Description(description)
+        {}
+
+        NJson::TJsonValue ToJson() const {
+            NJson::TJsonValue result;
+            result["type"] = "function";
+
+            auto& toolJson = result["function"];
+            toolJson["strict"] = false;  // AI-TODO: enable after fixes
+            toolJson["name"] = Name;
+            toolJson["parameters"] = ParametersSchema;
+            toolJson["description"] = Description;
+
+            return result;
+        }
+
+    private:
+        TString Name;
+        NJson::TJsonValue ParametersSchema;
+        TString Description;
+    };
+
     class TConversationPart {
     public:
         enum class ERole {
             User,
             AI,
+            Tool,
         };
 
         TConversationPart(const TString& content, ERole role)
             : Content(content)
             , Role(role)
+        {}
+
+        TConversationPart(const TString& content, const TString& toolCallId)
+            : Content(content)
+            , Role(ERole::Tool)
+            , ToolCallId(toolCallId)
         {}
 
         NJson::TJsonValue ToJson() const {
@@ -33,12 +67,21 @@ class TModelOpenAi final : public IModel {
 
             auto& roleJson = result["role"];
             switch (Role) {
-                case ERole::User:
+                case ERole::User: {
                     roleJson = "user";
                     break;
-                case ERole::AI:
+                }
+                case ERole::AI: {
                     roleJson = "assistant";
                     break;
+                }
+                case ERole::Tool: {
+                    roleJson = "tool";
+
+                    Y_ENSURE(ToolCallId);
+                    result["tool_call_id"] = *ToolCallId;
+                    break;
+                }
             }
 
             return result;
@@ -46,7 +89,8 @@ class TModelOpenAi final : public IModel {
 
     private:
         TString Content;
-        ERole Role;
+        ERole Role = ERole::User;
+        std::optional<TString> ToolCallId;
     };
 
 public:
@@ -66,17 +110,24 @@ public:
         Settings.BaseUrl = RemoveFinalSlash(sanitizedUrl);
     }
 
-    TString Chat(const TString& input) final {
+    TResponse HandleMessage(const TString& input, std::optional<TString> toolCallId) final {
+        if (toolCallId) {
+            Conversation.emplace_back(input, *toolCallId);
+        } else {
+            Conversation.emplace_back(input, TConversationPart::ERole::User);
+        }
+
         NJson::TJsonValue bodyJson;
         bodyJson["model"] = Settings.ModelId;
 
-        Conversation.emplace_back(input, TConversationPart::ERole::User);
-        auto& inputJson = bodyJson["input"];
-        inputJson.SetType(NJson::JSON_ARRAY);
-
-        auto& conversationJson = inputJson.GetArraySafe();
+        auto& conversationJson = bodyJson["messages"].SetType(NJson::JSON_ARRAY).GetArraySafe();
         for (const auto& part : Conversation) {
             conversationJson.push_back(part.ToJson());
+        }
+
+        auto& toolsArray = bodyJson["tools"].SetType(NJson::JSON_ARRAY).GetArraySafe();
+        for (const auto& tool : Tools) {
+            toolsArray.push_back(tool.ToJson());
         }
 
         NJsonWriter::TBuf bodyWriter;
@@ -84,17 +135,20 @@ public:
 
         NYql::THttpHeader headers = {.Fields = {"Content-Type: application/json"}};
 
+        // Cerr << "-------------------------- Request: " << bodyWriter.Str();
+
         if (Settings.ApiKey) {
             headers.Fields.emplace_back(TStringBuilder() << "Authorization: Bearer " << Settings.ApiKey);
         }
 
         auto answer = NThreading::NewPromise<TString>();
         HttpGateway->Upload(
-            TStringBuilder() << Settings.BaseUrl << "/responses",
+            TStringBuilder() << Settings.BaseUrl << "/chat/completions",
             std::move(headers),
             bodyWriter.Str(),
             [&answer](NYql::IHTTPGateway::TResult result) {
                 if (result.CurlResponseCode != CURLE_OK) {
+                    // AI-TODO: proper error handling
                     answer.SetException(TStringBuilder() << "Request model failed: " << result.Issues.ToOneLineString() << ", internal code: " << curl_easy_strerror(result.CurlResponseCode) << ", response: " << result.Content.Extract());
                     return;
                 }
@@ -110,6 +164,7 @@ public:
         );
 
         const auto result = answer.GetFuture().ExtractValueSync();
+        // Cerr << "-------------------------- Result: " << result;
         NJson::TJsonValue resultJson;
         if (!NJson::ReadJsonTree(result, &resultJson)) {
             throw yexception() << "Response of model is not JSON, got response: " << result;
@@ -117,24 +172,68 @@ public:
 
         ValidateJsonType(resultJson, NJson::JSON_MAP);
 
-        const auto& output = ValidateJsonKey(resultJson, "output");
-        ValidateJsonType(output, NJson::JSON_ARRAY, "output");
-        ValidateJsonArraySize(output, 1, "output");
+        const auto& choices = ValidateJsonKey(resultJson, "choices");
+        ValidateJsonType(choices, NJson::JSON_ARRAY, "choices");
+        ValidateJsonArraySize(choices, 1, "choices");
 
-        const auto& outputVal = output.GetArray()[0];
-        ValidateJsonType(outputVal, NJson::JSON_MAP, "output[0]");
+        // AI-TODO: proper error description
+        const auto& choiceVal = choices.GetArray()[0];
+        ValidateJsonType(choiceVal, NJson::JSON_MAP, "choices[0]");
 
-        const auto& content = ValidateJsonKey(outputVal, "content", "output[0]");
-        ValidateJsonType(content, NJson::JSON_ARRAY, "output[0].content");
-        ValidateJsonArraySize(content, 1, "output[0].content");
+        const auto& message = ValidateJsonKey(choiceVal, "message", "choices[0]");
+        ValidateJsonType(message, NJson::JSON_MAP, "choices[0].message");
 
-        const auto& contentVal = content.GetArray()[0];
-        ValidateJsonType(contentVal, NJson::JSON_MAP, "output[0].content[0]");
+        const auto& content = ValidateJsonKey(message, "content", "choices[0].message");
+        const auto& tollsCalls = ValidateJsonKey(message, "tool_calls", "choices[0].message");
 
-        const auto& text = ValidateJsonKey(contentVal, "text", "output[0].content[0]");
-        ValidateJsonType(text, NJson::JSON_STRING, "output[0].content[0].text");
+        if (content.GetType() == NJson::JSON_NULL && tollsCalls.GetType() == NJson::JSON_NULL) {
+            throw yexception() << "Response of model does not contain 'choices[0].message.content' or 'choices[0].message.tool_calls' fields, got response: " << result;
+        }
 
-        return text.GetString();
+        TResponse response;
+
+        if (content.GetType() != NJson::JSON_NULL) {
+            ValidateJsonType(content, NJson::JSON_STRING, "choices[0].message.content");
+            response.Text = content.GetString();
+        }
+
+        if (tollsCalls.GetType() != NJson::JSON_NULL) {
+            ValidateJsonType(tollsCalls, NJson::JSON_ARRAY, "choices[0].message.tool_calls");
+            ValidateJsonArraySize(tollsCalls, 1, "choices[0].message.tool_calls");
+
+            const auto& toolCall = tollsCalls.GetArray()[0];
+            ValidateJsonType(toolCall, NJson::JSON_MAP, "choices[0].message.tool_calls[0]");
+
+            const auto& function = ValidateJsonKey(toolCall, "function", "choices[0].message.tool_calls[0]");
+            ValidateJsonType(function, NJson::JSON_MAP, "choices[0].message.tool_calls[0].function");
+
+            const auto& name = ValidateJsonKey(function, "name", "choices[0].message.tool_calls[0].function");
+            ValidateJsonType(name, NJson::JSON_STRING, "choices[0].message.tool_calls[0].function.name");
+
+            const auto& arguments = ValidateJsonKey(function, "arguments", "choices[0].message.tool_calls[0].function");
+            ValidateJsonType(arguments, NJson::JSON_STRING, "choices[0].message.tool_calls[0].function.arguments");
+
+            const auto& callId = ValidateJsonKey(toolCall, "id", "choices[0].message.tool_calls[0]");
+            ValidateJsonType(callId, NJson::JSON_STRING, "choices[0].message.tool_calls[0].id");
+
+            NJson::TJsonValue argumentsJson;
+            if (!NJson::ReadJsonTree(arguments.GetString(), &argumentsJson)) {
+                throw yexception() << "Tool call arguments is not valid JSON, got response: " << arguments.GetString();
+            }
+
+            response.ToolCall = {
+                .Id = callId.GetString(),
+                .Name = name.GetString(),
+                .Parameters = std::move(argumentsJson)
+            };
+        }
+
+        Y_ENSURE(response.Text || response.ToolCall);
+        return response;
+    }
+
+    void RegisterTool(const TString& name, const NJson::TJsonValue& parametersSchema, const TString& description) final {
+        Tools.emplace_back(name, parametersSchema, description);
     }
 
 private:
@@ -163,6 +262,7 @@ private:
     const NYql::IHTTPGateway::TPtr HttpGateway;
     TOpenAiModelSettings Settings;
 
+    std::vector<TToolInfo> Tools;
     std::vector<TConversationPart> Conversation;
 };
 

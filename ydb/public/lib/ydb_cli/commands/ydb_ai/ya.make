@@ -13,4 +13,5 @@ END()
 
 RECURSE(
     models
+    tools
 )

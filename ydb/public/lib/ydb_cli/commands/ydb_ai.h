@@ -10,9 +10,9 @@ class TCommandAi final : public TYdbCommand {
 public:
     TCommandAi();
 
-    void Config(TConfig& config) override;
+    void Config(TConfig& config) final;
 
-    int Run(TConfig& config) override;
+    int Run(TConfig& config) final;
 };
 
 } // namespace NYdb::NConsoleClient

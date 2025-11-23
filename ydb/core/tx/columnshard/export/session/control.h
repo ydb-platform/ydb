@@ -10,7 +10,7 @@ class TConfirmSessionControl: public NBackgroundTasks::TInterfaceProtoAdapter<NK
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoAdapter<NKikimrColumnShardExportProto::TSessionControlContainer, NBackground::ISessionLogicControl>;
 public:
-  static TString GetClassNameStatic();
+    static TString GetClassNameStatic();
 
 private:
     virtual TConclusionStatus DoApply(const std::shared_ptr<NBackground::ISessionLogic>& session) const override;
@@ -26,7 +26,7 @@ class TAbortSessionControl: public NBackgroundTasks::TInterfaceProtoAdapter<NKik
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoAdapter<NKikimrColumnShardExportProto::TSessionControlContainer, NBackground::ISessionLogicControl>;
 public:
-  static TString GetClassNameStatic();
+    static TString GetClassNameStatic();
 
 private:
     virtual TConclusionStatus DoApply(const std::shared_ptr<NBackground::ISessionLogic>& session) const override;

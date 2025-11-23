@@ -72,10 +72,10 @@ bool TBackupTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlat
 }
 
 bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard & /*owner*/, const TActorContext & /*ctx*/) {
-  return true;
+    return true;
 }
 void TBackupTransactionOperator::RegisterSubscriber(const TActorId &actorId) {
-  NotifySubscribers.insert(actorId);
+    NotifySubscribers.insert(actorId);
 }
 
 TString TBackupTransactionOperator::DoDebugString() const { 

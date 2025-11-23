@@ -13,12 +13,12 @@ NKikimr::TConclusion<std::unique_ptr<NActors::IActor>> TSession::DoCreateActor(c
 }
 
 void TSession::Finish() {
-  AFL_VERIFY(Status == EStatus::Started);
-  Status = EStatus::Finished;
+    AFL_VERIFY(Status == EStatus::Started);
+    Status = EStatus::Finished;
 }
 
 const TIdentifier &TSession::GetIdentifier() const {
-  return Task->GetIdentifier();
+    return Task->GetIdentifier();
 }
 
 const TExportTask &TSession::GetTask() const { 
@@ -30,13 +30,13 @@ bool TSession::IsStarted() const {
 }
 
 void TSession::Abort() {
-  AFL_VERIFY(Status != EStatus::Finished && Status != EStatus::Aborted);
-  Status = EStatus::Aborted;
+    AFL_VERIFY(Status != EStatus::Finished && Status != EStatus::Aborted);
+    Status = EStatus::Aborted;
 }
 
 void TSession::Confirm() {
-  AFL_VERIFY(IsDraft());
-  Status = EStatus::Confirmed;
+    AFL_VERIFY(IsDraft());
+    Status = EStatus::Confirmed;
 }
 
 bool TSession::IsDraft() const { 
@@ -44,7 +44,7 @@ bool TSession::IsDraft() const {
 }
 
 TString TSession::DebugString() const {
-  return TStringBuilder() << "task=" << Task->DebugString()
+    return TStringBuilder() << "task=" << Task->DebugString()
                           << ";status=" << Status;
 }
 
@@ -62,7 +62,7 @@ bool TSession::IsConfirmed() const {
 
 TSession::TSession(const std::shared_ptr<TExportTask> &task) 
     : Task(task) {
-  AFL_VERIFY(Task);
+    AFL_VERIFY(Task);
 }
 
 TString TSession::GetClassName() const { 
@@ -70,7 +70,7 @@ TString TSession::GetClassName() const {
 }
 
 bool TSession::IsReadyForRemoveOnFinished() const {
-  return Status == EStatus::Aborted;
+    return Status == EStatus::Aborted;
 }
 
 bool TSession::IsFinished() const { 
@@ -86,45 +86,45 @@ std::optional<ui64> TSession::GetTxId() const {
 }
 
 TSession::TProtoLogic TSession::DoSerializeToProto() const {
-  TProtoLogic result;
-  *result.MutableTask() = Task->SerializeToProto();
-  return result;
+    TProtoLogic result;
+    *result.MutableTask() = Task->SerializeToProto();
+    return result;
 }
 
 TConclusionStatus TSession::DoDeserializeFromProto(const TProtoLogic &proto) {
-  Task = std::make_shared<TExportTask>();
-  return Task->DeserializeFromProto(proto.GetTask());
+    Task = std::make_shared<TExportTask>();
+    return Task->DeserializeFromProto(proto.GetTask());
 }
 
 TSession::TProtoState TSession::DoSerializeStateToProto() const {
-  TProtoState result;
-  if (Status == EStatus::Started) {
+    TProtoState result;
+    if (Status == EStatus::Started) {
     result.SetStatus(::ToString(EStatus::Confirmed));
-  } else {
+    } else {
     result.SetStatus(::ToString(Status));
-  }
-  return result;
+    }
+    return result;
 }
 
 TConclusionStatus TSession::DoDeserializeStateFromProto(const TProtoState &proto) {
-  if (!TryFromString(proto.GetStatus(), Status)) {
+    if (!TryFromString(proto.GetStatus(), Status)) {
     return TConclusionStatus::Fail("cannot read status from proto: " +
                                    proto.GetStatus());
-  }
-  return TConclusionStatus::Success();
+    }
+    return TConclusionStatus::Success();
 }
 
 TSession::TProtoProgress TSession::DoSerializeProgressToProto() const {
-  return Cursor.SerializeToProto();
+    return Cursor.SerializeToProto();
 }
 
 TConclusionStatus TSession::DoDeserializeProgressFromProto(const TProtoProgress &proto) {
-  auto cursorConclusion = TCursor::BuildFromProto(proto);
-  if (cursorConclusion.IsFail()) {
+    auto cursorConclusion = TCursor::BuildFromProto(proto);
+    if (cursorConclusion.IsFail()) {
     return cursorConclusion;
-  }
-  Cursor = cursorConclusion.DetachResult();
-  return TConclusionStatus::Success();
+    }
+    Cursor = cursorConclusion.DetachResult();
+    return TConclusionStatus::Success();
 }
 
 TString TSession::GetClassNameStatic() { 

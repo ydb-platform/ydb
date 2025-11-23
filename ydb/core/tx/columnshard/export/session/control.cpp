@@ -18,37 +18,37 @@ NKikimr::TConclusionStatus TAbortSessionControl::DoApply(const std::shared_ptr<N
 }
 
 TString TAbortSessionControl::GetClassName() const {
-  return GetClassNameStatic();
+    return GetClassNameStatic();
 }
 
 NKikimrColumnShardExportProto::TSessionControlContainer TAbortSessionControl::DoSerializeToProto() const {
-  NKikimrColumnShardExportProto::TSessionControlContainer result;
-  return result;
+    NKikimrColumnShardExportProto::TSessionControlContainer result;
+    return result;
 }
 
 TString TAbortSessionControl::GetClassNameStatic() {
-  return "CS::EXPORT::ABORT";
+    return "CS::EXPORT::ABORT";
 }
 
 TString TConfirmSessionControl::GetClassName() const {
-  return GetClassNameStatic();
+    return GetClassNameStatic();
 }
 
 NKikimrColumnShardExportProto::TSessionControlContainer TConfirmSessionControl::DoSerializeToProto() const {
-  NKikimrColumnShardExportProto::TSessionControlContainer result;
-  return result;
+    NKikimrColumnShardExportProto::TSessionControlContainer result;
+    return result;
 }
 
 TConclusionStatus TConfirmSessionControl::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer & /*proto*/) {
-  return TConclusionStatus::Success();
+    return TConclusionStatus::Success();
 }
 
 TString TConfirmSessionControl::GetClassNameStatic() {
-  return "CS::EXPORT::CONFIRM";
+    return "CS::EXPORT::CONFIRM";
 }
 
 TConclusionStatus TAbortSessionControl::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSessionControlContainer & /*proto*/) {
-  return TConclusionStatus::Success();
+    return TConclusionStatus::Success();
 }
 
 } // namespace NKikimr::NOlap::NExport

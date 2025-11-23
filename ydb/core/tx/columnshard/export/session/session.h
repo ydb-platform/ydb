@@ -23,14 +23,14 @@ namespace NKikimr::NOlap::NExport {
 class TSession: public NBackground::TSessionProtoAdapter<NKikimrColumnShardExportProto::TExportSessionLogic,
     NKikimrColumnShardExportProto::TCursor, NKikimrColumnShardExportProto::TExportSessionState> {
 public:
-  static TString GetClassNameStatic();
-  enum class EStatus : ui64 {
-    Draft = 0 /*"draft"*/,
-    Confirmed = 1 /*"confirmed"*/,
-    Started = 2 /*"started"*/,
-    Finished = 3 /*"finished"*/,
-    Aborted = 4 /*"aborted"*/
-  };
+    static TString GetClassNameStatic();
+    enum class EStatus : ui64 {
+        Draft = 0 /*"draft"*/,
+        Confirmed = 1 /*"confirmed"*/,
+        Started = 2 /*"started"*/,
+        Finished = 3 /*"finished"*/,
+        Aborted = 4 /*"aborted"*/
+    };
 
 private:
     std::shared_ptr<TExportTask> Task;
@@ -51,37 +51,37 @@ private:
     static const inline TFactory::TRegistrator<TSession> Registrator = TFactory::TRegistrator<TSession>(GetClassNameStatic());
 
 public:
-  std::optional<ui64> GetTxId() const;
-  virtual bool IsReadyForStart() const override;
-  virtual bool IsFinished() const override;
-  virtual bool IsReadyForRemoveOnFinished() const override;
+    std::optional<ui64> GetTxId() const;
+    virtual bool IsReadyForStart() const override;
+    virtual bool IsFinished() const override;
+    virtual bool IsReadyForRemoveOnFinished() const override;
 
-  virtual TString GetClassName() const override;
+    virtual TString GetClassName() const override;
 
-  TSession() = default;
+    TSession() = default;
 
-  TSession(const std::shared_ptr<TExportTask> &task);
+    TSession(const std::shared_ptr<TExportTask> &task);
 
-  bool IsConfirmed() const;
+    bool IsConfirmed() const;
 
-  const TCursor &GetCursor() const;
+    const TCursor &GetCursor() const;
 
-  TCursor &MutableCursor();
+    TCursor &MutableCursor();
 
-  TString DebugString() const;
+    TString DebugString() const;
 
-  bool IsDraft() const;
+    bool IsDraft() const;
 
-  void Confirm();
+    void Confirm();
 
-  void Abort();
+    void Abort();
 
-  bool IsStarted() const;
+    bool IsStarted() const;
 
-  const TExportTask &GetTask() const;
+    const TExportTask &GetTask() const;
 
-  const TIdentifier &GetIdentifier() const;
+    const TIdentifier &GetIdentifier() const;
 
-  void Finish();
+    void Finish();
 };
 }   // namespace NKikimr::NOlap::NExport

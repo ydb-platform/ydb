@@ -34,9 +34,9 @@ NKikimrColumnShardExportProto::TCursor TCursor::SerializeToProto() const {
 }
 
 void TCursor::InitNext(const TOwnedCellVec &lastKey, const bool finished) {
-  ++ChunkIdx;
-  LastKey = lastKey;
-  Finished = finished;
+    ++ChunkIdx;
+    LastKey = lastKey;
+    Finished = finished;
 }
 
 bool TCursor::IsFinished() const { 
@@ -52,7 +52,7 @@ ui32 TCursor::GetChunkIdx() const {
 }
 
 const std::optional<TOwnedCellVec> &TCursor::GetLastKey() const {
-  return LastKey;
+    return LastKey;
 }
 
 TCursor::TCursor(const TOwnedCellVec &lastKey, const bool finished)

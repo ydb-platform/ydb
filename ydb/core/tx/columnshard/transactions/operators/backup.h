@@ -30,7 +30,7 @@ private:
 
     virtual void RegisterSubscriber(const TActorId &actorId) override;
 
-  public:
+public:
     using TBase::TBase;
 
     virtual bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override;

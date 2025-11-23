@@ -551,8 +551,8 @@ inline TUnboxedValue TUnboxedValuePod::GetVariantItem() const {
 }
 
 inline bool TUnboxedValuePod::TryMakeVariant(ui32 index) {
-    static const ui32 limit = (1U << 6U) - 1U;
-    if (index >= limit || Raw.GetIndex()) {
+    static const ui32 Limit = (1U << 6U) - 1U;
+    if (index >= Limit || Raw.GetIndex()) {
         return false;
     }
 

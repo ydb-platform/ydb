@@ -128,12 +128,12 @@ public:
             path = std::move(out.Str());
         }
 
-        TLogRecord record(NLog::ELevelHelpers::ToLogPriority(yqlLevel), message.data(), message.length());
+        TLogRecord record(NLog::TLevelHelpers::ToLogPriority(yqlLevel), message.data(), message.length());
         NLog::YqlLogger().Contextify(record, NLog::EComponent::ProviderYt, yqlLevel, sl.File, sl.Line);
         record.MetaFlags.emplace_back(NLog::ToStringBuf(NLog::EContextKey::Path), std::move(path));
 
         if (needLog) {
-            ELogPriority level = NLog::ELevelHelpers::ToLogPriority(yqlLevel);
+            ELogPriority level = NLog::TLevelHelpers::ToLogPriority(yqlLevel);
             NLog::YqlLogger().Write(level, record.Data, record.Len, record.MetaFlags);
         }
 

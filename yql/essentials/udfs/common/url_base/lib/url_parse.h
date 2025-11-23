@@ -34,8 +34,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef("Parse");
-        return nameRef;
+        static const auto Name = TStringRef("Parse");
+        return Name;
     }
 
 private:

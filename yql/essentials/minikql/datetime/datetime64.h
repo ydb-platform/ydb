@@ -4,7 +4,7 @@
 
 #include "datetime.h"
 
-namespace NYql::DateTime {
+namespace NYql::NDateTime {
 
 struct TTM64Storage {
     i32 Year : 19;
@@ -182,4 +182,9 @@ struct TTM64Storage {
     }
 };
 
+} // namespace NYql::NDateTime
+
+// TODO(YQL-20086): Migrate YDB to NYql::NDateTime
+namespace NYql::DateTime { // NOLINT(readability-identifier-naming)
+using namespace NYql::NDateTime;
 } // namespace NYql::DateTime

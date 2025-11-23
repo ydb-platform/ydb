@@ -1,7 +1,7 @@
 // Vendored from musl git commit 593caa456309714402ca4cb77c3770f4c24da9da
 // + adaptations
 
-#include "arrow/vendored/strptime.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/strptime.h"
 
 #include <ctype.h>
 #include <stddef.h>

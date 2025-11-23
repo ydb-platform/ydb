@@ -886,11 +886,11 @@ bool TProgram::ParseYql() {
 bool TProgram::ParseSql() {
     YQL_PROFILE_FUNC(TRACE);
 
-    static const THashMap<TString, TString> clusters = {
+    static const THashMap<TString, TString> Clusters = {
         {"plato", TString(YtProviderName)}};
 
     NSQLTranslation::TTranslationSettings settings;
-    settings.ClusterMapping = clusters;
+    settings.ClusterMapping = Clusters;
     return ParseSql(settings);
 }
 
@@ -1965,12 +1965,12 @@ TIssue MakeNoBlocksInfoIssue(const TVector<TString>& names, bool isTypes) {
 void TProgram::FinalizeIssues() {
     FinalIssues_.Clear();
     if (TypeCtx_) {
-        static const size_t topCount = 10;
-        auto noBlockTypes = TypeCtx_->GetTopNoBlocksTypes(topCount);
+        constexpr size_t TopCount = 10;
+        auto noBlockTypes = TypeCtx_->GetTopNoBlocksTypes(TopCount);
         if (!noBlockTypes.empty()) {
             FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockTypes, true));
         }
-        auto noBlockCallables = TypeCtx_->GetTopNoBlocksCallables(topCount);
+        auto noBlockCallables = TypeCtx_->GetTopNoBlocksCallables(TopCount);
         if (!noBlockCallables.empty()) {
             FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockCallables, false));
         }

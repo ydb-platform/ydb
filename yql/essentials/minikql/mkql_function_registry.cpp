@@ -480,8 +480,8 @@ namespace NMiniKQL {
 
 void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths)
 {
-    static const TStringBuf libPrefix = TStringBuf(MKQL_UDF_LIB_PREFIX);
-    static const TStringBuf libSuffix = TStringBuf(MKQL_UDF_LIB_SUFFIX);
+    static const TStringBuf LibPrefix = TStringBuf(MKQL_UDF_LIB_PREFIX);
+    static const TStringBuf LibSuffix = TStringBuf(MKQL_UDF_LIB_SUFFIX);
 
     if (!dirPath.empty()) {
         std::vector<TString> dirs;
@@ -501,14 +501,14 @@ void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths)
                 TString fileName = GetBaseName(path);
 
                 // skip non shared libraries
-                if (!fileName.StartsWith(libPrefix) ||
-                    !fileName.EndsWith(libSuffix))
+                if (!fileName.StartsWith(LibPrefix) ||
+                    !fileName.EndsWith(LibSuffix))
                 {
                     continue;
                 }
 
                 // skip test udfs when scanning dir
-                auto udfName = TStringBuf(fileName).Skip(libPrefix.length());
+                auto udfName = TStringBuf(fileName).Skip(LibPrefix.length());
                 if (udfName.StartsWith(TStringBuf("test_"))) {
                     continue;
                 }

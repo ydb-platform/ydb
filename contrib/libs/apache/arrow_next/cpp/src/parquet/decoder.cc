@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/encoding.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encoding.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -27,28 +27,28 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/array/builder_binary.h"
-#include "arrow/array/builder_dict.h"
-#include "arrow/array/builder_primitive.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/bit_block_counter.h"
-#include "arrow/util/bit_stream_utils_internal.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/bitmap_ops.h"
-#include "arrow/util/byte_stream_split_internal.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/int_util_overflow.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/rle_encoding_internal.h"
-#include "arrow/util/spaced.h"
-#include "arrow/util/ubsan.h"
-#include "arrow/visit_data_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_dict.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_block_counter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_stream_utils_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/byte_stream_split_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util_overflow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/rle_encoding_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/spaced.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_data_inline.h"
 
-#include "parquet/exception.h"
-#include "parquet/platform.h"
-#include "parquet/schema.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 namespace bit_util = arrow20::bit_util;
 

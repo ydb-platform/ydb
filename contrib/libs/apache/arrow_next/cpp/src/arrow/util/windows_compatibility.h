@@ -35,6 +35,6 @@
 
 #  include <winsock2.h>
 
-#  include "arrow/util/windows_fixup.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_fixup.h"
 
 #endif  // _WIN32

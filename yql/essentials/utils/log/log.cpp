@@ -301,7 +301,7 @@ TYqlLog::TYqlLog(const TString& logType, const TComponentLevels& levels)
     , WriteTruncMsg_(0)
 {
     for (size_t component = 0; component < levels.size(); ++component) {
-        SetComponentLevel(EComponentHelpers::FromInt(component), levels[component]);
+        SetComponentLevel(TComponentHelpers::FromInt(component), levels[component]);
     }
 }
 
@@ -312,7 +312,7 @@ TYqlLog::TYqlLog(TAutoPtr<TLogBackend> backend, const TComponentLevels& levels)
     , WriteTruncMsg_(0)
 {
     for (size_t component = 0; component < levels.size(); ++component) {
-        SetComponentLevel(EComponentHelpers::FromInt(component), levels[component]);
+        SetComponentLevel(TComponentHelpers::FromInt(component), levels[component]);
     }
 }
 
@@ -325,12 +325,12 @@ TAutoPtr<TLogElement> TYqlLog::CreateLogElement(
     EComponent component, ELevel level,
     TStringBuf file, int line) const {
     if (/* const bool writeMsg = */ AtomicCas(&WriteTruncMsg_, 0, 1)) {
-        TLogElement fatal(this, ELevelHelpers::ToLogPriority(ELevel::FATAL));
+        TLogElement fatal(this, TLevelHelpers::ToLogPriority(ELevel::FATAL));
         Contextify(fatal, EComponent::Default, ELevel::FATAL, __FILE__, __LINE__);
         fatal << "Log is truncated by limit";
     }
 
-    auto element = MakeHolder<TLogElement>(this, ELevelHelpers::ToLogPriority(level));
+    auto element = MakeHolder<TLogElement>(this, TLevelHelpers::ToLogPriority(level));
     Contextify(*element, component, level, file, line);
     return element.Release();
 }
@@ -388,7 +388,7 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
         for (const auto& cmpLevel : config.GetLevels()) {
             auto component = ConvertComponent(cmpLevel.GetC());
             auto level = ConvertLevel(cmpLevel.GetL());
-            levels[EComponentHelpers::ToInt(component)] = level;
+            levels[TComponentHelpers::ToInt(component)] = level;
         }
         TLoggerOperator<TYqlLog>::Set(new TYqlLog("null", levels));
 

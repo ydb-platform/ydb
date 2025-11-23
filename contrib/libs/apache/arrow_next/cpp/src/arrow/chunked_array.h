@@ -24,14 +24,14 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/chunk_resolver.h"
-#include "arrow/compare.h"
-#include "arrow/device_allocation_type_set.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunk_resolver.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compare.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/device_allocation_type_set.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

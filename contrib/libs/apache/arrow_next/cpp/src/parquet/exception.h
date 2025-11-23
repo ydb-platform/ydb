@@ -23,9 +23,9 @@
 #include <string>
 #include <utility>
 
-#include "arrow/type_fwd.h"
-#include "arrow/util/string_builder.h"
-#include "parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string_builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
 
 // PARQUET-1085
 #if !defined(ARROW_UNUSED)

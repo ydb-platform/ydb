@@ -337,14 +337,6 @@ class StressRunExecutor:
                     run_config['duration']}"
             )
 
-        # Add iteration info to run name only if prefix
-        # hasn't been added yet
-        if "iteration_num" in run_config and not run_config.get(
-            "iter_prefix_added", False
-        ):
-            # Use iter_N format
-            run_name = f"{run_name}_iter_{run_config['iteration_num']}"
-
         run_start_time = time_module.time()
 
         try:
@@ -393,7 +385,7 @@ class StressRunExecutor:
 
                     stdout = execution_result.stdout
                     stderr = execution_result.stderr
-                    is_timeout = True  # execution_result.is_timeout
+                    is_timeout = execution_result.is_timeout
 
                     # Attach command execution results
                     if stdout:

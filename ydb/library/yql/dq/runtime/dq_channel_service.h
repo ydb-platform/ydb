@@ -29,7 +29,7 @@ struct TDqChannelParams {
     TCollectStatsLevel Level = TCollectStatsLevel::None;
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion = NKikimr::NMiniKQL::EValuePackerVersion::V0;
-    IDqChannelStorage::TPtr Storage;
+    IDqChannelStorage::TPtr ChannelStorage;
 };
 
 struct TChannelInfo {
@@ -78,9 +78,6 @@ public:
         Timestamp = TInstant::Now();
     }
 
-    TDataChunk(ui32 spillingBlobId) : SpillingBlobId(spillingBlobId) {
-    }
-
     TChunkedBuffer Buffer;
 
     ui64 Rows = 0;
@@ -90,8 +87,6 @@ public:
     bool Leading = false;
     bool Finished = false;
     TInstant Timestamp;
-
-    ui32 SpillingBlobId = 0;
 };
 
 class IChannelBuffer {
@@ -130,7 +125,7 @@ public:
     virtual ~IDqChannelService() {}
     virtual IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelParams& params) = 0;
     virtual IDqInputChannel::TPtr GetInputChannel(const TDqChannelParams& params) = 0;
-    virtual std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage = nullptr) = 0;
+    virtual std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) = 0;
     virtual std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info) = 0;
 };
 

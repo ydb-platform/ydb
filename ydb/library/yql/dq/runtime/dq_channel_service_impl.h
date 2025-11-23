@@ -120,7 +120,7 @@ std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType*
 
 class TChannelStub : public IChannelBuffer {
 public:
-    TChannelStub(ui64 channelId, IDqChannelStorage::TPtr storage) : Storage(storage) {
+    TChannelStub(ui64 channelId) {
         PopStats.ChannelId = channelId;
         PushStats.ChannelId = channelId;
     }
@@ -165,7 +165,14 @@ public:
     }
 
     std::shared_ptr<TDqFillAggregator> Aggregator;
-    IDqChannelStorage::TPtr Storage;
+};
+
+struct TLoadingInfo {
+    TLoadingInfo(ui32 blobId, ui32 bytes) : BlobId(blobId), Bytes(bytes) {}
+    TBuffer Buffer;
+    ui32 BlobId = 0;
+    ui32 Bytes = 0;;
+    bool Loaded = false;
 };
 
 class TLocalBufferRegistry;
@@ -202,6 +209,8 @@ public:
     void EarlyFinish() override;
 
     void BindInput();
+    void BindStorage(std::shared_ptr<TLocalBuffer> self, IDqChannelStorage::TPtr storage);
+    void StorageWakeupHandler();
 
     std::shared_ptr<TLocalBufferRegistry> Registry;
     TChannelFullInfo Info;
@@ -211,9 +220,11 @@ public:
     mutable std::queue<TDataChunk> Queue;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     EDqFillLevel FillLevel = EDqFillLevel::NoLimit;
+
     std::queue<ui32> SpilledChunkBytes;
     ui64 HeadBlobId = 0;
     ui64 TailBlobId = 0;
+    std::queue<TLoadingInfo> LoadingQueue;
     IDqChannelStorage::TPtr Storage;
 
     std::atomic<ui64> InflightBytes;
@@ -253,7 +264,7 @@ public:
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
     {}
-    void AddPushBytes(ui64 bytes);
+    void PushDataChunk(TDataChunk&& data, std::shared_ptr<TNodeState> nodeState, std::shared_ptr<TOutputDescriptor> self);
     void AddPopChunk(ui64 bytes, ui64 rows);
     void UpdatePopBytes(ui64 bytes);
     bool CheckGenMajor(ui64 genMajor, const TString& errorMessage);
@@ -267,6 +278,11 @@ public:
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
     std::atomic<ui64> GenMajor;
+
+    std::queue<ui32> SpilledChunkBytes;
+    ui64 HeadBlobId = 0;
+    ui64 TailBlobId = 0;
+    std::queue<ui32> LoadingQueue;
 
     mutable std::mutex WaitQueueMutex;
     std::atomic<ui64> WaitQueueSize;
@@ -289,8 +305,6 @@ public:
     std::atomic<bool> Aborted;
     std::atomic<bool> Flushed;
 
-    ui64 PushBytesDelta = 0;
-    ui64 PushChunksDelta = 0;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferChunks;
 
@@ -403,8 +417,6 @@ public:
     std::atomic<bool> Finished;
     std::atomic<bool> EarlyFinished;
 
-    ui64 PushBytesDelta = 0;
-    ui64 PushChunksDelta = 0;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
 };
@@ -495,7 +507,7 @@ public:
     }
 
     virtual ~TNodeState();
-    void Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
+    void PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
     void SendMessage(std::shared_ptr<TOutputItem> item);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
@@ -637,13 +649,13 @@ public:
     std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId);
 
     // unbinded stubs
-    std::shared_ptr<IChannelBuffer> GetOutputBuffer(ui64 channelId, IDqChannelStorage::TPtr storage);
+    std::shared_ptr<IChannelBuffer> GetOutputBuffer(ui64 channelId);
     std::shared_ptr<IChannelBuffer> GetInputBuffer(ui64 channelId);
     // binded helpers
     std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) final;
     std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info) final;
     // remote buffers
-    std::shared_ptr<TOutputBuffer> GetRemoteOutputBuffer(const TChannelFullInfo& info);
+    std::shared_ptr<TOutputBuffer> GetRemoteOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage);
     std::shared_ptr<TInputBuffer> GetRemoteInputBuffer(const TChannelFullInfo& info);
     // local buffer
     std::shared_ptr<IChannelBuffer> GetLocalBuffer(const TChannelFullInfo& info, bool bindInput, IDqChannelStorage::TPtr storage);
@@ -668,7 +680,7 @@ class TFastDqOutputChannel : public IDqOutputChannel {
 
 public:
     TFastDqOutputChannel(std::weak_ptr<TDqChannelService> service, const TDqChannelParams& params, std::shared_ptr<IChannelBuffer> buffer, bool localChannel)
-        : Service(service), Serializer(CreateSerializer(params, buffer, localChannel)), Desc(params.Desc), Storage(params.Storage) {
+        : Service(service), Serializer(CreateSerializer(params, buffer, localChannel)), Desc(params.Desc), Storage(params.ChannelStorage) {
     }
 
     ~TFastDqOutputChannel() {

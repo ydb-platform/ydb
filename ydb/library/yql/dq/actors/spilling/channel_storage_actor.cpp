@@ -35,7 +35,7 @@ namespace {
     LOG_WARN_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s);
 
 #define LOG_T(s) \
-    LOG_TRACE_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s); 
+    LOG_TRACE_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s);
 
 class TDqChannelStorageActor : public IDqChannelStorageActor,
                                public NActors::TActorBootstrapped<TDqChannelStorageActor>
@@ -98,28 +98,15 @@ private:
             hFunc(TEvDqSpilling::TEvWriteResult, HandleWork);
             hFunc(TEvDqSpilling::TEvReadResult, HandleWork);
             hFunc(TEvDqSpilling::TEvError, HandleWork);
-            hFunc(TEvDqChannelSpilling::TEvGet, HandleWork);
             hFunc(TEvDqChannelSpilling::TEvPut, HandleWork);
+            hFunc(TEvDqChannelSpilling::TEvGet, HandleWork);
+            hFunc(TEvDqChannelSpilling::TEvSetWakeUpCallback, HandleWork);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 Y_ABORT("TDqChannelStorageActor::WorkState unexpected event type: %" PRIx32 " event: %s",
                     ev->GetTypeRewrite(),
                     ev->ToString().data());
         }
-    }
-
-
-
-    void HandleWork(TEvDqChannelSpilling::TEvGet::TPtr& ev) {
-        auto& msg = *ev->Get();
-        LOG_T("[TEvGet] blobId: " << msg.BlobId_);
-
-        auto opBegin = TInstant::Now();
- 
-        auto loadingBlobInfo = TLoadingBlobInfo{std::move(msg.Promise_), opBegin};
-        LoadingBlobs_.emplace(msg.BlobId_, std::move(loadingBlobInfo));
-
-        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.BlobId_));
     }
 
     void HandleWork(TEvDqChannelSpilling::TEvPut::TPtr& ev) {
@@ -132,6 +119,23 @@ private:
         WritingBlobs_.emplace(msg.BlobId_, std::move(writingBlobInfo));
 
         SendInternal(SpillingActorId_, new TEvDqSpilling::TEvWrite(msg.BlobId_, std::move(msg.Blob_)));
+    }
+
+    void HandleWork(TEvDqChannelSpilling::TEvGet::TPtr& ev) {
+        auto& msg = *ev->Get();
+        LOG_T("[TEvGet] blobId: " << msg.BlobId_);
+
+        auto opBegin = TInstant::Now();
+
+        auto loadingBlobInfo = TLoadingBlobInfo{std::move(msg.Promise_), opBegin};
+        LoadingBlobs_.emplace(msg.BlobId_, std::move(loadingBlobInfo));
+
+        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.BlobId_));
+    }
+
+    void HandleWork(TEvDqChannelSpilling::TEvSetWakeUpCallback::TPtr& ev) {
+        auto& msg = *ev->Get();
+        WakeUpCallback_ = std::move(msg.WakeUpCallback_);
     }
 
     void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
@@ -203,7 +207,7 @@ private:
 
     // BlobId -> blob size + promise that blob is saved
     std::unordered_map<ui64, TWritingBlobInfo> WritingBlobs_;
-    
+
     // BlobId -> promise with requested blob
     std::unordered_map<ui64, TLoadingBlobInfo> LoadingBlobs_;
 

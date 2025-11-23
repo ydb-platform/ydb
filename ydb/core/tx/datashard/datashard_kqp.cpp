@@ -1007,6 +1007,10 @@ public:
         return {};
     }
 
+    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, NYql::NDq::TWakeUpCallback /* wakeUpCallback */, NYql::NDq::TErrorCallback /* errorCallback */) const override {
+        return {};
+    }
+
     NDq::TWakeUpCallback GetWakeupCallback() const override {
         return {};
     }

@@ -4,6 +4,7 @@ SRCS(
     GLOBAL schema.cpp
     GLOBAL backup.cpp
     GLOBAL sharing.cpp
+    GLOBAL restore.cpp
     propose_tx.cpp
 )
 

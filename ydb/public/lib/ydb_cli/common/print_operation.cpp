@@ -108,7 +108,7 @@ namespace {
         }
 
         float percentage = float(partsCompleted) / partsTotal * 100;
-        result << " (" << FloatToString(percentage, PREC_POINT_DIGITS, 2) + "%)";
+        result << " (" << FloatToString(percentage, PREC_POINT_DIGITS, 2) << "%)";
 
         return result;
     }

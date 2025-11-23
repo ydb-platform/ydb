@@ -4448,6 +4448,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                         type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
                         value { items { text_value: "b" } }
                     }
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "c" } }
+                    }
                 }
                 indexes {
                     name: "by_value_1"
@@ -4466,19 +4470,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 indexes {
                     name: "by_value_2"
                     index_columns: "value"
-                    global_index {
-                        settings {
-                            partition_at_keys {
-                                split_points {
-                                    type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
-                                    value { items { text_value: "b" } }
-                                }
-                            }
-                        }
-                    }
+                    global_index {}
                 }
             )",
-            {{"a", 1}, {"b", 1}}
+            {{"a", 1}, {"b", 1}, {"c", 1}}
         );
 
         TPortManager portManager;
@@ -4507,10 +4502,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(entry_blocked.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES);
 
         const auto& item_blocked = entry_blocked.GetItemsProgress(0);
-        // 2 table parts + 2 index parts + 2 index parts
-        UNIT_ASSERT_VALUES_EQUAL(item_blocked.parts_total(), 6);
+        // 3 table parts + 2 indexes each process 3 table parts
+        UNIT_ASSERT_VALUES_EQUAL(item_blocked.parts_total(), 9);
         // Table and 1'st index processed
-        UNIT_ASSERT_VALUES_EQUAL(item_blocked.parts_completed(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(item_blocked.parts_completed(), 6);
         UNIT_ASSERT(item_blocked.has_start_time());
 
         block2rdIndexBuild.Stop();
@@ -4524,8 +4519,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
 
         const auto& item = entry.GetItemsProgress(0);
-        UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 6);
-        UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 9);
         UNIT_ASSERT(item.has_start_time());
         UNIT_ASSERT(item.has_end_time());
     }

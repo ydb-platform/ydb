@@ -36,37 +36,15 @@ namespace {
 
         return state;
     }
-
-    ui32 GetPartsTotalFromSettings(const Ydb::Table::GlobalIndexSettings& settings) {
-        switch (settings.partitions_case()) {
-            case Ydb::Table::GlobalIndexSettings::PartitionsCase::kUniformPartitions:
-                return settings.uniform_partitions();
-            case Ydb::Table::GlobalIndexSettings::PartitionsCase::kPartitionAtKeys:
-                return settings.partition_at_keys().split_points_size() + 1;
+    ui32 GetTablePartitions(const Ydb::Table::CreateTableRequest& table) {
+        switch (table.partitions_case()) {
+            case Ydb::Table::CreateTableRequest::PartitionsCase::kUniformPartitions:
+                return table.uniform_partitions();
+            case Ydb::Table::CreateTableRequest::PartitionsCase::kPartitionAtKeys:
+                return table.partition_at_keys().split_points_size() + 1;
             default:
-                // Single table partitions as no partitions settings presented
-                return 1;
-        }
-    }
-
-    ui32 GetIndexPartsTotal(const Ydb::Table::TableIndex& index) {
-        Ydb::Table::GlobalIndexSettings settings;
-        switch (index.type_case()) {
-            case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
-                return GetPartsTotalFromSettings(index.global_index().settings());
-            case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
-                return GetPartsTotalFromSettings(index.global_unique_index().settings());
-            case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
-                return GetPartsTotalFromSettings(index.global_async_index().settings());
-            case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex:
-                return GetPartsTotalFromSettings(index.global_fulltext_index().settings());
-            case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
-                return GetPartsTotalFromSettings(index.global_vector_kmeans_tree_index().Getlevel_table_settings())
-                       + GetPartsTotalFromSettings(index.global_vector_kmeans_tree_index().Getposting_table_settings())
-                       + GetPartsTotalFromSettings(index.global_vector_kmeans_tree_index().Getprefix_table_settings());
-            default:
-                // Global index with 1 partition is default
-                return 1;
+                // Set min number of partitions as default
+                return table.partitioning_settings().min_partitions_count();
         }
     }
 
@@ -135,7 +113,10 @@ namespace {
             *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(indexBuild->EndTime.Seconds());
 
         } else {
-            const auto partsTotal = GetIndexPartsTotal(item.Table->indexes(indexIdx));
+            // As it is better and easier not to bind to schemeshard state,
+            // We'll use info from CreateTableRequest instead
+            // At this point item.Table is guaranteed not to be empty
+            const auto partsTotal = GetTablePartitions(*item.Table);
             const auto partsCompleted = indexIdx >= item.NextIndexIdx ? 0 : partsTotal;
 
             itemProgress.set_parts_total(itemProgress.parts_total() + partsTotal);

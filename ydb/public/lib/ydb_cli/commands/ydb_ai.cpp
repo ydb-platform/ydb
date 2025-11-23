@@ -3,6 +3,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_ai/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_ai/models/model_openai.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_ai/tools/exec_query_tool.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_ai/tools/list_directory_tool.h>
 
 #include <util/string/strip.h>
 #include <util/system/env.h>
@@ -48,12 +49,22 @@ int TCommandAi::Run(TConfig& config) {
         .ApiKey = GetEnv("MODEL_TOKEN"), // AI-TODO: KIKIMR-24214 -- configure it
     });
 
-    const auto sqlTool = NAi::CreateExecQueryTool(config);  // AI-TODO: more generic tools registration
-    model->RegisterTool(sqlTool->GetName(), sqlTool->GetParametersSchema(), sqlTool->GetDescription());
+    std::unordered_map<TString, NAi::ITool::TPtr> tools;
+
+    const auto sqlTool = NAi::CreateExecQueryTool(config);
+    tools.emplace(sqlTool->GetName(), sqlTool);
+
+    const auto lsTool = NAi::CreateListDirectoryTool(config);
+    tools.emplace(lsTool->GetName(), lsTool);
+
+    for (const auto& [name, tool] : tools) {
+        model->RegisterTool(name, tool->GetParametersSchema(), tool->GetDescription());
+    }
 
     // AI-TODO: there is strange highlighting of brackets
+    std::vector<NAi::IModel::TRequest> requests;
     while (const auto& maybeLine = lineReader.ReadLine()) {
-        TString input = *maybeLine;
+        const auto& input = *maybeLine;
         if (input.empty()) {
             continue;
         }
@@ -64,31 +75,33 @@ int TCommandAi::Run(TConfig& config) {
         }
 
         // AI-TODO: limit interaction number
-        std::optional<TString> toolCallId;
-        while (input) {
+        requests.push_back({.Text = input});
+        while (!requests.empty()) {
             // AI-TODO: progress visualization
-            auto output = model->HandleMessage(input);
-            Y_ENSURE(output.Text || output.ToolCall);
+            auto output = model->HandleMessages(requests);
+            requests.clear();
+            Y_ENSURE(output.Text || !output.ToolCalls.empty());
 
             if (output.Text) {
                 // AI-TODO: proper answer format
+                // AI-TODO: how can I render markdown?
                 Cout << "Model answer:\n" << *output.Text << Endl;
             }
 
-            if (!output.ToolCall) {
-                break;
-            }
+            for (const auto& toolCall : output.ToolCalls) {
+                const auto it = tools.find(toolCall.Name);
+                if (it == tools.end()) {
+                    // AI-TODO: proper wrong tool handling
+                    Cout << "Unsupported tool: " << toolCall.Name << Endl;
+                    return EXIT_FAILURE;
+                }
 
-            const auto& toolCall = *output.ToolCall;
-            if (toolCall.Name != sqlTool->GetName()) {
-                // AI-TODO: proper wrong tool handling
-                Cout << "Unsupported tool: " << toolCall.Name << Endl;
-                return EXIT_FAILURE;
+                // AI-TODO: ask permission before call and show progress
+                requests.push_back({
+                    .Text = it->second->Execute(toolCall.Parameters),
+                    .ToolCallId = toolCall.Id
+                });
             }
-
-            // AI-TODO: ask permission before call and show progress
-            toolCallId = toolCall.Id;
-            input = sqlTool->Execute(toolCall.Parameters);
         }
     }
 

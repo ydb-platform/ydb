@@ -74,6 +74,7 @@ public:
     }
 
 private:
+    // AI-TODO: reduce copypaste
     void ValidateJsonType(const NJson::TJsonValue& value, NJson::EJsonValueType expectedType, const std::optional<TString>& fieldName = std::nullopt) const {
         if (const auto valueType = value.GetType(); valueType != expectedType) {
             throw yexception() << "Tool request " << (fieldName ? " field '" + *fieldName + "'" : "") << " has unexpected type: " << valueType << ", expected type: " << expectedType;

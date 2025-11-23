@@ -14,6 +14,11 @@ public:
 
     virtual ~IModel() = default;
 
+    struct TRequest {
+        TString Text;
+        std::optional<TString> ToolCallId;
+    };
+
     struct TResponse {
         struct TToolCall {
             TString Id;
@@ -22,10 +27,10 @@ public:
         };
 
         std::optional<TString> Text;
-        std::optional<TToolCall> ToolCall;
+        std::vector<TToolCall> ToolCalls;
     };
 
-    virtual TResponse HandleMessage(const TString& input, std::optional<TString> toolCallId = std::nullopt) = 0;
+    virtual TResponse HandleMessages(const std::vector<NAi::IModel::TRequest>& requests) = 0;
 
     virtual void RegisterTool(const TString& name, const NJson::TJsonValue& parametersSchema, const TString& description) = 0;
 };

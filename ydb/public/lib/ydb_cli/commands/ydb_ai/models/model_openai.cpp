@@ -110,11 +110,13 @@ public:
         Settings.BaseUrl = RemoveFinalSlash(sanitizedUrl);
     }
 
-    TResponse HandleMessage(const TString& input, std::optional<TString> toolCallId) final {
-        if (toolCallId) {
-            Conversation.emplace_back(input, *toolCallId);
-        } else {
-            Conversation.emplace_back(input, TConversationPart::ERole::User);
+    TResponse HandleMessages(const std::vector<NAi::IModel::TRequest>& requests) final {
+        for (const auto& request : requests) {
+            if (request.ToolCallId) {
+                Conversation.emplace_back(request.Text, *request.ToolCallId);
+            } else {
+                Conversation.emplace_back(request.Text, TConversationPart::ERole::User);
+            }
         }
 
         NJson::TJsonValue bodyJson;
@@ -207,36 +209,36 @@ public:
 
         if (tollsCalls && tollsCalls->GetType() != NJson::JSON_NULL) {
             ValidateJsonType(*tollsCalls, NJson::JSON_ARRAY, "choices[0].message.tool_calls");
-            ValidateJsonArraySize(*tollsCalls, 1, "choices[0].message.tool_calls");
 
-            const auto& toolCall = tollsCalls->GetArray()[0];
-            ValidateJsonType(toolCall, NJson::JSON_MAP, "choices[0].message.tool_calls[0]");
+            for (const auto& toolCall : tollsCalls->GetArray()) {
+                ValidateJsonType(toolCall, NJson::JSON_MAP, "choices[0].message.tool_calls[0]");
 
-            const auto& function = ValidateJsonKey(toolCall, "function", "choices[0].message.tool_calls[0]");
-            ValidateJsonType(function, NJson::JSON_MAP, "choices[0].message.tool_calls[0].function");
+                const auto& function = ValidateJsonKey(toolCall, "function", "choices[0].message.tool_calls[0]");
+                ValidateJsonType(function, NJson::JSON_MAP, "choices[0].message.tool_calls[0].function");
 
-            const auto& name = ValidateJsonKey(function, "name", "choices[0].message.tool_calls[0].function");
-            ValidateJsonType(name, NJson::JSON_STRING, "choices[0].message.tool_calls[0].function.name");
+                const auto& name = ValidateJsonKey(function, "name", "choices[0].message.tool_calls[0].function");
+                ValidateJsonType(name, NJson::JSON_STRING, "choices[0].message.tool_calls[0].function.name");
 
-            const auto& arguments = ValidateJsonKey(function, "arguments", "choices[0].message.tool_calls[0].function");
-            ValidateJsonType(arguments, NJson::JSON_STRING, "choices[0].message.tool_calls[0].function.arguments");
+                const auto& arguments = ValidateJsonKey(function, "arguments", "choices[0].message.tool_calls[0].function");
+                ValidateJsonType(arguments, NJson::JSON_STRING, "choices[0].message.tool_calls[0].function.arguments");
 
-            const auto& callId = ValidateJsonKey(toolCall, "id", "choices[0].message.tool_calls[0]");
-            ValidateJsonType(callId, NJson::JSON_STRING, "choices[0].message.tool_calls[0].id");
+                const auto& callId = ValidateJsonKey(toolCall, "id", "choices[0].message.tool_calls[0]");
+                ValidateJsonType(callId, NJson::JSON_STRING, "choices[0].message.tool_calls[0].id");
 
-            NJson::TJsonValue argumentsJson;
-            if (!NJson::ReadJsonTree(arguments.GetString(), &argumentsJson)) {
-                throw yexception() << "Tool call arguments is not valid JSON, got response: " << arguments.GetString();
+                NJson::TJsonValue argumentsJson;
+                if (!NJson::ReadJsonTree(arguments.GetString(), &argumentsJson)) {
+                    throw yexception() << "Tool call arguments is not valid JSON, got response: " << arguments.GetString();
+                }
+
+                response.ToolCalls.push_back({
+                    .Id = callId.GetString(),
+                    .Name = name.GetString(),
+                    .Parameters = std::move(argumentsJson)
+                });
             }
-
-            response.ToolCall = {
-                .Id = callId.GetString(),
-                .Name = name.GetString(),
-                .Parameters = std::move(argumentsJson)
-            };
         }
 
-        Y_ENSURE(response.Text || response.ToolCall);
+        Y_ENSURE(response.Text || !response.ToolCalls.empty());
         return response;
     }
 

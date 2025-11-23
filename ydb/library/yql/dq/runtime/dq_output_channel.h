@@ -42,6 +42,8 @@ struct TDqOutputChannelSettings {
     TMutable MutableSettings;
 };
 
+class IDqTaskRunnerExecutionContext;
+
 class IDqOutputChannel : public IDqOutput {
 public:
     using TPtr = TIntrusivePtr<IDqOutputChannel>;

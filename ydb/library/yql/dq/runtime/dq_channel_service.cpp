@@ -107,10 +107,12 @@ void TLocalBuffer::Push(TDataChunk&& data) {
     EDqFillLevel fillLevel = FillLevel;
 
     if (Storage) {
-        if (!SpilledChunkBytes.empty() || InflightBytes.load() > MaxInflightBytes) {
+        if ((SpilledBytes.load() > 0) || InflightBytes.load() > MaxInflightBytes) {
+            // if there is something spilled and not loaded yet, continue to spill to avoid reordering
             SpilledChunkBytes.push(data.Bytes);
             SpilledBytes += data.Bytes;
             Storage->Put(++HeadBlobId, DataToBuffer(std::move(data)));
+            // and always report soft/hard limit even if we have small inflight
             fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
         } else {
             InflightBytes += data.Bytes;
@@ -123,7 +125,7 @@ void TLocalBuffer::Push(TDataChunk&& data) {
         fillLevel = InflightBytes.load() > MaxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
     }
 
-    if (fillLevel != FillLevel) {
+    if (FillLevel != fillLevel) {
         if (Aggregator) {
             Aggregator->UpdateCount(FillLevel, fillLevel);
         }
@@ -163,16 +165,6 @@ bool TLocalBuffer::IsEmpty() {
 bool TLocalBuffer::Pop(TDataChunk& data) {
     std::lock_guard lock(Mutex);
 
-    if (!Queue.empty() && Queue.front().SpillingBlobId) {
-        TBuffer buffer;
-        if (Storage->Get(Queue.front().SpillingBlobId, buffer)) {
-            BufferToData(Queue.front(), std::move(buffer));
-        } else {
-            NeedToNotifyInput.store(true);
-            return false;
-        }
-    }
-
     if (Queue.empty()) {
         NeedToNotifyInput.store(true);
         return false;
@@ -192,13 +184,18 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     while (InflightBytes.load() <= MinInflightBytes && !SpilledChunkBytes.empty()) {
         auto bytes = SpilledChunkBytes.front();
         SpilledChunkBytes.pop();
-        SpilledBytes -= bytes;
         InflightBytes += bytes;
         Y_ENSURE(TailBlobId < HeadBlobId);
-        Queue.emplace(++TailBlobId);
-        TBuffer buffer;
-        if (Storage->Get(TailBlobId, buffer)) {
-            BufferToData(Queue.back(), std::move(buffer));
+
+        TLoadingInfo info(TailBlobId++, bytes);
+        info.Loaded = Storage->Get(info.BlobId, info.Buffer);
+        if (LoadingQueue.empty() && info.Loaded) {
+            TDataChunk data;
+            BufferToData(data, std::move(info.Buffer));
+            Queue.emplace(std::move(data));
+            SpilledBytes -= bytes;
+        } else {
+            LoadingQueue.emplace(std::move(info));
         }
     }
 
@@ -212,7 +209,7 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
         fillLevel = EDqFillLevel::HardLimit;
     }
 
-    if (fillLevel != FillLevel) {
+    if (FillLevel != fillLevel) {
         if (Aggregator) {
             Aggregator->UpdateCount(FillLevel, fillLevel);
         }
@@ -235,6 +232,34 @@ void TLocalBuffer::EarlyFinish() {
     EarlyFinished.store(true);
 }
 
+void TLocalBuffer::StorageWakeupHandler() {
+    std::lock_guard lock(Mutex);
+
+    while (!LoadingQueue.empty()) {
+        auto& info = LoadingQueue.front();
+
+        if (!info.Loaded) {
+            info.Loaded = Storage->Get(info.BlobId, info.Buffer);
+        }
+        if (!info.Loaded) {
+            break;
+        }
+
+        TDataChunk data;
+        BufferToData(data, std::move(info.Buffer));
+        Queue.emplace(std::move(data));
+        SpilledBytes -= info.Bytes;
+
+        LoadingQueue.pop();
+
+        if (NeedToNotifyInput.exchange(false)) {
+            NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
+                new NActors::IEventHandle(Info.InputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
+            );
+        }
+    }
+}
+
 void TLocalBuffer::BindInput() {
     if (!InputBinded.exchange(true)) {
         std::lock_guard lock(Mutex);
@@ -244,26 +269,55 @@ void TLocalBuffer::BindInput() {
     }
 }
 
-void TOutputDescriptor::AddPushBytes(ui64 bytes) {
+void TLocalBuffer::BindStorage(std::shared_ptr<TLocalBuffer> self, IDqChannelStorage::TPtr storage) {
+    std::weak_ptr<TLocalBuffer> weakSelf = self;
+    storage->SetWakeUpCallback([weakSelf=weakSelf]() {
+        auto self = weakSelf.lock();
+        if (self) {
+            self->StorageWakeupHandler();
+        }
+    });
+    Storage = std::move(Storage);
+}
+
+void TOutputDescriptor::PushDataChunk(TDataChunk&& data, std::shared_ptr<TNodeState> nodeState, std::shared_ptr<TOutputDescriptor> self) {
+    bool spilled = false;
+
     {
         std::lock_guard lock(FlowControlMutex);
-        PushBytes += bytes;
-        if (FillLevel == EDqFillLevel::NoLimit && PushBytes.load() > MaxInflightBytes + RemotePopBytes.load()) {
-            FillLevel = EDqFillLevel::HardLimit;
-            if (Aggregator) {
-                Aggregator->UpdateCount(EDqFillLevel::NoLimit, EDqFillLevel::HardLimit);
+        PushBytes += data.Bytes;
+
+        auto fillLevel = FillLevel;
+        auto inflightExceeded = PushBytes.load() > MaxInflightBytes + RemotePopBytes.load();
+
+        /* if (Storage) {
+            if (!SpilledChunkBytes.empty() || inflightExceeded) {
+                SpilledChunkBytes.push(data.Bytes);
+                // SpilledBytes += data.Bytes;
+                Storage->Put(++HeadBlobId, DataToBuffer(std::move(data)));
+                spilled = true;
+                fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
             }
+        } else */ {
+            if (inflightExceeded) {
+                fillLevel = EDqFillLevel::HardLimit;
+            }
+        }
+
+        if (FillLevel != fillLevel) {
+            if (Aggregator) {
+                Aggregator->UpdateCount(FillLevel, fillLevel);
+            }
+            FillLevel = fillLevel;
             NeedToNotifyOutput.store(true);
         }
     }
 
-    PushChunksDelta++;
-    PushBytesDelta += bytes;
-    if (PushChunksDelta >= 100) {
-        *OutputBufferBytes += PushBytesDelta;
-        PushBytesDelta = 0;
-        *OutputBufferChunks += PushChunksDelta;
-        PushChunksDelta = 0;
+    (*OutputBufferChunks)++;
+    *OutputBufferBytes += data.Bytes;
+
+    if (!spilled) {
+        nodeState->PushDataChunk(std::move(data), self);
     }
 }
 
@@ -280,6 +334,9 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes) {
             return;
         }
         RemotePopBytes.store(bytes);
+        //
+        // TODO: Pop Spilled & PushToWaitQueue
+        //
         if (FillLevel == EDqFillLevel::HardLimit && PushBytes.load() <= MinInflightBytes + bytes) {
             FillLevel = EDqFillLevel::NoLimit;
             if (Aggregator) {
@@ -331,12 +388,6 @@ bool TOutputDescriptor::IsFlushed() {
 
 void TOutputDescriptor::Terminate() {
     Terminated.store(true);
-    if (PushChunksDelta) {
-        *OutputBufferBytes += PushBytesDelta;
-        PushBytesDelta = 0;
-        *OutputBufferChunks += PushChunksDelta;
-        PushChunksDelta = 0;
-    }
 }
 
 bool TOutputDescriptor::IsTerminatedOrAborted() {
@@ -391,8 +442,7 @@ void TOutputBuffer::Push(TDataChunk&& data) {
         PushStats.Chunks++;
         PushStats.Rows += data.Rows;
         PushStats.Bytes += data.Bytes;
-        Descriptor->AddPushBytes(data.Bytes);
-        NodeState->Push(std::move(data), Descriptor);
+        Descriptor->PushDataChunk(std::move(data), NodeState, Descriptor);
     }
 }
 
@@ -438,14 +488,8 @@ void TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     BufferPushBytes += data.Bytes;
     BufferPushRows += data.Rows;
 
-    PushChunksDelta++;
-    PushBytesDelta += data.Bytes;
-    if (PushChunksDelta >= 100 || data.Finished) {
-        *InputBufferBytes += PushBytesDelta;
-        PushBytesDelta = 0;
-        *InputBufferChunks += PushChunksDelta;
-        PushChunksDelta = 0;
-    }
+    (*InputBufferChunks)++;
+    *InputBufferBytes += data.Bytes;
 
     auto finished = data.Finished;
 
@@ -588,7 +632,7 @@ TNodeState::~TNodeState() {
     *OutputBufferWaiterMessages -= WaiterMessages.load();
 }
 
-void TNodeState::Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor) {
+void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor) {
     auto bytes = data.Bytes;
     auto rows = data.Rows;
 
@@ -645,11 +689,14 @@ void TNodeState::Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> desc
 
     if (result) {
         std::lock_guard lock(Mutex);
+        auto forceSendWaiters = Queue.empty();
         WaitersQueue.push(descriptor);
         WaitersQueueSize++;
         (*OutputBufferWaiterCount)++;
         LOG_E("NodeId=" << NodeId << ", ChannelId=" << descriptor->Info.ChannelId << ", TNodeState::Push+ to WaitQueue, WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << ", WaitTimestamp=" << descriptor->WaitTimestamp);
-        ActorSystem->Send(NodeActorId, new TEvPrivate::TEvSendWaiters());
+        if (forceSendWaiters) {
+            ActorSystem->Send(NodeActorId, new TEvPrivate::TEvSendWaiters());
+        }
     }
 }
 
@@ -982,6 +1029,8 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
         if (!waiter) {
             break;
         }
+
+        // TODO: Handle delayed (spilled) data
 
         if (waiter->CheckGenMajor(GenMajor, "Inconsistent Waiter Gen")) {
             std::shared_ptr<TOutputItem> item;
@@ -1469,19 +1518,19 @@ std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 no
 
 // unbinded stubs
 
-std::shared_ptr<IChannelBuffer> TDqChannelService::GetOutputBuffer(ui64 channelId, IDqChannelStorage::TPtr storage) {
-    return std::make_shared<TChannelStub>(channelId, storage);
+std::shared_ptr<IChannelBuffer> TDqChannelService::GetOutputBuffer(ui64 channelId) {
+    return std::make_shared<TChannelStub>(channelId);
 }
 
 std::shared_ptr<IChannelBuffer> TDqChannelService::GetInputBuffer(ui64 channelId) {
-    return std::make_shared<TChannelStub>(channelId, nullptr);
+    return std::make_shared<TChannelStub>(channelId);
 }
 
 // binded helpers
 
 std::shared_ptr<IChannelBuffer> TDqChannelService::GetOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) {
     Y_ENSURE(info.OutputActorId.NodeId() == NodeId);
-    return (info.InputActorId.NodeId() == NodeId) ? GetLocalBuffer(info, false, storage) : GetRemoteOutputBuffer(info);
+    return (info.InputActorId.NodeId() == NodeId) ? GetLocalBuffer(info, false, storage) : GetRemoteOutputBuffer(info, storage);
 }
 
 std::shared_ptr<IChannelBuffer> TDqChannelService::GetInputBuffer(const TChannelFullInfo& info) {
@@ -1491,7 +1540,7 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetInputBuffer(const TChannel
 
 // remote buffers
 
-std::shared_ptr<TOutputBuffer> TDqChannelService::GetRemoteOutputBuffer(const TChannelFullInfo& info) {
+std::shared_ptr<TOutputBuffer> TDqChannelService::GetRemoteOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr /* storage */) {
     Y_ENSURE(info.InputActorId.NodeId() != NodeId);
     return GetOrCreateNodeState(info.InputActorId.NodeId())->CreateOutputBuffer(info,
         Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10);
@@ -1513,7 +1562,7 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannel
         buffer->BindInput();
     }
     if (storage) {
-        buffer->Storage = storage;
+        buffer->BindStorage(buffer, storage);
     }
     return buffer;
 }
@@ -1523,7 +1572,7 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannel
 IDqOutputChannel::TPtr TDqChannelService::GetOutputChannel(const TDqChannelParams& params) {
     Y_ENSURE(params.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0
             || params.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0);
-    auto buffer  = GetOutputBuffer(params.Desc.ChannelId, params.Storage);
+    auto buffer  = GetOutputBuffer(params.Desc.ChannelId);
     buffer->PushStats.Level = params.Level;
     buffer->PopStats.Level = params.Level;
     return new TFastDqOutputChannel(Self, params, buffer, false);
@@ -1592,7 +1641,8 @@ bool TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
         if (inputActorId.NodeId() == service->NodeId) {
             Serializer = ConvertToLocalSerializer(std::move(Serializer));
         }
-        auto buffer = service->GetOutputBuffer(TChannelFullInfo(Desc.ChannelId, outputActorId, inputActorId, Desc.SrcStageId, Desc.DstStageId), Storage);
+        TChannelFullInfo info(Desc.ChannelId, outputActorId, inputActorId, Desc.SrcStageId, Desc.DstStageId);
+        auto buffer = service->GetOutputBuffer(info, Storage);
         if (Aggregator) {
             buffer->SetFillAggregator(Aggregator);
         }
@@ -1625,7 +1675,70 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
     TStringStream str;
     HTML(str) {
         PRE() {
-            str << "Channel Service NodeId: " << ChannelService->NodeId << Endl;
+            str << "Channel Service NodeId: " << ChannelService->NodeId;
+
+            str << Endl << "Local Buffers:";
+
+            TABLE_SORTABLE_CLASS ("table table-condensed") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() {str << "ChannelId";}
+                        TABLEH() {str << "OutputActorId";}
+                        TABLEH() {str << "InputActorId";}
+                        TABLEH() {str << "Src";}
+                        TABLEH() {str << "Dst";}
+                        TABLEH() {str << "Fill (Agg)";}
+                        TABLEH() {str << "PushBytes";}
+                        TABLEH() {str << "PopBytes";}
+                        TABLEH() {str << "InflightBytes";}
+                        TABLEH() {str << "QueueSize";}
+                        TABLEH() {str << "SpilledBytes";}
+                        TABLEH() {str << "LoadingQueueSize";}
+                        TABLEH() {str << "HeadBlobId";}
+                        TABLEH() {str << "TailBlobId";}
+                    }
+                }
+                TABLEBODY() {
+                    auto registry = ChannelService->LocalBufferRegistry;
+                    std::lock_guard lock(registry->Mutex);
+                    for (auto& [info, weakBuffer] : registry->LocalBuffers) {
+                        auto sharedBuffer = weakBuffer.lock();
+                        if (sharedBuffer) {
+                            TABLER() {
+                                TABLED() {str << sharedBuffer->Info.ChannelId;}
+                                TABLED() {
+                                    HREF("/actors/kqp_node?ca=" + ToString(sharedBuffer->Info.OutputActorId))  {
+                                        str << sharedBuffer->Info.OutputActorId;
+                                    }
+                                }
+                                TABLED() {
+                                    HREF("/actors/kqp_node?ca=" + ToString(sharedBuffer->Info.InputActorId))  {
+                                        str << sharedBuffer->Info.InputActorId;
+                                    }
+                                }
+                                TABLED() {str << sharedBuffer->Info.SrcStageId;}
+                                TABLED() {str << sharedBuffer->Info.DstStageId;}
+                                TABLED() {
+                                    str << FillLevelToString(sharedBuffer->FillLevel);
+                                    if (sharedBuffer->Aggregator) {
+                                        str << " (" << FillLevelToString(sharedBuffer->Aggregator->GetFillLevel()) << ")";
+                                    }
+                                }
+                                TABLED() {str << sharedBuffer->PushStats.Bytes;}
+                                TABLED() {str << sharedBuffer->PopStats.Bytes;}
+                                TABLED() {str << sharedBuffer->InflightBytes.load();}
+                                TABLED() {str << sharedBuffer->Queue.size();}
+                                TABLED() {str << sharedBuffer->SpilledBytes.load();}
+                                TABLED() {str << sharedBuffer->LoadingQueue.size();}
+                                TABLED() {str << sharedBuffer->HeadBlobId;}
+                                TABLED() {str << sharedBuffer->TailBlobId;}
+                            }
+                        }
+                    }
+                }
+            }
+
+            str << Endl << "Node Sessions:";
 
             TABLE_SORTABLE_CLASS ("table table-condensed") {
                 TABLEHEAD() {
@@ -1665,7 +1778,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                 }
             }
 
-            str << Endl << "Output Descriptors";
+            str << Endl << "Output Descriptors:";
 
             TABLE_SORTABLE_CLASS ("table table-condensed") {
                 TABLEHEAD() {
@@ -1715,7 +1828,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                 }
             }
 
-            str << Endl << "Input Descriptors";
+            str << Endl << "Input Descriptors:";
 
             TABLE_SORTABLE_CLASS ("table table-condensed") {
                 TABLEHEAD() {

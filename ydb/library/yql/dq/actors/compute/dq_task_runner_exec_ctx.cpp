@@ -26,6 +26,10 @@ IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64
     }
 }
 
+IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, TWakeUpCallback wakeUpCallback, TErrorCallback errorCallback) const {
+    return CreateDqChannelStorage(TxId_, channelId, wakeUpCallback, errorCallback, SpillingTaskCounters_, NActors::TlsActivationContext->ActorSystem());
+}
+
 TWakeUpCallback TDqTaskRunnerExecutionContext::GetWakeupCallback() const {
     return WakeUpCallback_;
 }

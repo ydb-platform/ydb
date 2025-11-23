@@ -464,10 +464,11 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
         if (portion->IsRemovedFor(snapshot)) {
             continue;
         }
-        // visible in the snapshot or own portions are not conflicting
+        // nonconflicting: visible in the snapshot or own portions
         auto nonconflicting = portion->IsVisible(snapshot, true) || (ownPortions.has_value() && ownPortions->contains(writeId));
+        auto conflicting = !nonconflicting;
 
-        if (nonconflicting && !withNonconflicting || !nonconflicting && !withConflicting) {
+        if (nonconflicting && !withNonconflicting || conflicting && !withConflicting) {
             continue;
         }
 
@@ -483,8 +484,14 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
         }
 
         auto nonconflicting = portion->IsVisible(snapshot, true); 
+        auto conflicting = !nonconflicting;
 
-        if (nonconflicting && !withNonconflicting || !nonconflicting && !withConflicting) {
+        // take compacted portions only if all the records are visible in the snapshot
+        if (conflicting && portion->GetPortionType() == EPortionType::Compacted) {
+            continue;
+        }
+
+        if (nonconflicting && !withNonconflicting || conflicting && !withConflicting) {
             continue;
         }
 

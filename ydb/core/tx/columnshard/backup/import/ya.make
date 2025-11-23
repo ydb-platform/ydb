@@ -8,12 +8,11 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/compute_actor
     ydb/core/scheme
     ydb/core/tablet_flat
     ydb/core/tx/columnshard/backup/import/protos
     ydb/core/tx/columnshard/bg_tasks
-    ydb/core/tx/columnshard/export/session/selector
-    ydb/core/tx/columnshard/export/session/storage
 )
 
 GENERATE_ENUM_SERIALIZATION(session.h)

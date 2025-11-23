@@ -110,7 +110,7 @@ TConclusionStatus TSession::DoDeserializeProgressFromProto(const TProtoProgress 
 }
 
 TString TSession::GetClassNameStatic() { 
-    return "CS::EXPORT"; 
+    return "CS::IMPORT"; 
 }
 
 } // namespace NKikimr::NOlap::NImport

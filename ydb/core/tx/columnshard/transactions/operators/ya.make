@@ -9,9 +9,10 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/columnshard/backup/import
     ydb/core/tx/columnshard/data_sharing/destination/events
-    ydb/core/tx/columnshard/transactions/operators/ev_write
     ydb/core/tx/columnshard/export/session
+    ydb/core/tx/columnshard/transactions/operators/ev_write
 )
 
 END()

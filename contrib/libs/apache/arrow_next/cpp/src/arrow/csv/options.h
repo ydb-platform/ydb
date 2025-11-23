@@ -24,11 +24,11 @@
 #include <unordered_map>
 #include <vector>
 
-#include "arrow/csv/invalid_row.h"
-#include "arrow/csv/type_fwd.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/status.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/invalid_row.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

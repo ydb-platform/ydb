@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/basic_decimal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/basic_decimal.h"
 
 #include <algorithm>
 #include <array>
@@ -27,14 +27,14 @@
 #include <limits>
 #include <string>
 
-#include "arrow/util/bit_util.h"
-#include "arrow/util/config.h"  // for ARROW_USE_NATIVE_INT128
-#include "arrow/util/decimal_internal.h"
-#include "arrow/util/endian.h"
-#include "arrow/util/int128_internal.h"
-#include "arrow/util/int_util_overflow.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"  // for ARROW_USE_NATIVE_INT128
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/decimal_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/endian.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int128_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util_overflow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
 
 namespace arrow20 {
 

@@ -17,15 +17,15 @@
 
 // Implementation of casting to integer, floating point, or decimal types
 
-#include "arrow/array/builder_primitive.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/scalar_cast_internal.h"
-#include "arrow/compute/kernels/util_internal.h"
-#include "arrow/scalar.h"
-#include "arrow/util/bit_block_counter.h"
-#include "arrow/util/float16.h"
-#include "arrow/util/int_util.h"
-#include "arrow/util/value_parsing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/scalar_cast_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_block_counter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/float16.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h"
 
 namespace arrow20 {
 

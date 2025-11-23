@@ -7,10 +7,10 @@
 #include <ydb/public/lib/ydb_cli/common/csv_parser.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
-#include <arrow/csv/options.h>
-#include <arrow/io/file.h>
-#include <arrow/io/stdio.h>
-#include <arrow/table.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/csv/options.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/io/file.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/io/stdio.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/table.h>
 #include <util/string/builder.h>
 #include <library/cpp/string_utils/csv/csv.h>
 #include <util/stream/file.h>
@@ -116,12 +116,12 @@ namespace {
 
 int TCommandToolsInferCsv::Run(TConfig& config) {
     Y_UNUSED(config);
-    std::vector<std::shared_ptr<arrow::io::InputStream>> inputs;
+    std::vector<std::shared_ptr<arrow20::io::InputStream>> inputs;
     if (ReadingFromStdin) {
-        inputs.push_back(std::make_shared<arrow::io::StdinStream>());
+        inputs.push_back(std::make_shared<arrow20::io::StdinStream>());
     } else {
         for (const auto& filePath : FilePaths) {
-            auto maybeFile = arrow::io::ReadableFile::Open(filePath.c_str());
+            auto maybeFile = arrow20::io::ReadableFile::Open(filePath.c_str());
             if (!maybeFile.ok()) {
                 throw TMisuseException() << "Failed to open file: " << filePath;
             }

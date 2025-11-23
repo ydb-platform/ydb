@@ -161,12 +161,9 @@ namespace NKikimr::NSqsTopic::V1 {
             if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageDeduplicationId)) {
                 result.mutable_attributes()->emplace("MessageDeduplicationId", *value);
             }
-            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageId)) {
-                result.set_message_id(*value);
-            } else {
-                // probably message was written not via the sqs api
-                result.set_message_id(GenerateMessageId(message.MessageId));
-            }
+
+            result.set_message_id(GenerateMessageId(message.MessageId));
+
             if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageAttributes)) {
                 NKikimr::NSQS::TMessageAttributes messageAttributes;
                 if (messageAttributes.ParseFromString(*value)) {

@@ -1,5 +1,7 @@
 #include <yt/yt/core/rpc/unittests/lib/common.h>
 
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
 #include <random>
 
 namespace NYT::NRpc {
@@ -432,7 +434,7 @@ TYPED_TEST(TNotGrpcTest, LaggyStreamingRequest)
 
     WaitFor(req->GetRequestAttachmentsStream()->Close())
         .ThrowOnError();
-    WaitFor(ExpectEndOfStream(req->GetResponseAttachmentsStream()))
+    WaitFor(CheckEndOfStream(req->GetResponseAttachmentsStream()))
         .ThrowOnError();
     WaitFor(invokeResult)
         .ThrowOnError();

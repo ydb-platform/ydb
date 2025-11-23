@@ -54,8 +54,8 @@ SRCS(
     concurrency/async_looper.cpp
     concurrency/async_rw_lock.cpp
     concurrency/async_semaphore.cpp
+    concurrency/async_stream_helpers.cpp
     concurrency/async_stream_pipe.cpp
-    concurrency/async_stream.cpp
     concurrency/config.cpp
     GLOBAL concurrency/configure_fiber_manager.cpp
     concurrency/coroutine.cpp

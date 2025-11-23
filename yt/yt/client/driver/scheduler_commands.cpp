@@ -8,6 +8,7 @@
 #include <yt/yt/client/table_client/row_buffer.h>
 
 #include <yt/yt/core/concurrency/scheduler.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/logging/fluent_log.h>
 

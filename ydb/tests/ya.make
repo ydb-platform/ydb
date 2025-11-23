@@ -1,4 +1,5 @@
 RECURSE(
+    datashard
     fq
     functional
     library
@@ -6,6 +7,7 @@ RECURSE(
     olap
     oss
     perf
+    sql
     supp
     tools
 )

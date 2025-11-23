@@ -68,7 +68,7 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
         if workload_start_time:
             stats["workload_start_time"] = workload_start_time
             stats["workload_end_time"] = result.end_time
-            stats["workload_duration"] = result.total_execution_time
+            stats["workload_duration"] = result.end_time - workload_start_time
 
         stats["total_runs"] = result.get_total_runs()
         stats["successful_runs"] = result.get_successful_runs()

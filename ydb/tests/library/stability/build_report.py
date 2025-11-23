@@ -44,7 +44,7 @@ def parallel_allure_test_description(
     execution_result: StressUtilTestResults = None
 ):
     """Creates a detailed Allure test description for parallel tests
-    
+
     Args:
         suite: Test suite name
         test: Test name
@@ -163,13 +163,12 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults):
     for stress_name, stress_result in execution_result.stress_util_runs.items():
         table_html += '<tr>'
         stress_color = '#ccffcc'
-        if stress_result.is_all_success():
+        if stress_result.get_successful_runs() == 0:
             stress_color = "#ffcccc"
         elif stress_result.get_successful_runs() < len(unique_hosts):
             stress_color = "#fff4cc"
         table_html += f'<td style="background-color: {stress_color};">{stress_name}</td>'
 
-        logging.info(f"hosts_stress_result: {stress_result.node_runs}")
         for host in unique_hosts:
             color = '#ccffcc'
             if host not in stress_result.node_runs:

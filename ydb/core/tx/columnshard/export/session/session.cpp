@@ -21,12 +21,12 @@ const TIdentifier &TSession::GetIdentifier() const {
     return Task->GetIdentifier();
 }
 
-const TExportTask &TSession::GetTask() const { 
-    return *Task; 
+const TExportTask &TSession::GetTask() const {
+    return *Task;
 }
 
-bool TSession::IsStarted() const { 
-    return Status == EStatus::Started; 
+bool TSession::IsStarted() const {
+    return Status == EStatus::Started;
 }
 
 void TSession::Abort() {
@@ -39,8 +39,8 @@ void TSession::Confirm() {
     Status = EStatus::Confirmed;
 }
 
-bool TSession::IsDraft() const { 
-    return Status == EStatus::Draft; 
+bool TSession::IsDraft() const {
+    return Status == EStatus::Draft;
 }
 
 TString TSession::DebugString() const {
@@ -48,37 +48,37 @@ TString TSession::DebugString() const {
                           << ";status=" << Status;
 }
 
-TCursor &TSession::MutableCursor() { 
-    return Cursor; 
+TCursor &TSession::MutableCursor() {
+    return Cursor;
 }
 
-const TCursor &TSession::GetCursor() const { 
-    return Cursor; 
+const TCursor &TSession::GetCursor() const {
+    return Cursor;
 }
 
-bool TSession::IsConfirmed() const { 
-    return Status == EStatus::Confirmed; 
+bool TSession::IsConfirmed() const {
+    return Status == EStatus::Confirmed;
 }
 
-TSession::TSession(const std::shared_ptr<TExportTask> &task) 
+TSession::TSession(const std::shared_ptr<TExportTask> &task)
     : Task(task) {
     AFL_VERIFY(Task);
 }
 
-TString TSession::GetClassName() const { 
-    return GetClassNameStatic(); 
+TString TSession::GetClassName() const {
+    return GetClassNameStatic();
 }
 
 bool TSession::IsReadyForRemoveOnFinished() const {
     return Status == EStatus::Aborted;
 }
 
-bool TSession::IsFinished() const { 
-    return Status == EStatus::Finished; 
+bool TSession::IsFinished() const {
+    return Status == EStatus::Finished;
 }
 
-bool TSession::IsReadyForStart() const { 
-    return Status == EStatus::Confirmed; 
+bool TSession::IsReadyForStart() const {
+    return Status == EStatus::Confirmed;
 }
 
 std::optional<ui64> TSession::GetTxId() const {
@@ -127,8 +127,8 @@ TConclusionStatus TSession::DoDeserializeProgressFromProto(const TProtoProgress 
     return TConclusionStatus::Success();
 }
 
-TString TSession::GetClassNameStatic() { 
-    return "CS::EXPORT"; 
+TString TSession::GetClassNameStatic() {
+    return "CS::EXPORT";
 }
 
 } // namespace NKikimr::NOlap::NExport

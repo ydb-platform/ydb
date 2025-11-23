@@ -39,16 +39,16 @@ void TCursor::InitNext(const TOwnedCellVec &lastKey, const bool finished) {
     Finished = finished;
 }
 
-bool TCursor::IsFinished() const { 
-    return Finished; 
+bool TCursor::IsFinished() const {
+    return Finished;
 }
 
-bool TCursor::HasLastKey() const { 
-    return !!LastKey; 
+bool TCursor::HasLastKey() const {
+    return !!LastKey;
 }
 
-ui32 TCursor::GetChunkIdx() const { 
-    return ChunkIdx; 
+ui32 TCursor::GetChunkIdx() const {
+    return ChunkIdx;
 }
 
 const std::optional<TOwnedCellVec> &TCursor::GetLastKey() const {
@@ -56,7 +56,7 @@ const std::optional<TOwnedCellVec> &TCursor::GetLastKey() const {
 }
 
 TCursor::TCursor(const TOwnedCellVec &lastKey, const bool finished)
-    : LastKey(lastKey), Finished(finished) {       
+    : LastKey(lastKey), Finished(finished) {
 }
 
 } // namespace NKikimr::NOlap::NExport

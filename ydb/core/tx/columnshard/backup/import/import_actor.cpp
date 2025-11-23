@@ -43,7 +43,7 @@ void TImportActor::OnTxCompleted(const ui64 /*txId*/) {
 }
 
 void TImportActor::OnBootstrap(const TActorContext & /*ctx*/) {
-    SwitchStage(EStage::WaitWriting, EStage::WaitSaveCursor);
+    SwitchStage(EStage::Initialization, EStage::WaitSaveCursor);
     SaveSessionProgress();
     Become(&TImportActor::StateFunc);
 }

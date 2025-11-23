@@ -16,4 +16,6 @@ PEERDIR(
     ydb/core/tx/columnshard/export/session/storage
 )
 
+GENERATE_ENUM_SERIALIZATION(session.h)
+
 END()

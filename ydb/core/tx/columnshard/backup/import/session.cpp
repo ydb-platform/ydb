@@ -89,11 +89,7 @@ TConclusionStatus TSession::DoDeserializeFromProto(const TProtoLogic &proto) {
 
 TSession::TProtoState TSession::DoSerializeStateToProto() const {
     TProtoState result;
-    if (Status == EStatus::Started) {
-    result.SetStatus(::ToString(EStatus::Confirmed));
-    } else {
     result.SetStatus(::ToString(Status));
-    }
     return result;
 }
 

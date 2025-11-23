@@ -11,8 +11,7 @@ all_workloads = {
                  # "--database", f"/{YdbCluster.ydb_database}",
                  "--path", "workload_ctas_{node_host}_iter_{iteration_num}_{uuid}"],
         'local_path': 'ydb/tests/stress/ctas/ctas'
-    }, }
-naw = {
+    },
     'workload_kafka': {
         'args': ["--endpoint", "grpc://{node_host}:2135",
                  # "--database", f"/{YdbCluster.ydb_database}",

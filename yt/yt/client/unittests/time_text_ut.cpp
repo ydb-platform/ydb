@@ -8,7 +8,7 @@ using namespace NTableClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TimeConverter, Correct)
+TEST(TimeConverterTest, Correct)
 {
     EXPECT_EQ(BinaryTimeFromText("2021-09-03", ESimpleLogicalValueType::Date), 18873U);
 
@@ -19,7 +19,7 @@ TEST(TimeConverter, Correct)
     EXPECT_EQ(BinaryTimeFromText("2021-09-03T10:12:41.123456Z", ESimpleLogicalValueType::Timestamp), 1630663961123456ULL);
 }
 
-TEST(TimeConverter, InvalidLength)
+TEST(TimeConverterTest, InvalidLength)
 {
     EXPECT_THROW_WITH_SUBSTRING(
         BinaryTimeFromText("2021-09", ESimpleLogicalValueType::Date),
@@ -52,7 +52,7 @@ TEST(TimeConverter, InvalidLength)
         "Invalid date string length");
 }
 
-TEST(TimeConverter, InvalidFormat)
+TEST(TimeConverterTest, InvalidFormat)
 {
     EXPECT_THROW_WITH_SUBSTRING(
         BinaryTimeFromText("2021-09-3T", ESimpleLogicalValueType::Date),

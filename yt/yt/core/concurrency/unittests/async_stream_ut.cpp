@@ -135,7 +135,7 @@ private:
 
 //! This test creates a big block size async zero copy input stream
 //! over a small block size async input stream to provoke a stack overflow.
-TEST(IAsyncZeroCopyInputStreamTest, NoStackOverflow)
+TEST(TIAsyncZeroCopyInputStreamTest, NoStackOverflow)
 {
     TString buf(512_KB, 'a');
     TMemoryInput memoryInput(buf.data(), buf.size());

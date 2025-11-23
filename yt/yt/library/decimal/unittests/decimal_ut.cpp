@@ -22,7 +22,7 @@ TString RoundConvertText(TStringBuf textValue, int precision, int scale)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TDecimal, TestTextBinaryConversion)
+TEST(TDecimalTest, TestTextBinaryConversion)
 {
 #define TEST_TEXT_BINARY_CONVERSION(precision, scale, text, binary) \
     do {                                                                 \
@@ -246,7 +246,7 @@ TEST(TDecimal, TestTextBinaryConversion)
 
 }
 
-TEST(TDecimal, TestPrecisionScaleLimits)
+TEST(TDecimalTest, TestPrecisionScaleLimits)
 {
     EXPECT_THROW_WITH_SUBSTRING(TDecimal::TextToBinary("0", -1, 0), "Invalid decimal precision");
     EXPECT_THROW_WITH_SUBSTRING(TDecimal::TextToBinary("0", 0, 0), "Invalid decimal precision");
@@ -294,7 +294,7 @@ TEST(TDecimal, TestPrecisionScaleLimits)
     EXPECT_EQ("-578960446186580977117854925043439539266349923328202820197287920039565648199.65", TDecimal::BinaryToText(minBinaryDecimal2, TDecimal::MaxPrecision, 2));
 }
 
-TEST(TDecimal, TestValidation)
+TEST(TDecimalTest, TestValidation)
 {
     EXPECT_NO_THROW(TDecimal::ValidateBinaryValue(HexDecode("8000013A"), 3, 2));
     EXPECT_NO_THROW(TDecimal::ValidateBinaryValue(HexDecode("80000000" "0000013A"), 10, 2));

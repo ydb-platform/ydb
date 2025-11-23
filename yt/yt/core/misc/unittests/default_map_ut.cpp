@@ -9,7 +9,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TDefaultMap, Common)
+TEST(TDefaultMapTest, Common)
 {
     TDefaultMap<THashMap<int, TString>> defaultMap("Hello");
     EXPECT_EQ(defaultMap[1], "Hello");

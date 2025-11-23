@@ -2498,12 +2498,11 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto opAggregate = TKqpOpAggregate(input);
 
-    THashMap<TString, std::pair<TString, TString>> aggTraitsMap;
+    THashMap<TString, TString> aggTraitsMap;
     for (const auto& traits : opAggregate.AggregationTraitsList()) {
         const auto originalColName = TString(traits.OriginalColName());
         const auto aggFuncName = TString(traits.AggregationFunction());
-        const auto resultColName = TString(traits.ResultColName());
-        aggTraitsMap[originalColName] = {resultColName, aggFuncName};
+        aggTraitsMap[originalColName] = aggFuncName;
     }
 
     THashSet<TString> keyColumns;
@@ -2516,17 +2515,22 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
         // The type of the column could be changed after aggregation.
         const auto itemName = itemType->GetName();
         if (auto it = aggTraitsMap.find(itemName); it != aggTraitsMap.end()) {
-            const auto& resultColName = it->second.first;
-            const auto& aggFunction = it->second.second;
+            const auto& colName = it->first;
+            const auto& aggFunction = it->second;
             const TTypeAnnotationNode* aggFieldType = itemType->GetItemType();
+            TPositionHandle dummyPos;
+
             if (aggFunction == "count") {
                 aggFieldType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
             } else if (aggFunction == "sum") {
-                TPositionHandle dummyPos;
                 Y_ENSURE(GetSumResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx),
                          "Unsupported type for sum aggregation function");
+            } else if (aggFunction == "avg") {
+                Y_ENSURE(GetAvgResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx),
+                         "Unsupported type for avg aggregation function");
             }
-            newItemTypes.push_back(ctx.MakeType<TItemExprType>(resultColName, aggFieldType));
+
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, aggFieldType));
         } else if (keyColumns.contains(itemName)) {
             newItemTypes.push_back(itemType);
         }

@@ -12,6 +12,7 @@
 #include <util/system/execpath.h>
 #include <util/system/shellcommand.h>
 #include <library/cpp/colorizer/output.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #ifndef _win32_
 #include <sys/utsname.h>
@@ -222,13 +223,13 @@ void TYdbUpdater::PrintUpdateMessageIfNeeded(bool forceVersionCheck) {
         return;
     }
     if (MyVersion != LatestVersion) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cerr);
         Cerr << colors.Green() << "(!) New version of YDB CLI is available. Current version: \"" << MyVersion
             << "\", Latest recommended version available: \"" << LatestVersion << "\". Run 'ydb update' command for update. "
             << "You can also disable further version checks with 'ydb version --disable-checks' command."
             << colors.OldColor() << Endl;
     } else if (forceVersionCheck) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cerr);
         Cerr << colors.GreenColor() << "Current version is up to date"
             << colors.OldColor() << Endl;
     }

@@ -4,6 +4,7 @@ SRCS(
     aws.cpp
     cert_format_converter.cpp
     client_command_options.cpp
+    colors.cpp
     command.cpp
     command_utils.cpp
     common.cpp

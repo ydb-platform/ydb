@@ -9,7 +9,7 @@
 using namespace NYdb::NConsoleClient;
 
 Y_UNIT_TEST_SUITE(YqlHighlightTests) {
-    auto Coloring = TColorSchema::Debug();
+    auto Coloring = GetColorSchema("debug");
 
     std::unordered_map<char, TColor> colors = {
         {'k', Coloring.keyword},

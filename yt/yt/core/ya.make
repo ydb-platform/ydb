@@ -242,10 +242,11 @@ SRCS(
 
     utilex/random.cpp
 
+    ypath/helpers.cpp
     ypath/stack.cpp
     ypath/token.cpp
     ypath/tokenizer.cpp
-    ypath/helpers.cpp
+    ypath/trie.cpp
 
     yson/async_consumer.cpp
     yson/async_writer.cpp
@@ -410,6 +411,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         benchmarks
         bus/benchmarks
+        ypath/benchmarks
         yson/benchmark
         ytree/benchmarks
     )

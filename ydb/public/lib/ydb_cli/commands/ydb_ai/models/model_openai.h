@@ -8,7 +8,7 @@ namespace NYdb::NConsoleClient::NAi {
 
 struct TOpenAiModelSettings {
     TString BaseUrl;  // AI-TODO KIKIMR-24211 add default value
-    TString ModelId;
+    std::optional<TString> ModelId;
     TString ApiKey;
 };
 

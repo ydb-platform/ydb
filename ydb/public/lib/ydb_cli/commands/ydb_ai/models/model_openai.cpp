@@ -118,7 +118,10 @@ public:
         }
 
         NJson::TJsonValue bodyJson;
-        bodyJson["model"] = Settings.ModelId;
+
+        if (Settings.ModelId) {
+            bodyJson["model"] = *Settings.ModelId;
+        }
 
         auto& conversationJson = bodyJson["messages"].SetType(NJson::JSON_ARRAY).GetArraySafe();
         for (const auto& part : Conversation) {
@@ -172,6 +175,11 @@ public:
 
         ValidateJsonType(resultJson, NJson::JSON_MAP);
 
+        const auto& resultMap = resultJson.GetMap();
+        if (const auto it = resultMap.find("response"); it != resultMap.end()) {
+            resultJson = it->second;
+        }
+
         const auto& choices = ValidateJsonKey(resultJson, "choices");
         ValidateJsonType(choices, NJson::JSON_ARRAY, "choices");
         ValidateJsonArraySize(choices, 1, "choices");
@@ -183,25 +191,25 @@ public:
         const auto& message = ValidateJsonKey(choiceVal, "message", "choices[0]");
         ValidateJsonType(message, NJson::JSON_MAP, "choices[0].message");
 
-        const auto& content = ValidateJsonKey(message, "content", "choices[0].message");
-        const auto& tollsCalls = ValidateJsonKey(message, "tool_calls", "choices[0].message");
-
-        if (content.GetType() == NJson::JSON_NULL && tollsCalls.GetType() == NJson::JSON_NULL) {
+        const auto& messageMap = message.GetMap();
+        const auto* content = messageMap.FindPtr("content");
+        const auto* tollsCalls = messageMap.FindPtr("tool_calls");
+        if ((!content || content->GetType() == NJson::JSON_NULL) && (!tollsCalls || tollsCalls->GetType() == NJson::JSON_NULL)) {
             throw yexception() << "Response of model does not contain 'choices[0].message.content' or 'choices[0].message.tool_calls' fields, got response: " << result;
         }
 
         TResponse response;
 
-        if (content.GetType() != NJson::JSON_NULL) {
-            ValidateJsonType(content, NJson::JSON_STRING, "choices[0].message.content");
-            response.Text = content.GetString();
+        if (content && content->GetType() != NJson::JSON_NULL) {
+            ValidateJsonType(*content, NJson::JSON_STRING, "choices[0].message.content");
+            response.Text = content->GetString();
         }
 
-        if (tollsCalls.GetType() != NJson::JSON_NULL) {
-            ValidateJsonType(tollsCalls, NJson::JSON_ARRAY, "choices[0].message.tool_calls");
-            ValidateJsonArraySize(tollsCalls, 1, "choices[0].message.tool_calls");
+        if (tollsCalls && tollsCalls->GetType() != NJson::JSON_NULL) {
+            ValidateJsonType(*tollsCalls, NJson::JSON_ARRAY, "choices[0].message.tool_calls");
+            ValidateJsonArraySize(*tollsCalls, 1, "choices[0].message.tool_calls");
 
-            const auto& toolCall = tollsCalls.GetArray()[0];
+            const auto& toolCall = tollsCalls->GetArray()[0];
             ValidateJsonType(toolCall, NJson::JSON_MAP, "choices[0].message.tool_calls[0]");
 
             const auto& function = ValidateJsonKey(toolCall, "function", "choices[0].message.tool_calls[0]");
@@ -239,20 +247,20 @@ public:
 private:
     void ValidateJsonType(const NJson::TJsonValue& value, NJson::EJsonValueType expectedType, const std::optional<TString>& fieldName = std::nullopt) const {
         if (const auto valueType = value.GetType(); valueType != expectedType) {
-            throw yexception() << "Response" << (fieldName ? " field '" + *fieldName + "'" : "") << " of model has unexpected type: " << valueType << ", expected type: " << expectedType;
+            throw yexception() << "Response" << (fieldName ? " field '" + *fieldName + "'" : "") << " of model has unexpected type: " << valueType << ", expected type: " << expectedType << ", got response: " << value;
         }
     }
 
     void ValidateJsonArraySize(const NJson::TJsonValue& value, size_t expectedSize, const std::optional<TString>& fieldName = std::nullopt) const {
         if (const auto valueSize = value.GetArray().size(); valueSize != expectedSize) {
-            throw yexception() << "Response" << (fieldName ? " field '" + *fieldName + "'" : "") << " of model has unexpected size: " << valueSize << ", expected size: " << expectedSize;
+            throw yexception() << "Response" << (fieldName ? " field '" + *fieldName + "'" : "") << " of model has unexpected size: " << valueSize << ", expected size: " << expectedSize << ", got response: " << value;
         }
     }
 
     const NJson::TJsonValue& ValidateJsonKey(const NJson::TJsonValue& value, const TString& key, const std::optional<TString>& fieldName = std::nullopt) const {
         const auto* output = value.GetMap().FindPtr(key);
         if (!output) {
-            throw yexception() << "Response of model does not contain '" << key << "' field" << (fieldName ? " in '" + *fieldName + "'" : "");
+            throw yexception() << "Response of model does not contain '" << key << "' field" << (fieldName ? " in '" + *fieldName + "'" : "") << ", got response: " << value;
         }
 
         return *output;

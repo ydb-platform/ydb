@@ -34,9 +34,17 @@ int TCommandAi::Run(TConfig& config) {
 
     // AI-TODO: KIKIMR-24202 - robust file creation
     NAi::TLineReader lineReader("ydb-ai> ", (TFsPath(HomeDir) / ".ydb-ai/history").GetPath());
+    
+    // DeepSeek
+    // const auto model = NAi::CreateOpenAiModel({
+    //     .BaseUrl = "https://api.eliza.yandex.net/raw/internal/deepseek/v1", // AI-TODO: KIKIMR-24214 -- configure it
+    //     .ModelId = "deepseek-0324", // AI-TODO: KIKIMR-24214 -- configure it
+    //     .ApiKey = GetEnv("MODEL_TOKEN"), // AI-TODO: KIKIMR-24214 -- configure it
+    // });
+
+    // YandexGPT Pro
     const auto model = NAi::CreateOpenAiModel({
-        .BaseUrl = "https://api.eliza.yandex.net/raw/internal/deepseek/v1", // AI-TODO: KIKIMR-24214 -- configure it
-        .ModelId = "deepseek-0324", // AI-TODO: KIKIMR-24214 -- configure it
+        .BaseUrl = "https://api.eliza.yandex.net/internal/zeliboba/32b_aligned_quantized_202506/generative/v1", // AI-TODO: KIKIMR-24214 -- configure it
         .ApiKey = GetEnv("MODEL_TOKEN"), // AI-TODO: KIKIMR-24214 -- configure it
     });
 

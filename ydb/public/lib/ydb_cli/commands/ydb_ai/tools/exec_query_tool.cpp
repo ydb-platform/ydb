@@ -16,8 +16,11 @@ public:
     {
         NJson::TJsonValue sqlParam;
         sqlParam["type"] = "string";
+        sqlParam["description"] = "SQL query";  // AI-TODO: proper description
 
-        ParametersSchema["sql"] = sqlParam;
+        ParametersSchema["properties"]["sql"] = sqlParam;
+        ParametersSchema["type"] = "object";
+        ParametersSchema["required"][0] = "sql";
     }
 
     TString GetName() const final {
@@ -46,6 +49,7 @@ public:
 
         // AI-TODO: proper error printing
         if (!result.IsSuccess()) {
+            Cerr << "\n!! Execute query error [" << result.GetStatus() << "]: " << result.GetIssues().ToString() << Endl;
             return TStringBuilder() << "Error executing SQL query, status: " << result.GetStatus() << ", issues: " << result.GetIssues().ToString();
         }
 

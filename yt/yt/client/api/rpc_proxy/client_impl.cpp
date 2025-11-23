@@ -1516,6 +1516,29 @@ TFuture<TSharedRef> TClient::GetJobFailContext(
     }));
 }
 
+TFuture<std::vector<TJobTraceMeta>> TClient::ListJobTraces(
+    const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+    const NJobTrackerClient::TJobId jobId,
+    const TListJobTracesOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.ListJobTraces();
+    SetTimeoutOptions(*req, options);
+
+    NScheduler::ToProto(req, operationIdOrAlias);
+    ToProto(req->mutable_job_id(), jobId);
+
+    if (options.PerProcess) {
+        req->set_per_process(*options.PerProcess);
+    }
+    req->set_limit(options.Limit);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListJobTracesPtr& rsp) {
+        return FromProto<std::vector<TJobTraceMeta>>(rsp->traces());
+    }));
+}
+
 TFuture<TListOperationsResult> TClient::ListOperations(
     const TListOperationsOptions& options)
 {

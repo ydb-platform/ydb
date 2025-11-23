@@ -307,6 +307,7 @@ public:
         REGISTER_ALL(TGetJobInputPathsCommand,             "get_job_input_paths",             Null,       Structured, false, true );
         REGISTER_ALL(TGetJobStderrCommand,                 "get_job_stderr",                  Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobTraceCommand,                  "get_job_trace",                   Null,       Binary,     false, true );
+        REGISTER_ALL(TListJobTracesCommand,                "list_job_traces",                 Null,       Structured, false, false );
         REGISTER_ALL(TGetJobFailContextCommand,            "get_job_fail_context",            Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobSpecCommand,                   "get_job_spec",                    Null,       Structured, false, true );
         REGISTER_ALL(TListOperationEventsCommand,          "list_operation_events",           Null,       Structured, false, false);

@@ -207,6 +207,26 @@ enum EJobState
     JS_NONE = 8;
 }
 
+enum EJobTraceProgress
+{
+    JTP_IN_PROGRESS = 0;
+    JTP_FINISHED = 1;
+}
+
+enum EJobTraceHealth
+{
+    JTH_HEALTHY = 0;
+    JTH_UNHEALTHY = 1;
+}
+
+enum EJobTraceState
+{
+    JTS_STARTED = 0;
+    JTS_FINISHED = 1;
+    JTS_DROPPED = 2;
+    JTS_ORPHANED = 3;
+}
+
 enum EJobSortField
 {
     JSF_NONE = 0;
@@ -2598,6 +2618,25 @@ message TRspListJobs
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqListJobTraces
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    required NYT.NProto.TGuid job_id = 3;
+
+    optional bool per_process = 4;
+    optional int64 limit = 5 [default = 1000];
+}
+
+message TRspListJobTraces
+{
+    repeated TJobTrace traces = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqGetJob
 {
     oneof operation_id_or_alias {
@@ -3319,6 +3358,24 @@ message TOperationEvent
     optional string incarnation = 3;
     optional EIncarnationSwitchReason incarnation_switch_reason = 4;
     optional bytes incarnation_switch_info = 5; // YSON
+}
+
+message TJobTrace
+{
+    message TProcessTraceMeta
+    {
+        optional EJobTraceState state = 1;
+    }
+
+    message TPerProcessTraceMeta
+    {
+        map<int32, TProcessTraceMeta> pids = 1;
+    }
+
+    optional NYT.NProto.TGuid trace_id = 1;
+    optional EJobTraceProgress progress = 2;
+    optional EJobTraceHealth health = 3;
+    optional TPerProcessTraceMeta process_trace_metas = 4;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

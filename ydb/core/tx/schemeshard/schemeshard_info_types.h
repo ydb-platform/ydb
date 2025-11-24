@@ -3389,6 +3389,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui32 Rounds = 0;
         ui32 OverlapClusters = 0;
         double OverlapRatio = 0;
+        bool IsPrefixed = false;
 
         // progress
         enum EState : ui32 {
@@ -3396,6 +3397,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Reshuffle,
             MultiLocal,
             Recompute,
+            Filter,
+            FilterBorders,
         };
         ui32 Level = 1;
         ui32 Round = 0;
@@ -3410,6 +3413,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         NTableIndex::NKMeans::TClusterId ChildBegin = 1;  // included
         NTableIndex::NKMeans::TClusterId Child = ChildBegin;
+
+        TVector<TString> FilterBorderRows;
 
         ui64 TableSize = 0;
 
@@ -3436,6 +3441,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TString WriteTo(bool needsBuildTable = false) const;
         TString ReadFrom() const;
+        int NextBuildIndex() const;
+        const char* NextBuildSuffix() const;
 
         std::pair<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId> RangeToBorders(const TSerializedTableRange& range) const;
 
@@ -3854,6 +3861,7 @@ public:
                     Y_ENSURE(NKikimr::NKMeans::ValidateSettings(desc.settings(), createError), createError);
                     indexInfo->KMeans.K = desc.settings().clusters();
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
+                    indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
                     indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
                     indexInfo->KMeans.OverlapClusters = desc.settings().overlap_clusters()
                         ? desc.settings().overlap_clusters()

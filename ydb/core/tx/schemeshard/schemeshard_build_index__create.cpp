@@ -267,6 +267,7 @@ private:
             buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
             buildInfo.KMeans.K = settings.clusters();
             buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + settings.levels();
+            buildInfo.KMeans.IsPrefixed = buildInfo.IsBuildPrefixedVectorIndex();
             buildInfo.KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
             buildInfo.KMeans.OverlapClusters = settings.overlap_clusters()
                 ? settings.overlap_clusters()

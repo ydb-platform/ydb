@@ -61,4 +61,4 @@ jobs:
           ./.github/scripts/cherry_pick_v2.py \
             --commits="${{ inputs.commits }}" \
             --target-branches="${{ inputs.target_branches }}" \
-            ${{ inputs.allow_unmerged && '--allow-unmerged' || '' }}
+            ${{ inputs.allow_unmerged == true && '--allow-unmerged' || '' }}

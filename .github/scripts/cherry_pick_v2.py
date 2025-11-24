@@ -8,7 +8,7 @@ import argparse
 import re
 from typing import List, Optional, Tuple
 from dataclasses import dataclass, field
-from github import Github, GithubException
+from github import Github, GithubException, PullRequest
 import requests
 
 # Import PR template and categories from validate_pr_description action
@@ -87,7 +87,7 @@ class PRContext:
 class BackportResult:
     """Результат backport для одной ветки"""
     target_branch: str
-    pr = None  # PullRequest object
+    pr: Optional[PullRequest] = None
     has_conflicts: bool = False
     conflict_files: List[ConflictInfo] = field(default_factory=list)
     error: Optional[str] = None
@@ -296,7 +296,7 @@ class ConflictHandler:
                         break
                     if next_line.startswith('hint:') or next_line.startswith('error:') or not next_line:
                         break
-                    if next_line.startswith('Version') or next_line:
+                    if next_line:
                         conflict_msg += ' ' + next_line
                     j += 1
                 conflict_messages.append(conflict_msg)
@@ -553,6 +553,25 @@ class PRContentBuilder:
         """Извлекает только содержимое Changelog entry"""
         return self.extract_changelog_entry(pr_body, stop_at_category=True)
     
+    def _format_items_list(self, items: List, item_type: str, format_func) -> str:
+        """Форматирует список элементов в строку с правильной грамматикой
+        
+        Args:
+            items: Список элементов
+            item_type: Тип элемента в единственном числе (например, "PR", "commit")
+            format_func: Функция для форматирования одного элемента (например, lambda p: f"#{p.number}")
+        
+        Returns:
+            Отформатированная строка: "PR #123" или "PRs #123, #456"
+        """
+        if not items:
+            return ""
+        if len(items) == 1:
+            return f"{item_type} {format_func(items[0])}"
+        else:
+            formatted = ', '.join([format_func(item) for item in items])
+            return f"{item_type}s {formatted}"
+    
     def get_changelog_info(self, pull_requests: List) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """Получает Changelog информацию из всех PR"""
         categories = []
@@ -623,19 +642,20 @@ class PRContentBuilder:
         if merged_entry_content:
             changelog_entry = merged_entry_content
         elif not changelog_entry_text:
-            if len(context.source_info.pull_requests) == 1:
-                pr_num = context.source_info.pull_requests[0].number
-                changelog_entry = f"Backport of PR #{pr_num} to `{branch_desc}`"
-            elif len(context.source_info.pull_requests) > 1:
-                pr_nums = ', '.join([f"#{p.number}" for p in context.source_info.pull_requests])
-                changelog_entry = f"Backport of PRs {pr_nums} to `{branch_desc}`"
+            # Используем PR или commits
+            if context.source_info.pull_requests:
+                items_str = self._format_items_list(
+                    context.source_info.pull_requests,
+                    "PR",
+                    lambda p: f"#{p.number}"
+                )
             else:
-                # Нет связанных PR - используем информацию о commits
-                if len(context.source_info.commit_shas) == 1:
-                    changelog_entry = f"Backport of commit {context.source_info.commit_shas[0][:7]} to `{branch_desc}`"
-                else:
-                    commit_refs = ', '.join([sha[:7] for sha in context.source_info.commit_shas])
-                    changelog_entry = f"Backport of commits {commit_refs} to `{branch_desc}`"
+                items_str = self._format_items_list(
+                    context.source_info.commit_shas,
+                    "commit",
+                    lambda sha: sha[:7]
+                )
+            changelog_entry = f"Backport of {items_str} to `{branch_desc}`"
         else:
             changelog_entry = changelog_entry_text
         
@@ -803,18 +823,26 @@ class CommentManager:
                         new_results += f" - [workflow run]({workflow_url})"
                 elif total_branches == 1 and len(results) == 1:
                     result = results[0]
-                    status = "draft PR" if result.has_conflicts else "PR"
-                    new_results = f"Backported to `{result.target_branch}`: {status} {result.pr.html_url}"
-                    if result.has_conflicts:
-                        new_results += " (contains conflicts requiring manual resolution)"
-                    if workflow_url:
-                        new_results += f" - [workflow run]({workflow_url})"
+                    if result.pr:
+                        status = "draft PR" if result.has_conflicts else "PR"
+                        new_results = f"Backported to `{result.target_branch}`: {status} {result.pr.html_url}"
+                        if result.has_conflicts:
+                            new_results += " (contains conflicts requiring manual resolution)"
+                        if workflow_url:
+                            new_results += f" - [workflow run]({workflow_url})"
+                    else:
+                        new_results = f"Backported to `{result.target_branch}`: failed"
+                        if workflow_url:
+                            new_results += f" - [workflow run]({workflow_url})"
                 else:
                     new_results = "Backport results:\n"
                     for result in results:
-                        status = "draft PR" if result.has_conflicts else "PR"
-                        conflict_note = " (contains conflicts requiring manual resolution)" if result.has_conflicts else ""
-                        new_results += f"- `{result.target_branch}`: {status} {result.pr.html_url}{conflict_note}\n"
+                        if result.pr:
+                            status = "draft PR" if result.has_conflicts else "PR"
+                            conflict_note = " (contains conflicts requiring manual resolution)" if result.has_conflicts else ""
+                            new_results += f"- `{result.target_branch}`: {status} {result.pr.html_url}{conflict_note}\n"
+                        else:
+                            new_results += f"- `{result.target_branch}`: failed\n"
                     for target_branch, reason in skipped_branches:
                         new_results += f"- `{target_branch}`: skipped ({reason})\n"
                     if workflow_url:

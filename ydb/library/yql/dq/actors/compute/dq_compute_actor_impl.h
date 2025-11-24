@@ -778,18 +778,6 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
             sourceInfo.ResumeByWatermark(watermark);
         }
-
-        // XXX Does nothing in async CA, not used (yet) in sync CA
-        for (auto& [id, channelInfo] : InputChannelsMap) {
-            if (channelInfo.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED) {
-                continue;
-            }
-
-            const auto channelId = id;
-            CA_LOG_T("Resume input channel " << channelId << " by completed watermark");
-
-            channelInfo.ResumeByWatermark(watermark);
-        }
     }
 
     void ResumeInputsByCheckpoint() override final {
@@ -883,26 +871,12 @@ protected:
             return PendingCheckpoint.has_value();
         }
 
-        void Pause(TInstant watermark) {
-            YQL_ENSURE(WatermarksMode != NDqProto::WATERMARKS_MODE_DISABLED);
-
-            if (Channel) {
-                Channel->AddWatermark(watermark);
-            }
-        }
-
         void Pause(const NDqProto::TCheckpoint& checkpoint) {
             YQL_ENSURE(!PendingCheckpoint);
             YQL_ENSURE(CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
             PendingCheckpoint = checkpoint;
             if (Channel) {  // async actor doesn't hold channels, so channel is paused in task runner actor
                 Channel->PauseByCheckpoint();
-            }
-        }
-
-        void ResumeByWatermark(TInstant watermark) {
-            if (Channel) {
-                Channel->ResumeByWatermark(watermark);
             }
         }
 

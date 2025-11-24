@@ -359,7 +359,7 @@ public:
                 }
 
                 auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
-                channel->Push(std::move(data), Nothing());
+                channel->Push(std::move(data));
                 break;
             }
             case NDqProto::TCommandHeader::PUSH_SOURCE: {
@@ -381,7 +381,7 @@ public:
                                                         (NDqProto::EDataTransportVersion)batch.Proto.GetTransportVersion(), NDq::FromProto(batch.Proto.GetValuePackerVersion()));
                 dataDeserializer.Deserialize(std::move(batch), source->GetInputType(), buffer);
 
-                source->Push(std::move(buffer), request.GetSpace(), Nothing());
+                source->Push(std::move(buffer), request.GetSpace());
                 break;
             }
             case NDqProto::TCommandHeader::FINISH: {

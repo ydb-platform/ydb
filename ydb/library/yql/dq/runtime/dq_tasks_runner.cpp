@@ -1047,10 +1047,12 @@ private:
                     // only for sync ca
                     if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
                         const auto watermark = WatermarksTracker->GetPendingWatermark();
+                        WatermarksTracker->PopPendingWatermark();
+
+                        Y_DEBUG_ABORT_UNLESS(watermark.Defined());
                         NDqProto::TWatermark watermarkRequest;
                         watermarkRequest.SetTimestampUs(watermark->MicroSeconds());
                         AllocatedHolder->Output->Consume(std::move(watermarkRequest));
-                        WatermarksTracker->PopPendingWatermark();
                     }
                     return ERunStatus::PendingInput;
                 }

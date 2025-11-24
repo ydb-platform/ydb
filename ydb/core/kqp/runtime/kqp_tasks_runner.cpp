@@ -198,7 +198,7 @@ std::pair<bool, bool> TKqpTasksRunner::TransferData(ui64 fromTask, ui64 fromChan
             break;
         }
         transferred = true;
-        dst->Push(std::move(data), Nothing());
+        dst->Push(std::move(data));
     }
 
     if (src->IsFinished()) {

@@ -34,7 +34,11 @@ public:
     }
 
 private:
-    void Push(TDqSerializedBatch&&, TMaybe<TInstant>) override {
+    void Push(TDqSerializedBatch&&) override {
+        Y_ABORT("Not implemented");
+    }
+
+    void Push(TInstant) override {
         Y_ABORT("Not implemented");
     }
 };
@@ -137,7 +141,7 @@ public:
         return Impl.Pop(batch, watermark);
     }
 
-    void Push(TDqSerializedBatch&& data, TMaybe<TInstant> watermark) override {
+    void Push(TDqSerializedBatch&& data) override {
         YQL_ENSURE(!Impl.IsFinished(), "input channel " << Impl.PushStats.ChannelId << " already finished");
         if (Y_UNLIKELY(data.Proto.GetChunks() == 0)) {
             return;
@@ -159,10 +163,12 @@ public:
         }
 
         DataForDeserialize.emplace_back(std::move(data));
+    }
 
-        if (watermark) {
-            DataForDeserialize.emplace_back(*watermark);
-        }
+    void Push(TInstant watermark) override {
+        YQL_ENSURE(!Impl.IsFinished(), "input channel " << Impl.PushStats.ChannelId << " already finished");
+
+        DataForDeserialize.emplace_back(watermark);
     }
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {

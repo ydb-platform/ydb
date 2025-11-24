@@ -975,7 +975,6 @@ private:
             if (WatermarksTracker.NotifyInChannelWatermarkReceived( channelId, *watermark)) {
                 CA_LOG_T("Pause input channel " << channelId << " because of watermark");
                 ScheduleIdlenessCheck();
-                inputChannel->Pause(*watermark); // XXX does nothing in async CA
             }
         }
 

@@ -108,7 +108,14 @@ protected: //TDqComputeActorChannels::ICallbacks
             batch.Proto = std::move(*channelData.Proto.MutableData());
             batch.Payload = std::move(channelData.Payload);
             auto guard = TBase::BindAllocator();
-            channel->Push(std::move(batch), Nothing());
+            channel->Push(std::move(batch));
+        }
+
+        if (channelData.Proto.HasWatermark()) {
+            Y_ABORT_UNLESS(inputChannel->WatermarksMode != NDqProto::WATERMARKS_MODE_DISABLED);
+            const auto& watermarkRequest = channelData.Proto.GetWatermark();
+            const auto watermark = TInstant::MicroSeconds(watermarkRequest.GetTimestampUs());
+            channel->Push(watermark);
         }
 
         if (channelData.Proto.HasCheckpoint()) {

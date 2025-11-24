@@ -225,6 +225,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
     bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
     bool EnableDqHashCombineByDefault = true;
+    bool EnableWatermarks = false;
 
     bool Antlr4ParserIsAmbiguityError = false;
 

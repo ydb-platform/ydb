@@ -125,7 +125,10 @@ public:
     using TComputeActorAsyncInputHelper::TComputeActorAsyncInputHelper;
 
     void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TMaybe<TInstant> watermark, i64 space, bool finished) override {
-        Buffer->Push(std::move(batch), space, watermark);
+        Buffer->Push(std::move(batch), space);
+        if (watermark) {
+            Buffer->Push(*watermark);
+        }
         if (finished) {
             Buffer->Finish();
             Finished = true;

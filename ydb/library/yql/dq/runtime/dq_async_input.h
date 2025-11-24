@@ -19,8 +19,9 @@ public:
     virtual ui64 GetInputIndex() const = 0;
     virtual const TDqAsyncInputBufferStats& GetPushStats() const = 0;
 
-    virtual void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, TMaybe<TInstant> watermark) = 0;
+    virtual void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) = 0;
     virtual void Push(TDqSerializedBatch&& batch, i64 space) = 0;
+    virtual void Push(TInstant watermark) = 0;
 
     virtual void Finish() = 0;
 

@@ -146,7 +146,7 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId, c
                     NDq::TDqSerializedBatch batch;
                     batch.Proto = std::move(*(channelData->MutableData()));
                     MKQL_ENSURE_S(!batch.IsOOB());
-                    channel->Push(std::move(batch), Nothing());
+                    channel->Push(std::move(batch));
 
                     MKQL_ENSURE_S(channelData->GetFinished());
                     channel->Finish();

@@ -52,8 +52,3 @@ ALL_CATEGORIES = FOR_CHANGELOG_CATEGORIES + NOT_FOR_CHANGELOG_CATEGORIES
 def get_category_section_template() -> str:
     """Get the category section template as a string (for cherry_pick.py)"""
     return "\n".join([f"* {cat}" for cat in ALL_CATEGORIES])
-
-
-def get_category_section_for_selected(category: str) -> str:
-    """Get category section with only selected category marked"""
-    return f"* {category}"

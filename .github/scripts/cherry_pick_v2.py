@@ -30,7 +30,7 @@ except ImportError as e:
 
 @dataclass
 class ConflictInfo:
-    """Информация о конфликте в файле"""
+    """Information about a conflict in a file"""
     file_path: str
     line: Optional[int] = None
     message: Optional[str] = None
@@ -38,17 +38,17 @@ class ConflictInfo:
 
 @dataclass
 class CherryPickResult:
-    """Результат выполнения git cherry-pick"""
+    """Result of git cherry-pick execution"""
     success: bool
     has_conflicts: bool
-    is_empty: bool = False  # True если "nothing to commit"
-    raw_output: str = ""  # Сырой вывод git команды
+    is_empty: bool = False  # True if "nothing to commit"
+    raw_output: str = ""  # Raw output of git command
     conflict_files: List[ConflictInfo] = field(default_factory=list)
 
 
 @dataclass
 class SourceInfo:
-    """Информация об исходных PR/commits для backport"""
+    """Information about source PRs/commits for backport"""
     titles: List[str] = field(default_factory=list)
     body_items: List[str] = field(default_factory=list)
     pull_requests: List = field(default_factory=list)
@@ -58,16 +58,16 @@ class SourceInfo:
 
 @dataclass
 class PRContext:
-    """Контекст для генерации PR body"""
+    """Context for PR body generation"""
     target_branch: str
     dev_branch_name: str
     repo_name: str
     pr_number: Optional[int] = None
     
-    # Source info - единственный источник данных
+    # Source info - single source of truth
     source_info: SourceInfo
     
-    # Changelog (вычисляется в build_body)
+    # Changelog (computed in build_body)
     changelog_category: Optional[str] = None
     changelog_entry: str = ""
     
@@ -76,7 +76,7 @@ class PRContext:
     conflict_files: List[ConflictInfo] = field(default_factory=list)
     
     # Logs
-    cherry_pick_logs: List[str] = field(default_factory=list)  # Сырые логи git cherry-pick
+    cherry_pick_logs: List[str] = field(default_factory=list)  # Raw git cherry-pick logs
     
     # Workflow
     workflow_url: Optional[str] = None
@@ -85,7 +85,7 @@ class PRContext:
 
 @dataclass
 class BackportResult:
-    """Результат backport для одной ветки"""
+    """Backport result for a single branch"""
     target_branch: str
     pr: Optional[PullRequest] = None
     has_conflicts: bool = False
@@ -99,7 +99,7 @@ class BackportResult:
 # ============================================================================
 
 class CommitResolver:
-    """Определяет и резолвит commit references (SHA, short SHA, PR number)"""
+    """Resolves and expands commit references (SHA, short SHA, PR number)"""
     
     MIN_SHA_LENGTH = 7
     FULL_SHA_LENGTH = 40
@@ -109,25 +109,25 @@ class CommitResolver:
         self.logger = logger
     
     def is_likely_sha(self, ref: str) -> bool:
-        """Проверяет, похоже ли на SHA (hexadecimal, правильная длина)"""
+        """Checks if string looks like SHA (hexadecimal, correct length)"""
         if not ref:
             return False
-        # Проверяем что это hex и правильная длина
+        # Check that it's hex and correct length
         try:
-            int(ref, 16)  # Проверка hex
+            int(ref, 16)  # Hex validation
             return len(ref) >= self.MIN_SHA_LENGTH and len(ref) <= self.FULL_SHA_LENGTH
         except ValueError:
             return False
     
     def expand_sha(self, ref: str) -> str:
-        """Расширяет short SHA до full SHA с валидацией"""
+        """Expands short SHA to full SHA with validation"""
         if len(ref) == self.FULL_SHA_LENGTH and self.is_likely_sha(ref):
-            return ref  # Уже полный SHA
+            return ref  # Already full SHA
         
         if not self.is_likely_sha(ref):
-            raise ValueError(f"'{ref}' не похож на SHA (должен быть hex, минимум {self.MIN_SHA_LENGTH} символов)")
+            raise ValueError(f"'{ref}' does not look like a SHA (must be hex, minimum {self.MIN_SHA_LENGTH} characters)")
         
-        # Пробуем GitHub API (работает до клонирования)
+        # Try GitHub API (works before cloning)
         try:
             commits = self.repo.get_commits(sha=ref)
             if commits.totalCount > 0:
@@ -137,7 +137,7 @@ class CommitResolver:
         except Exception as e:
             self.logger.debug(f"Failed to find commit via GitHub API: {e}")
         
-        # Fallback: git rev-parse (требует клонированный репозиторий)
+        # Fallback: git rev-parse (requires cloned repository)
         try:
             result = subprocess.run(
                 ['git', 'rev-parse', ref],
@@ -151,17 +151,17 @@ class CommitResolver:
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             pass
         
-        raise ValueError(f"Не удалось найти commit для '{ref}'")
+        raise ValueError(f"Failed to find commit for '{ref}'")
 
 
 class GitRepository:
-    """Абстракция над git командами"""
+    """Abstraction over git commands"""
     
     def __init__(self, logger):
         self.logger = logger
     
     def git_run(self, *args):
-        """Выполняет git команду с логированием"""
+        """Executes git command with logging"""
         args = ["git"] + list(args)
         self.logger.info("Executing git command: %r", args)
         try:
@@ -181,31 +181,31 @@ class GitRepository:
         return output
     
     def clone(self, repo_url: str, target_dir: str):
-        """Клонирует репозиторий"""
+        """Clones repository"""
         self.git_run("clone", repo_url, "-c", "protocol.version=2", target_dir)
     
     def fetch(self, remote: str, branch: str):
-        """Fetch ветки"""
+        """Fetches branch"""
         self.git_run("fetch", remote, branch)
     
     def reset_hard(self):
-        """Hard reset текущей ветки"""
+        """Hard reset current branch"""
         self.git_run("reset", "--hard")
     
     def checkout_branch(self, branch: str, from_branch: Optional[str] = None):
-        """Checkout ветки (создает если не существует)"""
+        """Checkout branch (creates if doesn't exist)"""
         if from_branch:
             self.git_run("checkout", "-B", branch, from_branch)
         else:
             self.git_run("checkout", branch)
     
     def create_branch(self, branch_name: str, from_branch: str):
-        """Создает новую ветку от указанной ветки"""
+        """Creates new branch from specified branch"""
         self.git_run("checkout", "-b", branch_name, from_branch)
         return branch_name
     
     def cherry_pick(self, commit_sha: str) -> CherryPickResult:
-        """Cherry-pick commit с сохранением полного вывода"""
+        """Cherry-pick commit with full output preservation"""
         try:
             result = subprocess.run(
                 ['git', 'cherry-pick', commit_sha],
@@ -224,14 +224,14 @@ class GitRepository:
             output = (e.stdout or '') + (e.stderr or '')
             output_lower = output.lower()
             
-            # "nothing to commit" или "empty" - не ошибка, просто пустой коммит
+            # "nothing to commit" or "empty" - not an error, just empty commit
             is_empty = "nothing to commit" in output_lower or "empty" in output_lower
             has_conflicts = "conflict" in output_lower
             
             if is_empty:
-                # НЕ делаем --skip, просто возвращаем результат
+                # Do NOT do --skip, just return result
                 return CherryPickResult(
-                    success=True,  # Считаем успехом
+                    success=True,  # Consider it success
                     has_conflicts=False,
                     is_empty=True,
                     raw_output=output
@@ -245,7 +245,7 @@ class GitRepository:
                     raw_output=output
                 )
             
-            # Другая ошибка - пробрасываем дальше
+            # Other error - re-raise
             raise
     
     def add_all(self):
@@ -257,7 +257,7 @@ class GitRepository:
         self.git_run("commit", "-m", message)
     
     def push(self, branch: str, set_upstream: bool = True):
-        """Push ветки"""
+        """Push branch"""
         if set_upstream:
             self.git_run("push", "--set-upstream", "origin", branch)
         else:
@@ -268,12 +268,12 @@ class GitRepository:
         try:
             self.git_run("cherry-pick", "--abort")
         except subprocess.CalledProcessError:
-            # Может быть не в состоянии cherry-pick
+            # May not be in cherry-pick state
             pass
 
 
 class ConflictHandler:
-    """Обработка конфликтов при cherry-pick"""
+    """Handles conflicts during cherry-pick"""
     
     CONFLICT_STATUS_CODES = ['UU', 'AA', 'DD', 'DU', 'UD', 'AU', 'UA']
     
@@ -282,7 +282,7 @@ class ConflictHandler:
         self.logger = logger
     
     def extract_conflict_messages(self, git_output: str) -> List[str]:
-        """Извлекает CONFLICT сообщения из git вывода"""
+        """Extracts CONFLICT messages from git output"""
         conflict_messages = []
         lines = git_output.split('\n')
         
@@ -304,7 +304,7 @@ class ConflictHandler:
         return conflict_messages
     
     def find_conflict_message_for_file(self, file_path: str, conflict_messages: List[str]) -> Optional[str]:
-        """Находит сообщение о конфликте для файла"""
+        """Finds conflict message for a file"""
         file_basename = os.path.basename(file_path)
         for msg in conflict_messages:
             if ': ' in msg:
@@ -318,7 +318,7 @@ class ConflictHandler:
         return None
     
     def find_first_conflict_line(self, file_path: str) -> Optional[int]:
-        """Находит первую строку с конфликтом"""
+        """Finds first line with conflict"""
         try:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 for line_num, line in enumerate(f, start=1):
@@ -329,7 +329,7 @@ class ConflictHandler:
         return None
     
     def detect_conflicts(self, git_output: str) -> List[ConflictInfo]:
-        """Обнаруживает конфликты из git status и вывода"""
+        """Detects conflicts from git status and output"""
         conflict_files = []
         conflict_messages = self.extract_conflict_messages(git_output)
         
@@ -360,7 +360,7 @@ class ConflictHandler:
                                     message=conflict_message
                                 ))
                 
-                # Если не нашли через status, пробуем git diff
+                # If not found via status, try git diff
                 if not conflict_files:
                     try:
                         diff_result = subprocess.run(
@@ -397,7 +397,7 @@ class ConflictHandler:
         return conflict_files
     
     def commit_conflicts(self, commit_sha: str, conflict_files: List[ConflictInfo]) -> bool:
-        """Коммитит конфликты для ручного разрешения"""
+        """Commits conflicts for manual resolution"""
         try:
             self.git_repo.add_all()
             self.git_repo.commit(f"BACKPORT-CONFLICT: manual resolution required for commit {commit_sha[:7]}")
@@ -409,7 +409,7 @@ class ConflictHandler:
 
 
 class GitHubClient:
-    """Обертка над GitHub API"""
+    """Wrapper over GitHub API"""
     
     def __init__(self, repo, token, logger):
         self.repo = repo
@@ -417,7 +417,7 @@ class GitHubClient:
         self.logger = logger
     
     def get_linked_issues_graphql(self, pr_number: int) -> List[str]:
-        """Получает связанные issues через GraphQL API"""
+        """Gets linked issues via GraphQL API"""
         query = """
         query($owner: String!, $repo: String!, $prNumber: Int!) {
           repository(owner: $owner, name: $repo) {
@@ -472,27 +472,27 @@ class GitHubClient:
         except Exception as e:
             self.logger.warning(f"Failed to get linked issues via GraphQL for PR #{pr_number}: {e}")
             return []
-    
+
     def get_linked_issues(self, pull_requests: List) -> str:
-        """Получает связанные issues для всех PR"""
+        """Gets linked issues for all PRs"""
         all_issues = []
         
         for pull in pull_requests:
             issues = self.get_linked_issues_graphql(pull.number)
             
-            # Если GraphQL не вернул issues, парсим из PR body
+            # If GraphQL didn't return issues, parse from PR body
             if not issues and pull.body:
                 body_issues = re.findall(r'#(\d+)', pull.body)
                 issues = [f"#{num}" for num in body_issues]
             
             all_issues.extend(issues)
         
-        # Убираем дубликаты
+        # Remove duplicates
         unique_issues = list(dict.fromkeys(all_issues))
         return ' '.join(unique_issues) if unique_issues else 'None'
-    
+
     def create_pr(self, base: str, head: str, title: str, body: str, draft: bool = False):
-        """Создает PR"""
+        """Creates PR"""
         return self.repo.create_pull(
             base=base,
             head=head,
@@ -504,7 +504,7 @@ class GitHubClient:
 
 
 class PRContentBuilder:
-    """Генерация контента для PR (title, body)"""
+    """Generates PR content (title, body)"""
     
     def __init__(self, repo_name: str, github_client: GitHubClient, logger):
         self.repo_name = repo_name
@@ -512,7 +512,7 @@ class PRContentBuilder:
         self.logger = logger
     
     def extract_changelog_category(self, pr_body: str) -> Optional[str]:
-        """Извлекает Changelog category из PR body"""
+        """Extracts Changelog category from PR body"""
         if not pr_body:
             return None
         
@@ -528,9 +528,9 @@ class PRContentBuilder:
                 return cat_clean
         
         return None
-    
+
     def extract_changelog_entry(self, pr_body: str, stop_at_category: bool = False) -> Optional[str]:
-        """Извлекает Changelog entry из PR body"""
+        """Extracts Changelog entry from PR body"""
         if not pr_body:
             return None
         
@@ -548,21 +548,21 @@ class PRContentBuilder:
             return None
         
         return entry
-    
+
     def extract_changelog_entry_content(self, pr_body: str) -> Optional[str]:
-        """Извлекает только содержимое Changelog entry"""
+        """Extracts only Changelog entry content"""
         return self.extract_changelog_entry(pr_body, stop_at_category=True)
     
     def _format_items_list(self, items: List, item_type: str, format_func) -> str:
-        """Форматирует список элементов в строку с правильной грамматикой
+        """Formats list of items into string with correct grammar
         
         Args:
-            items: Список элементов
-            item_type: Тип элемента в единственном числе (например, "PR", "commit")
-            format_func: Функция для форматирования одного элемента (например, lambda p: f"#{p.number}")
+            items: List of items
+            item_type: Item type in singular (e.g., "PR", "commit")
+            format_func: Function to format single item (e.g., lambda p: f"#{p.number}")
         
         Returns:
-            Отформатированная строка: "PR #123" или "PRs #123, #456"
+            Formatted string: "PR #123" or "PRs #123, #456"
         """
         if not items:
             return ""
@@ -573,7 +573,7 @@ class PRContentBuilder:
             return f"{item_type}s {formatted}"
     
     def get_changelog_info(self, pull_requests: List) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-        """Получает Changelog информацию из всех PR"""
+        """Gets Changelog information from all PRs"""
         categories = []
         entry = None
         entry_contents = []
@@ -607,42 +607,42 @@ class PRContentBuilder:
             merged_entry_content = None
         
         return category, entry, merged_entry_content
-    
+
     def build_title(self, target_branch: str, source_info: SourceInfo, has_conflicts: bool = False) -> str:
-        """Генерирует title с CONFLICT если есть конфликты"""
+        """Generates title with CONFLICT if conflicts exist"""
         if len(source_info.titles) == 1:
             base_title = f"[Backport {target_branch}] {source_info.titles[0]}"
         else:
             base_title = f"[Backport {target_branch}] cherry-pick {', '.join(source_info.titles)}"
         
-        # Добавляем CONFLICT в начало если есть конфликты
+        # Add CONFLICT prefix if conflicts exist
         if has_conflicts:
             base_title = f"[CONFLICT] {base_title}"
         
-        # Обрезаем длинные title
+        # Truncate long titles
         if len(base_title) > 200:
             base_title = base_title[:197] + "..."
         
         return base_title
     
     def build_body(self, context: PRContext) -> str:
-        """Генерирует PR body с сырым логом cherry-pick"""
-        # Получаем issues
+        """Generates PR body with raw cherry-pick log"""
+        # Get issues
         issue_refs = self.github_client.get_linked_issues(context.source_info.pull_requests)
         
-        # Форматируем авторов
+        # Format authors
         authors = ', '.join([f"@{author}" for author in set(context.source_info.authors)]) if context.source_info.authors else "Unknown"
         
-        # Получаем changelog информацию
+        # Get changelog information
         changelog_category, changelog_entry_text, merged_entry_content = self.get_changelog_info(context.source_info.pull_requests)
         context.changelog_category = changelog_category
         
-        # Определяем changelog entry
+        # Determine changelog entry
         branch_desc = context.target_branch
         if merged_entry_content:
             changelog_entry = merged_entry_content
         elif not changelog_entry_text:
-            # Используем PR или commits
+            # Use PR or commits
             if context.source_info.pull_requests:
                 items_str = self._format_items_list(
                     context.source_info.pull_requests,
@@ -659,11 +659,11 @@ class PRContentBuilder:
         else:
             changelog_entry = changelog_entry_text
         
-        # Убеждаемся что entry минимум 20 символов
+        # Ensure entry is at least 20 characters
         if len(changelog_entry) < 20:
             changelog_entry = f"Backport to `{branch_desc}`: {changelog_entry}"
         
-        # Для Bugfix категории добавляем issue reference
+        # For Bugfix category add issue reference
         if changelog_category and changelog_category.startswith("Bugfix") and issue_refs and issue_refs != "None":
             has_issue = any(re.search(pattern, changelog_entry) for pattern in ISSUE_PATTERNS)
             if not has_issue:
@@ -671,13 +671,13 @@ class PRContentBuilder:
         
         context.changelog_entry = changelog_entry
         
-        # Строим category section
+        # Build category section
         if changelog_category:
             category_section = f"* {changelog_category}"
         else:
             category_section = get_category_section_template()
         
-        # Строим description section
+        # Build description section
         commits = '\n'.join([f"* {item}" for item in context.source_info.body_items])
         
         description_section = f"#### Original PR(s)\n{commits}\n\n"
@@ -686,7 +686,7 @@ class PRContentBuilder:
         description_section += f"- **Cherry-picked by:** @{context.workflow_triggerer}\n"
         description_section += f"- **Related issues:** {issue_refs}"
         
-        # Добавляем сырой лог git cherry-pick (если есть)
+        # Add raw git cherry-pick log (if exists)
         cherry_pick_log_section = ""
         if context.cherry_pick_logs:
             cherry_pick_log_section = "\n\n### Git Cherry-Pick Log\n\n"
@@ -697,7 +697,7 @@ class PRContentBuilder:
                     cherry_pick_log_section += '\n'
             cherry_pick_log_section += "```\n"
         
-        # Добавляем conflicts section (если есть)
+        # Add conflicts section (if exists)
         conflicts_section = ""
         if context.has_conflicts:
             branch_for_instructions = context.dev_branch_name or context.target_branch
@@ -707,7 +707,7 @@ class PRContentBuilder:
             if context.conflict_files:
                 conflicts_section += "**Files with conflicts:**\n\n"
                 for conflict in context.conflict_files:
-                    # Простая ссылка на файлы в PR (без diff hash)
+                    # Simple link to files in PR (without diff hash)
                     if context.pr_number:
                         file_link = f"https://github.com/{self.repo_name}/pull/{context.pr_number}/files"
                     else:
@@ -728,19 +728,19 @@ git commit -m "Resolved merge conflicts"
 git push
 ```
 
-После разрешения конфликтов:
-1. Поправь title PR (убери `[CONFLICT]` если конфликты разрешены)
-2. Отметь PR как ready for review
+After resolving conflicts:
+1. Fix the PR title (remove `[CONFLICT]` if conflicts are resolved)
+2. Mark PR as ready for review
 """
         
-        # Добавляем workflow link
+        # Add workflow link
         workflow_section = ""
         if context.workflow_url:
             workflow_section = f"\n\n---\n\nPR was created by cherry-pick workflow [run]({context.workflow_url})"
         else:
             workflow_section = "\n\n---\n\nPR was created by cherry-pick script"
         
-        # Собираем полный body
+        # Assemble full body
         pr_body = f"""### Changelog entry <!-- a user-readable short description of the changes that goes to CHANGELOG.md and Release Notes -->
 
 {changelog_entry}
@@ -755,17 +755,17 @@ git push
 """
         
         return pr_body
-
+    
 
 class CommentManager:
-    """Управление комментариями в оригинальных PR"""
+    """Manages comments in original PRs"""
     
     def __init__(self, logger):
         self.logger = logger
         self.backport_comments = []  # [(pull, comment), ...]
     
     def find_existing_backport_comment(self, pull):
-        """Находит существующий backport комментарий"""
+        """Finds existing backport comment"""
         try:
             comments = pull.get_issue_comments()
             for comment in comments:
@@ -775,9 +775,9 @@ class CommentManager:
         except Exception as e:
             self.logger.debug(f"Failed to find existing comment in PR #{pull.number}: {e}")
         return None
-    
+
     def create_initial_comment(self, pull_requests: List, target_branches: List[str], workflow_url: Optional[str]):
-        """Создает или обновляет начальный комментарий о начале backport"""
+        """Creates or updates initial comment about backport start"""
         if not workflow_url:
             self.logger.warning("Workflow URL not available, skipping initial comment")
             return
@@ -806,9 +806,9 @@ class CommentManager:
                     self.logger.info(f"Created initial backport comment in original PR #{pull.number}")
             except GithubException as e:
                 self.logger.warning(f"Failed to create/update initial comment in original PR #{pull.number}: {e}")
-    
+
     def update_with_results(self, results: List[BackportResult], skipped_branches: List[Tuple[str, str]], target_branches: List[str], workflow_url: Optional[str]):
-        """Обновляет комментарии с результатами backport"""
+        """Updates comments with backport results"""
         if not self.backport_comments:
             return
         
@@ -848,7 +848,7 @@ class CommentManager:
                     if workflow_url:
                         new_results += f"\n[workflow run]({workflow_url})"
                 
-                # Заменяем "in progress" строку
+                # Replace "in progress" line
                 if workflow_url in existing_body:
                     lines = existing_body.split('\n')
                     updated_lines = []
@@ -904,28 +904,28 @@ class CommentManager:
 
 
 class SummaryWriter:
-    """Запись в GitHub Actions summary"""
+    """Writes to GitHub Actions summary"""
     
     def __init__(self, logger):
         self.logger = logger
         self.summary_path = os.getenv('GITHUB_STEP_SUMMARY')
     
     def write(self, msg: str):
-        """Записывает сообщение в summary и логирует"""
+        """Writes message to summary and logs"""
         self.logger.info(msg)
         if self.summary_path:
             with open(self.summary_path, 'a') as summary:
                 summary.write(f'{msg}\n\n')
     
     def write_branch_result(self, branch: str, pr, has_conflicts: bool, conflict_files: List[ConflictInfo], cherry_pick_logs: List[str]):
-        """Записывает результат для ветки с сырым логом"""
+        """Writes branch result with raw log"""
         summary = f"### Branch `{branch}`: "
         if has_conflicts:
             summary += f"**CONFLICT** Draft PR {pr.html_url}\n\n"
         else:
             summary += f"PR {pr.html_url}\n\n"
         
-        # Добавляем сырой лог
+        # Add raw log
         if cherry_pick_logs:
             summary += "**Git Cherry-Pick Log:**\n\n"
             summary += "```\n"
@@ -933,7 +933,7 @@ class SummaryWriter:
                 summary += log
             summary += "```\n\n"
         
-        # Добавляем конфликты (если есть)
+        # Add conflicts (if exists)
         if has_conflicts and conflict_files:
             summary += "**Files with conflicts:**\n\n"
             for conflict in conflict_files:
@@ -945,11 +945,11 @@ class SummaryWriter:
 
 
 class InputParser:
-    """Парсинг и нормализация входных данных"""
+    """Parses and normalizes input data"""
     
     @staticmethod
     def split(s: str, seps: str = ', \n') -> List[str]:
-        """Разделяет строку по нескольким разделителям"""
+        """Splits string by multiple separators"""
         if not s:
             return []
         if not seps:
@@ -961,12 +961,12 @@ class InputParser:
     
     @staticmethod
     def normalize_commit_ref(ref: str) -> str:
-        """Нормализует commit reference (убирает URL, оставляет только ID)"""
+        """Normalizes commit reference (removes URL, leaves only ID)"""
         return ref.split('/')[-1].strip()
 
 
 class InputValidator:
-    """Валидация входных данных"""
+    """Validates input data"""
     
     def __init__(self, repo, allow_unmerged: bool, logger):
         self.repo = repo
@@ -974,7 +974,7 @@ class InputValidator:
         self.logger = logger
     
     def validate_prs(self, pull_requests: List):
-        """Валидирует PR"""
+        """Validates PRs"""
         for pull in pull_requests:
             try:
                 if not hasattr(pull, "merged"):
@@ -985,7 +985,7 @@ class InputValidator:
                 raise ValueError(f"PR #{pull.number} does not exist or is not accessible: {e}")
     
     def validate_commits(self, commit_shas: List[str]):
-        """Валидирует commits"""
+        """Validates commits"""
         for commit_sha in commit_shas:
             try:
                 commit = self.repo.get_commit(commit_sha)
@@ -995,7 +995,7 @@ class InputValidator:
                 raise ValueError(f"Commit {commit_sha} does not exist: {e}")
     
     def validate_branches(self, branches: List[str]):
-        """Валидирует ветки"""
+        """Validates branches"""
         for branch in branches:
             try:
                 self.repo.get_branch(branch)
@@ -1003,7 +1003,7 @@ class InputValidator:
                 raise ValueError(f"Branch {branch} does not exist: {e}")
     
     def validate_all(self, commit_shas: List[str], branches: List[str], pull_requests: List):
-        """Валидирует все входные данные"""
+        """Validates all input data"""
         if len(commit_shas) == 0:
             raise ValueError("No commits to cherry-pick")
         if len(branches) == 0:
@@ -1017,7 +1017,7 @@ class InputValidator:
 
 
 class CherryPickOrchestrator:
-    """Основной класс для координации cherry-pick процесса с новой архитектурой"""
+    """Main class for coordinating cherry-pick process with new architecture"""
     
     def __init__(self, args, repo_name: str, token: str, workflow_triggerer: str, workflow_url: Optional[str] = None):
         self.logger = logging.getLogger("cherry-pick")
@@ -1026,7 +1026,7 @@ class CherryPickOrchestrator:
         self.workflow_triggerer = workflow_triggerer
         self.workflow_url = workflow_url
         
-        # Инициализация компонентов
+        # Initialize components
         self.gh = Github(login_or_token=token)
         self.repo = self.gh.get_repo(repo_name)
         
@@ -1039,18 +1039,18 @@ class CherryPickOrchestrator:
         self.summary_writer = SummaryWriter(self.logger)
         self.validator = InputValidator(self.repo, getattr(args, 'allow_unmerged', False), self.logger)
         
-        # Параметры
+        # Parameters
         self.merge_commits_mode = getattr(args, 'merge_commits', 'skip')
         self.allow_unmerged = getattr(args, 'allow_unmerged', False)
         
-        # Парсинг входных данных
+        # Parse input data
         commits_str = args.commits
         branches_str = args.target_branches
         
         commits = InputParser.split(commits_str)
         self.target_branches = InputParser.split(branches_str)
         
-        # Собираем информацию об исходных PR/commits
+        # Collect information about source PRs/commits
         self.source_info = SourceInfo()
         self.pull_requests = []
         
@@ -1062,14 +1062,14 @@ class CherryPickOrchestrator:
             except ValueError:
                 self._add_commit(ref, len(commits) == 1)
         
-        # Результаты
+        # Results
         self.results: List[BackportResult] = []
         self.skipped_branches: List[Tuple[str, str]] = []
         self.has_errors = False
         self.dtm = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
     
     def _add_commit(self, c: str, single: bool):
-        """Добавляет commit по SHA"""
+        """Adds commit by SHA"""
         try:
             expanded_sha = self.commit_resolver.expand_sha(c)
         except ValueError as e:
@@ -1078,15 +1078,15 @@ class CherryPickOrchestrator:
         
         commit = self.repo.get_commit(expanded_sha)
         
-        # Проверка merge commit
+        # Check merge commit
         is_merge_commit = commit.parents and len(commit.parents) > 1
         
-        # Сначала проверяем, связан ли commit с PR (даже если это merge commit)
+        # First check if commit is linked to PR (even if it's a merge commit)
         pulls = commit.get_pulls()
         if pulls.totalCount > 0:
             pr = pulls.get_page(0)[0]
             
-            # Если это merge commit, связанный с PR - автоматически используем PR
+            # If this is merge commit linked to PR - automatically use PR
             if is_merge_commit:
                 if self.merge_commits_mode == 'fail':
                     self.logger.warning(
@@ -1098,11 +1098,11 @@ class CherryPickOrchestrator:
                         f"Commit {expanded_sha[:7]} is a merge commit associated with PR #{pr.number}. "
                         f"Automatically using PR #{pr.number} instead of skipping."
                     )
-                # Обрабатываем как PR вместо merge commit
+                # Process as PR instead of merge commit
                 self._add_pull(pr.number, single)
                 return
             
-            # Обычный commit, связанный с PR
+            # Regular commit linked to PR
             if not pr.merged:
                 if not self.allow_unmerged:
                     raise ValueError(f"PR #{pr.number} (associated with commit {expanded_sha[:7]}) is not merged. Cannot backport unmerged PR. Use --allow-unmerged to allow")
@@ -1121,16 +1121,16 @@ class CherryPickOrchestrator:
                 self.source_info.titles.append(f'commit {commit.sha[:7]}')
             self.source_info.body_items.append(f"* commit {commit.html_url}: {pr.title}")
         else:
-            # Commit не связан с PR
+            # Commit not linked to PR
             if is_merge_commit:
-                # Merge commit без связанного PR
+                # Merge commit without linked PR
                 if self.merge_commits_mode == 'fail':
                     raise ValueError(f"Commit {expanded_sha[:7]} is a merge commit without associated PR. Use PR number instead or set --merge-commits skip")
                 elif self.merge_commits_mode == 'skip':
                     self.logger.info(f"Skipping merge commit {expanded_sha[:7]} (--merge-commits skip, no associated PR)")
                     return
             
-            # Обычный commit без PR
+            # Regular commit without PR
             try:
                 commit_author = commit.author.login if commit.author else None
                 if commit_author and commit_author not in self.source_info.authors:
@@ -1147,7 +1147,7 @@ class CherryPickOrchestrator:
         self.source_info.commit_shas.append(commit.sha)
     
     def _get_commits_from_pr(self, pull) -> List[str]:
-        """Получает список commits из PR (исключая merge commits)"""
+        """Gets list of commits from PR (excluding merge commits)"""
         commits = []
         for commit in pull.get_commits():
             commit_obj = commit.commit
@@ -1159,7 +1159,7 @@ class CherryPickOrchestrator:
         return commits
     
     def _add_pull(self, p: int, single: bool):
-        """Добавляет PR и получает commits из него"""
+        """Adds PR and gets commits from it"""
         pull = self.repo.get_pull(p)
         
         if not pull.merged:
@@ -1197,8 +1197,8 @@ class CherryPickOrchestrator:
             self.source_info.commit_shas.extend(pr_commits)
     
     def process(self):
-        """Основной метод обработки"""
-        # Валидация
+        """Main processing method"""
+        # Validation
         try:
             self.validator.validate_all(
                 self.source_info.commit_shas,
@@ -1211,14 +1211,14 @@ class CherryPickOrchestrator:
             self.summary_writer.write(error_msg)
             sys.exit(1)
         
-        # Создание начального комментария
+        # Create initial comment
         self.comment_manager.create_initial_comment(
             self.pull_requests,
             self.target_branches,
             self.workflow_url
         )
         
-        # Клонирование репозитория
+        # Clone repository
         try:
             repo_url = f"https://{self.token}@github.com/{self.repo_name}.git"
             self.git_repo.clone(repo_url, "ydb-new-pr")
@@ -1230,7 +1230,7 @@ class CherryPickOrchestrator:
         
         os.chdir("ydb-new-pr")
         
-        # Обработка каждой целевой ветки
+        # Process each target branch
         for target_branch in self.target_branches:
             try:
                 result = self._process_branch(target_branch)
@@ -1242,7 +1242,7 @@ class CherryPickOrchestrator:
                 self.summary_writer.write(f"Branch {target_branch} error: {type(e).__name__}\n```\n{e}\n```")
                 self.skipped_branches.append((target_branch, f"unexpected error: {type(e).__name__}"))
         
-        # Обновление комментариев
+        # Update comments
         self.comment_manager.update_with_results(
             self.results,
             self.skipped_branches,
@@ -1250,7 +1250,7 @@ class CherryPickOrchestrator:
             self.workflow_url
         )
         
-        # Проверка ошибок
+        # Check errors
         if self.has_errors:
             error_msg = "WORKFLOW_FAILED: Cherry-pick workflow completed with errors. Check logs above for details."
             self.logger.error(error_msg)
@@ -1261,37 +1261,37 @@ class CherryPickOrchestrator:
         self.summary_writer.write("All cherry-pick operations completed successfully")
     
     def _process_branch(self, target_branch: str) -> BackportResult:
-        """Обрабатывает одну ветку"""
+        """Processes single branch"""
         dev_branch_name = f"cherry-pick-{target_branch}-{self.dtm}"
         all_conflict_files: List[ConflictInfo] = []
         cherry_pick_logs: List[str] = []
         
-        # Подготовка ветки
+        # Prepare branch
         self.git_repo.fetch("origin", target_branch)
         self.git_repo.reset_hard()
         self.git_repo.checkout_branch(target_branch, f"origin/{target_branch}")
         self.git_repo.create_branch(dev_branch_name, target_branch)
         
-        # Cherry-pick каждого коммита
+        # Cherry-pick each commit
         for commit_sha in self.source_info.commit_shas:
             result = self.git_repo.cherry_pick(commit_sha)
             
-            # Сохраняем сырой лог
+            # Save raw log
             if result.raw_output:
                 cherry_pick_logs.append(f"=== Cherry-picking {commit_sha[:7]} ===\n{result.raw_output}")
             
-            # Обработка пустых коммитов - просто логируем, не пропускаем
+            # Handle empty commits - just log, don't skip
             if result.is_empty:
                 self.logger.info(f"Commit {commit_sha[:7]} is empty (already applied), continuing...")
-                continue  # Продолжаем, не делаем skip
+                continue  # Continue, don't skip
             
-            # Обработка конфликтов
+            # Handle conflicts
             if result.has_conflicts:
                 conflicts = self.conflict_handler.detect_conflicts(result.raw_output)
                 if self.conflict_handler.commit_conflicts(commit_sha, conflicts):
                     all_conflict_files.extend(conflicts)
                 else:
-                    # Не удалось закоммитить конфликты
+                    # Failed to commit conflicts
                     self.git_repo.cherry_pick_abort()
                     self.has_errors = True
                     error_msg = f"CHERRY_PICK_CONFLICT_ERROR: Failed to handle conflict for commit {commit_sha[:7]} in branch {target_branch}"
@@ -1300,17 +1300,17 @@ class CherryPickOrchestrator:
                     self.skipped_branches.append((target_branch, "cherry-pick conflict (failed to resolve)"))
                     raise RuntimeError(error_msg)
         
-        # Push ветки
+        # Push branch
         try:
             self.git_repo.push(dev_branch_name, set_upstream=True)
         except subprocess.CalledProcessError:
             self.has_errors = True
             raise
         
-        # Создание PR
+        # Create PR
         has_conflicts = len(all_conflict_files) > 0
         
-        # Создаем контекст для PR
+        # Create context for PR
         context = PRContext(
             target_branch=target_branch,
             dev_branch_name=dev_branch_name,
@@ -1336,19 +1336,19 @@ class CherryPickOrchestrator:
             )
             context.pr_number = pr.number
             
-            # Обновляем body с PR номером для правильных ссылок
+            # Update body with PR number for correct links
             if has_conflicts:
                 updated_body = self.pr_builder.build_body(context)
                 pr.edit(body=updated_body)
             
-            # Назначаем assignee
+            # Assign assignee
             if self.workflow_triggerer and self.workflow_triggerer != 'unknown':
                 try:
                     pr.add_to_assignees(self.workflow_triggerer)
                 except GithubException:
                     pass
             
-            # Включаем automerge если нет конфликтов
+            # Enable automerge if no conflicts
             if not has_conflicts:
                 try:
                     pr.enable_automerge(merge_method='MERGE')
@@ -1358,7 +1358,7 @@ class CherryPickOrchestrator:
                     except Exception:
                         pass
             
-            # Записываем в summary
+            # Write to summary
             self.summary_writer.write_branch_result(
                 target_branch,
                 pr,
@@ -1405,12 +1405,12 @@ def main():
     log_fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
     logging.basicConfig(format=log_fmt, level=logging.DEBUG)
     
-    # Используем новый orchestrator
+    # Use new orchestrator
     repo_name = os.environ["REPO"]
     token = os.environ["TOKEN"]
     workflow_triggerer = os.environ.get('GITHUB_ACTOR', 'unknown')
     
-    # Получаем workflow URL
+    # Get workflow URL
     workflow_url = None
     run_id = os.getenv('GITHUB_RUN_ID')
     if run_id:

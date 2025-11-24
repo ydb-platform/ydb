@@ -49,11 +49,11 @@ class StressUtilNodeResult:
     runs: list[StressUtilRunResult] = []
 
     def __init__(self):
-        """Initialize StressUtilResult with empty runs list"""
+        """Initialize StressUtilNodeResult with empty runs list"""
         self.runs = []
 
     def __repr__(self):
-        return (f"StressUtilResult(stress_name={self.stress_name}, "
+        return (f"StressUtilNodeResult(stress_name={self.stress_name}, "
                 f"node={self.node}, host={self.host}, "
                 f"start_time={self.start_time}, "
                 f"end_time={self.end_time}, "

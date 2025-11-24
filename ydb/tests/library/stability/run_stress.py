@@ -220,7 +220,6 @@ class StressRunExecutor:
                                 f"Run {current_iteration} on {node_host} failed")
                         current_iteration += 1
                         run_duration = planned_end_time - time_module.time()
-                    node_result.total_runs = len(node_result.runs)
                     node_result.end_time = time_module.time()
                     logging.info(
                         f"Execution on {node_host} completed: "
@@ -244,7 +243,7 @@ class StressRunExecutor:
                     for future in as_completed(future_to_node):
                         try:
                             node_result = future.result()
-                            execution_result.stress_util_runs[name].end_time = time_module.time()
+                            execution_result.stress_util_runs[node_result.stress_name].end_time = time_module.time()
                             execution_result.stress_util_runs[node_result.stress_name].node_runs[node_result.host] = node_result
                         except Exception as e:
                             node_plan = future_to_node[future]
@@ -253,13 +252,10 @@ class StressRunExecutor:
                                 f"Error executing on {node_host}: {e}")
                             logging.error(traceback.format_exc())
                             # Add error information
-                            error_result = StressUtilRunResult()
+                            error_result = StressUtilNodeResult()
                             error_result.node = node_plan[1]['node']
                             error_result.host = node_host
                             error_result.stress_name = node_plan[0]
-                            error_result.error = str(e)
-                            error_result.successful_runs = 0
-                            error_result.total_runs = 1
                             error_result.runs = []
                             error_result.total_execution_time = 0
                             execution_result.stress_util_runs[node_plan[0]].node_runs[node_host] = error_result

@@ -107,7 +107,6 @@ class Workload():
                 raise Exception(f"Insufficient data in output topic: expected ~{self.duration} messages, got {count}")
 
     def loop(self):
-        self.pool.execute_with_retries("GRANT ALL ON `/Root` TO ``;")
         self.create_topics()
         self.create_external_data_source()
         self.create_streaming_query()

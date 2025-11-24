@@ -978,11 +978,11 @@ namespace NSQLTranslationV0 {
     TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake);
 
 
-    enum class ReduceMode {
+    enum class EReduceMode {
         ByPartition,
         ByAll,
     };
-    TSourcePtr BuildReduce(TPosition pos, ReduceMode mode, TSourcePtr source, TVector<TSortSpecificationPtr>&& orderBy,
+    TSourcePtr BuildReduce(TPosition pos, EReduceMode mode, TSourcePtr source, TVector<TSortSpecificationPtr>&& orderBy,
         TVector<TNodePtr>&& keys, TVector<TNodePtr>&& args, TNodePtr udf, TNodePtr having, const TWriteSettings& settings);
     TSourcePtr BuildProcess(TPosition pos, TSourcePtr source, TNodePtr with, TVector<TNodePtr>&& terms, bool listCall, bool stream, const TWriteSettings& settings);
 

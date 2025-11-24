@@ -22,25 +22,25 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/array/array_dict.h"
-#include "arrow/array/builder_binary.h"
-#include "arrow/array/builder_decimal.h"
-#include "arrow/array/builder_dict.h"
-#include "arrow/array/builder_nested.h"
-#include "arrow/array/builder_primitive.h"
-#include "arrow/array/builder_time.h"
-#include "arrow/array/builder_union.h"
-#include "arrow/chunked_array.h"
-#include "arrow/ipc/json_simple.h"
-#include "arrow/scalar.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/decimal.h"
-#include "arrow/util/float16.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/value_parsing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_dict.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_decimal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_dict.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_nested.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_time.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_union.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/json_simple.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/decimal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/float16.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h"
 
-#include "arrow/json/rapidjson_defs.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/rapidjson_defs.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/error/en.h>

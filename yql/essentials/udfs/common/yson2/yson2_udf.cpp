@@ -69,8 +69,8 @@ class TOptions: public TBoxedValue {
 
 public:
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Options");
-        return name;
+        static auto Name = TStringRef::Of("Options");
+        return Name;
     }
 
     static bool DeclareSignature(
@@ -931,8 +931,8 @@ class TFrom: public TBase {
 
 public:
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("From");
-        return name;
+        static auto Name = TStringRef::Of("From");
+        return Name;
     }
 
     TFrom(TSourcePosition pos, const ITypeInfoHelper::TPtr typeHelper, const TType* shape)
@@ -1009,8 +1009,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("ConvertTo");
-        return name;
+        static auto Name = TStringRef::Of("ConvertTo");
+        return Name;
     }
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -1191,20 +1191,20 @@ TUnboxedValue TParse<TJson, true>::Run(const IValueBuilder* valueBuilder, const 
 
 template <>
 const TStringRef& TParse<TYson, false>::Name() {
-    static auto yson = TStringRef::Of("Parse");
-    return yson;
+    static auto Name = TStringRef::Of("Parse");
+    return Name;
 }
 
 template <>
 const TStringRef& TParse<TJson, false>::Name() {
-    static auto yson = TStringRef::Of("ParseJson");
-    return yson;
+    static auto Name = TStringRef::Of("ParseJson");
+    return Name;
 }
 
 template <>
 const TStringRef& TParse<TJson, true>::Name() {
-    static auto yson = TStringRef::Of("ParseJsonDecodeUtf8");
-    return yson;
+    static auto Name = TStringRef::Of("ParseJsonDecodeUtf8");
+    return Name;
 }
 
 } // namespace

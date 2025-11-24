@@ -122,9 +122,9 @@ public:
     typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
     static const TStringRef& Name() {
-        static auto name = TString(ResourceName).substr(10) + "Histogram_Create";
-        static auto nameRef = TStringRef(name);
-        return nameRef;
+        static auto Name = TString(ResourceName).substr(10) + "Histogram_Create";
+        static auto NameRef = TStringRef(Name);
+        return NameRef;
     }
 
 private:
@@ -174,9 +174,9 @@ public:
     typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
     static const TStringRef& Name() {
-        static auto name = TString(ResourceName).substr(10) + "Histogram_AddValue";
-        static auto nameRef = TStringRef(name);
-        return nameRef;
+        static auto Name = TString(ResourceName).substr(10) + "Histogram_AddValue";
+        static auto NameRef = TStringRef(Name);
+        return NameRef;
     }
 
 private:
@@ -226,9 +226,9 @@ public:
     typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
     static const TStringRef& Name() {
-        static auto name = TString(ResourceName).substr(10) + "Histogram_Serialize";
-        static auto nameRef = TStringRef(name);
-        return nameRef;
+        static auto Name = TString(ResourceName).substr(10) + "Histogram_Serialize";
+        static auto NameRef = TStringRef(Name);
+        return NameRef;
     }
 
 private:
@@ -279,9 +279,9 @@ public:
     typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
     static const TStringRef& Name() {
-        static auto name = TString(ResourceName).substr(10) + "Histogram_Deserialize";
-        static auto nameRef = TStringRef(name);
-        return nameRef;
+        static auto Name = TString(ResourceName).substr(10) + "Histogram_Deserialize";
+        static auto NameRef = TStringRef(Name);
+        return NameRef;
     }
 
 private:
@@ -333,9 +333,9 @@ public:
     typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
     static const TStringRef& Name() {
-        static auto name = TString(ResourceName).substr(10) + "Histogram_Merge";
-        static auto nameRef = TStringRef(name);
-        return nameRef;
+        static auto Name = TString(ResourceName).substr(10) + "Histogram_Merge";
+        static auto NameRef = TStringRef(Name);
+        return NameRef;
     }
 
 private:
@@ -409,9 +409,9 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TString(ResourceName).substr(10) + "Histogram_GetResult";
-        static auto nameRef = TStringRef(name);
-        return nameRef;
+        static auto Name = TString(ResourceName).substr(10) + "Histogram_GetResult";
+        static auto NameRef = TStringRef(Name);
+        return NameRef;
     }
 
 private:
@@ -624,8 +624,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Print");
-        return name;
+        static auto Name = TStringRef::Of("Print");
+        return Name;
     }
 
     TUnboxedValue Run(
@@ -721,8 +721,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("ToCumulativeDistributionFunction");
-        return name;
+        static auto Name = TStringRef::Of("ToCumulativeDistributionFunction");
+        return Name;
     }
 
     TUnboxedValue Run(
@@ -793,8 +793,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Normalize");
-        return name;
+        static auto Name = TStringRef::Of("Normalize");
+        return Name;
     }
 
     TUnboxedValue Run(

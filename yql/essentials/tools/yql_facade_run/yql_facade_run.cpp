@@ -158,11 +158,11 @@ TFacadeRunOptions::~TFacadeRunOptions() {
 
 void TFacadeRunOptions::InitLogger() {
     if (Verbosity != LOG_DEF_PRIORITY || ShowLog) {
-        NLog::ELevel level = NLog::ELevelHelpers::FromInt(Verbosity);
+        NLog::ELevel level = NLog::TLevelHelpers::FromInt(Verbosity);
         if (ShowLog) {
             level = Max(level, NLog::ELevel::DEBUG);
         }
-        NLog::EComponentHelpers::ForEach([level](NLog::EComponent c) {
+        NLog::TComponentHelpers::ForEach([level](NLog::EComponent c) {
             NYql::NLog::YqlLogger().SetComponentLevel(c, level);
         });
     }

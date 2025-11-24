@@ -18,14 +18,14 @@
 #include <cstdint>
 #include <memory>
 
-#include "arrow/compute/kernels/ree_util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/ree_util_internal.h"
 
-#include "arrow/buffer.h"
-#include "arrow/memory_pool.h"
-#include "arrow/result.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace compute {

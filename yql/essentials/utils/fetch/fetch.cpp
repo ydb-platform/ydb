@@ -143,7 +143,7 @@ ERetryErrorClass DefaultClassifyHttpCode(unsigned code) {
 }
 
 IRetryPolicy<unsigned>::TPtr GetDefaultPolicy() {
-    static const auto policy = IRetryPolicy<unsigned>::GetExponentialBackoffPolicy(
+    static const auto Policy = IRetryPolicy<unsigned>::GetExponentialBackoffPolicy(
         /*retryClassFunction=*/DefaultClassifyHttpCode,
         /*minDelay=*/TDuration::Seconds(1),
         /*minLongRetryDelay:*/ TDuration::Seconds(5),
@@ -151,7 +151,7 @@ IRetryPolicy<unsigned>::TPtr GetDefaultPolicy() {
         /*maxRetries=*/3,
         /*maxTime=*/TDuration::Minutes(3),
         /*scaleFactor=*/2);
-    return policy;
+    return Policy;
 }
 
 THttpURL ParseURL(const TStringBuf addr) {

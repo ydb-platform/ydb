@@ -31,6 +31,8 @@ public:
      */
     void Configure(const TDispatcherConfigPtr& config);
 
+    void Reconfigure(const TDispatcherConfigPtr& newConfig);
+
     [[nodiscard]] bool IsInitialized() const noexcept;
 
     TGrpcLibraryLockPtr GetLibraryLock();

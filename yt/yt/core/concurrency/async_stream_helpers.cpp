@@ -1,3 +1,5 @@
+#include "async_stream_helpers.h"
+
 #include "async_stream.h"
 #include "scheduler.h"
 
@@ -1149,7 +1151,7 @@ void DrainInput(const IAsyncZeroCopyInputStreamPtr& input)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFuture<void> ExpectEndOfStream(
+TFuture<void> CheckEndOfStream(
     const IAsyncZeroCopyInputStreamPtr& input)
 {
     YT_VERIFY(input);

@@ -23,9 +23,9 @@
 #include <optional>
 #include <vector>
 
-#include "arrow/util/span.h"
-#include "parquet/platform.h"
-#include "parquet/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/span.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/type_fwd.h"
 
 namespace parquet20 {
 

@@ -18,34 +18,17 @@ private:
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardExportProto::TCursor& proto);
 public:
     TCursor() = default;
-    TCursor(const TOwnedCellVec& lastKey, const bool finished)
-        : LastKey(lastKey)
-        , Finished(finished)
-    {
+    TCursor(const TOwnedCellVec &lastKey, const bool finished);
 
-    }
+    const std::optional<TOwnedCellVec> &GetLastKey() const;
 
-    const std::optional<TOwnedCellVec>& GetLastKey() const {
-        return LastKey;
-    }
+    ui32 GetChunkIdx() const;
 
-    ui32 GetChunkIdx() const {
-        return ChunkIdx;
-    }
+    bool HasLastKey() const;
 
-    bool HasLastKey() const {
-        return !!LastKey;
-    }
+    bool IsFinished() const;
 
-    bool IsFinished() const {
-        return Finished;
-    }
-
-    void InitNext(const TOwnedCellVec& lastKey, const bool finished) {
-        ++ChunkIdx;
-        LastKey = lastKey;
-        Finished = finished;
-    }
+    void InitNext(const TOwnedCellVec &lastKey, const bool finished);
 
     static TConclusion<TCursor> BuildFromProto(const NKikimrColumnShardExportProto::TCursor& proto);
 

@@ -5902,9 +5902,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             const auto optionName = option->Head().Content();
-            static const THashSet<TStringBuf> supportedOptions =
+            static const THashSet<TStringBuf> SupportedOptions =
                 {"isCompact", "tableSource", "nullsProcessed", "ansi", "warnNoAnsi"};
-            if (!supportedOptions.contains(optionName)) {
+            if (!SupportedOptions.contains(optionName)) {
                 ctx.Expr.AddError(
                     TIssue(ctx.Expr.GetPosition(option->Pos()), TStringBuilder() << "Unknown IN option '" << optionName));
                 return IGraphTransformer::TStatus::Error;
@@ -8135,7 +8135,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return status;
         }
 
-        static const std::unordered_map<std::string_view, std::string_view> deprecated = {
+        static const std::unordered_map<std::string_view, std::string_view> Deprecated = {
             {"String.Reverse", "'Unicode::Reverse'"},
             {"String.ToLower", "'String::AsciiToLower' or 'Unicode::ToLower'"},
             {"String.ToUpper", "'String::AsciiToUpper' or 'Unicode::ToUpper'"},
@@ -8149,7 +8149,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             {"Math.Fabs", "'Abs' builtin function"},
         };
 
-        if (const auto bad = deprecated.find(name); deprecated.cend() != bad) {
+        if (const auto bad = Deprecated.find(name); Deprecated.cend() != bad) {
             auto issue = TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Deprecated UDF function '" << moduleName << "::" << funcName << "', use " << bad->second << " instead.");
             SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_YQL_DEPRECATED_UDF_FUNCTION, issue);
             if (!ctx.Expr.AddWarning(issue)) {
@@ -12748,8 +12748,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TStringBuf op = input->Head().Content();
-        static const THashSet<TStringBuf> ops = {"==", "!=", "<=", "<", ">=", ">", "Exists", "NotExists", "===", "StartsWith", "NotStartsWith"};
-        if (!ops.contains(op)) {
+        static const THashSet<TStringBuf> Ops = {"==", "!=", "<=", "<", ">=", ">", "Exists", "NotExists", "===", "StartsWith", "NotStartsWith"};
+        if (!Ops.contains(op)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()),
                 TStringBuilder() << "Unknown operation: " << op));
             return IGraphTransformer::TStatus::Error;

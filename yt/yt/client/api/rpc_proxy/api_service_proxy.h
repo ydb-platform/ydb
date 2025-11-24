@@ -117,6 +117,7 @@ public:
 
     // Jobs
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListJobs);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListJobTraces);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJob);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, DumpJobContext);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobInput,

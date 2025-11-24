@@ -326,11 +326,10 @@ private:
 class TOrderingsStateMachine {
 private:
     class TDFSM;
-    enum _: std::uint32_t {
-        EMaxFDCount = 64,
-        EMaxNFSMStates = 256,
-        EMaxDFSMStates = 512,
-    };
+
+    static constexpr std::uint32_t MaxFDCount = 64;
+    static constexpr std::uint32_t MaxNFSMStates = 256;
+    static constexpr std::uint32_t MaxDFSMStates = 512;
 
     struct TItemInfo {
         bool UsedInAscOrdering = false;
@@ -338,7 +337,7 @@ private:
     };
 
 public:
-    using TFDSet = std::bitset<EMaxFDCount>;
+    using TFDSet = std::bitset<MaxFDCount>;
 
     /*
      * This class represents a state of the FSM (node idx in the DFSM and some metadata).
@@ -374,7 +373,7 @@ public:
         bool IsInitialized() const;
 
     private:
-        bool IsSubset(const std::bitset<EMaxNFSMStates>& lhs, const std::bitset<EMaxNFSMStates>& rhs);
+        bool IsSubset(const std::bitset<MaxNFSMStates>& lhs, const std::bitset<MaxNFSMStates>& rhs);
 
     private:
         TDFSM* Dfsm_ = nullptr;
@@ -461,9 +460,7 @@ private:
             std::size_t DstNodeIdx;
             i64 FdIdx;
 
-            enum _: i64 {
-                EPSILON = -1 // eps edges with give us nodes without applying any FDs.
-            };
+            static constexpr i64 Epsilon = -1; // eps edges with give us nodes without applying any FDs.
 
             bool operator==(const TEdge& other) const;
 
@@ -514,9 +511,9 @@ private:
 
         struct TNode {
             std::vector<std::size_t> NFSMNodes;
-            std::bitset<EMaxFDCount> OutgoingFDs;
-            std::bitset<EMaxNFSMStates> NFSMNodesBitset;
-            std::bitset<EMaxNFSMStates> InterestingOrderings;
+            std::bitset<MaxFDCount> OutgoingFDs;
+            std::bitset<MaxNFSMStates> NFSMNodesBitset;
+            std::bitset<MaxNFSMStates> InterestingOrderings;
 
             TString ToString() const;
         };
@@ -543,7 +540,7 @@ private:
             const TNFSM& nfsm,
             const std::vector<std::size_t>& startNFSMNodes,
             const std::vector<TFunctionalDependency>& fds,
-            i64 fdIdx = TNFSM::TEdge::EPSILON);
+            i64 fdIdx = TNFSM::TEdge::Epsilon);
         void Precompute(
             const TNFSM& nfsm,
             const std::vector<TFunctionalDependency>& fds);

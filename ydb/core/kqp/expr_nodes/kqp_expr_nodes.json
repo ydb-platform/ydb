@@ -910,8 +910,7 @@
             "Match": {"Type": "Tuple"},
             "Children": [
                 {"Index": 0, "Name": "OriginalColName", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "AggregationFunction", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "AggregationFunction", "Type": "TCoAtom"}
             ]
         },
         {

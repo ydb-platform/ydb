@@ -27,9 +27,9 @@
 #include <optional>
 #include <string>
 
-#include "parquet/size_statistics.h"
-#include "parquet/statistics.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/size_statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 namespace parquet20 {
 

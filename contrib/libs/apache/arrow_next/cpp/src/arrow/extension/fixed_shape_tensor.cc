@@ -18,19 +18,19 @@
 #include <numeric>
 #include <sstream>
 
-#include "arrow/extension/fixed_shape_tensor.h"
-#include "arrow/extension/tensor_internal.h"
-#include "arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension/fixed_shape_tensor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension/tensor_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
 
-#include "arrow/array/array_nested.h"
-#include "arrow/array/array_primitive.h"
-#include "arrow/json/rapidjson_defs.h"  // IWYU pragma: keep
-#include "arrow/tensor.h"
-#include "arrow/util/int_util_overflow.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/print.h"
-#include "arrow/util/sort.h"
-#include "arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_nested.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/rapidjson_defs.h"  // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/tensor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util_overflow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/print.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/sort.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>

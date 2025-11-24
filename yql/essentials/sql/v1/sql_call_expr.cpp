@@ -124,13 +124,13 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
             auto& ctor = node.GetAlt_value_constructor1();
             Func_ = "Variant";
             TSqlExpression expr(Ctx_, Mode_);
-            if (!Expr(expr, Args_, ctor.GetRule_expr3())) {
+            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr3()))) {
                 return false;
             }
-            if (!Expr(expr, Args_, ctor.GetRule_expr5())) {
+            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr5()))) {
                 return false;
             }
-            if (!Expr(expr, Args_, ctor.GetRule_expr7())) {
+            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr7()))) {
                 return false;
             }
             break;
@@ -139,10 +139,10 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
             auto& ctor = node.GetAlt_value_constructor2();
             Func_ = "Enum";
             TSqlExpression expr(Ctx_, Mode_);
-            if (!Expr(expr, Args_, ctor.GetRule_expr3())) {
+            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr3()))) {
                 return false;
             }
-            if (!Expr(expr, Args_, ctor.GetRule_expr5())) {
+            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr5()))) {
                 return false;
             }
             break;
@@ -151,10 +151,10 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
             auto& ctor = node.GetAlt_value_constructor3();
             Func_ = "Callable";
             TSqlExpression expr(Ctx_, Mode_);
-            if (!Expr(expr, Args_, ctor.GetRule_expr3())) {
+            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr3()))) {
                 return false;
             }
-            if (!Expr(expr, Args_, ctor.GetRule_expr5())) {
+            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr5()))) {
                 return false;
             }
             break;
@@ -185,7 +185,7 @@ bool TSqlCallExpr::ExtractCallParam(const TRule_external_call_param& node) {
     }
 
     TSqlExpression expression(Ctx_, Mode_);
-    auto value = expression.Build(node.GetRule_expr3());
+    TNodePtr value = Unwrap(expression.Build(node.GetRule_expr3()));
     if (value && optimizeForParam) {
         TDeferredAtom atom;
         MakeTableFromExpression(Ctx_.Pos(), Ctx_, value, atom);

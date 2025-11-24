@@ -10,7 +10,7 @@ from pr_template import (
 
 def validate_pr_description(description, is_not_for_cl_valid=True) -> bool:
     try:
-        result, _  = check_pr_description(description, is_not_for_cl_valid)
+        result, _ = check_pr_description(description, is_not_for_cl_valid)
         return result
     except Exception as e:
         print(f"::error::Error during validation: {e}")

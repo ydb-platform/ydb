@@ -67,6 +67,14 @@ constexpr std::string_view GlobalFulltextImplTables[] = {
 };
 static_assert(std::is_sorted(std::begin(GlobalFulltextImplTables), std::end(GlobalFulltextImplTables)));
 
+constexpr std::string_view GlobalFulltextWithRelevanceImplTables[] = {
+    NFulltext::DictTable,
+    NFulltext::DocsTable,
+    NFulltext::StatsTable,
+    ImplTable,
+};
+static_assert(std::is_sorted(std::begin(GlobalFulltextWithRelevanceImplTables), std::end(GlobalFulltextWithRelevanceImplTables)));
+
 bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -236,11 +244,16 @@ std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType inde
             } else {
                 return PrefixedGlobalKMeansTreeImplTables;
             }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
-            return GlobalFulltextImplTables;
         default:
             Y_ENSURE(false, InvalidIndexType(indexType));
     }
+}
+
+std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout) {
+    if (layout == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        return GlobalFulltextWithRelevanceImplTables;
+    }
+    return GlobalFulltextImplTables;
 }
 
 bool IsImplTable(std::string_view tableName) {

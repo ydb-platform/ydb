@@ -275,7 +275,19 @@ struct TIndexDescription {
     }
 
     std::span<const std::string_view> GetImplTables() const {
-        return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
+        switch (Type) {
+            case EType::GlobalSync:
+            case EType::GlobalSyncUnique:
+            case EType::GlobalAsync:
+            case EType::GlobalSyncVectorKMeansTree:
+                return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
+            case EType::GlobalFulltext:
+                const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+                YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
+                const auto& settings = fulltextDesc->GetSettings();
+                return NKikimr::NTableIndex::GetFulltextImplTables(settings.layout());
+        }
+        return {};
     }
 };
 

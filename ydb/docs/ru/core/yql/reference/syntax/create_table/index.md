@@ -35,26 +35,13 @@
     )
     WITH ( key = value, ... )
     [AS SELECT ...]
-```
+```image.png
 
-{% note info %}
+## Параметры запроса
 
-`column_option_list` - список опций для колонки. Для указания этих опций существует два синтаксиса:
+### column_option_list
 
-1. `option_1 option_2 ... option_n`;
-2. `(option_1, option_2, ..., option_n)`.
-
-Возможные значения опций:
-
-* `NOT NULL` — колонка не может содержать `NULL`.
-* `FAMILY column_family` — указывает, что данная колонка принадлежит [группе колонок](./family.md).
-* `DEFAULT value` — значение по умолчанию для колонки.
-
-Важно: конструкция `DEFAULT false NOT NULL` недопустима. Если Вам требуется указать несколько опций, включая `DEFAULT`, то следует использовать либо синтаксис со скобками, либо указывать опцию `DEFAULT` последней.
-
-Для лучшего понимания обратитесь к [примерам](#table-options-examples).
-
-{% endnote %}
+{% include [column_option_list.md](../_includes/column_option_list.md) %}
 
 {% if oss == true and backend_name == "YDB" %}
 
@@ -102,8 +89,9 @@ WITH (
     CREATE TABLE <table_name> (
       a Uint64,
       b Uint64,
-      c Float,
-      d "List<List<Int32>>"
+      c Float NOT NULL DEFAULT 3.0f,
+      d String (DEFAULT "Text", NOT NULL),
+      e "List<List<Int32>>"
       PRIMARY KEY (a, b)
     );
     ```
@@ -114,7 +102,8 @@ WITH (
     CREATE TABLE <table_name> (
       a Uint64,
       b Uint64,
-      c Float,
+      c Float NOT NULL DEFAULT 3.0f,
+      d String (DEFAULT "Text", NOT NULL),
       PRIMARY KEY (a, b)
     );
     ```
@@ -170,7 +159,8 @@ WITH (
   CREATE TABLE <table_name> (
     a Uint64,
     b Uint64,
-    c Float,
+    c Float NOT NULL DEFAULT 3.0f,
+    d String (DEFAULT "Text", NOT NULL),
     PRIMARY KEY (a, b)
   )
   WITH (
@@ -267,25 +257,6 @@ CREATE TABLE <table_name> (
 ```
 
 {% endif %}
-
-### Создание таблицы с разными опциями колонки {#table-options-examples}
-
-```yql
-CREATE TABLE tbl (
-    k Uint64,
-    v Bool (DEFAULT false, NOT NULL),
-    PRIMARY KEY (k)
-);
-```
-
-```yql
-CREATE TABLE tbl (
-    k Uint64,
-    v Bool NOT NULL DEFAULT false,
-    PRIMARY KEY (k)
-);
-```
-
 
 {% if backend_name == "YDB" and oss == true %}
 

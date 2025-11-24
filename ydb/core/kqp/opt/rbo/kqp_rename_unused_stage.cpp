@@ -58,8 +58,15 @@ void Scopes::ComputeScopesRec(std::shared_ptr<IOperator> &op, int &currScope) {
     if (RevScopeMap.contains(op)) {
         return;
     }
+    // We create a new scope for projection operators: map, project and group-by
+    // Also we create a new scope for Read, beacause of current limitation that it cannot rename output vars
+
     bool makeNewScope =
-        (op->Kind == EOperator::Map && CastOperator<TOpMap>(op)->Project) || (op->Kind == EOperator::Project) || (op->Parents.size() >= 2);
+        (op->Kind == EOperator::Map && CastOperator<TOpMap>(op)->Project) || 
+        (op->Kind == EOperator::Project) || 
+        (op->Kind == EOperator::Aggregate) ||
+        (op->Kind == EOperator::Source) ||
+        (op->Parents.size() >= 2);
 
     //YQL_CLOG(TRACE, CoreDq) << "Op: " << op->ToString() << ", nparents = " << op->Parents.size();
 
@@ -71,18 +78,12 @@ void Scopes::ComputeScopesRec(std::shared_ptr<IOperator> &op, int &currScope) {
             newScope.TopScope = true;
         }
 
-        if (op->Kind == EOperator::Map && CastOperator<TOpMap>(op)->Project) {
-            auto map = CastOperator<TOpMap>(op);
-            newScope.OutputIUs = map->GetOutputIUs();
-            newScope.IdentityMap = false;
-        } else if (op->Kind == EOperator::Project) {
-            auto project = CastOperator<TOpProject>(op);
-            newScope.OutputIUs = project->GetOutputIUs();
-            newScope.IdentityMap = false;
-        }
+        newScope.OutputIUs = op->GetOutputIUs();
+        newScope.IdentityMap = false;
         ScopeMap[currScope] = newScope;
     }
-
+    
+    // Cannot rename columns of the source operator
     if (op->Kind == EOperator::Source) {
         for (auto iu : op->GetOutputIUs()) {
             ScopeMap.at(currScope).Unrenameable.insert(iu);
@@ -105,6 +106,8 @@ void Scopes::ComputeScopes(std::shared_ptr<IOperator> &op) {
         for (auto &p : topOp->Parents) {
             auto parentScopeId = RevScopeMap.at(p.lock());
             sc.ParentScopes.push_back(parentScopeId);
+
+            // Cannot rename the output columns of a scope if its used in multiple consumers
             if (topOp->Parents.size() >= 2) {
                 auto &parentScope = ScopeMap.at(parentScopeId);
                 for (auto iu : sc.OutputIUs) {
@@ -130,17 +133,6 @@ TRenameStage::TRenameStage() {
 
 void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
-    YQL_CLOG(TRACE, CoreDq) << "Before compute parents";
-
-    for (auto it : root) {
-        YQL_CLOG(TRACE, CoreDq) << "Iterator: " << it.Current->ToString(ctx.ExprCtx);
-        for (auto c : it.Current->Children) {
-            YQL_CLOG(TRACE, CoreDq) << "Child: " << c->ToString(ctx.ExprCtx);
-        }
-    }
-
-    root.ComputeParents();
-
     // We need to build scopes for the plan, because same aliases and variable names may be
     // used multiple times in different scopes
     auto scopes = Scopes();
@@ -150,7 +142,7 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         YQL_CLOG(TRACE, CoreDq) << "Scope map: " << id << ": " << sc.ToString(ctx.ExprCtx);
     }
 
-    // Build a rename map by startingg at maps that rename variables and project
+    // Build a rename map by starting at maps that rename variables and project
     // Follow the parent scopes as far as possible and pick the top-most mapping
     // If at any point there are multiple parent scopes - stop
 
@@ -181,6 +173,9 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                 auto source = std::make_pair(scopeId, to);
                 auto target = std::make_pair(parentScopes[0], exportTo);
                 renameMap[source].push_back(target);
+                YQL_CLOG(TRACE, CoreDq) << "Rename map: " << source.second.GetFullName() << "," << source.first << " -> "
+                    << target.second.GetFullName() << "," << target.first;
+
 
                 // if (parentScopes.size()==1) {
                 //     renameMap[source].push_back(target);
@@ -194,6 +189,8 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                         source = std::make_pair(scopeId, sourceIU);
                         target = std::make_pair(scopeId, to);
                         renameMap[source].push_back(target);
+                        YQL_CLOG(TRACE, CoreDq) << "Rename map: " << source.second.GetFullName() << "," << source.first << " -> "
+                            << target.second.GetFullName() << "," << target.first;
                     }
                 }
             }
@@ -202,10 +199,10 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
     for (auto &[key, value] : renameMap) {
         if (value.size() == 1) {
-            YQL_CLOG(TRACE, CoreDq) << "Rename map: " << key.second.GetFullName() << "," << key.first << " -> "
+            YQL_CLOG(TRACE, CoreDq) << "Full Rename map: " << key.second.GetFullName() << "," << key.first << " -> "
                                     << value[0].second.GetFullName() << "," << value[0].first;
         } else {
-            YQL_CLOG(TRACE, CoreDq) << "Rename map: " << key.second.GetFullName() << "," << key.first << " -> ";
+            YQL_CLOG(TRACE, CoreDq) << "Full Rename map: " << key.second.GetFullName() << "," << key.first << " -> ";
             for (auto v : value) {
                 YQL_CLOG(TRACE, CoreDq) << v.second.GetFullName() << "," << v.first;
             }

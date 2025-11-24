@@ -155,7 +155,7 @@ namespace NActors {
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
-                ui32 RdmaCheckSum = 0;
+                ui32 RdmaCumulativeCheckSum = 0;
             };
 
             std::deque<TPendingEvent> PendingEvents;

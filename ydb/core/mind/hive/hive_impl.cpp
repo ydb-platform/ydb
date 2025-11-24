@@ -1979,7 +1979,7 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
                 }
                 tabletInfo.SetRestartsPerPeriod(follower.GetRestartsPerPeriod(restartsBarrierTime));
                 if (req.GetReturnMetrics()) {
-                    //tabletInfo.MutableMetrics()->CopyFrom(follower.GetResourceValues());
+                    follower.GetResourceValues().ToProto(tabletInfo.MutableMetrics());
                 }
             }
         }
@@ -2722,7 +2722,6 @@ static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMe
     i64 newValue = oldValue + delta;
     Y_ENSURE_LOG(newValue >= 0, "tablet " << tabletId << " name=" << name << " oldValue=" << oldValue << " delta=" << delta << " newValue=" << newValue);
     newValue = Max(newValue, (i64)0);
-    //BLOG_D("AggregateDiff: " << name << " -> " << newValue);
     aggregate.*field = newValue;
 }
 

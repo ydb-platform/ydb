@@ -178,6 +178,7 @@ public:
     IYtflowIntegration* GetYtflowIntegration() override {
         return State_->YtflowIntegration.Get();
     }
+
     IYtflowOptimization* GetYtflowOptimization() override {
         return State_->YtflowOptimization.Get();
     }

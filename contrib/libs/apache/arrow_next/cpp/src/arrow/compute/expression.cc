@@ -15,33 +15,33 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
 
-#include "arrow/compute/expression.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/expression.h"
 
 #include <algorithm>
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
 
-#include "arrow/chunked_array.h"
-#include "arrow/compute/api_aggregate.h"
-#include "arrow/compute/api_vector.h"
-#include "arrow/compute/exec_internal.h"
-#include "arrow/compute/expression_internal.h"
-#include "arrow/compute/function_internal.h"
-#include "arrow/compute/util.h"
-#include "arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/exec_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/expression_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
 #ifdef ARROW_IPC
-#  include "arrow/ipc/reader.h"
-#  include "arrow/ipc/writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/writer.h"
 #endif
-#include "arrow/util/hash_util.h"
-#include "arrow/util/key_value_metadata.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/string.h"
-#include "arrow/util/value_parsing.h"
-#include "arrow/util/vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/hash_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/vector.h"
 
 namespace arrow20 {
 

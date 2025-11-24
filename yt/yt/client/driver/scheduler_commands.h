@@ -216,6 +216,22 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TListJobTracesCommand
+    : public TSimpleOperationCommandBase<NApi::TListJobTracesOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TListJobTracesCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NJobTrackerClient::TJobId JobId;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TGetJobCommand
     : public TSimpleOperationCommandBase<NApi::TGetJobOptions>
 {

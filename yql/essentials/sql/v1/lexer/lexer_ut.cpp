@@ -147,7 +147,7 @@ Y_UNIT_TEST(UnsupportedIssues) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(AntlrAndFlavorIndependent) {
-    static const TVector<TString> queries = {
+    static const TVector<TString> Queries = {
         "",
         "   ",
         "SELECT",
@@ -165,7 +165,7 @@ Y_UNIT_TEST_ON_EACH_LEXER(AntlrAndFlavorIndependent) {
         "\"select\"select",
     };
 
-    static TVector<TString> expectations(queries.size());
+    static TVector<TString> Expectations(Queries.size());
 
     if (ANSI) {
         return;
@@ -173,9 +173,9 @@ Y_UNIT_TEST_ON_EACH_LEXER(AntlrAndFlavorIndependent) {
 
     auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
 
-    for (size_t i = 0; i < queries.size(); ++i) {
-        const auto& query = queries[i];
-        auto& expected = expectations[i];
+    for (size_t i = 0; i < Queries.size(); ++i) {
+        const auto& query = Queries[i];
+        auto& expected = Expectations[i];
 
         if (expected.empty()) {
             expected = Tokenized(lexer, query);
@@ -469,7 +469,7 @@ Y_UNIT_TEST_ON_EACH_LEXER(AsciiEscape) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(AsciiEscapeCanon) {
-    static THashMap<char, TString> canon;
+    static THashMap<char, TString> Canon;
 
     auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
 
@@ -477,7 +477,7 @@ Y_UNIT_TEST_ON_EACH_LEXER(AsciiEscapeCanon) {
         TString input;
         input += c;
 
-        TString& expected = canon[c];
+        TString& expected = Canon[c];
         if (expected.empty()) {
             expected = Tokenized(lexer, input);
         }

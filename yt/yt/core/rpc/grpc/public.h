@@ -9,6 +9,7 @@ namespace NYT::NRpc::NGrpc {
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_STRUCT(TDispatcherConfig)
+DECLARE_REFCOUNTED_STRUCT(TDispatcherDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TSslPemKeyCertPairConfig)
 DECLARE_REFCOUNTED_STRUCT(TServerCredentialsConfig)
 DECLARE_REFCOUNTED_STRUCT(TServerAddressConfig)

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"
 
 #include <algorithm>
 #include <cinttypes>
@@ -28,17 +28,17 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/io/memory.h"
-#include "arrow/util/key_value_metadata.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/pcg_random.h"
-#include "parquet/encryption/encryption_internal.h"
-#include "parquet/encryption/internal_file_decryptor.h"
-#include "parquet/exception.h"
-#include "parquet/schema.h"
-#include "parquet/schema_internal.h"
-#include "parquet/size_statistics.h"
-#include "parquet/thrift_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/pcg_random.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/encryption_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/internal_file_decryptor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/size_statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/thrift_internal.h"
 
 namespace parquet20 {
 

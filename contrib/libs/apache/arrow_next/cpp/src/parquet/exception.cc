@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
 
 namespace parquet20 {
 

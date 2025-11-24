@@ -151,7 +151,7 @@ void CheckYsonConversion(
         CHECK_NAMED_TO_POSITIONAL(type, namedYson, positionalYson); \
     } while (0)
 
-TEST(TNamedPositionalYsonConverter, TestSimpleTypes)
+TEST(TNamedPositionalYsonConverterTest, TestSimpleTypes)
 {
     CHECK_BIDIRECTIONAL(
         SimpleLogicalType(ESimpleLogicalValueType::Int64),
@@ -164,7 +164,7 @@ TEST(TNamedPositionalYsonConverter, TestSimpleTypes)
         "foo");
 }
 
-TEST(TNamedPositionalYsonConverter, TestStruct)
+TEST(TNamedPositionalYsonConverterTest, TestStruct)
 {
     CHECK_BIDIRECTIONAL(KeyValueStruct, "[foo; bar]", "{key=foo; value=bar}");
     CHECK_BIDIRECTIONAL(KeyValueStruct, "[qux; #]", "{key=qux; value=#}");
@@ -176,7 +176,7 @@ TEST(TNamedPositionalYsonConverter, TestStruct)
     CHECK_NAMED_TO_POSITIONAL_THROWS(KeyValueStruct, "{value=baz}", "is missing while parsing");
 }
 
-TEST(TNamedPositionalYsonConverter, TestStructSkipNullValues)
+TEST(TNamedPositionalYsonConverterTest, TestStructSkipNullValues)
 {
     TYsonConverterConfig config{
         .SkipNullValues = true,
@@ -197,7 +197,7 @@ TEST(TNamedPositionalYsonConverter, TestStructSkipNullValues)
     CHECK_POSITIONAL_TO_NAMED(type2, "[#; #; [#; #;]]", "{list_null=[#; #;]}");
 }
 
-TEST(TNamedPositionalYsonConverter, TestVariantStruct)
+TEST(TNamedPositionalYsonConverterTest, TestVariantStruct)
 {
     CHECK_BIDIRECTIONAL(IntStringVariant, "[0; 42]", "[int; 42]");
     CHECK_BIDIRECTIONAL(IntStringVariant, "[1; foo]", "[string; foo]");
@@ -205,7 +205,7 @@ TEST(TNamedPositionalYsonConverter, TestVariantStruct)
     CHECK_NAMED_TO_POSITIONAL_THROWS(IntStringVariant, "[str; foo]", "Unknown variant field");
 }
 
-TEST(TNamedPositionalYsonConverter, TestOptional)
+TEST(TNamedPositionalYsonConverterTest, TestOptional)
 {
     CHECK_BIDIRECTIONAL(
         OptionalLogicalType(KeyValueStruct),
@@ -233,7 +233,7 @@ TEST(TNamedPositionalYsonConverter, TestOptional)
         "[#]");
 }
 
-TEST(TNamedPositionalYsonConverter, TestList)
+TEST(TNamedPositionalYsonConverterTest, TestList)
 {
     CHECK_BIDIRECTIONAL(
         ListLogicalType(KeyValueStruct),
@@ -241,7 +241,7 @@ TEST(TNamedPositionalYsonConverter, TestList)
         "[{key=foo; value=bar}; {key=qux; value=#};]");
 }
 
-TEST(TNamedPositionalYsonConverter, TestTuple)
+TEST(TNamedPositionalYsonConverterTest, TestTuple)
 {
     CHECK_BIDIRECTIONAL(
         TupleLogicalType({KeyValueStruct, IntStringVariant, SimpleLogicalType(ESimpleLogicalValueType::Utf8)}),
@@ -249,7 +249,7 @@ TEST(TNamedPositionalYsonConverter, TestTuple)
         "[{key=foo; value=bar}; [int; 5]; foo;]");
 }
 
-TEST(TNamedPositionalYsonConverter, TestVariantTuple)
+TEST(TNamedPositionalYsonConverterTest, TestVariantTuple)
 {
     auto type = VariantTupleLogicalType({KeyValueStruct, IntStringVariant, SimpleLogicalType(ESimpleLogicalValueType::Utf8)});
     CHECK_BIDIRECTIONAL(
@@ -268,7 +268,7 @@ TEST(TNamedPositionalYsonConverter, TestVariantTuple)
         "[2; qux]");
 }
 
-TEST(TNamedPositionalYsonConverter, TestDict)
+TEST(TNamedPositionalYsonConverterTest, TestDict)
 {
     CHECK_BIDIRECTIONAL(
         DictLogicalType(KeyValueStruct, IntStringVariant),
@@ -276,7 +276,7 @@ TEST(TNamedPositionalYsonConverter, TestDict)
         "[ [{key=foo; value=#}; [int; 0]] ; [{key=bar; value=qux;}; [string; baz;]] ]");
 }
 
-TEST(TNamedPositionalYsonConverter, TestStringDictAsYsonMap)
+TEST(TNamedPositionalYsonConverterTest, TestStringDictAsYsonMap)
 {
     TYsonConverterConfig config{
         .StringKeyedDictMode = NFormats::EDictMode::Named,
@@ -290,7 +290,7 @@ TEST(TNamedPositionalYsonConverter, TestStringDictAsYsonMap)
         "[[key1; 1]; [key2; 2]]", "{key1=1; key2=2}");
 }
 
-TEST(TNamedPositionalYsonConverter, TestTagged)
+TEST(TNamedPositionalYsonConverterTest, TestTagged)
 {
     CHECK_BIDIRECTIONAL(
         TaggedLogicalType("foo", KeyValueStruct),

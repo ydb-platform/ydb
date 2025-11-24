@@ -107,7 +107,7 @@ bool IsTypeKeyword(int token)
 
 EToken TokenTypeFromStr(TStringBuf str)
 {
-    static const THashMap<TStringBuf, EToken> map = {
+    static const THashMap<TStringBuf, EToken> Map = {
         {TStringBuf("String"), TOKEN_STRING},
         {TStringBuf("Bool"), TOKEN_BOOL},
         {TStringBuf("Int32"), TOKEN_INT32},
@@ -168,8 +168,8 @@ EToken TokenTypeFromStr(TStringBuf str)
         {TStringBuf("DynamicLinear"), TOKEN_DYNAMICLINEAR},
     };
 
-    auto it = map.find(str);
-    if (it != map.end()) {
+    auto it = Map.find(str);
+    if (it != Map.end()) {
         return it->second;
     }
 

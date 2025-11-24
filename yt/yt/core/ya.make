@@ -54,8 +54,8 @@ SRCS(
     concurrency/async_looper.cpp
     concurrency/async_rw_lock.cpp
     concurrency/async_semaphore.cpp
+    concurrency/async_stream_helpers.cpp
     concurrency/async_stream_pipe.cpp
-    concurrency/async_stream.cpp
     concurrency/config.cpp
     GLOBAL concurrency/configure_fiber_manager.cpp
     concurrency/coroutine.cpp
@@ -242,10 +242,11 @@ SRCS(
 
     utilex/random.cpp
 
+    ypath/helpers.cpp
     ypath/stack.cpp
     ypath/token.cpp
     ypath/tokenizer.cpp
-    ypath/helpers.cpp
+    ypath/trie.cpp
 
     yson/async_consumer.cpp
     yson/async_writer.cpp
@@ -410,6 +411,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         benchmarks
         bus/benchmarks
+        ypath/benchmarks
         yson/benchmark
         ytree/benchmarks
     )

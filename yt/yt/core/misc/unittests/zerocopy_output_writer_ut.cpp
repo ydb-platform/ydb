@@ -10,7 +10,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TZeroCopyOutputStreamWriter, TestBasic)
+TEST(TZeroCopyOutputStreamWriterTest, TestBasic)
 {
     constexpr int GrowthSize = 7;
     TString string;
@@ -41,7 +41,7 @@ TEST(TZeroCopyOutputStreamWriter, TestBasic)
     EXPECT_EQ(string, buffer1 + buffer2);
 }
 
-TEST(TZeroCopyOutputStreamWriter, TestStress)
+TEST(TZeroCopyOutputStreamWriterTest, TestStress)
 {
     TString string;
     constexpr auto StringSize = 1000;
@@ -77,7 +77,7 @@ TEST(TZeroCopyOutputStreamWriter, TestStress)
     }
 }
 
-TEST(TZeroCopyOutputStreamWriter, TestVarInt)
+TEST(TZeroCopyOutputStreamWriterTest, TestVarInt)
 {
     constexpr auto GrowthSize = 4;
     TString outputString;

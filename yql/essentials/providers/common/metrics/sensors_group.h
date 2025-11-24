@@ -20,8 +20,8 @@ using TSensorCounterPtr = TIntrusivePtr<TSensorCounter>;
 TSensorsGroupPtr GetSensorsRootGroup();
 
 inline TSensorsGroupPtr GetSensorsGroupFor(const TString& compName) {
-    static TString compLabel("component");
-    return GetSensorsRootGroup()->GetSubgroup(compLabel, compName);
+    static TString CompLabel("component");
+    return GetSensorsRootGroup()->GetSubgroup(CompLabel, compName);
 }
 
 } // namespace NYql

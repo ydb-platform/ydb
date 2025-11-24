@@ -875,7 +875,7 @@ std::vector<std::vector<TString>> ParseData(TStringBuf data, int expectedFieldsC
     return result;
 }
 
-TEST(TTestLogicalTypesWithData, GoodTypes)
+TEST(TTestLogicalTypesWithDataTest, GoodTypes)
 {
     auto records = ParseData(NResource::Find("/types/good"), 2);
 
@@ -910,7 +910,7 @@ TEST(TTestLogicalTypesWithData, GoodTypes)
     }
 }
 
-TEST(TTestLogicalTypesWithData, BadTypes)
+TEST(TTestLogicalTypesWithDataTest, BadTypes)
 {
     auto records = ParseData(NResource::Find("/types/bad"), 3);
 

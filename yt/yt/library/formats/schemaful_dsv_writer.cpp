@@ -10,6 +10,7 @@
 #include <yt/yt/core/yson/format.h>
 
 #include <yt/yt/core/concurrency/async_stream.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <limits>
 

@@ -16,7 +16,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TSchemaSerialization, ParseUsingNodeAndSerialize)
+TEST(TSchemaSerializationTest, ParseUsingNodeAndSerialize)
 {
     const char* schemaString = "<strict=%true;unique_keys=%false>"
         "[{name=a;required=%false;type=int64;};{deleted=%true;stable_name=b}]";
@@ -42,7 +42,7 @@ TEST(TSchemaSerialization, ParseUsingNodeAndSerialize)
 R"RR({"$attributes":{"strict":true,"unique_keys":false},"$value":[{"name":"a","required":false,"type":"int64","type_v3":{"type_name":"optional","item":"int64"}},{"stable_name":"b","deleted":true}]})RR");
 }
 
-TEST(TSchemaSerialization, ParseEntityUsingNodeAndSerialize)
+TEST(TSchemaSerializationTest, ParseEntityUsingNodeAndSerialize)
 {
     NYT::NFormats::TFormat format(NFormats::EFormatType::Json);
 
@@ -57,7 +57,7 @@ TEST(TSchemaSerialization, ParseEntityUsingNodeAndSerialize)
     EXPECT_EQ(TString(buf.data(), buf.size()), "null");
 }
 
-TEST(TSchemaSerialization, Cursor)
+TEST(TSchemaSerializationTest, Cursor)
 {
     const char* schemaString = "<strict=%true;unique_keys=%false>"
         "[{name=a;required=%false;type=int64;};{deleted=%true;stable_name=b}]";
@@ -75,7 +75,7 @@ TEST(TSchemaSerialization, Cursor)
     EXPECT_EQ("b", schema.DeletedColumns()[0].StableName().Underlying());
 }
 
-TEST(TSchemaSerialization, Deleted)
+TEST(TSchemaSerializationTest, Deleted)
 {
     const char* schemaString = "<strict=%true;unique_keys=%false>"
         "[{name=a;required=%false;type=int64;};{deleted=%true;name=b}]";
@@ -86,7 +86,7 @@ TEST(TSchemaSerialization, Deleted)
         "Stable name should be set for a deleted column");
 }
 
-TEST(TInstantSerialization, YsonCompatibility)
+TEST(TInstantSerializationTest, YsonCompatibility)
 {
     auto convert = [] (auto value) {
         TUnversionedValue unversioned;
@@ -107,7 +107,7 @@ TEST(TInstantSerialization, YsonCompatibility)
     EXPECT_EQ(TInstant::MilliSeconds(upper.MilliSeconds()), convert(upper.MilliSeconds()));
 }
 
-TEST(TLegacyOwningKeySerialization, CompositeKeys)
+TEST(TLegacyOwningKeySerializationTest, CompositeKeys)
 {
     auto nameTable = New<TNameTable>();
     nameTable->RegisterName("key0");

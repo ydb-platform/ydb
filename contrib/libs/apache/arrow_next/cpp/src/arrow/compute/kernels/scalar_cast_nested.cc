@@ -22,14 +22,14 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/array/builder_nested.h"
-#include "arrow/array/builder_primitive.h"
-#include "arrow/compute/api_scalar.h"
-#include "arrow/compute/cast.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/scalar_cast_internal.h"
-#include "arrow/util/bitmap_ops.h"
-#include "arrow/util/int_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_nested.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/scalar_cast_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util.h"
 
 namespace arrow20 {
 

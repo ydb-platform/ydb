@@ -99,7 +99,7 @@ TString GetLocalTime();
 } // namespace NImpl
 
 using TComponentLevels =
-    std::array<ELevel, EComponentHelpers::ToInt(EComponent::MaxValue)>;
+    std::array<ELevel, TComponentHelpers::ToInt(EComponent::MaxValue)>;
 
 void WriteLocalTime(IOutputStream* out);
 
@@ -116,15 +116,15 @@ public:
     void UpdateProcInfo(const TString& procName);
 
     ELevel GetComponentLevel(EComponent component) const {
-        return ELevelHelpers::FromInt(AtomicGet(ComponentLevels_[EComponentHelpers::ToInt(component)]));
+        return TLevelHelpers::FromInt(AtomicGet(ComponentLevels_[TComponentHelpers::ToInt(component)]));
     }
 
     void SetComponentLevel(EComponent component, ELevel level) {
-        AtomicSet(ComponentLevels_[EComponentHelpers::ToInt(component)], ELevelHelpers::ToInt(level));
+        AtomicSet(ComponentLevels_[TComponentHelpers::ToInt(component)], TLevelHelpers::ToInt(level));
     }
 
     bool NeedToLog(EComponent component, ELevel level) const {
-        return ELevelHelpers::Lte(level, GetComponentLevel(component));
+        return TLevelHelpers::Lte(level, GetComponentLevel(component));
     }
 
     void SetMaxLogLimit(ui64 limit);
@@ -139,18 +139,18 @@ private:
     template <std::invocable<std::pair<TString, TString>> Action>
     void Contextify(Action action, EComponent component, ELevel level, TStringBuf file, int line) const {
         action(std::make_pair(TString(ToStringBuf(EContextKey::DateTime)), NImpl::GetLocalTime()));
-        action(std::make_pair(TString(ToStringBuf(EContextKey::Level)), TString(ELevelHelpers::ToString(level))));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::Level)), TString(TLevelHelpers::ToString(level))));
         action(std::make_pair(TString(ToStringBuf(EContextKey::ProcessName)), ProcName_));
         action(std::make_pair(TString(ToStringBuf(EContextKey::ProcessID)), ToString(ProcId_)));
         action(std::make_pair(TString(ToStringBuf(EContextKey::ThreadID)), NImpl::GetThreadId()));
-        action(std::make_pair(TString(ToStringBuf(EContextKey::Component)), TString(EComponentHelpers::ToString(component))));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::Component)), TString(TComponentHelpers::ToString(component))));
         action(std::make_pair(TString(ToStringBuf(EContextKey::FileName)), TString(file.RAfter(LOCSLASH_C))));
         action(std::make_pair(TString(ToStringBuf(EContextKey::Line)), ToString(line)));
     }
 
     TString ProcName_;
     pid_t ProcId_;
-    std::array<TAtomic, EComponentHelpers::ToInt(EComponent::MaxValue)> ComponentLevels_{0};
+    std::array<TAtomic, TComponentHelpers::ToInt(EComponent::MaxValue)> ComponentLevels_{0};
     mutable TAtomic WriteTruncMsg_;
 };
 

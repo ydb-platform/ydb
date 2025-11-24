@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/column_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_reader.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -29,32 +29,32 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/array/array_binary.h"
-#include "arrow/array/builder_binary.h"
-#include "arrow/array/builder_dict.h"
-#include "arrow/array/builder_primitive.h"
-#include "arrow/chunked_array.h"
-#include "arrow/type.h"
-#include "arrow/util/bit_stream_utils_internal.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/compression.h"
-#include "arrow/util/crc32.h"
-#include "arrow/util/int_util_overflow.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/rle_encoding_internal.h"
-#include "arrow/util/unreachable.h"
-#include "parquet/column_page.h"
-#include "parquet/encoding.h"
-#include "parquet/encryption/encryption_internal.h"
-#include "parquet/encryption/internal_file_decryptor.h"
-#include "parquet/level_comparison.h"
-#include "parquet/level_conversion.h"
-#include "parquet/properties.h"
-#include "parquet/statistics.h"
-#include "parquet/thrift_internal.h"  // IWYU pragma: keep
-#include "parquet/windows_fixup.h"    // for OPTIONAL
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_dict.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_stream_utils_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/crc32.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util_overflow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/rle_encoding_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/unreachable.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_page.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encoding.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/encryption_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/internal_file_decryptor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/level_comparison.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/level_conversion.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/thrift_internal.h"  // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/windows_fixup.h"    // for OPTIONAL
 
 using arrow20::MemoryPool;
 using arrow20::internal::AddWithOverflow;

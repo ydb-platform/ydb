@@ -8,6 +8,7 @@
 #include <yt/yt/client/table_client/row_buffer.h>
 
 #include <yt/yt/core/concurrency/scheduler.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/logging/fluent_log.h>
 
@@ -656,6 +657,38 @@ void TListJobsCommand::DoExecute(ICommandContextPtr context)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+
+void TListJobTracesCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("job_id", &TThis::JobId);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "per_process",
+        [] (TThis* command) -> auto& {
+            return command->Options.PerProcess;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<i64>(
+        "limit",
+        [] (TThis* command) -> auto& {return command->Options.Limit; })
+        .Optional(/*init*/ false);
+}
+
+
+void TListJobTracesCommand::DoExecute(ICommandContextPtr context)
+{
+    auto asyncResult = context->GetClient()->ListJobTraces(OperationIdOrAlias, JobId, Options);
+    auto result = WaitFor(asyncResult)
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .List(result));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 
 void TGetJobCommand::Register(TRegistrar registrar)
 {

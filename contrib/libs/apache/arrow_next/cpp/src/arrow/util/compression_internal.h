@@ -20,7 +20,7 @@
 
 #include <memory>
 
-#include "arrow/util/compression.h"  // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h"  // IWYU pragma: export
 
 namespace arrow20 {
 namespace util {

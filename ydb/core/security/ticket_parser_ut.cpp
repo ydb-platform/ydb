@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
             // Send token without type
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({.Ticket = loginResponse.Token, .Database = "/Root/Db1"})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({.Database = "/Root/Db1", .Ticket = loginResponse.Token})), 0);
             Sleep(TDuration::Seconds(1));
             // Send update security state in 1 second after send TEvAuthorizeTicket
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(loginProviderDb1.GetSecurityState())), 0);
@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
             // Send token with type Login
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({.Ticket = "Login " + loginResponse.Token, .Database = "/Root/Db2"})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({.Database = "/Root/Db2", .Ticket = "Login " + loginResponse.Token})), 0);
             Sleep(TDuration::Seconds(1));
             // Send update security state in 1 second after send TEvAuthorizeTicket
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(loginProviderDb2.GetSecurityState())), 0);
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
         // Send token without type
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({.Ticket = loginResponse.Token, .Database = "/Root/Db1"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({.Database = "/Root/Db1", .Ticket = loginResponse.Token})), 0);
         // Do no send update security state
         // runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(loginProviderDb1.GetSecurityState())), 0);
 

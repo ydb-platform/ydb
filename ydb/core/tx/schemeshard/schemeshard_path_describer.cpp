@@ -218,7 +218,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
-                return TPathElement::EPathSubType::EPathSubTypeFulltextIndexImplTable; 
+                return TPathElement::EPathSubType::EPathSubTypeFulltextIndexImplTable;
             default:
                 Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
                 return TPathElement::EPathSubType::EPathSubTypeEmpty;
@@ -1203,7 +1203,10 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         }
 
         if (!Params.GetOptions().GetShowPrivateTable()) {
-            checks.IsCommonSensePath();
+            // Allow accessing index impl tables when feature flag is enabled
+            if (!path.ShouldSkipCommonPathCheckForIndexImplTable()) {
+                checks.IsCommonSensePath();
+            }
         }
 
         if (!checks) {

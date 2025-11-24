@@ -172,6 +172,7 @@ namespace NKikimr::NStorage {
             };
 
             NJson::TJsonValue root = NJson::TJsonMap{
+                {"self_node_id", SelfId().NodeId()},
                 {"binding", getBinding()},
                 {"direct_bound_nodes", getDirectBoundNodes()},
                 {"all_bound_nodes", getAllBoundNodes()},
@@ -278,7 +279,7 @@ namespace NKikimr::NStorage {
                         out << "Quorum: " << (GlobalQuorum ? "yes" : "no") << "<br/>";
                         out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null") << "<br/>";
                         out << "NodeIdsForOutgoingBinding: " << FormatList(NodeIdsForOutgoingBinding) << "<br/>";
-                        out << "NodeIdsForPrimaryPileOutgoingBinding: " << FormatList(NodeIdsForPrimaryPileOutgoingBinding) << "<br/>";
+                        out << "NodeIdsForOtherPilesOutgoingBinding: " << FormatList(NodeIdsForOtherPilesOutgoingBinding) << "<br/>";
                     }
                 }
 
@@ -301,7 +302,6 @@ namespace NKikimr::NStorage {
                     DIV_CLASS("panel-body") {
                         DIV() {
                             out << "AllBoundNodes count: " << AllBoundNodes.size() << "<br/>";
-                            out << "LocalPileQuorum: " << (LocalPileQuorum ? "yes" : "no") << "<br/>";
                             out << "GlobalQuorum: " << (GlobalQuorum ? "yes" : "no") << "<br/>";
                             out << "NodeIdsForIncomingBinding: " << FormatList(NodeIdsForIncomingBinding) << "<br/>";
                             out << "ConnectedUnsyncedPiles: " << FormatList(ConnectedUnsyncedPiles) << "<br/>";

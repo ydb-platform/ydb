@@ -619,3 +619,37 @@ FROM my_table;
 ```
 
 
+
+## RANDOM_SAMPLE and RANDOM_VALUE
+
+#### Signature
+
+```yql
+RANDOM_SAMPLE(T?, limit:Uint64)->List<T>
+RANDOM_SAMPLE(T, limit:Uint64)->List<T>
+RANDOM_VALUE(T)->T
+RANDOM_VALUE(T?)->Optional<T>
+```
+
+Selects up to `limit` random values. `RANDOM_VALUE` is equivalent to `RANDOM_SAMPLE` with `limit=1`, except it returns an element instead of a list. The probability of each input value appearing in the resulting list is exactly `limit/count(*)`.
+
+#### Examples
+
+```yql
+SELECT
+   RANDOM_SAMPLE(region, 5) as five_random_regions,
+   RANDOM_VALUE(region) as random_region
+FROM users
+```
+
+{% note warning %}
+
+The final result is non-deterministic (it is impossible to perform two runs that are guaranteed to yield the same result).
+
+{% endnote %}
+
+{% note warning %}
+
+Choose a reasonable `limit` value, as the aggregation function keeps `limit` elements in memory during execution. Using a large `limit` when processing large elements can cause out-of-memory errors.
+
+{% endnote %}

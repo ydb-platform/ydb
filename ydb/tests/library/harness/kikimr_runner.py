@@ -794,7 +794,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                     if key == 'expected_slot_count':
                         drive_proto.PDiskConfig.ExpectedSlotCount = value
                     else:
-                        raise KeyError(f"unknown pdisk_config option {key}")
+                        raise KeyError("unknown pdisk_config option %s" % key)
 
         cmd = request.Command.add()
         cmd.DefineBox.BoxId = 1

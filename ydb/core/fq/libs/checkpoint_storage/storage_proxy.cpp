@@ -205,8 +205,7 @@ TStorageProxy::TStorageProxy(
         TDuration::MilliSeconds(100), 
         TDuration::MilliSeconds(100),
         TDuration::Seconds(10)
-        ))
-    , FeatureFlags(NKikimr::AppData()->FeatureFlags) {
+        )) {
     FillDefaultParameters(Config, StorageConfig);
 }
 
@@ -232,6 +231,7 @@ void TStorageProxy::Bootstrap() {
         new NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::FeatureFlagsItem}));
 
     Become(&TStorageProxy::StateFunc);
+    FeatureFlags = NKikimr::AppData()->FeatureFlags;
 
     LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped TStorageProxy " << SelfId() << " with connection to "
         << StorageConfig.GetEndpoint().data()
@@ -571,18 +571,6 @@ void TStorageProxy::Handle(TEvPrivate::TEvInitialize::TPtr& /*ev*/) {
 
 template<typename TEvent>
 bool TStorageProxy::CheckStatus(TEvent& ev) {
- 
-    // if (!FeatureFlags.GetEnableScriptExecutionOperations()) {
-    //     NYql::TIssues issues;
-    //     issues.AddIssue("ExecuteScript feature is not enabled");
-    //     HandleDelayedRequestError(requestType, std::move(ev), Ydb::StatusIds::UNSUPPORTED, std::move(issues));
-    //     return false;
-    // }
-
-    // if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(requestType), ActorContext())) {
-    //     return false;
-    // }
-
     switch (InitStatus) {
         case EInitStatus::NotStarted:
             StartInitialization();
@@ -664,9 +652,8 @@ void TStorageProxy::Handle(NKikimr::NConsole::TEvConsole::TEvConfigNotificationR
 
     if (changed) {
         if (InitStatus != EInitStatus::NotStarted) {
-            // TODO Pending?
-            InitStatus = EInitStatus::NotStarted;
             StartInitialization();
+            InitStatus = EInitStatus::Pending;
         }
     }
 }
@@ -686,17 +673,3 @@ std::unique_ptr<NActors::IActor> NewStorageProxy(
 }
 
 } // namespace NFq
-
-
-// #define STRICT_STFUNC(NAME, HANDLERS)           \
-//     void NAME(TAutoPtr<::NActors::IEventHandle>& ev) {
-//         switch ([[maybe_unused]] const ui32 etype = ev->GetTypeRewrite()) { \
-//             case TEvType::EventType: {                                                      \
-//                 typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
-//                 HandleFunc(*x);                                                             \
-//                 break;                                                                      \
-//             }
-//         default:                                                            \
-//             UNHANDLED_MSG_HANDLER                                           \
-//         }
-//     }

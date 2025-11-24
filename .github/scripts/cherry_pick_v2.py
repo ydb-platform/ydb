@@ -200,8 +200,8 @@ class GitRepository:
             self.git_run("checkout", branch)
     
     def create_branch(self, branch_name: str, from_branch: str):
-        """Создает новую ветку"""
-        self.git_run("checkout", "-b", branch_name)
+        """Создает новую ветку от указанной ветки"""
+        self.git_run("checkout", "-b", branch_name, from_branch)
         return branch_name
     
     def cherry_pick(self, commit_sha: str) -> CherryPickResult:
@@ -626,9 +626,16 @@ class PRContentBuilder:
             if len(context.source_info.pull_requests) == 1:
                 pr_num = context.source_info.pull_requests[0].number
                 changelog_entry = f"Backport of PR #{pr_num} to `{branch_desc}`"
-            else:
+            elif len(context.source_info.pull_requests) > 1:
                 pr_nums = ', '.join([f"#{p.number}" for p in context.source_info.pull_requests])
                 changelog_entry = f"Backport of PRs {pr_nums} to `{branch_desc}`"
+            else:
+                # Нет связанных PR - используем информацию о commits
+                if len(context.source_info.commit_shas) == 1:
+                    changelog_entry = f"Backport of commit {context.source_info.commit_shas[0][:7]} to `{branch_desc}`"
+                else:
+                    commit_refs = ', '.join([sha[:7] for sha in context.source_info.commit_shas])
+                    changelog_entry = f"Backport of commits {commit_refs} to `{branch_desc}`"
         else:
             changelog_entry = changelog_entry_text
         
@@ -1045,16 +1052,29 @@ class CherryPickOrchestrator:
         
         # Проверка merge commit
         is_merge_commit = commit.parents and len(commit.parents) > 1
-        if is_merge_commit:
-            if self.merge_commits_mode == 'fail':
-                raise ValueError(f"Commit {expanded_sha[:7]} is a merge commit. Use PR number instead or set --merge-commits skip")
-            elif self.merge_commits_mode == 'skip':
-                self.logger.info(f"Skipping merge commit {expanded_sha[:7]} (--merge-commits skip)")
-                return
         
+        # Сначала проверяем, связан ли commit с PR (даже если это merge commit)
         pulls = commit.get_pulls()
         if pulls.totalCount > 0:
             pr = pulls.get_page(0)[0]
+            
+            # Если это merge commit, связанный с PR - автоматически используем PR
+            if is_merge_commit:
+                if self.merge_commits_mode == 'fail':
+                    self.logger.warning(
+                        f"Commit {expanded_sha[:7]} is a merge commit associated with PR #{pr.number}. "
+                        f"Automatically using PR #{pr.number} instead."
+                    )
+                elif self.merge_commits_mode == 'skip':
+                    self.logger.info(
+                        f"Commit {expanded_sha[:7]} is a merge commit associated with PR #{pr.number}. "
+                        f"Automatically using PR #{pr.number} instead of skipping."
+                    )
+                # Обрабатываем как PR вместо merge commit
+                self._add_pull(pr.number, single)
+                return
+            
+            # Обычный commit, связанный с PR
             if not pr.merged:
                 if not self.allow_unmerged:
                     raise ValueError(f"PR #{pr.number} (associated with commit {expanded_sha[:7]}) is not merged. Cannot backport unmerged PR. Use --allow-unmerged to allow")
@@ -1073,6 +1093,16 @@ class CherryPickOrchestrator:
                 self.source_info.titles.append(f'commit {commit.sha[:7]}')
             self.source_info.body_items.append(f"* commit {commit.html_url}: {pr.title}")
         else:
+            # Commit не связан с PR
+            if is_merge_commit:
+                # Merge commit без связанного PR
+                if self.merge_commits_mode == 'fail':
+                    raise ValueError(f"Commit {expanded_sha[:7]} is a merge commit without associated PR. Use PR number instead or set --merge-commits skip")
+                elif self.merge_commits_mode == 'skip':
+                    self.logger.info(f"Skipping merge commit {expanded_sha[:7]} (--merge-commits skip, no associated PR)")
+                    return
+            
+            # Обычный commit без PR
             try:
                 commit_author = commit.author.login if commit.author else None
                 if commit_author and commit_author not in self.source_info.authors:
@@ -1240,7 +1270,7 @@ class CherryPickOrchestrator:
                     self.logger.error(error_msg)
                     self.summary_writer.write(error_msg)
                     self.skipped_branches.append((target_branch, "cherry-pick conflict (failed to resolve)"))
-                    raise Exception(error_msg)
+                    raise RuntimeError(error_msg)
         
         # Push ветки
         try:

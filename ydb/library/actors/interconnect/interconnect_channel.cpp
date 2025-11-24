@@ -104,7 +104,7 @@ namespace NActors {
                     } else if (Params.UseExternalDataChannel && !SerializationInfo->Sections.empty()) {
                         State = EState::SECTIONS;
                         SectionIndex = 0;
-                        XXH3_64bits_reset(&RdmaChecksumState);
+                        XXH3_64bits_reset(&RdmaCumulativeChecksumState);
 
                         bool sendViaRdma = false;
                         // Check if any section can be send via rdma
@@ -352,7 +352,7 @@ namespace NActors {
                     return false;
                 }
                 if (checksumming) {
-                    XXH3_64bits_update(&RdmaChecksumState, buf.GetData(), buf.GetSize());
+                    XXH3_64bits_update(&RdmaCumulativeChecksumState, buf.GetData(), buf.GetSize());
                 }
                 auto cred = RdmaCredsBuffer.AddCreds();
                 cred->SetAddress(reinterpret_cast<ui64>(memReg.GetAddr()));
@@ -393,7 +393,7 @@ namespace NActors {
 
         Y_ABORT_UNLESS(RdmaCredsBuffer.SerializePartialToArray(ptr, credsSerializedSize));
         ptr += credsSerializedSize;
-        WriteUnaligned<ui32>(ptr, checksumming ? XXH3_64bits_digest(&RdmaChecksumState) : 0);
+        WriteUnaligned<ui32>(ptr, checksumming ? XXH3_64bits_digest(&RdmaCumulativeChecksumState) : 0);
         OutputQueueSize -= payloadSz;
 
         task.Write<false>(buffer, partSize);

@@ -803,9 +803,9 @@ namespace NActors {
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;
                     if (Params.ChecksumRdmaEvent) {
-                        context.PendingEvents.back().RdmaCheckSum = ReadUnaligned<ui32>(ptr);
+                        context.PendingEvents.back().RdmaCumulativeCheckSum = ReadUnaligned<ui32>(ptr);
                     } else {
-                        context.PendingEvents.back().RdmaCheckSum = 0;
+                        context.PendingEvents.back().RdmaCumulativeCheckSum = 0;
                     }
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
@@ -903,7 +903,7 @@ namespace NActors {
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }
-            if (pendingEvent.RdmaCheckSum) {
+            if (pendingEvent.RdmaCumulativeCheckSum) {
                 XXH3_state_t state;
                 XXH3_64bits_reset(&state);
                 for (auto iter = payload.Begin(); iter.Valid(); ++iter) {
@@ -913,7 +913,7 @@ namespace NActors {
                     }
                 }
                 checksum = XXH3_64bits_digest(&state);
-                if (checksum != pendingEvent.RdmaCheckSum) {
+                if (checksum != pendingEvent.RdmaCumulativeCheckSum) {
                     LOG_CRIT_IC_SESSION("ICIS05", "event rdma checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }

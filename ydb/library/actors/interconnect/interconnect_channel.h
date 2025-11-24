@@ -152,7 +152,7 @@ namespace NActors {
         size_t SectionIndex = 0;
         std::vector<char> XdcData;
         std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
-        XXH3_state_t RdmaChecksumState;
+        XXH3_state_t RdmaCumulativeChecksumState;
 
         template<bool External>
         bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);

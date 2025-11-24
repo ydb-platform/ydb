@@ -381,6 +381,18 @@ public:
         return CountersQnt;
     }
 
+    void Populate(const TCountersArray<T>& rp) {
+        if (CountersQnt != rp.CountersQnt) {
+            Reset(rp);
+        } else {
+            for (ui32 i = 0, e = CountersQnt; i < e; ++i) {
+                Counters[i].Populate(rp.Counters[i]);
+            }
+        }
+    }
+
+    void ResetCounters();
+
 private:
     //
     void Reset(const TCountersArray<T>& rp) {
@@ -399,8 +411,6 @@ private:
         }
     }
 
-    void ResetCounter();
-
     //
     void AdjustToBaseLine(const TCountersArray<T>& baseLine) {
         Y_DEBUG_ABORT_UNLESS(baseLine.CountersQnt == CountersQnt);
@@ -416,16 +426,6 @@ private:
         }
     }
 
-    void Populate(const TCountersArray<T>& rp) {
-        if (CountersQnt != rp.CountersQnt) {
-            Reset(rp);
-        } else {
-            for (ui32 i = 0, e = CountersQnt; i < e; ++i) {
-                Counters[i].Populate(rp.Counters[i]);
-            }
-        }
-    }
-
     //
     ui32 CountersQnt;
     TCountersHolder CountersHolder;
@@ -433,21 +433,21 @@ private:
 };
 
 template <>
-inline void TCountersArray<TTabletSimpleCounter>::ResetCounter() {
+inline void TCountersArray<TTabletSimpleCounter>::ResetCounters() {
     for (ui32 i = 0; i < CountersQnt; ++i) {
         Counters[i].Set(0);
     }
 }
 
 template <>
-inline void TCountersArray<TTabletCumulativeCounter>::ResetCounter() {
+inline void TCountersArray<TTabletCumulativeCounter>::ResetCounters() {
     for (ui32 i = 0; i < CountersQnt; ++i) {
         Counters[i].Set(0);
     }
 }
 
 template <>
-inline void TCountersArray<TTabletPercentileCounter>::ResetCounter() {
+inline void TCountersArray<TTabletPercentileCounter>::ResetCounters() {
     for (ui32 i = 0; i < CountersQnt; ++i) {
         Counters[i].Clear();
     }
@@ -569,21 +569,9 @@ public:
     }
 
     void ResetCounters() {
-        SimpleCounters.ResetCounter();
-        CumulativeCounters.ResetCounter();
-        PercentileCounters.ResetCounter();
-    }
-
-    void ResetSimpleCounters() {
-        SimpleCounters.ResetCounter();
-    }
-
-    void ResetCumulativeCounters() {
-        CumulativeCounters.ResetCounter();
-    }
-
-    void ResetPercentileCounters() {
-        PercentileCounters.ResetCounter();
+        SimpleCounters.ResetCounters();
+        CumulativeCounters.ResetCounters();
+        PercentileCounters.ResetCounters();
     }
 
 private:

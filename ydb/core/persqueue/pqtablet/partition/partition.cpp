@@ -466,8 +466,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     ctx.Schedule(WAKE_TIMEOUT, new TEvents::TEvWakeup());
     ctx.Send(TabletActorId, new TEvPQ::TEvPartitionCounters(Partition, TabletCounters));
-    TabletCounters.ResetCumulativeCounters();
-    TabletCounters.ResetPercentileCounters();
+    TabletCounters.Cumulative().ResetCounters();
+    TabletCounters.Percentile().ResetCounters();
 
     ui64 usedStorage = GetUsedStorage(now);
     if (usedStorage > 0) {

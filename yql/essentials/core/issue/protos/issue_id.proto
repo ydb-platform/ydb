@@ -88,6 +88,7 @@ message TIssuesIds {
         KIKIMR_DISK_SPACE_EXHAUSTED = 2033;
         KIKIMR_SCHEMA_CHANGED = 2034;
         KIKIMR_INTERNAL_ERROR = 2035;
+        KIKIMR_OUT_OF_SPACE = 2036;
 
 // kikimr warnings
         KIKIMR_READ_MODIFIED_TABLE = 2500;

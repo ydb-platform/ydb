@@ -305,7 +305,7 @@ struct TLevel {
         CheckCompactions = true;
     }
 
-    bool NeedCompaction(const TSettings& settings) {
+    bool NeedCompaction(const TSettings& settings) const {
         if (Portions.size() < 2) {
             return false;
         }
@@ -591,7 +591,7 @@ private:
     std::shared_ptr<TColumnEngineChanges> GetCompactLevelTask(
             const std::shared_ptr<TGranuleMeta>& granule,
             const std::shared_ptr<NDataLocks::TManager>& locksManager,
-            ui32 level) const{
+            ui32 level) const {
         if (!NeedLevelCompaction(level)) {
             return nullptr;
         }
@@ -655,26 +655,23 @@ private:
     }
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
-        // Check compactions, bottom to top
-        std::shared_ptr<TColumnEngineChanges> result;
-        for (size_t level = Max(Accumulator.size(), Levels.size()) - 1; level >= 0; --level) {
-            if (level < Levels.size()) {
-                if (auto task = GetCompactLevelTask(granule, locksManager, level)) {
-                    result = task;
-                }
-            }
+        // Check compactions, top to bottom
+        for (size_t level = 0; level < Max(Accumulator.size(), Levels.size()); ++level) {
             if (level < Accumulator.size()) {
-                if (auto task = GetCompactAccumulatorTask(granule, locksManager, level)) {
-                    result = task;
+                if (auto result = GetCompactAccumulatorTask(granule, locksManager, level)) {
+                    return { result };
+                }
+            }
+            if (level < Levels.size()) {
+                if (auto result = GetCompactLevelTask(granule, locksManager, level)) {
+                    return { result };
                 }
             }
         }
-        if (!result) {
-            // Nothing to compact
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: nothing to compact");
-            return {};
-        }
-        return {result};
+
+        // Nothing to compact
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: nothing to compact");
+        return {};
     }
 
     void DoActualize(const TInstant currentInstant) override {

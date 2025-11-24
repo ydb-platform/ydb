@@ -1,11 +1,8 @@
-
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
-
-
 namespace NKikimr {
 
 ITilingCounter::ITilingCounter(ui32 i, bool isLevel): TBase("TilingLevelCounter") {
-    auto name = (isLevel ? "level=" : "acc=") +  ToString(i);
+    auto name = (isLevel ? "level=" : "acc=") + ToString(i);
     Count = TBase::GetValue("Count/" + name);
     BlobBytes = TBase::GetValue("BlobBytes/" + name);
     RawBytes = TBase::GetValue("RawBytes/" + name);
@@ -34,4 +31,4 @@ void TTilingLevelCounter::SetIntersections(ui32 intersections) {
     IntersectionsCount->Set(intersections);
 }
 
-}
+}  // namespace NKikimr

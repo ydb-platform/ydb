@@ -1,13 +1,6 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/signals/owner.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
-
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -37,4 +30,4 @@ public:
     void SetIntersections(ui32 intersections);
 };
 
-}   // namespace NKikimr
+}  // namespace NKikimr

@@ -803,9 +803,9 @@ namespace NActors {
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;
                     if (Params.ChecksumRdmaEvent) {
-                        context.PendingEvents.back().RdmaCheckSum = ReadUnaligned<ui32>(ptr);
+                        context.PendingEvents.back().RdmaCumulativeCheckSum = ReadUnaligned<ui32>(ptr);
                     } else {
-                        context.PendingEvents.back().RdmaCheckSum = 0;
+                        context.PendingEvents.back().RdmaCumulativeCheckSum = 0;
                     }
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
@@ -898,18 +898,23 @@ namespace NActors {
                 for (const auto&& [data, size] : payload) {
                     checksum = Crc32cExtendMSanCompatible(checksum, data, size);
                 }
-            } else if (pendingEvent.RdmaCheckSum) {
+                if (checksum != descr.Checksum) {
+                    LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
+                    throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+                }
+            }
+            if (pendingEvent.RdmaCumulativeCheckSum) {
                 XXH3_state_t state;
                 XXH3_64bits_reset(&state);
-                for (const auto&& [data, size] : payload) {
-                    XXH3_64bits_update(&state, data, size);
+                for (auto iter = payload.Begin(); iter.Valid(); ++iter) {
+                    auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(iter.GetChunk());
+                    if (!memRegion.Empty()) {
+                        XXH3_64bits_update(&state, memRegion.GetAddr(), memRegion.GetSize());
+                    }
                 }
                 checksum = XXH3_64bits_digest(&state);
-            }
-            ui32 expectedChecksum = descr.Checksum ?: pendingEvent.RdmaCheckSum;
-            if (expectedChecksum) {
-                if (checksum != expectedChecksum) {
-                    LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
+                if (checksum != pendingEvent.RdmaCumulativeCheckSum) {
+                    LOG_CRIT_IC_SESSION("ICIS05", "event rdma checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }

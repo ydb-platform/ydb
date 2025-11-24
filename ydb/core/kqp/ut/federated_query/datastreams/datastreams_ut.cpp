@@ -309,6 +309,41 @@ public:
         }
     }
 
+    void TestReadTopicBasic(const TString& testSuffix) {
+        const TString sourceName = "sourceName" + testSuffix;
+        const TString topicName = "topicName" + testSuffix;
+        CreateTopic(topicName);
+
+        CreatePqSourceBasicAuth(sourceName, UseSchemaSecrets());
+
+        const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
+            SELECT key || "{id}", value FROM `{source}`.`{topic}`
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(
+                        key String NOT NULL,
+                        value String NOT NULL
+                    ))
+                LIMIT 1;
+            )",
+            "source"_a=sourceName,
+            "topic"_a=topicName,
+            "id"_a=testSuffix
+        ));
+
+        WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
+
+        CheckScriptResult(scriptExecutionOperation, 2, 1, [testSuffix](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1" + testSuffix);
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
+        });
+
+        const auto metadata = GetScriptExecutionOperation(scriptExecutionOperation).Metadata();
+        const auto& plan = metadata.ExecStats.GetPlan();
+        UNIT_ASSERT(plan);
+        UNIT_ASSERT_STRING_CONTAINS(*plan, "Mkql_TotalNodes");
+    }
+
     // Table client SDK
 
     void ExecSchemeQuery(const TString& query, EStatus expectedStatus = EStatus::SUCCESS) {
@@ -1056,42 +1091,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         });
     }
 
-    Y_UNIT_TEST_F(ReadTopicBasic, TStreamingWithSchemaSecretsTestFixture) {
-        for (int i = 0; i < 2; ++i) {
-            const bool useSchemaSecrets = static_cast<bool>(i);
-            const TString sourceName = "sourceName" + ToString(i);
-            const TString topicName = "topicName" + ToString(i);
-            CreateTopic(topicName);
+    Y_UNIT_TEST_F(ReadTopicBasicNewSecrets, TStreamingWithSchemaSecretsTestFixture) {
+        TestReadTopicBasic("-with-new-secret");
+    }
 
-            CreatePqSourceBasicAuth(sourceName, useSchemaSecrets);
-
-            const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
-                SELECT key || "{id}", value FROM `{source}`.`{topic}`
-                    WITH (
-                        FORMAT="json_each_row",
-                        SCHEMA=(
-                            key String NOT NULL,
-                            value String NOT NULL
-                        ))
-                    LIMIT 1;
-                )",
-                "source"_a=sourceName,
-                "topic"_a=topicName,
-                "id"_a = i
-            ));
-
-            WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
-
-            CheckScriptResult(scriptExecutionOperation, 2, 1, [i](TResultSetParser& result) {
-                UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1" + ToString(i));
-                UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
-            });
-
-            const auto metadata = GetScriptExecutionOperation(scriptExecutionOperation).Metadata();
-            const auto& plan = metadata.ExecStats.GetPlan();
-            UNIT_ASSERT(plan);
-            UNIT_ASSERT_STRING_CONTAINS(*plan, "Mkql_TotalNodes");
-        }
+    Y_UNIT_TEST_F(ReadTopicBasicOldSecrets, TStreamingTestFixture) {
+        TestReadTopicBasic("-with-old-secret");
     }
 
     Y_UNIT_TEST_F(ReadTopicExplainBasic, TStreamingTestFixture) {

@@ -256,6 +256,10 @@ class GitRepository:
         """git commit"""
         self.git_run("commit", "-m", message)
     
+    def commit_allow_empty(self, message: str):
+        """git commit --allow-empty"""
+        self.git_run("commit", "--allow-empty", "-m", message)
+    
     def push(self, branch: str, set_upstream: bool = True):
         """Push branch"""
         if set_upstream:
@@ -1279,10 +1283,19 @@ class CherryPickOrchestrator:
             if result.raw_output:
                 cherry_pick_logs.append(f"=== Cherry-picking {commit_sha[:7]} ===\n{result.raw_output}")
             
-            # Handle empty commits - just log, don't skip
+            # Handle empty commits - create empty commit with original message
             if result.is_empty:
-                self.logger.info(f"Commit {commit_sha[:7]} is empty (already applied), continuing...")
-                continue  # Continue, don't skip
+                self.logger.info(f"Commit {commit_sha[:7]} is empty (already applied), creating empty commit...")
+                try:
+                    # Get original commit message
+                    original_commit = self.repo.get_commit(commit_sha)
+                    commit_message = original_commit.commit.message
+                    # Create empty commit with original message
+                    self.git_repo.commit_allow_empty(commit_message)
+                    self.logger.info(f"Created empty commit for {commit_sha[:7]}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to create empty commit for {commit_sha[:7]}: {e}, continuing...")
+                continue
             
             # Handle conflicts
             if result.has_conflicts:

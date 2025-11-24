@@ -16,10 +16,7 @@ namespace NKikimr::NStorage {
 
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
-            LocalPileQuorum = BridgeInfo && HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap,
-                BridgeInfo->SelfNodePile->BridgePileId, *Cfg, nullptr, true);
-            GlobalQuorum = (!BridgeInfo || BridgeInfo->SelfNodePile->IsPrimary) && HasNodeQuorum(*StorageConfig,
-                connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
+            GlobalQuorum = HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
 
             // recalculate unsynced piles' quorum too
             if (BridgeInfo) {
@@ -56,10 +53,6 @@ namespace NKikimr::NStorage {
         } else if (Scepter && !GlobalQuorum) {
             // if we have local pile quorum, then do not switch into error state, we'll start collecting configs locally
             SwitchToError("quorum lost");
-        }
-
-        if (!LocalPileQuorum) {
-            UnbindNodesFromOtherPiles("local pile quorum lost");
         }
     }
 

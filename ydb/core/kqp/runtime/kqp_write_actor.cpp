@@ -1114,10 +1114,6 @@ public:
             evWrite->SetLockId(LockTxId, LockNodeId);
             evWrite->Record.SetLockMode(LockMode);
 
-            if (LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
-                YQL_ENSURE(MvccSnapshot);
-            }
-
             if (MvccSnapshot) {
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
             }

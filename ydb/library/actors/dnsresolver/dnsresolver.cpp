@@ -620,7 +620,25 @@ namespace NDnsResolver {
 
         void WorkerThreadLoop() noexcept {
             TThread::SetCurrentThreadName("DnsResolver");
+
+            TVector<struct pollfd> fds;
             while (!Stopped) {
+                fds.clear();
+                fds.reserve(1);
+                {
+                    auto& entry = fds.emplace_back();
+                    entry.fd = WaitSock();
+                    entry.events = POLLRDNORM | POLLIN;
+                }
+
+                int ret = poll(fds.data(), fds.size(), 1000);
+                if (ret == -1) {
+                    if (errno == EINTR) {
+                        continue;
+                    }
+                }
+                // Actualy should be something like "if (ret > 0 && fds[0].revents & (POLLRDNORM | POLLIN))"
+                // but we have only one socket and use poll just to wait
                 RunCallbacks();
             }
         }

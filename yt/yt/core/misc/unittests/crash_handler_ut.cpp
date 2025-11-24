@@ -9,7 +9,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TCrashHandler, Simple)
+TEST(TCrashHandlerTest, Simple)
 {
     EXPECT_DEATH(
         {

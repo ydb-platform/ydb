@@ -18,7 +18,7 @@ TString GenerateRandomFileName(const char* prefix);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// NB. EXPECT_THROW_* are macros not functions so when failure occurres
+// NB. EXPECT_THROW_* are macros not functions so when failure occurs
 // gtest framework points to source code of test not the source code
 // of EXPECT_THROW_* function.
 #define EXPECT_THROW_THAT(expr, matcher) \

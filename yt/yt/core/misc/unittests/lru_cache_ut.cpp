@@ -7,7 +7,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TSimpleLruCache, Common)
+TEST(TSimpleLruCacheTest, Common)
 {
     TSimpleLruCache<TString, int> cache(2);
     cache.Insert("a", 1);
@@ -44,7 +44,7 @@ TEST(TSimpleLruCache, Common)
     EXPECT_EQ(cache.Get("b"), 4);
 }
 
-TEST(TSimpleLruCache, Clear)
+TEST(TSimpleLruCacheTest, Clear)
 {
     TSimpleLruCache<TString, int> cache(2);
     cache.Insert("a", 1);
@@ -65,7 +65,7 @@ TEST(TSimpleLruCache, Clear)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TMultiLruCache, InsertAndFind)
+TEST(TMultiLruCacheTest, InsertAndFind)
 {
     TMultiLruCache<TString, int> cache(3);
 
@@ -111,7 +111,7 @@ TEST(TMultiLruCache, InsertAndFind)
     EXPECT_EQ(cache.GetSize(), 0);
 }
 
-TEST(TMultiLruCache, Extract)
+TEST(TMultiLruCacheTest, Extract)
 {
     TMultiLruCache<TString, int> cache(3);
 

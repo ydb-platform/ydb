@@ -541,8 +541,8 @@ TExprNode::TPtr OptimizeExistsAndUnwrap(const TExprNode::TPtr& node, TExprContex
 
 bool IsExtractCommonPredicatesFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const char optName[] = "ExtractCommonPredicatesFromLogicalOps";
-    return !IsOptimizerDisabled<optName>(*optCtx.Types);
+    static const char OptName[] = "ExtractCommonPredicatesFromLogicalOps";
+    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 size_t GetNodeId(const TExprNode* node, const TNodeMap<size_t>& node2id) {
@@ -670,8 +670,8 @@ TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ct
 
 bool IsOptimizeXNotXEnabled(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const char flag[] = "OptimizeXNotX";
-    return IsOptimizerEnabled<flag>(*optCtx.Types) && !IsOptimizerDisabled<flag>(*optCtx.Types);
+    static const char Flag[] = "OptimizeXNotX";
+    return IsOptimizerEnabled<Flag>(*optCtx.Types) && !IsOptimizerDisabled<Flag>(*optCtx.Types);
 }
 
 const TExprNode* UnwrapUnessential(const TExprNode* node) {

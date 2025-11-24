@@ -595,7 +595,7 @@ class TestViewer(object):
     @classmethod
     def normalize_result_healthcheck(cls, result):
         result = cls.replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
-        cls.delete_keys_recursively(result, ['issue_log'])
+        cls.delete_keys_recursively(result, {'issue_log'})
         return result
 
     @classmethod
@@ -1603,4 +1603,10 @@ class TestViewer(object):
                 break
             tries -= 1
             time.sleep(1)
+        return result
+
+    @classmethod
+    def test_viewer_peers(cls):
+        result = cls.get_viewer_normalized("/viewer/peers")
+        cls.delete_keys_recursively(result, {'ScopeId', 'PoolStats'})
         return result

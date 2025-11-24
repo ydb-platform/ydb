@@ -591,12 +591,14 @@ namespace NKikimr {
     struct TEvNodeWardenStorageConfig
         : TEventLocal<TEvNodeWardenStorageConfig, TEvBlobStorage::EvNodeWardenStorageConfig>
     {
-        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> Config;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> Config; // effective storage config
         bool SelfManagementEnabled;
         TBridgeInfo::TPtr BridgeInfo;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> CommittedConfig; // committed storage config
 
         TEvNodeWardenStorageConfig(std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> config,
-            bool selfManagementEnabled, TBridgeInfo::TPtr bridgeInfo);
+            bool selfManagementEnabled, TBridgeInfo::TPtr bridgeInfo,
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> committedConfig = nullptr);
         ~TEvNodeWardenStorageConfig();
     };
 

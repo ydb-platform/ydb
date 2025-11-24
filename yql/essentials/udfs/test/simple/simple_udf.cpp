@@ -1,6 +1,7 @@
 #include <util/generic/yexception.h>
 #include <util/generic/hash.h>
 #include <util/string/cast.h>
+#include <util/system/fs.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
@@ -176,8 +177,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("GenericAsStruct");
-        return name;
+        static auto Name = TStringRef::Of("GenericAsStruct");
+        return Name;
     }
 
     TGenericAsStruct(size_t argc)
@@ -248,8 +249,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Logging");
-        return name;
+        static auto Name = TStringRef::Of("Logging");
+        return Name;
     }
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -277,6 +278,11 @@ private:
     const TLogComponentId Component_;
 };
 
+SIMPLE_UDF(TFileExists, bool(char*)) {
+    Y_UNUSED(valueBuilder);
+    return TUnboxedValuePod(NFs::Exists(TString(args[0].AsStringRef())));
+}
+
 SIMPLE_MODULE(TSimpleUdfModule,
               TCrash,
               TException,
@@ -297,7 +303,8 @@ SIMPLE_MODULE(TSimpleUdfModule,
               TIncrementOpt,
               TIncrementWithCounters,
               TGenericAsStruct,
-              TLogging)
+              TLogging,
+              TFileExists)
 
 } // namespace
 

@@ -22,9 +22,9 @@
 #include <string>
 #include <vector>
 
-#include "arrow/util/span.h"
-#include "parquet/properties.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/span.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 using parquet20::ParquetCipher;
 

@@ -480,7 +480,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
     }
 
-    /*
     Y_UNIT_TEST(Aggregation) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -538,6 +537,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
 
         std::vector<std::string> queries = {
+            // sum, min, max
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
@@ -551,9 +551,10 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
-                select sum(t1.c) from t1 group by t1.b
+                select sum(t1.c) as sum from t1 group by t1.b
                 union all
-                select sum(t1.b) from t1;
+                select sum(t1.b) as sum from t1
+                order by sum;
             )",
             R"(
                 --!syntax_pg
@@ -573,12 +574,12 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
-                select max(t1.b), min(t1.a) from t1;
+                select max(t1.b) maxb, min(t1.a) from t1 order by maxb;
             )",
             R"(
                 --!syntax_pg
                 set TablePathPrefix = "/Root/";
-                select sum(t1.a) from t1 group by t1.b, t1.c;
+                select sum(t1.a) as suma from t1 group by t1.b, t1.c order by suma;
             )",
             R"(
                 --!syntax_pg
@@ -588,8 +589,9 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             R"(
                 --!syntax_pg
                 set TablePathPrefix = "/Root/";
-                select max(t1.a), min(t1.a), min(t1.b) as min_b from t1;
+                select max(t1.a) as maxa, min(t1.a), min(t1.b) as min_b from t1 order by maxa;
             )",
+            // distinct all
             R"(
                 --!syntax_pg
                 set TablePathPrefix = "/Root/";
@@ -605,6 +607,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 set TablePathPrefix = "/Root/";
                 select distinct min(t1.a) as min_a, max(t1.a) as max_a from t1 group by t1.b order by min_a;
             )",
+            // aggregation on expressions and group by with expressions
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
@@ -628,24 +631,64 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
-                select sum(distinct t1.b) as sum, t1.a from t1 group by t1.a order by sum;
+                select sum(distinct t1.b) as sum, t1.a from t1 group by t1.a order by sum, t1.a;
             )",
+            // expressions on aggregations
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
                 select sum(t1.a) + 1, t1.b from t1 group by t1.b order by t1.b;
             )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select
+                       sum(case when t1.a > 0
+                            then 1
+                            else 0 end) +
+                       sum(case when t1.a < 0
+                            then 1
+                            else 0 end) + 1, sum(t1.a) as r, t1.b + 2 as group_key from t1 group by t1.b + 2 order by r;
+            )",
+            // distinct
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select distinct t1.b from t1 order by t1.b;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select count(distinct t1.a), t1.b from t1 group by t1.b, t1.c order by t1.b;
+            )",
+            // avg
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select avg(t1.b) from t1;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select avg(t1.a) as avgA, avg(t1.c) as avgC from t1 group by t1.b;
+            )",
+            // self aggregation
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select sum(t1.b) as sumb from t1 group by t1.b order by sumb;
+            )"
         };
 
         std::vector<std::string> results = {
             R"([["1";"4"];["2";"6"]])",
             R"([["1";"4"];["2";"6"]])",
-            R"([["6"];["4"];["8"]])",
+            R"([["4"];["6"];["8"]])",
             R"([["1";"1"];["2";"0"]])",
             R"([["1";"3"];["2";"4"]])",
             R"([["1";"2"];["2";"3"]])",
             R"([["2";"0"]])",
-            R"([["6"];["4"]])",
+            R"([["4"];["6"]])",
             R"([["4";"1"];["6";"2"]])",
             R"([["4";"0";"1"]])",
             R"([["0";"2"];["1";"1"];["2";"2"];["3";"1"];["4";"2"]])",
@@ -656,7 +699,13 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             R"([["4";"2";"4"];["6";"3";"4"]])",
             R"([["4"];["8"];["8"]])",
             R"([["1";"1"];["1";"3"];["2";"0"];["2";"2"];["2";"4"]])",
-            R"([["5";"1"];["7";"2"]])"
+            R"([["5";"1"];["7";"2"]])",
+            R"([["3";"4";"3"];["3";"6";"4"]])",
+            R"([["1"];["2"]])",
+            R"([["2";"1"];["3";"2"]])",
+            R"([["1.6"]])",
+            R"([["2";"2"];["2";"2"]])",
+            R"([["2"];["6"]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -667,7 +716,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }
-    */
 
     Y_UNIT_TEST(UnionAll) {
         NKikimrConfig::TAppConfig appConfig;

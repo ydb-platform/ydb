@@ -124,6 +124,14 @@ void FromProto(
     NApi::TOperationEvent* result,
     const NProto::TOperationEvent& proto);
 
+void ToProto(
+    NProto::TJobTrace* proto,
+    const NApi::TJobTraceMeta& result);
+
+void FromProto(
+    NApi::TJobTraceMeta* result,
+    const NProto::TJobTrace& proto);
+
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema);
 void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
 
@@ -315,6 +323,24 @@ NApi::EJobStderrType ConvertJobStderrTypeFromProto(
 
 NProto::EJobStderrType ConvertJobStderrTypeToProto(
     NApi::EJobStderrType jobStderrType);
+
+NProto::EJobTraceProgress ConvertJobTraceProgressToProto(
+    NApi::EJobTraceProgress progress);
+
+NApi::EJobTraceProgress ConvertJobTraceProgressFromProto(
+    NProto::EJobTraceProgress proto);
+
+NProto::EJobTraceHealth ConvertJobTraceHealthToProto(
+    NApi::EJobTraceHealth health);
+
+NApi::EJobTraceHealth ConvertJobTraceHealthFromProto(
+    NProto::EJobTraceHealth proto);
+
+NProto::EJobTraceState ConvertJobTraceStateToProto(
+    NJobTrackerClient::EJobTraceState state);
+
+NJobTrackerClient::EJobTraceState ConvertJobTraceStateFromProto(
+    NProto::EJobTraceState proto);
 
 ////////////////////////////////////////////////////////////////////////////////
 

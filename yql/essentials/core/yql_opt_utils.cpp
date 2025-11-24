@@ -2150,12 +2150,12 @@ TExprNode::TPtr FindNonYieldTransparentNode(const TExprNode::TPtr& root, const T
         });
     }
 
-    static const THashSet<TStringBuf> WHITE_LIST = {"EmptyIterator"sv, TCoToStream::CallableName(), TCoIterator::CallableName(),
+    static const THashSet<TStringBuf> WhiteList = {"EmptyIterator"sv, TCoToStream::CallableName(), TCoIterator::CallableName(),
         TCoToFlow::CallableName(), TCoApply::CallableName(), TCoNth::CallableName(), TCoMux::CallableName()};
     // Find all other flow sources (readers)
     auto sources = FindNodes(from,
         [](const TExprNode::TPtr& node) {
-            return !node->IsCallable(WHITE_LIST)
+            return !node->IsCallable(WhiteList)
                 && node->IsCallable()
                 && IsFlowOrStream(*node)
                 && (node->ChildrenSize() == 0 || !IsFlowOrStream(node->Head()));
@@ -2858,8 +2858,8 @@ bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeA
 
 bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char optName[] = "ExtractMembersForPartitionsByKeys";
-    return !IsOptimizerDisabled<optName>(*types);
+    static const char OptName[] = "ExtractMembersForPartitionsByKeys";
+    return !IsOptimizerDisabled<OptName>(*types);
 }
 
 }

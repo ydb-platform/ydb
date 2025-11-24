@@ -32,7 +32,8 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "YtflowReadWrap"},
             "Children": [
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
             ]
         },
         {
@@ -40,7 +41,8 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "YtflowWriteWrap"},
             "Children": [
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
             ]
         },
         {

@@ -6,7 +6,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
 
     Y_UNIT_TEST(TopicNotExists) {
         auto setup = CreateSetup();
-        
+
         auto& runtime = setup->GetRuntime();
         CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
 
     Y_UNIT_TEST(TopicWithoutConsumer) {
         auto setup = CreateSetup();
-        
+
         ExecuteDDL(*setup, "CREATE TOPIC topic1");
 
         auto& runtime = setup->GetRuntime();

@@ -81,11 +81,11 @@ void SignalHandlerWithSelfPipe(int signo)
 
     int savedErrno = errno;
     if (write(SignalPipeW.GetHandle(), "x", 1) == -1 && errno != EAGAIN) {
-        static TStringBuf msg("cannot write to signal pipe");
+        static TStringBuf Msg("cannot write to signal pipe");
 #ifndef STDERR_FILENO
     #define STDERR_FILENO 2
 #endif
-        write(STDERR_FILENO, msg.data(), msg.size());
+        write(STDERR_FILENO, Msg.data(), Msg.size());
         abort();
     }
     errno = savedErrno;

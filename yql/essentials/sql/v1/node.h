@@ -1,12 +1,14 @@
 #pragma once
 
-#include <google/protobuf/message.h>
+#include "result.h"
+
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/resetable_setting.h>
 #include <yql/essentials/parser/proto_ast/common.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
+
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
 #include <util/generic/map.h>
@@ -14,6 +16,8 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
+
+#include <google/protobuf/message.h>
 
 #include <library/cpp/enumbitset/enumbitset.h>
 
@@ -289,6 +293,12 @@ protected:
     bool DisableSort_ = false;
 };
 typedef INode::TPtr TNodePtr;
+
+using TNodeResult = TSQLResult<TNonNull<TNodePtr>>;
+
+TNodeResult Wrap(TNodePtr node);
+
+TNodePtr Unwrap(TNodeResult result);
 
 class IProxyNode: public INode {
 public:
@@ -1362,7 +1372,7 @@ struct TSequenceParameters {
 
 class TSecretParameters {
 public:
-    enum class TOperationMode {
+    enum class EOperationMode {
         Create,
         Alter,
     };
@@ -1371,7 +1381,7 @@ public:
     TMaybe<TDeferredAtom> InheritPermissions;
 
 public:
-    bool ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::TOperationMode mode);
+    bool ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode);
 };
 
 struct TTopicConsumerSettings {

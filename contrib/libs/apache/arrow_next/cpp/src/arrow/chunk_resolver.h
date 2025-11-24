@@ -25,9 +25,9 @@
 #include <type_traits>
 #include <vector>
 
-#include "arrow/type_fwd.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/span.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/span.h"
 
 namespace arrow20 {
 

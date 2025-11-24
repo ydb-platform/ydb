@@ -5131,8 +5131,14 @@ void TExecutor::StartBackup() {
     }
 
     const auto& backupConfig = AppData()->SystemTabletBackupConfig;
-    TTabletTypes::EType tabletType = Owner->TabletType();
+    const auto& excludeTabletIds = backupConfig.GetExcludeTabletIds();
     ui64 tabletId = Owner->TabletID();
+
+    if (std::find(excludeTabletIds.begin(), excludeTabletIds.end(), tabletId) != excludeTabletIds.end()) {
+        return;
+    }
+
+    TTabletTypes::EType tabletType = Owner->TabletType();
     const auto& scheme = Database->GetScheme();
     const auto& tables = scheme.Tables;
 

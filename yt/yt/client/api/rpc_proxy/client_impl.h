@@ -325,6 +325,11 @@ public:
     TFuture<NApi::TListOperationsResult> ListOperations(
         const NApi::TListOperationsOptions& options) override;
 
+    TFuture<std::vector<TJobTraceMeta>> ListJobTraces(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NJobTrackerClient::TJobId jobId,
+        const TListJobTracesOptions& options) override;
+
     TFuture<NApi::TListJobsResult> ListJobs(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const NApi::TListJobsOptions&) override;

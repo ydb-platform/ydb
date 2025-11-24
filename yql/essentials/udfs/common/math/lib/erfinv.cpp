@@ -17,7 +17,7 @@ namespace NMathUdf {
 
 // https://www.jstor.org/stable/2347330
 double ErfInv(double x) {
-    static constexpr std::array<double, 8> a = {
+    static constexpr std::array<double, 8> A = {
         1.1975323115670912564578e0,
         4.7072688112383978012285e1,
         6.9706266534389598238465e2,
@@ -27,7 +27,7 @@ double ErfInv(double x) {
         1.1819493347062294404278e4,
         8.8709406962545514830200e2,
     };
-    static constexpr std::array<double, 8> b = {
+    static constexpr std::array<double, 8> B = {
         1.,
         4.2313330701600911252e1,
         6.8718700749205790830e2,
@@ -37,7 +37,7 @@ double ErfInv(double x) {
         2.8729085735721942674e4,
         5.2264952788528545610e3,
     };
-    static constexpr std::array<double, 8> c = {
+    static constexpr std::array<double, 8> C = {
         1.42343711074968357734e0,
         4.63033784615654529590e0,
         5.76949722146069140550e0,
@@ -47,7 +47,7 @@ double ErfInv(double x) {
         2.27238449892691845833e-2,
         7.74545014278341407640e-4,
     };
-    static constexpr std::array<double, 8> d = {
+    static constexpr std::array<double, 8> D = {
         1.4142135623730950488016887e0,
         2.9036514445419946173133295e0,
         2.3707661626024532365971225e0,
@@ -57,7 +57,7 @@ double ErfInv(double x) {
         7.7441459065157709165577218e-4,
         1.4859850019840355905497876e-9,
     };
-    static constexpr std::array<double, 8> e = {
+    static constexpr std::array<double, 8> E = {
         6.65790464350110377720e0,
         5.46378491116411436990e0,
         1.78482653991729133580e0,
@@ -67,7 +67,7 @@ double ErfInv(double x) {
         2.71155556874348757815e-5,
         2.01033439929228813265e-7,
     };
-    static constexpr std::array<double, 8> f = {
+    static constexpr std::array<double, 8> F = {
         1.414213562373095048801689e0,
         8.482908416595164588112026e-1,
         1.936480946950659106176712e-1,
@@ -97,14 +97,14 @@ double ErfInv(double x) {
     double ans;
     if (x <= 0.85) {
         double r = 0.180625 - 0.25 * x * x;
-        ans = x * PolEval(r, a) / PolEval(r, b);
+        ans = x * PolEval(r, A) / PolEval(r, B);
     } else {
         double r = std::sqrt(M_LN2 - log(1. - x)) - 1.6;
         if (r <= 3.4) {
-            ans = PolEval(r, c) / PolEval(r, d);
+            ans = PolEval(r, C) / PolEval(r, D);
         } else {
             r -= 3.4;
-            ans = PolEval(r, e) / PolEval(r, f);
+            ans = PolEval(r, E) / PolEval(r, F);
         }
     }
 

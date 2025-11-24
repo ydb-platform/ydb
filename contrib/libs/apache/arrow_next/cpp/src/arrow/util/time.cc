@@ -17,9 +17,9 @@
 
 #include <memory>
 
-#include "arrow/type.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/time.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/time.h"
 
 namespace arrow20 {
 

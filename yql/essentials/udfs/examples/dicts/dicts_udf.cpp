@@ -21,8 +21,8 @@ public:
     }
 
     static TStringRef Name() {
-        static auto name = TStringRef::Of("StrToInt");
-        return name;
+        static auto Name = TStringRef::Of("StrToInt");
+        return Name;
     }
 
 private:

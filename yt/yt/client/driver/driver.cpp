@@ -22,8 +22,6 @@
 #include "table_commands.h"
 #include "transaction_commands.h"
 
-#include <yt/yt/library/formats/format.h>
-
 #include <yt/yt/client/api/client_cache.h>
 #include <yt/yt/client/api/connection.h>
 #include <yt/yt/client/api/sticky_transaction_pool.h>
@@ -31,6 +29,10 @@
 #include <yt/yt/core/yson/null_consumer.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
+#include <yt/yt/library/formats/format.h>
 
 #include <yt/yt/library/tvm/tvm_base.h>
 
@@ -307,6 +309,7 @@ public:
         REGISTER_ALL(TGetJobInputPathsCommand,             "get_job_input_paths",             Null,       Structured, false, true );
         REGISTER_ALL(TGetJobStderrCommand,                 "get_job_stderr",                  Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobTraceCommand,                  "get_job_trace",                   Null,       Binary,     false, true );
+        REGISTER_ALL(TListJobTracesCommand,                "list_job_traces",                 Null,       Structured, false, false );
         REGISTER_ALL(TGetJobFailContextCommand,            "get_job_fail_context",            Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobSpecCommand,                   "get_job_spec",                    Null,       Structured, false, true );
         REGISTER_ALL(TListOperationEventsCommand,          "list_operation_events",           Null,       Structured, false, false);

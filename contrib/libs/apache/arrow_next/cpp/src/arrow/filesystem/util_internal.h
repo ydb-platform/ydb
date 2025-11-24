@@ -22,11 +22,11 @@
 #include <memory>
 #include <string_view>
 
-#include "arrow/filesystem/filesystem.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/status.h"
-#include "arrow/util/uri.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/filesystem.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/uri.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 using util::Uri;

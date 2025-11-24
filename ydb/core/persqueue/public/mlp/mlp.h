@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/events/events.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
@@ -13,6 +14,7 @@ namespace NKikimr::NPQ::NMLP {
 
 enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::MLP),
+    EvWriteResponse,
     EvChangeResponse,
     EvEnd
 };
@@ -20,6 +22,18 @@ enum EEv : ui32 {
 struct TMessageId {
     ui32 PartitionId;
     ui64 Offset;
+};
+
+struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, EEv::EvWriteResponse> {
+
+    NDescriber::EStatus DescribeStatus;
+
+    struct TMessage {
+        size_t Index;
+        // if message was written successfully, it will be set
+        std::optional<TMessageId> MessageId;
+    };
+    std::vector<TMessage> Messages;
 };
 
 struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvReadResponse> {
@@ -41,7 +55,6 @@ struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvRea
         TInstant SentTimestamp;
         TString MessageGroupId;
     };
-    // The original topic path (from request) -> TopicInfo
     std::vector<TMessage> Messages;
 };
 
@@ -61,11 +74,29 @@ struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::E
         TMessageId MessageId;
         bool Success = false;
     };
-    // The original topic path (from request) -> TopicInfo
     std::vector<TResult> Messages;
 };
 
+struct TWriterSettings {
+    TString DatabasePath;
+    TString TopicName;
 
+    struct TMessage {
+        size_t Index;
+        TString MessageBody;
+        std::optional<TString> MessageGroupId;
+        std::optional<TString> MessageDeduplicationId;
+        std::optional<TString> SerializedMessageAttributes;
+        TDuration Delay;
+    };
+    std::vector<TMessage> Messages;
+
+    bool ShouldBeCharged = false;
+
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+};
+
+IActor* CreateWriter(const NActors::TActorId& parentId, TWriterSettings&& settings);
 
 struct TReaderSettings {
     TString DatabasePath;

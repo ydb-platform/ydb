@@ -20,8 +20,8 @@
 
 #include <cstdint>
 
-#include "arrow/csv/options.h"
-#include "arrow/util/simd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/simd.h"
 
 namespace arrow20 {
 namespace csv {

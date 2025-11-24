@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/persqueue/public/constants.h>
+
 #include <util/generic/strbuf.h>
 
 namespace NKikimr::NPQ::NMLP  {
@@ -7,7 +9,5 @@ namespace NKikimr::NPQ::NMLP  {
         constexpr TStringBuf MessageDeduplicationId = "__MessageDeduplicationId";
         constexpr TStringBuf MessageAttributes = "__MessageAttributes";
         constexpr TStringBuf DelaySeconds = "__DelaySeconds";
-        constexpr TStringBuf MessageId = "__MessageId";
-
     } // namespace NMessageConsts
 } // namespace NKikimr::NPQ::NMLP

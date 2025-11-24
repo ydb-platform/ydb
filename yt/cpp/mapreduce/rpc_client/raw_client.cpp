@@ -26,6 +26,8 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
 #include <library/cpp/iterator/enumerate.h>
 
 #include <library/cpp/yson/node/node_io.h>

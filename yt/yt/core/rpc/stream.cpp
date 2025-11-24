@@ -4,6 +4,7 @@
 #include <yt/yt/core/compression/codec.h>
 
 #include <yt/yt/core/concurrency/scheduler_api.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/rpc/service.h>
 
@@ -46,7 +47,7 @@ TFuture<TSharedRef> TAttachmentsInputStream::Read()
 
     // Failure here indicates an attempt to read past EOSs.
     if (Closed_) {
-        return MakeFuture<TSharedRef>(TError("Stream is already closed") << GetErrorAttributes());
+        return {};
     }
 
     if (!Error_.IsOK()) {
@@ -609,7 +610,7 @@ TFuture<void> ExpectHandshake(
 {
     return feedbackEnabled
         ? ExpectWriterFeedback(input, NDetail::EWriterFeedback::Handshake)
-        : ExpectEndOfStream(input);
+        : CheckEndOfStream(input);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -801,7 +802,7 @@ void HandleInputStreamingRequest(
 {
     auto inputStream = context->GetRequestAttachmentsStream();
     YT_VERIFY(inputStream);
-    WaitFor(ExpectEndOfStream(inputStream))
+    WaitFor(CheckEndOfStream(inputStream))
         .ThrowOnError();
 
     auto outputStream = context->GetResponseAttachmentsStream();

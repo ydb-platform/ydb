@@ -1304,6 +1304,9 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxAlterStreamingQuery:
         return CreateAlterStreamingQuery(NextPartId(), txState);
 
+    case TTxState::ETxType::TxTruncateTable:
+        return CreateTruncateTable(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }

@@ -1168,7 +1168,8 @@ message TCreateLongIncrementalBackupOp {
 }
 
 message TTruncateTable {
-    optional NKikimrProto.TPathID PathId = 1;
+    optional NKikimrProto.TPathID PathId = 1; // Using in DataShard
+    optional string TableName = 2;            // Using in KQP and SchemeShard
 }
 
 enum EIndexType {
@@ -1945,6 +1946,11 @@ message TModifyScheme {
     optional TSecretSchemaOp AlterSecret = 89;
 
     optional TStreamingQueryDescription CreateStreamingQuery = 90;
+
+    // Of course, "Truncate Table" does not modify scheme. 
+    // But for simplicity of implementation, it was decided to make the operation schematic
+    // and send it within the message ModifyScheme.
+    optional TTruncateTable TruncateTable = 92;
 
     // Some entries are grouped by semantics, so are out of order
 }

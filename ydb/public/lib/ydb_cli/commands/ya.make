@@ -59,6 +59,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
     ydb/public/lib/ydb_cli/commands/ydb_ai
+    ydb/public/lib/ydb_cli/commands/ydb_ai/common
     ydb/public/lib/ydb_cli/commands/ydb_ai/models
     ydb/public/lib/ydb_cli/commands/ydb_ai/tools
     ydb/public/lib/ydb_cli/commands/ydb_discovery

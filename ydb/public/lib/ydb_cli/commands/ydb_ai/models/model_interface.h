@@ -14,10 +14,17 @@ public:
 
     virtual ~IModel() = default;
 
-    struct TRequest {
+    struct TUserMessage {
         TString Text;
-        std::optional<TString> ToolCallId;
     };
+
+    struct TToolResponse {
+        TString Text;
+        TString ToolCallId;
+        bool IsSuccess = true;
+    };
+
+    using TMessage = std::variant<TUserMessage, TToolResponse>;
 
     struct TResponse {
         struct TToolCall {
@@ -26,11 +33,11 @@ public:
             NJson::TJsonValue Parameters;
         };
 
-        std::optional<TString> Text;
+        TString Text;
         std::vector<TToolCall> ToolCalls;
     };
 
-    virtual TResponse HandleMessages(const std::vector<NAi::IModel::TRequest>& requests) = 0;
+    virtual TResponse HandleMessages(const std::vector<TMessage>& messages) = 0;
 
     virtual void RegisterTool(const TString& name, const NJson::TJsonValue& parametersSchema, const TString& description) = 0;
 };

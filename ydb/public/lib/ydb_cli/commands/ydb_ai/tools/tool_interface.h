@@ -2,8 +2,6 @@
 
 #include <library/cpp/json/writer/json_value.h>
 
-#include <util/generic/fwd.h>
-
 #include <memory>
 
 namespace NYdb::NConsoleClient::NAi {
@@ -14,13 +12,20 @@ public:
 
     virtual ~ITool() = default;
 
-    virtual TString GetName() const = 0;
+    struct TResponse {
+        TString Text;
+        bool IsSuccess = true;
 
-    virtual NJson::TJsonValue GetParametersSchema() const = 0;
+        explicit TResponse(const TString& error);
 
-    virtual TString GetDescription() const = 0;
+        explicit TResponse(const NJson::TJsonValue& result);
+    };
 
-    virtual TString Execute(const NJson::TJsonValue& parameters) = 0;
+    virtual const NJson::TJsonValue& GetParametersSchema() const = 0;
+
+    virtual const TString& GetDescription() const = 0;
+
+    virtual TResponse Execute(const NJson::TJsonValue& parameters) = 0;
 };
 
 } // namespace NYdb::NConsoleClient::NAi

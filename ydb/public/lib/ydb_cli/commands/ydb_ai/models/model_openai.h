@@ -2,16 +2,16 @@
 
 #include "model_interface.h"
 
-#include <util/generic/string.h>
+#include <ydb/public/lib/ydb_cli/common/command.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
 struct TOpenAiModelSettings {
-    TString BaseUrl;  // AI-TODO KIKIMR-24211 add default value
+    TString BaseUrl;
     std::optional<TString> ModelId;
-    TString ApiKey;
+    std::optional<TString> ApiKey;
 };
 
-IModel::TPtr CreateOpenAiModel(const TOpenAiModelSettings& settings);
+IModel::TPtr CreateOpenAiModel(const TOpenAiModelSettings& settings, const TClientCommand::TConfig& config);
 
 } // namespace NYdb::NConsoleClient::NAi

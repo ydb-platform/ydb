@@ -1,95 +1,93 @@
 #include "list_directory_tool.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_ai/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
+#include <ydb/public/lib/ydb_cli/common/tabbed_table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+
+#include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
 namespace {
 
 class TListDirectoryTool final : public ITool {
+    static constexpr char DESCRIPTION[] = R"(
+List directory in Yandex Data Base (YDB) scheme tree. Returns list of item names inside directory and their types.
+For example if called on directory 'data/', which contains two tables 'my_table1', 'my_table2' and one topic 'my_topic', then tool will return:
+[
+    {"name": "my_table1", "type": "table"},
+    {"name": "my_table2", "type": "table"},
+    {"name": "my_topic", "type": "topic"}
+])";
+
+    static constexpr char DIRECTORY_PROPERTY[] = "directory";
+
 public:
     explicit TListDirectoryTool(TClientCommand::TConfig& config)
-        : Database(NKikimr::CanonizePath(config.Database))
+        : ParametersSchema(TJsonSchemaBuilder()
+            .Type(TJsonSchemaBuilder::EType::Object)
+            .Property(DIRECTORY_PROPERTY)
+                .Type(TJsonSchemaBuilder::EType::String)
+                .Description("Path to directory which should be listed (use empty string to list database root), for example 'data/cold/'")
+                .Done()
+            .Build()
+        )
+        , Description(DESCRIPTION)
+        , Database(NKikimr::CanonizePath(config.Database))
         , Client(TDriver(config.CreateDriverConfig()))
-    {
-        NJson::TJsonValue dirParam;
-        dirParam["type"] = "string";
-        dirParam["description"] = "Directory path to list (use empty to list root directory)";  // AI-TODO: proper description
+    {}
 
-        ParametersSchema["properties"]["directory"] = dirParam;
-        ParametersSchema["type"] = "object";
-        ParametersSchema["required"][0] = "directory";
-    }
-
-    TString GetName() const final {
-        return "list_directory";
-    }
-
-    NJson::TJsonValue GetParametersSchema() const final {
+    const NJson::TJsonValue& GetParametersSchema() const final {
         return ParametersSchema;
     }
 
-    TString GetDescription() const final {
-        return "List directory";  // AI-TODO: proper description
+    const TString& GetDescription() const final {
+        return Description;
     }
 
-    TString Execute(const NJson::TJsonValue& parameters) final {
-        ValidateJsonType(parameters, NJson::JSON_MAP);
-
-        const auto& dir = ValidateJsonKey(parameters, "directory");
-        ValidateJsonType(dir, NJson::JSON_STRING, "directory");
-
-        TString dirString = dir.GetString();
-        Cerr << "\n!! List directory: " << dirString << Endl;  // AI-TODO: proper list directory printing
-
-        if (!dirString.StartsWith('/')) {
-            dirString = NKikimr::JoinPath({Database, dirString});
+    TResponse Execute(const NJson::TJsonValue& parameters) final try {
+        const auto& directory = ParseParameters(parameters);
+        const auto response = Client.ListDirectory(directory).ExtractValueSync();
+        if (!response.IsSuccess()) {
+            return TResponse(TStringBuilder() << "Listing directory failed with status " << response.GetStatus() << ", reason:\n" << response.GetIssues().ToString());
         }
 
-        // AI-TODO: progress printing
-        auto result = Client.ListDirectory(dirString).ExtractValueSync();
+        const auto& children = response.GetChildren();
 
-        // AI-TODO: proper error printing
-        if (!result.IsSuccess()) {
-            Cerr << "\n!! List directory error [" << result.GetStatus() << "]: " << result.GetIssues().ToString() << Endl;
-            return TStringBuilder() << "Error listing directory, status: " << result.GetStatus() << ", issues: " << result.GetIssues().ToString();
-        }
-
-        const auto& children = result.GetChildren();
-
-        // AI-TODO: proper result formating
-        TStringBuilder resultBuilder;
+        NJson::TJsonValue result;
+        auto& resultArray = result.SetType(NJson::JSON_ARRAY).GetArraySafe();
         for (const auto& child : children) {
-            resultBuilder << child.Name << " (" << child.Type << ")" << "\n";
+            auto& item = resultArray.emplace_back();
+            item["name"] = child.Name;
+            item["type"] = EntryTypeToString(child.Type);
         }
 
-        Cerr << "\n!! List directory result: " << resultBuilder << Endl;  // AI-TODO: proper query result printing
+        Cout << TAdaptiveTabbedTable(children);
 
-        return resultBuilder;
+        return TResponse(std::move(result));
+    } catch (const std::exception& e) {
+        return TResponse(TStringBuilder() << "Listing directory failed. " << e.what());
     }
 
 private:
-    // AI-TODO: reduce copypaste
-    void ValidateJsonType(const NJson::TJsonValue& value, NJson::EJsonValueType expectedType, const std::optional<TString>& fieldName = std::nullopt) const {
-        if (const auto valueType = value.GetType(); valueType != expectedType) {
-            throw yexception() << "Tool request " << (fieldName ? " field '" + *fieldName + "'" : "") << " has unexpected type: " << valueType << ", expected type: " << expectedType;
-        }
-    }
+    TString ParseParameters(const NJson::TJsonValue& parameters) const {
+        TJsonParser parser(parameters);
 
-    const NJson::TJsonValue& ValidateJsonKey(const NJson::TJsonValue& value, const TString& key, const std::optional<TString>& fieldName = std::nullopt) const {
-        const auto* output = value.GetMap().FindPtr(key);
-        if (!output) {
-            throw yexception() << "Tool request does not contain '" << key << "' field" << (fieldName ? " in '" + *fieldName + "'" : "");
+        TString directory = Strip(parser.GetKey(DIRECTORY_PROPERTY).GetString());
+        if (!directory.StartsWith('/')) {
+            directory = NKikimr::JoinPath({Database, directory});
         }
 
-        return *output;
+        return NKikimr::CanonizePath(directory);
     }
 
 private:
+    const NJson::TJsonValue ParametersSchema;
+    const TString Description;
     const TString Database;
     NScheme::TSchemeClient Client;
-    NJson::TJsonValue ParametersSchema;
 };
 
 } // anonymous namespace

@@ -1,5 +1,6 @@
 #include "ydb_ai.h"
 
+#include <ydb/public/lib/ydb_cli/commands/ydb_ai/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_ai/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_ai/models/model_anthropic.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_ai/models/model_openai.h>
@@ -8,6 +9,22 @@
 
 #include <util/string/strip.h>
 #include <util/system/env.h>
+
+/*
+
+FEATURES-TODO:
+
+- Streamable model response printing
+- Streamable results printing
+- Adjusting errors, progress and response printing
+- Approving before tool use
+- Integration into common interactive mode
+- Think about helps
+- Think about robust
+- Provide system promt
+- Somehow render markdown
+
+*/
 
 namespace NYdb::NConsoleClient {
 
@@ -30,8 +47,6 @@ void TCommandAi::Config(TConfig& config) {
 }
 
 int TCommandAi::Run(TConfig& config) {
-    Y_UNUSED(config);
-
     Cout << "AI-TODO: KIKIMR-24198 -- welcome message" << Endl;
 
     // AI-TODO: KIKIMR-24202 - robust file creation
@@ -42,35 +57,31 @@ int TCommandAi::Run(TConfig& config) {
     //     .BaseUrl = "https://api.eliza.yandex.net/raw/internal/deepseek", // AI-TODO: KIKIMR-24214 -- configure it
     //     .ModelId = "deepseek-0324", // AI-TODO: KIKIMR-24214 -- configure it
     //     .ApiKey = GetEnv("MODEL_TOKEN"), // AI-TODO: KIKIMR-24214 -- configure it
-    // });
+    // }, config);
 
-    const auto model = NAi::CreateAnthropicModel({
-        .BaseUrl = "https://api.eliza.yandex.net/anthropic", // AI-TODO: KIKIMR-24214 -- configure it
-        .ModelId = "claude-3-5-haiku-20241022",
-        .ApiKey = GetEnv("MODEL_TOKEN"), // AI-TODO: KIKIMR-24214 -- configure it
-        .MaxTokens = 2048,   // AI-TODO configure it
-    });
+    // Claude 3.5 haiku
+    // const auto model = NAi::CreateAnthropicModel({
+    //     .BaseUrl = "https://api.eliza.yandex.net/anthropic", // AI-TODO: KIKIMR-24214 -- configure it
+    //     .ModelId = "claude-3-5-haiku-20241022",
+    //     .ApiKey = GetEnv("MODEL_TOKEN"), // AI-TODO: KIKIMR-24214 -- configure it
+    // }, config);
 
     // YandexGPT Pro
-    // const auto model = NAi::CreateOpenAiModel({
-    //     .BaseUrl = "https://api.eliza.yandex.net/internal/zeliboba/32b_aligned_quantized_202506/generative", // AI-TODO: KIKIMR-24214 -- configure it
-    //     .ApiKey = GetEnv("MODEL_TOKEN"), // AI-TODO: KIKIMR-24214 -- configure it
-    // });
+    const auto model = NAi::CreateOpenAiModel({
+        .BaseUrl = "https://api.eliza.yandex.net/internal/zeliboba/32b_aligned_quantized_202506/generative", // AI-TODO: KIKIMR-24214 -- configure it
+        .ApiKey = GetEnv("MODEL_TOKEN"), // AI-TODO: KIKIMR-24214 -- configure it
+    }, config);
 
-    std::unordered_map<TString, NAi::ITool::TPtr> tools;
-
-    const auto sqlTool = NAi::CreateExecQueryTool(config);
-    tools.emplace(sqlTool->GetName(), sqlTool);
-
-    const auto lsTool = NAi::CreateListDirectoryTool(config);
-    tools.emplace(lsTool->GetName(), lsTool);
-
+    std::unordered_map<TString, NAi::ITool::TPtr> tools = {
+        {"execute_query", NAi::CreateExecQueryTool(config)},
+        {"list_directory", NAi::CreateListDirectoryTool(config)},
+    };
     for (const auto& [name, tool] : tools) {
         model->RegisterTool(name, tool->GetParametersSchema(), tool->GetDescription());
     }
 
     // AI-TODO: there is strange highlighting of brackets
-    std::vector<NAi::IModel::TRequest> requests;
+    std::vector<NAi::IModel::TMessage> messages;
     while (const auto& maybeLine = lineReader.ReadLine()) {
         const auto& input = *maybeLine;
         if (input.empty()) {
@@ -83,17 +94,21 @@ int TCommandAi::Run(TConfig& config) {
         }
 
         // AI-TODO: limit interaction number
-        requests.push_back({.Text = input});
-        while (!requests.empty()) {
+        messages.emplace_back(NAi::IModel::TUserMessage{.Text = input});
+        while (!messages.empty()) {
             // AI-TODO: progress visualization
-            auto output = model->HandleMessages(requests);
-            requests.clear();
-            Y_ENSURE(output.Text || !output.ToolCalls.empty());
+            const auto output = model->HandleMessages(messages);
+            messages.clear();
+
+            if (!output.Text && output.ToolCalls.empty()) {
+                // AI-TODO: proper answer format
+                Cout << "Model answer is empty(" << Endl;
+                break;
+            }
 
             if (output.Text) {
                 // AI-TODO: proper answer format
-                // AI-TODO: how can I render markdown?
-                Cout << "Model answer:\n" << *output.Text << Endl;
+                Cout << "Model answer:\n" << output.Text << Endl;
             }
 
             for (const auto& toolCall : output.ToolCalls) {
@@ -104,10 +119,21 @@ int TCommandAi::Run(TConfig& config) {
                     return EXIT_FAILURE;
                 }
 
-                // AI-TODO: ask permission before call and show progress
-                requests.push_back({
-                    .Text = it->second->Execute(toolCall.Parameters),
-                    .ToolCallId = toolCall.Id
+                // AI-TODO: proper tool call printing
+                Cout << "Calling tool: " << toolCall.Name << " with params:\n" << NAi::FormatJsonValue(toolCall.Parameters) << Endl;
+
+                // AI-TODO: add approving
+                const auto& result = it->second->Execute(toolCall.Parameters);
+                if (!result.IsSuccess) {
+                    // AI-TODO: proper error handling
+                    Cout << result.Text << Endl;
+                }
+                // AI-TODO: show progress
+
+                messages.push_back(NAi::IModel::TToolResponse{
+                    .Text = result.Text,
+                    .ToolCallId = toolCall.Id,
+                    .IsSuccess = result.IsSuccess,
                 });
             }
         }

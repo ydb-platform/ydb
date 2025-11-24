@@ -184,7 +184,7 @@ public:
     NYdb::TAsyncStatus CreateTable(
         const TString& name,
         NYdb::NTable::TTableDescription&& description) {
-        auto f = [&]() { return NFq::CreateTable(Connection, name, std::move(description));};
+        auto f = [&]() { return NFq::CreateTable(Connection, name, std::move(description), {});};
         return Call<NYdb::TAsyncStatus>(f);
     }
 

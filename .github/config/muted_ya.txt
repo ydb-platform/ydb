@@ -219,9 +219,6 @@ ydb/tests/functional/tpcc py3test.[test.py */*] chunk
 ydb/tests/functional/tpcc test.py.test_run_benchmark
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackup.test_database_backup
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
-ydb/tests/olap order_by_with_limit.py.TestOrderBy.test_filtered_portion
-ydb/tests/olap order_by_with_limit.py.TestOrderBy.test_random
-ydb/tests/olap order_by_with_limit.py.TestOrderBy.test_stress_sorting
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap tablets_movement.py.TestTabletsMovement.test[ROW]
 ydb/tests/olap test_create.py.TestCreate.test_create_all_opt_ints

@@ -6,8 +6,8 @@ import uuid
 import random
 from collections import defaultdict
 
-class Workload(unittest.TestCase):
-    def __init__(self, endpoint, database, duration):
+class Workload():
+    def __init__(self, endpoint, database, duration, partitions_count):
         self.database = database
         self.endpoint = endpoint
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
@@ -17,12 +17,13 @@ class Workload(unittest.TestCase):
         self.output_topic = 'streaming_recipe/output_topic'
         self.query_name = 'my_queries/query_name'
         self.consumer_name = 'consumer_name'
-        self.partition_count = 10
+        self.partitions_count = partitions_count
+        self.receive_message_timeout_sec = 1
 
     def create_topics(self):
         self.pool.execute_with_retries(
             f"""
-                CREATE TOPIC `{self.input_topic}` WITH (min_active_partitions = {self.partition_count});
+                CREATE TOPIC `{self.input_topic}` WITH (min_active_partitions = {self.partitions_count});
                 CREATE TOPIC `{self.output_topic}` (CONSUMER {self.consumer_name});
             """
         )
@@ -50,7 +51,7 @@ class Workload(unittest.TestCase):
                             SCHEMA (time Uint64 NOT NULL, level String NOT NULL)
                         )
                 );
-                $filtered = (SELECT * FROM $input WHERE level == 'error');
+                $filtered = (SELECT * FROM $input WHERE level = 'error');
 
                 $number_errors = (
                     SELECT COUNT(*) AS error_count, CAST(HOP_START() AS String) AS ts
@@ -98,7 +99,7 @@ class Workload(unittest.TestCase):
             count = 0
             while True:
                 try:
-                    mess = reader.receive_message(timeout=1)
+                    mess = reader.receive_message(self.receive_message_timeout_sec)
                     count += 1
                 except TimeoutError:
                     break

@@ -31,6 +31,7 @@ class TestYdbWorkload(StressFixture):
             yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
             "--endpoint",  f"localhost:{self.cluster.nodes[1].port}",
             "--database", self.database,
-            "--duration", "20"
+            "--duration", "60",
+            "--partitions-count", "10"
         ]
         yatest.common.execute(cmd, wait=True)

@@ -165,16 +165,15 @@ class GitRepository:
         args = ["git"] + list(args)
         self.logger.info("Executing git command: %r", args)
         try:
-            output = subprocess.check_output(args).decode()
+            result = subprocess.run(args, capture_output=True, text=True, check=True)
+            output = result.stdout + (("\n" + result.stderr) if result.stderr else "")
         except subprocess.CalledProcessError as e:
-            error_output = e.output.decode() if e.output else ""
-            stderr_output = e.stderr.decode() if e.stderr else ""
             self.logger.error(f"Git command failed: {' '.join(args)}")
             self.logger.error(f"Exit code: {e.returncode}")
-            if error_output:
-                self.logger.error(f"Stdout: {error_output}")
-            if stderr_output:
-                self.logger.error(f"Stderr: {stderr_output}")
+            if e.stdout:
+                self.logger.error(f"Stdout: {e.stdout}")
+            if e.stderr:
+                self.logger.error(f"Stderr: {e.stderr}")
             raise
         else:
             self.logger.debug("Command output:\n%s", output)
@@ -668,7 +667,7 @@ class PRContentBuilder:
             changelog_entry = f"Backport to `{branch_desc}`: {changelog_entry}"
         
         # For Bugfix category add issue reference
-        if changelog_category and changelog_category.startswith("Bugfix") and issue_refs and issue_refs != "None":
+        if changelog_category and changelog_category == "Bugfix" and issue_refs and issue_refs != "None":
             has_issue = any(re.search(pattern, changelog_entry) for pattern in ISSUE_PATTERNS)
             if not has_issue:
                 changelog_entry = f"{changelog_entry} ({issue_refs})"

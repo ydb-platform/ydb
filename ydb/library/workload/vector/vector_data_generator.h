@@ -11,8 +11,8 @@ class TWorkloadVectorFilesDataInitializer : public TWorkloadDataInitializerBase 
 private:
     const TVectorWorkloadParams& Params;
     TString DataFiles;
-    bool DoTransform = false;
-    TString EmbeddingSourceField = "embedding";
+    TString EmbeddingColumnName = "embedding";
+    // TString InputBinaryStringEncodingFormat = "unicode";
 
 public:
     TWorkloadVectorFilesDataInitializer(const TVectorWorkloadParams& params);

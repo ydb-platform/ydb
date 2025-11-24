@@ -13,6 +13,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
+    library/cpp/colorizer
     ydb/library/workload/abstract
     ydb/public/api/protos
 )

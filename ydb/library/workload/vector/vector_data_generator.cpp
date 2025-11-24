@@ -22,20 +22,33 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
+#include <library/cpp/colorizer/colors.h>
 
 #include <util/stream/mem.h>
+
+#include <regex>
 
 namespace NYdbWorkload {
 
 namespace {
 
-class TTransformingDataGenerator final: public IBulkDataGenerator {
+bool ContainsListAlikeStrings(const std::shared_ptr<arrow::ChunkedArray> column) {
+    if (column->length() == 0) {
+        return false;
+    }
+
+    const auto sample = std::static_pointer_cast<arrow::StringArray>(column->chunk(0))->Value(0);
+    std::regex listPattern("\\[\\s*(\\S+(,|\\s)\\s*)\\]");
+    return std::regex_match(sample.begin(), sample.end(), listPattern);
+}
+
+class TDataGeneratorWrapper final: public IBulkDataGenerator {
 private:
-    std::shared_ptr<IBulkDataGenerator> InnerDataGenerator;
-    const TString EmbeddingSourceField;
+    const std::shared_ptr<IBulkDataGenerator> InnerDataGenerator;
+    const TString EmbeddingColumnName;
 
 private:
-    static std::pair<std::shared_ptr<arrow::Schema>, std::shared_ptr<arrow::RecordBatch>> Deserialize(TDataPortion::TArrow* data) {
+    static std::pair<std::shared_ptr<arrow::Schema>, std::shared_ptr<arrow::RecordBatch>> DeserializeArrow(TDataPortion::TArrow* data) {
         arrow::ipc::DictionaryMemo dictionary;
 
         arrow::io::BufferReader schemaBuffer(arrow::util::string_view(data->Schema.data(), data->Schema.size()));
@@ -47,7 +60,7 @@ private:
         return std::make_pair(schema, recordBatch);
     }
 
-    std::shared_ptr<arrow::Table> Deserialize(TDataPortion::TCsv* data) {
+    static std::shared_ptr<arrow::Table> DeserializeCsv(TDataPortion::TCsv* data) {
         Ydb::Formats::CsvSettings csvSettings;
         if (Y_UNLIKELY(!csvSettings.ParseFromString(data->FormatString))) {
             ythrow yexception() << "Unable to parse CsvSettings";
@@ -96,126 +109,134 @@ private:
         return csvReader->Read().ValueOrDie();
     }
 
-    void TransformArrow(TDataPortion::TArrow* data) {
-        const auto [schema, batch] = Deserialize(data);
+    void CanonizeArrow(TDataPortion::TArrow* data) {
+        const auto [schema, batch] = DeserializeArrow(data);
+
+        std::vector<std::shared_ptr<arrow::Array>> resultColumns;
 
         // id
         const auto idColumn = batch->GetColumnByName("id");
-        const auto newIdColumn = arrow::compute::Cast(idColumn, arrow::uint64()).ValueOrDie().make_array();
+        resultColumns.push_back(arrow::compute::Cast(idColumn, arrow::uint64()).ValueOrDie().make_array());
 
         // embedding
-        const auto embeddingColumn = std::dynamic_pointer_cast<arrow::ListArray>(batch->GetColumnByName(EmbeddingSourceField));
-        arrow::StringBuilder newEmbeddingsBuilder;
-        for (int64_t row = 0; row < batch->num_rows(); ++row) {
-            const auto embeddingFloatList = std::static_pointer_cast<arrow::FloatArray>(embeddingColumn->value_slice(row));
+        const auto embeddingColumn = batch->GetColumnByName(EmbeddingColumnName);
+        if (embeddingColumn->type()->Equals(arrow::binary())) {
+            resultColumns.push_back(embeddingColumn);
+        } else if (embeddingColumn->type()->Equals(arrow::list(arrow::float32()))) {
+            const std::shared_ptr<arrow::ListArray> embeddingListColumn = std::dynamic_pointer_cast<arrow::ListArray>(embeddingColumn);
+            arrow::StringBuilder newEmbeddingsBuilder;
+            for (int64_t row = 0; row < batch->num_rows(); ++row) {
+                const auto embeddingFloatList = std::static_pointer_cast<arrow::FloatArray>(embeddingListColumn->value_slice(row));
 
-            TStringBuilder buffer;
-            NKnnVectorSerialization::TSerializer<float> serializer(&buffer.Out);
-            for (int64_t i = 0; i < embeddingFloatList->length(); ++i) {
-                serializer.HandleElement(embeddingFloatList->Value(i));
-            }
-            serializer.Finish();
+                TStringBuilder buffer;
+                NKnnVectorSerialization::TSerializer<float> serializer(&buffer.Out);
+                for (int64_t i = 0; i < embeddingFloatList->length(); ++i) {
+                    serializer.HandleElement(embeddingFloatList->Value(i));
+                }
+                serializer.Finish();
 
-            if (const auto status = newEmbeddingsBuilder.Append(buffer.MutRef()); !status.ok()) {
-                status.Abort();
+                if (const auto status = newEmbeddingsBuilder.Append(buffer.MutRef()); !status.ok()) {
+                    ythrow yexception() << status.ToString();
+                }
             }
-        }
-        std::shared_ptr<arrow::StringArray> newEmbeddingColumn;
-        if (const auto status = newEmbeddingsBuilder.Finish(&newEmbeddingColumn); !status.ok()) {
-            status.Abort();
+            std::shared_ptr<arrow::StringArray> newEmbeddingColumn;
+            if (const auto status = newEmbeddingsBuilder.Finish(&newEmbeddingColumn); !status.ok()) {
+                ythrow yexception() << status.ToString();
+            }
+            resultColumns.push_back(std::move(newEmbeddingColumn));
+        } else {
+            ythrow yexception() << "Only binary and list[float32] parquet types are supported for embedding column";
         }
 
         const auto newSchema = arrow::schema({
             arrow::field("id", arrow::uint64()),
-            arrow::field("embedding", arrow::utf8()),
+            arrow::field("embedding", arrow::binary()),
         });
         const auto newRecordBatch = arrow::RecordBatch::Make(
             newSchema,
             batch->num_rows(),
-            {
-                newIdColumn,
-                newEmbeddingColumn,
-            }
+            resultColumns
         );
         data->Schema = arrow::ipc::SerializeSchema(*newSchema).ValueOrDie()->ToString();
         data->Data = arrow::ipc::SerializeRecordBatch(*newRecordBatch, arrow::ipc::IpcWriteOptions{}).ValueOrDie()->ToString();
     }
 
-    void TransformCsv(TDataPortion::TCsv* data) {
-        const auto table = Deserialize(data);
+    void CanonizeCsv(TDataPortion::TCsv* data) {
+        const auto table = DeserializeCsv(data);
+
+        std::vector<std::shared_ptr<arrow::ChunkedArray>> resultColumns;
 
         // id
         const auto idColumn = table->GetColumnByName("id");
+        resultColumns.push_back(idColumn);
 
         // embedding
-        const auto embeddingColumn = table->GetColumnByName(EmbeddingSourceField);
-        arrow::StringBuilder newEmbeddingsBuilder;
-        for (int64_t row = 0; row < table->num_rows(); ++row) {
-            const auto embeddingListString = std::static_pointer_cast<arrow::StringArray>(embeddingColumn->Slice(row, 1)->chunk(0))->Value(0);
-            
-            TStringBuf buffer(embeddingListString.data(), embeddingListString.size());
-            buffer.SkipPrefix("[");
-            buffer.ChopSuffix("]");
-            TMemoryInput input(buffer);
+        const auto embeddingColumn = table->GetColumnByName(EmbeddingColumnName);
+        if (ContainsListAlikeStrings(embeddingColumn)) {
+            arrow::StringBuilder newEmbeddingsBuilder;
+            for (int64_t row = 0; row < table->num_rows(); ++row) {
+                const auto embeddingListString = std::static_pointer_cast<arrow::StringArray>(embeddingColumn->Slice(row, 1)->chunk(0))->Value(0);
+                
+                TStringBuf buffer(embeddingListString.data(), embeddingListString.size());
+                buffer.SkipPrefix("[");
+                buffer.ChopSuffix("]");
+                TMemoryInput input(buffer);
 
-            TStringBuilder newEmbeddingBuilder;
-            NKnnVectorSerialization::TSerializer<float> serializer(&newEmbeddingBuilder.Out);
-            while (!input.Exhausted()) {
-                float val;
-                input >> val;
-                input.Skip(1);
-                serializer.HandleElement(val);
+                TStringBuilder newEmbeddingBuilder;
+                NKnnVectorSerialization::TSerializer<float> serializer(&newEmbeddingBuilder.Out);
+                while (!input.Exhausted()) {
+                    float tmp;
+                    input >> tmp;
+                    input.Skip(1);
+                    serializer.HandleElement(tmp);
+                }
+                serializer.Finish();
+
+                if (const auto status = newEmbeddingsBuilder.Append(newEmbeddingBuilder.MutRef()); !status.ok()) {
+                    ythrow yexception() << status.ToString();
+                }
             }
-            serializer.Finish();
-
-            if (const auto status = newEmbeddingsBuilder.Append(newEmbeddingBuilder.MutRef()); !status.ok()) {
-                status.Abort();
+            std::shared_ptr<arrow::StringArray> newEmbeddingColumn;
+            if (const auto status = newEmbeddingsBuilder.Finish(&newEmbeddingColumn); !status.ok()) {
+                ythrow yexception() << status.ToString();
             }
-        }
-        std::shared_ptr<arrow::StringArray> newEmbeddingColumn;
-        if (const auto status = newEmbeddingsBuilder.Finish(&newEmbeddingColumn); !status.ok()) {
-            status.Abort();
+            resultColumns.push_back(arrow::ChunkedArray::Make({newEmbeddingColumn}).ValueOrDie());
+        } else {
+            resultColumns.push_back(embeddingColumn);
         }
 
-        const auto newSchema = arrow::schema({
+        const auto newTable = arrow::Table::Make(arrow::schema({
             arrow::field("id", arrow::uint64()),
-            arrow::field("embedding", arrow::utf8()),
-        });
-        const auto newTable = arrow::Table::Make(
-            newSchema,
-            {
-                idColumn,
-                arrow::ChunkedArray::Make({newEmbeddingColumn}).ValueOrDie(),
-            }
-        );
+            arrow::field("embedding", arrow::binary()),
+        }), resultColumns);
         auto outputStream = arrow::io::BufferOutputStream::Create().ValueOrDie();
         if (const auto status = arrow::csv::WriteCSV(*newTable, arrow::csv::WriteOptions::Defaults(), outputStream.get()); !status.ok()) {
-            status.Abort();
+            ythrow yexception() << status.ToString();
         }
         data->FormatString = "";
         data->Data = outputStream->Finish().ValueOrDie()->ToString();
     }
 
-    void Transform(TDataPortion::TDataType& data) {
+    void CanonizePortion(TDataPortion::TDataType& data) {
         if (auto* value = std::get_if<TDataPortion::TArrow>(&data)) {
-            TransformArrow(value);
+            CanonizeArrow(value);
         }
         if (auto* value = std::get_if<TDataPortion::TCsv>(&data)) {
-            TransformCsv(value);
+            CanonizeCsv(value);
         }
     }
 
 public:
-    TTransformingDataGenerator(std::shared_ptr<IBulkDataGenerator> innerDataGenerator, const TString embeddingSourceField)
+    TDataGeneratorWrapper(const std::shared_ptr<IBulkDataGenerator> innerDataGenerator, const TString embeddingColumnName)
         : IBulkDataGenerator(innerDataGenerator->GetName(), innerDataGenerator->GetSize())
         , InnerDataGenerator(innerDataGenerator)
-        , EmbeddingSourceField(embeddingSourceField)
+        , EmbeddingColumnName(embeddingColumnName)
     {}
 
     virtual TDataPortions GenerateDataPortion() override {
         TDataPortions portions = InnerDataGenerator->GenerateDataPortion();
         for (auto portion : portions) {
-            Transform(portion->MutableData());
+            CanonizePortion(portion->MutableData());
         }
         return portions;
     }
@@ -229,26 +250,68 @@ TWorkloadVectorFilesDataInitializer::TWorkloadVectorFilesDataInitializer(const T
 { }
 
 void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
-    opts.AddLongOption('i', "input",
-            "File or Directory with dataset. If directory is set, all its available files will be used. "
-            "Supports zipped and unzipped csv, tsv files and parquet ones that may be downloaded here: "
-            "https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings. "
-            "For better performance you may split it into some parts for parallel upload."
-        ).Required().StoreResult(&DataFiles);
-    opts.AddLongOption('t', "transform",
-            "Perform transformation of input data. "
-            "Parquet: leave only required fields, cast to expected types, convert list of floats into serialized representation. "
-            "CSV: leave only required fields, parse float list from string and serialize. "
-            "Reference for embedding serialization: https://ydb.tech/docs/yql/reference/udf/list/knn#functions-convert"
-        ).Optional().StoreTrue(&DoTransform);
-    opts.AddLongOption(
-            "transform-embedding-source-field",
-            "Specify field that contains list of floats to be converted into YDB embedding format."
-        ).DefaultValue(EmbeddingSourceField).StoreResult(&EmbeddingSourceField);
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+
+    // --input
+    {
+        TStringBuilder description;
+        description
+            << "File or directory with the dataset to import. Only two columns are imported: "
+            << colors.BoldColor() << "id" << colors.OldColor() << " and "
+            << colors.BoldColor() << "embedding" << colors.OldColor() << ". "
+            << "If a directory is set, all supported files inside will be used."
+            << "\nSupported formats: CSV/TSV (zipped or unzipped) and Parquet."
+            << "\nIn " << colors.BoldColor() << "convert" << colors.OldColor() << " mode, "
+            << "embedding is converted from list of floats to YDB binary embedding format."
+            << "\nIn " << colors.BoldColor() << "raw" << colors.OldColor() << " mode, "
+            << "embedding must already be binary; for CSV/TSV its encoding is controlled by --input-binary-strings."
+            << "\nExample dataset: https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings";
+
+        opts.AddLongOption('i', "input", description)
+            .RequiredArgument("PATH")
+            .Required()
+            .StoreResult(&DataFiles);
+    }
+
+    // --embedding-column-name
+    {
+        TStringBuilder description;
+        description
+            << "Alternative source column name for the embedding field in input files."
+            << "\nUsed in " << colors.BoldColor() << "convert" << colors.OldColor()
+            << " (and " << colors.BoldColor() << "auto" << colors.OldColor() << " when it chooses convert)."
+            << "\nIf not set, the column is expected to be named "
+            << colors.BoldColor() << "\"" << EmbeddingColumnName << "\"" << colors.OldColor() << ".";
+
+        opts.AddLongOption("embedding-column-name", description)
+            .RequiredArgument("NAME")
+            .DefaultValue(EmbeddingColumnName)
+            .StoreResult(&EmbeddingColumnName);
+    }
+
+    // // --input-binary-strings
+    // {
+    //     TStringBuilder description;
+    //     description
+    //         << "Binary encoding of the " << colors.BoldColor() << "embedding" << colors.OldColor()
+    //         << " column in CSV/TSV when importing in " << colors.BoldColor() << "raw" << colors.OldColor()
+    //         << " mode (or in " << colors.BoldColor() << "auto" << colors.OldColor() << " when it selects raw)."
+    //         << "\nIgnored for Parquet and for " << colors.BoldColor() << "convert" << colors.OldColor() << " mode."
+    //         << "\nAvailable options:"
+    //         << "\n  " << colors.BoldColor() << "unicode" << colors.OldColor()
+    //         << "\n    " << "Every byte in binary strings that is not a printable ASCII symbol (codes 32-126) should be encoded as UTF-8."
+    //         << "\n  " << colors.BoldColor() << "base64" << colors.OldColor()
+    //         << "\n    " << "Binary strings should be fully encoded with base64.";
+
+    //     opts.AddLongOption("input-binary-strings", description)
+    //         .RequiredArgument("STRING")
+    //         .DefaultValue(InputBinaryStringEncodingFormat)
+    //         .StoreResult(&InputBinaryStringEncodingFormat);
+    // }
 }
 
 TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData() {
-    auto dataGenerator = std::make_shared<TDataGenerator>(
+    const auto basicDataGenerator = std::make_shared<TDataGenerator>(
         *this,
         Params.TableName,
         0,
@@ -258,10 +321,9 @@ TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData
         TDataGenerator::EPortionSizeUnit::Line
     );
 
-    if (DoTransform) {
-        return {std::make_shared<TTransformingDataGenerator>(dataGenerator, EmbeddingSourceField)};
-    }
-    return {dataGenerator};
+    return {
+        std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName)
+    };
 }
 
 } // namespace NYdbWorkload

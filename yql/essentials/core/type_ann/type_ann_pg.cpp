@@ -102,6 +102,7 @@ TExprNodePtr FindLeftCombinatorOfNthSetItem(const TExprNode* setItems, const TEx
         if (op->Content() == "push") {
             setItemsStack[++sp] = itemIdx++;
         } else {
+            Y_ENSURE(0 <= sp);
             if (setItemsStack[sp] == n) {
                 return op;
             }

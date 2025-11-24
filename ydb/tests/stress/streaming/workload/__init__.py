@@ -81,7 +81,7 @@ class Workload():
         finished_at = time.time() + self.duration
 
         writers = []
-        for i in range(self.partition_count):
+        for i in range(self.partitions_count):
             writers.append(self.driver.topic_client.writer(self.input_topic, partition_id=i))
         
         while time.time() < finished_at:
@@ -99,7 +99,7 @@ class Workload():
             count = 0
             while True:
                 try:
-                    mess = reader.receive_message(self.receive_message_timeout_sec)
+                    mess = reader.receive_message(timeout=self.receive_message_timeout_sec)
                     count += 1
                 except TimeoutError:
                     break

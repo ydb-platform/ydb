@@ -35,6 +35,7 @@ public:
 
                 tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
                 tablet->ActualizeTabletStatistics(now);
+                Self->EnqueueUpdateMetrics(tablet);
                     
                 if (tablet->IsLeader()) {
                     db.Table<Schema::Tablet>()

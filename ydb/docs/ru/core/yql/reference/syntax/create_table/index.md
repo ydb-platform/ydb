@@ -128,8 +128,9 @@ WITH (
     CREATE TABLE <table_name> (
       a Uint64,
       b Uint64,
-      c Float,
-      d "List<List<Int32>>"
+      c Float NOT NULL DEFAULT 3.0f,
+      d String (DEFAULT "Text", NOT NULL),
+      e "List<List<Int32>>"
       PRIMARY KEY (a, b)
     );
     ```
@@ -140,7 +141,8 @@ WITH (
     CREATE TABLE <table_name> (
       a Uint64,
       b Uint64,
-      c Float,
+      c Float NOT NULL DEFAULT 3.0f,
+      d String (DEFAULT "Text", NOT NULL),
       PRIMARY KEY (a, b)
     );
     ```
@@ -196,7 +198,8 @@ WITH (
   CREATE TABLE <table_name> (
     a Uint64,
     b Uint64,
-    c Float,
+    c Float NOT NULL DEFAULT 3.0f,
+    d String (DEFAULT "Text", NOT NULL),
     PRIMARY KEY (a, b)
   )
   WITH (
@@ -293,25 +296,6 @@ CREATE TABLE <table_name> (
 ```
 
 {% endif %}
-
-### Создание таблицы с разными опциями колонки {#table-options-examples}
-
-```yql
-CREATE TABLE tbl (
-    k Uint64,
-    v Bool (DEFAULT false, NOT NULL),
-    PRIMARY KEY (k)
-);
-```
-
-```yql
-CREATE TABLE tbl (
-    k Uint64,
-    v Bool NOT NULL DEFAULT false,
-    PRIMARY KEY (k)
-);
-```
-
 
 {% if backend_name == "YDB" and oss == true %}
 

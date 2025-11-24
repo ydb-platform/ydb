@@ -182,19 +182,8 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
     }
 
     if (requestData.RetryNumber >= 1) {
-        LOG_D("[SHUTDOWN] Try to retry by ActorUnknown reason, nodeId: " << target.NodeId() << ", requestId: " << requestId);
+        LOG_D("Try to retry by ActorUnknown reason, nodeId: " << target.NodeId() << ", requestId: " << requestId);
     }
-
-    LOG_I("[SHUTDOWN] Sending TEvStartKqpTasksRequest"
-        << ", requestId: " << requestId
-        << ", target: " << target
-        << ", targetNode: " << target.NodeId()
-        << ", executerNode: " << ExecuterId.NodeId()
-        << ", retryNumber: " << requestData.RetryNumber
-        << ", tasksCount: " << requestData.TaskIds.size()
-        << ", originalNode: " << requestData.NodeId
-        << ", txId: " << TxId);
-
     requestData.RetryNumber++;
 
     TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(target, ExecuterId, ev.release(),
@@ -333,13 +322,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         ResourceEstimations.size() <= localResources.ExecutionUnits &&
         singleNodeExecutionMakeSence)
     {
-        ui64 selfNodeId = ExecuterId.NodeId();
-        LOG_I("[SHUTDOWN] Running tasks locally, node: " << selfNodeId 
-            << ", tasksCount: " << ComputeTasks.size()
-            << ", memory: " << LocalRunMemoryEst << " / " << localResources.Memory[NRm::EKqpMemoryPool::ScanQuery]
-            << ", executionUnits: " << ResourceEstimations.size() << " / " << localResources.ExecutionUnits
-            << ", txId: " << TxId);
-        
+        ui64 selfNodeId = ExecuterId.NodeId(); 
         for(ui64 taskId: ComputeTasks) {
             TasksPerNode[selfNodeId].push_back(taskId);
         }

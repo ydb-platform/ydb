@@ -29,8 +29,6 @@ void TNodeState::RemoveRequest(ui64 txId, TActorId executerId) {
     for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
         if (requestIt->second.ExecuterId == executerId) {
             bucket.ExpiringRequests.erase(requestIt->second.GetExpirationInfo());
-            Cerr << "[SHUTDOWN] TxId: " << txId << ", executerId: " << executerId 
-                 << ", removing request from State due to error during task creation" << Endl;
             bucket.Requests.erase(requestIt);
             return;
         }
@@ -68,13 +66,8 @@ bool TNodeState::OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId, 
                 taskIt->second = computeActorId;
                 return true;
             }
-            // Don't return false here! Task might be in another request with same ExecuterId.
-            // Continue searching in other requests.
         }
     }
-
-    // Task not found in any request with this ExecuterId.
-    // This can happen if task already finished or request was removed.
     return false;
 }
 
@@ -89,12 +82,8 @@ void TNodeState::OnTaskFinished(ui64 txId, ui64 taskId, bool success) {
         auto& request = requestIt->second;
 
         if (auto taskIt = request.Tasks.find(taskId); taskIt != request.Tasks.end()) {
-            size_t remainingTasksCount = request.Tasks.size() - 1;
             request.Tasks.erase(taskIt);
             request.ExecutionCancelled |= !success;
-
-            Cerr << "[SHUTDOWN] TxId: " << txId << ", taskId: " << taskId 
-                 << ", success: " << success << ", remaining tasks: " << remainingTasksCount << Endl;
 
             if (request.Tasks.empty()) {
                 bucket.ExpiringRequests.erase(request.GetExpirationInfo());
@@ -106,10 +95,6 @@ void TNodeState::OnTaskFinished(ui64 txId, ui64 taskId, bool success) {
                     auto* actorSystem = TlsActivationContext->ActorSystem();
                     actorSystem->Send(MakeKqpSchedulerServiceId(actorSystem->NodeId), removeQueryEvent.Release());
                 }
-
-                Cerr << "[SHUTDOWN] TxId: " << txId 
-                     << ", all tasks finished, removing request from State, executionCancelled: " 
-                     << request.ExecutionCancelled << Endl;
                 bucket.Requests.erase(requestIt);
             }
 

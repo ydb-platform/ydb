@@ -127,7 +127,7 @@ private:
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
             default: {
-                Y_ABORT("Unexpected event 0x%x for TKqpNodeService", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TKqpNodeService in WorkState", ev->GetTypeRewrite());
             }
         }
     }
@@ -141,10 +141,7 @@ private:
             hFunc(TEvents::TEvWakeup, HandleShuttingDown);
             hFunc(TEvents::TEvPoison, HandleShuttingDown);
             default: {
-                LOG_E("[SHUTDOWN] Unexpected event in ShuttingDownState"
-                    << ", event: " << ev->GetTypeName()
-                    << ", sender: " << ev->Sender
-                    << ", recipient: " << ev->Recipient);
+                Y_ABORT("Unexpected event 0x%x for TKqpNodeService in ShutdownState", ev->GetTypeRewrite());
             }
         }
     }
@@ -212,16 +209,7 @@ private:
 
         if (State_->HasRequest(txId)) {
             auto existingTaskIds = State_->GetTaskIdsByTxId(txId);
-            
-            TVector<ui64> newTaskIds;
-            for (const auto& dqTask : msg.GetTasks()) {
-                newTaskIds.push_back(dqTask.GetId());
-            }
-            
-            LOG_I("[SHUTDOWN] TxId: " << txId << ", requester: " << requester 
-                  << ", request already exists. Existing tasks: [" << JoinSeq(", ", existingTaskIds) << "]"
-                  << ", new tasks: [" << JoinSeq(", ", newTaskIds) << "]");
-            
+
             bool hasOverlap = false;
             TVector<ui64> overlappingTasks;
             for (const auto& dqTask : msg.GetTasks()) {
@@ -232,11 +220,11 @@ private:
             }
             
             if (hasOverlap) {
-                LOG_E("[SHUTDOWN] TxId: " << txId << ", requester: " << requester 
+                LOG_E("TxId: " << txId << ", requester: " << requester 
                       << ", REJECTING retry: overlapping tasks found: [" << JoinSeq(", ", overlappingTasks) << "]");
                 co_return ReplyError(txId, executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, ev->Cookie);
             } else {
-                LOG_I("[SHUTDOWN] TxId: " << txId << ", requester: " << requester 
+                LOG_D("TxId: " << txId << ", requester: " << requester 
                       << ", ALLOWING retry: no overlapping tasks, will add as separate request");
             }
         }

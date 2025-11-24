@@ -862,14 +862,7 @@ protected:
                                 "Compute node is unavailable"));
                         break;
                     }
-                    
-                    LOG_I("[SHUTDOWN] Received NODE_SHUTTING_DOWN response"
-                        << ", TxId: " << TxId
-                        << ", from node: " << ev->Sender.NodeId()
-                        << ", selfNode: " << SelfId().NodeId()
-                        << ", notStartedTasksCount: " << record.NotStartedTasksSize());
-                    
-                    // Проверяем, можем ли делать retry (отправитель - не локальная нода)
+
                     if (ev->Sender.NodeId() == SelfId().NodeId()) {
                         LOG_W("[SHUTDOWN] Cannot retry: sender is local node"
                             << ", senderNode: " << ev->Sender.NodeId()
@@ -879,18 +872,10 @@ protected:
                         "All compute nodes are shutting down"));
                         break;
                     }
-                    
-                    // Получаем RequestId из первой задачи (у всех задач в response одинаковый RequestId)
+
                     ui32 requestId = record.GetNotStartedTasks(0).GetRequestId();
                     
-                    // Retry request ОДИН РАЗ для всех задач
                     auto targetNode = MakeKqpNodeServiceID(SelfId().NodeId());
-                    LOG_I("[SHUTDOWN] Retrying request on local node"
-                        << ", RequestId: " << requestId
-                        << ", originalNode: " << ev->Sender.NodeId()
-                        << ", targetNode: " << targetNode
-                        << ", tasksCount: " << record.NotStartedTasksSize());
-                    
                     Planner->SendStartKqpTasksRequest(requestId, targetNode);
                     break;
                 }

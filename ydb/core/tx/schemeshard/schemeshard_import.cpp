@@ -36,7 +36,7 @@ namespace {
 
         return state;
     }
-    ui32 GetTablePartitions(const Ydb::Table::CreateTableRequest& table) {
+    ui32 GetTablePartsFromRequest(const Ydb::Table::CreateTableRequest& table) {
         switch (table.partitions_case()) {
             case Ydb::Table::CreateTableRequest::PartitionsCase::kUniformPartitions:
                 return table.uniform_partitions();
@@ -59,11 +59,9 @@ namespace {
         const auto& item = importInfo.Items.at(itemIdx);
 
         const auto opId = TOperationId(item.WaitTxId, FirstSubTxId);
-        if (item.WaitTxId != InvalidTxId && ss->TxInFlight.contains(opId)) {
+        if (item.WaitTxId != InvalidTxId && ss->TxInFlight.contains(opId) &&
+            ss->TxInFlight.at(opId).TxType == TTxState::TxRestore) {
             const auto& txState = ss->TxInFlight.at(opId);
-            if (txState.TxType != TTxState::TxRestore) {
-                return;
-            }
 
             itemProgress.set_parts_total(itemProgress.parts_total() + txState.Shards.size());
             itemProgress.set_parts_completed(itemProgress.parts_completed() + txState.Shards.size() - txState.ShardsInProgress.size());
@@ -104,20 +102,28 @@ namespace {
 
         Y_ABORT_UNLESS(indexIdx < item.Table->indexes_size());
 
+        // At this point item.Table is guaranteed not to be empty
+        const ui32 partsTotal = ss->Tables.contains(item.DstPathId) ?
+            ss->Tables.at(item.DstPathId)->GetPartitions().size() :
+            GetTablePartsFromRequest(*item.Table);
+
         const auto buildUid = MakeIndexBuildUid(importInfo, itemIdx, indexIdx);
         if (ss->IndexBuildsByUid.contains(buildUid)) {
             const auto& indexBuild = ss->IndexBuildsByUid.FindPtr(buildUid)->Get();
 
-            itemProgress.set_parts_total(itemProgress.parts_total() + indexBuild->Shards.size());
-            itemProgress.set_parts_completed(itemProgress.parts_completed() + indexBuild->Shards.size() - indexBuild->InProgressShards.size());
-            *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(indexBuild->EndTime.Seconds());
+            ui32 partsCompleted = 0;
+            if (indexBuild->IsFinished()) {
+                partsCompleted = partsTotal;
+            } else if (indexBuild->InProgressShards.size() > 0) {
+                // Case if InProgressShards are not loaded yet
+                partsCompleted = partsTotal - indexBuild->InProgressShards.size();
+            } 
 
+            itemProgress.set_parts_total(itemProgress.parts_total() + partsTotal);
+            itemProgress.set_parts_completed(itemProgress.parts_completed() + partsCompleted);
+            *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(indexBuild->EndTime.Seconds());
         } else {
-            // As it is better and easier not to bind to schemeshard state,
-            // We'll use info from CreateTableRequest instead
-            // At this point item.Table is guaranteed not to be empty
-            const auto partsTotal = GetTablePartitions(*item.Table);
-            const auto partsCompleted = indexIdx >= item.NextIndexIdx ? 0 : partsTotal;
+            auto partsCompleted = indexIdx >= item.NextIndexIdx ? 0 : partsTotal;
 
             itemProgress.set_parts_total(itemProgress.parts_total() + partsTotal);
             itemProgress.set_parts_completed(itemProgress.parts_completed() + partsCompleted);

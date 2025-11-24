@@ -256,8 +256,8 @@ TEST_F(XdcRdmaTest, SerializeToRope) {
     }
 
     auto mempool = NInterconnect::NRdma::CreateSlotMemPool(nullptr);
-
-    auto serializedRope = ev->SerializeToRope(mempool.get());
+    TRdmaAllocatorWithFallback allocator(mempool);
+    auto serializedRope = ev->SerializeToRope(&allocator);
 
     ASSERT_TRUE(serializedRope.has_value());
     auto rope = serializedRope->ConvertToString();

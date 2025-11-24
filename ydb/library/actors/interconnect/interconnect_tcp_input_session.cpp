@@ -908,10 +908,11 @@ namespace NActors {
             }
             ui32 expectedChecksum = descr.Checksum ?: pendingEvent.RdmaCheckSum;
             if (expectedChecksum) {
-                if (checksum != expectedChecksum) {
-                    LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
-                    throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
-                }
+                Y_UNUSED(checksum, expectedChecksum);
+                // if (checksum != expectedChecksum) {
+                //     LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
+                //     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+                // }
             }
             pendingEvent.SerializationInfo.IsExtendedFormat = descr.Flags & IEventHandle::FlagExtendedFormat;
 

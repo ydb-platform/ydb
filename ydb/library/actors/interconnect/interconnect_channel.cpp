@@ -78,7 +78,6 @@ namespace NActors {
                         Metrics->UpdateIcQueueTimeHistogram(duration.MicroSeconds());
                     }
                     event.Span && event.Span.Event("FeedBuf:INITIAL");
-                    SendViaRdma.reset();
                     if (event.Buffer) {
                         State = EState::BODY;
                         Iter = event.Buffer->GetBeginIter();
@@ -118,9 +117,7 @@ namespace NActors {
                         if (sendViaRdma) {
                             Y_ABORT_UNLESS(totalSize, "got empty sz, sections: %d type: %d ", SerializationInfo->Sections.size(),  event.Event->Type());
                             NActorsInterconnect::TRdmaCreds rdmaCreds;
-                            ui32 checkSum = 0;
-                            if (SerializeEventRdma(event, rdmaCreds, task.Params.ChecksumRdmaEvent ? &checkSum : nullptr, rdmaDeviceIndex)) {
-                                SendViaRdma.emplace(TRdmaSerializationArtifacts{std::move(rdmaCreds), checkSum});
+                            if (SerializeEventRdma(event)) {
                                 Chunker.DiscardEvent();
                             }
                         }
@@ -168,8 +165,7 @@ namespace NActors {
                         p += NInterconnect::NDetail::SerializeNumber(section.Alignment, p);
                         if (section.IsInline && Params.UseXdcShuffle) {
                             type = static_cast<ui8>(EXdcCommand::DECLARE_SECTION_INLINE);
-                        }
-                        if (SendViaRdma) {
+                        } else if (section.IsRdmaCapable) {
                             type = static_cast<ui8>(EXdcCommand::DECLARE_SECTION_RDMA);
                         }
                         Y_ABORT_UNLESS(p <= std::end(sectionInfo));
@@ -268,16 +264,18 @@ namespace NActors {
                 if (!Params.UseExternalDataChannel || sections.empty()) {
                     // all data goes inline
                     IsPartInline = true;
+                    IsPartRdma = false;
                     PartLenRemain = Max<size_t>();
-                } else if (!Params.UseXdcShuffle || SendViaRdma) {
+                } else if (!Params.UseXdcShuffle) {
                     // when UseXdcShuffle feature is not supported by the remote side, we transfer whole event over XDC
-                    // also when we use RDMA, we transfer whole over RDMA
                     IsPartInline = false;
+                    IsPartRdma = false;
                     PartLenRemain = Max<size_t>();
                 } else {
                     Y_ABORT_UNLESS(SectionIndex < sections.size());
                     IsPartInline = sections[SectionIndex].IsInline;
-                    while (SectionIndex < sections.size() && IsPartInline == sections[SectionIndex].IsInline) {
+                    IsPartRdma = sections[SectionIndex].IsRdmaCapable;
+                    while (SectionIndex < sections.size() && IsPartInline == sections[SectionIndex].IsInline && IsPartRdma == sections[SectionIndex].IsRdmaCapable) {
                         PartLenRemain += sections[SectionIndex].Size;
                         ++SectionIndex;
                     }
@@ -288,8 +286,8 @@ namespace NActors {
             std::optional<bool> complete = false;
             if (IsPartInline) {
                 complete = FeedInlinePayload(task, event);
-            } else if (SendViaRdma) {
-                complete = FeedRdmaPayload(task, event, rdmaDeviceIndex);
+            } else if (IsPartRdma) {
+                complete = FeedRdmaPayload(task, event, rdmaDeviceIndex, task.Params.ChecksumRdmaEvent);
             } else {
                 complete = FeedExternalPayload(task, event);
             }
@@ -325,27 +323,34 @@ namespace NActors {
         return complete;
     }
 
-    bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds,
-        ui32* checksum, ssize_t rdmaDeviceIndex)
-    {
+    bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event) {
         if (!event.Buffer && event.Event) {
-            std::optional<TRope> rope = event.Event->SerializeToRope(RdmaMemPool.get());
+            // std::optional<TRope> rope = event.Event->SerializeToRope(RdmaMemPool.get());
+            std::optional<TRope> rope = event.Event->SerializeToRope(GetDefaultRcBufAllocator());
             if (!rope) {
                 return false; // serialization failed
             }
             event.Buffer = MakeIntrusive<TEventSerializedData>(
                 std::move(*rope), event.Event->CreateSerializationInfo()
             );
+            event.Event = nullptr;
             Iter = event.Buffer->GetBeginIter();
         }
 
+        return true;
+    }
+
+    std::optional<bool> TEventOutputChannel::FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex, bool checksumming) {
+        Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
+
         XXH3_state_t state;
-        if (checksum) {
+        if (checksumming) {
             XXH3_64bits_reset(&state);
         }
 
-        if (event.Buffer) {
-            for (; Iter.Valid(); ++Iter) {
+        Y_ABORT_UNLESS(event.Buffer);
+        if (RdmaCredsBuffer.CredsSize() == 0) {
+            for (; Iter.Valid() && PartLenRemain; ++Iter) {
                 TRcBuf buf = Iter.GetChunk();
                 auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
                 if (memReg.Empty()) {
@@ -353,28 +358,20 @@ namespace NActors {
                     Iter = event.Buffer->GetBeginIter();
                     return false;
                 }
-                if (checksum) {
+                if (checksumming) {
                     XXH3_64bits_update(&state, buf.GetData(), buf.GetSize());
                 }
-                auto cred = rdmaCreds.AddCreds();
+                auto cred = RdmaCredsBuffer.AddCreds();
                 cred->SetAddress(reinterpret_cast<ui64>(memReg.GetAddr()));
                 cred->SetSize(memReg.GetSize());
                 cred->SetRkey(memReg.GetRKey(rdmaDeviceIndex));
+    
+                event.EventActuallySerialized += buf.GetSize();
+                PartLenRemain -= buf.GetSize();
             }
         }
 
-        if (checksum) {
-            *checksum = XXH3_64bits_digest(&state);
-        }
-        return true;
-    }
-
-    std::optional<bool> TEventOutputChannel::FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex) {
-        Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
-        const NActorsInterconnect::TRdmaCreds& rdmaCreds = SendViaRdma->RdmaCreds;
-        ui32 checkSum = SendViaRdma->CheckSum;
-
-        ui16 credsSerializedSize = rdmaCreds.ByteSizeLong();
+        ui16 credsSerializedSize = RdmaCredsBuffer.ByteSizeLong();
         // Part = | TChannelPart | EXdcCommand::RDMA_READ | rdmaCreds.Size | rdmaCreds | checkSum |
         size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + credsSerializedSize + sizeof(ui32);
         Y_ABORT_UNLESS(partSize < 4096);
@@ -396,20 +393,22 @@ namespace NActors {
         ptr += sizeof(ui16);
 
         ui32 payloadSz = 0;
-        for (const auto& rdmaCred : rdmaCreds.GetCreds()) {
+        for (const auto& rdmaCred : RdmaCredsBuffer.GetCreds()) {
             payloadSz += rdmaCred.GetSize();
         }
 
-        Y_ABORT_UNLESS(rdmaCreds.SerializePartialToArray(ptr, credsSerializedSize));
+        Y_ABORT_UNLESS(RdmaCredsBuffer.SerializePartialToArray(ptr, credsSerializedSize));
         ptr += credsSerializedSize;
-        WriteUnaligned<ui32>(ptr, checkSum);
-        OutputQueueSize -= event.EventSerializedSize;
+        WriteUnaligned<ui32>(ptr, checksumming ? XXH3_64bits_digest(&state) : 0);
+        OutputQueueSize -= payloadSz;
 
         task.Write<false>(buffer, partSize);
 
         task.AttachRdmaPayloadSize(payloadSz);
 
-        return true;
+        RdmaCredsBuffer.Clear();
+
+        return !Iter.Valid();
     }
 
     std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event) {

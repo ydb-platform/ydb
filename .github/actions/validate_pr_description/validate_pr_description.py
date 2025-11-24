@@ -44,7 +44,7 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
 
     category = categories[0]
 
-    if category not in ALL_CATEGORIES:
+    if not any(category.lower() == valid_cat.lower() for valid_cat in ALL_CATEGORIES):
         txt = f"Invalid Changelog category: {category}"
         print(f"::warning::{txt}")
         return False, txt

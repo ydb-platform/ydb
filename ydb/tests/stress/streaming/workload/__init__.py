@@ -104,7 +104,7 @@ class Workload():
                 except TimeoutError:
                     break
             if count < self.duration / 2:
-                raise Exception(f"There is not enough data in the output topic, actual {count}, expected ~{self.duration}")
+                raise Exception(f"Insufficient data in output topic: expected ~{self.duration} messages, got {count}")
 
     def loop(self):
         self.pool.execute_with_retries("GRANT ALL ON `/Root` TO ``;")

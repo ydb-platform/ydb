@@ -173,6 +173,7 @@ private:
 
     void ReportBaseStatisticsCounters();
 
+    std::optional<bool> IsKnownTable(const TPathId& pathId) const;
     std::optional<bool> IsColumnTable(const TPathId& pathId) const;
 
     TString LastTraversalWasForceString() const;

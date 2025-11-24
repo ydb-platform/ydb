@@ -445,7 +445,7 @@ void ValidateCountMinDatashard(TTestActorRuntime& runtime, TPathId pathId) {
     }
 }
 
-void ValidateCountMinDatashardAbsense(TTestActorRuntime& runtime, TPathId pathId) {
+void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId) {
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
 
     NStat::TRequest req;

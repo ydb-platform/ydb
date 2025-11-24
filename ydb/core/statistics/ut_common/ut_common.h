@@ -107,7 +107,7 @@ std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, con
 void ValidateCountMinColumnshard(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expectedProbe);
 
 void ValidateCountMinDatashard(TTestActorRuntime& runtime, TPathId pathId);
-void ValidateCountMinDatashardAbsense(TTestActorRuntime& runtime, TPathId pathId);
+void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId);
 
 struct TAnalyzedTable {
     TPathId PathId;

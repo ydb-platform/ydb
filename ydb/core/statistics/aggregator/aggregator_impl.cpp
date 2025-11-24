@@ -651,41 +651,36 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
     for (TForceTraversalOperation& operation : ForceTraversals) {
         for (TForceTraversalTable& operationTable : operation.Tables) {
             if (operationTable.Status == TForceTraversalTable::EStatus::None) {
-                std::optional<bool> isColumnTable = IsColumnTable(operationTable.PathId);
-                if (!isColumnTable) {
-                    if (!BaseStatistics.contains(operationTable.PathId.OwnerId)) {
-                        SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
-                            << "Don't start analyze for table " << operationTable.PathId
-                            << " as there is still no info from its SchemeShard");
-                        continue;
-                    }
+                std::optional<bool> isKnown = IsKnownTable(operationTable.PathId);
+                if (!isKnown.has_value()) {
+                    SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
+                        << "Don't start analyze for table " << operationTable.PathId
+                        << " as there is still no info from its SchemeShard");
+                    continue;
+                }
 
-                    ForceTraversalOperationId = operation.OperationId;
-                    TraversalDatabase = operation.DatabaseName;
-                    TraversalPathId = operationTable.PathId;
+                ForceTraversalOperationId = operation.OperationId;
+                TraversalDatabase = operation.DatabaseName;
+                TraversalPathId = operationTable.PathId;
+
+                if (!*isKnown) {
+                    SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
+                        << "table " << operationTable.PathId
+                        << " was deleted, deleting its statistics");
                     DeleteStatisticsFromTable();
                     return;
                 }
 
-                if (*isColumnTable) {
-                    ForceTraversalOperationId = operation.OperationId;
-                    TraversalDatabase = operation.DatabaseName;
-                    TraversalPathId = operationTable.PathId;
-                    TraversalStartTime = TInstant::Now();
-                    LastTraversalWasForce = true;
+                TraversalStartTime = TInstant::Now();
+                LastTraversalWasForce = true;
 
-                    UpdateForceTraversalTableStatus(
-                        TForceTraversalTable::EStatus::AnalyzeStarted, operation.OperationId, operationTable, db);
+                UpdateForceTraversalTableStatus(
+                    TForceTraversalTable::EStatus::AnalyzeStarted, operation.OperationId, operationTable, db);
 
-                    ctx.RegisterWithSameMailbox(new TAnalyzeActor(
-                        SelfId(), operation.OperationId, operation.DatabaseName, operationTable.PathId,
-                        operationTable.ColumnTags));
-                    return;
-                } else {
-                    SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. Skip analyze for datashard table " << operationTable.PathId);
-                    UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::AnalyzeFinished, operation.OperationId, operationTable,  db);
-                    return;
-                }
+                ctx.RegisterWithSameMailbox(new TAnalyzeActor(
+                    SelfId(), operation.OperationId, operation.DatabaseName, operationTable.PathId,
+                    operationTable.ColumnTags));
+                return;
             }
         }
 
@@ -804,6 +799,17 @@ TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::ForceTra
     } else {
         return &*forceTraversalOperation;
     }
+}
+
+std::optional<bool> TStatisticsAggregator::IsKnownTable(const TPathId& pathId) const {
+    if (ScheduleTraversals.contains(pathId)) {
+        return true;
+    }
+    if (!BaseStatistics.contains(pathId.OwnerId)) {
+        // no info from the corresponding schemeshard yet
+        return std::nullopt;
+    }
+    return false;
 }
 
 std::optional<bool> TStatisticsAggregator::IsColumnTable(const TPathId& pathId) const {

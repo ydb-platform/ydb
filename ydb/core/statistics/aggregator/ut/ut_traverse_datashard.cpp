@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
         CreateUniformTable(env, "Database", "Table");
 
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
-        ValidateCountMinDatashardAbsense(runtime, pathId);
+        ValidateCountMinAbsense(runtime, pathId);
     }
 
     Y_UNIT_TEST(TraverseTwoTables) {
@@ -44,8 +44,8 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Database/Table2");
-        ValidateCountMinDatashardAbsense(runtime, pathId1);
-        ValidateCountMinDatashardAbsense(runtime, pathId2);
+        ValidateCountMinAbsense(runtime, pathId1);
+        ValidateCountMinAbsense(runtime, pathId2);
     }    
 
     Y_UNIT_TEST(TraverseOneTableServerless) {
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
         CreateUniformTable(env, "Serverless", "Table");
 
         auto pathId = ResolvePathId(runtime, "/Root/Serverless/Table");
-        ValidateCountMinDatashardAbsense(runtime, pathId);
+        ValidateCountMinAbsense(runtime, pathId);
     }
 
     Y_UNIT_TEST(TraverseTwoTablesServerless) {
@@ -71,8 +71,8 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Serverless/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Serverless/Table2");
-        ValidateCountMinDatashardAbsense(runtime, pathId1);
-        ValidateCountMinDatashardAbsense(runtime, pathId2);
+        ValidateCountMinAbsense(runtime, pathId1);
+        ValidateCountMinAbsense(runtime, pathId2);
     }
 
     Y_UNIT_TEST(TraverseTwoTablesTwoServerlessDbs) {
@@ -87,8 +87,8 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Serverless1/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");
-        ValidateCountMinDatashardAbsense(runtime, pathId1);
-        ValidateCountMinDatashardAbsense(runtime, pathId2);
+        ValidateCountMinAbsense(runtime, pathId1);
+        ValidateCountMinAbsense(runtime, pathId2);
     }
 
 }

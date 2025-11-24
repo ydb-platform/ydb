@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         Analyze(runtime, saTabletId, {{pathId}});
 
-        ValidateCountMinDatashardAbsense(runtime, pathId);
+        ValidateCountMinDatashard(runtime, pathId);
     }
 
     Y_UNIT_TEST(AnalyzeTwoTables) {
@@ -43,8 +43,8 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         Analyze(runtime, saTabletId1, {pathId1, pathId2});
 
-        ValidateCountMinDatashardAbsense(runtime, pathId1);
-        ValidateCountMinDatashardAbsense(runtime, pathId2);
+        ValidateCountMinDatashard(runtime, pathId1);
+        ValidateCountMinDatashard(runtime, pathId2);
     }
 
     Y_UNIT_TEST(DropTableNavigateError) {
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         Analyze(runtime, saTabletId, {pathId});
 
-        ValidateCountMinDatashardAbsense(runtime, pathId);
+        ValidateCountMinAbsense(runtime, pathId);
     }
 }
 

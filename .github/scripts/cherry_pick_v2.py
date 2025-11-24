@@ -949,15 +949,14 @@ class InputParser:
     
     @staticmethod
     def split(s: str, seps: str = ', \n') -> List[str]:
-        """Splits string by multiple separators"""
+        """Splits string by multiple separators (any of the characters in seps) and filters out empty strings"""
         if not s:
             return []
         if not seps:
-            return [s]
-        result = []
-        for part in s.split(seps[0]):
-            result += InputParser.split(part, seps[1:])
-        return result
+            return [s] if s.strip() else []
+        # Build regex pattern to match any separator character
+        pattern = f"[{re.escape(seps)}]+"
+        return [part.strip() for part in re.split(pattern, s) if part.strip()]
     
     @staticmethod
     def normalize_commit_ref(ref: str) -> str:

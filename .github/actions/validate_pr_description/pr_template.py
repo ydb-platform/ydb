@@ -23,7 +23,7 @@ PULL_REQUEST_TEMPLATE = """### Changelog entry <!-- a user-readable short descri
 * Improvement
 * Performance improvement
 * User Interface
-* Bugfix 
+* Bugfix
 * Backward incompatible change
 * Documentation (changelog entry is not required)
 * Not for changelog (changelog entry is not required)"""

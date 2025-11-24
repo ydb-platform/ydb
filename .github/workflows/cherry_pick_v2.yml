@@ -10,7 +10,7 @@ on:
         type: string
         default: ""
         description: |
-          List of commits to cherry-pick. 
+          List of commits to cherry-pick.
           Can be represented as full or short commit SHA, PR number or URL to commit or PR.
           Separated by space, comma or line end.
           Example: "sha5682 123245"

@@ -214,7 +214,7 @@ void TTrie::Clear(bool enableFlattening)
 
 bool TTrie::IsEmpty() const
 {
-    return GetType() != ETrieNodeType::Outlier;
+    return GetType() == ETrieNodeType::Outlier;
 }
 
 bool TTrie::IsFlat() const

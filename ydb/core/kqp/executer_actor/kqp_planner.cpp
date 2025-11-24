@@ -184,6 +184,7 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
     if (requestData.RetryNumber >= 1) {
         LOG_D("Try to retry by ActorUnknown reason, nodeId: " << target.NodeId() << ", requestId: " << requestId);
     }
+
     requestData.RetryNumber++;
 
     TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(target, ExecuterId, ev.release(),
@@ -322,7 +323,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         ResourceEstimations.size() <= localResources.ExecutionUnits &&
         singleNodeExecutionMakeSence)
     {
-        ui64 selfNodeId = ExecuterId.NodeId(); 
+        ui64 selfNodeId = ExecuterId.NodeId();
         for(ui64 taskId: ComputeTasks) {
             TasksPerNode[selfNodeId].push_back(taskId);
         }

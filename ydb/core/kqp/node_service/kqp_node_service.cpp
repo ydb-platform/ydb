@@ -235,8 +235,8 @@ private:
             requestTaskIds.push_back(dqTask.GetId());
         }
         
-        LOG_D("[SHUTDOWN] TxId: " << txId << ", requester: " << requester 
-              << ", adding request to State with tasks: [" << JoinSeq(", ", requestTaskIds) << "]");
+        LOG_D("TxId: " << txId << ", requester: " << requester 
+              << ", try to add request to State with tasks: [" << JoinSeq(", ", requestTaskIds) << "]");
         State_->AddRequest(std::move(request));
 
         NRm::EKqpMemoryPool memoryPool;
@@ -312,14 +312,7 @@ private:
 
             // NOTE: keep in mind that a task can start, execute and finish before we reach the end of this method.
 
-            if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
-                LOG_E("[SHUTDOWN] TxId: " << txId << ", taskId: " << taskId 
-                      << ", failed to create compute actor, status: " << static_cast<int>(rmResult->GetStatus()) 
-                      << ", reason: " << rmResult->GetFailReason());
-                
-                // Remove request from State since we're not sending SUCCESS response
-                State_->RemoveRequest(txId, executerId);
-                
+            if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {                
                 ReplyError(txId, executerId, msg, rmResult->GetStatus(), ev->Cookie, rmResult->GetFailReason());
                 TerminateTx(txId, rmResult->GetFailReason());
                 co_return;
@@ -417,44 +410,27 @@ private:
             LOG_I("Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request");
             return;
         }
-        LOG_I("Prepare to shutdown: do not acccept any messages from this time");
+        
+        LOG_I("Prepare to shutdown: do not acccept any messages from this time"
+            << ", sender: " << ev->Sender
+            << ", self: " << SelfId());
         ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
-        LOG_I("[SHUTDOWN] Transitioning to ShuttingDownState, will reject new requests with SupportShuttingDown=true");
         Become(&TKqpNodeService::ShuttingDownState);
     }
 
     void HandleShuttingDown(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
         auto& msg = ev->Get()->Record;
-        LOG_I("[SHUTDOWN] Received TEvStartKqpTasksRequest in ShuttingDownState"
-            << ", TxId: " << msg.GetTxId()
-            << ", sender: " << ev->Sender
-            << ", tasksCount: " << msg.TasksSize()
-            << ", SupportShuttingDown: " << (msg.HasSupportShuttingDown() ? (msg.GetSupportShuttingDown() ? "true" : "false") : "not set")
-            << ", cookie: " << ev->Cookie);
-        
         if (msg.HasSupportShuttingDown() && msg.GetSupportShuttingDown()) {
-            LOG_I("[SHUTDOWN] Rejecting request with NODE_SHUTTING_DOWN"
-                << ", TxId: " << msg.GetTxId()
-                << ", executer: " << ev->Sender
-                << ", tasksCount: " << msg.TasksSize());
-            for (auto& task : msg.GetTasks()) {
-                LOG_D("[SHUTDOWN]   Task being rejected: TaskId=" << task.GetId() 
-                    << ", StageId=" << task.GetStageId());
-            }
             ReplyError(msg.GetTxId(), ev->Sender, msg, NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN, ev->Cookie);
         } else {
-            LOG_I("[SHUTDOWN] Processing legacy request (SupportShuttingDown=false or not set)"
-                << ", TxId: " << msg.GetTxId()
-                << ", tasksCount: " << msg.TasksSize());
             HandleWork(ev);
         }
     }
 
     void HandleShuttingDown(TEvents::TEvWakeup::TPtr&) {
-        LOG_D("[SHUTDOWN] Received TEvWakeup in ShuttingDownState, not rescheduling timer");
+        LOG_D("Received TEvWakeup in ShuttingDownState, not rescheduling timer");
         auto expiredRequests = State_->ClearExpiredRequests();
         for (auto& txId : expiredRequests) {
-            LOG_D("[SHUTDOWN] Terminating expired request, TxId: " << txId);
             TerminateTx(txId, "reached execution deadline during shutdown", NYql::NDqProto::StatusIds::TIMEOUT);
         }
     }
@@ -607,14 +583,6 @@ private:
     void ReplyError(ui64 txId, TActorId executer, const NKikimrKqp::TEvStartKqpTasksRequest& request,
         NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message = "")
     {
-        LOG_I("[SHUTDOWN] Sending TEvStartKqpTasksResponse with error"
-            << ", TxId: " << txId
-            << ", executer: " << executer
-            << ", reason: " << NKikimrKqp::TEvStartKqpTasksResponse_ENotStartedTaskReason_Name(reason)
-            << ", requestId: " << requestId
-            << ", tasksCount: " << request.TasksSize()
-            << ", message: " << message);
-        
         auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         ev->Record.SetTxId(txId);
         for (auto& task : request.GetTasks()) {
@@ -623,14 +591,7 @@ private:
             resp->SetReason(reason);
             resp->SetMessage(message);
             resp->SetRequestId(requestId);
-            
-            LOG_D("[SHUTDOWN]   NotStartedTask added"
-                << ", TaskId: " << task.GetId()
-                << ", StageId: " << task.GetStageId()
-                << ", RequestId: " << requestId);
         }
-        
-        LOG_D("[SHUTDOWN] Sending error response to: " << executer);
         Send(executer, ev.Release());
     }
 

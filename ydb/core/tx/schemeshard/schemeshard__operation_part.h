@@ -763,6 +763,9 @@ inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& working
 
     return tx;
 }
+ISubOperation::TPtr CreateTruncateTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateTruncateTable(TOperationId id, TTxState::ETxState state);
+
 
 }
 }

@@ -582,6 +582,7 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
         case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
         case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate: // TODO flown4qqqq
+        case NKikimrSchemeOp::ESchemeOpTruncateTable: // TODO flown4qqqq
             return TxInvalid;
 
         //NOTE: intentionally no default: case

@@ -191,6 +191,7 @@ public:
         , NeedToNotifyInput(false)
         , EarlyFinished(false)
         , InputBinded(false)
+        , Finished(false)
     {
         PopStats.ChannelId = info.ChannelId;
         PushStats.ChannelId = info.ChannelId;
@@ -209,7 +210,7 @@ public:
     void EarlyFinish() override;
 
     void BindInput();
-    void BindStorage(std::shared_ptr<TLocalBuffer> self, IDqChannelStorage::TPtr storage);
+    void BindStorage(std::shared_ptr<TLocalBuffer>& self, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler();
 
     std::shared_ptr<TLocalBufferRegistry> Registry;
@@ -236,6 +237,7 @@ public:
     std::atomic<bool> NeedToNotifyInput;
     std::atomic<bool> EarlyFinished;
     std::atomic<bool> InputBinded;
+    std::atomic<bool> Finished;
 };
 
 class TOutputBuffer;

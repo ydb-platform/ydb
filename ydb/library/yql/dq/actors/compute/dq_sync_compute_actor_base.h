@@ -96,12 +96,22 @@ protected:
         return true;  // returns true, when channels were handled synchronously
     }
 
-    TString GetMonitoringInfo() override {
+    TString GetMonitoringInfo(NActors::NMon::TEvHttpInfo::TPtr& ev) override {
         TStringStream str;
         HTML(str) {
             PRE() {
                 str << "TDqSyncComputeActorBase SelfId: " << this->SelfId() << Endl;
                 str << "  State: " << (unsigned int)TBase::State << Endl;
+
+                TString uri(ev->Get()->Request.GetUri());
+                const TCgiParameters &cgi = ev->Get()->Request.GetParams();
+                if (cgi.Get("action") == "") {
+                    uri += "&action=run";
+                }
+
+                HREF(uri)  {
+                    str << "Resume Execution" << Endl;
+                }
 
                 if (TaskRunner) {
                     str << "TaskRunner" << Endl

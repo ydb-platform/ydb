@@ -40,16 +40,16 @@ void VerifyConflictingPortion(const std::shared_ptr<NCommon::IDataSource>& sourc
     if (status.Committed) {
         AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() > requestSnapshot)("error", "portion was committed and conflicting at the scan start, but has commit snapshot less than the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
     } else {
-        // if the portion was not committed it means now it may be:
-        // 1. still not committed
+        // if the portion was uncommitted it means now it may be:
+        // 1. still uncommitted
         if (!wPortionInfo.IsCommitted()) {
             // do nothing, it is just fine
         // 2. committed and removed, in this case its snapshot must be greater or equal to the request snapshot
         } else if (wPortionInfo.HasRemoveSnapshot()) {
-            AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() >= requestSnapshot)("error", "portion was committed and conflicting at the scan start, but now it is removed and committed and has commit snapshot less than the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
+            AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() >= requestSnapshot)("error", "portion was uncommitted and conflicting at the scan start, but now it is removed and committed and has commit snapshot less than the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
         // 3. committed and not removed, in this case its snapshot must be greater than the request snapshot
         } else {
-            AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() > requestSnapshot)("error", "portion was committed and conflicting at the scan start, but now it is committed and has commit snapshot less than the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
+            AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() > requestSnapshot)("error", "portion was uncommitted and conflicting at the scan start, but now it is committed and has commit snapshot less than the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
         }
     }
     // source must not be empty, we will mark it as conflicting

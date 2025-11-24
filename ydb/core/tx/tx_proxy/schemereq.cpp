@@ -481,6 +481,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery:
             return *modifyScheme.MutableCreateStreamingQuery()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpTruncateTable:
+            Y_ABORT("no implementation for ESchemeOpTruncateTable"); // TODO flown4qqqq
         }
         Y_UNREACHABLE();
     }
@@ -1164,6 +1167,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterView:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
+        case NKikimrSchemeOp::ESchemeOpTruncateTable: // TODO flown4qqqq
             return false;
         }
         return true;

@@ -1645,6 +1645,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return {CreateDropStreamingQuery(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
         return {CreateAlterStreamingQuery(op.NextPartId(), tx)};
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
+        return {CreateTruncateTable(op.NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();

@@ -36,7 +36,9 @@ void SetSigHandler() noexcept {
 
 class TSimpleCq: public TSimpleCqBase {
 public:
-    using TSimpleCqBase::TSimpleCqBase;
+    TSimpleCq(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c) noexcept
+        : TSimpleCqBase(as, sz, c, true)
+    {}
 
     int Init(const TRdmaCtx* ctx, int maxCqe) noexcept {
         return TSimpleCqBase::Init(ctx, maxCqe, nullptr);
@@ -54,7 +56,9 @@ public:
 
 class TSimpleEventDrivenCq: public TSimpleCqBase {
 public:
-    using TSimpleCqBase::TSimpleCqBase;
+    TSimpleEventDrivenCq(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c) noexcept
+        : TSimpleCqBase(as, sz, c, false)
+    {}
 
     int Init(const TRdmaCtx* ctx, int maxCqe) noexcept {
         CompChannel = ibv_create_comp_channel(ctx->GetContext());
@@ -101,7 +105,6 @@ public:
     }
 
     virtual ~TSimpleEventDrivenCq() {
-        Cerr << "~TSimpleEventDrivenCq" << Endl;
         // For event driven CQ stopping is a bit complicated
 
         // 1. Lock the verbs builder. This prevents possibility to add new WR. Not nessesearly but just to be sure
@@ -120,7 +123,7 @@ public:
 
         DestroyCq();
 
-        // 5. Destroy completion event channel 
+        // 5. Destroy completion event channel
         if (ibv_destroy_comp_channel(CompChannel)) {
             // https://www.rdmamojo.com/2012/10/26/ibv_destroy_comp_channel
             Cerr << "Unable to destroy completion event channel, errno: " << errno << Endl;

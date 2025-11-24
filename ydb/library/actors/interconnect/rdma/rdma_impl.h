@@ -196,10 +196,11 @@ protected:
     };
 
 public:
-    TSimpleCqBase(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c) noexcept
+    TSimpleCqBase(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c, bool nonBlockingPolling) noexcept
         : TCqCommon(as)
         , Thread(ThreadFunc, this)
         , Err(false)
+        , NonBlockingPolling(nonBlockingPolling)
     {
         auto counter = MakeCounters(c);
         RdmaDeviceVerbTimeUs = counter->GetHistogram(
@@ -240,7 +241,10 @@ public:
             return TErr();
         }
         Waiters.Enqueue(new TWaiterCtx(std::move(qp), std::move(builder)));
-        if (VerbsBuildingState.Lock.TryAcquire()) {
+        // If the thread may sleep we need to start Wr processing from caller thread. It is not a problem due to thread safe ibverbs api.
+        // If we can't finish wr prosessing (no more wr to allocate without waiting) it means there are some verbs infligh so we can process it
+        // from cq thread.
+        if (!NonBlockingPolling && VerbsBuildingState.Lock.TryAcquire()) {
             ProcessWr(VerbsBuildingState.CurCtx, VerbsBuildingState.PreparedWr, true);
             VerbsBuildingState.Lock.Release();
         }
@@ -394,6 +398,7 @@ protected:
     } VerbsBuildingState;
 
     std::atomic<bool> Err;
+    const bool NonBlockingPolling;
     std::atomic<ui64> Allocated;
     NMonitoring::THistogramPtr RdmaDeviceVerbTimeUs;
 private:

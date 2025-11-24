@@ -5,12 +5,19 @@
 
 #include <deque>
 
+namespace NKikimrPQ {
+class MessageDeduplicationIdWAL;
+}
+
 namespace NKikimr::NPQ {
 
 class TMessageIdDeduplicator {
 public:
-    class TBatch {
-        bool SerializeTo(TString& res) const;
+    struct TMessage {
+        TString DeduplicationId;
+        TInstant ExpirationTime;
+
+        bool operator==(const TMessage& other) const = default;
     };
 
     TMessageIdDeduplicator(TIntrusivePtr<ITimeProvider> timeProvider = CreateDefaultTimeProvider(), TDuration deduplicationWindow = TDuration::Minutes(5));
@@ -19,22 +26,29 @@ public:
     bool AddMessage(const TString& deduplicationId);
     size_t Compact();
 
-    bool ApplyWAL();
+    void Commit();
+    void Rollback();
+
+    bool ApplyWAL(NKikimrPQ::MessageDeduplicationIdWAL&& wal);
+    bool SerializeTo(NKikimrPQ::MessageDeduplicationIdWAL& wal);
+
+    const std::deque<TMessage>& GetQueue() const;
 
 private:
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TDuration DeduplicationWindow;
 
-    struct TMessage {
-        TString DeduplicationId;
-        TInstant ExpirationTime;
-    };
     std::deque<TMessage> Queue;
     absl::flat_hash_set<TString> Messages;
 
-    TInstant BucketStartTime;
-    size_t LastWrittenMessageIndex = 0;
-    size_t LastBucketIndex = 0;
+    struct TBucket {
+        TInstant StartTime;
+        size_t StartMessageIndex = 0;
+        size_t LastWrittenMessageIndex = 0;
+    };
+
+    TBucket CurrentBucket;
+    std::optional<TBucket> PendingBucket;
 };
 
 } // namespace NKikimr::NPQ

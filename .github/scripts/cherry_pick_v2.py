@@ -212,7 +212,7 @@ class GitRepository:
                 text=True,
                 check=True
             )
-            output = result.stdout + result.stderr
+            output = (result.stdout or '') + (result.stderr or '')
             return CherryPickResult(
                 success=True,
                 has_conflicts=False,

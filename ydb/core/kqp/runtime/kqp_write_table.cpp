@@ -1035,19 +1035,13 @@ IRowsBatcherPtr CreateRowsBatcher(
 
 std::vector<ui32> CreateMapping(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const TConstArrayRef<ui32> inputWriteIndex,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
-        const TConstArrayRef<ui32> outputWriteIndex,
         const bool preferAdditionalInputColumns) {
-    // inputColumns (reordered using inputWriteIndex) + additionalInputColumns 
-    // -> outputColumns (reordered using outputWriteIndex)
-
-    AFL_ENSURE(inputColumns.size() == inputWriteIndex.size());
-    AFL_ENSURE(outputColumns.size() == outputWriteIndex.size());
+    // inputColumns + additionalInputColumns -> outputColumns
     AFL_ENSURE(outputColumns.size() <= inputColumns.size() + additionalInputColumns.size());
 
-    THashMap<TString, ui32> inputColumnNameToIndex;
+    THashMap<TStringBuf, ui32> inputColumnNameToIndex;
     auto fillInputColumnNameToIndex = [&](const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>& columns, size_t shift) {
         for (size_t index = 0; index < columns.size(); ++index) {
             inputColumnNameToIndex[columns[index].GetName()] = shift + index;
@@ -1062,21 +1056,11 @@ std::vector<ui32> CreateMapping(
         fillInputColumnNameToIndex(inputColumns, 0);
     }
 
-    std::vector<ui32> outputOrder(outputWriteIndex.size());
-    for (size_t index = 0; index < outputWriteIndex.size(); ++index) {
-        outputOrder[outputWriteIndex[index]] = index;
-    }
-
     std::vector<ui32> columnsMapping(outputColumns.size());
-    for (size_t index = 0; index < outputColumns.size(); ++index) {
-        const auto& outputColumnIndex = outputOrder.at(index);
+    for (size_t outputColumnIndex = 0; outputColumnIndex < outputColumns.size(); ++outputColumnIndex) {
         const auto& outputColumnName = outputColumns.at(outputColumnIndex).GetName();
         const auto& inputColumnIndex = inputColumnNameToIndex.at(outputColumnName);
-        const auto& inputIndex = inputColumnIndex < inputWriteIndex.size()
-            ? inputWriteIndex.at(inputColumnIndex)
-            : inputColumnIndex;
-
-        columnsMapping[index] = inputIndex;
+        columnsMapping[outputColumnIndex] = inputColumnIndex;
     }
 
     return columnsMapping;
@@ -1084,17 +1068,13 @@ std::vector<ui32> CreateMapping(
 
 std::vector<ui32> GetIndexes(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const TConstArrayRef<ui32> inputWriteIndex,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
-        const TConstArrayRef<ui32> outputWriteIndex,
         const bool preferAdditionalInputColumns) {
     auto columnsMapping = CreateMapping(
         inputColumns,
-        inputWriteIndex,
         additionalInputColumns,
         outputColumns,
-        outputWriteIndex,
         preferAdditionalInputColumns);
     return columnsMapping;
 }
@@ -1124,18 +1104,14 @@ bool IsEqual(
 
 IDataBatchProjectionPtr CreateDataBatchProjection(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const TConstArrayRef<ui32> inputWriteIndex,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
-        const TConstArrayRef<ui32> outputWriteIndex,
         const bool preferAdditionalInputColumns,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     auto columnsMapping = CreateMapping(
         inputColumns,
-        inputWriteIndex,
         additionalInputColumns,
         outputColumns,
-        outputWriteIndex,
         preferAdditionalInputColumns);
 
     return MakeIntrusive<TDataBatchProjection>(

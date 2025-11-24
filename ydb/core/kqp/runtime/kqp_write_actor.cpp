@@ -439,9 +439,13 @@ public:
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata,
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata,
-        std::vector<ui32> writeIndexes,
         i64 priority) {
         YQL_ENSURE(!Closed);
+
+        // TODO:
+        std::vector<ui32> writeIndexes(columnsMetadata.size());
+        std::iota(std::begin(writeIndexes), std::end(writeIndexes), 0);
+
         ShardedWriteController->Open(
             token,
             TableId,
@@ -2119,19 +2123,17 @@ public:
             TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata(
                 Settings.GetKeyColumns().begin(),
                 Settings.GetKeyColumns().end());
-            TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
-                Settings.GetColumns().begin(),
-                Settings.GetColumns().end());
-            std::vector<ui32> writeIndex(
-                Settings.GetWriteIndexes().begin(),
-                Settings.GetWriteIndexes().end());
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(Settings.GetColumns().size());
+            AFL_ENSURE(Settings.GetColumns().size() == Settings.GetWriteIndexes().size());
+            for (int index = 0; index < Settings.GetColumns().size(); ++index) {
+                columnsMetadata[Settings.GetWriteIndexes()[index]] = Settings.GetColumns()[index];
+            }
             YQL_ENSURE(Settings.GetPriority() == 0);
             WriteTableActor->Open(
                 WriteToken,
                 GetOperation(Settings.GetType()),
                 std::move(keyColumnsMetadata),
                 std::move(columnsMetadata),
-                std::move(writeIndex),
                 Settings.GetPriority());
             WaitingForTableActor = true;
         } catch (const TMemoryLimitExceededException&) {
@@ -2437,7 +2439,6 @@ struct TWriteSettings {
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
-    std::vector<ui32> WriteIndex;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> LookupColumns;
     TTransactionSettings TransactionSettings;
     i64 Priority;
@@ -2450,7 +2451,6 @@ struct TWriteSettings {
         TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
         ui32 KeyPrefixSize;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
-        std::vector<ui32> WriteIndex;
         bool IsUniq;
     };
 
@@ -2848,22 +2848,15 @@ public:
             for (auto& indexSettings : settings.Indexes) {
                 auto projection = CreateDataBatchProjection(
                     settings.Columns,
-                    settings.WriteIndex,
                     settings.LookupColumns,
                     indexSettings.Columns,
-                    indexSettings.WriteIndex,
                     /* preferAdditionalInputColumns */ false,
                     Alloc);
 
-                std::vector<ui32> keyWriteIndex(indexSettings.KeyColumns.size());
-                std::iota(std::begin(keyWriteIndex), std::end(keyWriteIndex), 0);
-
                 auto deleteProjection = CreateDataBatchProjection(
                     settings.Columns,
-                    settings.WriteIndex,
                     settings.LookupColumns,
                     indexSettings.KeyColumns,
-                    keyWriteIndex,
                     /* preferAdditionalInputColumns */ true,
                     Alloc);
 
@@ -2885,7 +2878,6 @@ public:
                             : NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT),
                     indexSettings.KeyColumns,
                     indexSettings.Columns,
-                    indexSettings.WriteIndex,
                     settings.Priority);
 
                 const bool needAdditionalDelete = !isSubsetOfPrimaryKeyColumns(indexSettings.KeyColumns)
@@ -2898,7 +2890,6 @@ public:
                         NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
                         indexSettings.KeyColumns,
                         indexSettings.KeyColumns,
-                        keyWriteIndex,
                         settings.Priority);
                 }
 
@@ -2908,23 +2899,19 @@ public:
                     .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
                     .NewColumnsIndexes = GetIndexes(
                                 settings.Columns,
-                                settings.WriteIndex,
                                 settings.LookupColumns,
                                 indexSettings.Columns,
-                                indexSettings.WriteIndex,
                                 /* preferAdditionalInputColumns */ false),
                     .OldColumnsIndexes = GetIndexes(
                                 settings.Columns,
-                                settings.WriteIndex,
                                 settings.LookupColumns,
                                 indexSettings.Columns,
-                                indexSettings.WriteIndex,
                                 /* preferAdditionalInputColumns */ true),
                     .ColumnTypes = [&]() {
                         std::vector<NScheme::TTypeInfo> result(indexSettings.Columns.size());
                         for (ui32 index = 0; index < indexSettings.Columns.size(); ++index) {
                             const auto& column = indexSettings.Columns[index];
-                            result[indexSettings.WriteIndex[index]] = NScheme::TypeInfoFromProto(
+                            result[index] = NScheme::TypeInfoFromProto(
                                 column.GetTypeId(), column.GetTypeInfo());
                         }
                         return result;
@@ -2939,21 +2926,15 @@ public:
                     lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
                         .KeyIndexes = GetIndexes( // inserted secondary keys
                             settings.Columns,
-                            settings.WriteIndex,
                             settings.LookupColumns,
                             TConstArrayRef{
                                 indexSettings.KeyColumns.data(),
                                 indexSettings.KeyPrefixSize},
-                            TConstArrayRef{
-                                keyWriteIndex.data(),
-                                indexSettings.KeyPrefixSize},
                             /* preferAdditionalInputColumns */ false),
                         .FullKeyIndexes = GetIndexes( // full secondary table keys
                             settings.Columns,
-                            settings.WriteIndex,
                             settings.LookupColumns,
                             indexSettings.KeyColumns,
-                            keyWriteIndex,
                             /* preferAdditionalInputColumns */ false),
                         .PrimaryInFullKeyIndexes = [&](){ // primary key in full secondary table keys
                             THashMap<TStringBuf, ui32> ColumnNameToIndex;
@@ -2968,13 +2949,9 @@ public:
                         }(),
                         .OldKeyIndexes = GetIndexes( // old secondary keys
                                 settings.Columns,
-                                settings.WriteIndex,
                                 settings.LookupColumns,
                                 TConstArrayRef{
                                     indexSettings.KeyColumns.data(),
-                                    indexSettings.KeyPrefixSize},
-                                TConstArrayRef{
-                                    keyWriteIndex.data(),
                                     indexSettings.KeyPrefixSize},
                                 /* preferAdditionalInputColumns */ true),
                         .Lookup = lookupActor,
@@ -2993,10 +2970,8 @@ public:
             if (!settings.LookupColumns.empty()) {
                 projection = CreateDataBatchProjection(
                     settings.Columns,
-                    settings.WriteIndex,
                     settings.LookupColumns,
                     settings.Columns,
-                    settings.WriteIndex,
                     /* preferAdditionalInputColumns */ false,
                     Alloc);
                 
@@ -3025,7 +3000,6 @@ public:
                     : settings.OperationType,
                 settings.KeyColumns,
                 settings.Columns,
-                settings.WriteIndex,
                 settings.Priority);
 
             AFL_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
@@ -3036,23 +3010,19 @@ public:
 
                 .NewColumnsIndexes = GetIndexes(
                             settings.Columns,
-                            settings.WriteIndex,
                             settings.LookupColumns,
                             settings.Columns,
-                            settings.WriteIndex,
                             /* preferAdditionalInputColumns */ false),
                 .OldColumnsIndexes = GetIndexes(
                             settings.Columns,
-                            settings.WriteIndex,
                             settings.LookupColumns,
                             settings.Columns,
-                            settings.WriteIndex,
                             /* preferAdditionalInputColumns */ true),
                 .ColumnTypes = [&]() {
                     std::vector<NScheme::TTypeInfo> result(settings.Columns.size());
                     for (ui32 index = 0; index < settings.Columns.size(); ++index) {
                         const auto& column = settings.Columns[index];
-                        result[settings.WriteIndex[index]] = NScheme::TypeInfoFromProto(
+                        result[index] = NScheme::TypeInfoFromProto(
                             column.GetTypeId(), column.GetTypeInfo());
                     }
                     return result;
@@ -4732,12 +4702,11 @@ private:
             TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata(
                 Settings.GetKeyColumns().begin(),
                 Settings.GetKeyColumns().end());
-            TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
-                Settings.GetColumns().begin(),
-                Settings.GetColumns().end());
-            std::vector<ui32> writeIndex(
-                Settings.GetWriteIndexes().begin(),
-                Settings.GetWriteIndexes().end());
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(Settings.GetColumns().size());
+            AFL_ENSURE(Settings.GetColumns().size() == Settings.GetWriteIndexes().size());
+            for (int index = 0; index < Settings.GetColumns().size(); ++index) {
+                columnsMetadata[Settings.GetWriteIndexes()[index]] = Settings.GetColumns()[index];
+            }
             TVector<NKikimrKqp::TKqpColumnMetadataProto> lookupColumnsMetadata(
                 Settings.GetLookupColumns().begin(),
                 Settings.GetLookupColumns().end());
@@ -4749,7 +4718,6 @@ private:
                 .OperationType = GetOperation(Settings.GetType()),
                 .KeyColumns = std::move(keyColumnsMetadata),
                 .Columns = std::move(columnsMetadata),
-                .WriteIndex = std::move(writeIndex),
                 .LookupColumns = std::move(lookupColumnsMetadata),
                 .TransactionSettings = TTransactionSettings{
                     .TxId = TxId,
@@ -4768,13 +4736,11 @@ private:
                 TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata(
                     indexSettings.GetKeyColumns().begin(),
                     indexSettings.GetKeyColumns().end());
-                TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
-                    indexSettings.GetColumns().begin(),
-                    indexSettings.GetColumns().end());
-                std::vector<ui32> writeIndex(
-                    indexSettings.GetWriteIndexes().begin(),
-                    indexSettings.GetWriteIndexes().end());
-                AFL_ENSURE(writeIndex.size() == columnsMetadata.size());
+                TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(indexSettings.GetColumns().size());
+                AFL_ENSURE(indexSettings.GetColumns().size() == indexSettings.GetWriteIndexes().size());
+                for (int index = 0; index < indexSettings.GetColumns().size(); ++index) {
+                    columnsMetadata[indexSettings.GetWriteIndexes()[index]] = indexSettings.GetColumns()[index];
+                }
 
                 ev->Settings->Indexes.push_back(TWriteSettings::TIndex {
                     .TableId = TTableId(indexSettings.GetTable().GetOwnerId(),
@@ -4784,7 +4750,6 @@ private:
                     .KeyColumns = std::move(keyColumnsMetadata),
                     .KeyPrefixSize = indexSettings.GetKeyPrefixSize(),
                     .Columns = std::move(columnsMetadata),
-                    .WriteIndex = std::move(writeIndex),
                     .IsUniq = indexSettings.GetIsUniq(),
                 });
             }

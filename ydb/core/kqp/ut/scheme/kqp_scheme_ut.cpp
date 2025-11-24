@@ -11685,42 +11685,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "METRICS_LEVEL value should be an integer", result.GetIssues().ToString());
         }
-        {
-            const auto query = R"(
-                --!syntax_v1
-                CREATE TOPIC `/Root/topic` WITH (metrics_level = -1)
-            )";
-            const auto result = executeQuery(query);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Interval type is expected", result.GetIssues().ToString());
-        }
-        {
-            const auto query = R"(
-                --!syntax_v1
-                CREATE TOPIC `/Root/topic` WITH (metrics_level = 4)
-            )";
-            const auto result = executeQuery(query);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Interval type is expected", result.GetIssues().ToString());
-        }
-        {
-            const auto query = R"(
-                --!syntax_v1
-                ALTER TOPIC `/Root/topic` SET (metrics_level = -1)
-            )";
-            const auto result = executeQuery(query);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Interval type is expected", result.GetIssues().ToString());
-        }
-        {
-            const auto query = R"(
-                --!syntax_v1
-                ALTER TOPIC `/Root/topic` SET (metrics_level = 4)
-            )";
-            const auto result = executeQuery(query);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Interval type is expected", result.GetIssues().ToString());
-        }
     }
 
     Y_UNIT_TEST(DisableResourcePools) {

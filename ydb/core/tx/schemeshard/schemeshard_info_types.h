@@ -3385,12 +3385,12 @@ public:
         size_t Index = 0; // used only in prefixed vector index: a unique number of shard in the list
 
         // Used in fulltext index build:
-        ui64 DocCount;
-        ui64 TotalDocLength;
+        ui64 DocCount = 0;
+        ui64 TotalDocLength = 0;
         TString FirstToken;
         TString LastToken;
-        NTableIndex::NFulltext::TDocCount FirstTokenRows;
-        NTableIndex::NFulltext::TDocCount LastTokenRows;
+        NTableIndex::NFulltext::TDocCount FirstTokenRows = 0;
+        NTableIndex::NFulltext::TDocCount LastTokenRows = 0;
 
         NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 

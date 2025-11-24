@@ -43,10 +43,33 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     ui32 indexesCount = indexedTable.IndexDescriptionSize();
     ui32 indexedTableShards = 0;
     for (const auto& desc : indexedTable.GetIndexDescription()) {
-        if (desc.IndexImplTableDescriptionsSize()) {
-            indexedTableShards += TTableInfo::ShardsToCreate(desc.GetIndexImplTableDescriptions(0));
+        ui32 indexTableCount = 1;
+        switch (GetIndexType(desc)) {
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+                const bool prefixVectorIndex = desc.GetKeyColumnNames().size() > 1;
+                indexTableCount = (prefixVectorIndex ? 3 : 2);
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+                bool withRelevance = desc.GetFulltextIndexDescription().GetSettings()
+                    .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                indexTableCount = (withRelevance ? 4 : 1);
+                break;
+            }
+            default:
+                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(desc.GetType()));
+                break;
+        }
+        if (desc.IndexImplTableDescriptionsSize() == indexTableCount) {
+            for (const auto& indexTableDesc: desc.GetIndexImplTableDescriptions()) {
+                indexedTableShards += TTableInfo::ShardsToCreate(indexTableDesc);
+            }
         } else {
-            indexedTableShards += 1;
+            indexedTableShards += indexTableCount;
         }
     }
 
@@ -352,19 +375,25 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
-                NKikimrSchemeOp::TTableDescription userIndexDesc;
-                if (indexDescription.IndexImplTableDescriptionsSize()) {
-                    // This description provided by user to override partition policy
-                    userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
-                }
                 bool withRelevance = indexDescription.GetFulltextIndexDescription().GetSettings()
                     .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                NKikimrSchemeOp::TTableDescription userIndexDesc, docsTableDesc, dictTableDesc, statsTableDesc;
+                // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
+                if (indexDescription.IndexImplTableDescriptionsSize() == (withRelevance ? 4 : 1)) {
+                    // Descriptions provided by user to override partition policy
+                    userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
+                    if (withRelevance) {
+                        docsTableDesc = indexDescription.GetIndexImplTableDescriptions(1);
+                        dictTableDesc = indexDescription.GetIndexImplTableDescriptions(2);
+                        statsTableDesc = indexDescription.GetIndexImplTableDescriptions(3);
+                    }
+                }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
                 result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), withRelevance)));
                 if (withRelevance) {
-                    result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc)));
-                    result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), userIndexDesc, indexDescription.GetFulltextIndexDescription())));
-                    result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), userIndexDesc)));
+                    result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc)));
+                    result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
+                    result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));
                 }
                 break;
             }

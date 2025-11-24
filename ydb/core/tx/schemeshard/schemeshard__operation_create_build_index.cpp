@@ -194,21 +194,27 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
-            NKikimrSchemeOp::TTableDescription indexTableDesc;
-            // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
-            if (indexDesc.IndexImplTableDescriptionsSize() == 1) {
-                indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
-            }
             bool withRelevance = indexDesc.GetFulltextIndexDescription().GetSettings()
                 .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+            NKikimrSchemeOp::TTableDescription indexTableDesc, docsTableDesc, dictTableDesc, statsTableDesc;
+            // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
+            if (indexDesc.IndexImplTableDescriptionsSize() == (withRelevance ? 4 : 1)) {
+                // Descriptions provided by user to override partition policy
+                indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+                if (withRelevance) {
+                    docsTableDesc = indexDesc.GetIndexImplTableDescriptions(1);
+                    dictTableDesc = indexDesc.GetIndexImplTableDescriptions(2);
+                    statsTableDesc = indexDesc.GetIndexImplTableDescriptions(3);
+                }
+            }
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
             auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc, indexDesc.GetFulltextIndexDescription(), withRelevance);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
             if (withRelevance) {
-                result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc)));
-                result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexTableDesc, indexDesc.GetFulltextIndexDescription())));
-                result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexTableDesc)));
+                result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));
+                result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), dictTableDesc, indexDesc.GetFulltextIndexDescription())));
+                result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc)));
             }
             break;
         }

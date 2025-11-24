@@ -1003,7 +1003,7 @@ private:
         (*types)[0] = {NTableIndex::NFulltext::IdColumn, type};
         type.set_type_id(NTableIndex::NFulltext::DocCountType);
         (*types)[1] = {NTableIndex::NFulltext::DocCountColumn, type};
-        (*types)[2] = {NTableIndex::NFulltext::TotalDocLengthColumn, type};
+        (*types)[2] = {NTableIndex::NFulltext::SumDocLengthColumn, type};
 
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NFulltext::StatsTable);
         auto actor = new TUploadSampleK(CanonizePath(Self->RootPathElements), path.PathString(),
@@ -1568,6 +1568,8 @@ private:
                 LOG_D("FillFulltextIndex UploadBorders Done " << buildInfo.DebugString());
                 ClearDoneShards(txc, buildInfo);
                 NIceDb::TNiceDb db{txc.DB};
+                buildInfo.SubState = TIndexBuildInfo::ESubState::None;
+                Self->PersistBuildIndexState(db, buildInfo);
                 Self->PersistBuildIndexShardStatusReset(db, buildInfo);
                 done = true;
             }

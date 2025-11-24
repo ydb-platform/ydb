@@ -457,7 +457,7 @@ auto CalcFulltextStatsImplTableDescImpl(
     }
     {
         auto col = implTableDesc.AddColumns();
-        col->SetName(NFulltext::TotalDocLengthColumn);
+        col->SetName(NFulltext::SumDocLengthColumn);
         col->SetType(NFulltext::DocCountTypeName);
         col->SetTypeId(NFulltext::DocCountType);
         col->SetNotNull(true);

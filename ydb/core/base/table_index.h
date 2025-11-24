@@ -106,7 +106,7 @@ namespace NFulltext {
 
     inline constexpr const char* StatsTable = "indexImplStatsTable";
     inline constexpr const char* DocCountColumn = "__ydb_doc_count";
-    inline constexpr const char* TotalDocLengthColumn = "__ydb_total_length";
+    inline constexpr const char* SumDocLengthColumn = "__ydb_sum_doc_length";
 }
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);

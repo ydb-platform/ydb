@@ -116,7 +116,7 @@ namespace {
                 }
                 break;
             default:
-                Y_ENSURE(TStringBuilder() << "Invalid tokenizer: " << static_cast<int>(tokenizer));
+                Y_ENSURE(false, TStringBuilder() << "Invalid tokenizer: " << static_cast<int>(tokenizer));
         }
         return tokens;
     }

@@ -279,6 +279,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 }}
             });
 
+            Cerr << (TStringBuilder() << "json = " << WriteJson(json, true, true) << '\n');
             UNIT_ASSERT_VALUES_EQUAL(json["Successful"].GetArray().size(), 3);
             auto succesful0 = json["Successful"][0];
             UNIT_ASSERT_VALUES_EQUAL(succesful0["Id"], "Id-0");

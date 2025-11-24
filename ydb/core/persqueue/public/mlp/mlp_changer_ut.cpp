@@ -6,7 +6,7 @@ Y_UNIT_TEST_SUITE(TMLPChangerTests) {
 
 Y_UNIT_TEST(TopicNotExists) {
     auto setup = CreateSetup();
-    
+
     auto& runtime = setup->GetRuntime();
     CreateCommitterActor(runtime, {
         .DatabasePath = "/Root",
@@ -25,7 +25,7 @@ Y_UNIT_TEST(ConsumerNotExists) {
     auto setup = CreateSetup();
 
     ExecuteDDL(*setup, "CREATE TOPIC topic1");
-    
+
     auto& runtime = setup->GetRuntime();
     CreateCommitterActor(runtime, {
         .DatabasePath = "/Root",
@@ -43,7 +43,7 @@ Y_UNIT_TEST(PartitionNotExists) {
     auto setup = CreateSetup();
 
     CreateTopic(setup, "/Root/topic1", "mlp-consumer");
-    
+
     auto& runtime = setup->GetRuntime();
     CreateCommitterActor(runtime, {
         .DatabasePath = "/Root",
@@ -69,7 +69,7 @@ Y_UNIT_TEST(CommitTest) {
     setup->Write("/Root/topic1", "msg-2", 0);
 
     Sleep(TDuration::Seconds(2));
-    
+
     auto& runtime = setup->GetRuntime();
     CreateCommitterActor(runtime, {
         .DatabasePath = "/Root",
@@ -269,7 +269,7 @@ Y_UNIT_TEST(CapacityTest) {
                 hFunc(NMLP::TEvChangeResponse, Handle);
                 sFunc(TEvents::TEvPoison, PassAway);
                 sFunc(TEvents::TEvWakeup, PassAway);
-            }            
+            }
         }
 
         size_t Infly = 0;

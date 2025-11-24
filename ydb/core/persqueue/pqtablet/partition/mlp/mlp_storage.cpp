@@ -725,7 +725,7 @@ void TStorage::MoveBaseDeadline() {
     }
 
     auto newBaseDeadline = TrimToSeconds(TimeProvider->Now(), false);
-    auto newBaseWriteTimestamp = BaseWriteTimestamp + 
+    auto newBaseWriteTimestamp = BaseWriteTimestamp +
         (SlowMessages.empty() ? TDuration::Seconds(Messages.front().WriteTimestampDelta)
             : TDuration::Seconds(SlowMessages.begin()->second.WriteTimestampDelta));
 
@@ -816,7 +816,7 @@ TString TStorage::DebugString() const {
          << " BaseDeadline: " << BaseDeadline.ToString()
          << " BaseWriteTimestamp: " << BaseWriteTimestamp.ToString()
          << " Messages: [";
-    
+
     auto dump = [&](const auto offset, const auto& message, auto zone) {
         sb << zone <<"{" << offset << ", "
             << static_cast<EMessageStatus>(message.Status) << ", "

@@ -320,7 +320,6 @@ namespace NActors {
 
     bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event) {
         if (!event.Buffer && event.Event) {
-            // std::optional<TRope> rope = event.Event->SerializeToRope(RdmaMemPool.get());
             std::optional<TRope> rope = event.Event->SerializeToRope(GetDefaultRcBufAllocator());
             if (!rope) {
                 return false; // serialization failed
@@ -345,12 +344,16 @@ namespace NActors {
 
         Y_ABORT_UNLESS(event.Buffer);
         if (RdmaCredsBuffer.CredsSize() == 0) {
+            auto prevIter = Iter;
+            size_t prevPartLenRemain = PartLenRemain;
             for (; Iter.Valid() && PartLenRemain; ++Iter) {
                 TRcBuf buf = Iter.GetChunk();
                 auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
                 if (memReg.Empty()) {
-                    // TODO: may be copy to RDMA buffer ?????
-                    Iter = event.Buffer->GetBeginIter();
+                    Iter = prevIter;
+                    IsPartRdma = false;
+                    RdmaCredsBuffer.Clear();
+                    PartLenRemain = prevPartLenRemain;
                     return false;
                 }
                 if (checksumming) {
@@ -365,7 +368,8 @@ namespace NActors {
                 PartLenRemain -= buf.GetSize();
             }
         }
-
+        Y_ABORT_UNLESS(PartLenRemain == 0);
+ 
         ui16 credsSerializedSize = RdmaCredsBuffer.ByteSizeLong();
         // Part = | TChannelPart | EXdcCommand::RDMA_READ | rdmaCreds.Size | rdmaCreds | checkSum |
         size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + credsSerializedSize + sizeof(ui32);

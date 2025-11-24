@@ -190,131 +190,45 @@ const NJson::TJsonValue& TJsonRestorer::GetResult() const {
     return Result;
 }
 
-enum class PathType {
-    Member,
-    Array,
-};
-
-std::vector<std::pair<TString, PathType>> SplitJsonPaths(const std::string_view& svPath) {
+// To avoid string copies return TStringBuf
+// TJsonPathPtr holds the original parsed string, so it is needed to return it to avoid heap-use-after-free problems
+// Path is returned in reversed order
+TConclusion<std::pair<std::vector<TStringBuf>, const NYql::NJsonPath::TJsonPathPtr>> SplitJsonPath(const std::string_view& svPath) {
     NYql::TIssues issues;
-    auto path = NYql::NJsonPath::ParseJsonPath(svPath, issues, 1);
+    auto path = NYql::NJsonPath::ParseJsonPath(svPath, issues, 5);
     if (!path) {
-        return {};
+        return TConclusionStatus::Fail(issues.ToOneLineString());
     }
     NYql::NJsonPath::TJsonPathReader reader(path);
     auto it = &reader.ReadFirst();
-    std::vector<std::pair<TString, PathType>> result;
-    // Cerr << "PATH: " << svPath << Endl;
-    while (it->Type == NYql::NJsonPath::EJsonPathItemType::MemberAccess ||
-           it->Type == NYql::NJsonPath::EJsonPathItemType::ArrayAccess) {
-        const auto& str = it->GetString();
-        result.push_back(std::make_pair(TString(str), it->Type == NYql::NJsonPath::EJsonPathItemType::MemberAccess ? PathType::Member : PathType::Array));
+    std::vector<TStringBuf> result;
+    while (it->Type == NYql::NJsonPath::EJsonPathItemType::MemberAccess) {
+        result.push_back(it->GetString());
         it = &reader.ReadInput(*it);
-        Cerr << "PART: " << str << Endl;
     }
-    // AFL_VERIFY(it->Type == NYql::NJsonPath::EJsonPathItemType::ContextObject);
-    Cerr << "LAST_TYPE = " << (int)it->Type << Endl;
-    Cerr << "LAST_DATA = " << it->Data.index() << Endl;
+    if (it->Type != NYql::NJsonPath::EJsonPathItemType::ContextObject) {
+        return TConclusionStatus::Fail("Unsupported path");
+    }
 
-
-    std::ranges::reverse(result);
-
-    return result;
+    return std::make_pair(result, path);
 }
 
 void TJsonRestorer::SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue) {
-
-    const auto keys = SplitJsonPaths("$." + path);
+    // Path maybe empty (for backward compatibility), so make it $."" in this case
+    auto splitResult = SplitJsonPath("$." + (path.empty() ? "\"\"" : path));
+    AFL_VERIFY(splitResult.IsSuccess())("error", splitResult.GetErrorMessage());
+    const auto [keys, pathPtr] = splitResult.DetachResult();
     AFL_VERIFY(keys.size() > 0);
     NJson::TJsonValue* current = &Result;
-    for (size_t i = 0; i < keys.size() - 1; ++i) {
+    for (decltype(keys)::size_type i = keys.size() - 1; i > 0; --i) {
         NJson::TJsonValue* currentNext = nullptr;
-        if (current->GetValuePointer(keys[i].first, &currentNext)) {
+        if (current->GetValuePointer(keys[i], &currentNext)) {
             current = currentNext;
         } else {
-            current = &current->InsertValue(keys[i].first, NJson::JSON_MAP);
+            current = &current->InsertValue(keys[i], NJson::JSON_MAP);
         }
     }
-    current->InsertValue(keys[keys.size() - 1].first, jsonValue);
-
-    // ui32 start = 0;
-    // bool enqueue = false;
-    // bool wasEnqueue = false;
-    // for (ui32 i = 0; i < path.size(); ++i) {
-    //     if (path[i] == '\\') {
-    //         ++i;
-    //         continue;
-    //     }
-    //     if (path[i] == '\'' || path[i] == '\"') {
-    //         wasEnqueue = true;
-    //         enqueue = !enqueue;
-    //         continue;
-    //     }
-    //     if (enqueue) {
-    //         continue;
-    //     }
-    //     if (path[i] == '.') {
-    //         if (wasEnqueue) {
-    //             AFL_VERIFY(i > start + 2);
-    //             TStringBuf key(path.data() + start + 1, (i - 1) - start - 1);
-    //             Cerr << __LINE__ << " " << key << Endl;
-    //             NJson::TJsonValue* currentNext = nullptr;
-    //             if (current->GetValuePointer(key, &currentNext)) {
-    //                 current = currentNext;
-    //             } else {
-    //                 current = &current->InsertValue(key, NJson::JSON_MAP);
-    //             }
-    //         } else {
-    //             AFL_VERIFY(i > start);
-    //             TStringBuf key(path.data() + start, i - start);
-    //             Cerr << __LINE__ << " " << key << Endl;
-    //             NJson::TJsonValue* currentNext = nullptr;
-    //             if (current->GetValuePointer(key, &currentNext)) {
-    //                 current = currentNext;
-    //             } else {
-    //                 ui32 keyIndex;
-    //                 if (key.StartsWith("[") && key.EndsWith("]") && TryFromString<ui32>(key.data() + 1, key.size() - 2, keyIndex)) {
-    //                     AFL_VERIFY(!current->IsDefined() || current->IsArray() || (current->IsMap() && current->GetMapSafe().empty()));
-    //                     current->SetType(NJson::JSON_ARRAY);
-    //                     if (current->GetArraySafe().size() <= keyIndex) {
-    //                         current->GetArraySafe().resize(keyIndex + 1);
-    //                     }
-    //                     current = &current->GetArraySafe()[keyIndex];
-    //                 } else {
-    //                     AFL_VERIFY(!current->IsArray())("current_type", current->GetType())("current", current->GetStringRobust());
-    //                     Cerr << __LINE__ << " " << key << Endl;
-    //                     current = &current->InsertValue(key, NJson::JSON_MAP);
-    //                 }
-    //             }
-    //         }
-    //         wasEnqueue = false;
-    //         start = i + 1;
-    //     }
-    // }
-    // if (wasEnqueue) {
-    //     AFL_VERIFY(path.size() >= start + 2)("path", path)("start", start);
-    //     TStringBuf key(path.data() + start + 1, (path.size() - 1) - start - 1);
-    //     Cerr << __LINE__ << " " << key << Endl;
-    //     current->InsertValue(key, jsonValue);
-    // } else {
-    //     AFL_VERIFY(path.size() >= start)("path", path)("start", start);
-    //     TStringBuf key(path.data() + start, (path.size()) - start);
-    //     Cerr << __LINE__ << " " << key << Endl;
-    //     ui32 keyIndex;
-    //     if (key.StartsWith("[") && key.EndsWith("]") && TryFromString<ui32>(key.data() + 1, key.size() - 2, keyIndex)) {
-    //         AFL_VERIFY(!current->IsDefined() || current->IsArray() || (current->IsMap() && current->GetMapSafe().empty()));
-    //         current->SetType(NJson::JSON_ARRAY);
-
-    //         if (current->GetArraySafe().size() <= keyIndex) {
-    //             current->GetArraySafe().resize(keyIndex + 1);
-    //         }
-    //         current->GetArraySafe()[keyIndex] = jsonValue;
-    //     } else {
-    //         AFL_VERIFY(!current->IsArray())("key", key)("current", current->GetStringRobust())("full", Result.GetStringRobust())(
-    //             "current_type", current->GetType());
-    //         current->InsertValue(key, jsonValue);
-    //     }
-    // }
+    current->InsertValue(keys[0], jsonValue);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

@@ -1169,10 +1169,14 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             auto result = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
                 UPSERT INTO `/Root/olapTable` (id, json_payload)
-                VALUES (1, JsonDocument(@@{"":   null}@@)),
-                       (2, JsonDocument(@@{"'":  null}@@)),
-                       (3, JsonDocument(@@{"\"": null}@@)),
-                       (4, JsonDocument(@@{".":  null}@@));
+                VALUES (1, JsonDocument(@@{"":     11}@@)),
+                       (2, JsonDocument(@@{"'":    22}@@)),
+                       (3, JsonDocument(@@{"\"":   33}@@)),
+                       (4, JsonDocument(@@{".":    44}@@)),
+                       (5, JsonDocument(@@{"\\\"": 55}@@)),
+                       (6, JsonDocument(@@{"\\'":  66}@@)),
+                       (7, JsonDocument(@@{" ":    77}@@)),
+                       (8, JsonDocument(@@{"\\n":  88}@@));
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         }
@@ -1186,8 +1190,26 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
-            CompareYson(result, R"([[1u;["{\"\":null}"]];[2u;["{\"'\":null}"]];[3u;["{\"\\\"\":null}"]];[4u;["{\".\":null}"]]])");
+            CompareYson(result, R"([[1u;["{\"\":11}"]];[2u;["{\"'\":22}"]];[3u;["{\"\\\"\":33}"]];[4u;["{\".\":44}"]];[5u;["{\"\\\\\\\"\":55}"]];[6u;["{\"\\\\'\":66}"]];[7u;["{\" \":77}"]];[8u;["{\"\\\\n\":88}"]]])");
+        }
 
+        for (auto i : std::vector<std::tuple<TString,TString,TString,TString>>({//{"1", R"()", "11", R"()"}, // TODO: Fix quotes for normal input
+                                                                        {"2", R"(')", "22", R"(')"},
+                                                                        {"3", R"(\")", "33", R"(\\\")"},
+                                                                        {"4", R"(.)", "44", R"(.)"},
+                                                                        {"5", R"(\\\")", "55", R"(\\\\\\\")"},
+                                                                        {"6", R"(\\')", "66", R"(\\\\')"},
+                                                                        {"7", R"( )", "77", R"( )"},
+                                                                        {"8", R"(\\n)", "88", R"(\\\\n)"}})) {
+            TString query = R"(SELECT id, json_payload FROM  `/Root/olapTable` WHERE JSON_VALUE(json_payload, @@$.")" + std::get<1>(i) + R"("@@) = ')" + std::get<2>(i) + "';";
+            Cerr << "Query: " << query << Endl;
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(result, R"([[)" + std::get<0>(i) + R"(u;["{\")" + std::get<3>(i) + R"(\":)" + std::get<2>(i) + R"(}"]]])");
         }
     }
 

@@ -2,6 +2,7 @@
 #include "columns_storage.h"
 #include "direct_builder.h"
 
+#include <util/string/escape.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 
@@ -121,30 +122,12 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
 }
 
 std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {
-    NJson::TJsonValue v;
-    std::string res;
-    res.reserve(currentPrefix.size() + key.size() + 3);
-    res.append(currentPrefix.data(), currentPrefix.size());
-    if (!res.empty()) {
-        res.append(1, '.');
+    const auto escapedKey = EscapeC(key);
+    if (currentPrefix.size()) {
+        return Sprintf("%.*s.\"%.*s\"", currentPrefix.size(), currentPrefix.data(), escapedKey.size(), escapedKey.data());
     }
-    res.append(1, '"');
-    for (auto ch : key) {
-        if (ch == '\'' || ch =='"') {
-            res.append(1, '\\');
-        }
-        res.append(1, ch);
-    }
-    res.append(1, '"');
 
-    Cerr << "VLAD: | " << currentPrefix << (currentPrefix ? "." : "") << key << " | -> | " << res << " |" << Endl;
-
-    return res;
-    // if (currentPrefix.size()) {
-    //     return Sprintf("%.*s.\"%.*s\"", currentPrefix.size(), currentPrefix.data(), escapedKey.size(), escapedKey.data());
-    // } else {
-    //     return Sprintf("\"%.*s\"", escapedKey.size(), escapedKey.data());
-    // }
+    return Sprintf("\"%.*s\"", escapedKey.size(), escapedKey.data());
 }
 
 TStringBuf TDataBuilder::AddKeyOwn(const TStringBuf currentPrefix, std::string&& key) {

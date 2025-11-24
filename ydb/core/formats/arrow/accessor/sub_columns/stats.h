@@ -46,7 +46,9 @@ public:
     std::optional<ui32> GetKeyIndexOptional(const std::string_view keyName) const {
         for (ui32 i = 0; i < DataNames->length(); ++i) {
             const auto arrView = DataNames->GetView(i);
+            Cerr << "Comparing |" << TString(arrView.data(), arrView.size()) << "| with |" << TString(keyName.data(), keyName.size()) << "|" << Endl;
             if (std::string_view(arrView.data(), arrView.size()) == keyName) {
+                Cerr << "Found!!!111 |" << TString(arrView.data(), arrView.size()) << "|" << Endl;
                 return i;
             }
         }

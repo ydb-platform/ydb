@@ -227,7 +227,6 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         restorer.SetValueByPath(R"("d'".e)", "f");
         restorer.SetValueByPath(R"("g.h.".i)", "j");
         restorer.SetValueByPath(R"(".".k)", "l");
-        // restorer.SetValueByPath(R"("'".m)", "n");
         restorer.SetValueByPath(R"("\"")", "o");
         restorer.SetValueByPath(R"("\'")", "p");
 
@@ -237,7 +236,6 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         expected["d'"]["e"] = "f";
         expected["g.h."]["i"] = "j";
         expected["."]["k"] = "l";
-        // expected["'"]["m"] = "n";
         expected["\""] = "o";
         expected["'"] = "p";
         UNIT_ASSERT_VALUES_EQUAL(expected, restorer.GetResult());

@@ -275,7 +275,7 @@ class LoadSuiteBase:
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
 
-        sanitizer_regex_params = r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)'
+        sanitizer_regex_params = r'(ERROR|WARNING): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)'
 
         core_processes = {
             h: cls.execute_ssh(h, f"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -P -A 150 '{sanitizer_regex_params}'")

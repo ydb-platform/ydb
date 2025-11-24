@@ -113,7 +113,7 @@ class StressUtilResult:
         Returns:
             int: Total count of successful runs
         """
-        return sum(run_result.successful_runs for run_result in self.node_runs.values())
+        return sum(run_result.get_successful_runs() for run_result in self.node_runs.values())
 
     def get_total_runs(self) -> int:
         """Get total count of runs
@@ -121,7 +121,7 @@ class StressUtilResult:
         Returns:
             int: Total count of runs
         """
-        return sum(run_result.total_runs for run_result in self.node_runs.values())
+        return sum(run_result.get_total_runs() for run_result in self.node_runs.values())
 
     def is_all_success(self) -> bool:
         """Check if all runs across all nodes were successful

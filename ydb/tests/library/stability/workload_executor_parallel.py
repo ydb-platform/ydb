@@ -169,12 +169,12 @@ class ParallelWorkloadTestBase:
             overall_result.workload_start_time = execution_result["workload_start_time"]
             node_errors, verify_errors = self.process_workload_result_with_diagnostics(olap_load_base, overall_result)
 
+            # Separate step for uploading results (AFTER all data preparation)
+            safe_upload_results(overall_result, run_config, node_errors, verify_errors)
+
             # Final status processing (may throw exception, but results are already uploaded)
             # Use node_errors saved from diagnostics
             self._handle_final_status(overall_result, preparation_result, node_errors, verify_errors)
-
-            # Separate step for uploading results (AFTER all data preparation)
-            safe_upload_results(overall_result, run_config, node_errors, verify_errors)
 
             logging.info(
                 f"Final result: successful_runs={successful_runs} / {total_runs}"
@@ -297,7 +297,7 @@ class ParallelWorkloadTestBase:
 
         # --- FAIL TEST IF CORES OR OOM FOUND ---
         if nodes_with_issues > 0:
-            error_msg = f"Test failed: found {nodes_with_issues} node(s) with coredump(s), OOM(s), VERIFY fail(s) or SAN errors"
+            error_msg = f"Test failed: found {nodes_with_issues} issue(s) with coredump(s), OOM(s), VERIFY fail(s) or SAN errors"
             pytest.fail(error_msg)
         # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
         if workload_errors:

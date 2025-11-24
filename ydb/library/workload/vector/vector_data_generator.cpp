@@ -261,10 +261,8 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
             << colors.BoldColor() << "embedding" << colors.OldColor() << ". "
             << "If a directory is set, all supported files inside will be used."
             << "\nSupported formats: CSV/TSV (zipped or unzipped) and Parquet."
-            << "\nIn " << colors.BoldColor() << "convert" << colors.OldColor() << " mode, "
-            << "embedding is converted from list of floats to YDB binary embedding format."
-            << "\nIn " << colors.BoldColor() << "raw" << colors.OldColor() << " mode, "
-            << "embedding must already be binary; for CSV/TSV its encoding is controlled by --input-binary-strings."
+            << "\nIf embedding appears to be list of floats, then it gets converted to YDB binary embedding format."
+            << "\nOtherwise embedding must already be binary; for CSV/TSV its encoding is controlled by --input-binary-strings."
             << "\nExample dataset: https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings";
 
         opts.AddLongOption('i', "input", description)
@@ -275,15 +273,7 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
 
     // --embedding-column-name
     {
-        TStringBuilder description;
-        description
-            << "Alternative source column name for the embedding field in input files."
-            << "\nUsed in " << colors.BoldColor() << "convert" << colors.OldColor()
-            << " (and " << colors.BoldColor() << "auto" << colors.OldColor() << " when it chooses convert)."
-            << "\nIf not set, the column is expected to be named "
-            << colors.BoldColor() << "\"" << EmbeddingColumnName << "\"" << colors.OldColor() << ".";
-
-        opts.AddLongOption("embedding-column-name", description)
+        opts.AddLongOption("embedding-column-name", "Alternative source column name for the embedding field in input files.")
             .RequiredArgument("NAME")
             .DefaultValue(EmbeddingColumnName)
             .StoreResult(&EmbeddingColumnName);

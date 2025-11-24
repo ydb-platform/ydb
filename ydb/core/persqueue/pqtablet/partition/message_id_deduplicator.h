@@ -11,6 +11,8 @@ class MessageDeduplicationIdWAL;
 
 namespace NKikimr::NPQ {
 
+TString MakeDeduplicatorWALKey(ui32 partitionId, const TInstant& expirationTime);
+
 class TMessageIdDeduplicator {
 public:
     struct TMessage {
@@ -22,6 +24,8 @@ public:
 
     TMessageIdDeduplicator(TIntrusivePtr<ITimeProvider> timeProvider = CreateDefaultTimeProvider(), TDuration deduplicationWindow = TDuration::Minutes(5));
     ~TMessageIdDeduplicator();
+
+    const TDuration& GetDeduplicationWindow() const;
 
     bool AddMessage(const TString& deduplicationId);
     size_t Compact();
@@ -38,6 +42,7 @@ private:
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TDuration DeduplicationWindow;
 
+    bool HasChanges = false;
     std::deque<TMessage> Queue;
     absl::flat_hash_set<TString> Messages;
 

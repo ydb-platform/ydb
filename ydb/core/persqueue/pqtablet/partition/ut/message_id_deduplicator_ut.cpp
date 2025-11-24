@@ -59,7 +59,7 @@ struct TestScenario {
 TEST(TDeduplicatorTest, AddMessage) {
     TestScenario scenario;
 
-    EXPECT_FALSE(scenario.AddMessage("message1"));
+    EXPECT_TRUE(scenario.AddMessage("message1"));
     scenario.CreateWAL();
     scenario.AssertWALLoad();
 }

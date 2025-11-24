@@ -1,6 +1,7 @@
 #pragma once
 
 #include "consumer_offset_tracker.h"
+#include "message_id_deduplicator.h"
 #include "partition_blob_encoder.h"
 #include "partition_compactification.h"
 #include "partition_init.h"
@@ -140,6 +141,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitMetaStep;
     friend TInitInfoRangeStep;
     friend TInitDataRangeStep;
+    friend TInitMessageDeduplicatorStep;
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
     friend TInitFieldsStep;
@@ -303,6 +305,7 @@ private:
     void UpdateAvailableSize(const TActorContext& ctx);
 
     void AddMetaKey(TEvKeyValue::TEvRequest* request);
+    void AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
     void CheckHeadConsistency() const;
     void CheckTimestampsOrderInZones(TStringBuf validateReason = {}) const;
     void HandlePendingRequests(const TActorContext& ctx);
@@ -1258,6 +1261,8 @@ private:
     >;
     std::deque<TMLPPendingEvent> MLPPendingEvents;
     ui64 LastNotifiedEndOffset = 0;
+
+    TMessageIdDeduplicator MessageIdDeduplicator;
 };
 
 inline ui64 TPartition::GetStartOffset() const {

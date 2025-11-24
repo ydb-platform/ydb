@@ -1410,6 +1410,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 .CheckpointId = checkpointId
             });
 
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata/streaming` TO `" BUILTIN_ACL_ROOT "`");
         WaitCheckpointUpdate(checkpointId);
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
@@ -1465,6 +1468,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})"
         });
         ReadTopicMessage(outputTopicName, "A");
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata/streaming` TO `" BUILTIN_ACL_ROOT "`");
         WaitCheckpointUpdate(checkpointId);
 
         const auto& result = ExecQuery(fmt::format(R"(
@@ -1485,6 +1491,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         CheckpointPeriod = TDuration::Seconds(3);
         const auto pqGateway = SetupMockPqGateway();
+       // GetRuntime().GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(false);
 
         constexpr char inputTopicName[] = "inputTopicName";
         constexpr char outputTopicName[] = "outputTopicName";
@@ -1512,6 +1519,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             .SaveState = true,
             .CheckpointId = checkpointId
         });
+       // Sleep(TDuration::Seconds(10));
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata/streaming` TO `" BUILTIN_ACL_ROOT "`");
 
         auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
         WaitCheckpointUpdate(checkpointId);

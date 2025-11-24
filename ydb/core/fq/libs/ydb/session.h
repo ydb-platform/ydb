@@ -3,7 +3,6 @@
 #include <library/cpp/threading/future/core/future.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 
 namespace NFq {

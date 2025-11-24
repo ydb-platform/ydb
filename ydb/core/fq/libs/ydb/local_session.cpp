@@ -56,7 +56,6 @@ public:
             desc.SetNotNull(!optional); 
             columns.push_back(desc);
         }
-        Cerr << "CreateTableCreator: Db " << Db << " Path " <<  Path << " " << Endl;
         Register(
             NKikimr::CreateTableCreator(
                 NKikimr::SplitPath(Path),

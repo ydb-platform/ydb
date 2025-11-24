@@ -226,7 +226,7 @@ void TStorageProxy::Bootstrap() {
         const auto& gcConfig = Config.GetCheckpointGarbageConfig();
         ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
     }
-      
+
     Send(NKikimr::NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
         new NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::FeatureFlagsItem}));
 
@@ -239,7 +239,7 @@ void TStorageProxy::Bootstrap() {
 }
 
 void TStorageProxy::StartInitialization() {
-    LOG_STREAMS_STORAGE_SERVICE_INFO("StartInitialization");
+    LOG_STREAMS_STORAGE_SERVICE_ERROR("StartInitialization, EnableSecureScriptExecutions: " << FeatureFlags.GetEnableSecureScriptExecutions());
 
     NACLib::TDiffACL acl;
     acl.ClearAccess();
@@ -343,9 +343,6 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvSetCheckpointPendingCommitSt
     if (!CheckStatus(ev)) {
         return;
     }
-  //  DelayedEventsQueue.emplace_back(ev.Release());
-
-
     auto context = MakeIntrusive<TRequestContext>(Metrics);
     CheckpointStorage->UpdateCheckpointStatus(event->CoordinatorId, event->CheckpointId, ECheckpointStatus::PendingCommit, ECheckpointStatus::Pending, event->StateSizeBytes)
         .Apply([checkpointId = event->CheckpointId,
@@ -558,11 +555,11 @@ void TStorageProxy::Handle(TEvPrivate::TEvInitResult::TPtr& ev) {
         if (success) {
             TActivationContext::Send(ev.Release());
         } else {
-            const auto& issues = event->StorageIssues ? event->StorageIssues : event->StateIssues;
+            const auto& issues = !event->StorageIssues.Empty() ? event->StorageIssues : event->StateIssues;
             HandleDelayedRequestError(ev, issues);
         }
         DelayedEventsQueue.pop_front();
-    }    
+    }
 }
 
 void TStorageProxy::Handle(TEvPrivate::TEvInitialize::TPtr& /*ev*/) {
@@ -581,7 +578,6 @@ bool TStorageProxy::CheckStatus(TEvent& ev) {
                 LOG_STREAMS_STORAGE_SERVICE_WARN("Add to delayed");
                 DelayedEventsQueue.emplace_back(ev.Release());
             } else {
-                NYql::TIssues issues;
                 auto evHolder = THolder<IEventHandle>(ev.Release());
                 HandleDelayedRequestError(evHolder, NYql::TIssues{NYql::TIssue{"Too many queued requests"}});
             }
@@ -627,7 +623,7 @@ void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::T
             break;
         }
         case TEvCheckpointStorage::TEvAbortCheckpointRequest::EventType: {
-            LOG_STREAMS_STORAGE_SERVICE_WARN("Send TEvGetCheckpointsMetadataResponse with issues: " << issues.ToOneLineString());
+            LOG_STREAMS_STORAGE_SERVICE_WARN("Send TEvAbortCheckpointRequest with issues: " << issues.ToOneLineString());
             auto event = IEventHandle::Release<TEvCheckpointStorage::TEvAbortCheckpointRequest>(ev);
             auto response = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointResponse>(event->CheckpointId, std::move(issues));
             Send(ev->Sender, response.release(), 0, ev->Cookie);

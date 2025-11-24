@@ -92,6 +92,7 @@ namespace NKikimr::NBsController {
             TImpl& Self;
             const TBlobStorageGroupInfo::TTopology Topology;
             THashSet<TPDiskId> OldGroupContent; // set of all existing disks in the group, inclusing ones which are replaced
+            THashSet<TPDiskId> ReplacedDisks; // set of replaced pdisks
             const i64 RequiredSpace;
             const bool RequireOperational;
             TForbiddenPDisks ForbiddenDisks;
@@ -115,6 +116,7 @@ namespace NKikimr::NBsController {
             {
                 for (const auto& [vdiskId, pdiskId] : replacedDisks) {
                     OldGroupContent.insert(pdiskId);
+                    ReplacedDisks.insert(pdiskId);
                 }
             }
 
@@ -984,8 +986,25 @@ namespace NKikimr::NBsController {
             s << "PDisks# ";
 
             if (!PDiskByPosition.empty()) {
+                struct TStats {
+                    TPDiskId ExampleDiskId;
+                    ui32 AllSlotsAreOccupied = 0;
+                    ui32 NotEnoughSpace = 0;
+                    ui32 NotAcceptingNewSlots = 0;
+                    ui32 NotOperational = 0;
+                    ui32 Decommission = 0;
+                };
+
+                TStats fullStats;
+                TStats domainStats;
+
+                bool domainAlreadyUsed = false;
+
+                std::vector<TStats> matchingDomainsStats;
+
                 s << "{[(";
                 TPDiskLayoutPosition prevPosition = PDiskByPosition.front().first;
+                domainStats.ExampleDiskId = PDiskByPosition.front().second->PDiskId;
                 const char *space = "";
                 for (const auto& [position, pdisk] : PDiskByPosition) {
                     if (prevPosition != position) {
@@ -995,11 +1014,22 @@ namespace NKikimr::NBsController {
                             << (prevPosition.Realm != position.Realm ? "[" : "")
                             << (prevPosition.Domain != position.Domain ? "(" : "");
                         space = "";
+                        
+                        if (!domainAlreadyUsed) {
+                            matchingDomainsStats.push_back(domainStats);
+                            domainStats = TStats();
+                            domainStats.ExampleDiskId = pdisk->PDiskId;
+                        }
+                        domainAlreadyUsed = false;
                     }
 
                     s << std::exchange(space, " ") << pdisk->PDiskId;
 
                     if (diskManager.OldGroupContent.contains(pdisk->PDiskId)) {
+                        if (!diskManager.ReplacedDisks.contains(pdisk->PDiskId)) {
+                            domainAlreadyUsed = true;
+                        }
+
                         s << "*";
                     }
                     const char *minus = "-";
@@ -1007,12 +1037,31 @@ namespace NKikimr::NBsController {
                         s << std::exchange(minus, "") << "f";
                     }
                     if (!pdisk->Usable) {
+                        if (pdisk->WhyUnusable.Contains('S')) {
+                            fullStats.NotAcceptingNewSlots++;
+                            domainStats.NotAcceptingNewSlots++;
+                        }
+                        if (pdisk->WhyUnusable.Contains('O')) {
+                            fullStats.NotOperational++;
+                            domainStats.NotOperational++;
+                        }
+                        if (pdisk->WhyUnusable.Contains('D')) {
+                            fullStats.Decommission++;
+                            domainStats.Decommission++;
+                        }
+
                         s << std::exchange(minus, "") << pdisk->WhyUnusable;
                     }
                     if (pdisk->NumSlots >= pdisk->MaxSlots) {
+                        fullStats.AllSlotsAreOccupied++;
+                        domainStats.AllSlotsAreOccupied++;
+
                         s << std::exchange(minus, "") << "s[" << pdisk->NumSlots << "/" << pdisk->MaxSlots << "]";
                     }
                     if (pdisk->SpaceAvailable < diskManager.RequiredSpace) {
+                        fullStats.NotEnoughSpace++;
+                        domainStats.NotEnoughSpace++;
+
                         s << std::exchange(minus, "") << "v";
                     }
                     if (!pdisk->Operational) {
@@ -1027,7 +1076,23 @@ namespace NKikimr::NBsController {
 
                     prevPosition = position;
                 }
-                s << ")]}";
+                s << ")]}\n";
+                s << "All slots are occupied: " << fullStats.AllSlotsAreOccupied << "\n";
+                s << "Not enough space: " << fullStats.NotEnoughSpace << "\n";
+                s << "Not accepting new slots: " << fullStats.NotAcceptingNewSlots << "\n";
+                s << "Not operational: " << fullStats.NotOperational << "\n";
+                s << "Decommissioned: " << fullStats.Decommission << "\n";
+                if (!matchingDomainsStats.empty()) {
+                    s << "Matching domains stats:\n";
+                    for (const auto& stats : matchingDomainsStats) {
+                        s << "Domain starting with PDiskId " << stats.ExampleDiskId << ": "
+                            << "All slots are occupied: " << stats.AllSlotsAreOccupied << ", "
+                            << "Not enough space: " << stats.NotEnoughSpace << ", "
+                            << "Not accepting new slots: " << stats.NotAcceptingNewSlots << ", "
+                            << "Not operational: " << stats.NotOperational << ", "
+                            << "Decommissioned: " << stats.Decommission << "\n";
+                    }
+                }
             } else {
                 s << "<empty>";
             }

@@ -155,6 +155,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
             return EOperationClass::Other;
 
         // intentionally no default -- to trigger [-Werror,-Wswitch] compile error on any new entry not handled here

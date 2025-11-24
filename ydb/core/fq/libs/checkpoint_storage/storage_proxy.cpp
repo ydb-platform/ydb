@@ -243,7 +243,7 @@ void TStorageProxy::StartInitialization() {
 
     NACLib::TDiffACL acl;
     acl.ClearAccess();
-    acl.SetInterruptInheritance(false); //FeatureFlags.GetEnableSecureScriptExecutions());
+    acl.SetInterruptInheritance(FeatureFlags.GetEnableSecureScriptExecutions());
 
     auto storageInitFuture = CheckpointStorage->Init(acl);
     auto stateInitFuture = StateStorage->Init(acl);
@@ -657,17 +657,18 @@ void TStorageProxy::Handle(NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfig
 void TStorageProxy::Handle(NKikimr::NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     LOG_STREAMS_STORAGE_SERVICE_INFO("Updated config.");
     auto &event = ev->Get()->Record;
-
+    Send(ev->Sender, new NKikimr::NConsole::TEvConsole::TEvConfigNotificationResponse(event), 0, ev->Cookie);
     auto* newFeatureFlags = event.MutableConfig()->MutableFeatureFlags();
-    if (newFeatureFlags->GetEnableSecureScriptExecutions() != FeatureFlags.GetEnableSecureScriptExecutions()) {
+    bool changed = newFeatureFlags->GetEnableSecureScriptExecutions() != FeatureFlags.GetEnableSecureScriptExecutions();
+    FeatureFlags.Swap(newFeatureFlags);
+
+    if (changed) {
         if (InitStatus != EInitStatus::NotStarted) {
             // TODO Pending?
             InitStatus = EInitStatus::NotStarted;
-
             StartInitialization();
         }
     }
-    FeatureFlags.Swap(newFeatureFlags);
 }
 
 } // namespace

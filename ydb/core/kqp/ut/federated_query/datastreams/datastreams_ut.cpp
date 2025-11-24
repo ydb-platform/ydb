@@ -11,6 +11,7 @@
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
@@ -2624,27 +2625,40 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         const auto testNoAccess = [&]() {
             ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/queries`", EStatus::SCHEME_ERROR, "Cannot find table");
+            ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/checkpoints/checkpoints_metadata`", EStatus::SCHEME_ERROR, "Cannot find table");
         };
         const auto testAccessAllowed = [&]() {
-            const auto& result = ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/queries`");
-            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            const auto& resultQueries = ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/queries`");
+            UNIT_ASSERT_VALUES_EQUAL(resultQueries.size(), 1);
 
-            CheckScriptResult(result[0], 1, 1, [](TResultSetParser& parser) {
+            CheckScriptResult(resultQueries[0], 1, 1, [](TResultSetParser& parser) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 1);
             });
+
+            const auto& resultCheckpoints = ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/checkpoints/checkpoints_metadata`");
+            UNIT_ASSERT_VALUES_EQUAL(resultCheckpoints.size(), 1);
         };
         const auto switchAccess = [&](bool allowed) {
             auto& runtime = GetRuntime();
             runtime.GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(!allowed);
 
-            auto ev = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(!allowed);
-            *ev->Record.MutableConfig() = appConfig;
-
             const auto edgeActor = runtime.AllocateEdgeActor();
-            runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, ev.release());
-            const auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+            appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(!allowed);
+
+            auto evProxy = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            *evProxy->Record.MutableConfig() = appConfig;
+
+            runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, evProxy.release());
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
             UNIT_ASSERT(response);
+
+            auto evStorage = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            *evStorage->Record.MutableConfig() = appConfig;
+
+            runtime.Send(NYql::NDq::MakeCheckpointStorageID(), edgeActor, evStorage.release());
+            response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+            UNIT_ASSERT(response);
+
             Sleep(TDuration::Seconds(1));
 
             ExecQuery(fmt::format(R"(

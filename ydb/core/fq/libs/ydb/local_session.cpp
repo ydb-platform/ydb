@@ -35,8 +35,6 @@ public:
         for (const auto& key : TableDesc.GetPrimaryKeyColumns()) {
             keyColumns.push_back(key.c_str());
         }
-        TVector<TString> pathComponents;
-        pathComponents.push_back(Path.c_str());
 
         TVector<NKikimrSchemeOp::TColumnDescription> columns;
         for (const auto& column : TableDesc.GetTableColumns()) {
@@ -61,13 +59,13 @@ public:
         Cerr << "CreateTableCreator: Db " << Db << " Path " <<  Path << " " << Endl;
         Register(
             NKikimr::CreateTableCreator(
-                pathComponents,
+                NKikimr::SplitPath(Path),
                 columns,
                 keyColumns,
                 NKikimrServices::STREAMS_STORAGE_SERVICE,
                 Nothing(),
-                Db.c_str(),
-                false,
+                {},
+                /* isSystemUser */ true,
                 Nothing(),
                 Acl 
             )
@@ -90,7 +88,7 @@ private:
 
 private:
     const std::string Db;
-    const std::string Path;
+    const TString Path;
     const NYdb::NTable::TTableDescription TableDesc;
     NACLib::TDiffACL Acl;
     NThreading::TPromise<NYdb::TStatus> Promise;

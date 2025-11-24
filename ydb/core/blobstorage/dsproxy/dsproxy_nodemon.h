@@ -54,6 +54,8 @@ struct TDsProxyNodeMon : public TThrRefBase {
     THistoPtrForDeviceType GetDiscoverResponseTimeHist;
     NMonitoring::TPercentileTracker<16, 512, 15> GetLowReadResponseTime;
     THistoPtrForDeviceType GetLowReadResponseTimeHist;
+    NMonitoring::TPercentileTracker<16, 512, 15> GetBlockResponseTime;
+    THistoPtrForDeviceType GetBlockResponseTimeHist;
 
     NMonitoring::TPercentileTracker<16, 512, 15> PatchResponseTime;
     THistoPtrForDeviceType PatchResponseTimeHist;
@@ -106,6 +108,7 @@ struct TDsProxyNodeMon : public TThrRefBase {
             TDuration duration);
     void CountGetResponseTime(NPDisk::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls, ui32 size,
             TDuration duration);
+    void CountGetBlockResponseTime(NPDisk::EDeviceType type, TDuration duration);
     void CountPatchResponseTime(NPDisk::EDeviceType type, TDuration duration);
 
     // Called only from NodeWarder

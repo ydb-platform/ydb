@@ -50,7 +50,7 @@ class TestCompressionBase(ColumnFamilyTestBase):
             raise Exception("not all portions have been updated")
 
     @classmethod
-    def add_family_in_create(self, name: str, settings: str):
+    def add_family_in_create(cls, name: str, settings: str):
         return f"FAMILY {name} ({settings})"
 
 
@@ -65,7 +65,7 @@ class TestAlterCompression(TestCompressionBase):
         rows_count: int = 0
         test_name: str = "availability_data"
         test_dir: str = f"{self.ydb_client.database}/{self.class_name}/{test_name}"
-        tables_path: str = f"{test_dir}/test_table"
+        tables_path: str = f"{test_dir}/test_table_{random.randrange(99999)}"
 
         tables_family: list[str] = [
             self.add_family_in_create(name='default', settings='COMPRESSION = "off"'),
@@ -126,12 +126,11 @@ class TestAllCompression(TestCompressionBase):
     @classmethod
     def setup_class(cls):
         super(TestAllCompression, cls).setup_class()
-        cls.single_upsert_rows_count: int = 10**5
+        cls.single_upsert_rows_count: int = 10**4
         cls.upsert_count: int = 10
         cls.volumes_without_compression: tuple[int, int]
         cls.test_name: str = "all_supported_compression"
         cls.test_dir: str = f"{cls.ydb_client.database}/{cls.class_name}/{cls.test_name}"
-        cls.create_table_without_compression()
 
     COMPRESSION_CASES = [
         ("lz4_compression",  'COMPRESSION = "lz4"'),
@@ -141,12 +140,11 @@ class TestAllCompression(TestCompressionBase):
         for lvl in range(2, 22)
     ]
 
-    @classmethod
-    def create_table_without_compression(cls):
-        table_path: str = f"{cls.test_dir}/off_compression_{random.randrange(99999)}"
-        table_family: str = cls.add_family_in_create(name='default', settings='COMPRESSION = "off"')
+    def create_table_without_compression(self, suffix: str):
+        table_path: str = f"{self.test_dir}/without_{suffix}_compression_{random.randrange(99999)}"
+        table_family: str = self.add_family_in_create(name='default', settings='COMPRESSION = "off"')
 
-        cls.ydb_client.query(
+        self.ydb_client.query(
             f"""
                 CREATE TABLE `{table_path}` (
                     value Uint64 NOT NULL,
@@ -158,11 +156,11 @@ class TestAllCompression(TestCompressionBase):
                 """
         )
         logger.info(f"Table {table_path} created")
-        table = ColumnTableHelper(cls.ydb_client, table_path)
-        cls.upsert_and_wait_portions(table, cls.single_upsert_rows_count, cls.upsert_count)
+        table = ColumnTableHelper(self.ydb_client, table_path)
+        self.upsert_and_wait_portions(table, self.single_upsert_rows_count, self.upsert_count)
 
-        expected_raw = cls.upsert_count * cls.single_upsert_rows_count * 8
-        cls.volumes_without_compression: tuple[int, int] = table.get_volumes_column("value")
+        expected_raw = self.upsert_count * self.single_upsert_rows_count * 8
+        self.volumes_without_compression: tuple[int, int] = table.get_volumes_column("value")
 
         volumes = table.get_volumes_column("value")
         assert volumes[0] == expected_raw
@@ -171,6 +169,7 @@ class TestAllCompression(TestCompressionBase):
     @pytest.mark.parametrize("suffix, family_settings", COMPRESSION_CASES)
     def test_all_supported_compression(self, suffix: str, family_settings: str):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13640 '''
+        self.create_table_without_compression(suffix)
         table_path: str = f"{self.test_dir}/{suffix}_{random.randrange(99999)}"
         table_family: str = self.add_family_in_create(name='default', settings=family_settings)
 

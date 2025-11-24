@@ -50,7 +50,7 @@ struct TEvDqChannelSpilling {
         {
         }
 
-       TWakeUpCallback&& WakeUpCallback_;
+       TWakeUpCallback WakeUpCallback_;
     };
 };
 

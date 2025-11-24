@@ -1104,7 +1104,7 @@ protected:
         return true;
     }
 
-    virtual TString GetMonitoringInfo() {
+    virtual TString GetMonitoringInfo(NActors::NMon::TEvHttpInfo::TPtr&) {
         return "TDqComputeActorBase::GetMonitoringInfo() does nothing";
     }
 
@@ -1116,7 +1116,7 @@ protected:
                 DoExecute();
             }
         }
-        this->Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(GetMonitoringInfo()));
+        this->Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(GetMonitoringInfo(ev)));
     }
 
     void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr& ev) {

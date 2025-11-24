@@ -62,7 +62,9 @@ public:
         auto wakeupCallback = [actorSystem, selfId]() {
             actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         };
-        auto errorCallback = [this](const TString& error){ SendError(error); };
+        auto errorCallback = [actorSystem, selfId](const TString& error) {
+            actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
+        };
         TDqTaskRunnerExecutionContext execCtx(TxId, std::move(wakeupCallback), std::move(errorCallback));
         PrepareTaskRunner(execCtx);
 

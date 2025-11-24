@@ -178,6 +178,10 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     PopStats.Bytes += data.Bytes;
     *Registry->LocalBufferLatency += (TInstant::Now() - data.Timestamp).MicroSeconds();
 
+    if (data.Finished) {
+        Finished.store(true);
+    }
+
     Y_ENSURE(InflightBytes.load() >= data.Bytes);
     InflightBytes -= data.Bytes;
 
@@ -187,7 +191,7 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
         InflightBytes += bytes;
         Y_ENSURE(TailBlobId < HeadBlobId);
 
-        TLoadingInfo info(TailBlobId++, bytes);
+        TLoadingInfo info(++TailBlobId, bytes);
         info.Loaded = Storage->Get(info.BlobId, info.Buffer);
         if (LoadingQueue.empty() && info.Loaded) {
             TDataChunk data;
@@ -269,15 +273,13 @@ void TLocalBuffer::BindInput() {
     }
 }
 
-void TLocalBuffer::BindStorage(std::shared_ptr<TLocalBuffer> self, IDqChannelStorage::TPtr storage) {
-    std::weak_ptr<TLocalBuffer> weakSelf = self;
-    storage->SetWakeUpCallback([weakSelf=weakSelf]() {
-        auto self = weakSelf.lock();
-        if (self) {
-            self->StorageWakeupHandler();
+void TLocalBuffer::BindStorage(std::shared_ptr<TLocalBuffer>& self, IDqChannelStorage::TPtr storage) {
+    storage->SetWakeUpCallback([weakSelf=std::weak_ptr<TLocalBuffer>(self)]() {
+        if (auto sharedSelf = weakSelf.lock(); sharedSelf) {
+            sharedSelf->StorageWakeupHandler();
         }
     });
-    Storage = std::move(Storage);
+    Storage = std::move(storage);
 }
 
 void TOutputDescriptor::PushDataChunk(TDataChunk&& data, std::shared_ptr<TNodeState> nodeState, std::shared_ptr<TOutputDescriptor> self) {
@@ -1686,6 +1688,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH() {str << "Src";}
                         TABLEH() {str << "Dst";}
                         TABLEH() {str << "Fill (Agg)";}
+                        TABLEH() {str << "Finished";}
                         TABLEH() {str << "PushBytes";}
                         TABLEH() {str << "PopBytes";}
                         TABLEH() {str << "InflightBytes";}
@@ -1722,6 +1725,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                         str << " (" << FillLevelToString(sharedBuffer->Aggregator->GetFillLevel()) << ")";
                                     }
                                 }
+                                TABLED() {str << sharedBuffer->Finished.load();}
                                 TABLED() {str << sharedBuffer->PushStats.Bytes;}
                                 TABLED() {str << sharedBuffer->PopStats.Bytes;}
                                 TABLED() {str << sharedBuffer->InflightBytes.load();}

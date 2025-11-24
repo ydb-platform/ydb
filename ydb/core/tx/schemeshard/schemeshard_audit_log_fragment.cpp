@@ -708,7 +708,7 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(tx.GetCreateStreamingQuery().GetName());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
-        result.emplace_back("table_name");
+        result.emplace_back(tx.GetTruncateTable().GetTableName());
         break;
     }
 

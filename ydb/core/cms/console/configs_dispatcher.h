@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "configs_dispatcher_observer.h"
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/config/init/init.h>
@@ -36,6 +37,12 @@ namespace TEvConfigsDispatcher {
         EvGetConfigResponse,
         EvRemoveConfigSubscriptionRequest,
         EvRemoveConfigSubscriptionResponse,
+        
+        // Observability events
+        EvGetStateRequest,
+        EvGetStateResponse,
+        EvGetStorageYamlRequest,
+        EvGetStorageYamlResponse,
 
         EvEnd
     };
@@ -105,6 +112,46 @@ namespace TEvConfigsDispatcher {
 
     struct TEvGetConfigResponse : public TEventLocal<TEvGetConfigResponse, EvGetConfigResponse> {
         std::shared_ptr<const NKikimrConfig::TAppConfig> Config;
+    };
+    
+    /**
+     * Request current state of ConfigsDispatcher.
+     * Response: TEvGetStateResponse
+     */
+    struct TEvGetStateRequest : public TEventLocal<TEvGetStateRequest, EvGetStateRequest> {
+        TEvGetStateRequest() = default;
+    };
+    
+    /**
+     * Response containing current state snapshot.
+     */
+    struct TEvGetStateResponse : public TEventLocal<TEvGetStateResponse, EvGetStateResponse> {
+        TConfigsDispatcherState State;
+        
+        TEvGetStateResponse(TConfigsDispatcherState state)
+            : State(std::move(state))
+        {}
+    };
+    
+    /**
+     * Request storage YAML config (if available).
+     * Only available if initialized from seed nodes.
+     * Response: TEvGetStorageYamlResponse
+     */
+    struct TEvGetStorageYamlRequest : public TEventLocal<TEvGetStorageYamlRequest, EvGetStorageYamlRequest> {
+        TEvGetStorageYamlRequest() = default;
+    };
+    
+    /**
+     * Response containing storage YAML config.
+     * StorageYaml will be empty if not initialized from seed nodes.
+     */
+    struct TEvGetStorageYamlResponse : public TEventLocal<TEvGetStorageYamlResponse, EvGetStorageYamlResponse> {
+        TString StorageYaml;
+        
+        TEvGetStorageYamlResponse(TString storageYaml)
+            : StorageYaml(std::move(storageYaml))
+        {}
     };
 };
 

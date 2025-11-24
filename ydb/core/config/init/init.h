@@ -254,6 +254,7 @@ struct TDebugInfo {
 struct TConfigsDispatcherInitInfo {
     NKikimrConfig::TAppConfig InitialConfig;
     TString StartupConfigYaml;
+    TString StartupStorageYaml;
     TMap<TString, TString> Labels;
     std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     std::optional<TDebugInfo> DebugInfo;

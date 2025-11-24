@@ -3917,7 +3917,15 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         TColumnOrder order;
 
                         for (auto& e: outputItems) {
-                            e = RenameOnOrder(ctx.Expr, order, e);
+                            const TItemExprType* renamed = RenameOnOrder(ctx.Expr, order, e);
+                            if (isYql && renamed != e) {
+                                ctx.Expr.AddError(
+                                    TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                    TStringBuilder() << "Unable to use duplicate column names. "
+                                                     << "Collision in name: " << e->GetName()));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            e = renamed;
                         }
 
                         if (!hasUnknownsAllowed) {

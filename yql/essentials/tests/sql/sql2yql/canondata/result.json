@@ -8336,6 +8336,13 @@
             "uri": "https://{canondata_backend}/1942278/e70dd865b4bae863a91e3a3549d79889330fa76c/resource.tar.gz#test_sql2yql.test_select_yql-minimal_ordered_columns_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-projection_alias_case_sensivity]": [
+        {
+            "checksum": "bc4c776d624b18b7400e5cc6ca8170c8",
+            "size": 743,
+            "uri": "https://{canondata_backend}/1916746/08388be8fd571d9c658f3ff9d2f159380eed8093/resource.tar.gz#test_sql2yql.test_select_yql-projection_alias_case_sensivity_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-projection_alias_collision]": [
         {
             "checksum": "b8c971e51703b03b2a9766c58c11ed98",
@@ -13562,6 +13569,11 @@
     "test_sql_format.test[select_yql-minimal_ordered_columns]": [
         {
             "uri": "file://test_sql_format.test_select_yql-minimal_ordered_columns_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-projection_alias_case_sensivity]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-projection_alias_case_sensivity_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-projection_alias_collision]": [

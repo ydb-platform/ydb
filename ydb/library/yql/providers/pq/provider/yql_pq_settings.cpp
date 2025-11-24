@@ -11,6 +11,7 @@ TPqConfiguration::TPqConfiguration() {
             for (auto& clusterSetting : ClustersConfigurationSettings) {
                 clusterSetting.second.AuthToken = value;
             }
+
             for (auto& token: Tokens) {
                 token.second = ComposeStructuredTokenJsonForServiceAccount("", "", value);
             }

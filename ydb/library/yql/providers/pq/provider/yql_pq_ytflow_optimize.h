@@ -6,7 +6,6 @@
 
 #include <util/generic/ptr.h>
 
-
 namespace NYql {
 
 THolder<IYtflowOptimization> CreatePqYtflowOptimization(const TPqState::TPtr& state);

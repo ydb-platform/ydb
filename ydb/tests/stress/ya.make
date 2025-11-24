@@ -15,6 +15,7 @@ RECURSE(
     show_create/view
     simple_queue
     statistics_workload
+    testshard_workload
     topic
     topic_kafka
     transfer

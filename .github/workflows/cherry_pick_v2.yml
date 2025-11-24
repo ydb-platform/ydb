@@ -4,7 +4,9 @@ on:
     inputs:
       commit_sha:
         type: string
-        description: Commit to get scripts
+        description: |
+          (Optional) Commit SHA to use for checking out scripts.
+          If not provided, the default branch will be used.
         default: ""
       commits:
         type: string

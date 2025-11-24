@@ -131,6 +131,11 @@ public:
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
                     "base_path must be an absolute path");
             }
+            for (const auto& item : settings.items()) {
+                if (item.destination_path().empty() && item.source_path().empty()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty item is not allowed");
+                }
+            }
         }
 
         this->AllocateTxId();

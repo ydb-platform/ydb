@@ -165,7 +165,7 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults):
         stress_color = '#ccffcc'
         if stress_result.get_successful_runs() == 0:
             stress_color = "#ffcccc"
-        elif stress_result.get_successful_runs() < len(unique_hosts):
+        elif len(list(filter(lambda x: x.is_all_success(), stress_result.node_runs.values()))) < len(unique_hosts):
             stress_color = "#fff4cc"
         table_html += f'<td style="background-color: {stress_color};">{stress_name}</td>'
 

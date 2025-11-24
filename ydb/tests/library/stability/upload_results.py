@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 import logging
+import traceback
 import allure
 from ydb.tests.olap.lib.allure_utils import NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
@@ -10,10 +11,10 @@ from ydb.tests.library.stability.aggregate_results import StressUtilResult, Stre
 def safe_upload_results(result: StressUtilTestResults, run_config: RunConfigInfo, node_errors: list[NodeErrors], verify_errors):
     """Safe results upload with error handling and Allure reporting"""
     with allure.step("Upload results to YDB"):
-        # if not ResultsProcessor.send_results:
-        #     allure.attach("Results upload is disabled (send_results=false)",
-        #                   "Upload status", allure.attachment_type.TEXT)
-        #     return
+        if not ResultsProcessor.send_results:
+            allure.attach("Results upload is disabled (send_results=false)",
+                          "Upload status", allure.attachment_type.TEXT)
+            return
 
         try:
             suite_name = 'SingleStressUtil' if len(result.stress_util_runs.keys()) == 1 else 'ParallelStressUtil'
@@ -33,7 +34,7 @@ def safe_upload_results(result: StressUtilTestResults, run_config: RunConfigInfo
                               f"Upload summary [{workload_name}]", allure.attachment_type.TEXT)
         except Exception as e:
             # Log upload error but don't interrupt execution
-            error_msg = f"Failed to upload results: {e}"
+            error_msg = f"Failed to upload results: {e}\n{traceback.format_exc()}"
             logging.error(error_msg)
             # result.add_warning(error_msg)
             # After adding warning we need to recalculate summary flags
@@ -42,7 +43,7 @@ def safe_upload_results(result: StressUtilTestResults, run_config: RunConfigInfo
             # Detailed error info for Allure
             error_details = [
                 f"Error type: {type(e).__name__}",
-                f"Error message: {str(e)}",
+                f"Error message: {error_msg}",
                 f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             ]
 

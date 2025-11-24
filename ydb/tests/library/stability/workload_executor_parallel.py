@@ -285,13 +285,15 @@ class ParallelWorkloadTestBase:
         # --- Переключатель: если cluster_log=all, то всегда прикладываем логи ---
         cluster_log_mode = get_external_param('cluster_log', 'default')
         try:
-            if cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors:
-                LoadSuiteBase.__attach_logs(
-                    start_time=result.start_time,
-                    attach_name="kikimr",
-                    query_text="",
-                    ignore_roles=True  # Collect logs from all unique hosts
-                )
+            attach_logs_method = getattr(LoadSuiteBase, "_LoadSuiteBase__attach_logs", None)
+            if attach_logs_method:
+                if cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors:
+                    attach_logs_method(
+                        start_time=result.start_time,
+                        attach_name="kikimr",
+                        query_text="",
+                        ignore_roles=True  # Collect logs from all unique hosts
+                    )
         except Exception as e:
             logging.warning(f"Failed to attach kikimr logs: {e}")
 

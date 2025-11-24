@@ -317,6 +317,47 @@ TEST_F(XdcRdmaTest, SendRdma) {
     UNIT_ASSERT(recieverPtr->WhaitForRecieve(1, 20));
 }
 
+TEST_F(XdcRdmaTest, SendRdmaWithShuffledPayload) {
+    TTestICCluster cluster(2);
+    auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+    auto ev = new TEvTestSerialization();
+    ev->Record.SetBlobID(123);
+    ev->Record.SetBuffer("hello world");
+    for (ui32 i = 0; i < 10; ++i) {
+        if (i % 2 == 0) {
+            TRope tmp(TString(5000, 'X'));
+            ev->AddPayload(std::move(tmp));
+        } else {
+            auto buf = memPool->AllocRcBuf(5000, 0).value();
+            std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000, 'Y');
+            ev->AddPayload(TRope(std::move(buf)));
+        }
+    }
+
+    auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 10u);
+        for (ui32 i = 0; i < 10; ++i) {
+            if (i % 2 == 0) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[i].GetSize(), 5000u);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[i].ConvertToString(), TString(5000, 'X'));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[i].GetSize(), 5000u);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[i].ConvertToString(), TString(5000, 'Y'));
+            }
+        }
+    });
+    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+
+    Sleep(TDuration::MilliSeconds(1000));
+
+    auto senderPtr = new TSendActor(receiver, ev);
+    cluster.RegisterActor(senderPtr, 2);
+    UNIT_ASSERT(recieverPtr->WhaitForRecieve(1, 20));
+}
+
 TEST_F(XdcRdmaTest, SendRdmaWithRegionOffset) {
     TTestICCluster cluster(2);
     auto memPool = NInterconnect::NRdma::CreateDummyMemPool();

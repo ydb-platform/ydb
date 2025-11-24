@@ -105,17 +105,12 @@ namespace NActors {
                         State = EState::SECTIONS;
                         SectionIndex = 0;
 
-                        size_t totalSize = 0;
-                        // It is possible to have event without payload. Such events has only one section.
-                        // We do not send such events via rdma.
-                        bool sendViaRdma = Params.UseRdma && RdmaMemPool && SerializationInfo->Sections.size() > 2;
-                        // Check each section can be send via rdma
+                        bool sendViaRdma = false;
+                        // Check if any section can be send via rdma
                         for (const auto& section : SerializationInfo->Sections) {
-                            sendViaRdma &= section.IsRdmaCapable;
-                            totalSize += section.Size;
+                            sendViaRdma |= section.IsRdmaCapable;
                         }
-                        if (sendViaRdma) {
-                            Y_ABORT_UNLESS(totalSize, "got empty sz, sections: %d type: %d ", SerializationInfo->Sections.size(),  event.Event->Type());
+                        if (sendViaRdma && Params.UseRdma && RdmaMemPool) {
                             NActorsInterconnect::TRdmaCreds rdmaCreds;
                             if (SerializeEventRdma(event)) {
                                 Chunker.DiscardEvent();

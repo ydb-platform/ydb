@@ -470,14 +470,14 @@ namespace NActors {
                     for (const TRope& rope : payload) {
                         headerLen += SerializeNumber(rope.size(), temp);
                     }
-                    info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true, true});
+                    info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true, false});
                     for (const TRope& rope : payload) {
                         info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false, IsRdma(rope)});
                     }
                 }
 
                 const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
-                info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true, true}); // protobuf itself
+                info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true, false}); // protobuf itself
 
 #ifndef NDEBUG
                 size_t total = 0;

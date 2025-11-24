@@ -4,6 +4,7 @@ SRCS(
     account_read_quoter.cpp
     autopartitioning_manager.cpp
     consumer_offset_tracker.cpp
+    message_id_deduplicator.cpp
     offload_actor.cpp
     ownerinfo.cpp
     partition.cpp

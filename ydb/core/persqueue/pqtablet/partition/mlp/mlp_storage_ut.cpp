@@ -77,7 +77,7 @@ struct TUtils {
 
             utils.AssertEquals(*this);
         }
-    } 
+    }
 
     NKikimrPQ::TMLPStorageSnapshot CreateSnapshot() {
         // Clear batch
@@ -1410,7 +1410,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
             UNIT_ASSERT(message);
             UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 5);
         }
-        
+
         timeProvider->Tick(TDuration::Seconds(3));
         storage.MoveBaseDeadline();
         {

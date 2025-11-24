@@ -22,14 +22,14 @@
 #include <sstream>
 #include <string>
 
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/compression.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
-#include "parquet/exception.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
-#include "generated/parquet_types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/generated/parquet_types.h"
 
 using arrow20::internal::checked_cast;
 using arrow20::util::Codec;

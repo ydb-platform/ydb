@@ -36,8 +36,8 @@ TPyObjectPtr PyRepr(TStringBuf asciiStr, bool intern) {
 }
 
 TString PyObjectRepr(PyObject* value) {
-    static constexpr size_t maxLen = 1000;
-    static constexpr std::string_view truncSuffix = "(truncated)";
+    static constexpr size_t MaxLen = 1000;
+    static constexpr std::string_view TruncSuffix = "(truncated)";
     const TPyObjectPtr repr(PyObject_Repr(value));
     if (!repr) {
         return TString("repr error: ") + GetLastErrorAsString();
@@ -47,9 +47,9 @@ TString PyObjectRepr(PyObject* value) {
     if (!TryPyCast(repr.Get(), string)) {
         string = "can't get repr as string";
     }
-    if (string.size() > maxLen) {
-        string.resize(maxLen - truncSuffix.size());
-        string += truncSuffix;
+    if (string.size() > MaxLen) {
+        string.resize(MaxLen - TruncSuffix.size());
+        string += TruncSuffix;
     }
     return string;
 }
@@ -62,7 +62,7 @@ bool HasEncodingCookie(const TString& source) {
     // See https://www.python.org/dev/peps/pep-0263 for more details.
     //
 
-    static std::regex encodingRe(
+    static std::regex EncodingRe(
         "^[ \\t\\v]*#.*?coding[:=][ \\t]*[-_.a-zA-Z0-9]+.*");
 
     int i = 0;
@@ -72,7 +72,7 @@ bool HasEncodingCookie(const TString& source) {
         }
 
         TStringBuf line = it.Token();
-        if (std::regex_match(line.begin(), line.end(), encodingRe)) {
+        if (std::regex_match(line.begin(), line.end(), EncodingRe)) {
             return true;
         }
     }

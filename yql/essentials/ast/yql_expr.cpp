@@ -1747,8 +1747,8 @@ struct TVisitNodeContext {
             }
         }
 
-        static const TString stub;
-        return stub;
+        static const TString Stub;
+        return Stub;
     }
 
     size_t FindCommonAncestor(size_t one, size_t two) const {

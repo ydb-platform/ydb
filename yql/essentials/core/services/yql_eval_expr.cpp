@@ -140,8 +140,8 @@ private:
             }
         }
 
-        static THashSet<TStringBuf> FILE_CALLABLES = {"FilePath", "FileContent", "FolderPath"};
-        if (node.IsCallable(FILE_CALLABLES)) {
+        static THashSet<TStringBuf> FileCallables = {"FilePath", "FileContent", "FolderPath"};
+        if (node.IsCallable(FileCallables)) {
             const auto alias = node.Head().Content();
             if (PendingFileAliases_.contains(alias) || AnyOf(PendingFolderPrefixes_, [alias](const TStringBuf prefix) {
                     auto withSlash = TString(prefix) + "/";

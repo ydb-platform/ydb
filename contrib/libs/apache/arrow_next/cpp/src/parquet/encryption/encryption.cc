@@ -15,16 +15,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/encryption/encryption.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/encryption.h"
 
 #include <string.h>
 
 #include <map>
 #include <utility>
 
-#include "arrow/util/logging.h"
-#include "arrow/util/utf8.h"
-#include "parquet/encryption/encryption_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/utf8.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/encryption_internal.h"
 
 namespace parquet20 {
 

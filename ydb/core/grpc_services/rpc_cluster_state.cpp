@@ -21,6 +21,7 @@
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 #include <ydb/core/protos/cluster_state_info.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <google/protobuf/util/json_util.h>
 
@@ -148,7 +149,6 @@ public:
         request(TEvTabletStateRequest);
         request(TEvBSGroupStateRequest);
         request(TEvSystemStateRequest);
-        request(TEvBridgeInfoRequest);
         request(TEvNodeStateRequest);
 #undef request
     }
@@ -157,6 +157,7 @@ public:
         RequestSession();
         RequestHealthCheck();
         RequestBaseConfig();
+        RequestStorageConfig();
         Nodes = ev->Get()->Nodes;
         NodeReceived.resize(Nodes.size());
         NodeRequested.resize(Nodes.size());
@@ -243,8 +244,20 @@ public:
         Requested++;
     }
 
+    void RequestStorageConfig() {
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NKikimr::TEvNodeWardenQueryStorageConfig(/*subscribe=*/false));
+        Requested++;
+    }
+
     void Handle(NKikimr::NStorage::TEvNodeWardenBaseConfig::TPtr ev) {
         State.MutableBaseConfig()->CopyFrom(ev->Get()->BaseConfig);
+        ++Received;
+        CheckReply();
+    }
+
+    void Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr ev) {
+        State.MutableBridgeClusterState()->CopyFrom(ev->Get()->Config->GetClusterState());
+        State.MutableBridgeClusterStateDetails()->CopyFrom(ev->Get()->Config->GetClusterStateDetails());
         ++Received;
         CheckReply();
     }
@@ -272,7 +285,6 @@ public:
     HandleWhiteboard(TEvTabletStateResponse, TabletInfo)
     HandleWhiteboard(TEvBSGroupStateResponse, BSGroupInfo)
     HandleWhiteboard(TEvSystemStateResponse, SystemInfo)
-    HandleWhiteboard(TEvBridgeInfoResponse, BridgeInfo)
     HandleWhiteboard(TEvNodeStateResponse, NodeStateInfo)
 
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
@@ -359,11 +371,11 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
-            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvNodeStateResponse, Handle);
             hFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle)
             hFunc(NKikimr::NStorage::TEvNodeWardenBaseConfig, Handle);
+            hFunc(NKikimr::TEvNodeWardenStorageConfig, Handle);
             hFunc(NKikimr::NCountersInfo::TEvCountersInfoResponse, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, Wakeup);

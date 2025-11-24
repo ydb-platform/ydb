@@ -160,7 +160,19 @@ namespace NKikimr::NStorage {
                 return res;
             };
 
+            auto getConfigMeta = [&](const TStorageConfigPtr& config) -> NJson::TJsonValue {
+                if (!config) {
+                    return NJson::JSON_NULL;
+                }
+
+                return NJson::TJsonMap{
+                    {"generation", config->GetGeneration()},
+                    {"fingerprint", HexEncode(config->GetFingerprint())},
+                };
+            };
+
             NJson::TJsonValue root = NJson::TJsonMap{
+                {"self_node_id", SelfId().NodeId()},
                 {"binding", getBinding()},
                 {"direct_bound_nodes", getDirectBoundNodes()},
                 {"all_bound_nodes", getAllBoundNodes()},
@@ -170,6 +182,12 @@ namespace NKikimr::NStorage {
                 {"scepter", Scepter ? NJson::TJsonMap{
                     {"id", Scepter->Id},
                 } : NJson::TJsonValue{NJson::JSON_NULL}},
+                {"configs", NJson::TJsonMap{
+                    {"base", getConfigMeta(BaseConfig)},
+                    {"effective", getConfigMeta(StorageConfig)},
+                    {"committed", getConfigMeta(CommittedStorageConfig)},
+                    {"local_committed", getConfigMeta(LocalCommittedStorageConfig)},
+                }},
             };
 
             NJson::WriteJson(&out, &root);
@@ -197,7 +215,7 @@ namespace NKikimr::NStorage {
                     }
                 }
 
-                auto outputConfig = [&](const char *name, auto *config) {
+                auto outputConfig = [&](const char *name, const TStorageConfigPtr& config) {
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
                             out << name;
@@ -232,10 +250,10 @@ namespace NKikimr::NStorage {
                         }
                     }
                 };
-                outputConfig("StorageConfig", StorageConfig.get());
-                outputConfig("BaseConfig", BaseConfig.get());
-                outputConfig("InitialConfig", InitialConfig.get());
-                outputConfig("ProposedStorageConfig", ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr);
+                outputConfig("StorageConfig (effective storage config)", StorageConfig);
+                outputConfig("BaseConfig (startup config from YAML)", BaseConfig);
+                outputConfig("LocalCommittedStorageConfig (committed to local PDisks)", LocalCommittedStorageConfig);
+                outputConfig("CommittedStorageConfig (with quorum over cluster)", CommittedStorageConfig);
 
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
@@ -261,7 +279,7 @@ namespace NKikimr::NStorage {
                         out << "Quorum: " << (GlobalQuorum ? "yes" : "no") << "<br/>";
                         out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null") << "<br/>";
                         out << "NodeIdsForOutgoingBinding: " << FormatList(NodeIdsForOutgoingBinding) << "<br/>";
-                        out << "NodeIdsForPrimaryPileOutgoingBinding: " << FormatList(NodeIdsForPrimaryPileOutgoingBinding) << "<br/>";
+                        out << "NodeIdsForOtherPilesOutgoingBinding: " << FormatList(NodeIdsForOtherPilesOutgoingBinding) << "<br/>";
                     }
                 }
 
@@ -284,7 +302,6 @@ namespace NKikimr::NStorage {
                     DIV_CLASS("panel-body") {
                         DIV() {
                             out << "AllBoundNodes count: " << AllBoundNodes.size() << "<br/>";
-                            out << "LocalPileQuorum: " << (LocalPileQuorum ? "yes" : "no") << "<br/>";
                             out << "GlobalQuorum: " << (GlobalQuorum ? "yes" : "no") << "<br/>";
                             out << "NodeIdsForIncomingBinding: " << FormatList(NodeIdsForIncomingBinding) << "<br/>";
                             out << "ConnectedUnsyncedPiles: " << FormatList(ConnectedUnsyncedPiles) << "<br/>";

@@ -11,7 +11,8 @@
 
 namespace NYql {
 
-struct IFetchResult: public TThrRefBase {
+class IFetchResult: public TThrRefBase {
+public:
     virtual THttpInput& GetStream() = 0;
     virtual unsigned GetRetCode() = 0;
     virtual THttpURL GetRedirectURL(const THttpURL& baseUrl) = 0;

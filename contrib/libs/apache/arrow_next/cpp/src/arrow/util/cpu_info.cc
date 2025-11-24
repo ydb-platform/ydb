@@ -17,7 +17,7 @@
 
 // From Apache Impala (incubating) as of 2016-01-29.
 
-#include "arrow/util/cpu_info.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/cpu_info.h"
 
 #ifdef __APPLE__
 #  include <sys/sysctl.h>
@@ -30,7 +30,7 @@
 #ifdef _WIN32
 #  include <intrin.h>
 
-#  include "arrow/util/windows_compatibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_compatibility.h"
 #endif
 
 #include <algorithm>
@@ -45,10 +45,10 @@
 #include <string>
 #include <thread>
 
-#include "arrow/result.h"
-#include "arrow/util/io_util.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/io_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
 
 #undef CPUINFO_ARCH_X86
 #undef CPUINFO_ARCH_ARM

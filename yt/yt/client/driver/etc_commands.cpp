@@ -11,6 +11,7 @@
 #include <yt/yt/build/build.h>
 
 #include <yt/yt/core/concurrency/scheduler.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 

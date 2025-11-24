@@ -30,7 +30,9 @@
 
 #include <yt/yt/client/ypath/public.h>
 
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
+
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/ytree/convert.h>

@@ -18,8 +18,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("CompilePath");
-        return name;
+        static auto Name = TStringRef::Of("CompilePath");
+        return Name;
     }
 
     static bool DeclareSignature(

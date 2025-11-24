@@ -77,7 +77,7 @@ private:
 
     void CommitIfNeeded();
     void UpdateStorageConfig();
-    
+
     size_t RequiredToFetchMessageCount() const;
     void SendToPQTablet(std::unique_ptr<IEventBase> ev);
 

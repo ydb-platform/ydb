@@ -84,7 +84,7 @@ bool TSqlValues::BuildRows(const TRule_values_source_row_list& node, TVector<TVe
 
 bool TSqlValues::BuildRow(const TRule_values_source_row& inRow, TVector<TNodePtr>& outRow) {
     TSqlExpression sqlExpr(Ctx_, Mode_);
-    return ExprList(sqlExpr, outRow, inRow.GetRule_expr_list2());
+    return Unwrap(ExprList(sqlExpr, outRow, inRow.GetRule_expr_list2()));
 }
 
 TSourcePtr TSqlValues::ValuesSource(const TRule_values_source& node, const TVector<TString>& columnsHint,

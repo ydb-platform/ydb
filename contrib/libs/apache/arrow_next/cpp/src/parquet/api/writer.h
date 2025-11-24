@@ -18,9 +18,9 @@
 
 #pragma once
 
-#include "parquet/api/io.h"
-#include "parquet/api/schema.h"
-#include "parquet/column_writer.h"
-#include "parquet/exception.h"
-#include "parquet/file_writer.h"
-#include "parquet/statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/api/io.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/api/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/file_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/statistics.h"

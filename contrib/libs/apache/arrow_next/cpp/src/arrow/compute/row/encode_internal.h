@@ -22,15 +22,15 @@
 #include <memory>
 #include <vector>
 
-#include "arrow/array/data.h"
-#include "arrow/compute/key_map_internal.h"
-#include "arrow/compute/light_array_internal.h"
-#include "arrow/compute/row/row_internal.h"
-#include "arrow/compute/util.h"
-#include "arrow/memory_pool.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/key_map_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/light_array_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/row/row_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
 
 namespace arrow20 {
 namespace compute {

@@ -17,8 +17,8 @@ namespace {
 class TZip: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Zip");
-        return name;
+        static auto Name = TStringRef::Of("Zip");
+        return Name;
     }
 
 private:
@@ -49,8 +49,8 @@ private:
 class TFold: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Fold");
-        return name;
+        static auto Name = TStringRef::Of("Fold");
+        return Name;
     }
 
 private:
@@ -109,8 +109,8 @@ public:
     };
 
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Interleave");
-        return name;
+        static auto Name = TStringRef::Of("Interleave");
+        return Name;
     }
 
 private:

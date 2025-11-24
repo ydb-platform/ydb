@@ -102,6 +102,8 @@ namespace NKikimr::NStLog {
     template<typename T, typename Y> struct TIsIterable<std::vector<T, Y>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<TVector<T, Y>> { static constexpr bool value = true; };
     template<typename T, typename X, typename Y, typename Z> struct TIsIterable<THashSet<T, X, Y, Z>> { static constexpr bool value = true; };
+    template<typename... Ts> struct TIsIterable<std::set<Ts...>> { static constexpr bool value = true; };
+    template<typename... Ts> struct TIsIterable<std::unordered_set<Ts...>> { static constexpr bool value = true; };
     template<typename T> struct TIsIterable<NProtoBuf::RepeatedField<T>> { static constexpr bool value = true; };
     template<typename T> struct TIsIterable<NProtoBuf::RepeatedPtrField<T>> { static constexpr bool value = true; };
 
@@ -148,6 +150,8 @@ namespace NKikimr::NStLog {
         template<typename Tx> struct TOptionalTraits<std::optional<Tx>> { static constexpr bool HasOptionalValue = true; };
         template<typename Tx> struct TOptionalTraits<TMaybe<Tx>> { static constexpr bool HasOptionalValue = true; };
         template<typename Tx> struct TOptionalTraits<Tx*> { static constexpr bool HasOptionalValue = true; };
+        template<typename... Ts> struct TOptionalTraits<std::unique_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
+        template<typename... Ts> struct TOptionalTraits<std::shared_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
 
         template<typename TValue>
         static void OutputParam(IOutputStream& s, const TValue& value) {

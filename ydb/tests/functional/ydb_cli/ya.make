@@ -11,6 +11,7 @@ TEST_SRCS(
     test_ydb_scripting.py
     test_ydb_sql.py
     test_ydb_table.py
+    test_ydb_tools.py
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)

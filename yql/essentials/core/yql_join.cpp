@@ -1063,8 +1063,8 @@ THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const TCoEquiJoinTuple& jo
 
 bool IsSkipNullsUnessential(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "EmitSkipNullOnPushdownUsingUnessential";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "EmitSkipNullOnPushdownUsingUnessential";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 TExprNode::TPtr FilterOutNullJoinColumns(

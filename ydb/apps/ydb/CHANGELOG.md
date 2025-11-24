@@ -1,5 +1,6 @@
 * Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output .tar.bz2 file.
 * Added a simple progress bar for non-interactive stderr.
+* Added a new `omit-indexes` property to the `--item` option of the `ydb tools copy` command, allowing tables to be copied without their indexes.
 
 ## 2.27.0 ##
 

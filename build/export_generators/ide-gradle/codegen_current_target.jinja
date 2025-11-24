@@ -12,6 +12,7 @@
 {%- endif -%}
 
 {#- Here in current_target_object_indexes all codegens with special output dirs -#}
+{%- set current_target_object_indexes_with_codegen_dirs = current_target_object_indexes -%}
 {#- Select only some runs with parents (depend runs) -#}
 {%- set some_runs_with_parents = some_runs|selectattr('_parent_object_index', 'in', current_target_object_indexes) -%}
 

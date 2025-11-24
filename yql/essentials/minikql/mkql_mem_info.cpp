@@ -12,11 +12,11 @@ namespace {
 static constexpr char COLLECT_STACK_TRACE_KEY[] = "YQL_MKQL_COLLECT_STACKTRACES_FOR_ALLOCATIONS";
 
 bool ShouldCollectStackTracesForAllocations() {
-    static bool result = []() {
+    static bool Result = []() {
         auto collectEnvValue = TryGetEnv(TString(COLLECT_STACK_TRACE_KEY));
         return collectEnvValue.Defined();
     }();
-    return result;
+    return Result;
 }
 
 TMemoryUsageInfo::TAllocatorLocation WrapLocation(TMkqlLocation location) {

@@ -35,7 +35,7 @@
     )
     WITH ( key = value, ... )
     [AS SELECT ...]
-```image.png
+```
 
 ## Параметры запроса
 

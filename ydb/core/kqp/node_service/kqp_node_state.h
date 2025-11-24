@@ -61,7 +61,6 @@ public:
     // Returns only started tasks
     std::vector<TNodeRequest::TTaskInfo> GetTasksByTxId(ui64 txId) const;
     
-    // to filter whether new tasks duplicate with existing tasks
     THashSet<ui64> GetTaskIdsByTxId(ui64 txId) const;
 
     void DumpInfo(TStringStream& str) const;

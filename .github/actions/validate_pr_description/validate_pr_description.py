@@ -26,7 +26,7 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
         return is_not_for_cl_valid, "Changelog category and entry sections are not found."
 
     if PULL_REQUEST_TEMPLATE.strip() in description.strip():
-            return is_not_for_cl_valid, "Pull request template as is."
+        return is_not_for_cl_valid, "Pull request template as is."
 
     # Extract changelog category section
     category_section = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", description, re.DOTALL)
@@ -44,17 +44,17 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
 
     category = categories[0]
 
-    if not any(cat.startswith(category) for cat in ALL_CATEGORIES):
+    if category not in ALL_CATEGORIES:
         txt = f"Invalid Changelog category: {category}"
         print(f"::warning::{txt}")
         return False, txt
 
-    if not is_not_for_cl_valid and any(cat.startswith(category) for cat in NOT_FOR_CHANGELOG_CATEGORIES):
+    if not is_not_for_cl_valid and category in NOT_FOR_CHANGELOG_CATEGORIES:
         txt = f"Category is not for changelog: {category}"
         print(f"::notice::{txt}")
         return False, txt
 
-    if not any(cat.startswith(category) for cat in NOT_FOR_CHANGELOG_CATEGORIES):
+    if category not in NOT_FOR_CHANGELOG_CATEGORIES:
         entry_section = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", description, re.DOTALL)
         if not entry_section or len(entry_section.group(1).strip()) < 20:
             txt = "The changelog entry is less than 20 characters or missing."

@@ -35,7 +35,8 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
         print(f"::warning::{txt}")
         return False, txt
 
-    categories = [line.strip('* ').strip() for line in category_section.group(1).splitlines() if line.strip()]
+    # Extract only lines that start with * (category items), ignore comments and empty lines
+    categories = [line.strip('* ').strip() for line in category_section.group(1).splitlines() if line.strip().startswith('*')]
 
     if len(categories) != 1:
         txt = "Only one category can be selected at a time."

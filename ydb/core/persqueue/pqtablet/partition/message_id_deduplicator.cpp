@@ -10,8 +10,10 @@ namespace NKikimr::NPQ {
 
 namespace {
 
+static constexpr size_t BucketSize = TDuration::MilliSeconds(100).MilliSeconds();
+
 TInstant trim(TInstant value) {
-    return TInstant::MilliSeconds(value.MilliSeconds() / 100 * 100 + 100);
+    return TInstant::MilliSeconds(value.MilliSeconds() / BucketSize * BucketSize + BucketSize);
 }
 
 }
@@ -27,6 +29,10 @@ TMessageIdDeduplicator::~TMessageIdDeduplicator() {
 
 const TDuration& TMessageIdDeduplicator::GetDeduplicationWindow() const {
     return DeduplicationWindow;
+}
+
+TInstant TMessageIdDeduplicator::GetExpirationTime() const {
+    return trim(TimeProvider->Now()) + DeduplicationWindow;
 }
 
 bool TMessageIdDeduplicator::AddMessage(const TString& deduplicationId) {
@@ -138,11 +144,11 @@ const std::deque<TMessageIdDeduplicator::TMessage>& TMessageIdDeduplicator::GetQ
 TString MakeDeduplicatorWALKey(ui32 partitionId, const TInstant& expirationTime) {
     static constexpr char WALSeparator = '|';
 
-    auto bucket = trim(expirationTime);
-
     TKeyPrefix ikey(TKeyPrefix::EType::TypeDeduplicator, TPartitionId(partitionId));
     ikey.Append(WALSeparator);
-    ikey.Append(Sprintf("%.16X" PRIu64, bucket.MilliSeconds() / 100).data(), 16);
+
+    auto bucket = Sprintf("%.16llX", expirationTime.MilliSeconds() / BucketSize);
+    ikey.Append(bucket.data(), bucket.size());
 
     return ikey.ToString();
 }
@@ -152,14 +158,16 @@ void TPartition::AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request) {
 
     NKikimrPQ::MessageDeduplicationIdWAL wal;
     if (MessageIdDeduplicator.SerializeTo(wal)) {
+        auto expirationTime = TInstant::MilliSeconds(wal.GetExpirationTimestampMilliseconds());
+
         auto* writeWAL = request->Record.AddCmdWrite();
-        writeWAL->SetKey(MakeDeduplicatorWALKey(Partition.OriginalPartitionId, TInstant::Now()));
+        writeWAL->SetKey(MakeDeduplicatorWALKey(Partition.OriginalPartitionId, expirationTime));
         writeWAL->SetValue(wal.SerializeAsString());
     }
 
     auto* deleteExpired = request->Record.AddCmdDeleteRange();
     deleteExpired->MutableRange()->SetFrom(MakeDeduplicatorWALKey(Partition.OriginalPartitionId, TInstant::Zero()));
-    deleteExpired->MutableRange()->SetTo(MakeDeduplicatorWALKey(Partition.OriginalPartitionId, TInstant::Now() - MessageIdDeduplicator.GetDeduplicationWindow()));
+    deleteExpired->MutableRange()->SetTo(MakeDeduplicatorWALKey(Partition.OriginalPartitionId, MessageIdDeduplicator.GetExpirationTime()));
     deleteExpired->MutableRange()->SetIncludeFrom(true);
     deleteExpired->MutableRange()->SetIncludeTo(true);
 }
@@ -168,7 +176,10 @@ bool TPartition::DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg) {
     if (!Config.GetEnableDeduplicationByMessageDeduplicationId()) {
         return true;
     }
-    AFL_ENSURE(msg.TotalParts == 1)("p", msg.TotalParts); // TODO MLP убрать это ограничение
+    if (msg.TotalParts > 1) {
+        // Working with messages consisting of several parts is not supported.
+        return false;
+    }
 
     NKikimrPQClient::TDataChunk proto;
     bool res = proto.ParseFromString(msg.Data);

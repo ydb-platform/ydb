@@ -893,6 +893,11 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
                     return PoisonPill(ctx);
                 }
 
+                if (wal.GetExpirationTimestampMilliseconds() < TInstant::Now().MilliSeconds()) {
+                    PQ_LOG_D("tablet " << Partition()->TabletId << " Initializing of message id deduplicator expired: " << w.key());
+                    continue;
+                }
+
                 if (!Partition()->MessageIdDeduplicator.ApplyWAL(std::move(wal))) {
                     PQ_LOG_ERROR("tablet " << Partition()->TabletId << " Initializing of message id deduplicator failed: " << w.key() << " wal is corrupted");
                     return PoisonPill(ctx);
@@ -911,7 +916,6 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
             Done(ctx);
             break;
         default:
-            Cerr << "ERROR " << range.GetStatus() << "\n";
             AFL_ENSURE("bad status")("s", range.GetStatus());
     };
 }

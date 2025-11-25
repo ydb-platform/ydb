@@ -30,6 +30,7 @@ struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, EEv::EvW
 
     struct TMessage {
         size_t Index;
+        Ydb::StatusIds::StatusCode Status;
         // if message was written successfully, it will be set
         std::optional<TMessageId> MessageId;
     };

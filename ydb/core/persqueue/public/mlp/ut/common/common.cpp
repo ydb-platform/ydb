@@ -189,6 +189,7 @@ void ReloadPQTablet(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& d
     auto& runtime = setup->GetRuntime();
     auto tabletId = GetTabletId(setup, database, topic, partitionId);
     ForwardToTablet(runtime, tabletId, runtime.AllocateEdgeActor(), new TEvents::TEvPoison());
+    Sleep(TDuration::Seconds(1));
 }
 
 }

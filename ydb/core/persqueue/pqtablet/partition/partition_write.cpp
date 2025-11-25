@@ -1214,7 +1214,12 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     if (!DeduplicateByMessageId(p.Msg)) {
         LOG_D("Deduplicate message " << p.Msg.SeqNo << " by MessageDeduplicationId");
         p.DeduplicatedByMessageId = true;
-        // TODO MLP Metrics
+
+        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
+        MsgsDiscarded.Inc();
+        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
+        BytesDiscarded.Inc(p.Msg.Data.size());
+
         return true;
     }
 

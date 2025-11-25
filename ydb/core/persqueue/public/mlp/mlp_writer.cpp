@@ -177,7 +177,8 @@ void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     auto& record = ev->Get()->Record;
     if (IsSuccess(record)) {
         size_t i = 0;
-        auto partitionId = record.GetPartitionResponse().GetCookie();
+        auto& response = record.GetPartitionResponse();
+        auto partitionId = response.GetCookie();
         for (auto& message : PendingMessages) {
             if (message.PartitionId != partitionId) {
                 continue;
@@ -188,8 +189,13 @@ void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
             message.Status = Ydb::StatusIds::SUCCESS;
             message.ResultReceived = true;
 
-            if (i < record.GetPartitionResponse().CmdWriteResultSize()) {
-                message.Offset = record.GetPartitionResponse().GetCmdWriteResult(i).GetOffset();
+            if (i < response.CmdWriteResultSize()) {
+                auto& result = response.GetCmdWriteResult(i);
+                if (result.GetAlreadyWritten()) {
+                    message.Status = Ydb::StatusIds::ALREADY_EXISTS;
+                } else {
+                    message.Offset = result.GetOffset();
+                }
                 ++i;
             }
         }
@@ -279,6 +285,7 @@ void TWriterActor::ReplyIfPossible() {
         }
         response->Messages.push_back({
             .Index = message.Index,
+            .Status = message.Status,
             .MessageId = messageId,
         });
     }

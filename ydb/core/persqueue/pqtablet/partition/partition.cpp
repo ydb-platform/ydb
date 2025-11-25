@@ -2591,13 +2591,14 @@ void TPartition::RunPersist() {
         AddCmdWriteTxMeta(PersistRequest->Record);
         AddCmdWriteUserInfos(PersistRequest->Record);
         AddCmdWriteConfig(PersistRequest->Record);
-
-        AddMessageDeduplicatorKeys(PersistRequest.Get());
     }
     if (Compacter) {
         Compacter->TryCompactionIfPossible();
     }
+
     if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
+        AddMessageDeduplicatorKeys(PersistRequest.Get());
+
         // Apply counters
         for (const auto& writeInfo : WriteInfosApplied) {
             // writeTimeLag

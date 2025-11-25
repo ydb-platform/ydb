@@ -26,6 +26,7 @@ public:
     ~TMessageIdDeduplicator();
 
     const TDuration& GetDeduplicationWindow() const;
+    TInstant GetExpirationTime() const;
 
     bool AddMessage(const TString& deduplicationId);
     size_t Compact();

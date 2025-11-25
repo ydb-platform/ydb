@@ -61,7 +61,9 @@ TString MakeWALKey(ui32 partitionId, const TString& consumerName, ui64 index) {
     TKeyPrefix ikey(TKeyPrefix::EType::TypeMLPConsumerData, TPartitionId(partitionId), TKeyPrefix::EMark::MarkMLPWAL);
     ikey.Append(consumerName.c_str(), consumerName.size());
     ikey.Append(WALSeparator);
-    ikey.Append(Sprintf("%.16X" PRIu64, index).data(), 16);
+
+    auto bucket = Sprintf("%.16llX", index);
+    ikey.Append(bucket.data(), bucket.size());
 
     return ikey.ToString();
 }

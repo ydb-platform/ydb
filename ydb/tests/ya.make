@@ -9,6 +9,7 @@ RECURSE(
     olap
     oss
     postgres_integrations
+    small
     solomon
     sql
     stability

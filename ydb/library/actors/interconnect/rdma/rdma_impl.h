@@ -13,10 +13,29 @@
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
 #include <util/system/sanitizers.h>
+#include <util/system/compiler.h>
 
 #include <span>
 
 namespace NInterconnect::NRdma {
+
+void Y_FORCE_INLINE MemoryOrderAcquire(void* addr) {
+    atomic_thread_fence(std::memory_order_acquire);
+#if defined(_tsan_enabled_)
+    __tsan_acquire(addr);
+#else
+    Y_UNUSED(addr);
+#endif
+}
+
+void Y_FORCE_INLINE MemoryOrderRlease(void* addr) {
+    atomic_thread_fence(std::memory_order_release);
+#if defined(_tsan_enabled_)
+    __tsan_release(addr);
+#else
+    Y_UNUSED(addr);
+#endif
+}
 
 NMonitoring::TDynamicCounterPtr MakeCounters(NMonitoring::TDynamicCounters* counters);
 
@@ -106,8 +125,7 @@ public:
     }
 
     void Reply(NActors::TActorSystem* as, const ibv_wc* wc) noexcept {
-        atomic_thread_fence(std::memory_order_acquire);
-        __tsan_acquire(&Cb);
+        MemoryOrderAcquire(&Cb);
         if (Cb) {
             if (wc) {
                 if (wc->status == IBV_WC_SUCCESS) {
@@ -123,8 +141,7 @@ public:
     }
 
     void ReplyCqErr(NActors::TActorSystem* as) noexcept {
-        atomic_thread_fence(std::memory_order_acquire);
-        __tsan_acquire(&Cb);
+        MemoryOrderAcquire(&Cb);
         if (Cb) {
             Cb(as, TEvRdmaIoDone::CqError());
             Cb = TCb();
@@ -132,8 +149,7 @@ public:
     }
 
     void ReplyWrErr(NActors::TActorSystem* as, int err) noexcept {
-        atomic_thread_fence(std::memory_order_acquire);
-        __tsan_acquire(&Cb);
+        MemoryOrderAcquire(&Cb);
         if (Cb) {
             Cb(as, TEvRdmaIoDone::WrError(err));
             Cb = TCb();
@@ -143,8 +159,7 @@ public:
 
     void AttachCb(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept {
         Cb = std::move(cb);
-        atomic_thread_fence(std::memory_order_release);
-        __tsan_release(&Cb);
+        MemoryOrderRlease(&Cb);
     }
 
     void ResetTimer() noexcept {

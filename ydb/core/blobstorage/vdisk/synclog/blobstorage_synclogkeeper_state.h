@@ -142,7 +142,7 @@ namespace NKikimr {
 
             // incoming events
             void TrimTailEvent(ui64 trimTailLsn);
-            void BaldLogEvent(bool dropChunksExplicitely);
+            void BaldLogEvent(bool dropChunksExplicitly);
             void CutLogEvent(ui64 freeUpToLsn);
             void RetryCutLogEvent();
             void FreeChunkEvent(ui32 chunkIdx);

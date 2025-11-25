@@ -240,10 +240,10 @@ namespace NKikimr {
             // for tests/debug purposes only, remove almost all log
             void Handle(TEvBlobStorage::TEvVBaldSyncLog::TPtr &ev, const TActorContext &ctx) {
                 Y_UNUSED(ev);
-                bool dropChunksExplicitely = ev->Get()->Record.HasDropChunksExplicitely()
-                        ? ev->Get()->Record.GetDropChunksExplicitely()
+                bool dropChunksExplicitly = ev->Get()->Record.HasDropChunksExplicitly()
+                        ? ev->Get()->Record.GetDropChunksExplicitly()
                         : false;
-                KeepState.BaldLogEvent(dropChunksExplicitely);
+                KeepState.BaldLogEvent(dropChunksExplicitly);
                 PerformActions(ctx);
             }
 

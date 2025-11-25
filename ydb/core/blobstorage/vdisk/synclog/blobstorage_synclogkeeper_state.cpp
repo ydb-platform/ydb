@@ -140,8 +140,8 @@ namespace NKikimr {
             DelayedActions.SetTrimTail();
         }
 
-        void TSyncLogKeeperState::BaldLogEvent(bool dropChunksExplicitely) {
-            if (dropChunksExplicitely) {
+        void TSyncLogKeeperState::BaldLogEvent(bool dropChunksExplicitly) {
+            if (dropChunksExplicitly) {
                 const ui32 numCurChunks = SyncLogPtr->GetSizeInChunks();
                 if (numCurChunks > 0) {
                     TVector<ui32> droppedChunks = SyncLogPtr->TrimLogByRemovingChunks(numCurChunks, Notifier);
@@ -150,7 +150,7 @@ namespace NKikimr {
 
                 LOG_DEBUG(*LoggerCtx, BS_SYNCLOG,
                         VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                            "KEEPER: TEvSyncLogBaldLog DropChunksExplicitely: numChunks# %" PRIu32,
+                            "KEEPER: TEvSyncLogBaldLog DropChunksExplicitly: numChunks# %" PRIu32,
                             numCurChunks));
             } else {
                 const ui64 baldLsn = SyncLogPtr->GetLastLsn();

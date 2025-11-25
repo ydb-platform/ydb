@@ -2655,9 +2655,9 @@ namespace NKikimr {
     {
         TEvVBaldSyncLog() = default;
 
-        TEvVBaldSyncLog(const TVDiskID &vdisk, bool dropChunksExplicitely = false) {
+        TEvVBaldSyncLog(const TVDiskID &vdisk, bool dropChunksExplicitly = false) {
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            Record.SetDropChunksExplicitely(dropChunksExplicitely);
+            Record.SetDropChunksExplicitly(dropChunksExplicitly);
         }
     };
 

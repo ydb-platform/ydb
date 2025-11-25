@@ -55,7 +55,7 @@ Y_UNIT_TEST(FlushPutEventsV1) {
         "id": "put_units-databaseId-tabletId-{timestamp}-{counter}",
         "schema": "yds.events.puts.v1",
         "tags": {{
-            "Category": "Topic"
+            "category": "topic"
         }},
         "usage": {{
             "quantity": {quantity},
@@ -120,7 +120,7 @@ Y_UNIT_TEST(FlushResourcesReservedV1) {
         "id": "reserved_resources-databaseId-tabletId-{timestamp}-{counter}",
         "schema": "yds.resources.reserved.v1",
         "tags": {{
-            "Category": "Topic",
+            "category": "topic",
             "reserved_throughput_bps": {write_quota},
             "reserved_consumers_count": {consumers_count},
             "reserved_storage_bytes": {reserved_space}
@@ -185,7 +185,7 @@ Y_UNIT_TEST(FlushThroughputV1) {
         "id": "yds.reserved_resources-databaseId-tabletId-{timestamp}-{counter}",
         "schema": "yds.throughput.reserved.v1",
         "tags": {{
-            "Category": "Topic",
+            "category": "topic",
             "reserved_throughput_bps": {write_quota},
             "reserved_consumers_count": 0
         }},
@@ -246,7 +246,7 @@ Y_UNIT_TEST(FlushStorageV1) {
         "id": "yds.reserved_resources-databaseId-tabletId-{timestamp}-{counter}",
         "schema": "yds.storage.reserved.v1",
         "tags": {{
-            "Category": "Topic"
+            "category": "topic"
         }},
         "usage": {{
             "quantity": {quantity},
@@ -309,7 +309,7 @@ Y_UNIT_TEST(UsedStorageV1) {
         "id": "used_storage-databaseId-tabletId-1651752943168-{counter}",
         "schema": "ydb.serverless.v1",
         "tags": {{
-            "Category": "Topic",
+            "category": "topic",
             "ydb_size": 6815
         }},
         "usage": {{

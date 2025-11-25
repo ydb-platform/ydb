@@ -23,9 +23,6 @@ class TestOrderBy(object):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
-            extra_feature_flags={
-                "enable_columnshard_bool": True
-            },
             column_shard_config={
                 "compaction_enabled": False,
                 "deduplication_enabled": True,
@@ -167,7 +164,7 @@ class TestOrderBy(object):
             f"""
             CREATE TABLE `{table_path}` (
                 id Uint64 NOT NULL,
-                value bool NOT NULL,
+                value Uint64 NOT NULL,
                 PRIMARY KEY(id),
             )
             WITH (
@@ -179,12 +176,12 @@ class TestOrderBy(object):
 
         column_types = ydb.BulkUpsertColumns()
         column_types.add_column("id", ydb.PrimitiveType.Uint64)
-        column_types.add_column("value", ydb.PrimitiveType.Bool)
+        column_types.add_column("value", ydb.PrimitiveType.Uint64)
 
-        portion1 = [{"id" : 1, "value" : True}]
-        portion2 = [{"id" : 2, "value" : False}, {"id" : 3, "value" : False}]
-        portion3 = [{"id" : 2, "value" : True}]
-        portion4 = [{"id" : 2, "value" : True}, {"id" : 3, "value" : True}]
+        portion1 = [{"id" : 1, "value" : 1}]
+        portion2 = [{"id" : 2, "value" : 0}, {"id" : 3, "value" : 0}]
+        portion3 = [{"id" : 2, "value" : 1}]
+        portion4 = [{"id" : 2, "value" : 1}, {"id" : 3, "value" : 1}]
 
         self.ydb_client.bulk_upsert(table_path, column_types, portion1)
         self.ydb_client.bulk_upsert(table_path, column_types, portion2)
@@ -201,7 +198,7 @@ class TestOrderBy(object):
         result = [(row['id'], row['value']) for result_set in result_sets for row in result_set.rows]
 
         assert len(result) == 3
-        assert result == [(1, True), (2, True), (3, True)]
+        assert result == [(1, 1), (2, 1), (3, 1)]
 
     def test_stress_sorting(self):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"

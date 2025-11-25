@@ -983,7 +983,12 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&) {
     LOG_ROW_DISPATCHER_DEBUG("TEvGetEventByTimerEvent");
-    // There is an attempt to fix a partition reading bug here.
+    // Workaround for a partition reading bug:
+    // In some cases, the partition may stop delivering new events due to missed notifications or lost subscriptions,
+    // causing the session to stall and not receive further data. To address this, we periodically schedule a timer event
+    // (TEvGetEventByTimerEvent) that explicitly triggers reading of new events from the partition. If new data is found,
+    // and the session is waiting for events, we re-subscribe to ensure continuous data flow. This timer-based approach
+    // helps to recover from situations where the normal event-driven mechanism fails to deliver new data.
     Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
     bool readSomething = HandleNewEvents();
     if (readSomething && IsWaitingEvents) {

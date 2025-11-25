@@ -52,7 +52,7 @@ struct IPrint: public NYql::NUdf::IRefCounted {
     using TPtr = NYql::NUdf::TRefCountedPtr<IPrint>;
 };
 
-IPrint::TPtr MakePrinter(const TType* type);
+// IPrint::TPtr MakePrinter(const TType* type);
 
 void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected,
                                const NUdf::TUnboxedValue& gotList);

@@ -222,26 +222,26 @@ TVector<NUdf::TUnboxedValue> ConvertWideStreamToTupleVector(IComputationGraph& s
         }
     }
 }
-template<typename T>
-struct TTypedPrinter;
+// template<typename T>
+// struct TTypedPrinter;
 
-IPrint::TPtr MakePrinter(const TType* type){
-    switch (type->GetKind()) {
-        case TTypeBase::EKind::Data: {
+// IPrint::TPtr MakePrinter(const TType* type){
+//     switch (type->GetKind()) {
+//         case TTypeBase::EKind::Data: {
 
-        }
-        case TTypeBase::EKind::Optional: {
+//         }
+//         case TTypeBase::EKind::Optional: {
 
-        }
-        case TTypeBase::EKind::Tuple: {
+//         }
+//         case TTypeBase::EKind::Tuple: {
 
-        }
-    }
-}
+//         }
+//     }
+// }
 
 
 
-template
+// template
 
 namespace {
 void CompareVectorsIgnoringOrder(const TType* type, TVector<NYql::NUdf::TUnboxedValue> expectedItems,

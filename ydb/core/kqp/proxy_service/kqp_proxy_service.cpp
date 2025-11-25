@@ -452,6 +452,7 @@ public:
         auto* newFeatureFlags = event.MutableConfig()->MutableFeatureFlags();
         if (newFeatureFlags->GetEnableSecureScriptExecutions() != FeatureFlags.GetEnableSecureScriptExecutions()) {
             ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
+            ScriptExecutionsTalesGeneration++;
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvResetManagerRegistration(TStreamingQueryBehaviour::GetInstance()));
         }
 
@@ -1574,7 +1575,7 @@ private:
 
     void StartScriptExecutionsTablesCreation() {
         ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
-        Register(CreateScriptExecutionsTablesCreator(FeatureFlags), TMailboxType::HTSwap, AppData()->SystemPoolId);
+        Register(CreateScriptExecutionsTablesCreator(FeatureFlags, ScriptExecutionsTalesGeneration), TMailboxType::HTSwap, AppData()->SystemPoolId);
     }
 
     template<typename TEvent>
@@ -1614,8 +1615,10 @@ private:
     }
 
     void Handle(TEvScriptExecutionsTablesCreationFinished::TPtr& ev) {
-        if (ScriptExecutionsCreationStatus == EScriptExecutionsCreationStatus::NotStarted) {
-            StartScriptExecutionsTablesCreation();
+        if (ev->Cookie != ScriptExecutionsTalesGeneration) {
+            if (ScriptExecutionsCreationStatus == EScriptExecutionsCreationStatus::NotStarted) {
+                StartScriptExecutionsTablesCreation();
+            }
             return;
         }
 
@@ -1883,6 +1886,7 @@ private:
     };
     EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
     std::deque<TDatabasesCache::TDelayedEvent> DelayedEventsQueue;
+    ui64 ScriptExecutionsTalesGeneration = 0;
     TActorId KqpTempTablesAgentActor;
 
     TResourcePoolsCache ResourcePoolsCache;

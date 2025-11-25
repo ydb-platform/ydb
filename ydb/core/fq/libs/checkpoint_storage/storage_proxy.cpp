@@ -123,6 +123,7 @@ private:
     };
     EInitStatus InitStatus = EInitStatus::NotStarted;
     std::deque<THolder<IEventHandle>> DelayedEventsQueue;
+    ui64 InitializationGeneration = 0;
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
 public:
@@ -250,9 +251,9 @@ void TStorageProxy::StartInitialization() {
 
     std::vector<NThreading::TFuture<NYql::TIssues>> futures{storageInitFuture, stateInitFuture};
     auto voidFuture = NThreading::WaitAll(futures);
-    voidFuture.Subscribe([futures = std::move(futures), actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const auto& ) mutable {
-            actorSystem->Send(actorId, new TEvPrivate::TEvInitResult(futures[0].GetValue(), futures[1].GetValue()));
-        });
+    voidFuture.Subscribe([futures = std::move(futures), actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem(), generation = InitializationGeneration](const auto&) {
+        actorSystem->Send(actorId, new TEvPrivate::TEvInitResult(futures[0].GetValue(), futures[1].GetValue()), 0, generation);
+    });
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev) {
@@ -529,6 +530,13 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
 }
 
 void TStorageProxy::Handle(TEvPrivate::TEvInitResult::TPtr& ev) {
+    if (ev->Cookie != InitializationGeneration) {
+        if (InitStatus == EInitStatus::NotStarted) {
+            StartInitialization();
+        }
+        return;
+    }
+
     const auto* event = ev->Get();
     if (!event->StorageIssues.Empty()) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << event->StorageIssues.ToOneLineString());
@@ -546,7 +554,7 @@ void TStorageProxy::Handle(TEvPrivate::TEvInitResult::TPtr& ev) {
             Schedule(*delay, new TEvPrivate::TEvInitialize());
         }
     } else {
-        LOG_STREAMS_STORAGE_SERVICE_INFO("Checkpoint storage and state storage were successfully inited");
+        LOG_STREAMS_STORAGE_SERVICE_INFO("Checkpoint storage and state storage were successfully initted");
         InitStatus = EInitStatus::Finished;
     }
     while (!DelayedEventsQueue.empty()) {
@@ -646,10 +654,8 @@ void TStorageProxy::Handle(NKikimr::NConsole::TEvConsole::TEvConfigNotificationR
     FeatureFlags.Swap(newFeatureFlags);
 
     if (changed) {
-        if (InitStatus != EInitStatus::NotStarted) {
-            StartInitialization();
-            InitStatus = EInitStatus::Pending;
-        }
+        InitStatus = EInitStatus::NotStarted;
+        InitializationGeneration++;
     }
 }
 

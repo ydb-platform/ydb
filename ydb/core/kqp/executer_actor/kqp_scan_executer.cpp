@@ -129,7 +129,8 @@ private:
             }
         }
         if (shardIds) {
-            LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
+            LOG_D("Start resolving tablets nodes",
+                (ShardIdsCount, shardIds.size()));
             ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
             auto kqpShardsResolver = CreateKqpShardsResolver(
                 this->SelfId(), TxId, false, std::move(shardIds));
@@ -146,7 +147,8 @@ private:
 
     void HandleResolve(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
         if (ev->Get()->Snapshot.empty()) {
-            LOG_E("Can not find default state storage group for database " << Database);
+            LOG_E("Can not find default state storage group for database",
+                (Database, Database));
         }
 
         ResourcesSnapshot = std::move(ev->Get()->Snapshot);
@@ -198,14 +200,16 @@ private:
 
         if (TasksGraph.GetTasks().size() > Request.MaxComputeActors) {
             // LOG_N("Too many compute actors: computeTasks=" << computeTasks.size() << ", scanTasks=" << nScanTasks);
-            LOG_N("Too many compute actors: totalTasks=" << TasksGraph.GetTasks().size());
+            LOG_N("Too many compute actors",
+                (TotalTasks, TasksGraph.GetTasks().size()));
             TBase::ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                     << "Requested too many execution units: " << TasksGraph.GetTasks().size()));
             return;
         }
 
-        LOG_D("TotalShardScans: " << nShardScans);
+        LOG_D("TotalShardScans",
+            (Count, nShardScans));
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         ExecuteScanTx();
@@ -245,7 +249,8 @@ private:
     {
         if (Planner) {
             if (!Planner->GetPendingComputeTasks().empty()) {
-                LOG_D("terminate pending resources request: " << Ydb::StatusIds::StatusCode_Name(status));
+                LOG_D("terminate pending resources request",
+                    (Status, Ydb::StatusIds::StatusCode_Name(status)));
 
                 auto ev = MakeHolder<TEvKqpNode::TEvCancelKqpTasksRequest>();
                 ev->Record.SetTxId(TxId);

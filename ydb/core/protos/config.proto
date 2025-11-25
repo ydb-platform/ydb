@@ -2434,7 +2434,7 @@ message TColumnShardConfig {
 
     optional TStatistics Statistics = 57;
     optional NKikimrSchemeOp.TS3Settings S3Client = 58;
-    optional uint32 BlobMaxInFlightIntervalsOnRequest = 59;
+    optional uint32 BlobStorageMaxInFlightIntervalsOnRequest = 59;
     optional uint32 S3MaxInFlightIntervalsOnRequest = 60;
 }
 

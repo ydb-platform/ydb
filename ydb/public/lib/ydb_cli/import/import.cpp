@@ -21,6 +21,7 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/progress_bar.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
+#include <ydb/public/lib/ydb_cli/common/local_paths.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/ydb_cli/import/cli_arrow_helpers.h>
@@ -422,7 +423,7 @@ private:
     std::counting_semaphore<> JobsSemaphore;
 }; // TJobInflightManager
 
-static const TFsPath pathToProgressFiles = TFsPath(HomeDir).Child(".config").Child("ydb").Child("import_progress");
+static const TFsPath pathToProgressFiles = NLocalPaths::GetImportProgressDir();
 static const TString sourceModifiedKey = "source_modified_ts"; // Timestamp of source modification
 static const TString lastImportedLineKey = "last_imported_row"; // Last line that was imported with confirmation
 static const TString completedKey = "completed"; // File was successfully imported

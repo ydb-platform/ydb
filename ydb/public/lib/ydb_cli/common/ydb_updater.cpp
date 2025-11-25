@@ -5,14 +5,21 @@
 #include <util/datetime/base.h>
 #include <util/folder/dirut.h>
 #include <util/folder/path.h>
+#include <util/generic/guid.h>
+#include <util/generic/vector.h>
+#include <util/generic/scope.h>
 #include <util/stream/file.h>
 #include <util/string/builder.h>
+#include <util/string/join.h>
+#include <util/string/split.h>
 #include <util/string/strip.h>
 #include <util/system/env.h>
 #include <util/system/execpath.h>
 #include <util/system/shellcommand.h>
 #include <library/cpp/colorizer/output.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+
+#include "local_paths.h"
 
 #ifndef _win32_
 #include <sys/utsname.h>
@@ -38,20 +45,158 @@ TString GetOsArchitecture() {
 namespace {
 #if defined(_darwin_)
     const TString osVersion = "darwin";
-    const TString binaryName = "ydb";
-    const TString homeDir = GetHomeDir();
 #elif defined(_win32_)
     const TString osVersion = "windows";
-    const TString binaryName = "ydb.exe";
-    const TString homeDir = GetEnv("USERPROFILE");
 #else
     const TString osVersion = "linux";
-    const TString binaryName = "ydb";
-    const TString homeDir = GetHomeDir();
 #endif
     const TString osArch = GetOsArchitecture();
-    const TString defaultConfigFile = TStringBuilder() << homeDir << "/ydb/bin/config.json";
-    const TString defaultTempFile = TStringBuilder() << homeDir << "/ydb/install/" << binaryName;
+
+    TFsPath CreateCacheDownloadPath() {
+        TFsPath dir = NLocalPaths::GetUpdateCacheDir();
+        TFsPath path = dir.Child(TStringBuilder() << "ydb-update-" << CreateGuidAsString());
+        path.Fix();
+        EnsureParentDirExists(path.Fix());
+        return path;
+    }
+
+    TFsPath CreateStagingBinaryPath(const TFsPath& binaryPath) {
+        TFsPath staging = binaryPath.Parent().Child(
+            TStringBuilder() << '.' << binaryPath.GetName() << ".tmp-" << CreateGuidAsString());
+        return staging.Fix();
+    }
+
+    void CopyBinaryFile(const TFsPath& src, const TFsPath& dst) {
+        TFileInput input(src);
+        TFileOutput output(dst);
+        static const size_t BufferSize = 1 << 16;
+        char buffer[BufferSize];
+        size_t read = 0;
+        while ((read = input.Read(buffer, BufferSize)) > 0) {
+            output.Write(buffer, read);
+        }
+        output.Finish();
+    }
+
+    TFsPath GetCurrentBinaryPath() {
+        TFsPath current(GetExecPath());
+        current.Fix();
+        return current;
+    }
+
+    void EnsureParentDirExists(const TFsPath& path) {
+        TFsPath parent = path.Parent();
+        if (!parent.Exists()) {
+            parent.MkDirs();
+        }
+    }
+
+#if defined(_win32_)
+    TString EscapeForPowerShellSingleQuotes(const TString& value) {
+        TString result;
+        result.reserve(value.size());
+        for (const char ch : value) {
+            if (ch == '\'') {
+                result.append("''");
+            } else {
+                result.push_back(ch);
+            }
+        }
+        return result;
+    }
+
+    bool PersistWindowsPath(const TString& newPath) {
+        TString escaped = EscapeForPowerShellSingleQuotes(newPath);
+        TShellCommand cmd(TStringBuilder()
+            << "powershell -NoLogo -NoProfile -Command \"[Environment]::SetEnvironmentVariable('Path','"
+            << escaped << "','User')\"");
+        cmd.Run().Wait();
+        return cmd.GetExitCode() == 0;
+    }
+#endif
+
+    void UpdateLegacyPathReferences(const TFsPath& canonicalBinaryPath) {
+        TFsPath canonicalDir = canonicalBinaryPath.Parent();
+#if defined(_win32_)
+        TString legacyEntry = NLocalPaths::GetLegacyBinaryPath().Parent().GetPath();
+        TString canonicalEntry = canonicalDir.GetPath();
+        TVector<TString> elements = StringSplitter(GetEnv("PATH")).Split(';').ToList<TString>();
+        bool replaced = false;
+        for (TString& element : elements) {
+            TString trimmed = StripString(element);
+            if (trimmed.empty()) {
+                continue;
+            }
+            if (trimmed == legacyEntry) {
+                element = canonicalEntry;
+                replaced = true;
+            }
+        }
+        if (replaced) {
+            TString newPath = JoinSeq(";", elements);
+            SetEnv("PATH", newPath);
+            bool persisted = PersistWindowsPath(newPath);
+            if (persisted) {
+                Cerr << "Updated user PATH: replaced \"" << legacyEntry << "\" with \"" << canonicalEntry
+                    << "\". Please restart your shell to apply changes." << Endl;
+            } else {
+                Cerr << "Updated PATH in current session, but failed to persist changes. "
+                    << "Please update PATH manually to include " << canonicalEntry << Endl;
+            }
+        } else {
+            Cerr << "Legacy PATH entry was not updated automatically. "
+                << "Please ensure " << canonicalEntry << " is present in the PATH." << Endl;
+        }
+#else
+        TFsPath helper = NLocalPaths::GetLegacyPathHelperScript();
+        if (!helper.Exists()) {
+            return;
+        }
+        try {
+            TFsPath helperDir = helper.Parent();
+            if (!helperDir.Exists()) {
+                helperDir.MkDirs();
+            }
+            TFileOutput out(helper);
+            out << "# Updated by ydb update: legacy path helper now points to canonical YDB CLI location" << Endl;
+            out << "bin_path=\"" << canonicalDir.GetPath() << "\"" << Endl;
+            out << "case \":${PATH}:\" in" << Endl;
+            out << "    *:\"${bin_path}\":*) ;;" << Endl;
+            out << "    *) export PATH=\"${bin_path}:${PATH}\" ;;" << Endl;
+            out << "esac" << Endl;
+            out.Finish();
+            Cerr << "Updated legacy PATH helper script " << helper.GetPath()
+                << " to use " << canonicalDir.GetPath()
+                << ". Please restart your shell to apply changes." << Endl;
+        } catch (const yexception& e) {
+            Cerr << "Failed to update legacy PATH helper script: " << e.what() << Endl;
+        }
+#endif
+    }
+
+    void RemoveLegacyBinaryFile(const TFsPath& legacyBinary) {
+        if (!legacyBinary.Exists()) {
+            return;
+        }
+#if defined(_win32_)
+        TFsPath backup(TStringBuilder() << legacyBinary.GetPath() << "_old");
+        backup.Fix();
+        backup.DeleteIfExists();
+        try {
+            legacyBinary.RenameTo(backup);
+            Cerr << "Legacy binary moved to " << backup.GetPath() << ". You can delete it after closing current session." << Endl;
+        } catch (const yexception& e) {
+            if (!legacyBinary.DeleteIfExists()) {
+                Cerr << "Failed to remove legacy binary " << legacyBinary.GetPath() << ": " << e.what() << Endl;
+            } else {
+                Cerr << "Removed legacy binary " << legacyBinary.GetPath() << Endl;
+            }
+        }
+#else
+        legacyBinary.DeleteIfExists();
+        Cerr << "Removed legacy binary " << legacyBinary.GetPath() << Endl;
+#endif
+    }
 }
 
 TYdbUpdater::TYdbUpdater(std::string storageUrl)
@@ -78,14 +223,9 @@ int TYdbUpdater::Update(bool forceUpdate) {
         return EXIT_FAILURE;
     }
 
-    TFsPath tmpPathToBinary(defaultTempFile);
-    tmpPathToBinary.Fix();
-    TString corrPath = tmpPathToBinary.GetPath();
-    if (!tmpPathToBinary.Parent().Exists()) {
-        tmpPathToBinary.Parent().MkDirs();
-    }
+    TFsPath tmpPathToBinary = CreateCacheDownloadPath();
     const TString downloadUrl = TStringBuilder() << StorageUrl << '/' << LatestVersion << '/' << osVersion
-        << '/' << osArch << '/' << binaryName;
+        << '/' << osArch << '/' << NLocalPaths::YdbBinaryName;
     Cout << "Downloading binary from url " << downloadUrl << Endl;
     TShellCommand curlCmd(TStringBuilder() << "curl --connect-timeout 60 " << downloadUrl << " -o " << tmpPathToBinary.GetPath());
     curlCmd.Run().Wait();
@@ -114,19 +254,50 @@ int TYdbUpdater::Update(bool forceUpdate) {
     }
     Cout << checkCmd.GetOutput();
 
-    TFsPath fsPathToBinary(GetExecPath());
-#ifdef _win32_
-    TFsPath binaryNameOld(TStringBuilder() << fsPathToBinary.GetPath() << "_old");
-    binaryNameOld.Fix();
-    binaryNameOld.DeleteIfExists();
-    fsPathToBinary.RenameTo(binaryNameOld);
-    Cout << "Old binary renamed to " << binaryNameOld.GetPath() << Endl;
-#else
-    fsPathToBinary.DeleteIfExists();
-    Cout << "Old binary removed" << Endl;
+    TFsPath currentBinary = GetCurrentBinaryPath();
+    TFsPath canonicalBinary = NLocalPaths::GetCanonicalBinaryPath();
+    TFsPath legacyBinary = NLocalPaths::GetLegacyBinaryPath();
+    const bool runningFromLegacy = (currentBinary == legacyBinary);
+    TFsPath targetBinaryPath = runningFromLegacy ? canonicalBinary : currentBinary;
+    EnsureParentDirExists(targetBinaryPath);
+    TFsPath stagingBinary = CreateStagingBinaryPath(targetBinaryPath);
+    try {
+        CopyBinaryFile(tmpPathToBinary, stagingBinary);
+#ifndef _win32_
+        int chmodResult = Chmod(stagingBinary.GetPath().data(), MODE0777);
+        if (chmodResult != 0) {
+            Cerr << "Couldn't make binary \"" << stagingBinary.GetPath() << "\" executable. Error code: "
+                << chmodResult << Endl;
+        }
 #endif
-    tmpPathToBinary.RenameTo(fsPathToBinary);
-    Cout << "New binary renamed to " << fsPathToBinary.GetPath() << Endl;
+    } catch (const yexception& ex) {
+        Cerr << "Failed to prepare new binary: " << ex.what() << Endl;
+        stagingBinary.DeleteIfExists();
+        tmpPathToBinary.DeleteIfExists();
+        return EXIT_FAILURE;
+    }
+    if (!runningFromLegacy) {
+#ifdef _win32_
+        TFsPath binaryNameOld(TStringBuilder() << targetBinaryPath.GetPath() << "_old");
+        binaryNameOld.Fix();
+        binaryNameOld.DeleteIfExists();
+        targetBinaryPath.RenameTo(binaryNameOld);
+        Cout << "Old binary renamed to " << binaryNameOld.GetPath() << Endl;
+#else
+        targetBinaryPath.DeleteIfExists();
+        Cout << "Old binary removed" << Endl;
+#endif
+    }
+
+    stagingBinary.RenameTo(targetBinaryPath);
+    Cout << "New binary installed to " << targetBinaryPath.GetPath() << Endl;
+    tmpPathToBinary.DeleteIfExists();
+
+    if (runningFromLegacy) {
+        RemoveLegacyBinaryFile(currentBinary);
+        UpdateLegacyPathReferences(targetBinaryPath);
+        Cout << "Legacy installation migrated to canonical path " << targetBinaryPath.GetPath() << Endl;
+    }
 
     return EXIT_SUCCESS;
 }
@@ -142,7 +313,7 @@ void TYdbUpdater::SetConfigValue(const TString& name, const T& value) {
 }
 
 void TYdbUpdater::LoadConfig() {
-    TFsPath configFilePath(defaultConfigFile);
+    TFsPath configFilePath = NLocalPaths::GetUpdateStateFile();
     configFilePath.Fix();
     try {
         if (configFilePath.Exists()) {
@@ -162,7 +333,7 @@ void TYdbUpdater::LoadConfig() {
 
 void TYdbUpdater::SaveConfig() {
     try {
-        TFsPath configFilePath(defaultConfigFile);
+        TFsPath configFilePath = NLocalPaths::GetUpdateStateFile();
         configFilePath.Fix();
         if (!configFilePath.Parent().Exists()) {
             configFilePath.Parent().MkDirs();

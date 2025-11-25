@@ -92,7 +92,7 @@ namespace NKikimr::NBsController {
             TImpl& Self;
             const TBlobStorageGroupInfo::TTopology Topology;
             THashSet<TPDiskId> OldGroupContent; // set of all existing disks in the group, inclusing ones which are replaced
-            THashSet<TPDiskId> ReplacedDisks; // set of replaced pdisks
+            THashSet<TPDiskId> ReplacedDisks; // set of pdisks whose vdisks are being replaced
             const i64 RequiredSpace;
             const bool RequireOperational;
             TForbiddenPDisks ForbiddenDisks;

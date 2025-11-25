@@ -179,7 +179,9 @@ std::optional<ui64> TPartition::DeduplicateByMessageId(const TEvPQ::TEvWrite::TM
 
     NKikimrPQClient::TDataChunk proto;
     bool res = proto.ParseFromString(msg.Data);
-    AFL_ENSURE(res)("o", msg.SeqNo);
+    if (!res) {
+        return std::nullopt;
+    }
 
     std::optional<TString> deduplicationId;
     for (auto& attr : *proto.MutableMessageMeta()) {

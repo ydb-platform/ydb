@@ -240,7 +240,7 @@ void TStorageProxy::Bootstrap() {
 }
 
 void TStorageProxy::StartInitialization() {
-    LOG_STREAMS_STORAGE_SERVICE_ERROR("StartInitialization, EnableSecureScriptExecutions: " << FeatureFlags.GetEnableSecureScriptExecutions());
+    LOG_STREAMS_STORAGE_SERVICE_INFO("StartInitialization, EnableSecureScriptExecutions: " << FeatureFlags.GetEnableSecureScriptExecutions());
 
     NACLib::TDiffACL acl;
     acl.ClearAccess();

@@ -267,7 +267,7 @@ bool TSqlCallExpr::FillArg(const TString& module, const TString& func, size_t& i
 
     TNodePtr expr;
     if (status) {
-        TColumnRefScope scope(Ctx_, *status, /* isTopLevel = */ false);
+        TColumnRefScope scope(Ctx_, *status, /*isTopLevelExpr=*/false);
         expr = NamedExpr(node);
     } else {
         expr = NamedExpr(node);

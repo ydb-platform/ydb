@@ -482,7 +482,7 @@ void FillOutputMessage(
                                 reflection->AddEnumValue(destination, mapping.Field, item.Get<i32>());
                                 break;
                             case EEnumFormatType::String: {
-                                auto enumValueDescriptor = mapping.Field->enum_type()->FindValueByName(TString(item.AsStringRef()));
+                                auto enumValueDescriptor = mapping.Field->enum_type()->FindValueByName(item.AsStringRef());
                                 if (!enumValueDescriptor) {
                                     enumValueDescriptor = mapping.Field->default_value_enum();
                                 }
@@ -553,7 +553,7 @@ void FillOutputMessage(
                             reflection->SetEnumValue(destination, mapping.Field, cell.Get<i32>());
                             break;
                         case EEnumFormatType::String: {
-                            auto enumValueDescriptor = mapping.Field->enum_type()->FindValueByName(TString(cell.AsStringRef()));
+                            auto enumValueDescriptor = mapping.Field->enum_type()->FindValueByName(cell.AsStringRef());
                             if (!enumValueDescriptor) {
                                 enumValueDescriptor = mapping.Field->default_value_enum();
                             }

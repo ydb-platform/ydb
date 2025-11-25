@@ -2905,7 +2905,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus DecimalBinaryWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return DecimalBinaryWrapperBase(input, output, ctx, /*block = */ false);
+        return DecimalBinaryWrapperBase(input, output, ctx, /*blocks = */ false);
     }
 
     IGraphTransformer::TStatus CountBitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {

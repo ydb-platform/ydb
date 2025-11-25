@@ -3746,13 +3746,13 @@ TExprNode::TPtr ExpandSelectMembers(const TExprNode::TPtr& node, TExprContext& c
         else
             return prefixes.contains(memberName);
     };
+
     TExprNode::TListType members;
     UpdateStructMembers(ctx, node->HeadPtr(), ByPrefix ? "SelectMembers" : "FilterMembers", members, filterByPrefixFunc);
+
     auto res = ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
     res = KeepWorld(res, *node, ctx, *optCtx.Types);
-    if (members.empty()) {
-        res = KeepSideEffects(res, node->HeadPtr(), ctx);
-    }
+    res = KeepSideEffects(res, node->HeadPtr(), ctx);
 
     return res;
 }

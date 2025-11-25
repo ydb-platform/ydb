@@ -935,7 +935,7 @@ TExprNode::TListType Compile(const TAstNode& node, TContext& ctx);
 
 TExprNode::TPtr CompileQuote(const TAstNode& node, TContext& ctx) {
     if (node.IsAtom()) {
-        return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), TString(node.GetContent()), node.GetFlags()));
+        return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), node.GetContent(), node.GetFlags()));
     } else {
         TExprNode::TListType children;
         children.reserve(node.GetChildrenCount());
@@ -977,7 +977,7 @@ TExprNode::TListType CompileLambda(const TAstNode& node, TContext& ctx) {
     TExprNode::TListType argNodes;
     for (ui32 index = 0; index < params->GetChildrenCount(); ++index) {
         auto arg = params->GetChild(index);
-        auto lambdaArg = ctx.ProcessNode(*arg, ctx.Expr.NewArgument(arg->GetPosition(), TString(arg->GetContent())));
+        auto lambdaArg = ctx.ProcessNode(*arg, ctx.Expr.NewArgument(arg->GetPosition(), arg->GetContent()));
         argNodes.push_back(lambdaArg);
         auto& binding = ctx.Frames.back().Bindings[arg->GetContent()];
         if (!binding.empty()) {
@@ -1681,7 +1681,7 @@ TExprNode::TListType Compile(const TAstNode& node, TContext& ctx) {
         std::move(r.begin(), r.end(), std::back_inserter(children));
     }
 
-    return {ctx.ProcessNode(node, ctx.Expr.NewCallable(node.GetPosition(), TString(function), std::move(children)))};
+    return {ctx.ProcessNode(node, ctx.Expr.NewCallable(node.GetPosition(), function, std::move(children)))};
 }
 
 template <typename T>

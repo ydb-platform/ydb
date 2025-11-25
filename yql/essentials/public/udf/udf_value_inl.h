@@ -305,7 +305,7 @@ Y_FORCE_INLINE TUnboxedValue::TUnboxedValue(const TUnboxedValuePod& value) noexc
 Y_FORCE_INLINE TUnboxedValue::TUnboxedValue(TUnboxedValuePod&& value) noexcept
     : TUnboxedValuePod(std::move(value))
 {
-    value.Raw = TRaw();
+    value.Raw = TRaw(); // NOLINT(bugprone-use-after-move)
     Ref();
 }
 
@@ -318,7 +318,7 @@ Y_FORCE_INLINE TUnboxedValue::TUnboxedValue(const TUnboxedValue& value) noexcept
 Y_FORCE_INLINE TUnboxedValue::TUnboxedValue(TUnboxedValue&& value) noexcept
     : TUnboxedValuePod(static_cast<TUnboxedValuePod&&>(value))
 {
-    value.Raw = TRaw();
+    value.Raw = TRaw(); // NOLINT(bugprone-use-after-move)
 }
 
 Y_FORCE_INLINE TUnboxedValue& TUnboxedValue::operator=(const TUnboxedValue& value) noexcept {

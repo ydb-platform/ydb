@@ -2497,7 +2497,7 @@ TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
         }
 
         source->UseAsInner();
-        result = Wrap(BuildSourceNode(source->GetPos(), std::move(source)));
+        result = Wrap(BuildSourceNode(source->GetPos(), source));
     }
 
     return result;

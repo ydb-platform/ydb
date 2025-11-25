@@ -3,10 +3,6 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_execution.h>
 
-namespace Nkikimr::NMiniKQL {
-class IFunctionRegistry;
-} // namespace Nkikimr::NMiniKQL
-
 namespace NYql {
 
 class IResultWriter: public TThrRefBase {

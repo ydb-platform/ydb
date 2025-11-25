@@ -217,7 +217,7 @@ public:
         : TCompositeGraphTransformer(
             {WrapCondition(condition), left, right},
             /* useIssueScopes = */ false,
-            /* doCheckArgumentstrue = */ true)
+            /* doCheckArguments = */ true)
     { }
 
 private:

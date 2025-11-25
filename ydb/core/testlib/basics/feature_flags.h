@@ -79,6 +79,7 @@ public:
     FEATURE_FLAG_SETTER(EnableLocalDBBtreeIndex)
     FEATURE_FLAG_SETTER(EnableSharedMetadataAccessorCache)
     FEATURE_FLAG_SETTER(DisableMissingDefaultColumnsInBulkUpsert)
+    FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForReplication)
 
     #undef FEATURE_FLAG_SETTER
 };

@@ -10,5 +10,6 @@ def test_flacky():
 def test_skiped():
     pytest.skip("becourse I want it")
 
+
 def test_timeout():
     time.sleep(60)

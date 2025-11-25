@@ -164,6 +164,7 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
             {"source_id", "sless-docapi-ydb-storage"},
             {"source_wt", ctx.Now().Seconds()},
             {"tags", NJson::TJsonMap {
+                 {"Category", "Table"},
                  {"ydb_size", spaceUsage.Tables.TotalSize}
             }},
             {"usage", NJson::TJsonMap {

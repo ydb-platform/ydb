@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
     struct TTestRegistration {
         TTestRegistration() {
             [[maybe_unused]] constexpr bool xfail = false;
-            constexpr ui64 xfailTimestampPositionMaxError = 1;
+            constexpr ui64 xfailTimestampPositionMaxError = 0;
 
             const std::tuple<bool, TString, TTimestampReadOptions> options[]{
                 {true, "1MB", TTimestampReadOptions{.MessageSize = 1_MB,}},

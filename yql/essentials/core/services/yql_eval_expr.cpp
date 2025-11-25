@@ -94,7 +94,7 @@ public:
 
 public:
     void Scan(const TExprNode& node) {
-        VisitExprByFirst(node, [this](const TExprNode& n) {
+        VisitExpr(node, [this](const TExprNode& n) {
             if (n.IsCallable(ConfigureName)) {
                 if (n.ChildrenSize() > 3 && n.Child(1)->Child(0)->Content() == ConfigProviderName) {
                     bool pending = false;

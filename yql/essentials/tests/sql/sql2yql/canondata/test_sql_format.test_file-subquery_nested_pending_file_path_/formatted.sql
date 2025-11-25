@@ -1,0 +1,16 @@
+DEFINE SUBQUERY $sub() AS
+    $foo_url = 'http_test://' || 'foo1.txt';
+    PRAGMA FILE('foo.txt', $foo_url);
+    $bar_url = 'http_test://' || 'bar1.txt' || substring(FileContent('foo.txt'), 10);
+    PRAGMA FILE('bar.txt', $bar_url);
+
+    SELECT
+        $bar_url
+    ;
+END DEFINE;
+
+SELECT
+    *
+FROM
+    $sub()
+;

@@ -228,6 +228,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
 
     bool Antlr4ParserIsAmbiguityError = false;
 
+    bool EnableFallbackToYqlOptimizer = false;
+
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
 

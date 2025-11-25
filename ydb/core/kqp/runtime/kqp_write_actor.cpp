@@ -1478,12 +1478,11 @@ private:
 class TKqpWriteTask {
 public:
     struct TPathWriteInfo {
-        IDataBatchProjectionPtr Projection = nullptr;
-        IDataBatchProjectionPtr DeleteProjection = nullptr;
-        TKqpTableWriteActor* WriteActor = nullptr;
-
+        std::vector<ui32> WriteColumnsIndexes;
+        std::vector<ui32> DeleteColumnsIndexes;
         std::vector<ui32> NewColumnsIndexes;
         std::vector<ui32> OldColumnsIndexes;
+        TKqpTableWriteActor* WriteActor = nullptr;
         std::vector<NScheme::TTypeInfo> ColumnTypes;
         bool SkipEqualRows = false;
     };
@@ -1530,7 +1529,7 @@ public:
         }
 
         for (const auto& write : writes) {
-            AFL_ENSURE(write.Projection || write.WriteActor->GetTableId().PathId == pathId);
+            AFL_ENSURE(!write.WriteColumnsIndexes.empty() || write.WriteActor->GetTableId().PathId == PathId);
             AFL_ENSURE(write.NewColumnsIndexes.size() == write.OldColumnsIndexes.size());
             AFL_ENSURE(write.NewColumnsIndexes.empty() || write.NewColumnsIndexes.size() == write.ColumnTypes.size());
             AFL_ENSURE(write.OldColumnsIndexes.empty() || write.OldColumnsIndexes.size() == write.ColumnTypes.size());
@@ -1935,10 +1934,12 @@ private:
             for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
                 // At first, write to indexes
                 if (PathId != actorPathId) {
-                    if (actorInfo.DeleteProjection) {
+                    if (!actorInfo.DeleteColumnsIndexes.empty()) {
                         AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
                             && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
                         {
+                            auto deleteProjection = CreateDataBatchProjection(
+                                actorInfo.DeleteColumnsIndexes, Alloc);
                             for (const auto& [key, rowAndExists] : keyToRow) {
                                 if (rowAndExists.second && (
                                         !actorInfo.SkipEqualRows
@@ -1948,11 +1949,10 @@ private:
                                             actorInfo.NewColumnsIndexes,
                                             actorInfo.OldColumnsIndexes,
                                             actorInfo.ColumnTypes))) {
-                                    actorInfo.DeleteProjection->AddRow(rowAndExists.first);
+                                    deleteProjection->AddRow(rowAndExists.first);
                                 }
                             }
-                            auto preparedKeyBatch = actorInfo.DeleteProjection->Flush();
-                            AFL_ENSURE(actorInfo.DeleteProjection->IsEmpty());
+                            auto preparedKeyBatch = deleteProjection->Flush();
                             actorInfo.WriteActor->Write(
                                 DeleteCookie,
                                 std::move(preparedKeyBatch));
@@ -1960,7 +1960,10 @@ private:
                         actorInfo.WriteActor->FlushBuffer(DeleteCookie);
                     }
 
-                    AFL_ENSURE(actorInfo.Projection);
+                    AFL_ENSURE(!actorInfo.WriteColumnsIndexes.empty());
+                    auto projection = CreateDataBatchProjection(
+                                actorInfo.WriteColumnsIndexes, Alloc);
+
                     for (const auto& [key, rowAndExists] : keyToRow) {
                         if (!rowAndExists.second || !actorInfo.SkipEqualRows || !IsEqual(
                                 rowAndExists.first,
@@ -1968,11 +1971,10 @@ private:
                                 actorInfo.NewColumnsIndexes,
                                 actorInfo.OldColumnsIndexes,
                                 actorInfo.ColumnTypes)) {
-                            actorInfo.Projection->AddRow(rowAndExists.first);
+                            projection->AddRow(rowAndExists.first);
                         }
                     }
-                    auto preparedBatch = actorInfo.Projection->Flush();
-                    AFL_ENSURE(actorInfo.Projection->IsEmpty());
+                    auto preparedBatch = projection->Flush();
                     actorInfo.WriteActor->Write(
                         Cookie,
                         preparedBatch);
@@ -1987,13 +1989,16 @@ private:
             Memory -= batch->GetMemory();
 
             auto& actorInfo = PathWriteInfo.at(PathId);
-            if (actorInfo.Projection) {
+            AFL_ENSURE(actorInfo.DeleteColumnsIndexes.empty());
+            if (!actorInfo.WriteColumnsIndexes.empty()) {
+                auto projection = CreateDataBatchProjection(
+                    actorInfo.WriteColumnsIndexes,
+                    Alloc);
                 for (const auto& row : GetRows(batch)) {
-                    actorInfo.Projection->AddRow(row);
+                    projection->AddRow(row);
                 }
-                batch = actorInfo.Projection->Flush();
+                batch = projection->Flush();
             }
-            AFL_ENSURE(!actorInfo.DeleteProjection);
             PathWriteInfo.at(PathId).WriteActor->Write(
                 Cookie,
                 std::move(batch));
@@ -2006,7 +2011,7 @@ private:
         AFL_ENSURE(!IsError());
         for (auto& [pathId, actorInfo] : PathWriteInfo) {
             actorInfo.WriteActor->Close(Cookie);
-            if (actorInfo.DeleteProjection) {
+            if (!actorInfo.DeleteColumnsIndexes.empty()) {
                 AFL_ENSURE(pathId != PathId);
                 actorInfo.WriteActor->Close(DeleteCookie);
             }
@@ -2840,20 +2845,6 @@ public:
 
             AFL_ENSURE(writeInfo.Actors.size() > settings.Indexes.size());
             for (auto& indexSettings : settings.Indexes) {
-                auto projection = CreateDataBatchProjection(
-                    settings.Columns,
-                    settings.LookupColumns,
-                    indexSettings.Columns,
-                    /* preferAdditionalInputColumns */ false,
-                    Alloc);
-
-                auto deleteProjection = CreateDataBatchProjection(
-                    settings.Columns,
-                    settings.LookupColumns,
-                    indexSettings.KeyColumns,
-                    /* preferAdditionalInputColumns */ true,
-                    Alloc);
-
                 // Flag for the case of UPDATE been processed without doing lookup,
                 // so no secondary index key columns are touched.
                 // In this case we must use UPDATE operation at shards for all table,
@@ -2888,9 +2879,18 @@ public:
                 }
 
                 writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                    .Projection = std::move(projection),
-                    .DeleteProjection = needAdditionalDelete ? std::move(deleteProjection) : nullptr,
-                    .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
+                    .WriteColumnsIndexes = GetIndexes(
+                                settings.Columns,
+                                settings.LookupColumns,
+                                indexSettings.Columns,
+                                /* preferAdditionalInputColumns */ false),
+                    .DeleteColumnsIndexes = needAdditionalDelete
+                                ? GetIndexes(
+                                    settings.Columns,
+                                    settings.LookupColumns,
+                                    indexSettings.KeyColumns,
+                                    /* preferAdditionalInputColumns */ true)
+                                : std::vector<ui32>{},
                     .NewColumnsIndexes = GetIndexes(
                                 settings.Columns,
                                 settings.LookupColumns,
@@ -2901,6 +2901,7 @@ public:
                                 settings.LookupColumns,
                                 indexSettings.Columns,
                                 /* preferAdditionalInputColumns */ true),
+                    .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
                     .ColumnTypes = [&]() {
                         std::vector<NScheme::TTypeInfo> result(indexSettings.Columns.size());
                         for (ui32 index = 0; index < indexSettings.Columns.size(); ++index) {
@@ -2960,15 +2961,7 @@ public:
                 }
             }
 
-            IDataBatchProjectionPtr projection = nullptr;
             if (!settings.LookupColumns.empty()) {
-                projection = CreateDataBatchProjection(
-                    settings.Columns,
-                    settings.LookupColumns,
-                    settings.Columns,
-                    /* preferAdditionalInputColumns */ false,
-                    Alloc);
-                
                 auto lookupInfo = LookupInfos.at(settings.TableId.PathId);
                 auto lookupActor = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor;
                 lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
@@ -2998,10 +2991,14 @@ public:
 
             AFL_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
             writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                .Projection = std::move(projection),
-                .DeleteProjection = nullptr,
-                .WriteActor = writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
-
+                .WriteColumnsIndexes = settings.LookupColumns.empty()
+                            ? std::vector<ui32>{}
+                            : GetIndexes(
+                                settings.Columns,
+                                settings.LookupColumns,
+                                settings.Columns,
+                                /* preferAdditionalInputColumns */ false),
+                .DeleteColumnsIndexes = {},
                 .NewColumnsIndexes = GetIndexes(
                             settings.Columns,
                             settings.LookupColumns,
@@ -3012,6 +3009,7 @@ public:
                             settings.LookupColumns,
                             settings.Columns,
                             /* preferAdditionalInputColumns */ true),
+                .WriteActor = writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
                 .ColumnTypes = [&]() {
                     std::vector<NScheme::TTypeInfo> result(settings.Columns.size());
                     for (ui32 index = 0; index < settings.Columns.size(); ++index) {

@@ -70,16 +70,12 @@ class IDataBatchProjection : public TThrRefBase {
 public:
     virtual void AddRow(TConstArrayRef<TCell> row) = 0;
     virtual IDataBatchPtr Flush() = 0;
-    virtual bool IsEmpty() const = 0;
 };
 
 using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
 
 IDataBatchProjectionPtr CreateDataBatchProjection(
-    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
-    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
-    const bool preferAdditionalInputColumns,
+    TConstArrayRef<ui32> indexes,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
 std::vector<ui32> GetIndexes(

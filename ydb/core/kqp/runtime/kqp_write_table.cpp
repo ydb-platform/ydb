@@ -985,18 +985,18 @@ IPayloadSerializerPtr CreateDataShardPayloadSerializer(
 class TDataBatchProjection : public IDataBatchProjection {
 public:
     TDataBatchProjection(
-        std::vector<ui32>&& columnsMapping,
+        TConstArrayRef<ui32> indexes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
-            : ColumnsMapping(std::move(columnsMapping))
+            : Indexes(indexes)
             , Alloc(std::move(alloc))
-            , RowBatcher(ColumnsMapping.size(), std::nullopt, Alloc) {
+            , RowBatcher(Indexes.size(), std::nullopt, Alloc) {
     }
 
     void AddRow(TConstArrayRef<TCell> row) override {
-        const size_t columnsCount = ColumnsMapping.size();
+        const size_t columnsCount = Indexes.size();
         std::vector<TCell> cells(columnsCount);
         for (size_t index = 0; index < columnsCount; ++index) {
-            cells[index] = row[ColumnsMapping[index]];
+            cells[index] = row[Indexes[index]];
         }
         RowBatcher.AddRow(std::move(cells));
     }
@@ -1007,12 +1007,8 @@ public:
         return result;
     }
 
-    bool IsEmpty() const override {
-        return RowBatcher.IsEmpty();
-    }
-
 private:
-    std::vector<ui32> ColumnsMapping;
+    TConstArrayRef<ui32> Indexes;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     TRowsBatcher RowBatcher;
 };
@@ -1095,19 +1091,10 @@ bool IsEqual(
 }
 
 IDataBatchProjectionPtr CreateDataBatchProjection(
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
-        const bool preferAdditionalInputColumns,
+        TConstArrayRef<ui32> indexes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
-    auto columnsMapping = CreateMapping(
-        inputColumns,
-        additionalInputColumns,
-        outputColumns,
-        preferAdditionalInputColumns);
-
     return MakeIntrusive<TDataBatchProjection>(
-        std::move(columnsMapping), std::move(alloc));
+        indexes, std::move(alloc));
 }
 
 std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch) {

@@ -44,8 +44,6 @@ def kikimr(request):
     kikimr.compute_plane.fq_config['row_dispatcher']['json_parser'] = {}
     if hasattr(request, "param"):
         kikimr.compute_plane.fq_config['row_dispatcher']['coordinator']['rebalancing_timeout_sec'] = request.param.rebalancing_timeout_sec
-        
-
     kikimr.start_mvp_mock_server()
     kikimr.start()
     yield kikimr

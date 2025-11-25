@@ -89,14 +89,7 @@ void TMessageIdDeduplicator::Commit() {
     }
 }
 
-void TMessageIdDeduplicator::Rollback() {
-    if (PendingBucket) {
-        PendingBucket.reset();
-        HasChanges = true;
-    }
-}
-
-bool TMessageIdDeduplicator::ApplyWAL(NKikimrPQ::MessageDeduplicationIdWAL&& wal) {
+bool TMessageIdDeduplicator::ApplyWAL(NKikimrPQ::TMessageDeduplicationIdWAL&& wal) {
     CurrentBucket.StartMessageIndex = Queue.size();
 
     auto expirationTime = TInstant::MilliSeconds(wal.GetExpirationTimestampMilliseconds());
@@ -111,7 +104,7 @@ bool TMessageIdDeduplicator::ApplyWAL(NKikimrPQ::MessageDeduplicationIdWAL&& wal
     return true;
 }
 
-bool TMessageIdDeduplicator::SerializeTo(NKikimrPQ::MessageDeduplicationIdWAL& wal) {
+bool TMessageIdDeduplicator::SerializeTo(NKikimrPQ::TMessageDeduplicationIdWAL& wal) {
     if (Queue.empty() || !HasChanges) {
         return false;
     }
@@ -159,7 +152,7 @@ TString MakeDeduplicatorWALKey(ui32 partitionId, const TInstant& expirationTime)
 void TPartition::AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request) {
     MessageIdDeduplicator.Compact();
 
-    NKikimrPQ::MessageDeduplicationIdWAL wal;
+    NKikimrPQ::TMessageDeduplicationIdWAL wal;
     if (MessageIdDeduplicator.SerializeTo(wal)) {
         auto expirationTime = TInstant::MilliSeconds(wal.GetExpirationTimestampMilliseconds());
 

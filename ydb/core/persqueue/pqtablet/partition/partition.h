@@ -305,7 +305,6 @@ private:
     void UpdateAvailableSize(const TActorContext& ctx);
 
     void AddMetaKey(TEvKeyValue::TEvRequest* request);
-    void AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
     void CheckHeadConsistency() const;
     void CheckTimestampsOrderInZones(TStringBuf validateReason = {}) const;
     void HandlePendingRequests(const TActorContext& ctx);
@@ -1263,6 +1262,7 @@ private:
     ui64 LastNotifiedEndOffset = 0;
 
     TMessageIdDeduplicator MessageIdDeduplicator;
+    void AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
     std::optional<ui64> DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset);
 };
 

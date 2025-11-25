@@ -29,14 +29,14 @@ struct TestScenario {
     {
     }
 
-    bool AddMessage(const TString& messageId) {
-        return Deduplicator.AddMessage(messageId);
+    std::optional<ui64> AddMessage(const TString& messageId, ui64 offset) {
+        return Deduplicator.AddMessage(messageId, offset);
     }
 
     void CreateWAL() {
         Deduplicator.Compact();
 
-        NKikimrPQ::MessageDeduplicationIdWAL wal;
+        NKikimrPQ::TMessageDeduplicationIdWAL wal;
         if (!Deduplicator.SerializeTo(wal)) {
             return;
         }
@@ -62,14 +62,14 @@ struct TestScenario {
 
     TIntrusivePtr<MockTimeProvider> TimeProvider;
     TMessageIdDeduplicator Deduplicator;
-    std::deque<NKikimrPQ::MessageDeduplicationIdWAL> WALs;
+    std::deque<NKikimrPQ::TMessageDeduplicationIdWAL> WALs;
 };
 
 
 TEST(TDeduplicatorTest, AddMessage) {
     TestScenario scenario;
 
-    EXPECT_TRUE(scenario.AddMessage("message1"));
+    EXPECT_FALSE(scenario.AddMessage("message1", 1).has_value());
     scenario.CreateWAL();
     EXPECT_EQ(scenario.WALs.size(), 1ul);
 
@@ -79,9 +79,9 @@ TEST(TDeduplicatorTest, AddMessage) {
 TEST(TDeduplicatorTest, AddTwoMessages) {
     TestScenario scenario;
 
-    EXPECT_TRUE(scenario.AddMessage("message1"));
+    EXPECT_FALSE(scenario.AddMessage("message1", 1).has_value());
     scenario.CreateWAL();
-    EXPECT_TRUE(scenario.AddMessage("message2"));
+    EXPECT_FALSE(scenario.AddMessage("message2", 2).has_value());
     scenario.CreateWAL();
 
     EXPECT_EQ(scenario.WALs.size(), 1ul);
@@ -92,9 +92,11 @@ TEST(TDeduplicatorTest, AddTwoMessages) {
 TEST(TDeduplicatorTest, AddDeduplicatedMessages) {
     TestScenario scenario;
 
-    EXPECT_TRUE(scenario.AddMessage("message1"));
+    EXPECT_FALSE(scenario.AddMessage("message1", 3).has_value());
     scenario.CreateWAL();
-    EXPECT_FALSE(scenario.AddMessage("message1"));
+    auto r = scenario.AddMessage("message1", 7);
+    EXPECT_TRUE(r.has_value());
+    EXPECT_EQ(r.value(), 7ul);
     scenario.CreateWAL();
 
     EXPECT_EQ(scenario.WALs.size(), 1ul);
@@ -105,9 +107,9 @@ TEST(TDeduplicatorTest, AddDeduplicatedMessages) {
 TEST(TDeduplicatorTest, AddTwoMessages_DifferentTime_OneBucket) {
     TestScenario scenario;
 
-    EXPECT_TRUE(scenario.AddMessage("message1"));
+    EXPECT_FALSE(scenario.AddMessage("message1", 1).has_value());
     scenario.TimeProvider->Tick(TDuration::MilliSeconds(110));
-    EXPECT_TRUE(scenario.AddMessage("message2"));
+    EXPECT_FALSE(scenario.AddMessage("message2", 2).has_value());
     scenario.CreateWAL();
 
     EXPECT_EQ(scenario.WALs.size(), 1ul);
@@ -118,10 +120,10 @@ TEST(TDeduplicatorTest, AddTwoMessages_DifferentTime_OneBucket) {
 TEST(TDeduplicatorTest, AddTwoMessages_DifferentTime_DifferentBucket) {
     TestScenario scenario;
 
-    EXPECT_TRUE(scenario.AddMessage("message1"));
+    EXPECT_FALSE(scenario.AddMessage("message1", 1).has_value());
     scenario.CreateWAL();
     scenario.TimeProvider->Tick(TDuration::MilliSeconds(110));
-    EXPECT_TRUE(scenario.AddMessage("message2"));
+    EXPECT_FALSE(scenario.AddMessage("message2", 2).has_value());
     scenario.CreateWAL();
 
     EXPECT_EQ(scenario.WALs.size(), 2ul);

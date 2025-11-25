@@ -887,7 +887,7 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
             for (auto& w : range.GetPair()) {
-                NKikimrPQ::MessageDeduplicationIdWAL wal;
+                NKikimrPQ::TMessageDeduplicationIdWAL wal;
                 if (!wal.ParseFromString(w.GetValue())) {
                     PQ_LOG_ERROR("tablet " << Partition()->TabletId << " Initializing of message id deduplicator failed: " << w.key());
                     return PoisonPill(ctx);

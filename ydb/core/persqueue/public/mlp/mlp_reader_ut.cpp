@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         });
 
         {
-            // message with offset 1 has been skipped because his message group equals message groupps of the first message
+            // message with offset 1 has been skipped because his message group equals message groups of the first message
             auto response = GetReadResponse(runtime);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);

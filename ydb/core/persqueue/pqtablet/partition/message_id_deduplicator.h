@@ -6,7 +6,7 @@
 #include <deque>
 
 namespace NKikimrPQ {
-class MessageDeduplicationIdWAL;
+class TMessageDeduplicationIdWAL;
 }
 
 namespace NKikimr::NPQ {
@@ -33,10 +33,9 @@ public:
     size_t Compact();
 
     void Commit();
-    void Rollback();
 
-    bool ApplyWAL(NKikimrPQ::MessageDeduplicationIdWAL&& wal);
-    bool SerializeTo(NKikimrPQ::MessageDeduplicationIdWAL& wal);
+    bool ApplyWAL(NKikimrPQ::TMessageDeduplicationIdWAL&& wal);
+    bool SerializeTo(NKikimrPQ::TMessageDeduplicationIdWAL& wal);
 
     const std::deque<TMessage>& GetQueue() const;
 

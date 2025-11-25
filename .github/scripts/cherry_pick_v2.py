@@ -685,12 +685,24 @@ def main():
             logger.error(f"VALIDATION_ERROR: Commit {commit_sha} does not exist: {e}")
             sys.exit(1)
     
+    # Validate branches and collect invalid ones
+    invalid_branches = []
     for branch in target_branches:
         try:
             repo.get_branch(branch)
         except GithubException as e:
             logger.error(f"VALIDATION_ERROR: Branch {branch} does not exist: {e}")
-            sys.exit(1)
+            invalid_branches.append(branch)
+    
+    # Remove invalid branches from target_branches
+    valid_target_branches = [b for b in target_branches if b not in invalid_branches]
+    
+    if not valid_target_branches:
+        logger.error("VALIDATION_ERROR: No valid target branches after validation")
+        sys.exit(1)
+    
+    if invalid_branches:
+        logger.warning(f"VALIDATION_WARNING: Skipping invalid branches: {', '.join(invalid_branches)}")
     
     logger.info("Input validation successful")
     
@@ -743,10 +755,14 @@ def main():
         # Process each target branch
         results = []
         skipped_branches = []
+        # Add invalid branches from validation
+        for invalid_branch in invalid_branches:
+            skipped_branches.append((invalid_branch, "branch does not exist"))
+        
         has_errors = False
         dtm = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
         
-        for target_branch in target_branches:
+        for target_branch in valid_target_branches:
             try:
                 dev_branch_name = f"cherry-pick-{target_branch}-{dtm}"
                 result = process_branch(

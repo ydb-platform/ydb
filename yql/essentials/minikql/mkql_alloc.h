@@ -500,7 +500,12 @@ inline void* MKQLAllocDeprecated(size_t sz, const EMemorySubPool mPool) {
 }
 
 inline void* MKQLAllocWithSize(size_t sz, const EMemorySubPool mPool, const TAllocLocation& location = TAllocLocation::current()) {
-    return MKQLAllocFastWithSize(sz, TlsAllocState, mPool, location);
+    try{
+        return MKQLAllocFastWithSize(sz, TlsAllocState, mPool, location);
+    } catch (const TMemoryLimitExceededException& ex) {
+        Cout << "memlimit exception at location: " << __LOCATION__ << Endl;
+        throw;
+    }
 }
 
 inline void MKQLFreeWithSize(const void* mem, size_t sz, const EMemorySubPool mPool) noexcept {

@@ -78,6 +78,7 @@ constexpr auto SimpleGraceJoinWithSpillingQuery = R"(
     )";
 
 
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpScanSpilling) {
@@ -99,6 +100,7 @@ Y_UNIT_TEST(SpillingPragmaParseError) {
     auto planres = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::GENERIC_ERROR, planres.GetIssues().ToString());
 }
+
 
 Y_UNIT_TEST_TWIN(SpillingInRuntimeNodes, EnabledSpilling) {
     double reasonableTreshold = EnabledSpilling ? 0.01 : 100;

@@ -60,6 +60,13 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         }
         const size_t cols = UserDataCols();
         TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), cols});
+        std::string name;
+        for(auto& column: columns) {
+            name += column.ToString();
+            name += "-";
+        }
+        name.pop_back();
+        Cerr << std::format("got block, size: {}, type: {}", columns[0].length(), name) << Endl;
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
         return One{std::move(result)};
@@ -321,6 +328,17 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     MKQL_ENSURE(joinKind == EJoinKind::Inner, "Only inner is supported, see gh#26780 for details.");
     ValidateRenames(userRenames, joinKind, std::ssize(meta.InputTypes.Probe) - 1,
                     std::ssize(meta.InputTypes.Build) - 1);
+    ForEachSide([&](ESide side) {
+        int size = std::ssize(meta.InputTypes.SelectSide(side));
+        for(int index = 0; index < size; ++index) {
+            TBlockType* thisType = meta.InputTypes.SelectSide(side)[index]; 
+            if (index == size - 1) {
+                MKQL_ENSURE(thisType->GetShape() == TBlockType::EShape::Scalar, Sprintf("expected last(%i) column in %s side to be scalar size",index, AsString(side)));
+            } else {
+                MKQL_ENSURE(thisType->GetShape() == TBlockType::EShape::Many, Sprintf("expected %i column in %s side to be block data",index, AsString(side)));
+            }
+        }
+    });
 
     for (auto rename : userRenames) {
         ESide thisSide = [&] {

@@ -6,11 +6,26 @@
 
 namespace NKikimr::NMiniKQL {
 
+#ifdef MKQL_ENSURE
+#undef MKQL_ENSURE
+#endif
+#define MKQL_ENSURE(condition, message)                                   \
+    do {                                                                  \
+        if (Y_UNLIKELY(!(condition))) {                                   \
+            PrintBackTrace();                                             \
+            (THROW yexception() << __FUNCTION__ << "(): requirement "     \
+                                << #condition << " failed. " << message); \
+        }                                                                 \
+    } while (0)
+
+
 template <typename T> using TMKQLDeque = std::deque<T, TMKQLAllocator<T>>;
 
 using TFuturePage = NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>;
 
 enum class ESide { Probe, Build };
+
+const char* AsString(ESide side);
 
 template <typename T> struct TSides {
     T Build;
@@ -79,7 +94,7 @@ struct TBucket {
 
     bool Empty() const {
         bool inMemoryPagesEmpty = true;
-        for (auto& page : InMemoryPages) {
+        for (auto& page : InMemoryPages_) {
             inMemoryPagesEmpty &= page.Empty();
         }
         return inMemoryPagesEmpty && (!SpilledPages.has_value() || SpilledPages->empty()) && BuildingPage.Empty();
@@ -87,22 +102,44 @@ struct TBucket {
 
     TPackResult BuildingPage;
     std::optional<TMKQLVector<ISpiller::TKey>> SpilledPages;
-    TMKQLVector<TPackResult> InMemoryPages;
+    const TMKQLVector<TPackResult>& InMemoryPages() const {
+        return InMemoryPages_;
+    }
+    std::optional<TPackResult> ReleaseAtMostOnePage() {
+        return GetBackOrNull(InMemoryPages_);
+    }
+    TMKQLVector<TPackResult> ReleaseInMemoryPages() {
+        return std::move(InMemoryPages_);
+    }
 
     bool DetatchBuildingPage() {
         return DetatchBuildingPageIfLimitReached<0>();
     }
 
+
+    void ForEachPage(std::invocable<TPackResult> auto fn) {
+        for(auto& page: InMemoryPages_) {
+            MKQL_ENSURE(!page.Empty(), "sanity check");
+            fn(std::move(page));
+        }
+        InMemoryPages_.clear();
+    }
+
     template <int SizeLimit> bool DetatchBuildingPageIfLimitReached() {
         if (BuildingPage.AllocatedBytes() > SizeLimit) {
-            InMemoryPages.push_back(std::move(BuildingPage));
-            InMemoryPages.back().PackedTuples.shrink_to_fit();
-            InMemoryPages.back().Overflow.shrink_to_fit();
+            // MKQL_ENSURE(condition, message)
+            MKQL_ENSURE(!BuildingPage.Empty(), "sanity check");
+            InMemoryPages_.push_back(std::move(BuildingPage));
+            InMemoryPages_.back().PackedTuples.shrink_to_fit();
+            InMemoryPages_.back().Overflow.shrink_to_fit();
             BuildingPage.NTuples = 0;
+            MKQL_ENSURE(BuildingPage.Empty(), "sanity check");
             return true;
         }
         return false;
     }
+private:
+TMKQLVector<TPackResult> InMemoryPages_;
 };
 
 using TBuckets = TMKQLVector<TBucket>;

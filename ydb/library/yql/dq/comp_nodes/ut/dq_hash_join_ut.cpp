@@ -464,6 +464,41 @@ TJoinTestData SpillingTestData() {
     td.Kind = EJoinKind::Inner;
     return td;
 }
+TJoinTestData BigStringsTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int leftSize = 2000000;
+    TVector<ui64> leftKeys(leftSize);
+    TVector<TString> leftValues(leftSize);
+    for (int index = 0; index < leftSize; ++index) {
+        leftKeys[index] = 2 * index + 3;
+        leftValues[index] = TString(std::min(400 + index / 1000, index+1), static_cast<char>((index+1)%10+'a'));
+    }
+    constexpr int rightSize = 200000;
+    TVector<ui64> rightKeys(rightSize);
+    TVector<TString> rightValues(rightSize);
+    for (int index = 0; index < rightSize; ++index) {
+        rightKeys[index] = 2 * index + 3;
+        rightValues[index] = TString(std::min(400 + index / 1000, index+1), static_cast<char>((index+1)%10+'a'));
+    }
+
+    TVector<ui64> expectedKeysLeft = rightKeys;
+    TVector<TString> expectedValuesLeft = rightValues;
+    TVector<ui64> expectedKeysRight = rightKeys;
+    TVector<TString> expectedValuesRight = rightValues;
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+
+    // constexpr int packedTupleSize = 2 * 8 + 5;
+    // constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
+    // [[maybe_unused]] constexpr ui64 rightSizeBytes = rightSize * packedTupleSize;
+    // td.JoinMemoryConstraint = joinMemory;
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
 
 void Test(TJoinTestData testData, bool blockJoin) {
     FilterRenamesForSemiAndOnlyJoins(testData);
@@ -569,12 +604,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
 
     Y_UNIT_TEST(TestBlockSpilling) { 
-        try {
-            Test(SpillingTestData(), true);
-        } catch (...) {
-            Cout << "TestBlockSpilling failed with unknown exception" << Endl;
-            throw;
-        }
+        Test(SpillingTestData(), true);
+    }
+    Y_UNIT_TEST(TestStrings) { 
+        Test(BigStringsTestData(), true);
     }
 }
 } // namespace NKikimr::NMiniKQL

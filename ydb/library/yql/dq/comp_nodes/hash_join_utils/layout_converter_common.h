@@ -43,8 +43,8 @@ struct TPackResult {
     TPackResult& operator=(const TPackResult& other) = delete;
 
     bool Empty() const {
-        bool allFieldEmpty = NTuples == 0 && Overflow.empty() && PackedTuples.empty();
-        bool haveOneFieldEmpty = NTuples == 0 || Overflow.empty() || PackedTuples.empty();
+        bool allFieldEmpty = NTuples == 0 && PackedTuples.empty();
+        bool haveOneFieldEmpty = NTuples == 0 || PackedTuples.empty();
         MKQL_ENSURE(allFieldEmpty == haveOneFieldEmpty, "inconsistent state");
         return allFieldEmpty;
     }

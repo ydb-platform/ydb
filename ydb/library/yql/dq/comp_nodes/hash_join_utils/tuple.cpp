@@ -1128,6 +1128,7 @@ void TTupleLayoutSIMD<TTraits>::Pack(
                 auto nextOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * (start + 1));
                 auto size = nextOffset - dataOffset;
+                Cerr << std::format("data offset: {}", dataOffset) << Endl;
                 auto data = columns[col.OriginalIndex + 1] + dataOffset;
                 if (size >= col.DataSize) {
                     res[col.Offset] = 255;

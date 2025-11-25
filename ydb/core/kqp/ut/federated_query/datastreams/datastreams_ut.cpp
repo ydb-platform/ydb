@@ -1491,7 +1491,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         CheckpointPeriod = TDuration::Seconds(3);
         const auto pqGateway = SetupMockPqGateway();
-       // GetRuntime().GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(false);
 
         constexpr char inputTopicName[] = "inputTopicName";
         constexpr char outputTopicName[] = "outputTopicName";

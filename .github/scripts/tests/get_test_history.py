@@ -67,7 +67,7 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, b
             )
             AND t.status != 'skipped'
             AND suite_folder || '/' || test_name IN $test_names
-            AND t.run_timestamp >  CurrentUtcDate() - 90 * Interval("P1D")
+            AND t.run_timestamp >  CurrentUtcDate() - 180 * Interval("P1D")
     );
 
     -- Финальный запрос с ограничением по количеству запусков

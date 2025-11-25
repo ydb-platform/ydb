@@ -2,21 +2,19 @@ import allure
 import logging
 import os
 import time as time_module
-from pytz import timezone
 import yatest.common
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
-from ydb.tests.olap.lib.remote_execution import execute_command
+from ydb.tests.library.stability.remote_execution import execute_command, deploy_binaries_to_hosts
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.library.stability.aggregate_results import StressUtilDeployResult
-from ydb.tests.olap.lib.remote_execution import (
-    deploy_binaries_to_hosts,
-)
+
 
 
 class StressUtilDeployer:
     binaries_deploy_path: str
     nemesis_started: bool
+    hosts: list[str]
 
     def __init__(self, binaries_deploy_path: str):
         self.binaries_deploy_path = binaries_deploy_path
@@ -25,7 +23,6 @@ class StressUtilDeployer:
 
     def prepare_stress_execution(
         self,
-        load_test_instance,
         workload_params: dict,
         nodes_percentage: int = 100,
     ):
@@ -60,8 +57,7 @@ class StressUtilDeployer:
                 nemesis_log = [f"Workload preparation started at {prep_time}"]
 
                 # Stop nemesis using common method
-                self._manage_nemesis(
-                    False, "Stopping nemesis before workload execution", nemesis_log)
+                self._manage_nemesis(False, "Stopping nemesis before workload execution", nemesis_log)
 
                 logging.info("Nemesis stopped successfully before workload execution")
 
@@ -77,8 +73,25 @@ class StressUtilDeployer:
                 except Exception:
                     pass
 
-            # Save node state for diagnostics
-            load_test_instance.save_nodes_state()
+            # Get unique cluster hosts
+            with allure.step("Get all unique cluster hosts"):
+                nodes = YdbCluster.get_cluster_nodes()
+                if not nodes:
+                    raise Exception("No cluster nodes found")
+
+                # Collect unique hosts and their corresponding nodes
+                unique_hosts = set(node.host for node in nodes)
+                self.hosts = list(filter(lambda h: h != 'localhost', unique_hosts))
+                self.nodes = list(filter(lambda n: n.host != 'localhost', nodes))
+
+                allure.attach(
+                    str(self.hosts),
+                    "Target Hosts",
+                    attachment_type=allure.attachment_type.TEXT,
+                )
+                logging.info(
+                    f"Got hosts {self.hosts} for deployment"
+                )
 
             deployed_nodes = {}
             # Deploy to selected percentage of nodes
@@ -151,13 +164,10 @@ class StressUtilDeployer:
 
             # Get unique cluster hosts
             with allure.step("Select unique cluster hosts"):
-                nodes = YdbCluster.get_cluster_nodes()
-                if not nodes:
-                    raise Exception("No cluster nodes found")
 
-                # Collect unique hosts and their corresponding nodes
+                # Select first N nodes from unique list
                 unique_hosts = {}
-                for node in nodes:
+                for node in self.nodes:
                     if node.host not in unique_hosts:
                         unique_hosts[node.host] = node
 
@@ -167,20 +177,20 @@ class StressUtilDeployer:
                 num_nodes = max(
                     1, int(
                         len(unique_nodes) * nodes_percentage / 100))
-                # Select first N nodes from unique list
+
                 selected_nodes = unique_nodes[:num_nodes]
 
                 allure.attach(
                     f"Selected {
                         len(selected_nodes)} / {
-                        len(unique_nodes)} unique hosts ({nodes_percentage} %)",
+                        len(self.hosts)} unique hosts ({nodes_percentage} %)",
                     "Target Hosts",
                     attachment_type=allure.attachment_type.TEXT,
                 )
                 logging.info(
                     f"Selected {
                         len(selected_nodes)} / {
-                        len(unique_nodes)} unique hosts for deployment"
+                        len(self.hosts)} unique hosts for deployment"
                 )
 
             # Deploy binary to selected nodes
@@ -189,12 +199,10 @@ class StressUtilDeployer:
                     workload_name} to {
                     len(selected_nodes)} hosts"
             ):
-                target_hosts = [node.host for node in selected_nodes]
-                self.hosts = list(filter(lambda h: h != 'localhost', target_hosts))
-                logging.info(f"Starting deployment to hosts: {target_hosts}")
+                logging.info(f"Starting deployment to hosts: {selected_nodes}")
 
                 deploy_results = deploy_binaries_to_hosts(
-                    binary_files, target_hosts, self.binaries_deploy_path
+                    binary_files, [node.host for node in selected_nodes], self.binaries_deploy_path
                 )
                 logging.info(f"Deploy results: {deploy_results}")
 
@@ -248,7 +256,7 @@ class StressUtilDeployer:
                         f"DEPLOYMENT FAILED: {workload_name}"
                     )
                     deploy_error_details.append(
-                        f"Target hosts: {target_hosts}")
+                        f"Target hosts: {selected_nodes}")
                     deploy_error_details.append(
                         f"Target directory: {self.binaries_deploy_path}"
                     )
@@ -737,24 +745,3 @@ class StressUtilDeployer:
                 "Nemesis Delayed Start Error",
                 attachment_type=allure.attachment_type.TEXT,
             )
-
-    def attach_nemesis_logs(self, start_time):
-        """
-        Attach nemesis logs to Allure report
-
-        Args:
-            start_time: Start time of nemesis service
-        """
-        tz = timezone('Europe/Moscow')
-        start = datetime.fromtimestamp(start_time, tz).strftime("%Y-%m-%d %H:%M:%S")
-        end = datetime.fromtimestamp(datetime.now().timestamp(), tz).strftime("%Y-%m-%d %H:%M:%S")
-        cmd = f"sudo journalctl -u nemesis -S '{start}' -U '{end}'"
-        nemesis_logs = {}
-        for host in self.hosts:
-            try:
-                nemesis_logs[host] = execute_command(host, cmd, timeout=30).stdout
-            except BaseException as e:
-                logging.error(f'Failed to read nemesis logs: {e}')
-
-        for host, stdout in nemesis_logs.items():
-            allure.attach(stdout, f'Nemesis_{host}_logs', allure.attachment_type.TEXT)

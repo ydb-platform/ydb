@@ -1,12 +1,16 @@
 PY3_LIBRARY()
 
     PY_SRCS (
+        results_processor.py
+        remote_execution.py
+        collect_errors.py
         aggregate_results.py
         build_report.py
         deploy.py
         run_stress.py
         upload_results.py
         workload_executor_parallel.py
+        utils.py
     )
 
     PEERDIR (

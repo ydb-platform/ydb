@@ -5,11 +5,11 @@ import pytest
 
 from ydb.tests.library.stability.aggregate_results import StressUtilDeployResult, StressUtilTestResults
 from ydb.tests.library.stability.build_report import create_parallel_allure_report
+from ydb.tests.library.stability.collect_errors import ErrorsCollector
 from ydb.tests.library.stability.upload_results import RunConfigInfo, safe_upload_results
-from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
+from ydb.tests.library.stability.utils import external_param_is_true, get_external_param
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 from ydb.tests.library.stability.run_stress import StressRunExecutor
-from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
 
 
 class ParallelWorkloadTestBase:
@@ -44,18 +44,7 @@ class ParallelWorkloadTestBase:
         return StressRunExecutor()
 
     @pytest.fixture(autouse=True, scope="session")
-    def olap_load_base(self) -> LoadSuiteBase:
-        base = LoadSuiteBase()
-        try:
-            pass
-            # LoadSuiteBase.do_setup_class()
-        except Exception as e:
-            logging.error(f"Error in do_setup_class: {e}")
-            raise
-        return base
-
-    @pytest.fixture(autouse=True, scope="session")
-    def context_setup(self, binary_deployer, olap_load_base) -> None:
+    def context_setup(self, binary_deployer) -> None:
         """
         Common initialization for workload tests.
         Do NOT perform _Verification here - we'll do it before each test.
@@ -68,7 +57,6 @@ class ParallelWorkloadTestBase:
         self,
         stress_executor: StressRunExecutor,
         stress_deployer: StressUtilDeployer,
-        olap_load_base: LoadSuiteBase,
         workload_params: dict,
         duration_value: float = None,
         nemesis_enabled: bool = False,
@@ -83,7 +71,6 @@ class ParallelWorkloadTestBase:
         Args:
             stress_executor: Stress test executor instance
             stress_deployer: Stress test deployer instance
-            olap_load_base: Load test base configuration
             workload_params: Dictionary of workload configurations
             duration_value: Execution time in seconds (None uses self.timeout)
             nemesis_enabled: Whether to start nemesis after 15 seconds
@@ -114,7 +101,8 @@ class ParallelWorkloadTestBase:
         logging.info("=== Starting environment preparation ===")
 
         # PHASE 1: PREPARATION (deploy binaries to nodes)
-        preparation_result = stress_deployer.prepare_stress_execution(olap_load_base, workload_params, nodes_percentage)
+        preparation_result = stress_deployer.prepare_stress_execution(workload_params, nodes_percentage)
+        additional_stats.all_hosts = stress_deployer.hosts
 
         logging.debug(f"Deploy finished with {preparation_result}")
 
@@ -131,8 +119,6 @@ class ParallelWorkloadTestBase:
 
         # PHASE 3: RESULTS (collect diagnostics and finalize)
         self._finalize_workload_results(
-            olap_load_base,
-            stress_deployer,
             execution_result,
             preparation_result['deployed_nodes'],
             additional_stats
@@ -143,8 +129,6 @@ class ParallelWorkloadTestBase:
 
     def _finalize_workload_results(
         self,
-        olap_load_base: LoadSuiteBase,
-        stress_deployer: StressUtilDeployer,
         execution_result: dict,
         preparation_result: dict[str, StressUtilDeployResult],
         run_config: RunConfigInfo
@@ -167,16 +151,18 @@ class ParallelWorkloadTestBase:
             successful_runs = execution_result["successful_runs"]
             total_runs = execution_result["total_runs"]
 
+            errors_collector = ErrorsCollector(run_config.all_hosts)
+
             # Final processing with diagnostics (prepares data for upload)
             overall_result.workload_start_time = execution_result["workload_start_time"]
-            node_errors, verify_errors = self.process_workload_result_with_diagnostics(olap_load_base, overall_result)
+            node_errors, verify_errors = self.process_workload_result_with_diagnostics(errors_collector, overall_result)
 
             # Separate step for uploading results (AFTER all data preparation)
             safe_upload_results(overall_result, run_config, node_errors, verify_errors)
 
             # Final status processing (may throw exception, but results are already uploaded)
             # Use node_errors saved from diagnostics
-            self._handle_final_status(stress_deployer, overall_result, preparation_result, node_errors, verify_errors)
+            self._handle_final_status(errors_collector, overall_result, preparation_result, node_errors, verify_errors)
 
             logging.info(
                 f"Final result: successful_runs={successful_runs} / {total_runs}"
@@ -185,7 +171,7 @@ class ParallelWorkloadTestBase:
 
     def process_workload_result_with_diagnostics(
         self,
-        olap_load_base: LoadSuiteBase,
+        errors_collector : ErrorsCollector,
         result: StressUtilTestResults,
     ):
         """
@@ -214,14 +200,13 @@ class ParallelWorkloadTestBase:
                 # Use parent class method for node diagnostics
                 end_time = time_module.time()
                 diagnostics_start_time = result.start_time
-                verify_errors = olap_load_base.check_nodes_verifies_with_timing(diagnostics_start_time, end_time)
-                node_errors = olap_load_base.check_nodes_diagnostics_with_timing(
+                verify_errors = errors_collector.check_nodes_verifies_with_timing(diagnostics_start_time, end_time)
+                node_errors = errors_collector.check_nodes_diagnostics_with_timing(
                     result, diagnostics_start_time, end_time
                 )
             except Exception as e:
                 logging.error(f"Error getting nodes state: {e}")
                 # Добавляем ошибку в результат
-                result.add_warning(f"Error getting nodes state: {e}")
                 node_errors = []  # Set empty list if diagnostics failed
 
             # Вычисляем время выполнения
@@ -264,7 +249,7 @@ class ParallelWorkloadTestBase:
             # Data is ready, now we can upload results
             return node_errors, verify_errors
 
-    def _handle_final_status(self, stress_deployer: StressUtilDeployer, result: StressUtilTestResults, preparation_result: dict[str, StressUtilDeployResult], node_errors, verify_errors):
+    def _handle_final_status(self, errors_collector: ErrorsCollector, result: StressUtilTestResults, preparation_result: dict[str, StressUtilDeployResult], node_errors, verify_errors):
         """
         Handles final test status (fail, broken, etc.)
 
@@ -287,21 +272,9 @@ class ParallelWorkloadTestBase:
         # --- Переключатель: если cluster_log=all, то всегда прикладываем логи ---
         cluster_log_mode = get_external_param('cluster_log', 'default')
         try:
-            attach_logs_method = getattr(LoadSuiteBase, "_LoadSuiteBase__attach_logs", None)
-            if attach_logs_method:
-                if cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors:
-                    attach_logs_method(
-                        start_time=result.start_time,
-                        attach_name="kikimr",
-                        query_text="",
-                        ignore_roles=True  # Collect logs from all unique hosts
-                    )
-        except Exception as e:
-            logging.warning(f"Failed to attach kikimr logs: {e}")
-
-        try:
             if cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors:
-                stress_deployer.attach_nemesis_logs(result.start_time)
+                errors_collector.attach_kikimr_logs(result.start_time)
+                errors_collector.attach_nemesis_logs(result.start_time)
         except Exception as e:
             logging.warning(f"Failed to attach nemesis logs: {e}")
 
@@ -355,5 +328,3 @@ class ParallelWorkloadTestBase:
             detailed_error_message = "\n".join(error_details)
             exc = pytest.fail.Exception(detailed_error_message)
             raise exc
-        # if result.warning_message:
-        #     logging.warning(f"Workload completed with warnings: {result.warning_message}")

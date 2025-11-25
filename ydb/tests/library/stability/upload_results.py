@@ -4,7 +4,7 @@ import logging
 import traceback
 import allure
 from ydb.tests.olap.lib.allure_utils import NodeErrors
-from ydb.tests.olap.lib.results_processor import ResultsProcessor
+from ydb.tests.library.stability.results_processor import ResultsProcessor
 from ydb.tests.library.stability.aggregate_results import StressUtilResult, StressUtilTestResults, RunConfigInfo
 
 
@@ -60,6 +60,7 @@ def safe_upload_results(result: StressUtilTestResults, run_config: RunConfigInfo
 def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_errors: list[NodeErrors], verify_errors, suite_name, workload_name):
     """Overridden method for workload tests"""
     stats = {}
+    is_success = True
     # stats = result.get_stats(workload_name)
     if stats is not None:
         stats["aggregation_level"] = "aggregate"
@@ -93,8 +94,6 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
         stats["workload_type"] = workload_name
         stats["test_timestamp"] = result.start_time
 
-        stats["errors"] = {'other': True} if not result.is_all_success() else None
-        stats["with_errors"] = not result.is_all_success()
         stats["with_warnings"] = False
 
         aggregated_errors = []
@@ -113,7 +112,7 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
         if san_errors_count > 0:
             aggregated_errors.append(f'SAN errors: {san_errors_count}')
         if coredump_count > 0:
-            aggregated_errors.append(f'Coredumps: {coredump_count}')
+            aggregated_errors.append(f'Collectedcoredumps: {coredump_count}')
         if had_oom:
             aggregated_errors.append('OOM occured')
 
@@ -122,7 +121,11 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
             for host, hosts_count in detailed_info['hosts_count'].items():
                 aggregated_errors.append(f'  {host}: {hosts_count}')
 
-        stats["node_errors"] = aggregated_errors
+        stats["with_errors"] = len(aggregated_errors) > 0
+        stats["node_errors"] = len(aggregated_errors) > 0
+
+        is_success = result.is_all_success() and len(aggregated_errors) > 0
+        stats["errors"] = {'other': True} if not is_success else None
 
         stats["nodes_with_issues"] = list(node.host for node in nodes_with_issues)
         stats["node_error_messages"] = aggregated_errors
@@ -140,7 +143,7 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
         "suite": suite_name,
         "test": workload_name,
         "timestamp": end_time,
-        "is_successful": result.is_all_success(),
+        "is_successful": is_success,
         "statistics": stats,
     }
 

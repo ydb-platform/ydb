@@ -15,7 +15,7 @@ from ydb.tests.olap.lib.allure_utils import (
     _set_node_errors,
     _set_results_plot
 )
-from ydb.tests.olap.lib.utils import external_param_is_true, get_ci_version, get_self_version
+from ydb.tests.library.stability.utils import external_param_is_true, get_ci_version, get_self_version
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 

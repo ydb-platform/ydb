@@ -16,8 +16,8 @@ from ydb.tests.library.stability.aggregate_results import (
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 
 from ydb.tests.library.stability import deploy
-from ydb.tests.olap.lib.utils import external_param_is_true
-from ydb.tests.olap.lib.remote_execution import execute_command
+from ydb.tests.library.stability.remote_execution import execute_command
+from ydb.tests.library.stability.utils import external_param_is_true
 
 
 class StressRunExecutor:

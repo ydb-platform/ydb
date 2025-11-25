@@ -24,7 +24,9 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.head_ref || github.ref }}
+      
       - name: Get PR body (manual run)
         if: github.event_name == 'workflow_dispatch'
         id: get_pr

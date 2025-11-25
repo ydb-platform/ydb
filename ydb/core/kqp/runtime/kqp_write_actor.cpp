@@ -1479,19 +1479,20 @@ class TKqpWriteTask {
 public:
     struct TPathWriteInfo {
         std::vector<ui32> WriteColumnsIndexes;
-        std::vector<ui32> DeleteColumnsIndexes;
+        std::vector<ui32> DeleteKeysIndexes;
         std::vector<ui32> NewColumnsIndexes;
         std::vector<ui32> OldColumnsIndexes;
         TKqpTableWriteActor* WriteActor = nullptr;
         std::vector<NScheme::TTypeInfo> ColumnTypes;
         bool SkipEqualRows = false;
+        bool NeedWriteProjection = true;
     };
 
     struct TPathLookupInfo {
-        std::vector<ui32> KeyIndexes;
-        std::vector<ui32> FullKeyIndexes;
-        std::vector<ui32> PrimaryInFullKeyIndexes; // primary key in full secondary table keys
-        std::vector<ui32> OldKeyIndexes;
+        std::vector<ui32> KeyIndexes; // Secondary key
+        std::vector<ui32> FullKeyIndexes; // Secondary table key (includes primary key columns)
+        std::vector<ui32> PrimaryInFullKeyIndexes; // Primary key in secondary table key
+        std::vector<ui32> OldKeyIndexes; // Old secondary key
 
         IKqpBufferTableLookup* Lookup = nullptr;
         bool SkipEqualRowsForUniqCheck = false;
@@ -1529,7 +1530,6 @@ public:
         }
 
         for (const auto& write : writes) {
-            AFL_ENSURE(!write.WriteColumnsIndexes.empty() || write.WriteActor->GetTableId().PathId == PathId);
             AFL_ENSURE(write.NewColumnsIndexes.size() == write.OldColumnsIndexes.size());
             AFL_ENSURE(write.NewColumnsIndexes.empty() || write.NewColumnsIndexes.size() == write.ColumnTypes.size());
             AFL_ENSURE(write.OldColumnsIndexes.empty() || write.OldColumnsIndexes.size() == write.ColumnTypes.size());
@@ -1934,12 +1934,12 @@ private:
             for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
                 // At first, write to indexes
                 if (PathId != actorPathId) {
-                    if (!actorInfo.DeleteColumnsIndexes.empty()) {
+                    if (!actorInfo.DeleteKeysIndexes.empty()) {
                         AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
                             && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
                         {
                             auto deleteProjection = CreateDataBatchProjection(
-                                actorInfo.DeleteColumnsIndexes, Alloc);
+                                actorInfo.DeleteKeysIndexes, Alloc);
                             for (const auto& [key, rowAndExists] : keyToRow) {
                                 if (rowAndExists.second && (
                                         !actorInfo.SkipEqualRows
@@ -1985,12 +1985,13 @@ private:
 
         for (auto& write : Writes) {
             auto& batch = write.Batch;
-
             Memory -= batch->GetMemory();
 
             auto& actorInfo = PathWriteInfo.at(PathId);
-            AFL_ENSURE(actorInfo.DeleteColumnsIndexes.empty());
-            if (!actorInfo.WriteColumnsIndexes.empty()) {
+            AFL_ENSURE(actorInfo.DeleteKeysIndexes.empty());
+
+            if (actorInfo.NeedWriteProjection) {
+                AFL_ENSURE(!actorInfo.WriteColumnsIndexes.empty());
                 auto projection = CreateDataBatchProjection(
                     actorInfo.WriteColumnsIndexes,
                     Alloc);
@@ -2011,7 +2012,7 @@ private:
         AFL_ENSURE(!IsError());
         for (auto& [pathId, actorInfo] : PathWriteInfo) {
             actorInfo.WriteActor->Close(Cookie);
-            if (!actorInfo.DeleteColumnsIndexes.empty()) {
+            if (!actorInfo.DeleteKeysIndexes.empty()) {
                 AFL_ENSURE(pathId != PathId);
                 actorInfo.WriteActor->Close(DeleteCookie);
             }
@@ -2884,7 +2885,7 @@ public:
                                 settings.LookupColumns,
                                 indexSettings.Columns,
                                 /* preferAdditionalInputColumns */ false),
-                    .DeleteColumnsIndexes = needAdditionalDelete
+                    .DeleteKeysIndexes = needAdditionalDelete
                                 ? GetIndexes(
                                     settings.Columns,
                                     settings.LookupColumns,
@@ -2913,6 +2914,7 @@ public:
                     }(),
                     .SkipEqualRows = !settings.LookupColumns.empty()
                         && (settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE),
+                    .NeedWriteProjection = true,
                 });
 
                 if (indexSettings.IsUniq) {
@@ -2991,14 +2993,12 @@ public:
 
             AFL_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
             writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                .WriteColumnsIndexes = settings.LookupColumns.empty()
-                            ? std::vector<ui32>{}
-                            : GetIndexes(
-                                settings.Columns,
-                                settings.LookupColumns,
-                                settings.Columns,
-                                /* preferAdditionalInputColumns */ false),
-                .DeleteColumnsIndexes = {},
+                .WriteColumnsIndexes = GetIndexes(
+                            settings.Columns,
+                            settings.LookupColumns,
+                            settings.Columns,
+                            /* preferAdditionalInputColumns */ false),
+                .DeleteKeysIndexes = {},
                 .NewColumnsIndexes = GetIndexes(
                             settings.Columns,
                             settings.LookupColumns,
@@ -3021,6 +3021,7 @@ public:
                 }(),
                 .SkipEqualRows = !settings.LookupColumns.empty()
                     && (settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE),
+                .NeedWriteProjection = !settings.LookupColumns.empty(),
             });
 
             WriteTasks.emplace(

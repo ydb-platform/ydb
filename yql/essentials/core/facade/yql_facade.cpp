@@ -32,6 +32,7 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_logger.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
+#include <yql/essentials/providers/common/activation/yql_activation.h>
 #include <yql/essentials/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
 #include <yql/essentials/core/qplayer/url_lister/qplayer_url_lister_manager.h>
 
@@ -142,14 +143,46 @@ std::function<TString(const TString&, const TString&)> BuildCompositeTokenResolv
     };
 }
 
-void AddSqlFlagsFromPatch(THashSet<TString>& flags, const TString& gatewaysPatch) {
+TGatewaySQLFlags SQLFlagsFromYson(const NYT::TNode& node) {
+    const auto& list = node["SqlFlags"].AsList();
+
+    THashSet<TString> flags(list.size());
+    for (const auto& f : list) {
+        flags.insert(f.AsString());
+    }
+
+    return {
+        .Unconditional = std::move(flags),
+    };
+}
+
+TGatewaySQLFlags SQLFlagsFromGatewaysPatch(TStringBuf patch) {
     TGatewaysConfig config;
-    YQL_ENSURE(NProtoBuf::TextFormat::ParseFromString(gatewaysPatch, &config));
-    auto patchFlags = ExtractSqlFlags(config);
-    flags.insert(patchFlags.begin(), patchFlags.end());
+    YQL_ENSURE(NProtoBuf::TextFormat::ParseFromString(patch, &config));
+
+    // Gateways Patch is used for experimental features
+    return TGatewaySQLFlags::FromTesting(config);
 }
 
 } // namespace
+
+TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context) {
+    if (!context.CanRead()) {
+        return {};
+    }
+
+    TMaybe<NYql::TQItem> loaded =
+        context
+            .GetReader()
+            ->Get({FacadeComponent, TranslationLabel})
+            .GetValueSync();
+
+    if (!loaded) {
+        return {};
+    }
+
+    return SQLFlagsFromYson(NYT::NodeFromYsonString(loaded->Value));
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // TProgramFactory
@@ -433,12 +466,16 @@ TProgram::TProgram(
             auto item = QContext_.GetReader()->Get({FacadeComponent, GatewaysLabel}).GetValueSync();
             if (item) {
                 YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
+
                 if (GatewaysForMerge_) {
                     YQL_ENSURE(NProtoBuf::TextFormat::MergeFromString(*GatewaysForMerge_, &LoadedGatewaysConfig_));
                 }
+
                 THashMap<TString, TString> clusterMapping;
                 GetClusterMappingFromGateways(LoadedGatewaysConfig_, clusterMapping);
-                auto sqlFlags = ExtractSqlFlags(LoadedGatewaysConfig_);
+
+                THashSet<TString> sqlFlags = TGatewaySQLFlags::FromTesting(LoadedGatewaysConfig_).All();
+
                 if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
                     modules->SetClusterMapping(clusterMapping);
                     modules->SetSqlFlags(sqlFlags);
@@ -739,34 +776,6 @@ void TProgram::HandleSourceCode() {
     }
 }
 
-namespace {
-
-THashSet<TString> ExtractSqlFlags(const NYT::TNode& dataNode) {
-    THashSet<TString> result;
-    for (const auto& f : dataNode["SqlFlags"].AsList()) {
-        result.insert(f.AsString());
-    }
-    return result;
-}
-
-} // namespace
-
-void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags, TMaybe<TString> gatewaysPatch) {
-    if (qContext.CanRead()) {
-        auto loaded = qContext.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
-        if (!loaded) {
-            return;
-        }
-
-        auto dataNode = NYT::NodeFromYsonString(loaded->Value);
-        flags = ExtractSqlFlags(dataNode);
-
-        if (gatewaysPatch) {
-            AddSqlFlagsFromPatch(flags, *gatewaysPatch);
-        }
-    }
-}
-
 bool HasFullCapture(const IQReaderPtr& reader) {
     auto fullCaptureItem = reader->Get({FacadeComponent, FullCaptureLabel}).GetValueSync();
     return fullCaptureItem.Defined();
@@ -810,10 +819,11 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
             loadedSettings.ClusterMapping[c.first] = c.second.AsString();
         }
 
-        loadedSettings.Flags = ExtractSqlFlags(dataNode);
+        TGatewaySQLFlags flags = SQLFlagsFromYson(dataNode);
         if (GatewaysForMerge_) {
-            AddSqlFlagsFromPatch(loadedSettings.Flags, *GatewaysForMerge_);
+            flags.ExtendWith(SQLFlagsFromGatewaysPatch(*GatewaysForMerge_));
         }
+        loadedSettings.Flags = flags.All();
 
         loadedSettings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
         loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());

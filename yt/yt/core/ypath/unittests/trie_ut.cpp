@@ -16,12 +16,14 @@ TEST_P(TTrieTest, EmptyTrie)
     TTrie trie(/*paths*/ {}, /*enableFlattening*/ GetParam());
     EXPECT_EQ(trie.GetType(), ETrieNodeType::Outlier);
     EXPECT_EQ(trie.Visit("a").GetType(), ETrieNodeType::Outlier);
+    EXPECT_TRUE(trie.IsEmpty());
 }
 
 TEST_P(TTrieTest, EmptyPath)
 {
     TTrie trie({""}, /*enableFlattening*/ GetParam());
     EXPECT_EQ(trie.GetType(), ETrieNodeType::Leaf);
+    EXPECT_FALSE(trie.IsEmpty());
 }
 
 TEST_P(TTrieTest, Simple)

@@ -222,11 +222,11 @@ public:
 
     TString Find(const TString&) const;
 
-    TVector<TOrderedItem>::const_pointer begin() const {
+    TVector<TOrderedItem>::const_iterator begin() const {
         return Order_.cbegin();
     }
 
-    TVector<TOrderedItem>::const_pointer end() const {
+    TVector<TOrderedItem>::const_iterator end() const {
         return Order_.cend();
     }
 

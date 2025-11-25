@@ -116,11 +116,16 @@ private:
 
         // id
         const auto idColumn = batch->GetColumnByName("id");
+        if (idColumn == nullptr) {
+            ythrow yexception() << "Cannot find id column";
+        }
         resultColumns.push_back(arrow::compute::Cast(idColumn, arrow::uint64()).ValueOrDie().make_array());
 
         // embedding
         const auto embeddingColumn = batch->GetColumnByName(EmbeddingColumnName);
-        Cerr << embeddingColumn->type()->ToString() << Endl;
+        if (embeddingColumn == nullptr) {
+            ythrow yexception() << "Cannot find embedding column '" << EmbeddingColumnName << "'";
+        }
         if (embeddingColumn->type()->Equals(arrow::binary())) {
             resultColumns.push_back(embeddingColumn);
         } else if (embeddingColumn->type_id() == arrow::Type::LIST) {
@@ -169,10 +174,16 @@ private:
 
         // id
         const auto idColumn = table->GetColumnByName("id");
+        if (idColumn == nullptr) {
+            ythrow yexception() << "Cannot find id column";
+        }
         resultColumns.push_back(idColumn);
 
         // embedding
         const auto embeddingColumn = table->GetColumnByName(EmbeddingColumnName);
+        if (embeddingColumn == nullptr) {
+            ythrow yexception() << "Cannot find embedding column '" << EmbeddingColumnName << "'";
+        }
         if (ContainsListAlikeStrings(embeddingColumn)) {
             arrow::StringBuilder newEmbeddingsBuilder;
             for (int64_t row = 0; row < table->num_rows(); ++row) {

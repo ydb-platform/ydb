@@ -57,6 +57,7 @@ protected:
         std::shared_ptr<arrow::DataType>CsvArrowType;
         ui32 Precision = 0;
         ui32 Scale = 0;
+        bool IsBool = false;
     };
     using TColummns = TVector<TColumnInfo>;
     TArrowCSV(const TColummns& columns, bool header, const std::set<std::string>& notNullColumns);

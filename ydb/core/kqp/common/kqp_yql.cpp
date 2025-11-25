@@ -656,6 +656,42 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
         );
     }
 
+    if (VectorTopColumn) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopColumnSettingName)
+                .Value<TCoAtom>().Build(VectorTopColumn)
+            .Done()
+        );
+    }
+
+    if (VectorTopIndex) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopIndexSettingName)
+                .Value<TCoAtom>().Build(VectorTopIndex)
+            .Done()
+        );
+    }
+
+    if (VectorTopTarget) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(VectorTopTargetSettingName)
+                .Value(VectorTopTarget)
+                .Done());
+    }
+
+    if (VectorTopLimit) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(VectorTopLimitSettingName)
+                .Value(VectorTopLimit)
+                .Done());
+    }
+
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add(settings)
         .Done();
@@ -684,6 +720,18 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameVa
         } else if (name == AllowNullKeysSettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.AllowNullKeysPrefixSize = FromString<ui32>(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == VectorTopColumnSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.VectorTopColumn = tuple.Value().Cast<TCoAtom>().Value();
+        } else if (name == VectorTopIndexSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.VectorTopIndex = tuple.Value().Cast<TCoAtom>().Value();
+        } else if (name == VectorTopTargetSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.VectorTopTarget = tuple.Value().Cast().Ptr();
+        } else if (name == VectorTopLimitSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.VectorTopLimit = tuple.Value().Cast().Ptr();
         } else {
             YQL_ENSURE(false, "Unknown KqpStreamLookup setting name '" << name << "'");
         }

@@ -195,13 +195,9 @@ public:
 
 private:
     static TMaybe<NACLib::TDiffACL> GetTableACL(const NKikimrConfig::TFeatureFlags& featureFlags) {
-        if (!featureFlags.GetEnableSecureScriptExecutions()) {
-            return Nothing();
-        }
-
         NACLib::TDiffACL acl;
         acl.ClearAccess();
-        acl.SetInterruptInheritance(true);
+        acl.SetInterruptInheritance(featureFlags.GetEnableSecureScriptExecutions());
         return acl;
     }
 
@@ -566,6 +562,7 @@ public:
             .PhysicalGraph = ev.QueryPhysicalGraph,
             .DisableDefaultTimeout = ev.DisableDefaultTimeout,
             .CheckpointId = ev.CheckpointId,
+            .StreamingQueryPath = ev.StreamingQueryPath
         }, QueryServiceConfig));
 
         const auto& creatorId = Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, ev.Generation));
@@ -619,6 +616,7 @@ private:
         meta.SetTraceId(eventProto.GetTraceId());
         meta.SetResourcePoolId(request.GetPoolId());
         meta.SetCheckpointId(ev.CheckpointId);
+        meta.SetStreamingQueryPath(ev.StreamingQueryPath);
         meta.SetClientAddress(request.GetClientAddress());
         meta.SetCollectStats(request.GetCollectStats());
         meta.SetSaveQueryPhysicalGraph(ev.SaveQueryPhysicalGraph);
@@ -1096,6 +1094,7 @@ public:
             .PhysicalGraph = std::move(physicalGraph),
             .DisableDefaultTimeout = meta.GetDisableDefaultTimeout(),
             .CheckpointId = meta.GetCheckpointId(),
+            .StreamingQueryPath = meta.GetStreamingQueryPath()
         }, QueryServiceConfig));
 
         KQP_PROXY_LOG_D("Restart with RunScriptActorId: " << RunScriptActorId << ", has PhysicalGraph: " << hasPhysicalGraph);

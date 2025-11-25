@@ -87,7 +87,7 @@
   collections:
     - name: git+https://github.com/ydb-platform/ydb-ansible
       type: git
-      version: main
+      version: latest
   EOF
   $ ansible-galaxy install -r requirements.yaml
   ```
@@ -95,7 +95,7 @@
 - Однократно
 
   ```bash
-  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git
+  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
   ```
 
 {% endlist %}
@@ -116,7 +116,6 @@ inventory = ./inventory
 pipelining = True
 private_role_vars = True
 timeout = 5
-vault_password_file = ./ansible_vault_password_file
 verbosity = 1
 log_path = ./ydb.log
 
@@ -420,7 +419,7 @@ all:
         ydb_password: <password>
 ```
 
-Зашифруйте этот файл с помощью команды `ansible-vault encrypt inventory/99-inventory-vault.yaml`. Это потребует либо вручную ввести пароль шифрования (который может отличаться), либо настроить параметр Ansible `vault_password_file`. Подробнее о том, как это работает, см. в [документации Ansible Vault](https://docs.ansible.com/ansible/latest/vault_guide/index.html).
+Зашифруйте этот файл с помощью команды `ansible-vault encrypt inventory/99-inventory-vault.yaml`. Это потребует либо вручную ввести пароль шифрования (который не зависит от установленного значения `ydb_password`, предпочтительнее должен отличаться), либо настроить параметр Ansible `vault_password_file`. Подробнее о том, как это работает, см. в [документации Ansible Vault](https://docs.ansible.com/ansible/latest/vault_guide/index.html).
 
 ### Подготовка конфигурационного файла {{ ydb-short-name }} {#ydb-config-prepare}
 

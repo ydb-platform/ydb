@@ -206,6 +206,9 @@ message TTableServiceConfig {
         optional double Multiplier = 5;
         optional uint32 IteratorResponseTimeoutMs = 6;
         optional uint32 MaxTotalRetries = 7;
+
+        optional uint64 MaxRowsProcessingStreamLookup = 9 [default = 65536];
+        optional uint64 MaxTotalBytesQuotaStreamLookup = 10 [default = 2684354560]; // 5_MB * 512
     }
 
     message TIteratorReadQuotaSettings {

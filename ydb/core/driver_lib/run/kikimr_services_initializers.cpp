@@ -280,6 +280,7 @@ IKikimrServicesInitializer::IKikimrServicesInitializer(const TKikimrRunConfig& r
     : Config(runConfig.AppConfig)
     , NodeId(runConfig.NodeId)
     , ScopeId(runConfig.ScopeId)
+    , TinyMode(runConfig.TinyMode)
 {}
 
 // TBasicServicesInitializer
@@ -514,7 +515,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     bool useAutoConfig = !hasASCfg || NeedToUseAutoConfig(Config.GetActorSystemConfig());
     if (useAutoConfig) {
         bool isDynamicNode = appData->DynamicNameserviceConfig->MinDynamicNodeId <= NodeId;
-        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), isDynamicNode);
+        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), isDynamicNode, TinyMode);
     }
 
     Y_ABORT_UNLESS(Config.HasActorSystemConfig());

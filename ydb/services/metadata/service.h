@@ -66,6 +66,18 @@ public:
     }
 };
 
+class TEvResetManagerRegistration : public TEventLocal<TEvResetManagerRegistration, EEvents::EvResetManagerRegistration> {
+private:
+    YDB_READONLY_DEF(IClassBehaviour::TPtr, Manager);
+
+public:
+    explicit TEvResetManagerRegistration(IClassBehaviour::TPtr manager)
+        : Manager(std::move(manager))
+    {
+        Y_ABORT_UNLESS(!!Manager);
+    }
+};
+
 NActors::TActorId MakeServiceId(const ui32 node);
 
 class TConfig;
@@ -82,4 +94,4 @@ public:
     static TString GetPath();
 };
 
-}
+} // namespace NKikimr::NMetadata::NProvider

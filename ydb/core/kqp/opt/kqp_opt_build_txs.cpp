@@ -383,11 +383,10 @@ private:
             const auto& input = stage.Inputs().Item(i);
             const auto& inputArg = stage.Program().Args().Arg(i);
 
-            if (auto source = input.Maybe<TDqSource>()) {
+            if (input.Maybe<TDqSource>() || input.Maybe<TKqpCnStreamLookup>()) {
                 VisitExpr(input.Ptr(),
                     [&](const TExprNode::TPtr& node) {
                         TExprBase expr(node);
-                        YQL_ENSURE(!expr.Maybe<TDqConnection>().IsValid());
                         if (auto binding = expr.Maybe<TKqpTxResultBinding>()) {
                             sourceReplaceMap.emplace(node.Get(), makeParameterBinding(binding.Cast(), node->Pos()).Ptr());
                         }
@@ -477,6 +476,16 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
                     }
                     if (auto maybeConnection = node.Maybe<TDqConnection>()) {
                         YQL_ENSURE(false, "unexpected connection in source");
+                    }
+                    return true;
+                  });
+        } else if (auto maybeStreamLookup = input.Maybe<TKqpCnStreamLookup>()) {
+            VisitExpr(maybeStreamLookup.Cast().Settings().Ptr(),
+                  [&] (const TExprNode::TPtr& ptr) {
+                    TExprBase node(ptr);
+                    if (auto maybePrecompute = node.Maybe<TDqPhyPrecompute>()) {
+                        result.push_back(maybePrecompute.Cast());
+                        return false;
                     }
                     return true;
                   });

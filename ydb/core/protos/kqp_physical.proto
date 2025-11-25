@@ -301,6 +301,15 @@ enum EStreamLookupStrategy {
     SEMI_JOIN = 3;
 };
 
+message TKqpPhyVectorTopK {
+    // Top-K pushdown by vector distance between Column and TargetVector
+    // Where TargetVector and Limit may be runtime expressions
+    uint32 Column = 1;
+    Ydb.Table.VectorIndexSettings Settings = 2;
+    TKqpPhyValue TargetVector = 3;
+    TKqpPhyValue Limit = 4;
+}
+
 message TKqpPhyCnStreamLookup {
     TKqpPhyTableId Table = 1;
     repeated string KeyColumns = 2;
@@ -312,6 +321,7 @@ message TKqpPhyCnStreamLookup {
     bool AllowNullKeys = 8;
     uint32 AllowNullKeysPrefixSize = 9;
     bool IsTableImmutable = 10;
+    TKqpPhyVectorTopK VectorTopK = 11;
 }
 
 message TKqpPhyCnVectorResolve {

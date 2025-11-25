@@ -167,6 +167,8 @@ protected:
 
     void DeleteSupportivePartition(const std::string& topicName,
                                    std::uint32_t partition);
+    void WaitForTheTabletToDeleteTheWriteInfo(const std::string& topicName,
+                                              std::uint32_t partition);
 
     struct TTableRecord {
         TTableRecord() = default;
@@ -1544,6 +1546,42 @@ void TFixture::SendLongTxLockStatus(const TActorId& actorId,
     runtime.SendToPipe(tabletId, actorId, event.release());
 }
 
+void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const std::string& topicName,
+                                                    std::uint32_t partition)
+{
+    auto& runtime = Setup->GetRuntime();
+    NActors::TActorId edge = runtime.AllocateEdgeActor();
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
+
+    for (int i = 0; i < 20; ++i) {
+        auto request = std::make_unique<NKikimr::TEvKeyValue::TEvRequest>();
+        request->Record.SetCookie(12345);
+        request->Record.AddCmdRead()->SetKey("_txinfo");
+
+        auto& runtime = Setup->GetRuntime();
+
+        runtime.SendToPipe(tabletId, edge, request.release());
+        auto response = runtime.GrabEdgeEvent<NKikimr::TEvKeyValue::TEvResponse>();
+
+        UNIT_ASSERT(response->Record.HasCookie());
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadResultSize(), 1);
+
+        auto& read = response->Record.GetReadResult(0);
+
+        NKikimrPQ::TTabletTxInfo info;
+        UNIT_ASSERT(info.ParseFromString(read.GetValue()));
+
+        if (info.TxWritesSize() == 0) {
+            return;
+        }
+
+        std::this_thread::sleep_for(100ms);
+    }
+
+    UNIT_FAIL("TTabletTxInfo.TxWrites is expected to be empty");
+}
+
 void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
                                                     std::uint64_t tabletId,
                                                     const NPQ::TWriteId& writeId)
@@ -2089,6 +2127,32 @@ std::size_t TFixture::GetTableRecordsCount(const std::string& tablePath)
     UNIT_ASSERT(parser.TryNextRow());
 
     return parser.ColumnParser(0).GetUint64();
+}
+
+Y_UNIT_TEST_F(The_TxWriteInfo_Is_Deleted_After_The_Immediate_Transaction, TFixtureTable)
+{
+    CreateTopic("topic_A");
+
+    auto session = CreateSession();
+
+    auto tx = session->BeginTx();
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", tx.get());
+    RestartPQTablet("topic_A", 0);
+    session->CommitTx(*tx, EStatus::SUCCESS);
+
+    tx = session->BeginTx();
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", tx.get());
+    RestartPQTablet("topic_A", 0);
+    session->CommitTx(*tx, EStatus::SUCCESS);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+    UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
+
+    CheckTabletKeys("topic_A");
+
+    WaitForTheTabletToDeleteTheWriteInfo("topic_A", 0);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_24_Table, TFixtureTable)

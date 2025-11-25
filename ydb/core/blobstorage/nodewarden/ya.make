@@ -61,7 +61,6 @@ PEERDIR(
     ydb/core/control/lib
     ydb/library/pdisk_io
     ydb/library/yaml_config
-    ydb/core/util/actorsys_test
 )
 
 END()

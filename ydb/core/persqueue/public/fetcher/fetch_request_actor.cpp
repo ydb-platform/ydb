@@ -158,7 +158,7 @@ public:
             return SendReplyAndDie(std::move(Response), ctx);
         }
 
-        LongTimer = CreateLongTimer(Min<TDuration>(MaxTimeout, TDuration::MilliSeconds(Settings.MaxWaitTimeMs)),
+        LongTimer = CreateLongTimer(Min<TDuration>(MaxTimeout, TDuration::MilliSeconds(Settings.MaxWaitTimeMs + 250)),
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(TimeoutWakeupTag)));
 
         SendSchemeCacheRequest(ctx);

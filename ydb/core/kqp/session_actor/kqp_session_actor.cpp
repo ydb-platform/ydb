@@ -305,11 +305,7 @@ public:
         auto txId = TTxId::FromString(txControl.tx_id());
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            if (!ctx->BufferActorId) {
-                Transactions.AddToBeAborted(std::move(ctx));
-            } else {
-                TerminateBufferActor(ctx);
-            }
+            Transactions.AddToBeAborted(std::move(ctx));
             ReplySuccess();
         } else {
             ReplyTransactionNotFound(txControl.tx_id());
@@ -1062,6 +1058,7 @@ public:
 
         if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE
                 && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO
+                && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_SCAN
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_AST_SCAN
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
@@ -1312,9 +1309,21 @@ public:
         }
 
         const auto& txCtx = *QueryState->TxCtx;
-        if (txCtx.HasTableRead || txCtx.HasTableWrite || txCtx.TopicOperations.GetSize() != 0) {
-            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table and topic operations");
+        if (txCtx.HasTableRead || txCtx.TopicOperations.GetSize() != 0) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table reads and topic operations");
             return false;
+        }
+
+        if (txCtx.HasTableWrite) {
+            if (txCtx.HasOlapTable && !txCtx.EnableOlapSink.value_or(false)) {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for column table writes without enabled olap sink");
+                return false;
+            }
+
+            if (txCtx.HasOltpTable && !txCtx.EnableOltpSink.value_or(false)) {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for row table writes without enabled oltp sink");
+                return false;
+            }
         }
 
         if (!tx) {
@@ -1494,7 +1503,7 @@ public:
             }
         }
 
-        if (QueryState->GetResultSetFormatSettings().IsArrowFormat() && !AppData()->FeatureFlags.GetEnableArrowResultSetFormat()) {
+        if (QueryState->GetFormatsSettings().IsArrowFormat() && !AppData()->FeatureFlags.GetEnableArrowResultSetFormat()) {
             ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "Arrow result set format is not enabled. Please set EnableArrowResultSetFormat feature flag to true.");
             return true;
         }
@@ -1728,7 +1737,7 @@ public:
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
-            QueryState ? QueryState->GetResultSetFormatSettings() : TResultSetFormatSettings{},
+            QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
@@ -2096,7 +2105,7 @@ public:
         }
 
         if (ExecuterId) {
-            Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues)}, IEventHandle::FlagTrackDelivery);
+            Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
         } else {
             ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), logMsg, MessageFromIssues(msg.Issues));
         }
@@ -2275,6 +2284,7 @@ public:
         }
 
         if (QueryState->Commit) {
+            TerminateBufferActor(QueryState->TxCtx);
             ResetTxState();
             Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             QueryState->TxId.Reset();
@@ -2347,7 +2357,7 @@ public:
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
                         auto ydbResult = QueryState->QueryData->GetYdbTxResult(
                             phyQuery.GetResultBindings(i), response->GetArena(),
-                            QueryState->GetResultSetFormatSettings(), {});
+                            QueryState->GetFormatsSettings(), {});
 
                         YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
@@ -2365,7 +2375,7 @@ public:
 
                 auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
                     phyQuery.GetResultBindings(i), response->GetArena(),
-                    QueryState->GetResultSetFormatSettings(), effectiveRowsLimit);
+                    QueryState->GetFormatsSettings(), effectiveRowsLimit);
                 response->AddYdbResults()->Swap(ydbResult);
             }
         }
@@ -2411,11 +2421,7 @@ public:
 
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            if (!ctx->BufferActorId) {
-                Transactions.AddToBeAborted(std::move(ctx));
-            } else {
-                TerminateBufferActor(ctx);
-            }
+            Transactions.AddToBeAborted(std::move(ctx));
         }
 
         auto* record = &QueryResponse->Record;
@@ -2436,11 +2442,7 @@ public:
         auto txId = TTxId();
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            if (!ctx->BufferActorId) {
-                Transactions.AddToBeAborted(std::move(ctx));
-            } else {
-                TerminateBufferActor(ctx);
-            }
+            Transactions.AddToBeAborted(std::move(ctx));
         }
 
         FillTxInfo(record.MutableResponse());
@@ -2646,7 +2648,6 @@ public:
 
     void ResetTxState() {
         if (QueryState->TxCtx) {
-            TerminateBufferActor(QueryState->TxCtx);
             QueryState->TxCtx->ClearDeferredEffects();
             QueryState->TxCtx->Locks.Clear();
             QueryState->TxCtx->TxManager.reset();
@@ -2664,18 +2665,11 @@ public:
         if (QueryState && QueryState->TxCtx) {
             auto& txCtx = QueryState->TxCtx;
             if (txCtx->IsInvalidated()) {
-                if (!txCtx->BufferActorId) {
-                    Transactions.AddToBeAborted(txCtx);
-                } else {
-                    TerminateBufferActor(txCtx);
-                }
+                Transactions.AddToBeAborted(txCtx);
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }
-
-        if (isFinal && QueryState)
-            TerminateBufferActor(QueryState->TxCtx);
 
         if (isFinal)
             Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
@@ -2772,6 +2766,12 @@ public:
             TIssues issues;
             IssuesFromMessage(response.GetIssues(), issues);
             LOG_E("Failed to cleanup: " << issues.ToString());
+
+            for (const auto& txCtx : CleanupCtx->TransactionsToBeAborted) {
+                AFL_ENSURE(txCtx);
+                // Terminate BufferActors without waiting
+                TerminateBufferActor(txCtx);
+            }
             EndCleanup(CleanupCtx->Final);
             return;
         }

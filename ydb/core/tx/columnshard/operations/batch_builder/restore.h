@@ -27,6 +27,10 @@ public:
     virtual bool IsActive() const override {
         return Context.IsActive();
     }
+    
+    virtual TString GetErrorMessage() const override {
+        return Context.GetErrorMessage();
+    }
 
     virtual TDuration GetTimeout() const override;
 

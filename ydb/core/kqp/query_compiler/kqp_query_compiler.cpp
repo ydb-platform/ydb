@@ -230,6 +230,16 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
     }
 }
 
+void FillExternalSource(const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyTable& tableProto) {
+    THashSet<TStringBuf> columns;
+    columns.reserve(tableMeta.Columns.size());
+    for (const auto& [col, _] : tableMeta.Columns){
+        columns.emplace(col);
+    }
+
+    FillTable(tableMeta, std::move(columns), tableProto);
+}
+
 template <typename TProto, typename TContainer>
 void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMeta,
     TProto& opProto, bool allowSystemColumns)
@@ -599,16 +609,18 @@ TStringBuf RemoveJoinAliases(TStringBuf keyName) {
 
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
-    TKqpQueryCompiler(const TString& cluster, const TIntrusivePtr<TKikimrTablesData> tablesData,
-        const NMiniKQL::IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config)
+    TKqpQueryCompiler(const TString& cluster,
+        const NMiniKQL::IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx,
+        NOpt::TKqpOptimizeContext& optimizeCtx, NYql::TKikimrConfiguration::TPtr config)
         : Cluster(cluster)
-        , TablesData(tablesData)
+        , TablesData(optimizeCtx.Tables)
         , FuncRegistry(funcRegistry)
         , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
         , TypeEnv(Alloc)
-        , KqlCtx(cluster, tablesData, TypeEnv, FuncRegistry)
+        , KqlCtx(cluster, optimizeCtx.Tables, TypeEnv, FuncRegistry)
         , KqlCompiler(CreateKqlCompiler(KqlCtx, typesCtx))
         , TypesCtx(typesCtx)
+        , OptimizeCtx(optimizeCtx)
         , Config(config)
     {
         Alloc.Release();
@@ -1072,15 +1084,16 @@ private:
             FillTable(*tableMeta, std::move(tableColumns), *txProto.AddTables());
         }
 
-        for (const auto& [a, desc] : TablesData->GetTables()) {
-            auto tableMeta = desc.Metadata;
-            YQL_ENSURE(tableMeta);
-            if (desc.Metadata->Kind == NYql::EKikimrTableKind::External) {
-                THashSet<TStringBuf> columns;
-                for (const auto& [col, _]: tableMeta->Columns){
-                    columns.emplace(col);
+        for (const auto& [path, desc] : TablesData->GetTables()) {
+            const auto tableMeta = desc.Metadata;
+            Y_ENSURE(tableMeta, path.first << ":" << path.second);
+
+            if (tableMeta->Kind == NYql::EKikimrTableKind::External) {
+                FillExternalSource(*tableMeta, *txProto.AddTables());
+
+                if (const auto sourceMeta = tableMeta->ExternalSource.UnderlyingExternalSourceMetadata) {
+                    FillExternalSource(*sourceMeta, *txProto.AddTables());
                 }
-                FillTable(*tableMeta, std::move(columns), *txProto.AddTables());
             }
         }
 
@@ -1333,8 +1346,9 @@ private:
 
                 settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
 
-                AFL_ENSURE(settings.InconsistentWrite().Cast().StringValue() == "false");
-                settingsProto.SetInconsistentTx(false);
+                const bool inconsistentWrite = settings.InconsistentWrite().Cast().Value() == "true"sv;
+                AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
+                settingsProto.SetInconsistentTx(inconsistentWrite);
 
                 if (Config->EnableIndexStreamWrite && settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
@@ -1451,6 +1465,64 @@ private:
                 externalSink.SetSinkName(secureParams->first);
                 externalSink.SetAuthInfo(secureParams->second);
             }
+        }
+    }
+
+    void FillStreamLookupVectorTop(NKqpProto::TKqpPhyCnStreamLookup& streamLookupProto,
+        const TKqpCnStreamLookup& streamLookup, const TKqpStreamLookupSettings& settings) {
+        NKqpProto::TKqpPhyVectorTopK& vectorTopK = *streamLookupProto.MutableVectorTopK();
+        const auto implTablePath = streamLookup.Table().Path();
+        const auto mainTableFromImpl = TablesData->GetMainTableIfTableIsImplTableOfIndex(Cluster, implTablePath);
+        const auto mainTable = mainTableFromImpl ? mainTableFromImpl : &TablesData->ExistingTable(Cluster, implTablePath);
+
+        const TIndexDescription *indexDesc = nullptr;
+        for (const auto& index: mainTable->Metadata->Indexes) {
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree &&
+                index.Name == settings.VectorTopIndex) {
+                indexDesc = &index;
+            }
+        }
+        YQL_ENSURE(indexDesc);
+
+        // Index settings
+        auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
+        *vectorTopK.MutableSettings() = kmeansDesc.GetSettings().Getsettings();
+
+        // Column index
+        ui32 columnIdx = 0;
+        for (const auto& column: streamLookupProto.GetColumns()) {
+            if (column == settings.VectorTopColumn) {
+                break;
+            }
+            columnIdx++;
+        }
+        YQL_ENSURE(columnIdx < streamLookup.Columns().Size());
+        vectorTopK.SetColumn(columnIdx);
+
+        // Limit - may be a parameter which will be linked later
+        TExprBase expr(settings.VectorTopLimit);
+        if (expr.Maybe<TCoUint64>()) {
+            auto* literal = vectorTopK.MutableLimit()->MutableLiteralValue();
+            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+            literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+        } else if (expr.Maybe<TCoParameter>()) {
+            vectorTopK.MutableLimit()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+        } else {
+            YQL_ENSURE(false, "Unexpected Limit callable " << expr.Ref().Content());
+        }
+
+        // Target vector - may be a parameter which will be linked later
+        expr = TExprBase(settings.VectorTopTarget);
+        if (expr.Maybe<TCoString>()) {
+            auto* literal = vectorTopK.MutableTargetVector()->MutableLiteralValue();
+            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
+            literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+        } else if (expr.Maybe<TCoParameter>()) {
+            vectorTopK.MutableTargetVector()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+        } else {
+            YQL_ENSURE(false, "Unexpected TargetVector callable " << expr.Ref().Content());
         }
     }
 
@@ -1713,6 +1785,9 @@ private:
                     YQL_ENSURE(false, "Unexpected lookup strategy for stream lookup: " << settings.Strategy);
             }
 
+            if (settings.VectorTopColumn) {
+                FillStreamLookupVectorTop(streamLookupProto, streamLookup, settings);
+            }
 
             return;
         }
@@ -1912,6 +1987,7 @@ private:
     TKqlCompileContext KqlCtx;
     TIntrusivePtr<NCommon::IMkqlCallableCompiler> KqlCompiler;
     TTypeAnnotationContext& TypesCtx;
+    NOpt::TKqpOptimizeContext& OptimizeCtx;
     TKikimrConfiguration::TPtr Config;
     TSet<TString> SecretNames;
 };
@@ -1919,10 +1995,10 @@ private:
 } // namespace
 
 TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster,
-    const TIntrusivePtr<TKikimrTablesData> tablesData, const IFunctionRegistry& funcRegistry,
-    TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config)
+    const IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx,
+    NOpt::TKqpOptimizeContext& optimizeCtx, NYql::TKikimrConfiguration::TPtr config)
 {
-    return MakeIntrusive<TKqpQueryCompiler>(cluster, tablesData, funcRegistry, typesCtx, config);
+    return MakeIntrusive<TKqpQueryCompiler>(cluster, funcRegistry, typesCtx, optimizeCtx, config);
 }
 
 } // namespace NKqp

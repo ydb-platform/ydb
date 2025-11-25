@@ -116,3 +116,74 @@ class TestWatermarks(TestYdsBase):
             assert "Row dispatcher will use the predicate:" in issues, issues
             issues = str(client.describe_query(query_id).result.query.transient_issue)
             assert "Row dispatcher will use watermark expr:" in issues, issues
+
+    @yq_v1
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
+    def test_idle_watermarks(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient, shared_reading: bool):
+        client.create_yds_connection(
+            name=YDS_CONNECTION, database=os.getenv("YDB_DATABASE"), endpoint=os.getenv("YDB_ENDPOINT"), shared_reading=shared_reading
+        )
+        self.init_topics(f"test_idle_watermarks_{"shared" if shared_reading else "no_shared"}", partitions_count=2)
+
+        ts = "ts" if shared_reading else "write_time"
+        watermark_expr = ", WATERMARK AS (Unwrap(CAST(ts AS Timestamp) - Interval(\"PT0.1S\")))" if shared_reading else ""
+
+        sql = Rf'''
+            USE {YDS_CONNECTION};
+            -- Cannot guarantee writing to a specific partition
+            PRAGMA dq.MaxTasksPerStage="1";
+            PRAGMA dq.WatermarksMode="default";
+            PRAGMA dq.WatermarksGranularityMs="500";
+            PRAGMA dq.WatermarksLateArrivalDelayMs="100";
+            PRAGMA dq.WatermarksEnableIdlePartitions="true";
+
+            $input =
+                SELECT
+                    {self.input_topic}.*,
+                    SystemMetadata("write_time") as write_time
+                FROM {self.input_topic}
+                WITH(
+                    FORMAT=json_each_row,
+                    SCHEMA(
+                        ts String NOT NULL,
+                        pass Uint64
+                    )
+                    {watermark_expr}
+                );
+
+            $output =
+                SELECT
+                    AGGREGATE_LIST(ts) AS result
+                FROM $input
+                WHERE pass > 0
+                GROUP BY HoppingWindow(CAST({ts} AS Timestamp), "PT0.5S", "PT1S");
+
+            INSERT INTO {self.output_topic}
+            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+            FROM $output;
+        '''
+
+        query_id = start_yds_query(kikimr, client, sql)
+
+        self.write_stream([
+            '{"ts": "1970-01-01T00:00:42Z", "pass": 1}',
+            '{"ts": "1970-01-01T00:00:42Z", "pass": 0}',
+        ], partition_key=b'1')
+        assert self.read_stream(1) == []
+
+        time.sleep(2)
+
+        self.write_stream(['{"ts": "1970-01-01T00:00:44Z", "pass": 0}'], partition_key=b'1')
+        expected = [
+            '{"result":["1970-01-01T00:00:42Z"]}',
+            '{"result":["1970-01-01T00:00:42Z"]}',
+        ]
+        assert self.read_stream(len(expected)) == expected
+
+        stop_yds_query(client, query_id)
+
+        if shared_reading:
+            issues = str(client.describe_query(query_id).result.query.transient_issue)
+            assert "Row dispatcher will use the predicate:" in issues, issues
+            issues = str(client.describe_query(query_id).result.query.transient_issue)
+            assert "Row dispatcher will use watermark expr:" in issues, issues

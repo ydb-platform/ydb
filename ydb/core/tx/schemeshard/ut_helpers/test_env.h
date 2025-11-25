@@ -82,6 +82,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableRealSystemViewPaths, std::nullopt);
         OPTION(ui32, NStoragePools, 2);
         OPTION(std::optional<ui32>, DataShardStatsReportIntervalSeconds, std::nullopt);
+        OPTION(bool, EnableAlterDatabase, false);
 
         #undef OPTION
     };

@@ -620,6 +620,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
     app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);
     app.SetEnableRealSystemViewPaths(opts.EnableRealSystemViewPaths_);
+    app.FeatureFlags.SetEnableAlterDatabase(opts.EnableAlterDatabase_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

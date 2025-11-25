@@ -226,12 +226,27 @@ void TLockInfo::PersistLock(ILocksDb* db) {
 }
 
 void TLockInfo::PersistBrokenLock(ILocksDb* db) {
+    Y_ENSURE(!IsRemoved());
     Y_ENSURE(IsPersistent());
     Y_ENSURE(db, "Cannot persist lock without a db");
     db->PersistLockCounter(LockId, Max<ui64>());
+
+    db->OnPersistent([lock = TLockInfo::TPtr(this)]() {
+        // Remove conflicts with non-persistent locks (broken lock cannot have conflicts)
+        for (auto it = lock->ConflictLocks.begin(); it != lock->ConflictLocks.end();) {
+            TLockInfo* otherLock = it->first;
+            if (!otherLock->IsPersistent()) {
+                otherLock->ConflictLocks.erase(lock.Get());
+                lock->ConflictLocks.erase(it++);
+            } else {
+                ++it;
+            }
+        }
+    });
 }
 
 void TLockInfo::PersistRemoveLock(ILocksDb* db) {
+    Y_ENSURE(!IsRemoved());
     Y_ENSURE(IsPersistent());
     Y_ENSURE(db, "Cannot persist lock without a db");
 
@@ -242,19 +257,17 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
     VolatileDependencies.clear();
 
     // Remove persistent conflicts
-    for (auto& pr : ConflictLocks) {
-        TLockInfo* otherLock = pr.first;
-        if (otherLock->IsPersistent()) {
-            if (!!(pr.second & ELockConflictFlags::BreakThemOnOurCommit)) {
+    for (auto it = ConflictLocks.begin(); it != ConflictLocks.end(); ++it) {
+        TLockInfo* otherLock = it->first;
+        if (otherLock->IsPersistent() && !otherLock->IsRemoved()) {
+            if (!!(it->second & ELockConflictFlags::BreakThemOnOurCommit)) {
                 db->PersistRemoveConflict(LockId, otherLock->LockId);
             }
-            if (!!(pr.second & ELockConflictFlags::BreakUsOnTheirCommit)) {
+            if (!!(it->second & ELockConflictFlags::BreakUsOnTheirCommit)) {
                 db->PersistRemoveConflict(otherLock->LockId, LockId);
             }
         }
-        otherLock->ConflictLocks.erase(this);
     }
-    ConflictLocks.clear();
 
     // Remove persistent ranges
     for (auto& range : PersistentRanges) {
@@ -264,6 +277,15 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
 
     // Remove the lock itself
     db->PersistRemoveLock(LockId);
+    Flags |= ELockFlags::Removed;
+
+    db->OnPersistent([lock = TLockInfo::TPtr(this)]() {
+        for (auto& pr : lock->ConflictLocks) {
+            TLockInfo* otherLock = pr.first;
+            otherLock->ConflictLocks.erase(lock.Get());
+        }
+        lock->ConflictLocks.clear();
+    });
 }
 
 bool TLockInfo::PersistRanges(ILocksDb* db) {
@@ -307,6 +329,9 @@ bool TLockInfo::PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, I
 }
 
 bool TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
+    Y_ENSURE(!IsRemoved());
+    Y_ENSURE(!otherLock->IsRemoved());
+
     Y_ENSURE(this != otherLock, "Lock cannot conflict with itself");
     Y_ENSURE(LockId != otherLock->LockId, "Unexpected conflict between a pair of locks with the same id");
     bool changed = false;
@@ -328,6 +353,8 @@ bool TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
 }
 
 bool TLockInfo::AddVolatileDependency(ui64 txId, ILocksDb* db) {
+    Y_ENSURE(!IsRemoved());
+
     Y_ENSURE(LockId != txId, "Unexpected volatile dependency between a lock and itself");
     bool changed = false;
 
@@ -340,6 +367,7 @@ bool TLockInfo::AddVolatileDependency(ui64 txId, ILocksDb* db) {
 }
 
 bool TLockInfo::PersistConflicts(ILocksDb* db) {
+    Y_ENSURE(!IsRemoved());
     Y_ENSURE(IsPersistent());
     Y_ENSURE(db, "Cannot persist conflicts without a db");
     bool changed = false;
@@ -367,16 +395,7 @@ bool TLockInfo::PersistConflicts(ILocksDb* db) {
 
 void TLockInfo::CleanupConflicts() {
     if (IsPersistent()) {
-        for (auto it = ConflictLocks.begin(); it != ConflictLocks.end();) {
-            TLockInfo* otherLock = it->first;
-            if (otherLock->IsPersistent()) {
-                // We keep persistent conflict in memory until lock is removed
-                ++it;
-            } else {
-                otherLock->ConflictLocks.erase(this);
-                ConflictLocks.erase(it++);
-            }
-        }
+        // We keep all conflicts in memory until broken/removed state is persistent
     } else {
         for (auto& pr : ConflictLocks) {
             TLockInfo* otherLock = pr.first;
@@ -387,39 +406,52 @@ void TLockInfo::CleanupConflicts() {
     }
 }
 
-void TLockInfo::RestoreInMemoryState(const ILocksDb::TLockRow& lockRow) {
+bool TLockInfo::RestoreInMemoryState(const ILocksDb::TLockRow& lockRow) {
     auto flags = ELockFlags(lockRow.Flags);
-    if (IsShardLock() && !(flags & ELockFlags::WholeShard)) {
-        // Lock was not a shard lock in the previous generation
-        Locker->UndoShardLock(this);
-        Flags &= ~ELockFlags::WholeShard;
-    }
-    Flags |= flags;
-    Generation = lockRow.Generation;
-    Counter = lockRow.Counter;
-    if (lockRow.BreakVersion != TRowVersion::Max()) {
-        BreakVersion.emplace(lockRow.BreakVersion);
-    }
-    if (IsShardLock()) {
-        // NOTE: this code path is currently only used for persistent locks. We
-        // should have restored all read ranges already, since they are
-        // persistent. Unless we failed to commit some read ranges this loop
-        // shouldn't really change anything.
-        for (const auto& tableId : lockRow.ReadTables) {
-            if (auto* table = Locker->FindTablePtr(tableId)) {
-                if (ReadTables.insert(tableId).second) {
-                    table->AddShardLock(this);
-                    UnpersistedRanges = true;
+    if (!!(flags & ELockFlags::Persistent)) {
+        Y_ENSURE(IsPersistent());
+
+        if (Generation != lockRow.Generation || Counter != lockRow.Counter || lockRow.BreakVersion != TRowVersion::Max()) {
+            // Ignore locks which have been broken, removed or recreated
+            // We will use the coarse lock restored from storage
+            return false;
+        }
+
+        if (IsShardLock() && !(flags & ELockFlags::WholeShard)) {
+            // Lock was not a shard lock in the previous generation
+            // Note: shard lock is not a persistent state
+            Locker->UndoShardLock(this);
+            Flags &= ~ELockFlags::WholeShard;
+
+            // Try to restore accurate in-memory ranges from the previous generation
+            for (auto& rangeRow : lockRow.Ranges) {
+                if (!RestoreInMemoryRange(rangeRow)) {
+                    // Lock reverts to shard lock on errors
+                    break;
                 }
             }
         }
+    } else {
+        Y_ENSURE(!IsPersistent());
+
+        for (auto& rangeRow : lockRow.Ranges) {
+            RestoreInMemoryRange(rangeRow);
+        }
     }
-    // NOTE: we don't restore WriteTables, they must be persistent
+
+    return true;
 }
 
 bool TLockInfo::RestoreInMemoryRange(const ILocksDb::TLockRange& rangeRow) {
     auto flags = ELockRangeFlags(rangeRow.Flags);
     if (!!(flags & ELockRangeFlags::Read)) {
+        if (IsPersistent() && !ReadTables.contains(rangeRow.TableId)) {
+            // We don't restore read ranges which failed to persist
+            if (!IsShardLock()) {
+                Locker->MakeShardLock(this);
+            }
+            return false;
+        }
         if (auto* table = Locker->FindTablePtr(rangeRow.TableId)) {
             if (IsShardLock()) {
                 if (AddShardLock(rangeRow.TableId)) {
@@ -779,6 +811,10 @@ TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
         return it->second;
     }
 
+    if (RemovedLocks.contains(lockId)) {
+        return nullptr;
+    }
+
     while (Locks.size() >= LockLimit()) {
         if (!BrokenLocks.Empty()) {
             // We remove broken locks first
@@ -820,24 +856,32 @@ TLockInfo::TPtr TLockLocker::AddLock(const ILocksDb::TLockRow& row) {
 }
 
 TLockInfo::TPtr TLockLocker::RestoreInMemoryLock(const ILocksDb::TLockRow& row) {
-    auto it = Locks.find(row.LockId);
-    if (it == Locks.end()) {
-        auto flags = ELockFlags(row.Flags);
-        if (!!(flags & ELockFlags::Persistent)) {
-            // Persistent lock must be restored from storage
-            // Since this lock is missing its commit must have failed
-            return nullptr;
+    auto flags = ELockFlags(row.Flags);
+    if (!!(flags & ELockFlags::Persistent)) {
+        // Persistent locks must be restored from storage
+        // This includes coarse ranges, flags and break versions which could fail to persist
+        auto it = Locks.find(row.LockId);
+        if (it != Locks.end() && it->second->IsPersistent()) {
+            // Accurate ranges are not persistent, this will attempt to restore them
+            if (it->second->RestoreInMemoryState(row)) {
+                return it->second;
+            }
         }
-        TLockInfo::TPtr lock = MakeIntrusive<TLockInfo>(this, row);
-        Locks[row.LockId] = lock;
-        if (row.LockNodeId) {
-            PendingSubscribeLocks.emplace_back(row.LockId, row.LockNodeId);
-        }
-        return lock;
     } else {
-        it->second->RestoreInMemoryState(row);
-        return it->second;
+        // In-memory locks can only be migrated as new in-memory locks
+        auto it = Locks.find(row.LockId);
+        if (it == Locks.end()) {
+            TLockInfo::TPtr lock = MakeIntrusive<TLockInfo>(this, row);
+            Locks[row.LockId] = lock;
+            if (row.LockNodeId) {
+                PendingSubscribeLocks.emplace_back(row.LockId, row.LockNodeId);
+            }
+            // Restore in-memory ranges from the previous generation
+            lock->RestoreInMemoryState(row);
+            return lock;
+        }
     }
+    return nullptr;
 }
 
 void TLockLocker::RemoveOneLock(ui64 lockTxId, ILocksDb* db) {
@@ -868,6 +912,13 @@ void TLockLocker::RemoveOneLock(ui64 lockTxId, ILocksDb* db) {
         if (txLock->IsPersistent()) {
             Y_ENSURE(db, "Cannot remove persistent locks without a database");
             txLock->PersistRemoveLock(db);
+            RemovedLocks[lockTxId] = txLock;
+            db->OnPersistent([this, lockTxId, txLock]() {
+                auto it = RemovedLocks.find(lockTxId);
+                if (it != RemovedLocks.end() && it->second == txLock) {
+                    RemovedLocks.erase(it);
+                }
+            });
         }
 
         txLock->OnRemoved();
@@ -1260,7 +1311,7 @@ void TSysLocks::CommitLock(const TArrayRef<const TCell>& key) {
     Y_ENSURE(Update);
     if (auto* lock = Locker.FindLockPtr(GetLockId(key))) {
         for (auto& pr : lock->ConflictLocks) {
-            if (!!(pr.second & ELockConflictFlags::BreakThemOnOurCommit)) {
+            if (!!(pr.second & ELockConflictFlags::BreakThemOnOurCommit) && !pr.first->IsRemoved()) {
                 Update->AddBreakLock(pr.first);
             }
         }
@@ -1466,6 +1517,11 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock() {
         return EEnsureCurrentLock::Success;
     }
 
+    if (Locker.GetRemovedLocks().contains(Update->LockTxId)) {
+        // This lock was removed, but the removal is not persistent yet
+        return EEnsureCurrentLock::Abort;
+    }
+
     if (!Db->MayAddLock(Update->LockTxId)) {
         return EEnsureCurrentLock::Abort;
     }
@@ -1532,12 +1588,7 @@ bool TSysLocks::Load(ILocksDb& db) {
 void TSysLocks::RestoreInMemoryLocks(THashMap<ui64, ILocksDb::TLockRow>&& rows) {
     for (auto& pr : rows) {
         auto& lockRow = pr.second;
-        TLockInfo::TPtr lock = Locker.RestoreInMemoryLock(lockRow);
-        if (lock) {
-            for (auto& rangeRow : lockRow.Ranges) {
-                lock->RestoreInMemoryRange(rangeRow);
-            }
-        }
+        Locker.RestoreInMemoryLock(lockRow);
     }
 
     for (auto& pr : rows) {
@@ -1549,11 +1600,19 @@ void TSysLocks::RestoreInMemoryLocks(THashMap<ui64, ILocksDb::TLockRow>&& rows) 
         }
         for (ui64 conflictId : lockRow.Conflicts) {
             if (auto* otherLock = Locker.FindLockPtr(conflictId)) {
-                lock->RestoreInMemoryConflict(otherLock);
+                // Note: we only restore in-memory conflicts (at least one
+                // lock is not persistent). Conflicts must be persistent when
+                // both locks are, otherwise such conflicts might be lost on
+                // restarts where in-memory migration fails.
+                if (!lock->IsPersistent() || !otherLock->IsPersistent()) {
+                    lock->RestoreInMemoryConflict(otherLock);
+                }
             }
         }
-        for (ui64 txId : lockRow.VolatileDependencies) {
-            lock->RestoreInMemoryVolatileDependency(txId);
+        if (!lock->IsPersistent()) {
+            for (ui64 txId : lockRow.VolatileDependencies) {
+                lock->RestoreInMemoryVolatileDependency(txId);
+            }
         }
     }
 }

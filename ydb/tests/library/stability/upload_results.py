@@ -99,14 +99,28 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
 
         aggregated_errors = []
         nodes_with_issues = set()
+        had_oom = False
+        san_errors_count = 0
+        coredump_count = 0
+
         for error in node_errors:
             nodes_with_issues.add(error.node)
-            aggregated_errors.append(error.message)
+            if len(error.core_hashes) > 0:
+                coredump_count += 1
+            had_oom |= error.was_oom
+            san_errors_count += error.sanitizer_errors
+
+        if san_errors_count > 0:
+            aggregated_errors.append(f'SAN errors: {san_errors_count}')
+        if coredump_count > 0:
+            aggregated_errors.append(f'Coredumps: {coredump_count}')
+        if had_oom:
+            aggregated_errors.append('OOM occured')
 
         for error_summary, detailed_info in verify_errors.items():
             aggregated_errors.append(f'VERIFY {error_summary} appeared on')
-            for host, host_count in detailed_info['host_count']:
-                aggregated_errors.append(f'  {host}: {host_count}')
+            for host, hosts_count in detailed_info['hosts_count'].items():
+                aggregated_errors.append(f'  {host}: {hosts_count}')
 
         stats["node_errors"] = aggregated_errors
 

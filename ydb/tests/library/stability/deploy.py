@@ -2,6 +2,7 @@ import allure
 import logging
 import os
 import time as time_module
+from pytz import timezone
 import yatest.common
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
@@ -20,6 +21,7 @@ class StressUtilDeployer:
     def __init__(self, binaries_deploy_path: str):
         self.binaries_deploy_path = binaries_deploy_path
         self.nemesis_started = False
+        self.hosts = []
 
     def prepare_stress_execution(
         self,
@@ -125,7 +127,7 @@ class StressUtilDeployer:
                 'node': node_object,
                 'binary_path': path_to_binary
             }, ...]
-            
+
         Raises:
             Exception: If deployment fails on all target nodes
         """
@@ -188,6 +190,7 @@ class StressUtilDeployer:
                     len(selected_nodes)} hosts"
             ):
                 target_hosts = [node.host for node in selected_nodes]
+                self.hosts = list(filter(lambda h: h != 'localhost', target_hosts))
                 logging.info(f"Starting deployment to hosts: {target_hosts}")
 
                 deploy_results = deploy_binaries_to_hosts(
@@ -288,7 +291,7 @@ class StressUtilDeployer:
             - Operation status per host
             - Timing information
             - Error details if any
-            
+
         Note:
             This method handles both binary deployment and service management
             when starting nemesis
@@ -667,7 +670,7 @@ class StressUtilDeployer:
 
         Args:
             delay_seconds: Delay in seconds before starting nemesis
-            
+
         Note:
             Creates a separate thread to handle the delayed start
             and attaches detailed timing information to Allure report
@@ -734,3 +737,24 @@ class StressUtilDeployer:
                 "Nemesis Delayed Start Error",
                 attachment_type=allure.attachment_type.TEXT,
             )
+
+    def attach_nemesis_logs(self, start_time):
+        """
+        Attach nemesis logs to Allure report
+
+        Args:
+            start_time: Start time of nemesis service
+        """
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).strftime("%Y-%m-%d %H:%M:%S")
+        end = datetime.fromtimestamp(datetime.now().timestamp(), tz).strftime("%Y-%m-%d %H:%M:%S")
+        cmd = f"sudo journalctl -u nemesis -S '{start}' -U '{end}'"
+        nemesis_logs = {}
+        for host in self.hosts:
+            try:
+                nemesis_logs[host] = execute_command(host, cmd, timeout=30).stdout
+            except BaseException as e:
+                logging.error(f'Failed to read nemesis logs: {e}')
+
+        for host, stdout in nemesis_logs.items():
+            allure.attach(stdout, f'Nemesis_{host}_logs', allure.attachment_type.TEXT)

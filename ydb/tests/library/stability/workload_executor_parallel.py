@@ -132,6 +132,7 @@ class ParallelWorkloadTestBase:
         # PHASE 3: RESULTS (collect diagnostics and finalize)
         self._finalize_workload_results(
             olap_load_base,
+            stress_deployer,
             execution_result,
             preparation_result['deployed_nodes'],
             additional_stats
@@ -143,6 +144,7 @@ class ParallelWorkloadTestBase:
     def _finalize_workload_results(
         self,
         olap_load_base: LoadSuiteBase,
+        stress_deployer: StressUtilDeployer,
         execution_result: dict,
         preparation_result: dict[str, StressUtilDeployResult],
         run_config: RunConfigInfo
@@ -174,7 +176,7 @@ class ParallelWorkloadTestBase:
 
             # Final status processing (may throw exception, but results are already uploaded)
             # Use node_errors saved from diagnostics
-            self._handle_final_status(overall_result, preparation_result, node_errors, verify_errors)
+            self._handle_final_status(stress_deployer, overall_result, preparation_result, node_errors, verify_errors)
 
             logging.info(
                 f"Final result: successful_runs={successful_runs} / {total_runs}"
@@ -262,7 +264,7 @@ class ParallelWorkloadTestBase:
             # Data is ready, now we can upload results
             return node_errors, verify_errors
 
-    def _handle_final_status(self, result: StressUtilTestResults, preparation_result: dict[str, StressUtilDeployResult], node_errors, verify_errors):
+    def _handle_final_status(self, stress_deployer: StressUtilDeployer, result: StressUtilTestResults, preparation_result: dict[str, StressUtilDeployResult], node_errors, verify_errors):
         """
         Handles final test status (fail, broken, etc.)
 
@@ -296,6 +298,12 @@ class ParallelWorkloadTestBase:
                     )
         except Exception as e:
             logging.warning(f"Failed to attach kikimr logs: {e}")
+
+        try:
+            if cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors:
+                stress_deployer.attach_nemesis_logs(result.start_time)
+        except Exception as e:
+            logging.warning(f"Failed to attach nemesis logs: {e}")
 
         # --- FAIL TEST IF CORES OR OOM FOUND ---
         if nodes_with_issues > 0:

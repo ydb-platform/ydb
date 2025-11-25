@@ -249,7 +249,12 @@ class LoadSuiteBase:
                 for core in json.loads(f'[{exec.stdout.strip(",")}]'):
                     slot = f"{core.get('slot', '')}@{h}"
                     core_hashes.setdefault(slot, [])
-                    core_hashes[slot].append((core.get('core_id', ''), core.get('core_hash', '')))
+                    v2_info = (core.get('core_id', ''), core.get('core_hash', ''))
+                    if v2_info[0] is None and v2_info[1] is None:
+                        v3_info = (core.get('core_uuid_v3', ''), core.get('core_hash_v3', ''))
+                        core_hashes[slot].append(v3_info)
+                    else:
+                        core_hashes[slot].append(v2_info)
             else:
                 logging.error(f'Error while search coredumps on host {h}: {exec.stderr}')
         return core_hashes

@@ -529,6 +529,7 @@ namespace NKikimr::NStorage {
 
         struct TGroupRecord {
             TIntrusivePtr<TBlobStorageGroupInfo> Info; // current group info
+            std::optional<TBlobStorageGroupType> GType;
             ui32 MaxKnownGeneration = 0; // maximum seen generation
             std::optional<NKikimrBlobStorage::TGroupInfo> Group; // group info as a protobuf
             NKikimrBlobStorage::TGroupInfo EncryptionParams; // latest encryption parameters; set only when encryption enabled; overlay in respect to Group
@@ -679,6 +680,8 @@ namespace NKikimr::NStorage {
         };
 
         std::set<TWorkingSyncer> WorkingSyncers;
+
+        TReplQuoter::TPtr SyncRateQuoter;
 
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
         void StartSyncerIfNeeded(TWorkingSyncer& syncer);

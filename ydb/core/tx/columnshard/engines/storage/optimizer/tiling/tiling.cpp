@@ -523,7 +523,9 @@ private:
     void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         std::vector<TPortionInfo::TPtr> sortedRemove;
         for (const auto& p : remove) {
-            PortionsInfo->RemovePortion(p);
+            if (p->GetProduced() != NPortion::INACTIVE &&  p->GetProduced() != NPortion::EVICTED) {
+                PortionsInfo->RemovePortion(p);
+            }
             sortedRemove.push_back(p);
         }
         std::sort(sortedRemove.begin(), sortedRemove.end(), [](const auto& a, const auto& b) {

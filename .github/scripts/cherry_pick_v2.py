@@ -16,7 +16,7 @@ import tempfile
 import shutil
 from typing import List, Optional, Tuple
 from dataclasses import dataclass, field
-from github import Github, GithubException, PullRequest
+from github import Github, GithubException, PullRequest, Auth
 import requests
 
 try:
@@ -41,6 +41,18 @@ class Source:
     body_item: str
     author: Optional[str]
     pull_requests: List[PullRequest]
+
+
+@dataclass
+class BackportResult:
+    target_branch: str
+    pr: Optional[PullRequest] = None
+    conflict_files: List[ConflictInfo] = field(default_factory=list)
+    cherry_pick_logs: List[str] = field(default_factory=list)
+    
+    @property
+    def has_conflicts(self) -> bool:
+        return len(self.conflict_files) > 0
 
 
 def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.CompletedProcess:
@@ -205,8 +217,8 @@ def extract_changelog(pr_body: str) -> Tuple[Optional[str], Optional[str], Optio
     category_match = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", pr_body, re.DOTALL)
     category = None
     if category_match:
-        categories = [line.strip('* ').strip() for line in category_match.group(1).splitlines() if line.strip() and line.strip().startswith('*')]
-        category = categories[0].strip() if categories else None
+        categories = [line.lstrip('* ').strip() for line in category_match.group(1).splitlines() if line.strip() and line.strip().startswith('*')]
+        category = categories[0] if categories else None
     
     # Entry
     entry_match = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", pr_body, re.DOTALL)
@@ -302,7 +314,7 @@ def build_pr_content(
             changelog_entry = f"{changelog_entry} ({issue_refs})"
     
     category_section = f"* {changelog_category}" if changelog_category else get_category_section_template()
-    commits = '\n'.join([f"* {item}" for item in all_body_items])
+    commits = '\n'.join(all_body_items)
     
     # Build body sections
     description = f"#### Original PR(s)\n{commits}\n\n#### Metadata\n"
@@ -448,19 +460,6 @@ def process_branch(
     workflow_url: Optional[str], summary_path: Optional[str], logger
 ):
     """Processes single branch"""
-    from dataclasses import dataclass, field
-    
-    @dataclass
-    class BackportResult:
-        target_branch: str
-        pr: Optional[PullRequest] = None
-        conflict_files: List[ConflictInfo] = field(default_factory=list)
-        cherry_pick_logs: List[str] = field(default_factory=list)
-        
-        @property
-        def has_conflicts(self) -> bool:
-            return len(self.conflict_files) > 0
-    
     all_conflict_files = []
     cherry_pick_logs = []
     
@@ -578,7 +577,7 @@ def main():
     summary_path = os.getenv('GITHUB_STEP_SUMMARY')
     
     # Initialize GitHub
-    gh = Github(login_or_token=token)
+    gh = Github(auth=Auth.Token(token))
     repo = gh.get_repo(repo_name)
     
     # Get workflow URL

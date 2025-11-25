@@ -49,12 +49,12 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
         print(f"::warning::{txt}")
         return False, txt
 
-    if not is_not_for_cl_valid and category in NOT_FOR_CHANGELOG_CATEGORIES:
+    if not is_not_for_cl_valid and any(category.lower() == cat.lower() for cat in NOT_FOR_CHANGELOG_CATEGORIES):
         txt = f"Category is not for changelog: {category}"
         print(f"::notice::{txt}")
         return False, txt
 
-    if category not in NOT_FOR_CHANGELOG_CATEGORIES:
+    if not any(category.lower() == cat.lower() for cat in NOT_FOR_CHANGELOG_CATEGORIES):
         entry_section = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", description, re.DOTALL)
         if not entry_section or len(entry_section.group(1).strip()) < 20:
             txt = "The changelog entry is less than 20 characters or missing."

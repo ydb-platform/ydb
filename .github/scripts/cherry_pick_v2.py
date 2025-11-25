@@ -95,10 +95,13 @@ def create_commit_source(commit, repo, logger) -> Source:
     author = linked_pr.user.login if linked_pr else (commit.author.login if commit.author else None)
     body_item = f"* commit {commit.html_url}: {linked_pr.title}" if linked_pr else f"* commit {commit.html_url}"
     
+    # Get commit message title (first line)
+    commit_title = commit.commit.message.split('\n')[0].strip() if commit.commit.message else f"commit {commit.sha[:7]}"
+    
     return Source(
         type='commit',
         commit_shas=[commit.sha],
-        title=f'commit {commit.sha[:7]}',
+        title=f'commit {commit.sha[:7]}: {commit_title}',
         body_item=body_item,
         author=author,
         pull_requests=[linked_pr] if linked_pr else []
@@ -121,7 +124,7 @@ def create_pr_source(pull: PullRequest, allow_unmerged: bool, logger) -> Source:
     return Source(
         type='pr',
         commit_shas=commit_shas,
-        title=f'PR {pull.number}',
+        title=f'PR {pull.number}: {pull.title}',
         body_item=f"* PR {pull.html_url}",
         author=pull.user.login,
         pull_requests=[pull]
@@ -253,8 +256,7 @@ def build_pr_content(
     for source in sources:
         all_commit_shas.extend(source.commit_shas)
         all_pull_requests.extend(source.pull_requests)
-        single = len(sources) == 1
-        all_titles.append(f'cherry-pick {source.title}' if single and source.type == 'commit' else source.title)
+        all_titles.append(source.title)
         all_body_items.append(source.body_item)
         if source.author and source.author not in all_authors:
             all_authors.append(source.author)
@@ -263,7 +265,7 @@ def build_pr_content(
     if len(all_titles) == 1:
         title = f"[Backport {target_branch}] {all_titles[0]}"
     else:
-        title = f"[Backport {target_branch}] cherry-pick {', '.join(all_titles)}"
+        title = f"[Backport {target_branch}] {', '.join(all_titles)}"
     if has_conflicts:
         title = f"[CONFLICT] {title}"
     if len(title) > 256: # GitHub limit for PR title
@@ -484,6 +486,8 @@ def process_branch(
     # Cherry-pick each commit
     for commit_sha in commit_shas:
         logger.info("Cherry-picking commit: %s", commit_sha[:7])
+        # Fetch commit to ensure it's available locally (needed for unmerged PRs)
+        run_git(repo_path, ['fetch', 'origin', commit_sha], logger, check=False)
         try:
             result = run_git(repo_path, ['cherry-pick', '--allow-empty', commit_sha], logger, check=False)
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')

@@ -643,6 +643,8 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
 void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
                                         const TActorContext& ctx)
 {
+    PQ_ENSURE(!TxQueue.empty());
+
     std::tie(ExecStep, ExecTxId) = TxQueue.front();
     PQ_LOG_TX_I("New ExecStep " << ExecStep << ", ExecTxId " << ExecTxId);
 
@@ -3331,9 +3333,10 @@ void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorCont
 
     PQ_LOG_TX_D("Handle TEvTxProcessing::TEvPlanStep " << ev->Get()->Record.ShortDebugString());
 
-    EvPlanStepQueue.emplace_back(ev->Sender, ev->Release().Release());
+    const TActorId sender = ev->Sender;
+    std::unique_ptr<TEvTxProcessing::TEvPlanStep> event{ev->Release().Release()};
 
-    TryWriteTxs(ctx);
+    ProcessPlanStep(sender, std::move(event), ctx);
 }
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx)
@@ -3666,6 +3669,87 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
     }
 }
 
+void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& ev,
+                                 const TActorContext& ctx)
+{
+    const NKikimrTx::TEvMediatorPlanStep& event = ev->Record;
+    const ui64 step = event.GetStep();
+    TMaybe<ui64> lastPlannedTxId;
+
+    for (const auto& tx : event.GetTransactions()) {
+        PQ_ENSURE(tx.HasTxId());
+        const ui64 txId = tx.GetTxId();
+        PQ_ENSURE(!lastPlannedTxId.Defined() || (*lastPlannedTxId < txId));
+
+        if (auto p = Txs.find(txId); p != Txs.end()) {
+            TDistributedTransaction& tx = p->second;
+
+            PQ_ENSURE(tx.MaxStep >= step);
+
+            if (tx.Step == Max<ui64>()) {
+                auto span = tx.CreatePlanStepSpan(TabletID(), step);
+                tx.BeginWaitRSSpan(TabletID());
+
+                PQ_ENSURE(TxQueue.empty() || (TxQueue.back() < std::make_pair(step, txId)));
+
+                TxQueue.emplace_back(step, txId);
+                SetTxCompleteLagCounter();
+
+                tx.OnPlanStep(step);
+                TryExecuteTxs(ctx, tx);
+
+                lastPlannedTxId = txId;
+            } else {
+                PQ_LOG_TX_W("Transaction already planned for step " << tx.Step <<
+                            ", Step: " << step <<
+                            ", TxId: " << txId);
+            }
+        } else {
+            PQ_LOG_TX_W("Unknown transaction  TxId " << txId << ". Step " << step);
+        }
+    }
+
+    if (step > PlanStep) {
+        PlanStep = step;
+
+        if (lastPlannedTxId.Defined()) {
+            PlanTxId = *lastPlannedTxId;
+        }
+    }
+
+    if (lastPlannedTxId.Defined()) {
+        auto p = Txs.find(*lastPlannedTxId);
+        TDistributedTransaction& tx = p->second;
+
+        tx.SendPlanStepAcksAfterCompletion(sender, std::move(ev));
+    }
+
+    PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
+}
+
+void TPersQueue::TrySchedulePlanStepAcks(const TDistributedTransaction& tx)
+{
+    if (!tx.PlanStepSender) {
+        return;
+    }
+
+    THashMap<TActorId, TVector<ui64>> txAcks;
+
+    for (auto& m : tx.PlanStepEvent->Record.GetTransactions()) {
+        PQ_ENSURE(m.HasTxId());
+
+        if (m.HasAckTo()) {
+            TActorId txOwner = ActorIdFromProto(m.GetAckTo());
+            if (txOwner) {
+                txAcks[txOwner].push_back(m.GetTxId());
+            }
+        }
+    }
+
+    SchedulePlanStepAck(tx.Step, txAcks);
+    SchedulePlanStepAccepted(tx.PlanStepSender, tx.Step);
+}
+
 void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
 {
     PQ_ENSURE(!WriteTxsInProgress);
@@ -3790,6 +3874,8 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
             tx->BeginDeleteSpan(TabletID(), WriteTxsSpan.GetTraceId());
 
             ChangedTxs.emplace(tx->Step, txId);
+
+            TrySchedulePlanStepAcks(*tx);
         }
     }
 
@@ -4338,11 +4424,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
     case NKikimrPQ::TTransaction::PREPARED:
         PQ_ENSURE(tx.Step != Max<ui64>())("TxId", tx.TxId);
 
-        WriteTx(tx, NKikimrPQ::TTransaction::PLANNED);
-
         ChangeTxState(tx, NKikimrPQ::TTransaction::PLANNING);
 
-        break;
+        [[fallthrough]];
 
     case NKikimrPQ::TTransaction::PLANNING:
         PQ_ENSURE(!tx.WriteInProgress)("TxId", tx.TxId);

@@ -1,3 +1,4 @@
+import os
 import sys
 import re
 from typing import Tuple
@@ -87,7 +88,11 @@ def validate_pr_description_from_file(file_path) -> Tuple[bool, str]:
             with open(file_path, 'r') as file:
                 description = file.read()
         else:
-            description = sys.stdin.read()
+            # Read from environment variable (preferred) or stdin (fallback)
+            description = os.environ.get('PR_BODY', '')
+            if not description:
+                description = sys.stdin.read()
+        
         return check_pr_description(description)
     except Exception as e:
         txt = f"Failed to validate PR description: {e}"

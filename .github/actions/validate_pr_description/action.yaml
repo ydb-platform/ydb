@@ -21,7 +21,7 @@ runs:
         GITHUB_REPOSITORY: ${{ github.repository }}
       run: |
         python3 -m pip install PyGithub
-        echo "$PR_BODY" | python3 ${{ github.action_path }}/validate_pr_description.py
+        python3 ${{ github.action_path }}/validate_pr_description.py
 
 outputs:
   status:

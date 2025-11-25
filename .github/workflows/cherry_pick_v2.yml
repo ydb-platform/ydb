@@ -42,7 +42,7 @@ jobs:
       - name: install packages
         shell: bash
         run: |
-          pip install PyGithub==2.5.0 requests
+          pip install PyGithub==2.5.0 requests GitPython==3.1.40
 
       - name: configure
         shell: bash

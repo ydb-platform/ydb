@@ -1,4 +1,76 @@
 #!/usr/bin/env python3
+"""
+Cherry-pick v2 Script - Automated Backport Tool
+
+ARCHITECTURE OVERVIEW
+=====================
+
+This module implements an automated cherry-pick workflow for backporting commits/PRs
+to target branches. It maintains order of input sources and creates PRs with proper
+metadata.
+
+Main Components:
+----------------
+
+1. Data Models
+   - ConflictInfo: Information about merge conflicts
+   - CherryPickResult: Result of git cherry-pick operation
+   - AbstractCommit/CommitSource/PRSource: Source abstraction preserving order
+     * CommitSource: Represents a single commit SHA
+     * PRSource: Represents a Pull Request (uses merge_commit_sha for merged PRs)
+   - SourceInfo: Container for all sources with ordered properties
+   - PRContext: Context for PR body generation
+   - BackportResult: Result for a single target branch
+
+2. Core Classes
+   - CommitResolver: Expands and validates commit references (SHA, short SHA)
+   - GitRepository: Git operations wrapper using GitPython
+   - ConflictHandler: Detects and handles merge conflicts
+   - GitHubClient: GitHub API operations (PR creation, issues)
+   - PRContentBuilder: Generates PR title and body with changelog
+   - CommentManager: Manages comments on original PRs
+   - SummaryWriter: Writes GitHub Actions summary
+   - InputParser: Parses and normalizes input strings
+   - InputValidator: Validates PRs, commits, and branches
+
+3. Orchestrator
+   - CherryPickOrchestrator: Main coordinator class
+     * Parses input (PR numbers, commit SHAs)
+     * Creates AbstractCommit sources preserving order
+     * Processes each target branch:
+       - Clones repository
+       - Cherry-picks commits in order (git cherry-pick --allow-empty)
+       - Handles conflicts
+       - Creates PR with proper metadata
+
+Execution Flow:
+---------------
+
+1. Parse input: Split commits string, normalize references
+2. Create sources: For each input, create CommitSource or PRSource
+   - PR number → PRSource (uses merge_commit_sha for merged PRs)
+   - Commit SHA → CommitSource (always uses commit.sha)
+3. Validate: Check PRs are merged, commits/branches exist
+4. For each target branch:
+   a. Clone repository
+   b. Fetch and checkout target branch
+   c. Create dev branch
+   d. Cherry-pick each commit SHA in order (from source_info.commit_shas)
+   e. Handle conflicts (commit with BACKPORT-CONFLICT message)
+   f. Push branch
+   g. Create PR (draft if conflicts, normal otherwise)
+   h. Update comments on original PRs
+
+Key Design Decisions:
+--------------------
+
+- Order preservation: Sources stored in single list (SourceInfo.sources)
+- Merged PR handling: Always uses merge_commit_sha (same as old script)
+- Empty commits: Handled via --allow-empty flag (same as old script)
+- Conflict handling: Commits conflicts for manual resolution
+- PR metadata: Extracts changelog category/entry from original PRs
+"""
+
 import os
 import sys
 import datetime
@@ -7,9 +79,11 @@ import subprocess
 import argparse
 import re
 from typing import List, Optional, Tuple
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from github import Github, GithubException, PullRequest
 import requests
+import git
 
 # Import PR template and categories from validate_pr_description action
 try:
@@ -40,20 +114,191 @@ class ConflictInfo:
 class CherryPickResult:
     """Result of git cherry-pick execution"""
     success: bool
-    has_conflicts: bool
-    is_empty: bool = False  # True if "nothing to commit"
     raw_output: str = ""  # Raw output of git command
     conflict_files: List[ConflictInfo] = field(default_factory=list)
+    
+    @property
+    def has_conflicts(self) -> bool:
+        """Check if there are conflicts based on conflict_files or raw_output"""
+        if self.conflict_files:
+            return True
+        # Fallback to checking raw_output if conflict_files not yet populated
+        return "conflict" in self.raw_output.lower() if self.raw_output else False
+
+
+class AbstractCommit(ABC):
+    """Abstract base class for commit sources (commits and PRs)"""
+    
+    @abstractmethod
+    def get_commit_shas(self) -> List[str]:
+        """Returns list of commit SHAs to cherry-pick"""
+        pass
+    
+    @abstractmethod
+    def get_title(self, single: bool) -> str:
+        """Returns title for display"""
+        pass
+    
+    @abstractmethod
+    def get_body_item(self) -> str:
+        """Returns body item for PR description"""
+        pass
+    
+    @abstractmethod
+    def get_author(self) -> Optional[str]:
+        """Returns author username"""
+        pass
+    
+    @abstractmethod
+    def get_pull_requests(self) -> List[PullRequest]:
+        """Returns list of associated PullRequest objects"""
+        pass
+
+
+class CommitSource(AbstractCommit):
+    """Source representing a single commit"""
+    
+    def __init__(self, commit, repo, merge_commits_mode: str = 'skip'):
+        self.commit = commit
+        self.repo = repo
+        self.merge_commits_mode = merge_commits_mode
+        self._linked_pr: Optional[PullRequest] = None
+        # Cache linked PR if available
+        try:
+            pulls = commit.get_pulls()
+            if pulls.totalCount > 0:
+                self._linked_pr = pulls.get_page(0)[0]
+        except Exception:
+            pass
+    
+    def get_commit_shas(self) -> List[str]:
+        return [self.commit.sha]
+    
+    def get_title(self, single: bool) -> str:
+        if single:
+            return f'cherry-pick commit {self.commit.sha[:7]}'
+        return f'commit {self.commit.sha[:7]}'
+    
+    def get_body_item(self) -> str:
+        if self._linked_pr:
+            return f"* commit {self.commit.html_url}: {self._linked_pr.title}"
+        return f"* commit {self.commit.html_url}"
+    
+    def get_author(self) -> Optional[str]:
+        # Prefer PR author if commit is linked to PR
+        if self._linked_pr:
+            return self._linked_pr.user.login
+        try:
+            return self.commit.author.login if self.commit.author else None
+        except AttributeError:
+            return None
+    
+    def get_pull_requests(self) -> List[PullRequest]:
+        if self._linked_pr:
+            return [self._linked_pr]
+        return []
+
+
+class PRSource(AbstractCommit):
+    """Source representing a Pull Request"""
+    
+    def __init__(self, pull, repo, merge_commits_mode: str = 'skip', allow_unmerged: bool = False):
+        self.pull = pull
+        self.repo = repo
+        self.merge_commits_mode = merge_commits_mode
+        self.allow_unmerged = allow_unmerged
+        self._commit_shas: Optional[List[str]] = None
+    
+    def _get_commits_from_pr(self) -> List[str]:
+        """Gets list of commits from PR (excluding merge commits)"""
+        commits = []
+        for commit in self.pull.get_commits():
+            commit_obj = commit.commit
+            if self.merge_commits_mode == 'skip':
+                if commit_obj.parents and len(commit_obj.parents) > 1:
+                    continue
+            commits.append(commit.sha)
+        return commits
+    
+    def get_commit_shas(self) -> List[str]:
+        """Returns commit SHAs to cherry-pick"""
+        if self._commit_shas is not None:
+            return self._commit_shas
+        
+        if not self.pull.merged:
+            # Unmerged PR - use all commits from PR
+            pr_commits = self._get_commits_from_pr()
+            if not pr_commits:
+                raise ValueError(f"PR #{self.pull.number} contains no commits to cherry-pick")
+            self._commit_shas = pr_commits
+        elif self.pull.merge_commit_sha:
+            # Merged PR - always use merge_commit_sha (same as old script)
+            self._commit_shas = [self.pull.merge_commit_sha]
+        else:
+            # Fallback: use all commits from PR if no merge_commit_sha
+            pr_commits = self._get_commits_from_pr()
+            if not pr_commits:
+                raise ValueError(f"PR #{self.pull.number} contains no commits to cherry-pick")
+            self._commit_shas = pr_commits
+        
+        return self._commit_shas
+    
+    def get_title(self, single: bool) -> str:
+        if single:
+            return self.pull.title
+        return f'PR {self.pull.number}'
+    
+    def get_body_item(self) -> str:
+        return f"* PR {self.pull.html_url}"
+    
+    def get_author(self) -> Optional[str]:
+        return self.pull.user.login
+    
+    def get_pull_requests(self) -> List[PullRequest]:
+        return [self.pull]
 
 
 @dataclass
 class SourceInfo:
     """Information about source PRs/commits for backport"""
-    titles: List[str] = field(default_factory=list)
-    body_items: List[str] = field(default_factory=list)
-    pull_requests: List = field(default_factory=list)
-    authors: List[str] = field(default_factory=list)
-    commit_shas: List[str] = field(default_factory=list)
+    sources: List[AbstractCommit] = field(default_factory=list)
+    
+    @property
+    def commit_shas(self) -> List[str]:
+        """Get all commit SHAs in order"""
+        result = []
+        for source in self.sources:
+            result.extend(source.get_commit_shas())
+        return result
+    
+    @property
+    def pull_requests(self) -> List[PullRequest]:
+        """Get all pull requests in order"""
+        result = []
+        for source in self.sources:
+            result.extend(source.get_pull_requests())
+        return result
+    
+    @property
+    def titles(self) -> List[str]:
+        """Get all titles in order"""
+        single = len(self.sources) == 1
+        return [source.get_title(single) for source in self.sources]
+    
+    @property
+    def body_items(self) -> List[str]:
+        """Get all body items in order"""
+        return [source.get_body_item() for source in self.sources]
+    
+    @property
+    def authors(self) -> List[str]:
+        """Get all authors in order"""
+        result = []
+        for source in self.sources:
+            author = source.get_author()
+            if author and author not in result:
+                result.append(author)
+        return result
 
 
 @dataclass
@@ -88,10 +333,14 @@ class BackportResult:
     """Backport result for a single branch"""
     target_branch: str
     pr: Optional[PullRequest] = None
-    has_conflicts: bool = False
     conflict_files: List[ConflictInfo] = field(default_factory=list)
     error: Optional[str] = None
     cherry_pick_logs: List[str] = field(default_factory=list)
+    
+    @property
+    def has_conflicts(self) -> bool:
+        """Check if there are conflicts based on conflict_files"""
+        return len(self.conflict_files) > 0
 
 
 # ============================================================================
@@ -101,177 +350,200 @@ class BackportResult:
 class CommitResolver:
     """Resolves and expands commit references (SHA, short SHA, PR number)"""
     
-    MIN_SHA_LENGTH = 7
     FULL_SHA_LENGTH = 40
     
     def __init__(self, repo, logger):
         self.repo = repo
         self.logger = logger
     
-    def is_likely_sha(self, ref: str) -> bool:
-        """Checks if string looks like SHA (hexadecimal, correct length)"""
-        if not ref:
-            return False
-        # Check that it's hex and correct length
-        try:
-            int(ref, 16)  # Hex validation
-            return len(ref) >= self.MIN_SHA_LENGTH and len(ref) <= self.FULL_SHA_LENGTH
-        except ValueError:
-            return False
-    
     def expand_sha(self, ref: str) -> str:
-        """Expands short SHA to full SHA with validation"""
-        if len(ref) == self.FULL_SHA_LENGTH and self.is_likely_sha(ref):
-            return ref  # Already full SHA
-        
-        if not self.is_likely_sha(ref):
-            raise ValueError(f"'{ref}' does not look like a SHA (must be hex, minimum {self.MIN_SHA_LENGTH} characters)")
-        
-        # Try GitHub API (works before cloning)
-        try:
-            commits = self.repo.get_commits(sha=ref)
-            if commits.totalCount > 0:
-                commit = commits[0]
-                if commit.sha.startswith(ref):
-                    return commit.sha
-        except Exception as e:
-            self.logger.debug(f"Failed to find commit via GitHub API: {e}")
-        
-        # Fallback: git rev-parse (requires cloned repository)
-        try:
-            result = subprocess.run(
-                ['git', 'rev-parse', ref],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            expanded = result.stdout.strip()
-            if len(expanded) == self.FULL_SHA_LENGTH:
-                return expanded
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            pass
+        """Expands short SHA to full SHA using GitHub API"""
+        if len(ref) == self.FULL_SHA_LENGTH:
+            # Already full SHA, verify it exists
+            try:
+                commits = self.repo.get_commits(sha=ref)
+                if commits.totalCount > 0 and commits[0].sha == ref:
+                    return ref
+            except Exception as e:
+                self.logger.debug(f"Failed to verify full SHA via GitHub API: {e}")
+        else:
+            # Short SHA, expand it
+            try:
+                commits = self.repo.get_commits(sha=ref)
+                if commits.totalCount > 0:
+                    commit = commits[0]
+                    if commit.sha.startswith(ref):
+                        return commit.sha
+            except Exception as e:
+                self.logger.debug(f"Failed to find commit via GitHub API: {e}")
         
         raise ValueError(f"Failed to find commit for '{ref}'")
 
 
 class GitRepository:
-    """Abstraction over git commands"""
+    """Abstraction over git commands using GitPython"""
     
-    def __init__(self, logger):
+    def __init__(self, logger, repo_path: Optional[str] = None):
         self.logger = logger
-    
-    def git_run(self, *args):
-        """Executes git command with logging"""
-        args = ["git"] + list(args)
-        self.logger.info("Executing git command: %r", args)
-        try:
-            result = subprocess.run(args, capture_output=True, text=True, check=True)
-            output = result.stdout + (("\n" + result.stderr) if result.stderr else "")
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Git command failed: {' '.join(args)}")
-            self.logger.error(f"Exit code: {e.returncode}")
-            if e.stdout:
-                self.logger.error(f"Stdout: {e.stdout}")
-            if e.stderr:
-                self.logger.error(f"Stderr: {e.stderr}")
-            raise
-        else:
-            self.logger.debug("Command output:\n%s", output)
-        return output
+        self.repo: Optional[git.Repo] = None
+        if repo_path:
+            self.repo = git.Repo(repo_path)
     
     def clone(self, repo_url: str, target_dir: str):
         """Clones repository"""
-        self.git_run("clone", repo_url, "-c", "protocol.version=2", target_dir)
+        self.logger.info("Cloning repository: %s to %s", repo_url, target_dir)
+        try:
+            self.repo = git.Repo.clone_from(
+                repo_url,
+                target_dir,
+                env={'GIT_PROTOCOL': '2'}
+            )
+            self.logger.debug("Repository cloned successfully")
+        except git.GitCommandError as e:
+            self.logger.error(f"Failed to clone repository: {e}")
+            raise
     
     def fetch(self, remote: str, branch: str):
         """Fetches branch"""
-        self.git_run("fetch", remote, branch)
+        if not self.repo:
+            raise RuntimeError("Repository not initialized. Call clone() first.")
+        self.logger.info("Fetching %s/%s", remote, branch)
+        try:
+            self.repo.remote(remote).fetch(branch)
+            self.logger.debug("Branch fetched successfully")
+        except git.GitCommandError as e:
+            self.logger.error(f"Failed to fetch branch: {e}")
+            raise
     
     def reset_hard(self):
         """Hard reset current branch"""
-        self.git_run("reset", "--hard")
+        if not self.repo:
+            raise RuntimeError("Repository not initialized. Call clone() first.")
+        self.logger.info("Hard reset current branch")
+        try:
+            self.repo.head.reset(index=True, working_tree=True)
+            self.logger.debug("Hard reset completed")
+        except git.GitCommandError as e:
+            self.logger.error(f"Failed to reset: {e}")
+            raise
     
     def checkout_branch(self, branch: str, from_branch: Optional[str] = None):
         """Checkout branch (creates if doesn't exist)"""
-        if from_branch:
-            self.git_run("checkout", "-B", branch, from_branch)
-        else:
-            self.git_run("checkout", branch)
+        if not self.repo:
+            raise RuntimeError("Repository not initialized. Call clone() first.")
+        self.logger.info("Checkout branch: %s", branch)
+        try:
+            if from_branch:
+                # from_branch can be "origin/branch" format
+                # Use git command for simplicity with remote refs
+                self.repo.git.checkout("-B", branch, from_branch)
+            else:
+                self.repo.git.checkout(branch)
+            self.logger.debug("Branch checked out successfully")
+        except git.GitCommandError as e:
+            self.logger.error(f"Failed to checkout branch: {e}")
+            raise
     
     def create_branch(self, branch_name: str, from_branch: str):
         """Creates new branch from specified branch"""
-        self.git_run("checkout", "-b", branch_name, from_branch)
-        return branch_name
+        if not self.repo:
+            raise RuntimeError("Repository not initialized. Call clone() first.")
+        self.logger.info("Create branch: %s from %s", branch_name, from_branch)
+        try:
+            # from_branch can be "origin/branch" format
+            # Use git command for simplicity with remote refs
+            self.repo.git.checkout("-b", branch_name, from_branch)
+            self.logger.debug("Branch created and checked out successfully")
+            return branch_name
+        except git.GitCommandError as e:
+            self.logger.error(f"Failed to create branch: {e}")
+            raise
     
     def cherry_pick(self, commit_sha: str) -> CherryPickResult:
         """Cherry-pick commit with full output preservation"""
+        if not self.repo:
+            raise RuntimeError("Repository not initialized. Call clone() first.")
+        self.logger.info("Cherry-picking commit: %s", commit_sha[:7])
+        # Use subprocess to preserve full raw output for logging
         try:
             result = subprocess.run(
-                ['git', 'cherry-pick', commit_sha],
+                ['git', 'cherry-pick', '--allow-empty', commit_sha],
+                cwd=self.repo.working_dir,
                 capture_output=True,
                 text=True,
                 check=True
             )
-            output = (result.stdout or '') + (result.stderr or '')
+            output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
             return CherryPickResult(
                 success=True,
-                has_conflicts=False,
-                is_empty=False,
                 raw_output=output
             )
         except subprocess.CalledProcessError as e:
-            output = (e.stdout or '') + (e.stderr or '')
+            output = (e.stdout or '') + (('\n' + e.stderr) if e.stderr else '')
             output_lower = output.lower()
             
-            # "nothing to commit" or "empty" - not an error, just empty commit
-            is_empty = "nothing to commit" in output_lower or "empty" in output_lower
             has_conflicts = "conflict" in output_lower
-            
-            if is_empty:
-                # Do NOT do --skip, just return result
-                return CherryPickResult(
-                    success=True,  # Consider it success
-                    has_conflicts=False,
-                    is_empty=True,
-                    raw_output=output
-                )
             
             if has_conflicts:
                 return CherryPickResult(
                     success=False,
-                    has_conflicts=True,
-                    is_empty=False,
                     raw_output=output
                 )
             
             # Other error - re-raise
+            self.logger.error(f"Cherry-pick failed: {e}")
             raise
     
     def add_all(self):
         """git add -A"""
-        self.git_run("add", "-A")
+        if not self.repo:
+            raise RuntimeError("Repository not initialized. Call clone() first.")
+        self.logger.info("Adding all files")
+        try:
+            self.repo.git.add(A=True)
+            self.logger.debug("Files added successfully")
+        except git.GitCommandError as e:
+            self.logger.error(f"Failed to add files: {e}")
+            raise
     
     def commit(self, message: str):
         """git commit"""
-        self.git_run("commit", "-m", message)
-    
-    def commit_allow_empty(self, message: str):
-        """git commit --allow-empty"""
-        self.git_run("commit", "--allow-empty", "-m", message)
+        if not self.repo:
+            raise RuntimeError("Repository not initialized. Call clone() first.")
+        self.logger.info("Committing: %s", message[:50])
+        try:
+            self.repo.index.commit(message)
+            self.logger.debug("Commit created successfully")
+        except git.GitCommandError as e:
+            self.logger.error(f"Failed to commit: {e}")
+            raise
     
     def push(self, branch: str, set_upstream: bool = True):
         """Push branch"""
-        if set_upstream:
-            self.git_run("push", "--set-upstream", "origin", branch)
-        else:
-            self.git_run("push", "origin", branch)
+        if not self.repo:
+            raise RuntimeError("Repository not initialized. Call clone() first.")
+        self.logger.info("Pushing branch: %s", branch)
+        try:
+            if set_upstream:
+                self.repo.git.push("--set-upstream", "origin", branch)
+            else:
+                self.repo.remote("origin").push(branch)
+            self.logger.debug("Branch pushed successfully")
+        except git.GitCommandError as e:
+            self.logger.error(f"Failed to push branch: {e}")
+            raise
     
     def cherry_pick_abort(self):
         """Abort cherry-pick"""
+        if not self.repo:
+            raise RuntimeError("Repository not initialized. Call clone() first.")
+        self.logger.info("Aborting cherry-pick")
         try:
-            self.git_run("cherry-pick", "--abort")
-        except subprocess.CalledProcessError:
+            self.repo.git.cherry_pick("--abort")
+            self.logger.debug("Cherry-pick aborted successfully")
+        except git.GitCommandError:
             # May not be in cherry-pick state
+            self.logger.debug("No cherry-pick in progress to abort")
             pass
 
 
@@ -1054,7 +1326,6 @@ class CherryPickOrchestrator:
         
         # Collect information about source PRs/commits
         self.source_info = SourceInfo()
-        self.pull_requests = []
         
         for c in commits:
             ref = InputParser.normalize_commit_ref(c)
@@ -1104,25 +1375,16 @@ class CherryPickOrchestrator:
                 self._add_pull(pr.number, single)
                 return
             
-            # Regular commit linked to PR
+            # Regular commit linked to PR - still create CommitSource, PR info is available via get_pull_requests()
+            # Check if PR is merged
             if not pr.merged:
                 if not self.allow_unmerged:
                     raise ValueError(f"PR #{pr.number} (associated with commit {expanded_sha[:7]}) is not merged. Cannot backport unmerged PR. Use --allow-unmerged to allow")
                 else:
                     self.logger.info(f"PR #{pr.number} (associated with commit {expanded_sha[:7]}) is not merged, but --allow-unmerged is set, proceeding")
-            
-            existing_pr_numbers = [p.number for p in self.pull_requests]
-            if pr.number not in existing_pr_numbers:
-                self.pull_requests.append(pr)
-                self.source_info.pull_requests.append(pr)
-                self.source_info.authors.append(pr.user.login)
-            
-            if single:
-                self.source_info.titles.append(pr.title)
-            else:
-                self.source_info.titles.append(f'commit {commit.sha[:7]}')
-            self.source_info.body_items.append(f"* commit {commit.html_url}: {pr.title}")
-        else:
+        
+        # Commit not linked to PR or linked but we use commit
+        if not pulls.totalCount > 0:
             # Commit not linked to PR
             if is_merge_commit:
                 # Merge commit without linked PR
@@ -1131,34 +1393,10 @@ class CherryPickOrchestrator:
                 elif self.merge_commits_mode == 'skip':
                     self.logger.info(f"Skipping merge commit {expanded_sha[:7]} (--merge-commits skip, no associated PR)")
                     return
-            
-            # Regular commit without PR
-            try:
-                commit_author = commit.author.login if commit.author else None
-                if commit_author and commit_author not in self.source_info.authors:
-                    self.source_info.authors.append(commit_author)
-            except AttributeError:
-                pass
-            
-            if single:
-                self.source_info.titles.append(f'cherry-pick commit {commit.sha[:7]}')
-            else:
-                self.source_info.titles.append(f'commit {commit.sha[:7]}')
-            self.source_info.body_items.append(f"* commit {commit.html_url}")
         
-        self.source_info.commit_shas.append(commit.sha)
-    
-    def _get_commits_from_pr(self, pull) -> List[str]:
-        """Gets list of commits from PR (excluding merge commits)"""
-        commits = []
-        for commit in pull.get_commits():
-            commit_obj = commit.commit
-            if self.merge_commits_mode == 'skip':
-                if commit_obj.parents and len(commit_obj.parents) > 1:
-                    self.logger.info(f"Skipping merge commit {commit.sha[:7]} from PR #{pull.number}")
-                    continue
-            commits.append(commit.sha)
-        return commits
+        # Create CommitSource and add to sources
+        source = CommitSource(commit, self.repo, self.merge_commits_mode)
+        self.source_info.sources.append(source)
     
     def _add_pull(self, p: int, single: bool):
         """Adds PR and gets commits from it"""
@@ -1170,33 +1408,23 @@ class CherryPickOrchestrator:
             else:
                 self.logger.info(f"PR #{p} is not merged, but --allow-unmerged is set, proceeding with commits from PR")
         
-        self.pull_requests.append(pull)
-        self.source_info.pull_requests.append(pull)
-        self.source_info.authors.append(pull.user.login)
+        # Create PRSource and add to sources
+        source = PRSource(pull, self.repo, self.merge_commits_mode, self.allow_unmerged)
+        self.source_info.sources.append(source)
         
-        if single:
-            self.source_info.titles.append(f"{pull.title}")
-        else:
-            self.source_info.titles.append(f'PR {pull.number}')
-        self.source_info.body_items.append(f"* PR {pull.html_url}")
-        
-        pr_commits = self._get_commits_from_pr(pull)
-        if not pr_commits:
-            raise ValueError(f"PR #{p} contains no commits to cherry-pick")
-        
-        if not pull.merged:
-            self.source_info.commit_shas.extend(pr_commits)
-            self.logger.info(f"PR #{p} is unmerged, using {len(pr_commits)} commits from PR")
-        elif pull.merge_commit_sha:
-            merge_commit = self.repo.get_commit(pull.merge_commit_sha)
-            if merge_commit.parents and len(merge_commit.parents) > 1:
-                self.source_info.commit_shas.extend(pr_commits)
-                self.logger.info(f"PR #{p} was merged as merge commit, using {len(pr_commits)} individual commits")
-            else:
-                self.source_info.commit_shas.append(pull.merge_commit_sha)
-                self.logger.info(f"PR #{p} was merged as squash/rebase, using merge_commit_sha")
-        else:
-            self.source_info.commit_shas.extend(pr_commits)
+        # Validate that PR has commits (this will also populate _commit_shas)
+        try:
+            commit_shas = source.get_commit_shas()
+            if not pull.merged:
+                self.logger.info(f"PR #{p} is unmerged, using {len(commit_shas)} commits from PR")
+            elif pull.merge_commit_sha:
+                merge_commit = self.repo.get_commit(pull.merge_commit_sha)
+                if merge_commit.parents and len(merge_commit.parents) > 1:
+                    self.logger.info(f"PR #{p} was merged as merge commit, using {len(commit_shas)} individual commits")
+                else:
+                    self.logger.info(f"PR #{p} was merged as squash/rebase, using merge_commit_sha")
+        except ValueError as e:
+            raise
     
     def process(self):
         """Main processing method"""
@@ -1205,7 +1433,7 @@ class CherryPickOrchestrator:
             self.validator.validate_all(
                 self.source_info.commit_shas,
                 self.target_branches,
-                self.pull_requests
+                self.source_info.pull_requests
             )
         except ValueError as e:
             error_msg = f"VALIDATION_ERROR: {e}"
@@ -1215,7 +1443,7 @@ class CherryPickOrchestrator:
         
         # Create initial comment
         self.comment_manager.create_initial_comment(
-            self.pull_requests,
+            self.source_info.pull_requests,
             self.target_branches,
             self.workflow_url
         )
@@ -1224,7 +1452,9 @@ class CherryPickOrchestrator:
         try:
             repo_url = f"https://{self.token}@github.com/{self.repo_name}.git"
             self.git_repo.clone(repo_url, "ydb-new-pr")
-        except subprocess.CalledProcessError as e:
+            # Update repo path after cloning
+            self.git_repo.repo = git.Repo("ydb-new-pr")
+        except (git.GitCommandError, Exception) as e:
             error_msg = f"REPOSITORY_CLONE_ERROR: Failed to clone repository {self.repo_name}: {e}"
             self.logger.error(error_msg)
             self.summary_writer.write(error_msg)
@@ -1281,20 +1511,6 @@ class CherryPickOrchestrator:
             # Save raw log
             if result.raw_output:
                 cherry_pick_logs.append(f"=== Cherry-picking {commit_sha[:7]} ===\n{result.raw_output}")
-            
-            # Handle empty commits - create empty commit with original message
-            if result.is_empty:
-                self.logger.info(f"Commit {commit_sha[:7]} is empty (already applied), creating empty commit...")
-                try:
-                    # Get original commit message
-                    original_commit = self.repo.get_commit(commit_sha)
-                    commit_message = original_commit.commit.message
-                    # Create empty commit with original message
-                    self.git_repo.commit_allow_empty(commit_message)
-                    self.logger.info(f"Created empty commit for {commit_sha[:7]}")
-                except Exception as e:
-                    self.logger.warning(f"Failed to create empty commit for {commit_sha[:7]}: {e}, continuing...")
-                continue
             
             # Handle conflicts
             if result.has_conflicts:
@@ -1381,7 +1597,6 @@ class CherryPickOrchestrator:
             return BackportResult(
                 target_branch=target_branch,
                 pr=pr,
-                has_conflicts=has_conflicts,
                 conflict_files=all_conflict_files,
                 cherry_pick_logs=cherry_pick_logs
             )

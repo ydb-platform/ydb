@@ -5,17 +5,17 @@ import json
 from github import Github, Auth as GithubAuth
 
 def main():
-    pr_number = os.environ.get("PR_NUMBER") or (sys.argv[1] if len(sys.argv) > 1 else None)
+    pr_number = os.getenv("PR_NUMBER", sys.argv[1] if len(sys.argv) > 1 else None)
     if not pr_number:
         print("::error::PR_NUMBER is required")
         sys.exit(1)
     
-    github_token = os.environ.get("GITHUB_TOKEN")
+    github_token = os.getenv("GITHUB_TOKEN")
     if not github_token:
         print("::error::GITHUB_TOKEN is not set")
         sys.exit(1)
     
-    github_repo = os.environ.get("GITHUB_REPOSITORY")
+    github_repo = os.getenv("GITHUB_REPOSITORY")
     if not github_repo:
         print("::error::GITHUB_REPOSITORY is not set")
         sys.exit(1)
@@ -25,13 +25,22 @@ def main():
         repo = gh.get_repo(github_repo)
         pr = repo.get_pull(int(pr_number))
         
+        # Check if PR was found
+        if not pr:
+            print(f"::error::PR #{pr_number} not found")
+            sys.exit(1)
+        
         # Save PR body for next step
         pr_body = pr.body or ""
-        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+        github_output = os.getenv("GITHUB_OUTPUT")
+        if not github_output:
+            print("::error::GITHUB_OUTPUT is not set")
+            sys.exit(1)
+        with open(github_output, "a") as f:
             f.write(f"pr_body<<EOF\n{pr_body}\nEOF\n")
         
         # Update GITHUB_EVENT_PATH for post_status_to_github.py
-        event_path = os.environ.get("GITHUB_EVENT_PATH")
+        event_path = os.getenv("GITHUB_EVENT_PATH")
         if event_path:
             with open(event_path, "w") as f:
                 json.dump({"pull_request": {

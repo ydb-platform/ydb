@@ -107,8 +107,8 @@ TConclusionStatus TScanHead::Start() {
 TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
     if (HasAppData()) {
-        if (AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
-            MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
+        if (AppDataVerified().ColumnShardConfig.HasBlobMaxInFlightIntervalsOnRequest()) {
+            MaxInFlight = AppDataVerified().ColumnShardConfig.GetBlobMaxInFlightIntervalsOnRequest();
         }
     }
 

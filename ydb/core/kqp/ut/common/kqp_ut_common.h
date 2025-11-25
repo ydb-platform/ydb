@@ -69,8 +69,8 @@ private:
         if (!AppConfig.MutableColumnShardConfig()->HasDisabledOnSchemeShard()) {
             AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
         }
-        if (!AppConfig.MutableColumnShardConfig()->HasMaxInFlightIntervalsOnRequest()) {
-            AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
+        if (!AppConfig.MutableColumnShardConfig()->HasBlobMaxInFlightIntervalsOnRequest()) {
+            AppConfig.MutableColumnShardConfig()->SetBlobMaxInFlightIntervalsOnRequest(1);
         }
     }
 public:

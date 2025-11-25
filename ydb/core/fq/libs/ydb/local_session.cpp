@@ -86,7 +86,6 @@ private:
     )
 
 private:
-    const std::string Db;
     const TString Path;
     const NYdb::NTable::TTableDescription TableDesc;
     NACLib::TDiffACL Acl;

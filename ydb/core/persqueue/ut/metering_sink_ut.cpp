@@ -70,14 +70,13 @@ Y_UNIT_TEST(FlushPutEventsV1) {
         }},
         "version": "v1",
         "source_id": "tabletId",
-        "source_wt": {source_wt}
+        "source_wt": {finish}
     }})",
         fmt::arg("timestamp", emptyFlushTs / 1'000),
         fmt::arg("counter", meteringSink.GetMeteringCounter()),
         fmt::arg("quantity", quantity),
         fmt::arg("start", emptyFlushTs / 1'000'000),
-        fmt::arg("finish", flushTs / 1'000'000),
-        fmt::arg("source_wt", flushTs / 1'000'000)
+        fmt::arg("finish", flushTs / 1'000'000)
     );
 
     UNIT_ASSERT_VALUES_EQUAL(ReformatJson(fullMetering), ReformatJson(referencePutUnitsJson));
@@ -138,7 +137,7 @@ Y_UNIT_TEST(FlushResourcesReservedV1) {
         }},
         "version": "v1",
         "source_id": "tabletId",
-        "source_wt": {source_wt}
+        "source_wt": {finish}
     }})",
         fmt::arg("timestamp", creationTs / 1'000),
         fmt::arg("counter", meteringSink.GetMeteringCounter()),
@@ -147,8 +146,7 @@ Y_UNIT_TEST(FlushResourcesReservedV1) {
         fmt::arg("reserved_space", reservedSpace),
         fmt::arg("quantity", partitions * (flushTs - creationTs) / 1'000'000),
         fmt::arg("start", creationTs / 1'000'000),
-        fmt::arg("finish", flushTs / 1'000'000),
-        fmt::arg("source_wt", flushTs / 1'000'000)
+        fmt::arg("finish", flushTs / 1'000'000)
     );
 
     UNIT_ASSERT_VALUES_EQUAL(ReformatJson(fullMetering), ReformatJson(referenceResourcesReservedJson));
@@ -202,15 +200,14 @@ Y_UNIT_TEST(FlushThroughputV1) {
         }},
         "version": "v1",
         "source_id": "tabletId",
-        "source_wt": {source_wt}
+        "source_wt": {finish}
     }})",
         fmt::arg("timestamp", creationTs / 1'000),
         fmt::arg("counter", meteringSink.GetMeteringCounter()),
         fmt::arg("write_quota", writeQuota),
         fmt::arg("quantity", partitions * (flushTs - creationTs) / 1'000'000),
         fmt::arg("start", creationTs / 1'000'000),
-        fmt::arg("finish", flushTs / 1'000'000),
-        fmt::arg("source_wt", flushTs / 1'000'000)
+        fmt::arg("finish", flushTs / 1'000'000)
     );
     UNIT_ASSERT_VALUES_EQUAL(ReformatJson(fullMetering), ReformatJson(referenceThrougputJson));
 }
@@ -261,14 +258,13 @@ Y_UNIT_TEST(FlushStorageV1) {
         }},
         "version": "v1",
         "source_id": "tabletId",
-        "source_wt": {source_wt}
+        "source_wt": {finish}
     }})",
         fmt::arg("timestamp", creationTs / 1'000),
         fmt::arg("counter", meteringSink.GetMeteringCounter()),
         fmt::arg("quantity", ((flushTs - creationTs) / 1'000'000) * partitions * (reservedSpace / 1_MB)),
         fmt::arg("start", creationTs / 1'000'000),
-        fmt::arg("finish", flushTs / 1'000'000),
-        fmt::arg("source_wt", flushTs / 1'000'000)
+        fmt::arg("finish", flushTs / 1'000'000)
     );
     UNIT_ASSERT_VALUES_EQUAL(ReformatJson(fullMetering), ReformatJson(referenceStorageJson));
 }

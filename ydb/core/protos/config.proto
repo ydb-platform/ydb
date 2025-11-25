@@ -1549,8 +1549,8 @@ message TImmediateControlsConfig {
         optional uint64 FastSplitCpuPercentageThreshold = 11 [(ControlOptions) = {
             Description: "Max Fast split cpu usage",
             MinValue: 1,
-            MaxValue: 50,
-            DefaultValue: 146 }];
+            MaxValue: 146,
+            DefaultValue: 50 }];
         optional uint64 SplitByLoadEnabled = 12 [(ControlOptions) = {
             Description: "Enables split by load",
             MinValue: 0,

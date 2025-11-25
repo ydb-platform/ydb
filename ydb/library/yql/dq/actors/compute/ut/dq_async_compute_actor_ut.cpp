@@ -558,7 +558,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         TDqSerializedBatch sbatch;
         auto& channelData = *ev->Get()->Record.MutableChannelData();
         sbatch.Proto = std::move(*channelData.MutableData());
-        dqInputChannel->Push(std::move(sbatch), Nothing());
+        dqInputChannel->Push(std::move(sbatch));
         bool finished = channelData.GetFinished();
         if (finished) {
             dqInputChannel->Finish();

@@ -568,19 +568,20 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 
         TDqSerializedBatch data;
         data.Proto = std::move(*channelData.MutableData());
+        dqInputChannel->Push(std::move(data));
 
-        TMaybe<TInstant> watermark;
-        if (channelData.GetWatermark().HasTimestampUs()) {
-            watermark = TInstant::MicroSeconds(channelData.GetWatermark().GetTimestampUs());
+        if (channelData.HasWatermark()) {
+            const auto& watermarkRequest = channelData.GetWatermark();
+            const auto watermark = TInstant::MicroSeconds(watermarkRequest.GetTimestampUs());
+            dqInputChannel->Push(watermark);
         }
 
-        const auto finished = channelData.GetFinished();
-
-        dqInputChannel->Push(std::move(data), watermark);
-        if (finished) {
+        if (channelData.GetFinished()) {
             dqInputChannel->Finish();
         }
+
         TUnboxedValueBatch batch;
+        TMaybe<TInstant> watermark;
         const auto columns = IsWide ? static_cast<TMultiType*>(dqInputChannel->GetInputType())->GetElementsCount() : static_cast<TStructType*>(dqInputChannel->GetInputType())->GetMembersCount();
         while (dqInputChannel->Pop(batch, watermark)) {
             if (IsWide) {

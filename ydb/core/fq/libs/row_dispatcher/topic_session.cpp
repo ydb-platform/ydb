@@ -982,7 +982,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&) {
-    LOG_ROW_DISPATCHER_ERROR("TEvGetEventByTimerEvent");
+    LOG_ROW_DISPATCHER_DEBUG("TEvGetEventByTimerEvent");
     // There is an attempt to fix a partition reading bug here.
     Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
     bool readSomething = HandleNewEvents ();

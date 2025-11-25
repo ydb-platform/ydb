@@ -16,13 +16,12 @@ namespace {
 class TTableCreator : public NActors::TActorBootstrapped<TTableCreator> {
 public:
     TTableCreator(
-        const std::string& db,
+        const std::string& /*db*/,
         const std::string& path,
         NYdb::NTable::TTableDescription&& tableDesc,
         const NACLib::TDiffACL& acl,
         NThreading::TPromise<NYdb::TStatus> promise)
-        : Db(db)
-        , Path(path)
+        : Path(path)
         , TableDesc(std::move(tableDesc))
         , Acl(acl)
         , Promise(promise) {

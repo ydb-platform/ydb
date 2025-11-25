@@ -219,8 +219,10 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             {
                 auto& msg = response->Messages[1];
                 UNIT_ASSERT_VALUES_EQUAL(msg.Index, 7);
-                UNIT_ASSERT(!msg.MessageId.has_value());
                 UNIT_ASSERT_VALUES_EQUAL(msg.Status, Ydb::StatusIds::ALREADY_EXISTS);
+                UNIT_ASSERT(msg.MessageId.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->PartitionId, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->Offset, 0);
             }
             {
                 auto& msg = response->Messages[2];
@@ -287,6 +289,9 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
                 auto& msg = response->Messages[0];
                 UNIT_ASSERT_VALUES_EQUAL(msg.Index, 7);
                 UNIT_ASSERT_VALUES_EQUAL(msg.Status, Ydb::StatusIds::ALREADY_EXISTS);
+                UNIT_ASSERT(msg.MessageId.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->PartitionId, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg.MessageId->Offset, 0);
             }
         }
     }

@@ -1211,18 +1211,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         }
     }
 
-    if (!DeduplicateByMessageId(p.Msg)) {
-        LOG_D("Deduplicate message " << p.Msg.SeqNo << " by MessageDeduplicationId");
-        p.DeduplicatedByMessageId = true;
-
-        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
-        MsgsDiscarded.Inc();
-        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
-        BytesDiscarded.Inc(p.Msg.Data.size());
-
-        return true;
-    }
-
     if (!p.Msg.DisableDeduplication &&
         ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo) || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))
     ) {
@@ -1306,6 +1294,20 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             return false;
         }
         curOffset = poffset;
+    }
+
+    auto deduplicationResult = DeduplicateByMessageId(p.Msg, curOffset);
+    if (deduplicationResult) {
+        LOG_D("Deduplicate message " << p.Msg.SeqNo << " by MessageDeduplicationId");
+        p.DeduplicatedByMessageId = true;
+        p.Offset = deduplicationResult.value();
+
+        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
+        MsgsDiscarded.Inc();
+        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
+        BytesDiscarded.Inc(p.Msg.Data.size());
+
+        return true;
     }
 
     if (p.Msg.PartNo == 0) { //create new PartitionedBlob

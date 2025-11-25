@@ -185,17 +185,12 @@ void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
             }
 
             alreadyReceived = message.ResultReceived;
-
-            message.Status = Ydb::StatusIds::SUCCESS;
             message.ResultReceived = true;
 
             if (i < response.CmdWriteResultSize()) {
                 auto& result = response.GetCmdWriteResult(i);
-                if (result.GetAlreadyWritten()) {
-                    message.Status = Ydb::StatusIds::ALREADY_EXISTS;
-                } else {
-                    message.Offset = result.GetOffset();
-                }
+                message.Status = result.GetAlreadyWritten() ? Ydb::StatusIds::ALREADY_EXISTS : Ydb::StatusIds::SUCCESS;
+                message.Offset = result.GetOffset();
                 ++i;
             }
         }
@@ -277,7 +272,7 @@ void TWriterActor::ReplyIfPossible() {
     response->DescribeStatus = DescribeStatus;
     for (auto& message : PendingMessages) {
         std::optional<TMessageId> messageId;
-        if (message.Status == Ydb::StatusIds::SUCCESS) {
+        if (message.Status == Ydb::StatusIds::SUCCESS || message.Status == Ydb::StatusIds::ALREADY_EXISTS) {
             messageId = {
                 .PartitionId = message.PartitionId,
                 .Offset = message.Offset

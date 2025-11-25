@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <deque>
@@ -18,6 +18,7 @@ public:
     struct TMessage {
         TString DeduplicationId;
         TInstant ExpirationTime;
+        ui64 Offset;
 
         bool operator==(const TMessage& other) const = default;
     };
@@ -28,7 +29,7 @@ public:
     const TDuration& GetDeduplicationWindow() const;
     TInstant GetExpirationTime() const;
 
-    bool AddMessage(const TString& deduplicationId);
+    std::optional<ui64> AddMessage(const TString& deduplicationId, const ui64 offset);
     size_t Compact();
 
     void Commit();
@@ -45,7 +46,7 @@ private:
 
     bool HasChanges = false;
     std::deque<TMessage> Queue;
-    absl::flat_hash_set<TString> Messages;
+    absl::flat_hash_map<TString, ui64> Messages;
 
     struct TBucket {
         TInstant StartTime;

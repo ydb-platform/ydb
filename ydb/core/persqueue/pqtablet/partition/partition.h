@@ -1263,7 +1263,7 @@ private:
     ui64 LastNotifiedEndOffset = 0;
 
     TMessageIdDeduplicator MessageIdDeduplicator;
-    bool DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg);
+    std::optional<ui64> DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset);
 };
 
 inline ui64 TPartition::GetStartOffset() const {

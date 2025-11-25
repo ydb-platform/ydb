@@ -427,7 +427,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                               UNIT_ASSERT(map.contains("tags"));
                               const auto& tags = map.find("tags")->second.GetMap();
                               UNIT_ASSERT_VALUES_EQUAL(tags.size(), 1);
-                              UNIT_ASSERT_VALUES_EQUAL(tags.find("Category")->second.GetString(), "Topic");
+                              UNIT_ASSERT_VALUES_EQUAL(tags.find("category")->second.GetString(), "topic");
                           },
                           [streamName](const NJson::TJsonValue::TMapType& map) {
                               UNIT_ASSERT(map.contains("labels"));
@@ -518,7 +518,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                 UNIT_ASSERT(map.contains("tags"));
                                 const auto& tags = map.find("tags")->second.GetMap();
                                 UNIT_ASSERT_VALUES_EQUAL(tags.size(), 1);
-                                UNIT_ASSERT_VALUES_EQUAL(tags.find("Category")->second.GetString(), "Topic");
+                                UNIT_ASSERT_VALUES_EQUAL(tags.find("category")->second.GetString(), "topic");
                             },
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
@@ -562,7 +562,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                     tags.find("reserved_throughput_bps")->second.GetUInteger(), 1_MB);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     tags.find("reserved_consumers_count")->second.GetUInteger(), 0);
-                                UNIT_ASSERT_VALUES_EQUAL(tags.find("Category")->second.GetString(), "Topic");
+                                UNIT_ASSERT_VALUES_EQUAL(tags.find("category")->second.GetString(), "topic");
 
                             },
                             [streamName](const NJson::TJsonValue::TMapType& map) {
@@ -600,7 +600,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                 UNIT_ASSERT(map.contains("tags"));
                                 const auto& tags = map.find("tags")->second.GetMap();
                                 UNIT_ASSERT_VALUES_EQUAL(tags.size(), 1);
-                                UNIT_ASSERT_VALUES_EQUAL(tags.find("Category")->second.GetString(), "Topic");
+                                UNIT_ASSERT_VALUES_EQUAL(tags.find("category")->second.GetString(), "topic");
                             },
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
@@ -711,7 +711,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                 UNIT_ASSERT(map.contains("tags"));
                                 const auto& tags = map.find("tags")->second.GetMap();
                                 UNIT_ASSERT_VALUES_EQUAL(tags.size(), 1);
-                                UNIT_ASSERT_VALUES_EQUAL(tags.find("Category")->second.GetString(), "Topic");
+                                UNIT_ASSERT_VALUES_EQUAL(tags.find("category")->second.GetString(), "topic");
                             },
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
@@ -754,7 +754,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                     tags.find("reserved_consumers_count")->second.GetUInteger(), ui32(s >= 1) + ui32(s >= 3) );
                                 ++s;
 
-                                UNIT_ASSERT_VALUES_EQUAL(tags.find("Category")->second.GetString(), "Topic");
+                                UNIT_ASSERT_VALUES_EQUAL(tags.find("category")->second.GetString(), "topic");
                             },
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
@@ -856,7 +856,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                 UNIT_ASSERT(tags.contains("reserved_throughput_bps"));
                                 UNIT_ASSERT(tags.contains("reserved_consumers_count"));
                                 UNIT_ASSERT(tags.contains("reserved_storage_bytes"));
-                                UNIT_ASSERT_VALUES_EQUAL(tags.find("Category")->second.GetString(), "Topic");
+                                UNIT_ASSERT_VALUES_EQUAL(tags.find("category")->second.GetString(), "topic");
                             },
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));

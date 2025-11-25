@@ -90,7 +90,7 @@ TString TMeteringSink::GetMeteringJson(const TMeteringSink::FlushParameters& par
     for (const auto& [tag, value] : parameters.Tags) {
         writer.Write(tag, value);
     }
-    writer.Write("Category", "Topic");
+    writer.Write("category", "topic");
     writer.CloseMap(); // "tags"
 
     writer.OpenMap("usage");

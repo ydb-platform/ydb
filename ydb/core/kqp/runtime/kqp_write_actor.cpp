@@ -441,18 +441,12 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata,
         i64 priority) {
         YQL_ENSURE(!Closed);
-
-        // TODO:
-        std::vector<ui32> writeIndexes(columnsMetadata.size());
-        std::iota(std::begin(writeIndexes), std::end(writeIndexes), 0);
-
         ShardedWriteController->Open(
             token,
             TableId,
             operationType,
             std::move(keyColumnsMetadata),
             std::move(columnsMetadata),
-            std::move(writeIndexes),
             priority);
         
         // At current time only insert operation can fail.

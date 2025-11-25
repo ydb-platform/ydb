@@ -151,7 +151,6 @@ public:
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
-        std::vector<ui32>&& writeIndexes,
         const i64 priority) = 0;
     virtual void Write(
         const TWriteToken token,

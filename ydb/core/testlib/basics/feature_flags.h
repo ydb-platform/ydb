@@ -83,6 +83,7 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardWriteAlwaysVolatile)
     FEATURE_FLAG_SETTER(EnableStreamingQueries)
     FEATURE_FLAG_SETTER(DisableMissingDefaultColumnsInBulkUpsert)
+    FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForReplication)
 
     #undef FEATURE_FLAG_SETTER
 };

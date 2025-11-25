@@ -1478,7 +1478,6 @@ private:
 class TKqpWriteTask {
 public:
     struct TPathWriteInfo {
-        std::vector<ui32> WriteColumnsIndexes;
         std::vector<ui32> DeleteKeysIndexes;
         std::vector<ui32> NewColumnsIndexes;
         std::vector<ui32> OldColumnsIndexes;
@@ -1808,6 +1807,7 @@ private:
             .Batch = rowsBatcher->Flush(),
             .ExistsMask = std::move(existsMask),
         });
+        AFL_ENSURE(rowsBatcher->IsEmpty());
 
         if (PathLookupInfo.size() > 1) {
             // Lookup unique indexes
@@ -1960,9 +1960,9 @@ private:
                         actorInfo.WriteActor->FlushBuffer(DeleteCookie);
                     }
 
-                    AFL_ENSURE(!actorInfo.WriteColumnsIndexes.empty());
+                    AFL_ENSURE(!actorInfo.NewColumnsIndexes.empty());
                     auto projection = CreateDataBatchProjection(
-                                actorInfo.WriteColumnsIndexes, Alloc);
+                                actorInfo.NewColumnsIndexes, Alloc);
 
                     for (const auto& [key, rowAndExists] : keyToRow) {
                         if (!rowAndExists.second || !actorInfo.SkipEqualRows || !IsEqual(
@@ -1991,9 +1991,9 @@ private:
             AFL_ENSURE(actorInfo.DeleteKeysIndexes.empty());
 
             if (actorInfo.NeedWriteProjection) {
-                AFL_ENSURE(!actorInfo.WriteColumnsIndexes.empty());
+                AFL_ENSURE(!actorInfo.NewColumnsIndexes.empty());
                 auto projection = CreateDataBatchProjection(
-                    actorInfo.WriteColumnsIndexes,
+                    actorInfo.NewColumnsIndexes,
                     Alloc);
                 for (const auto& row : GetRows(batch)) {
                     projection->AddRow(row);
@@ -2880,11 +2880,6 @@ public:
                 }
 
                 writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                    .WriteColumnsIndexes = GetIndexes(
-                                settings.Columns,
-                                settings.LookupColumns,
-                                indexSettings.Columns,
-                                /* preferAdditionalInputColumns */ false),
                     .DeleteKeysIndexes = needAdditionalDelete
                                 ? GetIndexes(
                                     settings.Columns,
@@ -2993,11 +2988,6 @@ public:
 
             AFL_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
             writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                .WriteColumnsIndexes = GetIndexes(
-                            settings.Columns,
-                            settings.LookupColumns,
-                            settings.Columns,
-                            /* preferAdditionalInputColumns */ false),
                 .DeleteKeysIndexes = {},
                 .NewColumnsIndexes = GetIndexes(
                             settings.Columns,

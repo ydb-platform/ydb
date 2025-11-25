@@ -1919,9 +1919,6 @@ private:
     }
 
     void Init(EKikimrQueryType queryType) {
-        const auto enableWatermarks = queryType == EKikimrQueryType::Script && AppData()->FeatureFlags.GetEnableWatermarks();
-        SessionCtx->Config().EnableWatermarks = enableWatermarks;
-
         TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem);
 

@@ -110,6 +110,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , VerboseMemoryLimitException(args.VerboseMemoryLimitException)
     , Query(args.Query)
     , CheckpointCoordinatorId(args.CheckpointCoordinator)
+    , EnableWatermarks(args.EnableWatermarks)
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -272,7 +273,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetUserToken(UserToken->SerializeAsString());
     }
 
-    request.SetEnableWatermarks(AppData()->FeatureFlags.GetEnableWatermarks());
+    request.SetEnableWatermarks(EnableWatermarks);
 
     return result;
 }
@@ -637,9 +638,14 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 }
 
 void TKqpPlanner::PrepareCheckpoints() {
+    const auto isStreamingQuery = UserRequestContext && UserRequestContext->IsStreamingQuery;
+
+    if (!isStreamingQuery) {
+        return;
+    }
+
     const auto enableCheckpoints = static_cast<bool>(CheckpointCoordinatorId);
-    const auto enableWatermarks = AppData()->FeatureFlags.GetEnableWatermarks();
-    TasksGraph.BuildCheckpointingAndWatermarksMode(enableCheckpoints, enableWatermarks);
+    TasksGraph.BuildCheckpointingAndWatermarksMode(enableCheckpoints, EnableWatermarks);
 
     if (!enableCheckpoints) {
         return;

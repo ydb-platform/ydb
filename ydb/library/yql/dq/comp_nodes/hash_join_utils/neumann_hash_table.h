@@ -419,7 +419,7 @@ class TNeumannHashTable {
     std::array<TIterator, Size> FindBatch(const std::array<const ui8 *, Size> &rows,
                                           const ui8 *const overflow) const {
         if constexpr (Prefetch) {
-            if (Directories_.size_bytes() > 1024 * 1024) {
+            if (Directories_.size() > 1024 * 1024 / sizeof(TDirectory)) {
                 for (ui32 index = 0; index < Size && rows[index]; ++index) {
                     const THash &thash = ReadUnaligned<THash>(rows[index]);
                     const Hash dirSlot = getDirectorySlot(thash);

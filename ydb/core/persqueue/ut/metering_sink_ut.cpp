@@ -9,7 +9,7 @@
 
 namespace NKikimr::NPQ {
 
-static NJson::TJsonValue ReformatJson(TStringBuf json) {
+static TString ReformatJson(TStringBuf json) {
     TMemoryInput in(json);
     const auto value = NJson::ReadJsonTree(&in, true);
     return WriteJson(value, true, true, true);

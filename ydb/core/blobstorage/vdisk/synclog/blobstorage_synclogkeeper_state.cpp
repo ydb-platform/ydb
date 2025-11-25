@@ -487,7 +487,6 @@ namespace NKikimr {
                 PhantomFlagStorageState.Deactivate();
             }
 
-            // append scheduledChunks to ChunksToDeleteDelayed
             ChunksToDeleteDelayed.Insert(chunks);
         }
 

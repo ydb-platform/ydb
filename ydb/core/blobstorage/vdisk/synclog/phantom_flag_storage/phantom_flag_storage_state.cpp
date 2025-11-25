@@ -94,8 +94,6 @@ void TPhantomFlagStorageState::AdjustSize(ui64 sizeLimit) {
 }
 
 bool TPhantomFlagStorageState::AddFlag(const TLogoBlobRec& blobRec) {
-    StoredFlags.emplace_back(blobRec);
-    return true;
     if (StoredFlags.size() < StoredFlags.capacity()) {
         StoredFlags.emplace_back(blobRec);
         return true;

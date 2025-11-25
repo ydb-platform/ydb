@@ -229,8 +229,8 @@ private:
                     sumLength += value.size();
                 }
 
-                double avgLenght = sumLength * 1.0 / label.Values.size();
-                batchSize = std::min<ui64>(batchSize, MaxHttpGetRequestSize * 0.75 / avgLenght);
+                double avgLength = std::max<double>(1.0, sumLength * 1.0 / label.Values.size());
+                batchSize = std::min<ui64>(batchSize, MaxHttpGetRequestSize * 0.5 / avgLength);
             }
 
             for (ui64 i = 0; i * batchSize < label.Values.size(); i++) {

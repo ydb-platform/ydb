@@ -120,9 +120,10 @@ private:
 
         // embedding
         const auto embeddingColumn = batch->GetColumnByName(EmbeddingColumnName);
+        Cerr << embeddingColumn->type()->ToString() << Endl;
         if (embeddingColumn->type()->Equals(arrow::binary())) {
             resultColumns.push_back(embeddingColumn);
-        } else if (embeddingColumn->type()->Equals(arrow::list(arrow::float32()))) {
+        } else if (embeddingColumn->type_id() == arrow::Type::LIST) {
             const std::shared_ptr<arrow::ListArray> embeddingListColumn = std::dynamic_pointer_cast<arrow::ListArray>(embeddingColumn);
             arrow::StringBuilder newEmbeddingsBuilder;
             for (int64_t row = 0; row < batch->num_rows(); ++row) {
@@ -202,7 +203,7 @@ private:
             }
             resultColumns.push_back(arrow::ChunkedArray::Make({newEmbeddingColumn}).ValueOrDie());
         } else {
-            resultColumns.push_back(embeddingColumn);
+            ythrow yexception() << "Only list[float32] CSV type is supported for embedding column";
         }
 
         const auto newTable = arrow::Table::Make(arrow::schema({
@@ -262,7 +263,7 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
             << "If a directory is set, all supported files inside will be used."
             << "\nSupported formats: CSV/TSV (zipped or unzipped) and Parquet."
             << "\nIf embedding appears to be list of floats, then it gets converted to YDB binary embedding format."
-            << "\nOtherwise embedding must already be binary; for CSV/TSV its encoding is controlled by --input-binary-strings."
+            << "\nOtherwise embedding must already be binary; for CSV/TSV format embedding always must be represented as list of floats."
             << "\nExample dataset: https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings";
 
         opts.AddLongOption('i', "input", description)
@@ -278,26 +279,6 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
             .DefaultValue(EmbeddingColumnName)
             .StoreResult(&EmbeddingColumnName);
     }
-
-    // // --input-binary-strings
-    // {
-    //     TStringBuilder description;
-    //     description
-    //         << "Binary encoding of the " << colors.BoldColor() << "embedding" << colors.OldColor()
-    //         << " column in CSV/TSV when importing in " << colors.BoldColor() << "raw" << colors.OldColor()
-    //         << " mode (or in " << colors.BoldColor() << "auto" << colors.OldColor() << " when it selects raw)."
-    //         << "\nIgnored for Parquet and for " << colors.BoldColor() << "convert" << colors.OldColor() << " mode."
-    //         << "\nAvailable options:"
-    //         << "\n  " << colors.BoldColor() << "unicode" << colors.OldColor()
-    //         << "\n    " << "Every byte in binary strings that is not a printable ASCII symbol (codes 32-126) should be encoded as UTF-8."
-    //         << "\n  " << colors.BoldColor() << "base64" << colors.OldColor()
-    //         << "\n    " << "Binary strings should be fully encoded with base64.";
-
-    //     opts.AddLongOption("input-binary-strings", description)
-    //         .RequiredArgument("STRING")
-    //         .DefaultValue(InputBinaryStringEncodingFormat)
-    //         .StoreResult(&InputBinaryStringEncodingFormat);
-    // }
 }
 
 TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData() {

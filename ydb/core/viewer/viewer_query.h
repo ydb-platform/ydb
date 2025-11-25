@@ -709,7 +709,6 @@ private:
         if (Y_UNLIKELY(NUdf::MIN_TIMESTAMP64 > value || value > NUdf::MAX_TIMESTAMP64)) {
             throw yexception() << "Value out of range for Timestamp64: " << value << " (min: " << NUdf::MIN_TIMESTAMP64 << ", max: " << NUdf::MAX_TIMESTAMP64 << ")";
         }
-    
         auto date = value / 86400000000ll;
         value -= date * 86400000000ll;
         if (value < 0) {
@@ -721,11 +720,11 @@ private:
         out << FormatDate32(std::chrono::sys_time<NYdb::TWideDays>(NYdb::TWideDays(date)));
         out << 'T';
 
-        const auto time = value / 1000000ull;
+        const ui32 time = static_cast<ui32>(value / 1000000ull);
         value -= time * 1000000ull;
-        out << WriteTime(time) << '.';
+        out << WriteTime(time);
         if (value) {
-            out << LeftPad(value, 6, '0');
+            out << '.' << LeftPad(value, 6, '0');
         }
         return out << 'Z';
     }

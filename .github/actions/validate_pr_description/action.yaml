@@ -1,5 +1,13 @@
 name: "validate-pr-description"
 
+inputs:
+  pr_body:
+    description: "The body of the pull request."
+    required: true
+  pr_number:
+    description: "The number of the pull request."
+    required: false
+
 runs:
   using: "composite"
   steps:
@@ -14,14 +22,6 @@ runs:
       run: |
         python3 -m pip install PyGithub
         echo "$PR_BODY" | python3 ${{ github.action_path }}/validate_pr_description.py
-
-inputs:
-  pr_body:
-    description: "The body of the pull request."
-    required: true
-  pr_number:
-    description: "The number of the pull request."
-    required: false
 
 outputs:
   status:

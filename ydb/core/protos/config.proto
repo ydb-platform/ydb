@@ -2355,6 +2355,10 @@ message TColumnShardConfig {
         }
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
+    message TS3Client {
+        optional uint32 ExecutorThreadsCount = 1 [default = 32];
+        optional uint32 MaxConnectionsCount = 2 [default = 32];
+    }
     optional bool DisabledOnSchemeShard = 2 [default = false];
     optional bool IndexationEnabled = 4 [default = true];
     optional bool CompactionEnabled = 5 [default = true];
@@ -2385,7 +2389,7 @@ message TColumnShardConfig {
         CAST_TO_INFINITY = 1;
     }
 
-    optional uint32 MaxInFlightIntervalsOnRequest = 16;
+    reserved 16;
     optional uint32 MaxReadStaleness_ms = 18 [default = 1800000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
     optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
@@ -2432,6 +2436,9 @@ message TColumnShardConfig {
     }
 
     optional TStatistics Statistics = 57;
+    optional TS3Client S3Client = 58;
+    optional uint32 BlobMaxInFlightIntervalsOnRequest = 59;
+    optional uint32 S3MaxInFlightIntervalsOnRequest = 60;
 }
 
 message TSchemeShardConfig {

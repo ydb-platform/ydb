@@ -158,10 +158,9 @@ class AbstractCommit(ABC):
 class CommitSource(AbstractCommit):
     """Source representing a single commit"""
     
-    def __init__(self, commit, repo, merge_commits_mode: str = 'skip'):
+    def __init__(self, commit, repo):
         self.commit = commit
         self.repo = repo
-        self.merge_commits_mode = merge_commits_mode
         self._linked_pr: Optional[PullRequest] = None
         # Cache linked PR if available
         try:
@@ -202,21 +201,16 @@ class CommitSource(AbstractCommit):
 class PRSource(AbstractCommit):
     """Source representing a Pull Request"""
     
-    def __init__(self, pull, repo, merge_commits_mode: str = 'skip', allow_unmerged: bool = False):
+    def __init__(self, pull, repo, allow_unmerged: bool = False):
         self.pull = pull
         self.repo = repo
-        self.merge_commits_mode = merge_commits_mode
         self.allow_unmerged = allow_unmerged
         self._commit_shas: Optional[List[str]] = None
     
     def _get_commits_from_pr(self) -> List[str]:
-        """Gets list of commits from PR (excluding merge commits)"""
+        """Gets list of commits from PR"""
         commits = []
         for commit in self.pull.get_commits():
-            commit_obj = commit.commit
-            if self.merge_commits_mode == 'skip':
-                if commit_obj.parents and len(commit_obj.parents) > 1:
-                    continue
             commits.append(commit.sha)
         return commits
     
@@ -1314,7 +1308,6 @@ class CherryPickOrchestrator:
         self.validator = InputValidator(self.repo, getattr(args, 'allow_unmerged', False), self.logger)
         
         # Parameters
-        self.merge_commits_mode = getattr(args, 'merge_commits', 'skip')
         self.allow_unmerged = getattr(args, 'allow_unmerged', False)
         
         # Parse input data
@@ -1351,31 +1344,11 @@ class CherryPickOrchestrator:
         
         commit = self.repo.get_commit(expanded_sha)
         
-        # Check merge commit
-        is_merge_commit = commit.parents and len(commit.parents) > 1
-        
-        # First check if commit is linked to PR (even if it's a merge commit)
+        # Check if commit is linked to PR
         pulls = commit.get_pulls()
         if pulls.totalCount > 0:
             pr = pulls.get_page(0)[0]
             
-            # If this is merge commit linked to PR - automatically use PR
-            if is_merge_commit:
-                if self.merge_commits_mode == 'fail':
-                    self.logger.warning(
-                        f"Commit {expanded_sha[:7]} is a merge commit associated with PR #{pr.number}. "
-                        f"Automatically using PR #{pr.number} instead."
-                    )
-                elif self.merge_commits_mode == 'skip':
-                    self.logger.info(
-                        f"Commit {expanded_sha[:7]} is a merge commit associated with PR #{pr.number}. "
-                        f"Automatically using PR #{pr.number} instead of skipping."
-                    )
-                # Process as PR instead of merge commit
-                self._add_pull(pr.number, single)
-                return
-            
-            # Regular commit linked to PR - still create CommitSource, PR info is available via get_pull_requests()
             # Check if PR is merged
             if not pr.merged:
                 if not self.allow_unmerged:
@@ -1383,19 +1356,8 @@ class CherryPickOrchestrator:
                 else:
                     self.logger.info(f"PR #{pr.number} (associated with commit {expanded_sha[:7]}) is not merged, but --allow-unmerged is set, proceeding")
         
-        # Commit not linked to PR or linked but we use commit
-        if not pulls.totalCount > 0:
-            # Commit not linked to PR
-            if is_merge_commit:
-                # Merge commit without linked PR
-                if self.merge_commits_mode == 'fail':
-                    raise ValueError(f"Commit {expanded_sha[:7]} is a merge commit without associated PR. Use PR number instead or set --merge-commits skip")
-                elif self.merge_commits_mode == 'skip':
-                    self.logger.info(f"Skipping merge commit {expanded_sha[:7]} (--merge-commits skip, no associated PR)")
-                    return
-        
         # Create CommitSource and add to sources
-        source = CommitSource(commit, self.repo, self.merge_commits_mode)
+        source = CommitSource(commit, self.repo)
         self.source_info.sources.append(source)
     
     def _add_pull(self, p: int, single: bool):
@@ -1409,7 +1371,7 @@ class CherryPickOrchestrator:
                 self.logger.info(f"PR #{p} is not merged, but --allow-unmerged is set, proceeding with commits from PR")
         
         # Create PRSource and add to sources
-        source = PRSource(pull, self.repo, self.merge_commits_mode, self.allow_unmerged)
+        source = PRSource(pull, self.repo, self.allow_unmerged)
         self.source_info.sources.append(source)
         
         # Validate that PR has commits (this will also populate _commit_shas)
@@ -1614,12 +1576,6 @@ def main():
     )
     parser.add_argument(
         "--target-branches", help="List of branches to cherry-pick. Separated by space, comma or line end."
-    )
-    parser.add_argument(
-        "--merge-commits",
-        choices=['fail', 'skip'],
-        default='skip',
-        help="How to handle merge commits inside PR: 'skip' (default) - skip merge commits, 'fail' - fail on merge commits"
     )
     parser.add_argument(
         "--allow-unmerged",

@@ -1,94 +1,180 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/hive.h>
+#include <ydb/core/base/subdomain.h>
+
 
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TTruncateTable: public TSubOperationBase {
+class TConfigureParts: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder()
+            << "TTruncateTable TConfigureParts"
+            << " operationId# " << OperationId;
+    }
+
 public:
-    using TSubOperationBase::TSubOperationBase;
+    TConfigureParts(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+    }
+
+    bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+        Y_UNUSED(ev);
+        Y_UNUSED(context);
+        return true;
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        Y_UNUSED(context);
+        return false;
+    }
+};
+
+class TPropose: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder()
+            << "TTruncateTable TPropose"
+            << " operationId# " << OperationId;
+    }
+
+public:
+    TPropose(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
+    }
+
+    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+        Y_UNUSED(ev);
+        Y_UNUSED(context);
+        return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+        Y_UNUSED(ev);
+        Y_UNUSED(context);
+        return true;
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        Y_UNUSED(context);
+        return false;
+    }
+};
+
+
+class TTruncateTable: public TSubOperation {
+public:
+    using TSubOperation::TSubOperation;
+    static TTxState::ETxState NextState() {
+        return TTxState::ConfigureParts;
+    }
+
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
+        case TTxState::Waiting:
+        case TTxState::ConfigureParts:
+            return TTxState::Propose;
+        case TTxState::Propose:
+            return TTxState::ProposedWaitParts;
+        case TTxState::ProposedWaitParts:
+            return TTxState::Done;
+        default:
+            return TTxState::Invalid;
+        }
+    }
+
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
+        case TTxState::Waiting:
+        case TTxState::ConfigureParts:
+            return MakeHolder<TConfigureParts>(OperationId);
+        case TTxState::Propose:
+            return MakeHolder<TPropose>(OperationId);
+        case TTxState::ProposedWaitParts:
+            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+        case TTxState::Done:
+            return MakeHolder<TDone>(OperationId);
+        default:
+            return nullptr;
+        }
+    }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        Y_UNUSED(context);
-        return {};
+        const TTabletId ssId = context.SS->SelfTabletId();
+
+        THolder<TProposeResponse> result;
+        result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
+            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
+        TString errStr;
+
+        const auto& op = Transaction.GetTruncateTable();
+        const auto stringTablePath = NKikimr::JoinPath({Transaction.GetWorkingDir(), op.GetTableName()});
+        TPath tablePath = TPath::Resolve(stringTablePath, context.SS);
+         {
+            if (tablePath->IsColumnTable()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Column tables don`t support TRUNCATE TABLE");
+                return result;
+            }
+
+            if (!tablePath->IsTable()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "You can use TRUNCATE TABLE only on tables");
+                return result;
+            }
+
+            TPath::TChecker checks = tablePath.Check();
+            checks
+                .NotEmpty()
+                .NotUnderDomainUpgrade()
+                .IsResolved()
+                .NotDeleted()
+                .NotBackupTable()
+                .NotAsyncReplicaTable()
+                .NotUnderTheSameOperation(OperationId.GetTxId())
+                .NotUnderOperation();
+                // TODO flown4qqqq (need add check on cdc streams)
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
+
+        if (!context.SS->CheckLocks(tablePath.Base()->PathId, Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            return result;
+        }
+
+        // TODO flown4qqqq (need persist the op)
+
+        result->SetPathId(tablePath.Base()->PathId.LocalPathId);
+
+        return result;
     }
 
     void AbortPropose(TOperationContext&) override {
         Y_ABORT("no AbortPropose for TTruncateTable");
     }
 
-    bool ProgressState(TOperationContext& context) override {
-        Y_UNUSED(context);
-        // LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        //            "TAlterUserAttrs ProgressState"
-        //                << ", opId: " << OperationId
-        //                << ", at schemeshard: " << context.SS->TabletID());
-
-        // TTxState* txState = context.SS->FindTx(OperationId);
-        // Y_ABORT_UNLESS(txState);
-
-        // context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
-        return true;
-    }
-
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
-        Y_UNUSED(ev);
-        Y_UNUSED(context);
-        // const TStepId step = TStepId(ev->Get()->StepId);
-        // const TTabletId ssId = context.SS->SelfTabletId();
-
-        // LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        //            "TAlterUserAttrs HandleReply TEvOperationPlan"
-        //                << ", opId: " << OperationId
-        //                << ", stepId:" << step
-        //                << ", at schemeshard: " << ssId);
-
-        // TTxState* txState = context.SS->FindTx(OperationId);
-        // Y_ABORT_UNLESS(txState);
-
-        // if (txState->State != TTxState::Propose) {
-        //     LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        //                "Duplicate PlanStep opId#" << OperationId
-        //                    << " at schemeshard: " << ssId
-        //                    << " txState is in state#" << TTxState::StateName(txState->State));
-        //     return true;
-        // }
-
-        // Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterUserAttributes);
-
-        // TPathId pathId = txState->TargetPathId;
-        // TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-        // context.OnComplete.ReleasePathState(OperationId, pathId, TPathElement::EPathState::EPathStateNoChanges);
-
-        // NIceDb::TNiceDb db(context.GetDB());
-
-        // Y_ABORT_UNLESS(path->UserAttrs);
-        // Y_ABORT_UNLESS(path->UserAttrs->AlterData);
-        // Y_ABORT_UNLESS(path->UserAttrs->AlterVersion < path->UserAttrs->AlterData->AlterVersion);
-        // context.SS->ApplyAndPersistUserAttrs(db, path->PathId);
-
-        // context.SS->ClearDescribePathCaches(path);
-        // context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-
-        // context.OnComplete.UpdateTenants({pathId});
-
-        // context.OnComplete.DoneOperation(OperationId);
-        return true;
-    }
-
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         Y_UNUSED(forceDropTxId);
         Y_UNUSED(context);
-        // LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        //              "TAlterUserAttrs AbortUnsafe"
-        //                  << ", opId: " << OperationId
-        //                  << ", forceDropId: " << forceDropTxId
-        //                  << ", at schemeshard: " << context.SS->TabletID());
-
-        // context.OnComplete.DoneOperation(OperationId);
+        Y_ABORT("no AbortUnsafe for TTruncateTable");
     }
 };
 

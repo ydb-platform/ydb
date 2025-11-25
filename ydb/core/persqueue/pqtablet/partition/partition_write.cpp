@@ -6,11 +6,9 @@
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
-#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 
 #include <ydb/core/protos/counters_pq.pb.h>
-#include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
 
 #include <ydb/core/base/appdata.h>
@@ -325,6 +323,8 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                     already = true;
                 }
             }
+
+            already = already || writeResponse.DeduplicatedByMessageId;
 
             if (!already) {
                 if (wrOffset) {
@@ -739,35 +739,6 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
 
     ui64 size = 0;
     for (auto& msg: ev->Get()->Msgs) {
-        if (Config.GetEnableDeduplicationByMessageDeduplicationId()) {
-            AFL_ENSURE(msg.TotalParts == 1)("p", msg.TotalParts); // TODO MLP убрать это ограничение
-
-            NKikimrPQClient::TDataChunk proto;
-            bool res = proto.ParseFromString(msg.Data);
-            AFL_ENSURE(res)("o", msg.SeqNo);
-
-            std::optional<TString> deduplicationId;
-            for (auto& attr : *proto.MutableMessageMeta()) {
-                if (attr.key() == NMLP::NMessageConsts::MessageDeduplicationId) {
-                    deduplicationId = attr.value();
-                    break;
-                }
-            }
-
-            if (deduplicationId) {
-                if (!MessageIdDeduplicator.AddMessage(*deduplicationId)) {
-                    EmplacePendingRequest(TWriteMsg{
-                        .Cookie = ev->Get()->Cookie,
-                        //.Offset = offset,
-                        .Msg= std::move(msg),
-                        .InitialSeqNo = ev->Get()->InitialSeqNo,
-                        .DeduplicatedByMessageId = true
-                    }, NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.WriteMessage"), ctx);
-                    continue;
-                }
-            }
-        }
-
         size += msg.Data.size();
         TString sourceId = msg.SourceId;
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;
@@ -1238,6 +1209,13 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             }
             }
         }
+    }
+
+    if (!DeduplicateByMessageId(p.Msg)) {
+        LOG_D("Deduplicate message " << p.Msg.SeqNo << " by MessageDeduplicationId");
+        p.DeduplicatedByMessageId = true;
+        // TODO MLP Metrics
+        return true;
     }
 
     if (!p.Msg.DisableDeduplication &&

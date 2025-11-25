@@ -1,6 +1,9 @@
 #include "message_id_deduplicator.h"
 #include "partition.h"
 
+#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
+
+#include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr::NPQ {
@@ -106,19 +109,21 @@ bool TMessageIdDeduplicator::SerializeTo(NKikimrPQ::MessageDeduplicationIdWAL& w
         return false;
     }
 
-    const bool sameBucket = CurrentBucket.StartTime == Queue.back().ExpirationTime;
+    const auto expirationTime = Queue.back().ExpirationTime;
+    const bool sameBucket = CurrentBucket.StartTime == expirationTime;
     size_t startIndex = sameBucket ? CurrentBucket.StartMessageIndex : CurrentBucket.LastWrittenMessageIndex;
     if (startIndex == Queue.size()) {
         return false;
     }
 
-    wal.SetExpirationTimestampMilliseconds(Queue.back().ExpirationTime.MilliSeconds());
+    wal.SetExpirationTimestampMilliseconds(expirationTime.MilliSeconds());
     for (size_t i = startIndex; i < Queue.size(); ++i) {
+        Queue[i].ExpirationTime = expirationTime;
         wal.AddDeduplicationId(Queue[i].DeduplicationId);
     }
 
     PendingBucket = {
-        .StartTime = Queue.back().ExpirationTime,
+        .StartTime = expirationTime,
         .StartMessageIndex = startIndex,
         .LastWrittenMessageIndex = Queue.size(),
     };
@@ -157,6 +162,31 @@ void TPartition::AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request) {
     deleteExpired->MutableRange()->SetTo(MakeDeduplicatorWALKey(Partition.OriginalPartitionId, TInstant::Now() - MessageIdDeduplicator.GetDeduplicationWindow()));
     deleteExpired->MutableRange()->SetIncludeFrom(true);
     deleteExpired->MutableRange()->SetIncludeTo(true);
+}
+
+bool TPartition::DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg) {
+    if (!Config.GetEnableDeduplicationByMessageDeduplicationId()) {
+        return true;
+    }
+    AFL_ENSURE(msg.TotalParts == 1)("p", msg.TotalParts); // TODO MLP убрать это ограничение
+
+    NKikimrPQClient::TDataChunk proto;
+    bool res = proto.ParseFromString(msg.Data);
+    AFL_ENSURE(res)("o", msg.SeqNo);
+
+    std::optional<TString> deduplicationId;
+    for (auto& attr : *proto.MutableMessageMeta()) {
+        if (attr.key() == NMLP::NMessageConsts::MessageDeduplicationId) {
+            deduplicationId = attr.value();
+            break;
+        }
+    }
+
+    if (!deduplicationId) {
+        return true;
+    }
+
+    return MessageIdDeduplicator.AddMessage(*deduplicationId);
 }
 
 } // namespace NKikimr::NPQ

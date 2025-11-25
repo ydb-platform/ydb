@@ -36,8 +36,18 @@ struct TestScenario {
     void CreateWAL() {
         Deduplicator.Compact();
 
-        WALs.emplace_back();
-        Deduplicator.SerializeTo(WALs.back());
+        NKikimrPQ::MessageDeduplicationIdWAL wal;
+        if (!Deduplicator.SerializeTo(wal)) {
+            return;
+        }
+
+        if (!WALs.empty() && WALs.back().GetExpirationTimestampMilliseconds() == wal.GetExpirationTimestampMilliseconds()) {
+            WALs.back() = std::move(wal);
+        } else {
+            WALs.push_back(std::move(wal));
+        }
+
+        Deduplicator.Commit();
     }
 
     void AssertWALLoad() {
@@ -61,5 +71,61 @@ TEST(TDeduplicatorTest, AddMessage) {
 
     EXPECT_TRUE(scenario.AddMessage("message1"));
     scenario.CreateWAL();
+    EXPECT_EQ(scenario.WALs.size(), 1ul);
+
     scenario.AssertWALLoad();
 }
+
+TEST(TDeduplicatorTest, AddTwoMessages) {
+    TestScenario scenario;
+
+    EXPECT_TRUE(scenario.AddMessage("message1"));
+    scenario.CreateWAL();
+    EXPECT_TRUE(scenario.AddMessage("message2"));
+    scenario.CreateWAL();
+
+    EXPECT_EQ(scenario.WALs.size(), 1ul);
+
+    scenario.AssertWALLoad();
+}
+
+TEST(TDeduplicatorTest, AddDeduplicatedMessages) {
+    TestScenario scenario;
+
+    EXPECT_TRUE(scenario.AddMessage("message1"));
+    scenario.CreateWAL();
+    EXPECT_FALSE(scenario.AddMessage("message1"));
+    scenario.CreateWAL();
+
+    EXPECT_EQ(scenario.WALs.size(), 1ul);
+
+    scenario.AssertWALLoad();
+}
+
+TEST(TDeduplicatorTest, AddTwoMessages_DifferentTime_OneBucket) {
+    TestScenario scenario;
+
+    EXPECT_TRUE(scenario.AddMessage("message1"));
+    scenario.TimeProvider->Tick(TDuration::MilliSeconds(110));
+    EXPECT_TRUE(scenario.AddMessage("message2"));
+    scenario.CreateWAL();
+
+    EXPECT_EQ(scenario.WALs.size(), 1ul);
+
+    scenario.AssertWALLoad();
+}
+
+TEST(TDeduplicatorTest, AddTwoMessages_DifferentTime_DifferentBucket) {
+    TestScenario scenario;
+
+    EXPECT_TRUE(scenario.AddMessage("message1"));
+    scenario.CreateWAL();
+    scenario.TimeProvider->Tick(TDuration::MilliSeconds(110));
+    EXPECT_TRUE(scenario.AddMessage("message2"));
+    scenario.CreateWAL();
+
+    EXPECT_EQ(scenario.WALs.size(), 2ul);
+
+    scenario.AssertWALLoad();
+}
+

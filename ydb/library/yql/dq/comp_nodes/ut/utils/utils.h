@@ -46,6 +46,14 @@ struct TypeAndValue {
     NUdf::TUnboxedValue Value;
 };
 
+
+struct IPrint: public NYql::NUdf::IRefCounted {
+    virtual TString Stringify(NYql::NUdf::TUnboxedValuePod value) = 0;
+    using TPtr = NYql::NUdf::TRefCountedPtr<IPrint>;
+};
+
+IPrint::TPtr MakePrinter(const TType* type);
+
 void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected,
                                const NUdf::TUnboxedValue& gotList);
 void CompareListAndStreamIgnoringOrder(const TypeAndValue& expected, IComputationGraph& gotStream);

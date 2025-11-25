@@ -2,6 +2,7 @@ UNITTEST()
 
 SRCS(
     yql_yt_util_helpers_ut.cpp
+    yql_yt_parser_fragment_list_index_ut.cpp
 )
 
 PEERDIR(

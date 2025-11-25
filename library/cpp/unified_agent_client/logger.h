@@ -54,6 +54,8 @@ namespace NUnifiedAgent {
     public:
         TLogger(TLog& log, TFMaybe<size_t> rateLimitBytes);
 
+        void AddLog(TLog& log);
+
         void StartTracing(ELogPriority logPriority) noexcept;
 
         void FinishTracing() noexcept;
@@ -119,6 +121,7 @@ namespace NUnifiedAgent {
         NMonitoring::TDeprecatedCounter* DroppedBytes;
         const THolder<TThrottlerWithLock> Throttler;
         TAdaptiveLock Lock;
+        TVector<TLog> AdditionalLogs;
     };
 
     class TScopeLogger {

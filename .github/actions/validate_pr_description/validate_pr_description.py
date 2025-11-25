@@ -37,7 +37,8 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
 
     # Extract changelog category section
     # After normalization, we can safely use \n
-    category_section = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", description, re.DOTALL)
+    # Use a more flexible pattern that handles comments and multiple newlines
+    category_section = re.search(r"### Changelog category[^\n]*\n+(.*?)(\n###|$)", description, re.DOTALL)
     if not category_section:
         txt = "Changelog category section not found."
         print(f"::warning::{txt}")
@@ -70,7 +71,7 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
 
     if not any(category.lower() == cat.lower() for cat in NOT_FOR_CHANGELOG_CATEGORIES):
         # After normalization, we can safely use \n
-        entry_section = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", description, re.DOTALL)
+        entry_section = re.search(r"### Changelog entry[^\n]*\n+(.*?)(\n###|$)", description, re.DOTALL)
         if not entry_section or len(entry_section.group(1).strip()) < 20:
             txt = "The changelog entry is less than 20 characters or missing."
             print(f"::warning::{txt}")
@@ -96,6 +97,9 @@ def validate_pr_description_from_file(file_path) -> Tuple[bool, str]:
         else:
             # Read from environment variable (preferred) or stdin (fallback)
             description = os.environ.get('PR_BODY', '')
+            # Handle case when PR_BODY is the string "null" (from GitHub API)
+            if description == 'null' or description is None:
+                description = ''
             if not description:
                 description = sys.stdin.read()
         

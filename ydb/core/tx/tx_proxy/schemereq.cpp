@@ -483,7 +483,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableCreateStreamingQuery()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpTruncateTable:
-            Y_ABORT("no implementation for ESchemeOpTruncateTable"); // TODO flown4qqqq
+            return *modifyScheme.MutableTruncateTable()->MutableTableName();
         }
         Y_UNREACHABLE();
     }
@@ -1137,6 +1137,13 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             ResolveForACL.push_back(toResolve);
             break;
         }
+        case NKikimrSchemeOp::ESchemeOpTruncateTable: {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::EraseRow;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
         case NKikimrSchemeOp::ESchemeOpCreateTableIndex:
         case NKikimrSchemeOp::ESchemeOpDropTableIndex:
         case NKikimrSchemeOp::ESchemeOp_DEPRECATED_35:
@@ -1167,7 +1174,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterView:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
-        case NKikimrSchemeOp::ESchemeOpTruncateTable: // TODO flown4qqqq
             return false;
         }
         return true;

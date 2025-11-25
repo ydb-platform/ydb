@@ -6,6 +6,12 @@
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
+#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
+
+#include <ydb/core/protos/counters_pq.pb.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/protos/msgbus.pb.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -13,14 +19,12 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/quoter/public/quoter.h>
-#include <ydb/core/persqueue/writer/source_id_encoding.h>
-#include <ydb/core/protos/counters_pq.pb.h>
-#include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
+
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
@@ -480,6 +484,8 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     ProcessTxsAndUserActs(ctx);
     TryRunCompaction();
 
+    MessageIdDeduplicator.Commit();
+
     if (DeletePartitionState == DELETION_IN_PROCESS) {
         DestroyActor(ctx);
     }
@@ -733,6 +739,35 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
 
     ui64 size = 0;
     for (auto& msg: ev->Get()->Msgs) {
+        if (Config.GetEnableDeduplicationByMessageDeduplicationId()) {
+            AFL_ENSURE(msg.TotalParts == 1)("p", msg.TotalParts); // TODO MLP убрать это ограничение
+
+            NKikimrPQClient::TDataChunk proto;
+            bool res = proto.ParseFromString(msg.Data);
+            AFL_ENSURE(res)("o", msg.SeqNo);
+
+            std::optional<TString> deduplicationId;
+            for (auto& attr : *proto.MutableMessageMeta()) {
+                if (attr.key() == NMLP::NMessageConsts::MessageDeduplicationId) {
+                    deduplicationId = attr.value();
+                    break;
+                }
+            }
+
+            if (deduplicationId) {
+                if (!MessageIdDeduplicator.AddMessage(*deduplicationId)) {
+                    EmplacePendingRequest(TWriteMsg{
+                        .Cookie = ev->Get()->Cookie,
+                        //.Offset = offset,
+                        .Msg= std::move(msg),
+                        .InitialSeqNo = ev->Get()->InitialSeqNo,
+                        .DeduplicatedByMessageId = true
+                    }, NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.WriteMessage"), ctx);
+                    continue;
+                }
+            }
+        }
+
         size += msg.Data.size();
         TString sourceId = msg.SourceId;
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;

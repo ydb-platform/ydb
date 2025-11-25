@@ -549,7 +549,6 @@ void TStorageProxy::Handle(TEvPrivate::TEvInitResult::TPtr& ev) {
         LOG_STREAMS_STORAGE_SERVICE_INFO("Checkpoint storage and state storage were successfully inited");
         InitStatus = EInitStatus::Finished;
     }
-        
     while (!DelayedEventsQueue.empty()) {
         auto ev = std::move(DelayedEventsQueue.front());
         if (success) {

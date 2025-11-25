@@ -582,7 +582,7 @@ bool TStorageProxy::CheckStatus(TEvent& ev) {
             [[fallthrough]];
         case EInitStatus::Pending:
             if (DelayedEventsQueue.size() < DELAYED_EVENTS_QUEUE_LIMIT) {
-                LOG_STREAMS_STORAGE_SERVICE_WARN("Add to delayed");
+                LOG_STREAMS_STORAGE_SERVICE_NOTICE ("Add to delayed");
                 DelayedEventsQueue.emplace_back(ev.Release());
             } else {
                 auto evHolder = THolder<IEventHandle>(ev.Release());

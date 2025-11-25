@@ -12,7 +12,7 @@ private:
     const TVectorWorkloadParams& Params;
     TString DataFiles;
     TString EmbeddingColumnName = "embedding";
-    // TString InputBinaryStringEncodingFormat = "unicode";
+
 
 public:
     TWorkloadVectorFilesDataInitializer(const TVectorWorkloadParams& params);

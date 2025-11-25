@@ -26,7 +26,7 @@
 
 #include <util/stream/mem.h>
 
-#include <regex>
+
 
 namespace NYdbWorkload {
 
@@ -141,7 +141,7 @@ private:
             }
             resultColumns.push_back(std::move(newEmbeddingColumn));
         } else {
-            ythrow yexception() << "Only binary and list[float32] parquet types are supported for embedding column";
+            ythrow yexception() << "Only binary and list[float32] arrow types are supported for embedding column";
         }
 
         const auto newSchema = arrow::schema({
@@ -224,8 +224,7 @@ private:
     void CanonizePortion(TDataPortion::TDataType& data) {
         if (auto* value = std::get_if<TDataPortion::TArrow>(&data)) {
             CanonizeArrow(value);
-        }
-        if (auto* value = std::get_if<TDataPortion::TCsv>(&data)) {
+        } else if (auto* value = std::get_if<TDataPortion::TCsv>(&data)) {
             CanonizeCsv(value);
         }
     }

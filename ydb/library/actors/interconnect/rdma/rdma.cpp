@@ -11,6 +11,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/system/thread.h>
+#include <util/system/yield.h>
 
 namespace NInterconnect::NRdma {
 
@@ -115,7 +116,15 @@ public:
         Cont.store(false, std::memory_order_relaxed);
 
         // 3. Send signal to the thread to interrupt waiting on the read syscall ()
-        Awake();
+        // NOTE: There is a tiny chanse the signal was send before thread blocked on the read syscall
+        // so in this case repeat send signal until cq thread finished
+        while (!Finished.load(std::memory_order_relaxed)) {
+            Awake();
+            if (Finished.load(std::memory_order_relaxed)) {
+                break;
+            }
+            ThreadYield();
+        }
 
         // 4. As usual, join and destroy CQ
         if (Thread.Running())

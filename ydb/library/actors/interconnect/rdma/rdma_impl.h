@@ -223,6 +223,7 @@ public:
     TSimpleCqBase(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c, bool nonBlockingPolling) noexcept
         : TCqCommon(as)
         , Thread(ThreadFunc, this)
+        , Finished(false)
         , Err(false)
         , NonBlockingPolling(nonBlockingPolling)
     {
@@ -366,6 +367,7 @@ public:
                 }
             }
         }
+        Finished.store(true, std::memory_order_relaxed);
     }
 
     void HandleErr() noexcept {
@@ -404,6 +406,7 @@ public:
 
 protected:
     TThread Thread;
+    std::atomic<bool> Finished;
     std::atomic<bool> Cont;
 
     std::vector<TWr> WrBuf;

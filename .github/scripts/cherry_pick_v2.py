@@ -266,49 +266,60 @@ def build_pr_content(
         title = f"[Backport {target_branch}] cherry-pick {', '.join(all_titles)}"
     if has_conflicts:
         title = f"[CONFLICT] {title}"
-    if len(title) > 200:
-        title = title[:197] + "..."
+    if len(title) > 256: # GitHub limit for PR title
+        title = title[:253] + "..."
     
     # Issues
     issue_refs = get_linked_issues(repo, token, all_pull_requests, logger)
     authors_str = ', '.join([f"@{a}" for a in set(all_authors)]) if all_authors else "Unknown"
     
-    # Changelog
+    # Changelog: build entry for each source, then merge
     categories = []
-    entry = None
-    entry_contents = []
-    for pull in all_pull_requests:
-        if pull.body:
-            cat, ent, ent_content = extract_changelog(pull.body)
-            if cat:
-                categories.append(cat)
-            if not entry and ent:
-                entry = ent
-            if ent_content:
-                entry_contents.append(ent_content)
+    changelog_entries = []
+    
+    for source in sources:
+        source_entry = None
+        source_category = None
+        
+        # For PR or merge commit with linked PR
+        if source.pull_requests:
+            pull = source.pull_requests[0]
+            if pull.body:
+                cat, ent, ent_content = extract_changelog(pull.body)
+                source_category = cat
+                # Use entry_content if available, otherwise entry
+                source_entry = ent_content if ent_content else ent
+            
+            # Format: "PR Title: changelog_entry" or just "PR Title"
+            if source_entry:
+                changelog_entries.append(f"{pull.title}: {source_entry}")
+            else:
+                changelog_entries.append(pull.title)
+        
+        # For commit SHA (no linked PR)
+        elif source.type == 'commit' and source.commit_shas:
+            try:
+                commit = repo.get_commit(source.commit_shas[0])
+                commit_message = commit.commit.message
+                commit_title = commit_message.split('\n')[0].strip()
+                changelog_entries.append(commit_title)
+            except Exception as e:
+                logger.debug(f"Failed to get commit message for {source.commit_shas[0]}: {e}")
+                changelog_entries.append(f"commit {source.commit_shas[0][:7]}")
+        
+        if source_category:
+            categories.append(source_category)
     
     changelog_category = categories[0] if len(set(categories)) == 1 else None
-    if len(entry_contents) > 1:
-        merged_entry_content = "\n\n---\n\n".join(entry_contents)
-    elif len(entry_contents) == 1:
-        merged_entry_content = entry_contents[0]
-    else:
-        merged_entry_content = None
     
-    # Determine changelog entry
-    if merged_entry_content:
-        changelog_entry = merged_entry_content
-    elif not entry:
-        if all_pull_requests:
-            items_str = f"PR {'#' + str(all_pull_requests[0].number)}" if len(all_pull_requests) == 1 else f"PRs {', '.join([f'#{p.number}' for p in all_pull_requests])}"
-        else:
-            items_str = f"commit {all_commit_shas[0][:7]}" if len(all_commit_shas) == 1 else f"commits {', '.join([sha[:7] for sha in all_commit_shas])}"
-        changelog_entry = f"Backport of {items_str} to `{target_branch}`"
+    # Merge all entries
+    if len(changelog_entries) > 1:
+        changelog_entry = "\n\n---\n\n".join(changelog_entries)
+    elif len(changelog_entries) == 1:
+        changelog_entry = changelog_entries[0]
     else:
-        changelog_entry = entry
-    
-    if len(changelog_entry) < 20:
-        changelog_entry = f"Backport to `{target_branch}`: {changelog_entry}"
+        # Fallback
+        changelog_entry = f"Backport to `{target_branch}`"
     
     if changelog_category == "Bugfix" and issue_refs != "None":
         if not any(re.search(p, changelog_entry) for p in ISSUE_PATTERNS):

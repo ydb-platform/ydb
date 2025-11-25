@@ -762,6 +762,13 @@ private:
             }
 
             Types_.UdfIndex->SetCaseSentiveSearch(name == "UdfStrictCase");
+        } else if (name == "NamedArgsIgnoreCase" || name == "NamedArgsStrictCase") {
+            if (args.size() != 0) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+
+            Types_.CaseInsensitiveNamedArgs = (name == "NamedArgsIgnoreCase");
         } else if (name == "DqEngine") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));

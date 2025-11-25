@@ -8602,6 +8602,30 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TSet<ui32> usedIndices;
         for (const auto& structItem : structType->GetItems()) {
             auto foundIndex = type->ArgumentIndexByName(structItem->GetName());
+            TStringBuf foundName;
+            if (foundIndex) {
+                foundName = structItem->GetName();
+            }
+
+            if (!foundIndex && ctx.Types.CaseInsensitiveNamedArgs) {
+                for (ui32 index = 0; index < type->GetArgumentsSize(); ++index) {
+                    const auto& arg = type->GetArguments()[index];
+                    if (arg.Name.empty()) {
+                        continue;
+                    }
+
+                    if (AsciiEqualsIgnoreCase(arg.Name, structItem->GetName())) {
+                        if (!foundIndex) {
+                            foundIndex = index;
+                            foundName = arg.Name;
+                        } else {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Ambigious argument name: " << structItem->GetName()));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    }
+                }
+            }
+
             if (!foundIndex) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Unknown argument name: " << structItem->GetName()));
                 return IGraphTransformer::TStatus::Error;
@@ -8613,7 +8637,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
 
-            expectedStructTypeItems.push_back(ctx.Expr.MakeType<TItemExprType>(structItem->GetName(),
+            expectedStructTypeItems.push_back(ctx.Expr.MakeType<TItemExprType>(foundName,
                 type->GetArguments()[*foundIndex].Type));
 
             usedIndices.insert(*foundIndex);

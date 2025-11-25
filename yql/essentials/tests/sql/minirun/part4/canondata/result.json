@@ -1939,6 +1939,20 @@
             "uri": "file://test.test_simple_pg-to_date-default.txt-Results_/extracted"
         }
     ],
+    "test.test[udf-case_insensitive_named_args--Debug]": [
+        {
+            "checksum": "d56010bed7bfcb684358fd32e8a15e52",
+            "size": 1189,
+            "uri": "https://{canondata_backend}/1942415/0db010966a1744362836895490ee7597832fdf93/resource.tar.gz#test.test_udf-case_insensitive_named_args--Debug_/opt.yql"
+        }
+    ],
+    "test.test[udf-case_insensitive_named_args--Results]": [
+        {
+            "checksum": "a84575209258a47ff2d1ef9764cecfb8",
+            "size": 828,
+            "uri": "https://{canondata_backend}/1942415/0db010966a1744362836895490ee7597832fdf93/resource.tar.gz#test.test_udf-case_insensitive_named_args--Results_/results.txt"
+        }
+    ],
     "test.test[udf-same_udf_modules--Debug]": [
         {
             "checksum": "f90e4ed7c7d964c319a4155dda443d04",

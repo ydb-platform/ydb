@@ -450,6 +450,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool StrictTableProps = true;
     bool JsonQueryReturnsJsonDocument = false;
     bool YsonCastToString = true;
+    bool CaseInsensitiveNamedArgs = false;
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;

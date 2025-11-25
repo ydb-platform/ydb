@@ -355,6 +355,16 @@ void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
         if (NScheme::NTypeIds::IsParametrizedType(columnIt->second.TypeInfo.GetTypeId())) {
             ProtoFromTypeInfo(columnIt->second.TypeInfo, columnIt->second.TypeMod, *columnDesc.MutableTypeInfo());
         }
+
+        if (columnIt->second.Compression) {
+            auto compression = columnDesc.MutableCompression();
+            if (const auto maybeAlgorithm = columnIt->second.Compression->Algorithm) {
+                compression->SetAlgorithm(maybeAlgorithm->c_str());
+            }
+            if (const auto maybeLevel = columnIt->second.Compression->Algorithm) {
+                compression->SetLevel(FromString<i64>(*maybeLevel));
+            }
+        }
     }
 
     for (TString& keyColumn : metadata->KeyColumnNames) {
@@ -443,6 +453,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
             }
         }
 
+        // TODO: error
         if (family.CompressionLevel.Defined()) {
             if (!family.Compression.Defined()) {
                 code = Ydb::StatusIds::BAD_REQUEST;
@@ -496,6 +507,36 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
             }
             columnDesc.SetColumnFamilyName(columnFamilyName);
             columnDesc.SetColumnFamilyId(columnFamilyId);
+        }
+
+        if (columnIt->second.Compression) {
+            if (columnIt->second.Compression->Algorithm) {
+                NKikimrSchemeOp::EColumnCodec codec;
+                auto algoName = columnIt->second.Compression->Algorithm.GetRef();
+                auto codecName = to_lower(algoName);
+                if (codecName == "off") {
+                    codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
+                } else if (codecName == "zstd") {
+                    codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
+                } else if (codecName == "lz4") {
+                    codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
+                } else {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "Unknown compression algorithm '" << algoName << "' for a column " << name;
+                    return false;
+                }
+                columnDesc.MutableSerializer()->SetClassName("ARROW_SERIALIZER");
+                columnDesc.MutableSerializer()->MutableArrowCompression()->SetCodec(codec);
+            }
+            if (columnIt->second.Compression->Level) {
+                const auto level = *columnIt->second.Compression->Level;
+                if (!columnIt->second.Compression->Algorithm) {
+                    error = TStringBuilder() << "Compression level " << level <<" for a column `" << name << "` specified without an algorithm";
+                    return false;
+                }
+                // TODO: more checks for level applicability
+                columnDesc.MutableSerializer()->MutableArrowCompression()->SetLevel(level);
+            }
         }
     }
 

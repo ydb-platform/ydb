@@ -69,7 +69,7 @@ private:
             ythrow yexception() << "Cannot read CSV: Wrong quote char '" << quoting.quote_char() << "'";
         }
         const char qchar = quoting.quote_char().empty() ? '"' : quoting.quote_char().front();
-        parseOptions.quoting = false;
+        parseOptions.quoting = !quoting.disabled();
         parseOptions.quote_char = qchar;
         parseOptions.double_quote = !quoting.double_quote_disabled();
         if (csvSettings.delimiter()) {

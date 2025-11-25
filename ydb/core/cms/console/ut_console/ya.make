@@ -15,8 +15,6 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    configs_cache_ut.cpp
-    configs_dispatcher_ut.cpp
     console_ut_tenants.cpp
     console_ut_configs.cpp
     feature_flags_configurator_ut.cpp
@@ -28,3 +26,4 @@ SRCS(
 )
 
 END()
+

@@ -1506,6 +1506,9 @@ public:
         clusterName = ClusterName;
         configsDispatcherInitInfo.InitialConfig = appConfig;
         configsDispatcherInitInfo.StartupConfigYaml = appConfig.GetStartupConfigYaml();
+        if (appConfig.HasStartupStorageYaml()) {
+            configsDispatcherInitInfo.StartupStorageYaml = appConfig.GetStartupStorageYaml();
+        }
         configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
         configsDispatcherInitInfo.Labels = Labels;
         configsDispatcherInitInfo.Labels["configuration_version"] = appConfig.GetConfigDirPath() ? "v2" : "v1";

@@ -508,6 +508,20 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
         Stream << " DEFAULT ";
         Format(defaultFromLiteral.value());
     }
+    if (columnDesc.HasCompression()) {
+        Stream << " COMPRESSION()";
+        const auto& compression = columnDesc.GetCompression();
+        if (compression.HasAlgorithm()) {
+            Stream << "algorithm=" << compression.GetAlgorithm();
+        }
+        if (compression.HasLevel()) {
+            if (compression.HasAlgorithm()) {
+                Stream << ',';
+            }
+            Stream << "level=" << compression.GetLevel();
+        }
+        Stream << ')';
+    }
 }
 
 void TCreateTableFormatter::Format(const TableIndex& index) {

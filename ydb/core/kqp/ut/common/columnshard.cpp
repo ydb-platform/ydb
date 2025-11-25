@@ -291,11 +291,36 @@ namespace NKqp {
         if (!NullableFlag) {
             str << " NOT NULL";
         }
+        if (ColumnCompression) {
+            str << " COMPRESSION(";
+            bool haveSome = false;
+            for (const auto& [key, value] : *ColumnCompression) {
+                if (haveSome) {
+                    str << ',';
+                }
+                str << key << '=' << value;
+                haveSome = true;
+            }
+            str << ")";
+        }
         return str;
     }
 
     TTestHelper::TColumnSchema& TTestHelper::TColumnSchema::SetType(const NScheme::TTypeInfo& typeInfo) {
         TypeInfo = typeInfo;
+        return *this;
+    }
+
+    TTestHelper::TColumnSchema& TTestHelper::TColumnSchema::SetCompression() {
+        ColumnCompression = std::map<TString, TString>();
+        return *this;
+    }
+
+    TTestHelper::TColumnSchema& TTestHelper::TColumnSchema::SetCompressionSetting(const TString& key, const TString& value) {
+        if (!ColumnCompression) {
+            ColumnCompression = std::map<TString, TString>();
+        }
+        (*ColumnCompression)[key] = value;
         return *this;
     }
 

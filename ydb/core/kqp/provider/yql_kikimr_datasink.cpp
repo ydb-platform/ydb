@@ -1355,6 +1355,7 @@ public:
                         .ExistingOk<TCoAtom>()
                             .Value(existringOk)
                             .Build()
+                        .ColumnCompression(settings.ColumnCompression.Cast())
                         .Done();
 
                     bool exprEvalNeeded = EvaluateDefaultValuesIfNeeded(ctx, createTable.Cast<TKiCreateTable>().Columns());
@@ -1364,7 +1365,7 @@ public:
 
                     return createTable.Ptr();
 
-                } else if (mode == "alter") {
+                } else if (mode == "alter") {                    
                     for (auto setting : settings.Other) {
                         if (setting.Name().Value() == "intent") {
                             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Old AST format for AlterTable"));

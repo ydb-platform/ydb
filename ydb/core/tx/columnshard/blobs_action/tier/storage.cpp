@@ -43,6 +43,7 @@ void TOperator::ApplyS3DefaultsFromShardConfig(NKikimrSchemeOp::TS3Settings& set
             } else {
                 settings.SetExecutorThreadsCount(lim);
             }
+
             if (settings.HasMaxConnectionsCount()) {
                 settings.SetMaxConnectionsCount(std::min<ui32>(settings.GetMaxConnectionsCount(), lim));
             } else {

@@ -621,14 +621,13 @@ namespace NDnsResolver {
         void WorkerThreadLoop() noexcept {
             TThread::SetCurrentThreadName("DnsResolver");
 
-            TVector<struct pollfd> fds;
+            std::array<struct pollfd, 1> fds;
             while (!Stopped) {
-                fds.clear();
-                fds.reserve(1);
                 {
-                    auto& entry = fds.emplace_back();
+                    auto& entry = fds[0];
                     entry.fd = WaitSock();
                     entry.events = POLLRDNORM | POLLIN;
+                    entry.revents = 0;
                 }
 
                 int ret = poll(fds.data(), fds.size(), 1000);

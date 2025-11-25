@@ -8,6 +8,7 @@ import random
 import string
 import typing  # noqa: F401
 import sys
+import types
 from six.moves.urllib.parse import urlparse
 
 import yatest
@@ -31,6 +32,7 @@ class EmptyArguments(object):
         self.suppress_version_check = False
         self.ydb_udfs_dir = None
         self.fq_config_path = None
+        self.config_path = None
         self.auth_config_path = None
         self.debug_logging = []
         self.fixed_ports = False
@@ -394,6 +396,17 @@ def deploy(arguments):
         **optionals
     )
 
+    config_path = getattr(arguments, 'config_path', None)
+    if config_path:
+        def _write_proto_configs(self, configs_path):
+            # This override only triggers on the very first deploy before the recipe metafile exists.
+            # Subsequent deploy invocations reuse the saved config directory and skip calling this hook.
+            self.write_tls_data()
+            os.makedirs(configs_path, exist_ok=True)
+            shutil.copyfile(config_path, os.path.join(configs_path, "config.yaml"))
+
+        configuration.write_proto_configs = types.MethodType(_write_proto_configs, configuration)
+
     cluster = KiKiMR(configuration)
     cluster.start()
 
@@ -540,6 +553,7 @@ def produce_arguments(args):
     parser.add_argument("--base-port-offset", action="store", type=int, default=0)
     parser.add_argument("--pq-client-service-type", action='append', default=[])
     parser.add_argument("--enable-pqcd", action='store_true', default=False)
+    parser.add_argument("--config-path", action="store")
     parsed, _ = parser.parse_known_args(args)
     arguments = EmptyArguments()
     arguments.suppress_version_check = parsed.suppress_version_check
@@ -553,6 +567,7 @@ def produce_arguments(args):
     arguments.enable_pq = parsed.enable_pq
     arguments.pq_client_service_types = parsed.pq_client_service_type
     arguments.enable_pqcd = parsed.enable_pqcd
+    arguments.config_path = parsed.config_path
     return arguments
 
 

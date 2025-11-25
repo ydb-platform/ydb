@@ -43,6 +43,37 @@ std::pair<ui64, ui64> GetVolumes(
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapCompression) {
+    Y_UNIT_TEST(CreateWithCompression) {
+        auto settings = TKikimrSettings()
+            .SetEnableOlapCompression(false)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
+                .SetCompressionSetting("algorithm", "zstd").SetCompressionSetting("level", "3")
+        };
+
+        TTestHelper::TColumnTable standaloneTable;
+        standaloneTable.SetName("/Root/CompKeyTable").SetPrimaryKey({ "key" }).SetSchema(schema);
+        testHelper.CreateTable(standaloneTable);
+    }
+
+    Y_UNIT_TEST(ChangeCompression) {
+        auto settings = TKikimrSettings()
+            .SetEnableOlapCompression(false)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Uint64)
+        };
+
+        TTestHelper::TColumnTable standaloneTable;
+        standaloneTable.SetName("/Root/CompValueTable").SetPrimaryKey({ "key" }).SetSchema(schema);
+        testHelper.CreateTable(standaloneTable);
+        testHelper.ExecuteQuery("ALTER TABLE `/Root/CompValueTable` ALTER COLUMN `value` SET COMPRESSION(algorithm=zstd, level=5);");
+    }
+
     Y_UNIT_TEST(DisabledAlterCompression) {
         auto settings = TKikimrSettings()
             .SetEnableOlapCompression(false)

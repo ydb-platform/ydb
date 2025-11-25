@@ -622,7 +622,12 @@ def main():
         ref = c.split('/')[-1].strip()
         try:
             pr_num = int(ref)
-            pull = repo.get_pull(pr_num)
+            try:
+                pull = repo.get_pull(pr_num)
+            except GithubException as e:
+                logger.error(f"VALIDATION_ERROR: PR #{pr_num} does not exist: {e}")
+                sys.exit(1)
+            
             if not pull.merged and not allow_unmerged:
                 raise ValueError(f"PR #{pr_num} is not merged. Use --allow-unmerged to backport unmerged PRs")
             if not pull.merged:
@@ -642,10 +647,14 @@ def main():
             try:
                 expanded_sha = expand_sha(repo, ref, logger)
             except ValueError as e:
-                logger.error(f"Failed to expand SHA {ref}: {e}")
-                raise
+                logger.error(f"VALIDATION_ERROR: Failed to expand SHA {ref}: {e}")
+                sys.exit(1)
             
-            commit = repo.get_commit(expanded_sha)
+            try:
+                commit = repo.get_commit(expanded_sha)
+            except GithubException as e:
+                logger.error(f"VALIDATION_ERROR: Commit {ref} (expanded to {expanded_sha}) does not exist: {e}")
+                sys.exit(1)
             
             # Check if commit is linked to PR
             pulls = commit.get_pulls()

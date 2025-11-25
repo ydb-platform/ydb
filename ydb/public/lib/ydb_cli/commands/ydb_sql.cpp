@@ -45,8 +45,8 @@ void TCommandSql::Config(TConfig& config) {
         .StoreTrue(&ExplainAnalyzeMode);
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
-    config.Opts->AddLongOption("tx-mode", "Transaction mode [serializable-rw, online-ro, stale-ro, snapshot-ro, snapshot-rw, notx]")
-        .RequiredArgument("[String]").DefaultValue("serializable-rw").StoreResult(&TxMode);
+    config.Opts->AddLongOption("tx-mode", "Transaction mode [serializable-rw, online-ro, stale-ro, snapshot-ro, snapshot-rw, no-tx]")
+        .RequiredArgument("[String]").DefaultValue("no-tx").StoreResult(&TxMode);
 
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     TStringStream description;
@@ -181,7 +181,7 @@ int TCommandSql::RunCommand(TConfig& config) {
 
     // Configure transaction control based on TxMode
     auto getTxControl = [this]() -> NQuery::TTxControl {
-        if (TxMode == "notx") {
+        if (TxMode == "no-tx" || TxMode == "notx") {
             return NQuery::TTxControl::NoTx();
         }
         NQuery::TTxSettings txSettings;

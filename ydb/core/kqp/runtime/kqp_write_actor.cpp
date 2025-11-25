@@ -2772,6 +2772,7 @@ public:
             }
 
             if (!settings.LookupColumns.empty()) {
+                AFL_ENSURE(!settings.IsOlap);
                 auto& lookupInfo = LookupInfos[settings.TableId.PathId];
                 if (!lookupInfo.Actors.contains(settings.TableId.PathId)) {
                     const auto [ptr, id] = createLookupActor(settings.TableId, settings.TablePath);
@@ -2800,6 +2801,7 @@ public:
             };
 
             for (const auto& indexSettings : settings.Indexes) {
+                AFL_ENSURE(!settings.IsOlap);
                 if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
                     const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns);
                     writeInfo.Actors.emplace(indexSettings.TableId.PathId, TWriteInfo::TActorInfo{
@@ -2846,6 +2848,7 @@ public:
 
             AFL_ENSURE(writeInfo.Actors.size() > settings.Indexes.size());
             for (auto& indexSettings : settings.Indexes) {
+                AFL_ENSURE(!settings.IsOlap);
                 // Flag for the case of UPDATE been processed without doing lookup,
                 // so no secondary index key columns are touched.
                 // In this case we must use UPDATE operation at shards for all table,
@@ -2959,6 +2962,7 @@ public:
             }
 
             if (!settings.LookupColumns.empty()) {
+                AFL_ENSURE(!settings.IsOlap);
                 auto lookupInfo = LookupInfos.at(settings.TableId.PathId);
                 auto lookupActor = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor;
                 lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{

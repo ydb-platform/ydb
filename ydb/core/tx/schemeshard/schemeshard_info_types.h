@@ -3830,6 +3830,26 @@ public:
         return BuildKind == EBuildKind::BuildColumns;
     }
 
+    bool IsPreparing() const {
+        return State == EState::AlterMainTable ||
+               State == EState::Locking ||
+               State == EState::GatheringStatistics ||
+               State == EState::Initiating;
+    }
+
+    bool IsTransferring() const {
+        return State == EState::Filling || 
+               State == EState::DropBuild || 
+               State == EState::CreateBuild || 
+               State == EState::LockBuild ||
+               State == EState::AlterSequence;
+    }
+
+    bool IsApplying() const {
+        return State == EState::Applying ||
+               State == EState::Unlocking;
+    }
+    
     bool IsDone() const {
         return State == EState::Done;
     }

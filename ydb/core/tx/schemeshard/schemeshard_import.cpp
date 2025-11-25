@@ -77,8 +77,6 @@ namespace {
             if (item.WaitTxId != InvalidTxId && table->RestoreHistory.contains(item.WaitTxId)) {
                 it = table->RestoreHistory.find(item.WaitTxId);
             } else if (table->RestoreHistory.size() == 1) {
-                // As restore operations always create new table, case table->RestoreHistory.size() > 1 is unexpected
-                // To return at least something in this case, we'll just pick one of items from RestoreHistory
                 it = table->RestoreHistory.begin();
             }
 
@@ -90,8 +88,9 @@ namespace {
             itemProgress.set_parts_total(itemProgress.parts_total() + restoreResult.TotalShardCount);
             itemProgress.set_parts_completed(itemProgress.parts_completed() + restoreResult.TotalShardCount);
             *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(restoreResult.StartDateTime);
-            // Update for case no index builds are required
-            *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(restoreResult.CompletionDateTime);
+            if (item.Table && item.Table->indexes_size() == 0) {
+                *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(restoreResult.CompletionDateTime);
+            }
         }
     }
 
@@ -106,36 +105,26 @@ namespace {
         }
         Y_ABORT_UNLESS(indexIdx < item.Table->indexes_size());
 
-        const ui32 partsTotal = ss->Tables.contains(item.DstPathId) ?
-            ss->Tables.at(item.DstPathId)->GetPartitions().size() :
-            GetTablePartsFromRequest(*item.Table);
+        const ui32 partsTotal = GetTablePartsFromRequest(*item.Table);
 
         const auto buildUid = MakeIndexBuildUid(importInfo, itemIdx, indexIdx);
         if (ss->IndexBuildsByUid.contains(buildUid)) {
-            const auto& indexBuild = ss->IndexBuildsByUid.FindPtr(buildUid)->Get();
+            const auto& indexBuild = ss->IndexBuildsByUid[buildUid];
 
-
-            ui32 partsCompleted;
-            if (indexBuild->State < TIndexBuildInfo::EState::Filling) {
-                // Shards are not filled yet
-                partsCompleted = 0;
-            } else if (indexBuild->State < TIndexBuildInfo::EState::Applying) {
-                // Shards are not processed yet
-                partsCompleted = static_cast<ui32>(indexBuild->CalcProgressPercent() / 100.0f * partsTotal );
-            } else {
-                // All shards are processed
+            ui32 partsCompleted = 0;
+            if (indexBuild->IsTransferring()) {
+                partsCompleted = static_cast<ui32>(indexBuild->CalcProgressPercent() / 100.0f * partsTotal);
+            } else if (indexBuild->IsApplying() || indexBuild->IsFinished()) {
                 partsCompleted = partsTotal;
             }
 
             itemProgress.set_parts_total(itemProgress.parts_total() + partsTotal);
             itemProgress.set_parts_completed(itemProgress.parts_completed() + partsCompleted);
-            *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(indexBuild->EndTime.Seconds());
-        } else {
-            auto partsCompleted = indexIdx >= item.NextIndexIdx ? 0 : partsTotal;
-
+            if (indexIdx == item.Table->indexes_size() - 1 && indexBuild->IsFinished()) {
+                *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(indexBuild->EndTime.Seconds());
+            }
+        } else if (indexIdx >= item.NextIndexIdx) {
             itemProgress.set_parts_total(itemProgress.parts_total() + partsTotal);
-            itemProgress.set_parts_completed(itemProgress.parts_completed() + partsCompleted);
-            *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(0);
         }
     }
 
@@ -146,7 +135,7 @@ namespace {
 
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
         const auto& item = importInfo.Items.at(itemIdx);
-        if (!item.Table) {
+        if (!item.Table || !itemProgress.has_start_time()) {
             return;
         }
 

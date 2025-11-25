@@ -8275,7 +8275,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             Ctest << "Hive response: " << resp->Json << Endl;
             NJson::TJsonValue value;
             ReadJsonTree(resp->Json, &value, false);
-            UNIT_ASSERT_VALUES_EQUAL(value["total"].GetIntegerSafe(), 0);
+            UNIT_ASSERT(value.Has("error"));
         }
 
         // this must not block balancer

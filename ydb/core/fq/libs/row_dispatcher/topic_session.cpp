@@ -987,7 +987,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&) {
     Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
     bool readSomething = HandleNewEvents();
     if (readSomething && IsWaitingEvents) {
-        SubscribeOnNextEvent(true);
+        SubscribeOnNextEvent(false);
     }
 }
 

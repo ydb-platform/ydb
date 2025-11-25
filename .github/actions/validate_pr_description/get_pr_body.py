@@ -25,11 +25,6 @@ def main():
         repo = gh.get_repo(github_repo)
         pr = repo.get_pull(int(pr_number))
         
-        # Check if PR was found
-        if not pr:
-            print(f"::error::PR #{pr_number} not found")
-            sys.exit(1)
-        
         # Save PR body for next step
         pr_body = pr.body or ""
         github_output = os.getenv("GITHUB_OUTPUT")
@@ -37,7 +32,8 @@ def main():
             print("::error::GITHUB_OUTPUT is not set")
             sys.exit(1)
         with open(github_output, "a") as f:
-            f.write(f"pr_body<<EOF\n{pr_body}\nEOF\n")
+            # Use JSON encoding to safely handle multiline content and special characters
+            f.write(f"pr_body={json.dumps(pr_body)}\n")
         
         # Update GITHUB_EVENT_PATH for post_status_to_github.py
         event_path = os.getenv("GITHUB_EVENT_PATH")

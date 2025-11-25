@@ -32,7 +32,8 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
         return False, txt
 
     # Extract changelog category section
-    category_section = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", description, re.DOTALL)
+    # Use \r?\n to handle both Unix (\n) and Windows (\r\n) line endings
+    category_section = re.search(r"### Changelog category.*?\r?\n(.*?)(\r?\n###|$)", description, re.DOTALL)
     if not category_section:
         txt = "Changelog category section not found."
         print(f"::warning::{txt}")
@@ -64,7 +65,8 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
         return False, txt
 
     if not any(category.lower() == cat.lower() for cat in NOT_FOR_CHANGELOG_CATEGORIES):
-        entry_section = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", description, re.DOTALL)
+        # Use \r?\n to handle both Unix (\n) and Windows (\r\n) line endings
+        entry_section = re.search(r"### Changelog entry.*?\r?\n(.*?)(\r?\n###|$)", description, re.DOTALL)
         if not entry_section or len(entry_section.group(1).strip()) < 20:
             txt = "The changelog entry is less than 20 characters or missing."
             print(f"::warning::{txt}")

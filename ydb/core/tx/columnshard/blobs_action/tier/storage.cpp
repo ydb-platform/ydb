@@ -18,6 +18,40 @@ NWrappers::NExternalStorage::IExternalStorageOperator::TPtr TOperator::GetCurren
     return ExternalStorageOperator->Get();
 }
 
+void TOperator::ApplyS3DefaultsFromShardConfig(NKikimrSchemeOp::TS3Settings& settings) const {
+    if (!HasAppData()) {
+        return;
+    }
+
+    const auto& cfg = AppDataVerified().ColumnShardConfig;
+    if (cfg.HasS3Client()) {
+        const auto& s3 = cfg.GetS3Client();
+        if (!settings.HasExecutorThreadsCount() && s3.HasExecutorThreadsCount()) {
+            settings.SetExecutorThreadsCount(s3.GetExecutorThreadsCount());
+        }
+
+        if (!settings.HasMaxConnectionsCount() && s3.HasMaxConnectionsCount()) {
+            settings.SetMaxConnectionsCount(s3.GetMaxConnectionsCount());
+        }
+    }
+
+    if (cfg.HasS3MaxInFlightIntervalsOnRequest()) {
+        const ui32 lim = cfg.GetS3MaxInFlightIntervalsOnRequest();
+        if (lim) {
+            if (settings.HasExecutorThreadsCount()) {
+                settings.SetExecutorThreadsCount(std::min<ui32>(settings.GetExecutorThreadsCount(), lim));
+            } else {
+                settings.SetExecutorThreadsCount(lim);
+            }
+            if (settings.HasMaxConnectionsCount()) {
+                settings.SetMaxConnectionsCount(std::min<ui32>(settings.GetMaxConnectionsCount(), lim));
+            } else {
+                settings.SetMaxConnectionsCount(lim);
+            }
+        }
+    }
+}
+
 std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAction(
     const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) {
     return std::make_shared<TDeclareRemovingAction>(GetStorageId(), GetSelfTabletId(), counters, GCInfo);
@@ -63,36 +97,8 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
         DoInitNewExternalOperator(op, std::nullopt);
     } else if (tierManager && tierManager->IsReady()) {
         NKikimrSchemeOp::TS3Settings settings = tierManager->GetS3Settings();
-        if (HasAppData()) {
-            const auto& cfg = AppDataVerified().ColumnShardConfig;
-            if (cfg.HasS3Client()) {
-                const auto& s3 = cfg.GetS3Client();
-                if (!settings.HasExecutorThreadsCount() && s3.HasExecutorThreadsCount()) {
-                    settings.SetExecutorThreadsCount(s3.GetExecutorThreadsCount());
-                }
+        ApplyS3DefaultsFromShardConfig(settings);
 
-                if (!settings.HasMaxConnectionsCount() && s3.HasMaxConnectionsCount()) {
-                    settings.SetMaxConnectionsCount(s3.GetMaxConnectionsCount());
-                }
-            }
-
-            if (cfg.HasS3MaxInFlightIntervalsOnRequest()) {
-                const ui32 lim = cfg.GetS3MaxInFlightIntervalsOnRequest();
-                if (lim) {
-                    if (settings.HasExecutorThreadsCount()) {
-                        settings.SetExecutorThreadsCount(std::min<ui32>(settings.GetExecutorThreadsCount(), lim));
-                    } else {
-                        settings.SetExecutorThreadsCount(lim);
-                    }
-
-                    if (settings.HasMaxConnectionsCount()) {
-                        settings.SetMaxConnectionsCount(std::min<ui32>(settings.GetMaxConnectionsCount(), lim));
-                    } else {
-                        settings.SetMaxConnectionsCount(lim);
-                    }
-                }
-            }
-        }
         {
             TGuard<TSpinLock> changeLock(ChangeOperatorLock);
             if (CurrentS3Settings && CurrentS3Settings->SerializeAsString() == settings.SerializeAsString()) {

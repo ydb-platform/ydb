@@ -276,6 +276,8 @@ public:
     bool IsTerminatedOrAborted();
     void AbortChannel(const TString& message);
     void HandleUpdate(bool flushed, bool earlyFinished, ui64 popBytes);
+    void BindStorage(std::shared_ptr<TOutputDescriptor>& self, IDqChannelStorage::TPtr storage);
+    void StorageWakeupHandler();
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
@@ -284,7 +286,8 @@ public:
     std::queue<ui32> SpilledChunkBytes;
     ui64 HeadBlobId = 0;
     ui64 TailBlobId = 0;
-    std::queue<ui32> LoadingQueue;
+    std::queue<TLoadingInfo> LoadingQueue;
+    IDqChannelStorage::TPtr Storage;
 
     mutable std::mutex WaitQueueMutex;
     std::atomic<ui64> WaitQueueSize;
@@ -518,7 +521,7 @@ public:
     void Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev);
     void Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev);
     void Handle(TEvPrivate::TEvSendWaiters::TPtr& ev);
-    std::shared_ptr<TOutputBuffer> CreateOutputBuffer(const TChannelFullInfo& info, ui64 maxInflightBytes, ui64 minInflightBytes);
+    std::shared_ptr<TOutputBuffer> CreateOutputBuffer(const TChannelFullInfo& info, ui64 maxInflightBytes, ui64 minInflightBytes, IDqChannelStorage::TPtr storage);
     std::shared_ptr<TInputDescriptor> GetOrCreateInputDescriptor(const TChannelFullInfo& info, bool binded, bool leading);
     void TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
     void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& inputBuffer);

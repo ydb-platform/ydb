@@ -292,15 +292,15 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, std::shared_ptr<TNodeSt
         auto fillLevel = FillLevel;
         auto inflightExceeded = PushBytes.load() > MaxInflightBytes + RemotePopBytes.load();
 
-        /* if (Storage) {
+        if (Storage) {
             if (!SpilledChunkBytes.empty() || inflightExceeded) {
                 SpilledChunkBytes.push(data.Bytes);
-                // SpilledBytes += data.Bytes;
+                SpilledBytes += data.Bytes;
                 Storage->Put(++HeadBlobId, DataToBuffer(std::move(data)));
                 spilled = true;
                 fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
             }
-        } else */ {
+        } else {
             if (inflightExceeded) {
                 fillLevel = EDqFillLevel::HardLimit;
             }
@@ -422,6 +422,19 @@ void TOutputDescriptor::HandleUpdate(bool flushed, bool earlyFinished, ui64 popB
             ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
     }
+}
+
+void TOutputDescriptor::BindStorage(std::shared_ptr<TOutputDescriptor>& self, IDqChannelStorage::TPtr storage) {
+    storage->SetWakeUpCallback([weakSelf=std::weak_ptr<TOutputDescriptor>(self)]() {
+        if (auto sharedSelf = weakSelf.lock(); sharedSelf) {
+            sharedSelf->StorageWakeupHandler();
+        }
+    });
+    Storage = std::move(storage);
+}
+
+void TOutputDescriptor::StorageWakeupHandler() {
+
 }
 
 TOutputBuffer::~TOutputBuffer() {
@@ -1267,7 +1280,7 @@ void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor, u
     ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evUpdate.Release(), flags));
 }
 
-std::shared_ptr<TOutputBuffer> TNodeState::CreateOutputBuffer(const TChannelFullInfo& info, ui64 maxInflightBytes, ui64 minInflightBytes) {
+std::shared_ptr<TOutputBuffer> TNodeState::CreateOutputBuffer(const TChannelFullInfo& info, ui64 maxInflightBytes, ui64 minInflightBytes, IDqChannelStorage::TPtr storage) {
     auto self = Self.lock();
     Y_ENSURE(self);
     auto descriptor = std::make_shared<TOutputDescriptor>(info, ActorSystem, OutputBufferBytes, OutputBufferChunks, maxInflightBytes, minInflightBytes);
@@ -1275,6 +1288,9 @@ std::shared_ptr<TOutputBuffer> TNodeState::CreateOutputBuffer(const TChannelFull
     auto [_, inserted] = OutputDescriptors.emplace(info, descriptor);
     Y_ENSURE(inserted);
     (*OutputBufferCount)++;
+    if (storage) {
+        descriptor->BindStorage(descriptor, storage);
+    }
     return std::make_shared<TOutputBuffer>(self, descriptor);
 }
 
@@ -1542,10 +1558,10 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetInputBuffer(const TChannel
 
 // remote buffers
 
-std::shared_ptr<TOutputBuffer> TDqChannelService::GetRemoteOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr /* storage */) {
+std::shared_ptr<TOutputBuffer> TDqChannelService::GetRemoteOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) {
     Y_ENSURE(info.InputActorId.NodeId() != NodeId);
     return GetOrCreateNodeState(info.InputActorId.NodeId())->CreateOutputBuffer(info,
-        Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10);
+        Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10, storage);
 }
 
 std::shared_ptr<TInputBuffer> TDqChannelService::GetRemoteInputBuffer(const TChannelFullInfo& info) {

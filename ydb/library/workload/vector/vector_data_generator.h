@@ -13,7 +13,6 @@ private:
     TString DataFiles;
     TString EmbeddingColumnName = "embedding";
 
-
 public:
     TWorkloadVectorFilesDataInitializer(const TVectorWorkloadParams& params);
 

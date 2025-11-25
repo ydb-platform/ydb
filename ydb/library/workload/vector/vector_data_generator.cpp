@@ -27,7 +27,6 @@
 #include <util/stream/mem.h>
 
 
-
 namespace NYdbWorkload {
 
 namespace {

@@ -53,10 +53,14 @@ public:
         YDB_FLAG_ACCESSOR(Nullable, true);
         YDB_ACCESSOR_DEF(TString, ColumnFamilyName);
 
+        std::optional<std::map<TString, TString>> ColumnCompression;
+
     public:
         TString BuildQuery() const;
 
         TColumnSchema& SetType(const NScheme::TTypeInfo& typeInfo);
+        TColumnSchema& SetCompression();
+        TColumnSchema& SetCompressionSetting(const TString& key, const TString& value);
     };
 
     using TUpdatesBuilder = NColumnShard::TTableUpdatesBuilder;

@@ -156,7 +156,8 @@
                 {"Index": 11, "Name": "TableType", "Type": "TCoAtom"},
                 {"Index": 12, "Name": "Temporary", "Type": "TCoAtom"},
                 {"Index": 13, "Name": "ExistingOk", "Type": "TCoAtom"},
-                {"Index": 14, "Name": "ReplaceIfExists", "Type":  "TCoAtom"}
+                {"Index": 14, "Name": "ReplaceIfExists", "Type":  "TCoAtom"},
+                {"Index": 15, "Name": "ColumnCompression", "Type": "TExprList"}
             ]
         },
         {

@@ -323,7 +323,7 @@ struct TLevel {
         auto it = Portions.find(id);
         if (it != Portions.end()) {
             const auto& p = it->second;
-            Counters.Portions->AddPortion(it->second);
+            Counters.Portions->RemovePortion(it->second);
             Intersections.Remove(p->GetPortionId());
             TotalBlobBytes -= p->GetTotalBlobBytes();
             Portions.erase(it);
@@ -523,7 +523,7 @@ private:
     void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         std::vector<TPortionInfo::TPtr> sortedRemove;
         for (const auto& p : remove) {
-            PortionsInfo->AddPortion(p);
+            PortionsInfo->RemovePortion(p);
             sortedRemove.push_back(p);
         }
         std::sort(sortedRemove.begin(), sortedRemove.end(), [](const auto& a, const auto& b) {

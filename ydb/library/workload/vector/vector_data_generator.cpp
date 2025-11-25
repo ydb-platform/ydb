@@ -261,11 +261,12 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
             << "File or directory with the dataset to import. Only two columns are imported: "
             << colors.BoldColor() << "id" << colors.OldColor() << " and "
             << colors.BoldColor() << "embedding" << colors.OldColor() << ". "
+            << "Any additional columns present in the input files (such as extra key columns or prefix columns) will be ignored during import. "
             << "If a directory is set, all supported files inside will be used."
             << "\nSupported formats: CSV/TSV (zipped or unzipped) and Parquet."
-            << "\nIf embedding appears to be list of floats, then it gets converted to YDB binary embedding format."
+            << "\nIf embedding appears to be a list of floats, then it gets converted to YDB binary embedding format."
             << "\nOtherwise embedding must already be binary; "
-            << "for CSV/TSV format embedding always must be represented as list of floats e.g., \"[ 1.0 2.0 3.0 ]\", \"[ 1.0, 2.0, 3.0 ]\"."
+            << "for CSV/TSV format, embeddings must always be represented as a list of floats e.g., \"[ 1.0 2.0 3.0 ]\", \"[ 1.0, 2.0, 3.0 ]\"."
             << "\nExample dataset: https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings";
 
         opts.AddLongOption('i', "input", description)

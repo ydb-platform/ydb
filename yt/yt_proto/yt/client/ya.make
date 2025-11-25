@@ -31,6 +31,8 @@ SRCS(
     hive/proto/timestamp_map.proto
     hive/proto/cluster_directory.proto
 
+    job_proxy/proto/job_api_service.proto
+
     node_tracker_client/proto/node.proto
     node_tracker_client/proto/node_directory.proto
 

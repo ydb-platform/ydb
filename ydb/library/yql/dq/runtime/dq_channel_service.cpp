@@ -107,7 +107,7 @@ void TLocalBuffer::Push(TDataChunk&& data) {
     EDqFillLevel fillLevel = FillLevel;
 
     if (Storage) {
-        if ((SpilledBytes.load() > 0) || InflightBytes.load() > MaxInflightBytes) {
+        if ((SpilledBytes.load() > 0) || InflightBytes.load() >= MaxInflightBytes) {
             // if there is something spilled and not loaded yet, continue to spill to avoid reordering
             SpilledChunkBytes.push(data.Bytes);
             SpilledBytes += data.Bytes;
@@ -117,12 +117,12 @@ void TLocalBuffer::Push(TDataChunk&& data) {
         } else {
             InflightBytes += data.Bytes;
             Queue.push(std::move(data));
-            fillLevel = InflightBytes.load() > MaxInflightBytes ? EDqFillLevel::SoftLimit : EDqFillLevel::NoLimit;
+            fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::SoftLimit : EDqFillLevel::NoLimit;
         }
     } else {
         InflightBytes += data.Bytes;
         Queue.push(std::move(data));
-        fillLevel = InflightBytes.load() > MaxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
+        fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
     }
 
     if (FillLevel != fillLevel) {
@@ -185,7 +185,7 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     Y_ENSURE(InflightBytes.load() >= data.Bytes);
     InflightBytes -= data.Bytes;
 
-    while (InflightBytes.load() <= MinInflightBytes && !SpilledChunkBytes.empty()) {
+    while (InflightBytes.load() < MinInflightBytes && !SpilledChunkBytes.empty()) {
         auto bytes = SpilledChunkBytes.front();
         SpilledChunkBytes.pop();
         InflightBytes += bytes;
@@ -205,11 +205,11 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
 
     EDqFillLevel fillLevel = FillLevel;
 
-    if (InflightBytes.load() <= MinInflightBytes) {
+    if (SpilledBytes.load() == 0 && InflightBytes.load() < MinInflightBytes) {
         fillLevel = EDqFillLevel::NoLimit;
     } else if (Storage) {
         fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
-    } else {
+    } else if (InflightBytes.load() >= MaxInflightBytes) {
         fillLevel = EDqFillLevel::HardLimit;
     }
 
@@ -282,17 +282,15 @@ void TLocalBuffer::BindStorage(std::shared_ptr<TLocalBuffer>& self, IDqChannelSt
     Storage = std::move(storage);
 }
 
-void TOutputDescriptor::PushDataChunk(TDataChunk&& data, std::shared_ptr<TNodeState> nodeState, std::shared_ptr<TOutputDescriptor> self) {
+void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
     bool spilled = false;
 
     {
         std::lock_guard lock(FlowControlMutex);
-
         auto fillLevel = FillLevel;
-        auto inflightExceeded = PushBytes.load() > MaxInflightBytes + RemotePopBytes.load();
 
         if (Storage) {
-            if (!SpilledChunkBytes.empty() || inflightExceeded) {
+            if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes)) {
                 SpilledChunkBytes.push(data.Bytes);
                 SpilledBytes += data.Bytes;
                 Storage->Put(++HeadBlobId, DataToBuffer(std::move(data)));
@@ -301,7 +299,7 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, std::shared_ptr<TNodeSt
             }
         } else {
             PushBytes += data.Bytes;
-            if (inflightExceeded) {
+            if (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes) {
                 fillLevel = EDqFillLevel::HardLimit;
             }
         }
@@ -329,23 +327,50 @@ void TOutputDescriptor::AddPopChunk(ui64 bytes, ui64 rows) {
     BufferPopRows += rows;
 }
 
-void TOutputDescriptor::UpdatePopBytes(ui64 bytes) {
+void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+    if (bytes <= RemotePopBytes.load()) {
+        return;
+    }
+
     {
         std::lock_guard lock(FlowControlMutex);
         if (bytes <= RemotePopBytes.load()) {
             return;
         }
         RemotePopBytes.store(bytes);
-        //
-        // TODO: Pop Spilled & PushToWaitQueue
-        //
-        if (FillLevel == EDqFillLevel::HardLimit && PushBytes.load() <= MinInflightBytes + bytes) {
-            FillLevel = EDqFillLevel::NoLimit;
-            if (Aggregator) {
-                Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::NoLimit);
+
+        while (PushBytes.load() < RemotePopBytes.load() + MaxInflightBytes && !SpilledChunkBytes.empty()) {
+            auto bytes = SpilledChunkBytes.front();
+            SpilledChunkBytes.pop();
+            Y_ENSURE(TailBlobId < HeadBlobId);
+
+            TLoadingInfo info(++TailBlobId, bytes);
+            info.Loaded = Storage->Get(info.BlobId, info.Buffer);
+            if (LoadingQueue.empty() && info.Loaded) {
+                TDataChunk data;
+                BufferToData(data, std::move(info.Buffer));
+                PushDataChunk(std::move(data), nodeState, self);
+                SpilledBytes -= bytes;
+            } else {
+                LoadingQueue.emplace(std::move(info));
             }
-        } else if (PushBytes.load() > bytes) {
-            return;
+        }
+
+        EDqFillLevel fillLevel = FillLevel;
+
+        if (SpilledBytes.load() == 0 && PushBytes.load() < RemotePopBytes.load() + MinInflightBytes) {
+            fillLevel = EDqFillLevel::NoLimit;
+        } else if (Storage) {
+            fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
+        } else if (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes) {
+            fillLevel = EDqFillLevel::HardLimit;
+        }
+
+        if (FillLevel != fillLevel) {
+            if (Aggregator) {
+                Aggregator->UpdateCount(FillLevel, fillLevel);
+            }
+            FillLevel = fillLevel;
         }
     }
 
@@ -402,10 +427,10 @@ void TOutputDescriptor::AbortChannel(const TString& message) {
     }
 }
 
-void TOutputDescriptor::HandleUpdate(bool flushed, bool earlyFinished, ui64 popBytes) {
+void TOutputDescriptor::HandleUpdate(bool flushed, bool earlyFinished, ui64 popBytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
     if (!IsTerminatedOrAborted()) {
         if (popBytes) {
-            UpdatePopBytes(popBytes);
+            UpdatePopBytes(popBytes, nodeState, self);
         }
 
         bool notify = false;
@@ -424,17 +449,37 @@ void TOutputDescriptor::HandleUpdate(bool flushed, bool earlyFinished, ui64 popB
     }
 }
 
-void TOutputDescriptor::BindStorage(std::shared_ptr<TOutputDescriptor>& self, IDqChannelStorage::TPtr storage) {
-    storage->SetWakeUpCallback([weakSelf=std::weak_ptr<TOutputDescriptor>(self)]() {
+void TOutputDescriptor::BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage) {
+    storage->SetWakeUpCallback([weakSelf=std::weak_ptr<TOutputDescriptor>(self), weakNodeState=std::weak_ptr<TNodeState>(nodeState)]() {
         if (auto sharedSelf = weakSelf.lock(); sharedSelf) {
-            sharedSelf->StorageWakeupHandler();
+            if (auto sharedNodeState = weakNodeState.lock(); sharedNodeState) {
+                sharedSelf->StorageWakeupHandler(sharedNodeState.get(), sharedSelf);
+            }
         }
     });
     Storage = std::move(storage);
 }
 
-void TOutputDescriptor::StorageWakeupHandler() {
+void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+    std::lock_guard lock(FlowControlMutex);
 
+    while (!LoadingQueue.empty()) {
+        auto& info = LoadingQueue.front();
+
+        if (!info.Loaded) {
+            info.Loaded = Storage->Get(info.BlobId, info.Buffer);
+        }
+        if (!info.Loaded) {
+            break;
+        }
+
+        TDataChunk data;
+        BufferToData(data, std::move(info.Buffer));
+        PushDataChunk(std::move(data), nodeState, self);
+        SpilledBytes -= info.Bytes;
+
+        LoadingQueue.pop();
+    }
 }
 
 TOutputBuffer::~TOutputBuffer() {
@@ -457,7 +502,7 @@ void TOutputBuffer::Push(TDataChunk&& data) {
         PushStats.Chunks++;
         PushStats.Rows += data.Rows;
         PushStats.Bytes += data.Bytes;
-        Descriptor->PushDataChunk(std::move(data), NodeState, Descriptor);
+        Descriptor->PushDataChunk(std::move(data), NodeState.get(), Descriptor);
     }
 }
 
@@ -1147,7 +1192,7 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             if (item->Descriptor->GenMajor.load() != GenMajor) {
                 item->Descriptor->AbortChannel(TStringBuilder() << "By Outdated GenMajor1 " << item->Descriptor->GenMajor.load() << " vs " << GenMajor);
             } else if (item->Data.Finished) {
-                item->Descriptor->HandleUpdate(true, false, 0);
+                item->Descriptor->HandleUpdate(true, false, 0, this, item->Descriptor);
             }
             deltaBytes += item->Data.Bytes;
             *OutputBufferInflightBytes -= item->Data.Bytes;
@@ -1195,7 +1240,7 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                         auto earlyFinished = record.GetEarlyFinished();
                         auto popBytes = record.GetPopBytes();
                         if (flushed || earlyFinished || popBytes) {
-                            item->Descriptor->HandleUpdate(flushed, earlyFinished, popBytes);
+                            item->Descriptor->HandleUpdate(flushed, earlyFinished, popBytes, this, item->Descriptor);
                         }
                     }
                 }
@@ -1249,7 +1294,7 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
         auto earlyFinished = record.GetEarlyFinished();
         auto popBytes = record.GetPopBytes();
         if (earlyFinished || popBytes) {
-            descriptor->HandleUpdate(false, earlyFinished, popBytes);
+            descriptor->HandleUpdate(false, earlyFinished, popBytes, this, descriptor);
         }
     }
 }
@@ -1289,7 +1334,7 @@ std::shared_ptr<TOutputBuffer> TNodeState::CreateOutputBuffer(const TChannelFull
     Y_ENSURE(inserted);
     (*OutputBufferCount)++;
     if (storage) {
-        descriptor->BindStorage(descriptor, storage);
+        descriptor->BindStorage(descriptor, self, storage);
     }
     return std::make_shared<TOutputBuffer>(self, descriptor);
 }

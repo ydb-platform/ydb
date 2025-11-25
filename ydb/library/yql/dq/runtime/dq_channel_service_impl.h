@@ -256,6 +256,7 @@ public:
         , BufferPopBytes(0)
         , BufferPopChunks(0)
         , BufferPopRows(0)
+        , SpilledBytes(0)
         , NeedToNotifyOutput(false)
         , EarlyFinished(false)
         , Terminated(false)
@@ -266,18 +267,18 @@ public:
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
     {}
-    void PushDataChunk(TDataChunk&& data, std::shared_ptr<TNodeState> nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void AddPopChunk(ui64 bytes, ui64 rows);
-    void UpdatePopBytes(ui64 bytes);
+    void UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     bool CheckGenMajor(ui64 genMajor, const TString& errorMessage);
     /* bool PushToWaitQueue(TDataChunk&& data); */
     bool IsFlushed();
     void Terminate();
     bool IsTerminatedOrAborted();
     void AbortChannel(const TString& message);
-    void HandleUpdate(bool flushed, bool earlyFinished, ui64 popBytes);
-    void BindStorage(std::shared_ptr<TOutputDescriptor>& self, IDqChannelStorage::TPtr storage);
-    void StorageWakeupHandler();
+    void HandleUpdate(bool flushed, bool earlyFinished, ui64 popBytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
+    void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
@@ -303,6 +304,7 @@ public:
     std::atomic<ui64> BufferPopBytes;
     std::atomic<ui64> BufferPopChunks;
     std::atomic<ui64> BufferPopRows;
+    std::atomic<ui64> SpilledBytes;
 
     std::atomic<bool> NeedToNotifyOutput;
     std::atomic<bool> EarlyFinished;

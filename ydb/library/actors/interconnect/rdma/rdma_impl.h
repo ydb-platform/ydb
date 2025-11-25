@@ -12,6 +12,7 @@
 #include <util/thread/lfqueue.h>
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
+#include <util/system/sanitizers.h>
 
 #include <span>
 
@@ -105,6 +106,8 @@ public:
     }
 
     void Reply(NActors::TActorSystem* as, const ibv_wc* wc) noexcept {
+        atomic_thread_fence(std::memory_order_acquire);
+        __tsan_acquire(&Cb);
         if (Cb) {
             if (wc) {
                 if (wc->status == IBV_WC_SUCCESS) {
@@ -120,6 +123,8 @@ public:
     }
 
     void ReplyCqErr(NActors::TActorSystem* as) noexcept {
+        atomic_thread_fence(std::memory_order_acquire);
+        __tsan_acquire(&Cb);
         if (Cb) {
             Cb(as, TEvRdmaIoDone::CqError());
             Cb = TCb();
@@ -127,6 +132,8 @@ public:
     }
 
     void ReplyWrErr(NActors::TActorSystem* as, int err) noexcept {
+        atomic_thread_fence(std::memory_order_acquire);
+        __tsan_acquire(&Cb);
         if (Cb) {
             Cb(as, TEvRdmaIoDone::WrError(err));
             Cb = TCb();
@@ -136,6 +143,8 @@ public:
 
     void AttachCb(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept {
         Cb = std::move(cb);
+        atomic_thread_fence(std::memory_order_release);
+        __tsan_release(&Cb);
     }
 
     void ResetTimer() noexcept {

@@ -20,8 +20,6 @@ namespace NKikimr {
             ui64 Raw[3]; // TLogoBlobID
             TIngress Ingress;
 
-            TLogoBlobRec() = default;
-
             explicit TLogoBlobRec(const TLogoBlobID &id, ui64 ingressRaw)
                 :  Ingress(ingressRaw)
             {

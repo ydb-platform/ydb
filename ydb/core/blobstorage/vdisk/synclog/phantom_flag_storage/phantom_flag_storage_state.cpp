@@ -89,7 +89,11 @@ void TPhantomFlagStorageState::AdjustSize(ui64 sizeLimit) {
     if (newCapacity > StoredFlags.capacity()) {
         StoredFlags.reserve(newCapacity);
     } else if (newCapacity < StoredFlags.capacity()) {
-        StoredFlags.resize(newCapacity);
+        if (newCapacity < StoredFlags.size()) {
+            StoredFlags = TPhantomFlags(StoredFlags.begin(), StoredFlags.begin() + newCapacity);
+        }
+        StoredFlags.shrink_to_fit();
+        StoredFlags.reserve(newCapacity);
     }
 }
 

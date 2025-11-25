@@ -41,7 +41,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     const NKikimrSchemeOp::TTableDescription& baseTableDescription = indexedTable.GetTableDescription();
 
     ui32 indexesCount = indexedTable.IndexDescriptionSize();
-    ui32 indexedTableShards = 0;
+    ui32 indexTableShards = 0;
     for (const auto& desc : indexedTable.GetIndexDescription()) {
         ui32 indexTableCount = 1;
         switch (GetIndexType(desc)) {
@@ -66,16 +66,16 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         }
         if (desc.IndexImplTableDescriptionsSize() == indexTableCount) {
             for (const auto& indexTableDesc: desc.GetIndexImplTableDescriptions()) {
-                indexedTableShards += TTableInfo::ShardsToCreate(indexTableDesc);
+                indexTableShards += TTableInfo::ShardsToCreate(indexTableDesc);
             }
         } else {
-            indexedTableShards += indexTableCount;
+            indexTableShards += indexTableCount;
         }
     }
 
     ui32 sequencesCount = indexedTable.SequenceDescriptionSize();
     ui32 baseShards = TTableInfo::ShardsToCreate(baseTableDescription);
-    ui32 shardsToCreate = baseShards + indexedTableShards;
+    ui32 shardsToCreate = baseShards + indexTableShards;
     ui32 pathToCreate = 1 + indexesCount * 2 + sequencesCount;
 
     TPath workingDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);

@@ -40,6 +40,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     const auto& op = tx.GetInitiateIndexBuild();
     const auto& indexDesc = op.GetIndex();
 
+    ui32 indexTableCount = 1;
     switch (GetIndexType(indexDesc)) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -50,18 +51,34 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding a unique index to an existing table is disabled")};
             }
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
             if (!context.SS->EnableVectorIndex) {
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
             }
+            const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
+            indexTableCount = (prefixVectorIndex ? 3 : 2);
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+        }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
             if (!context.SS->EnableFulltextIndex) {
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
             }
+            bool withRelevance = indexDesc.GetFulltextIndexDescription().GetSettings()
+                .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+            indexTableCount = (withRelevance ? 4 : 1);
             break;
+        }
         default:
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
+    }
+
+    ui32 indexTableShards = 0;
+    if (indexDesc.IndexImplTableDescriptionsSize() == indexTableCount) {
+        for (const auto& indexTableDesc: indexDesc.GetIndexImplTableDescriptions()) {
+            indexTableShards += TTableInfo::ShardsToCreate(indexTableDesc);
+        }
+    } else {
+        indexTableShards = indexTableCount;
     }
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
@@ -82,15 +99,14 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 .NotResolved();
         }
 
-        // TODO(mbkkt) less than necessary for vector index
         checks
             .IsValidLeafName(context.UserToken.Get())
-            .PathsLimit(2) // index and impl-table
+            .PathsLimit(1 + indexTableCount)
             .DirChildrenLimit();
 
         if (!tx.GetInternal()) {
             checks
-                .ShardsLimit(1); // impl-table
+                .ShardsLimit(indexTableShards);
         }
 
         if (!checks) {

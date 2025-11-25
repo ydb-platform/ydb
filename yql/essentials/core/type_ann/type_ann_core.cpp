@@ -624,7 +624,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus FailMeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& /* output */, TContext& ctx) {
-        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -632,6 +632,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        ui32 maxCount = 1;
         auto failureKind = input->Child(0)->Content();
         Y_ABORT_UNLESS(!TryGetEnv("YQL_DETERMINISTIC_MODE") || failureKind != "crash");
         if (failureKind == "expr") {
@@ -642,9 +643,22 @@ namespace NTypeAnnImpl {
             input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String)));
         } else if (failureKind == "exception") {
             ythrow yexception() << "FailMe exception";
+        } else if (failureKind == "opt_cycle" || failureKind == "opt_inf") {
+            maxCount = 2;
+            input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()), TStringBuilder() << "Unknown failure kind: " << failureKind));
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureMaxArgsCount(*input, maxCount, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->ChildrenSize() == 2) {
+            if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         return IGraphTransformer::TStatus::Ok;

@@ -560,6 +560,20 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
                 return false;
             }
+        } else if (name == "TransformCycleDetector") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                return false;
+            }
+            ui64 cnt;
+            if (!TryFromString(args[0], cnt)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
+
+            if (!ctx.CycleDetector) {
+                ctx.CycleDetector.ConstructInPlace(cnt);
+            }
         } else if (name == "PureDataSource") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));

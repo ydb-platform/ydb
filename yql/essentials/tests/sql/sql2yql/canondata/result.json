@@ -3198,6 +3198,34 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_expr-fail_expr_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-fail_opt_cycle]": [
+        {
+            "checksum": "a8ea20da2d2186bebf52a575f8d755c9",
+            "size": 1175,
+            "uri": "https://{canondata_backend}/1773845/77325201ee32f14e5260f99ced908a01c62897ad/resource.tar.gz#test_sql2yql.test_expr-fail_opt_cycle_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-fail_opt_cycle_detect]": [
+        {
+            "checksum": "dd156fc197ac58b18bc42e9b12d2bf57",
+            "size": 1261,
+            "uri": "https://{canondata_backend}/1773845/77325201ee32f14e5260f99ced908a01c62897ad/resource.tar.gz#test_sql2yql.test_expr-fail_opt_cycle_detect_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-fail_opt_cycle_detect_small]": [
+        {
+            "checksum": "c486302b988d984f6175461f2df83065",
+            "size": 1260,
+            "uri": "https://{canondata_backend}/1916746/2d060e6b91651e14c9d4ca2def31df4663188c5c/resource.tar.gz#test_sql2yql.test_expr-fail_opt_cycle_detect_small_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-fail_opt_inf]": [
+        {
+            "checksum": "c78dcaa979446029bcac9d1531a599e4",
+            "size": 1173,
+            "uri": "https://{canondata_backend}/1773845/77325201ee32f14e5260f99ced908a01c62897ad/resource.tar.gz#test_sql2yql.test_expr-fail_opt_inf_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-fail_type]": [
         {
             "checksum": "83d13d17dd7b376ae4a534364b1da2a6",
@@ -11368,6 +11396,26 @@
     "test_sql_format.test[expr-fail_expr]": [
         {
             "uri": "file://test_sql_format.test_expr-fail_expr_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-fail_opt_cycle]": [
+        {
+            "uri": "file://test_sql_format.test_expr-fail_opt_cycle_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-fail_opt_cycle_detect]": [
+        {
+            "uri": "file://test_sql_format.test_expr-fail_opt_cycle_detect_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-fail_opt_cycle_detect_small]": [
+        {
+            "uri": "file://test_sql_format.test_expr-fail_opt_cycle_detect_small_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-fail_opt_inf]": [
+        {
+            "uri": "file://test_sql_format.test_expr-fail_opt_inf_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-fail_type]": [

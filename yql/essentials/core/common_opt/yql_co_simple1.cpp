@@ -7279,6 +7279,24 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 .Build();
         }
 
+        if (failureKind == "opt_cycle" || failureKind == "opt_inf") {
+            auto children = node->ChildrenList();
+            Y_ENSURE(children.size() >= 1 && children.size() <= 2);
+            if (children.size() < 2) {
+                children.push_back(ctx.NewAtom(node->Pos(),"0"));
+            } else {
+                ui64 cnt = FromString<ui64>(node->Tail().Content());
+                ++cnt;
+                if (failureKind == "opt_cycle") {
+                    cnt = cnt % 5;
+                }
+
+                children[1] = ctx.NewAtom(node->Pos(),cnt);
+            }
+
+            return ctx.ChangeChildren(*node, std::move(children));
+        }
+
         throw yexception() << "Unknown failure kind: " << failureKind;
     };
 

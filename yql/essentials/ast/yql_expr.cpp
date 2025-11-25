@@ -3354,6 +3354,30 @@ ui64 MakePgExtensionMask(ui32 extensionIndex) {
     return 1ull << (extensionIndex - 1);
 }
 
+TExprCycleDetector::TExprCycleDetector(ui64 maxQueueSize)
+    : MaxQueueSize_(maxQueueSize)
+{
+}
+
+void TExprCycleDetector::Reset() {
+    Queue_.clear();
+    Set_.clear();
+}
+
+void TExprCycleDetector::AddNode(const TExprNode& node) {
+    auto hash = MakeCacheKey(node);
+    if (!Set_.insert(hash).second) {
+        throw yexception() << "Graph cycle detected";
+    }
+
+    Queue_.push(hash);
+    if (Queue_.size() > MaxQueueSize_) {
+        auto prevHash = Queue_.front();
+        Set_.erase(prevHash);
+        Queue_.pop();
+    }
+}
+
 TExprContext::TExprContext(ui64 nextUniqueId)
     : StringPool(4096)
     , NextUniqueId(nextUniqueId)
@@ -3420,6 +3444,7 @@ void TExprContext::Reset() {
     IssueManager.Reset();
     Step.Reset();
     RepeatTransformCounter = 0;
+    ResetCycleDetector();
 }
 
 bool TExprContext::IsEqual(TPositionHandle a, TPositionHandle b) const {

@@ -205,13 +205,15 @@ private:
 };
 
 struct TEvalScope {
-    TEvalScope(TTypeAnnotationContext& types)
+    TEvalScope(TTypeAnnotationContext& types, TExprContext& ctx)
         : Types(types)
+        , Ctx(ctx)
     {
         ++Types.EvaluationInProgress;
         for (auto& dataProvider : Types.DataSources) {
             dataProvider->EnterEvaluation(Types.EvaluationInProgress);
         }
+        Ctx.ResetCycleDetector();
     }
 
     ~TEvalScope() {
@@ -219,8 +221,10 @@ struct TEvalScope {
             dataProvider->LeaveEvaluation(Types.EvaluationInProgress);
         }
         --Types.EvaluationInProgress;
+        Ctx.ResetCycleDetector();
     }
     TTypeAnnotationContext& Types;
+    TExprContext& Ctx;
 };
 
 bool ValidateCalcWorlds(const TExprNode& node, const TTypeAnnotationContext& types, TNodeSet& visited) {
@@ -1040,7 +1044,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 calcWorldRoot.Drop();
                 fullTransformer->Rewind();
                 auto prevSteps = ctx.Step;
-                TEvalScope scope(types);
+                TEvalScope scope(types, ctx);
                 ctx.Step.Reset();
                 if (prevSteps.IsDone(TExprStep::Recapture)) {
                     ctx.Step.Done(TExprStep::Recapture);

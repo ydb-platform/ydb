@@ -519,6 +519,10 @@ public:
         BufferedWriter->WriteToBlockDevice();
     }
 
+    THolder<TBufferedWriter> ExportBufferedWriter() {
+        return std::move(BufferedWriter);
+    }
+
 protected:
     void FinalizeWrite(ui64 size, TReqId reqId, NWilson::TTraceId *traceId) {
         CurrentPosition += size;

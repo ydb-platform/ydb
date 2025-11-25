@@ -190,9 +190,9 @@ public:
     }
 
     void RemovePart(TActorSystem *actorSystem) {
-        ui32 old = PartsRemoved.fetch_add(1, std::memory_order_seq_cst);
+        ui32 old = PartsRemoved.fetch_add(1, std::memory_order::seq_cst);
         if (old + 1 == Pieces) {
-            if (PartsWritten.load(std::memory_order_seq_cst) == Pieces) {
+            if (PartsWritten.load(std::memory_order::seq_cst) == Pieces) {
                 Exec(actorSystem);
             } else {
                 Release(actorSystem);

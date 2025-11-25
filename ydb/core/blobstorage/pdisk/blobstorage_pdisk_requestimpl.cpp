@@ -102,7 +102,7 @@ TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &wr
     , ChunkWrite(write)
     , PieceShift(pieceShift)
     , PieceSize(pieceSize)
-    , Completion(MakeHolder<TCompletionChunkWritePiece>(this, ChunkWrite->Completion))
+    ,Completion(MakeHolder<TCompletionChunkWritePiece>(this, ChunkWrite->Completion))
 {
     ChunkWrite->RegisterPiece();
     GateId = ChunkWrite->GateId;
@@ -112,21 +112,24 @@ TChunkWritePiece::~TChunkWritePiece() {
 }
 
 void TChunkWritePiece::Process(void*) {
-    //do not override PDiskThread counter if no extra threads are created
     if (PDisk->HasEncryptionThreads()) {
-        auto cpuCounter = PDisk->Mon.PDiskGroup->GetCounter(TThread::CurrentThreadName() + "CPU", true);
+        thread_local TIntrusivePtr<NMonitoring::TCounterForPtr> cpuCounter = nullptr;
+        if (!cpuCounter) {
+            cpuCounter = PDisk->Mon.PDiskGroup->GetCounter(TThread::CurrentThreadName() + "CPU", true);
+        }
         *cpuCounter = ThreadCPUTime();
     }
-    this->ChunkWriteResult = MakeHolder<TChunkWriteResult>(PDisk->ChunkWritePiece(this));
+    PDisk->ChunkWritePiece(this);
     PDisk->PushChunkWrite(this);
 }
 
 void TChunkWritePiece::MarkReady(const TString& logPrefix) {
     Processed = true;
     auto evChunkWrite = ChunkWrite.Get();
-    ui8 old = evChunkWrite->ReadyForBlockDevice.fetch_add(1, std::memory_order_seq_cst);
+    ui8 old = evChunkWrite->ReadyForBlockDevice.fetch_add(1, std::memory_order::seq_cst);
     if (old + 1 == evChunkWrite->Pieces) {
         Y_VERIFY_S(evChunkWrite->RemainingSize == 0, logPrefix);
+        Y_VERIFY_S(evChunkWrite->Completion, logPrefix);
         evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
     }
 }

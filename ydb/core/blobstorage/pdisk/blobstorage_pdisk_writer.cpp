@@ -162,9 +162,6 @@ void TBufferedWriter::Obliterate() {
 }
 
 void TBufferedWriter::WriteToBlockDevice() {
-    if (!WithDelayedFlush) {
-        Cerr << "error";
-    }
     Y_VERIFY(WithDelayedFlush, "WriteToBlockDevice should be called only for buffers WithDelayedFlush");
     while (!BlockDeviceActions.empty()) {
         const auto& action = BlockDeviceActions.front();

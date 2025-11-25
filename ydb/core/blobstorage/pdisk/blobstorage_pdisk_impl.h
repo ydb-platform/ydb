@@ -333,9 +333,9 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk writing
     void PushChunkWrite(TChunkWritePiece *piece);
-    TChunkWriteResult ChunkWritePiece(TChunkWritePiece *piece);
+    void ChunkWritePiece(TChunkWritePiece *piece);
     void ChunkWritePiecePlain(TChunkWritePiece *piece);
-    bool ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter &writer, ui32 bytesAvailable);
+    void ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter &writer, ui32 bytesAvailable);
     void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
     bool HasEncryptionThreads() const;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

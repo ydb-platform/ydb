@@ -2,7 +2,6 @@
 #include "defs.h"
 #include "blobstorage_pdisk.h"
 #include <ydb/library/pdisk_io/buffers.h>
-#include "blobstorage_pdisk_chunk_write_result.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_drivemodel.h"
 #include "blobstorage_pdisk_internal_interface.h"
@@ -573,6 +572,8 @@ public:
 // TChunkWritePiece
 //
 
+class TBufferedWriter;
+
 class TChunkWritePiece : public TRequestBase, public IObjectInQueue {
 public:
     TPDisk *PDisk;
@@ -580,9 +581,10 @@ public:
     TIntrusivePtr<TChunkWrite> ChunkWrite;
     ui32 PieceShift;
     ui32 PieceSize;
+    ui32 PartIdx;
     ui32 PartOffset = 0;
-    THolder<TChunkWriteResult> ChunkWriteResult;
-    THolder<TCompletionChunkWritePiece> Completion;
+    THolder<TBufferedWriter> ChunkWriter;
+    THolder<TCompletionAction> Completion;
     bool Processed = false;
 
     TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span);

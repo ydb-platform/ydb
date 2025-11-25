@@ -237,11 +237,12 @@ def extract_changelog(pr_body: str) -> Tuple[Optional[str], Optional[str], Optio
 
 def build_pr_content(
     repo_name: str, repo, token: str, target_branch: str, dev_branch_name: str,
-    sources: List[Source], has_conflicts: bool, conflict_files: List[ConflictInfo],
+    sources: List[Source], conflict_files: List[ConflictInfo],
     cherry_pick_logs: List[str], workflow_triggerer: str, workflow_url: Optional[str],
     pr_number: Optional[int], logger
 ) -> Tuple[str, str]:
     """Generates PR title and body"""
+    has_conflicts = len(conflict_files) > 0
     # Collect data
     all_commit_shas = []
     all_pull_requests = []
@@ -501,7 +502,7 @@ def process_branch(
     has_conflicts = len(all_conflict_files) > 0
     title, body = build_pr_content(
         repo_name, repo, token, target_branch, dev_branch_name,
-        sources, has_conflicts, all_conflict_files, cherry_pick_logs,
+        sources, all_conflict_files, cherry_pick_logs,
         workflow_triggerer, workflow_url, None, logger
     )
     
@@ -518,7 +519,7 @@ def process_branch(
     if has_conflicts:
         _, updated_body = build_pr_content(
             repo_name, repo, token, target_branch, dev_branch_name,
-            sources, has_conflicts, all_conflict_files, cherry_pick_logs,
+            sources, all_conflict_files, cherry_pick_logs,
             workflow_triggerer, workflow_url, pr.number, logger
         )
         pr.edit(body=updated_body)

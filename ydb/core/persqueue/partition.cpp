@@ -1267,10 +1267,10 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
         }
     }
 
-    Y_ABORT_UNLESS(!TransactionsInflight.empty())("Step", ev->Step)("TxId",  ev->TxId);
+    Y_ABORT_UNLESS(!TransactionsInflight.empty());
 
     auto txIter = TransactionsInflight.find(ev->TxId);
-    Y_ABORT_UNLESS(!txIter.IsEnd())("Step", ev->Step)("TxId",  ev->TxId);
+    Y_ABORT_UNLESS(!txIter.IsEnd());
     auto& tx = txIter->second;
 
     Y_ABORT_UNLESS(tx->State == ECommitState::Pending);

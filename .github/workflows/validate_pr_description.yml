@@ -39,11 +39,10 @@ jobs:
 
       - name: Use custom PR validation action
         id: validate
-        env:
-          PR_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_number || github.event.pull_request.number }}
         uses: ./.github/actions/validate_pr_description
         with:
           pr_body: ${{ github.event_name == 'workflow_dispatch' && steps.get_pr.outputs.pr_body || github.event.pull_request.body }}
+          pr_number: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_number || github.event.pull_request.number }}
 
       - name: Test output
         if: always()

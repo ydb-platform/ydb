@@ -14,8 +14,8 @@ struct Scope {
 
     TVector<int> ParentScopes;
     bool TopScope = false;
-    bool IdentityMap = true;
     THashSet<TInfoUnit, TInfoUnit::THashFunction> Unrenameable;
+    bool MultipleConsumers = false;
     TVector<TInfoUnit> OutputIUs;
     TVector<std::shared_ptr<IOperator>> Operators;
 
@@ -24,7 +24,7 @@ struct Scope {
         for (int p : ParentScopes) {
             res << p << ",";
         }
-        res << "], Identity: " << IdentityMap << ", TopScope: " << TopScope << ", Unrenameable: {";
+        res << "], MultipleConsumers: " << MultipleConsumers << ", TopScope: " << TopScope << ", Unrenameable: {";
         for (auto &iu : Unrenameable) {
             res << iu.GetFullName() << ",";
         }
@@ -79,7 +79,7 @@ void Scopes::ComputeScopesRec(std::shared_ptr<IOperator> &op, int &currScope) {
         }
 
         newScope.OutputIUs = op->GetOutputIUs();
-        newScope.IdentityMap = false;
+        newScope.MultipleConsumers = op->Parents.size() >= 2;
         ScopeMap[currScope] = newScope;
     }
     
@@ -148,8 +148,6 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
     THashMap<std::pair<int, TInfoUnit>, TVector<std::pair<int, TInfoUnit>>, TIntTUnitPairHash> renameMap;
 
-    int newAliasId = 1;
-
     for (auto iter : root) {
         if (iter.Current->Kind == EOperator::Map && CastOperator<TOpMap>(iter.Current)->Project) {
             auto map = CastOperator<TOpMap>(iter.Current);
@@ -160,26 +158,16 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                 auto scope = scopes.ScopeMap.at(scopeId);
                 auto parentScopes = scope.ParentScopes;
 
-                // If we're not in the final scope that exports variables to the user,
-                // generate a unique new alias for the variable to avoid collisions
-                auto exportTo = to;
-                if (!scope.TopScope) {
-                    TString newAlias = "#" + std::to_string(newAliasId++);
-                    exportTo = TInfoUnit(newAlias, to.ColumnName);
-                }
-
                 // "Export" the result of map output to the upper scope, but only if there is one
                 // parent scope only
                 auto source = std::make_pair(scopeId, to);
-                auto target = std::make_pair(parentScopes[0], exportTo);
-                renameMap[source].push_back(target);
-                YQL_CLOG(TRACE, CoreDq) << "Rename map: " << source.second.GetFullName() << "," << source.first << " -> "
-                    << target.second.GetFullName() << "," << target.first;
+                auto target = std::make_pair(parentScopes[0], to);
 
-
-                // if (parentScopes.size()==1) {
-                //     renameMap[source].push_back(target);
-                // }
+                if (parentScopes.size()==1) {
+                    YQL_CLOG(TRACE, CoreDq) << "Rename map: " << source.second.GetFullName() << "," << source.first << " -> "
+                        << target.second.GetFullName() << "," << target.first;
+                    renameMap[source].push_back(target);
+                }
 
                 // If the map element is a rename, record the rename in the map within the same scope
                 // However skip all unrenamable uis
@@ -233,23 +221,11 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         }
     }
 
-    // Add unique aliases
-
     // Iterate through the plan, applying renames to one operator at a time
 
     for (auto it : root) {
         // Build a subset of the map for the current scope only
         auto scopeId = scopes.RevScopeMap.at(it.Current);
-
-        // Exclude all IUs from OpReads in this scope
-        // THashSet<TInfoUnit, TInfoUnit::THashFunction> exclude;
-        // for (auto & op : scopes.ScopeMap.at(scopeId).Operators) {
-        //    if (op->Kind == EOperator::Source) {
-        //        for (auto iu : op->GetOutputIUs()) {
-        //            exclude.insert(iu);
-        //        }
-        //    }
-        //}
 
         auto scopedRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>();
         for (auto &[k, v] : closedMap) {

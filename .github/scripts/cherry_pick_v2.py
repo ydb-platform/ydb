@@ -353,7 +353,7 @@ After resolving conflicts:
 
 ### Description for reviewers <!-- (optional) description for those who read this PR -->
 
-{description}{cherry_pick_log_section}{conflicts_section}{workflow_section}
+{description}{conflicts_section}{cherry_pick_log_section}{workflow_section}
 """
     
     return title, body
@@ -411,44 +411,30 @@ def update_comments(backport_comments: List[Tuple[PullRequest, object]], results
                 if workflow_url:
                     new_results += f"\n[workflow run]({workflow_url})"
             
-            # Replace "in progress" line
-            if workflow_url in existing_body:
-                lines = existing_body.split('\n')
-                updated_lines = []
-                workflow_found = False
-                in_results_block = False
+            # Replace "in progress" line with results
+            lines = existing_body.split('\n')
+            updated_lines = []
+            found = False
+            
+            for line in lines:
+                # Check if this is the "in progress" line for our target branches
+                is_progress_line = (
+                    "in progress" in line and 
+                    any(f"`{b}`" in line for b in target_branches) and
+                    (not workflow_url or workflow_url in line)
+                )
                 
-                for line in lines:
-                    if workflow_url in line:
-                        if "in progress" in line:
-                            updated_lines.append(new_results)
-                            workflow_found = True
-                            in_results_block = new_results.count('\n') > 0
-                        elif in_results_block:
-                            if line.strip() == '' or workflow_url not in line:
-                                in_results_block = False
-                                updated_lines.append(line)
-                        else:
-                            is_result_line = (any(f"`{b}`" in line for b in target_branches) or "Backport results:" in line or line.strip().startswith("- `"))
-                            if is_result_line and workflow_url in line:
-                                updated_lines.append(new_results)
-                                workflow_found = True
-                                in_results_block = new_results.count('\n') > 0
-                            else:
-                                updated_lines.append(line)
-                    elif in_results_block and line.strip() == '':
-                        in_results_block = False
-                        updated_lines.append(line)
-                    else:
-                        updated_lines.append(line)
-                
-                if not workflow_found:
-                    updated_lines.append("")
+                if is_progress_line and not found:
                     updated_lines.append(new_results)
-                
-                updated_comment = '\n'.join(updated_lines)
-            else:
-                updated_comment = f"{existing_body}\n\n{new_results}"
+                    found = True
+                else:
+                    updated_lines.append(line)
+            
+            if not found:
+                updated_lines.append("")
+                updated_lines.append(new_results)
+            
+            updated_comment = '\n'.join(updated_lines)
             
             comment.edit(updated_comment)
             logger.info(f"Updated backport comment in original PR #{pull.number}")
@@ -695,9 +681,12 @@ def main():
     
     # Create initial comment
     backport_comments = []
-    if workflow_url:
+    if all_pull_requests:
         target_branches_str = ', '.join([f"`{b}`" for b in target_branches])
-        new_line = f"Backport to {target_branches_str} in progress: [workflow run]({workflow_url})"
+        if workflow_url:
+            new_line = f"Backport to {target_branches_str} in progress: [workflow run]({workflow_url})"
+        else:
+            new_line = f"Backport to {target_branches_str} in progress"
         
         for pull in all_pull_requests:
             try:
@@ -705,7 +694,13 @@ def main():
                 if existing_comment:
                     existing_body = existing_comment.body
                     branches_already_mentioned = all(f"`{b}`" in existing_body for b in target_branches)
-                    if branches_already_mentioned and workflow_url in existing_body:
+                    should_skip = (
+                        branches_already_mentioned and 
+                        ("in progress" in existing_body) and
+                        (not workflow_url or workflow_url in existing_body)
+                    )
+                    
+                    if should_skip:
                         backport_comments.append((pull, existing_comment))
                     else:
                         existing_comment.edit(f"{existing_body}\n\n{new_line}")

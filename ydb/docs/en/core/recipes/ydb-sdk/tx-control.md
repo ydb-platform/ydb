@@ -15,10 +15,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
    import (
      "context"
+     "fmt"
      "os"
 
      "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/table"
+     "github.com/ydb-platform/ydb-go-sdk/v3/query"
    )
 
    func main() {
@@ -32,14 +33,59 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
        panic(err)
      }
      defer db.Close(ctx)
-     txControl := table.TxControl(
-       table.BeginTx(table.WithSerializableReadWrite()),
-       table.CommitTx(),
+     row, err := db.Query().QueryRow(ctx, "SELECT 1",
+       query.WithTxControl(query.SerializableReadWriteTxControl(query.CommitTx())),
      )
-     err := driver.Table().Do(scope.Ctx, func(ctx context.Context, s table.Session) error {
-       _, _, err := s.Execute(ctx, txControl, "SELECT 1", nil)
-       return err
-     })
+     if err != nil {
+       fmt.Printf("unexpected error: %v", err)
+     }
+     // work with row
+     _ = row
+   }
+   ```
+
+- Go (database/sql)
+
+   ```go
+   package main
+
+   import (
+     "context"
+     "database/sql"
+     "fmt"
+     "os"
+
+     "github.com/ydb-platform/ydb-go-sdk/v3"
+     "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+   )
+
+   func main() {
+     ctx, cancel := context.WithCancel(context.Background())
+     defer cancel()
+     nativeDriver, err := ydb.Open(ctx,
+       os.Getenv("YDB_CONNECTION_STRING"),
+       ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+     )
+     if err != nil {
+       panic(err)
+     }
+     defer nativeDriver.Close(ctx)
+
+     connector, err := ydb.Connector(nativeDriver)
+     if err != nil {
+       panic(err)
+     }
+     defer connector.Close()
+
+     db := sql.OpenDB(connector)
+     defer db.Close()
+
+     // Serializable Read-Write mode is used by default for transactions
+     err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
+       row := tx.QueryRowContext(ctx, "SELECT 1")
+       var result int
+       return row.Scan(&result)
+     }, retry.WithIdempotent(true))
      if err != nil {
        fmt.Printf("unexpected error: %v", err)
      }
@@ -90,10 +136,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
    import (
      "context"
+     "fmt"
      "os"
 
      "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/table"
+     "github.com/ydb-platform/ydb-go-sdk/v3/query"
    )
 
    func main() {
@@ -107,14 +154,65 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
        panic(err)
      }
      defer db.Close(ctx)
-     txControl := table.TxControl(
-       table.BeginTx(table.WithOnlineReadOnly(table.WithInconsistentReads())),
-       table.CommitTx(),
+     row, err := db.Query().QueryRow(ctx, "SELECT 1",
+       query.WithTxControl(
+         query.OnlineReadOnlyTxControl(query.WithInconsistentReads()),
+       ),
      )
-     err := driver.Table().Do(scope.Ctx, func(ctx context.Context, s table.Session) error {
-       _, _, err := s.Execute(ctx, txControl, "SELECT 1", nil)
-       return err
-     })
+     if err != nil {
+       fmt.Printf("unexpected error: %v", err)
+     }
+     // work with row
+     _ = row
+   }
+   ```
+
+- Go (database/sql)
+
+   ```go
+   package main
+
+   import (
+     "context"
+     "database/sql"
+     "fmt"
+     "os"
+
+     "github.com/ydb-platform/ydb-go-sdk/v3"
+     "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+   )
+
+   func main() {
+     ctx, cancel := context.WithCancel(context.Background())
+     defer cancel()
+     nativeDriver, err := ydb.Open(ctx,
+       os.Getenv("YDB_CONNECTION_STRING"),
+       ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+     )
+     if err != nil {
+       panic(err)
+     }
+     defer nativeDriver.Close(ctx)
+
+     connector, err := ydb.Connector(nativeDriver)
+     if err != nil {
+       panic(err)
+     }
+     defer connector.Close()
+
+     db := sql.OpenDB(connector)
+     defer db.Close()
+
+     // Online Read-Only - a read mode providing access to the latest data
+     // without strict consistency guarantees
+     err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
+       row := tx.QueryRowContext(ctx, "SELECT 1")
+       var result int
+       return row.Scan(&result)
+     }, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
+       Isolation: sql.LevelReadCommitted,
+       ReadOnly:  true,
+     }))
      if err != nil {
        fmt.Printf("unexpected error: %v", err)
      }
@@ -134,10 +232,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
    import (
      "context"
+     "fmt"
      "os"
 
      "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/table"
+     "github.com/ydb-platform/ydb-go-sdk/v3/query"
    )
 
    func main() {
@@ -151,19 +250,20 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
        panic(err)
      }
      defer db.Close(ctx)
-     txControl := table.TxControl(
-       table.BeginTx(table.WithStaleReadOnly()),
-       table.CommitTx(),
+     row, err := db.Query().QueryRow(ctx, "SELECT 1",
+       query.WithTxControl(query.StaleReadOnlyTxControl()),
      )
-     err := driver.Table().Do(scope.Ctx, func(ctx context.Context, s table.Session) error {
-       _, _, err := s.Execute(ctx, txControl, "SELECT 1", nil)
-       return err
-     })
      if err != nil {
        fmt.Printf("unexpected error: %v", err)
      }
+     // work with row
+     _ = row
    }
    ```
+
+- Go (database/sql)
+
+   The Stale Read-Only mode is not directly supported in the standard `database/sql` interface. It is recommended to use the native Go SDK for this transaction mode.
 
 {% endlist %}
 
@@ -178,10 +278,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
    import (
      "context"
+     "fmt"
      "os"
 
      "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/table"
+     "github.com/ydb-platform/ydb-go-sdk/v3/query"
    )
 
    func main() {
@@ -195,14 +296,62 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
        panic(err)
      }
      defer db.Close(ctx)
-     txControl := table.TxControl(
-       table.BeginTx(table.WithSnapshotReadOnly()),
-       table.CommitTx(),
+     row, err := db.Query().QueryRow(ctx, "SELECT 1",
+       query.WithTxControl(query.SnapshotReadOnlyTxControl()),
      )
-     err := driver.Table().Do(scope.Ctx, func(ctx context.Context, s table.Session) error {
-       _, _, err := s.Execute(ctx, txControl, "SELECT 1", nil)
-       return err
-     })
+     if err != nil {
+       fmt.Printf("unexpected error: %v", err)
+     }
+     // work with row
+     _ = row
+   }
+   ```
+
+- Go (database/sql)
+
+   ```go
+   package main
+
+   import (
+     "context"
+     "database/sql"
+     "fmt"
+     "os"
+
+     "github.com/ydb-platform/ydb-go-sdk/v3"
+     "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+   )
+
+   func main() {
+     ctx, cancel := context.WithCancel(context.Background())
+     defer cancel()
+     nativeDriver, err := ydb.Open(ctx,
+       os.Getenv("YDB_CONNECTION_STRING"),
+       ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+     )
+     if err != nil {
+       panic(err)
+     }
+     defer nativeDriver.Close(ctx)
+
+     connector, err := ydb.Connector(nativeDriver)
+     if err != nil {
+       panic(err)
+     }
+     defer connector.Close()
+
+     db := sql.OpenDB(connector)
+     defer db.Close()
+
+     // Snapshot Read-Only - provides consistent reading of data at a specific point in time
+     err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
+       row := tx.QueryRowContext(ctx, "SELECT 1")
+       var result int
+       return row.Scan(&result)
+     }, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
+       Isolation: sql.LevelSnapshot,
+       ReadOnly:  true,
+     }))
      if err != nil {
        fmt.Printf("unexpected error: %v", err)
      }

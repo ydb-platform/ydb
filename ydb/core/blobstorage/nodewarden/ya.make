@@ -45,6 +45,7 @@ PEERDIR(
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk
+    ydb/core/config/validation
     ydb/core/control
     ydb/library/pdisk_io
     ydb/library/yaml_config

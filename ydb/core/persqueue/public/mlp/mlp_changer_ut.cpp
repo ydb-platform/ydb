@@ -181,11 +181,11 @@ Y_UNIT_TEST(ReadAndReleaseTest) {
 }
 
 Y_UNIT_TEST(CapacityTest) {
-    return;
+    //return;
 
     auto setup = CreateSetup();
 
-    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, true);
 
     Cerr << (TStringBuilder() << ">>>>> TOPIC WAS CREATED" << Endl);
 
@@ -220,15 +220,15 @@ Y_UNIT_TEST(CapacityTest) {
                     .Messages = {{
                         .Index = 0,
                         .MessageBody = "it is simple message body",
-                        .MessageGroupId = TStringBuilder() << "message-group-" << RandomNumber<ui64>(250),
-                        .MessageDeduplicationId = TStringBuilder() << "deduplication-id-" << RandomNumber<ui64>(1000)
+                        .MessageGroupId = TStringBuilder() << "message-group-" << RandomNumber<ui64>(100000),
+                        .MessageDeduplicationId = TStringBuilder() << "deduplication-id-" << RandomNumber<ui64>(5000000)
                     }}
                 }));
 
                 ++InflightWrite;
             }
 
-            while (Inflight < 200) {
+            while (Inflight < 300) {
                 Register(CreateReader(SelfId(), TReaderSettings{
                     .DatabasePath = "/Root",
                     .TopicName = "/Root/topic1",
@@ -294,6 +294,7 @@ Y_UNIT_TEST(CapacityTest) {
 
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
+                hFunc(NMLP::TEvWriteResponse, Handle);
                 hFunc(NMLP::TEvReadResponse, Handle);
                 hFunc(NMLP::TEvChangeResponse, Handle);
                 sFunc(TEvents::TEvPoison, PassAway);

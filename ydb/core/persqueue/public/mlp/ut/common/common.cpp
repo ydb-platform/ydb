@@ -20,6 +20,7 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
     setup->GetServer().EnableLogs({
             NKikimrServices::PERSQUEUE,
             NKikimrServices::PERSQUEUE_READ_BALANCER,
+            NKikimrServices::PQ_WRITE_PROXY
         },
         NActors::NLog::PRI_INFO
     );
@@ -48,11 +49,11 @@ void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topi
     setup->GetServer().WaitInit(GetTopicPath(topicName));
 }
 
-void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount) {
+void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount, bool keepMessagesOrder) {
     return CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
             .PartitioningSettings(partitionCount, partitionCount)
             .BeginAddSharedConsumer(consumerName)
-                .KeepMessagesOrder(false)
+                .KeepMessagesOrder(keepMessagesOrder)
                 .BeginDeadLetterPolicy()
                     .Enable()
                     .BeginCondition()

@@ -15,7 +15,7 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
             NKikimrServices::PQ_MLP_ENRICHER,
             NKikimrServices::PQ_MLP_DLQ_MOVER,
         },
-        NActors::NLog::PRI_INFO
+        NActors::NLog::PRI_DEBUG
     );
     setup->GetServer().EnableLogs({
             NKikimrServices::PERSQUEUE,

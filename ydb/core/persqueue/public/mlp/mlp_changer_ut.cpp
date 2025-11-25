@@ -181,7 +181,7 @@ Y_UNIT_TEST(ReadAndReleaseTest) {
 }
 
 Y_UNIT_TEST(CapacityTest) {
-    //return;
+    return;
 
     auto setup = CreateSetup();
 
@@ -219,7 +219,7 @@ Y_UNIT_TEST(CapacityTest) {
                     .TopicName = "/Root/topic1",
                     .Messages = {{
                         .Index = 0,
-                        .MessageBody = "it is simple message body",
+                        .MessageBody = Body,
                         .MessageGroupId = TStringBuilder() << "message-group-" << RandomNumber<ui64>(100000),
                         .MessageDeduplicationId = TStringBuilder() << "deduplication-id-" << RandomNumber<ui64>(5000000)
                     }}
@@ -304,6 +304,8 @@ Y_UNIT_TEST(CapacityTest) {
 
         size_t Inflight = 0;
         size_t InflightWrite = 0;
+
+        TString Body = NUnitTest::RandomString(10_KB);
 
         State& State;
     };

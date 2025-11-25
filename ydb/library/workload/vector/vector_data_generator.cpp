@@ -32,16 +32,6 @@ namespace NYdbWorkload {
 
 namespace {
 
-bool ContainsListAlikeStrings(const std::shared_ptr<arrow::ChunkedArray> column) {
-    if (column->length() == 0) {
-        return false;
-    }
-
-    const auto sample = std::static_pointer_cast<arrow::StringArray>(column->chunk(0))->Value(0);
-    std::regex listPattern("\\[\\s*(\\S+(,|\\s)\\s*)\\]");
-    return std::regex_match(sample.begin(), sample.end(), listPattern);
-}
-
 class TDataGeneratorWrapper final: public IBulkDataGenerator {
 private:
     const std::shared_ptr<IBulkDataGenerator> InnerDataGenerator;
@@ -184,38 +174,40 @@ private:
         if (embeddingColumn == nullptr) {
             ythrow yexception() << "Cannot find embedding column '" << EmbeddingColumnName << "'";
         }
-        if (ContainsListAlikeStrings(embeddingColumn)) {
-            arrow::StringBuilder newEmbeddingsBuilder;
-            for (int64_t row = 0; row < table->num_rows(); ++row) {
-                const auto embeddingListString = std::static_pointer_cast<arrow::StringArray>(embeddingColumn->Slice(row, 1)->chunk(0))->Value(0);
-                
-                TStringBuf buffer(embeddingListString.data(), embeddingListString.size());
-                buffer.SkipPrefix("[");
-                buffer.ChopSuffix("]");
-                TMemoryInput input(buffer);
 
-                TStringBuilder newEmbeddingBuilder;
-                NKnnVectorSerialization::TSerializer<float> serializer(&newEmbeddingBuilder.Out);
-                while (!input.Exhausted()) {
-                    float tmp;
-                    input >> tmp;
-                    input.Skip(1);
-                    serializer.HandleElement(tmp);
-                }
-                serializer.Finish();
+        arrow::StringBuilder newEmbeddingsBuilder;
+        for (int64_t row = 0; row < table->num_rows(); ++row) {
+            const auto embeddingListString = std::static_pointer_cast<arrow::StringArray>(embeddingColumn->Slice(row, 1)->chunk(0))->Value(0);
+            
+            TStringBuf buffer(embeddingListString.data(), embeddingListString.size());
+            buffer.SkipPrefix("\"");
+            buffer.ChopSuffix("\"");
+            buffer.SkipPrefix("[");
+            buffer.ChopSuffix("]");
 
-                if (const auto status = newEmbeddingsBuilder.Append(newEmbeddingBuilder.MutRef()); !status.ok()) {
-                    ythrow yexception() << status.ToString();
+            TStringBuilder newEmbeddingBuilder;
+            const auto splitter = StringSplitter(buffer.begin(), buffer.end()).SplitByFunc([](char c) {
+                return c == ',' || std::isspace(c);
+            }).SkipEmpty();
+            NKnnVectorSerialization::TSerializer<float> serializer(&newEmbeddingBuilder.Out);
+            for (auto it = splitter.begin(); it != splitter.end(); ++it) {
+                float value;
+                if (!TryFromString(it->Token(), value)) {
+                    ythrow yexception() << "Cannot parse float from embedding element '" << it->Token() << "'";
                 }
+                serializer.HandleElement(value);
             }
-            std::shared_ptr<arrow::StringArray> newEmbeddingColumn;
-            if (const auto status = newEmbeddingsBuilder.Finish(&newEmbeddingColumn); !status.ok()) {
+            serializer.Finish();
+
+            if (const auto status = newEmbeddingsBuilder.Append(newEmbeddingBuilder.MutRef()); !status.ok()) {
                 ythrow yexception() << status.ToString();
             }
-            resultColumns.push_back(arrow::ChunkedArray::Make({newEmbeddingColumn}).ValueOrDie());
-        } else {
-            ythrow yexception() << "Only list[float32] CSV type is supported for embedding column";
         }
+        std::shared_ptr<arrow::StringArray> newEmbeddingColumn;
+        if (const auto status = newEmbeddingsBuilder.Finish(&newEmbeddingColumn); !status.ok()) {
+            ythrow yexception() << status.ToString();
+        }
+        resultColumns.push_back(arrow::ChunkedArray::Make({newEmbeddingColumn}).ValueOrDie());
 
         const auto newTable = arrow::Table::Make(arrow::schema({
             arrow::field("id", arrow::uint64()),

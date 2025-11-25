@@ -274,7 +274,8 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
             << "If a directory is set, all supported files inside will be used."
             << "\nSupported formats: CSV/TSV (zipped or unzipped) and Parquet."
             << "\nIf embedding appears to be list of floats, then it gets converted to YDB binary embedding format."
-            << "\nOtherwise embedding must already be binary; for CSV/TSV format embedding always must be represented as list of floats."
+            << "\nOtherwise embedding must already be binary; "
+            << "for CSV/TSV format embedding always must be represented as list of floats e.g., \"[ 1.0 2.0 3.0 ]\", \"[ 1.0, 2.0, 3.0 ]\"."
             << "\nExample dataset: https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings";
 
         opts.AddLongOption('i', "input", description)

@@ -559,8 +559,8 @@ namespace NYdb::NConsoleClient {
             settings.SetRetentionStorageMb(*RetentionStorageMb_);
         }
 
-        if (MetricsLevel_.Defined()) {
-            settings.SetMetricsLevel(*MetricsLevel_);
+        if (auto level = GetMetricsLevel(); level.Defined()) {
+            settings.SetMetricsLevel(*level);
         }
 
         return settings;

@@ -85,7 +85,7 @@ private:
         parseOptions.double_quote = !quoting.double_quote_disabled();
         if (csvSettings.delimiter()) {
             if (Y_UNLIKELY(csvSettings.delimiter().size() != 1)) {
-                ythrow yexception() << "Cannot read CSV: Invalid delimitr in csv: " << csvSettings.delimiter();
+                ythrow yexception() << "Cannot read CSV: Invalid delimiter in csv: " << csvSettings.delimiter();
             }
             parseOptions.delimiter = csvSettings.delimiter().front();
         }
@@ -247,7 +247,7 @@ public:
 
     virtual TDataPortions GenerateDataPortion() override {
         TDataPortions portions = InnerDataGenerator->GenerateDataPortion();
-        for (auto portion : portions) {
+        for (auto& portion : portions) {
             CanonizePortion(portion->MutableData());
         }
         return portions;

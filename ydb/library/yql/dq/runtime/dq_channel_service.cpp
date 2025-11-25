@@ -287,7 +287,6 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, std::shared_ptr<TNodeSt
 
     {
         std::lock_guard lock(FlowControlMutex);
-        PushBytes += data.Bytes;
 
         auto fillLevel = FillLevel;
         auto inflightExceeded = PushBytes.load() > MaxInflightBytes + RemotePopBytes.load();
@@ -301,6 +300,7 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, std::shared_ptr<TNodeSt
                 fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
             }
         } else {
+            PushBytes += data.Bytes;
             if (inflightExceeded) {
                 fillLevel = EDqFillLevel::HardLimit;
             }

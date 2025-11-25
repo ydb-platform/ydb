@@ -26,7 +26,9 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
         return is_not_for_cl_valid, "Changelog category and entry sections are not found."
 
     if PULL_REQUEST_TEMPLATE.strip() in description.strip():
-        return is_not_for_cl_valid, "Pull request template as is."
+        txt = "Pull request template as is."
+        print(f"::warning::{txt}")
+        return False, txt
 
     # Extract changelog category section
     category_section = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", description, re.DOTALL)
@@ -38,6 +40,11 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
     # Extract only lines that start with * (category items), ignore comments and empty lines
     categories = [line.strip('* ').strip() for line in category_section.group(1).splitlines() if line.strip().startswith('*')]
 
+    if len(categories) == 0:
+        txt = "Changelog category section not found or no category selected."
+        print(f"::warning::{txt}")
+        return False, txt
+    
     if len(categories) != 1:
         txt = "Only one category can be selected at a time."
         print(f"::warning::{txt}")

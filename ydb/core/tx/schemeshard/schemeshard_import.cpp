@@ -36,6 +36,7 @@ namespace {
 
         return state;
     }
+    
     ui32 GetTablePartsFromRequest(const Ydb::Table::CreateTableRequest& table) {
         switch (table.partitions_case()) {
             case Ydb::Table::CreateTableRequest::PartitionsCase::kUniformPartitions:
@@ -75,7 +76,7 @@ namespace {
             auto it = table->RestoreHistory.end();
             if (item.WaitTxId != InvalidTxId && table->RestoreHistory.contains(item.WaitTxId)) {
                 it = table->RestoreHistory.find(item.WaitTxId);
-            } else if (table->RestoreHistory.size() >= 1) {
+            } else if (table->RestoreHistory.size() == 1) {
                 // As restore operations always create new table, case table->RestoreHistory.size() > 1 is unexpected
                 // To return at least something in this case, we'll just pick one of items from RestoreHistory
                 it = table->RestoreHistory.begin();
@@ -100,9 +101,11 @@ namespace {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
         const auto& item = importInfo.Items.at(itemIdx);
 
+        if (!item.Table) {
+            return;
+        }
         Y_ABORT_UNLESS(indexIdx < item.Table->indexes_size());
 
-        // At this point item.Table is guaranteed not to be empty
         const ui32 partsTotal = ss->Tables.contains(item.DstPathId) ?
             ss->Tables.at(item.DstPathId)->GetPartitions().size() :
             GetTablePartsFromRequest(*item.Table);
@@ -111,13 +114,18 @@ namespace {
         if (ss->IndexBuildsByUid.contains(buildUid)) {
             const auto& indexBuild = ss->IndexBuildsByUid.FindPtr(buildUid)->Get();
 
-            ui32 partsCompleted = 0;
-            if (indexBuild->IsFinished()) {
+
+            ui32 partsCompleted;
+            if (indexBuild->State < TIndexBuildInfo::EState::Filling) {
+                // Shards are not filled yet
+                partsCompleted = 0;
+            } else if (indexBuild->State < TIndexBuildInfo::EState::Applying) {
+                // Shards are not processed yet
+                partsCompleted = static_cast<ui32>(indexBuild->CalcProgressPercent() / 100.0f * partsTotal );
+            } else {
+                // All shards are processed
                 partsCompleted = partsTotal;
-            } else if (indexBuild->InProgressShards.size() > 0) {
-                // Case if InProgressShards are not loaded yet
-                partsCompleted = partsTotal - indexBuild->InProgressShards.size();
-            } 
+            }
 
             itemProgress.set_parts_total(itemProgress.parts_total() + partsTotal);
             itemProgress.set_parts_completed(itemProgress.parts_completed() + partsCompleted);
@@ -127,14 +135,12 @@ namespace {
 
             itemProgress.set_parts_total(itemProgress.parts_total() + partsTotal);
             itemProgress.set_parts_completed(itemProgress.parts_completed() + partsCompleted);
+            *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(0);
         }
     }
 
     void FillItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx,
         Ydb::Import::ImportItemProgress& itemProgress) {
-
-        itemProgress.set_parts_total(0);
-        itemProgress.set_parts_completed(0);
 
         AddTransferringItemProgress(ss, importInfo, itemIdx, itemProgress);
 

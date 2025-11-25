@@ -4399,7 +4399,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 isCompleted = true;
                 UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 1);
-                UNIT_ASSERT(item.has_start_time());
+                UNIT_ASSERT_VALUES_UNEQUAL(item.start_time().seconds(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(item.end_time().seconds(), 0);
             } else {
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
@@ -4418,8 +4419,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         const auto& item = entry.GetItemsProgress(0);
         UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
         UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 2);
-        UNIT_ASSERT(item.has_start_time());
-        UNIT_ASSERT(item.has_end_time());
+        UNIT_ASSERT_VALUES_UNEQUAL(item.start_time().seconds(), 0);
+        UNIT_ASSERT_VALUES_UNEQUAL(item.end_time().seconds(), 0);
     }
 
     Y_UNIT_TEST(CheckItemProgressWithIndexes) {
@@ -4429,7 +4430,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ui64 txId = 100;
 
         // Wait for 3'rd index processing
-        TBlockEvents<TEvIndexBuilder::TEvCreateRequest> block2rdIndexBuild(runtime, [&](const auto& ev) {
+        TBlockEvents<TEvIndexBuilder::TEvCreateRequest> block2ndIndexBuild(runtime, [&](const auto& ev) {
             return ev->Get()->Record.GetSettings().Getindex().Getname() == "by_value_2";
         });
 
@@ -4493,7 +4494,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )", port));
 
-        runtime.WaitFor("2'nd index build start", [&]{ return block2rdIndexBuild.size() >= 1; });
+        runtime.WaitFor("2'nd index build start", [&]{ return block2ndIndexBuild.size() >= 1; });
 
         const auto desc_blocked = TestGetImport(runtime, txId, "/MyRoot");
         const auto& entry_blocked = desc_blocked.GetResponse().GetEntry();
@@ -4506,10 +4507,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(item_blocked.parts_total(), 9);
         // Table and 1'st index processed
         UNIT_ASSERT_VALUES_EQUAL(item_blocked.parts_completed(), 6);
-        UNIT_ASSERT(item_blocked.has_start_time());
+        UNIT_ASSERT_VALUES_UNEQUAL(item_blocked.start_time().seconds(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(item_blocked.end_time().seconds(), 0);
 
-        block2rdIndexBuild.Stop();
-        block2rdIndexBuild.Unblock();
+        block2ndIndexBuild.Stop();
+        block2ndIndexBuild.Unblock();
 
         env.TestWaitNotification(runtime, txId);
 
@@ -4521,8 +4523,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         const auto& item = entry.GetItemsProgress(0);
         UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 9);
         UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 9);
-        UNIT_ASSERT(item.has_start_time());
-        UNIT_ASSERT(item.has_end_time());
+        UNIT_ASSERT_VALUES_UNEQUAL(item.start_time().seconds(), 0);
+        UNIT_ASSERT_VALUES_UNEQUAL(item.end_time().seconds(), 0);
     }
 
     Y_UNIT_TEST(UidAsIdempotencyKey) {

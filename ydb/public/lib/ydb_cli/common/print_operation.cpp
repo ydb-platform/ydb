@@ -53,11 +53,11 @@ namespace {
     }
 
     template <typename EProgress, typename TMetadata>
-    TString PrintProgress(const TMetadata& metadata) {
+    TString PrintProgress(const TMetadata& metadata, auto&& detailedPrintOn) {
         TStringBuilder result;
 
         result << metadata.Progress;
-        if (metadata.Progress != EProgress::TransferData) {
+        if (!detailedPrintOn(metadata)) {
             return result;
         }
 
@@ -82,35 +82,19 @@ namespace {
         return result;
     }
 
+    template <typename EProgress, typename TMetadata>
+    TString PrintProgress(const TMetadata& metadata) {
+        return PrintProgress<EProgress>(metadata, [](const TMetadata& metadata) {
+            return metadata.Progress == EProgress::TransferData;
+        });
+    }
+
     template <>
     TString PrintProgress<NImport::EImportProgress>(const NImport::TImportFromS3Response::TMetadata& metadata) {
-        TStringBuilder result;
-
-        result << metadata.Progress;
-        if (metadata.Progress != NImport::EImportProgress::TransferData &&
-            metadata.Progress != NImport::EImportProgress::BuildIndexes) {
-            return result;
-        }
-
-        if (metadata.ItemsProgress.empty()) {
-            return result;
-        }
-
-        ui32 partsTotal = 0;
-        ui32 partsCompleted = 0;
-        for (const auto& item : metadata.ItemsProgress) {
-            if (!item.PartsTotal) {
-                return result;
-            }
-
-            partsTotal += item.PartsTotal;
-            partsCompleted += item.PartsCompleted;
-        }
-
-        float percentage = float(partsCompleted) / partsTotal * 100;
-        result << " (" << FloatToString(percentage, PREC_POINT_DIGITS, 2) << "%)";
-
-        return result;
+        return PrintProgress<NImport::EImportProgress>(metadata, [](const NImport::TImportFromS3Response::TMetadata& metadata) {
+            return metadata.Progress == NImport::EImportProgress::TransferData ||
+                   metadata.Progress == NImport::EImportProgress::BuildIndexes;
+        });
     }
 
     /// YT

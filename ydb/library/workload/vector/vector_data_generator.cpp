@@ -117,8 +117,8 @@ private:
         }
         if (embeddingColumn->type()->Equals(arrow::binary())) {
             resultColumns.push_back(embeddingColumn);
-        } else if (embeddingColumn->type_id() == arrow::Type::LIST) {
-            const std::shared_ptr<arrow::ListArray> embeddingListColumn = std::dynamic_pointer_cast<arrow::ListArray>(embeddingColumn);
+        } else if (embeddingColumn->type_id() == arrow::Type::LIST && std::static_pointer_cast<arrow::ListType>(embeddingColumn->type())->value_type()->Equals(arrow::float32())) {
+            const std::shared_ptr<arrow::ListArray> embeddingListColumn = std::static_pointer_cast<arrow::ListArray>(embeddingColumn);
             arrow::StringBuilder newEmbeddingsBuilder;
             for (int64_t row = 0; row < batch->num_rows(); ++row) {
                 const auto embeddingFloatList = std::static_pointer_cast<arrow::FloatArray>(embeddingListColumn->value_slice(row));

@@ -11,8 +11,6 @@ class TBinaryJsonValueView {
 public:
     TBinaryJsonValueView(const TStringBuf& rawValue);
 
-    NJson::TJsonValue GetJsonValue() const;
-
     std::optional<TStringBuf> GetScalarOptional() const;
 
 private:

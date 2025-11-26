@@ -13,17 +13,6 @@ TBinaryJsonValueView::TBinaryJsonValueView(const TStringBuf& rawValue)
     }
 }
 
-NJson::TJsonValue TBinaryJsonValueView::GetJsonValue() const {
-    if (RawValue.empty()) {
-        return NJson::TJsonValue(NJson::JSON_UNDEFINED);
-    }
-
-    auto data = NBinaryJson::SerializeToJson(RawValue);
-    NJson::TJsonValue res;
-    AFL_VERIFY(NJson::ReadJsonTree(data, &res));
-    return res;
-}
-
 std::optional<TStringBuf> TBinaryJsonValueView::GetScalarOptional() const {
     if (RawValue.empty()) {
         return std::nullopt;
@@ -48,7 +37,7 @@ std::optional<TStringBuf> TBinaryJsonValueView::GetScalarOptional() const {
         case NBinaryJson::EEntryType::Number: {
             const double val = rootElement.GetNumber();
             double integer;
-            if (modf(val, &integer)) {
+            if (val < std::numeric_limits<i64>::min() || val > std::numeric_limits<i64>::max() || modf(val, &integer)) {
                 ScalarHolder = ToString(val);
             } else {
                 ScalarHolder = ToString((i64)integer);

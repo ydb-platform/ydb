@@ -63,7 +63,6 @@ public:
 
 class TPortionInfoConstructor;
 class TGranuleShardingInfo;
-class TPortionDataAccessor;
 class TCompactedPortionInfo;
 class TWrittenPortionInfo;
 

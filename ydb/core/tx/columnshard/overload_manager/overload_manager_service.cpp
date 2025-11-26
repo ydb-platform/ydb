@@ -20,7 +20,7 @@ std::atomic<EResourcesStatus> TOverloadManagerServiceOperator::ResourcesStatus{E
 ui64 TOverloadManagerServiceOperator::GetShardWritesInFlyLimit() {
     if (DEFAULT_WRITES_IN_FLY_LIMIT.load() == 0) {
         uint64_t oldValue = 0;
-        const uint64_t newValue = std::max(static_cast<ui32>(NKqp::TStagePredictor::GetMaxExecutorThreadLimit() * 10000), ui32(100000));
+        const uint64_t newValue = std::max(NKqp::TStagePredictor::GetMaxExecutorThreadLimit() * 10000, ui32(100000));
         DEFAULT_WRITES_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
     return (HasAppData() && AppDataVerified().ColumnShardConfig.HasWritingInFlightRequestsCountLimit()) ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit()

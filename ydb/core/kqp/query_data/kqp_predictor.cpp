@@ -131,7 +131,7 @@ ui32 TStagePredictor::GetUsableThreads() {
     return Max<ui32>(1, *userPoolSize);
 }
 
-float TStagePredictor::GetMaxExecutorThreadLimit() {
+ui32 TStagePredictor::GetMaxExecutorThreadLimit() {
     std::optional<ui32> userPoolMaxThreadsCount;
     if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
         TExecutorPoolState poolState;
@@ -143,7 +143,7 @@ float TStagePredictor::GetMaxExecutorThreadLimit() {
         userPoolMaxThreadsCount = NSystemInfo::NumberOfCpus();
     }
 
-    return Max<float>(1.0f, *userPoolMaxThreadsCount);
+    return Max<ui32>(1, *userPoolMaxThreadsCount);
 }
 
 ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const {

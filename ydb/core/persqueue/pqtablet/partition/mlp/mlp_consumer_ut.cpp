@@ -81,9 +81,9 @@ Y_UNIT_TEST(ReloadPQTablet) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Offset, 1);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, static_cast<ui32>(TStorage::EMessageStatus::Locked));
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Offset, 2);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Status, TStorage::EMessageStatus::Unprocessed);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Status, static_cast<ui32>(TStorage::EMessageStatus::Unprocessed));
 
         break;
     }
@@ -210,7 +210,7 @@ Y_UNIT_TEST(ReloadPQTabletAfterAlterConsumer) {
 
         // Message with offset 0 was committed and deleted
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Offset, 1);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, TStorage::EMessageStatus::Unprocessed);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, static_cast<ui32>(TStorage::EMessageStatus::Unprocessed));
 
         break;
     }

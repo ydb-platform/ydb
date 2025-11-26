@@ -633,7 +633,8 @@ public:
             bool hasDateTimeFormatName = false;
             bool hasTimestampFormat = false;
             bool hasTimestampFormatName = false;
-            auto validator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
+            THashSet<TStringBuf> partitioningColumns;
+            auto commonValidator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
                 if (name != "partitionedby"sv && name != "directories"sv && setting.ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
                         TStringBuilder() << "Expected single value setting for " << name << ", but got " << setting.ChildrenSize() - 1));
@@ -655,13 +656,12 @@ public:
                         return false;
                     }
 
-                    THashSet<TStringBuf> uniqs;
                     for (size_t i = 1; i < setting.ChildrenSize(); ++i) {
                         const auto& column = setting.Child(i);
                         if (!EnsureAtom(*column, ctx)) {
                             return false;
                         }
-                        if (!uniqs.emplace(column->Content()).second) {
+                        if (!partitioningColumns.emplace(column->Content()).second) {
                             ctx.AddError(TIssue(ctx.GetPosition(column->Pos()),
                                 TStringBuilder() << "Duplicate partitioned_by column '" << column->Content() << "'"));
                             return false;
@@ -785,26 +785,101 @@ public:
                     return true;
                 }
 
-                YQL_ENSURE(name == "projection"sv);
-                haveProjection = true;
-                if (!EnsureAtom(setting.Tail(), ctx)) {
+                if (name == "projection"sv) {
+                    TStringBuf projection;
+                    if (!ExtractSettingValue(setting.Tail(), "projection"sv, format, {}, ctx, projection)) {
+                        return false;
+                    }
+                    if (projection.empty()) {
+                        return false;
+                    }
+                    return true;
+                }
+
+                if (name == "storage.location.template"sv) {
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "storage.location.template"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
+                }
+
+                if (name == "projection.enabled"sv) {
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "projection.enabled"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
+                }
+
+                if (name.StartsWith("projection.")) {
+                    return true;
+                }
+
+                return false;
+            };
+            auto projectionValidator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
+                if (!name.StartsWith("projection.") || name == "projection.enabled") {
+                    return true;
+                }
+
+                name = name.substr(sizeof("projection."), name.size() - sizeof("projection."));
+
+                const std::vector<TString> validEnds = {
+                    ".type",
+                    ".min",
+                    ".max",
+                    ".interval",
+                    ".digits"
+                };
+                
+                bool match = false;
+                for (const auto& end : validEnds) {
+                    if (name.EndsWith(end)) {
+                        match = true;
+                        name = name.substr(0, end.size());
+                    }
+                }
+
+                if (!match) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected projection parameter to end with one of: [.type, .min, .max, .interval, .digits]"));
                     return false;
                 }
 
-                if (setting.Tail().Content().empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expecting non-empty projection setting"));
+                if (partitioningColumns.contains(name)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected projection column parameter to contain partitioned column name"));
                     return false;
                 }
 
                 return true;
             };
-            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
-                                     { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv, "constraints"sv,
-                                        "data.datetime.formatname"sv, "data.datetime.format"sv, "data.timestamp.formatname"sv, "data.timestamp.format"sv, "data.date.format"sv,
-                                        "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv, "pathpattern"sv, "pathpatternvariant"sv }, validator, ctx))
-            {
+            
+            if (!EnsureTuple(*input->Child(TS3Object::idx_Settings), ctx)) {
                 return TStatus::Error;
             }
+
+            for (auto& setting : input->Child(TS3Object::idx_Settings)->ChildrenList()) {
+                if (!EnsureTupleMinSize(*setting, 1, ctx)) {
+                    return TStatus::Error;
+                }
+
+                if (!EnsureAtom(setting->Head(), ctx)) {
+                    return TStatus::Error;
+                }
+
+                const TStringBuf name = setting->Head().Content();
+
+                if (!commonValidator(name, *setting, ctx)) {
+                    return TStatus::Error;
+                }
+            }
+            
+            for (auto& setting : input->Child(TS3Object::idx_Settings)->ChildrenList()) {
+                if (!projectionValidator(setting->Head().Content(), *setting, ctx)) {
+                    return TStatus::Error;
+                }
+            }
+            
             if (haveProjection && !havePartitionedBy) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Object::idx_Settings)->Pos()), "Missing partitioned_by setting for projection"));
                 return TStatus::Error;

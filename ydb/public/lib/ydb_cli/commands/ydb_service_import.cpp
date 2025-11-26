@@ -178,6 +178,10 @@ void TCommandImportFromS3::FillItems(NYdb::NImport::TImportFromS3Settings& setti
     }
 
     ExcludeItems(settings, ExclusionPatterns);
+
+    if (settings.Item_.empty()) {
+        throw TMisuseException() << "No objects to import: the list of objects is empty after applying all filters";
+    }
 }
 
 void TCommandImportFromS3::FillItemsFromItemParam(NYdb::NImport::TImportFromS3Settings& settings) const {

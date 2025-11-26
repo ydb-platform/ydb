@@ -511,7 +511,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
             TBuckets& buckets = state.Spiller.GetBuckets();
             const i64 memoryWithoutDummyStorage = TlsAllocState->GetAllocated();
             auto extraMemoryForBuild = [&] {
-                int64_t flattenMemory = 0;
+                i64 flattenMemory = 0;
                 i64 inMemoryTuples = 0;
                 for (const auto& bucket : buckets) {
                     if (!bucket.IsSpilled()) {

@@ -306,10 +306,10 @@ class KiKiMRMessageBusClient(object):
 
         response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
         if not response.Success:
-            raise RuntimeError(f'read_host_config request failed: {response.ErrorDescription}')
+            raise RuntimeError('read_host_config request failed: %s' % response.ErrorDescription)
         status = response.Status[0]
         if not status.Success:
-            raise RuntimeError(f'read_host_config has failed status: {status.ErrorDescription}')
+            raise RuntimeError('read_host_config has failed status: %s' % status.ErrorDescription)
 
         return status.HostConfig
 
@@ -321,10 +321,10 @@ class KiKiMRMessageBusClient(object):
 
         response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
         if not response.Success:
-            raise RuntimeError(f'define_host_config request failed: {response.ErrorDescription}')
+            raise RuntimeError('define_host_config request failed: %s' % response.ErrorDescription)
         for i, status in enumerate(response.Status):
             if not status.Success:
-                raise RuntimeError(f'define_host_config has failed status[{i}]: {status}')
+                raise RuntimeError('define_host_config has failed status[%d]: %s' % (i, status))
 
     def read_storage_pools(self, domain=1):
         request = msgbus.TBlobStorageConfigRequest()
@@ -334,11 +334,11 @@ class KiKiMRMessageBusClient(object):
 
         response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
         if not response.Success:
-            raise RuntimeError(f'read_storage_pools request failed: {response.ErrorDescription}')
+            raise RuntimeError('read_storage_pools request failed: %s' % response.ErrorDescription)
 
         status = response.Status[0]
         if not status.Success:
-            raise RuntimeError(f'read_storage_pools has failed status: {status.ErrorDescription}')
+            raise RuntimeError('read_storage_pools has failed status: %s' % status.ErrorDescription)
 
         return status.StoragePool
 
@@ -360,10 +360,10 @@ class KiKiMRMessageBusClient(object):
         response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
 
         if not response.Success:
-            raise RuntimeError(f'update_all_drive_status_active request failed: {response.ErrorDescription}')
+            raise RuntimeError('update_all_drive_status_active request failed: %s' % response.ErrorDescription)
         for i, status in enumerate(response.Status):
             if not status.Success:
-                raise RuntimeError(f'update_all_drive_status_active has failed status[{i}]: {status}')
+                raise RuntimeError('update_all_drive_status_active has failed status[%d]: %s' % (i, status))
 
     def query_base_config(self, domain=1):
         request = msgbus.TBlobStorageConfigRequest()
@@ -375,11 +375,11 @@ class KiKiMRMessageBusClient(object):
 
         response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
         if not response.Success:
-            raise RuntimeError(f'query_base_config failed: {response.ErrorDescription}')
+            raise RuntimeError('query_base_config failed: %s' % response.ErrorDescription)
 
         status = response.Status[0]
         if not status.Success:
-            raise RuntimeError(f'query_base_config failed: {status.ErrorDescription}')
+            raise RuntimeError('query_base_config failed: %s' % status.ErrorDescription)
 
         return status
 

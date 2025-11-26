@@ -357,7 +357,7 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
     ui32 deadlineDelta = delay == TDuration::Zero() ? 0 : NormalizeDeadline(writeTimestamp + delay);
 
     Messages.push_back({
-        .Status = deadlineDelta ? EMessageStatus::Delayed : EMessageStatus::Unprocessed,
+        .Status = static_cast<ui32>(deadlineDelta ? EMessageStatus::Delayed : EMessageStatus::Unprocessed),
         .ProcessingCount = 0,
         .DeadlineDelta = deadlineDelta,
         .HasMessageGroupId = hasMessagegroup,

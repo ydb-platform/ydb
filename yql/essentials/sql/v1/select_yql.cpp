@@ -388,7 +388,8 @@ private:
     }
 
     TMaybe<TNodePtr> BuildFromElement(TContext& ctx, const TYqlSource& source) const {
-        const auto build = [this](TNodePtr node, TString name = "") {
+        const auto build = [this](TNodePtr node, TString name) {
+            YQL_ENSURE(!name.empty(), "An empty source name is unsupported");
             return Q(Y(
                 std::move(node),
                 Q(std::move(name)),
@@ -396,7 +397,7 @@ private:
         };
 
         if (!source.Alias) {
-            return build(source.Node);
+            return build(source.Node, ctx.MakeName("_yql_source_"));
         }
 
         if (auto& columns = source.Alias->Columns) {

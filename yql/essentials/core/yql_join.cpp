@@ -2045,6 +2045,7 @@ TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListTyp
                 continue;
             }
             term = std::move(replaceWith);
+            replaceWith = nullptr;
         }
 
         if (!added.insert(term.Get()).second) {

@@ -194,6 +194,9 @@ using TFairShareHierarchicalSlotQueuePtr = TIntrusivePtr<TFairShareHierarchicalS
 DECLARE_REFCOUNTED_STRUCT(TAdaptiveHedgingManagerConfig)
 DECLARE_REFCOUNTED_STRUCT(IHedgingManager)
 
+DECLARE_REFCOUNTED_STRUCT(INewHedgingManager)
+DECLARE_REFCOUNTED_STRUCT(ISecondaryRequestGenerator)
+
 ////////////////////////////////////////////////////////////////////////////////
 
 DEFINE_ENUM(EProcessErrorCode,

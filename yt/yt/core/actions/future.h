@@ -338,8 +338,7 @@ public:
     TFuture<void> AsVoid() &&;
 
     //! Converts to TCancelable interface.
-    TCancelable AsCancelable() const&;
-    TCancelable AsCancelable() &&;
+    TCancelable AsCancelable() const;
 
 protected:
     explicit TFutureBase(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);

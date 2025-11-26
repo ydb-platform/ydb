@@ -36,7 +36,7 @@ public:
     static constexpr TDuration MaxDeadline = TDuration::Hours(12);
 
 public:
-    enum EMessageStatus {
+    enum class EMessageStatus : int {
         // The message is waiting to be processed.
         Unprocessed = 0,
         // The message is locked because it is currently being processed.
@@ -50,7 +50,7 @@ public:
     };
 
     struct TMessage {
-        ui32 Status: 3 = EMessageStatus::Unprocessed;
+        ui32 Status: 3 = static_cast<ui32>(EMessageStatus::Unprocessed);
         ui32 Reserve: 3;
         // It stores how many times the message was submitted to work.
         // If the value is large, then the message has been processed several times,
@@ -65,6 +65,14 @@ public:
         ui32 MessageGroupIdHash: 31 = 0;
         ui32 WriteTimestampDelta: 26 = 0;
         ui32 Reserve2: 6;
+
+        EMessageStatus GetStatus() const {
+            return static_cast<EMessageStatus>(Status);
+        }
+
+        void SetStatus(EMessageStatus status) {
+            Status = static_cast<ui32>(status);
+        }
     };
     static_assert(sizeof(TMessage) == sizeof(ui32) * 3);
 

@@ -321,7 +321,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
             auto& message = Messages[i];
             ++i;
 
-            switch(message.Status) {
+            switch(message.GetStatus()) {
                 case EMessageStatus::Locked:
                     ++Metrics.LockedMessageCount;
                     if (KeepMessageOrder && message.HasMessageGroupId) {
@@ -364,7 +364,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         while (deserializer.Next(offset, snapshot)) {
             auto& message = SlowMessages[offset] = fromSnapshot(snapshot);
 
-            switch(message.Status) {
+            switch(message.GetStatus()) {
                 case EMessageStatus::Locked:
                     ++Metrics.LockedMessageCount;
                     if (KeepMessageOrder && message.HasMessageGroupId) {
@@ -443,7 +443,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             AFL_ENSURE(it != newMessages.end())("o", offset);
             auto& msg = it->second;
             SlowMessages[offset] = TMessage{
-                .Status = EMessageStatus::Unprocessed,
+                .Status = static_cast<ui32>(EMessageStatus::Unprocessed),
                 .ProcessingCount = 0,
                 .DeadlineDelta = 0,
                 .HasMessageGroupId = msg.MessageGroup.Fields.HasMessageGroupId,
@@ -475,7 +475,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
         while (deserializer.Next(offset, msg)) {
             if (offset >= GetLastOffset()) {
                 Messages.push_back({
-                    .Status = EMessageStatus::Unprocessed,
+                    .Status = static_cast<ui32>(EMessageStatus::Unprocessed),
                     .ProcessingCount = 0,
                     .DeadlineDelta = 0,
                     .HasMessageGroupId = msg.MessageGroup.Fields.HasMessageGroupId,
@@ -511,7 +511,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             message->ProcessingCount = msg.Common.Fields.ProcessingCount;
 
             if (statusChanged) {
-                switch(message->Status) {
+                switch(message->GetStatus()) {
                     case EMessageStatus::Locked:
                         ++Metrics.LockedMessageCount;
                         if (KeepMessageOrder && message->HasMessageGroupId) {

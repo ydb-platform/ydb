@@ -7,9 +7,6 @@
 
 #include <yt/yt/core/logging/log.h>
 
-// TODO(cherepashka): remove dependency.
-#include <yt/yt/core/rpc/dispatcher.h>
-
 #include <yt/yt/library/profiling/sensor.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -38,12 +35,11 @@ public:
         bool RequestInitialized;
     };
 
-    explicit TAsyncExpiringCache(
+    TAsyncExpiringCache(
         TAsyncExpiringCacheConfigPtr config,
+        const IInvokerPtr& invoker,
         NLogging::TLogger logger = {},
-        NProfiling::TProfiler profiler = {},
-        // TODO(cherepashka): remove default value and move upper.
-        const IInvokerPtr& invoker = NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker());
+        NProfiling::TProfiler profiler = {});
 
     TFuture<TValue> Get(const TKey& key);
     TExtendedGetResult GetExtended(const TKey& key);
@@ -108,6 +104,7 @@ private:
     const NConcurrency::TPeriodicExecutorPtr ExpirationExecutor_;
     const NConcurrency::TPeriodicExecutorPtr RefreshExecutor_;
     const int ShardCount_ = 1;
+    const IInvokerPtr Invoker_;
 
     std::atomic<bool> Started_ = false;
 

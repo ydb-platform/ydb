@@ -85,7 +85,10 @@
       row := tx.QueryRowContext(ctx, "SELECT 1")
       var result int
       return row.Scan(&result)
-    }, retry.WithIdempotent(true))
+	}, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
+		Isolation: sql.LevelSerializable,
+		ReadOnly:  false,
+	}))
     if err != nil {
       fmt.Printf("unexpected error: %v", err)
     }

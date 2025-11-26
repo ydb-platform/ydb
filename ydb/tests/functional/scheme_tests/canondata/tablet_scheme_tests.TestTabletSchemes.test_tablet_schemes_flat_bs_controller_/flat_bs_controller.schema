@@ -12,6 +12,11 @@
                 "ColumnType": "Bool"
             },
             {
+                "ColumnId": 30,
+                "ColumnName": "AllowSlotAllocationOnNonActive",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
@@ -147,6 +152,7 @@
             "0": {
                 "Columns": [
                     29,
+                    30,
                     1,
                     2,
                     4,

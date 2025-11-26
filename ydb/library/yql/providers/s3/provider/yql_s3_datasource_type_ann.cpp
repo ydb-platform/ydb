@@ -633,7 +633,6 @@ public:
             bool hasDateTimeFormatName = false;
             bool hasTimestampFormat = false;
             bool hasTimestampFormatName = false;
-            THashSet<TStringBuf> partitioningColumns;
             auto commonValidator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
                 if (name != "partitionedby"sv && name != "directories"sv && setting.ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
@@ -661,7 +660,8 @@ public:
                         if (!EnsureAtom(*column, ctx)) {
                             return false;
                         }
-                        if (!partitioningColumns.emplace(column->Content()).second) {
+                        THashSet<TStringBuf> uniqs;
+                        if (!uniqs.emplace(column->Content()).second) {
                             ctx.AddError(TIssue(ctx.GetPosition(column->Pos()),
                                 TStringBuilder() << "Duplicate partitioned_by column '" << column->Content() << "'"));
                             return false;
@@ -816,42 +816,8 @@ public:
                     return true;
                 }
 
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder{} << "Unknown setting: `" << name << "`"));
                 return false;
-            };
-            auto projectionValidator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
-                if (!name.StartsWith("projection.") || name == "projection.enabled") {
-                    return true;
-                }
-
-                name = name.substr(sizeof("projection."), name.size() - sizeof("projection."));
-
-                const std::vector<TString> validEnds = {
-                    ".type",
-                    ".min",
-                    ".max",
-                    ".interval",
-                    ".digits"
-                };
-                
-                bool match = false;
-                for (const auto& end : validEnds) {
-                    if (name.EndsWith(end)) {
-                        match = true;
-                        name = name.substr(0, end.size());
-                    }
-                }
-
-                if (!match) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected projection parameter to end with one of: [.type, .min, .max, .interval, .digits]"));
-                    return false;
-                }
-
-                if (!partitioningColumns.contains(name)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected parameter to contain partitioned column name"));
-                    return false;
-                }
-
-                return true;
             };
             
             if (!EnsureTuple(*input->Child(TS3Object::idx_Settings), ctx)) {
@@ -870,12 +836,6 @@ public:
                 const TStringBuf name = setting->Head().Content();
 
                 if (!commonValidator(name, *setting, ctx)) {
-                    return TStatus::Error;
-                }
-            }
-            
-            for (auto& setting : input->Child(TS3Object::idx_Settings)->ChildrenList()) {
-                if (!projectionValidator(setting->Head().Content(), *setting, ctx)) {
                     return TStatus::Error;
                 }
             }

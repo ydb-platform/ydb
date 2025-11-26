@@ -786,6 +786,7 @@ public:
                 }
 
                 if (name == "projection"sv) {
+                    haveProjection = true;
                     TStringBuf projection;
                     if (!ExtractSettingValue(setting.Tail(), "projection"sv, format, {}, ctx, projection)) {
                         return false;
@@ -805,6 +806,7 @@ public:
                 }
 
                 if (name == "projection.enabled"sv) {
+                    haveProjection = true;
                     TStringBuf unused;
                     if (!ExtractSettingValue(setting.Tail(), "projection.enabled"sv, format, {}, ctx, unused)) {
                         return false;

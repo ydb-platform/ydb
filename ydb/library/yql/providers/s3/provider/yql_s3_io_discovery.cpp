@@ -724,7 +724,7 @@ private:
                 }
 
                 if (partitionedBySetting->Tail().Content().empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), "Expecting non-empty patitionedby setting"));
+                    ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), "Expecting non-empty patitioned_by setting"));
                     return false;
                 }
 
@@ -740,16 +740,31 @@ private:
                 }
                 std::replace(partitioningStr.begin(), partitioningStr.end(), '\'', '\"');
 
+                const TString formattingTip = "partitioned_by setting should be specified in \"['column1', ..., 'columnN']\" format";
                 try {
                     NJson::ReadJsonTree(partitioningStr, &partitioningJson, /*throwOnError*/ true);
                 } catch (const std::exception& e) {
-                    ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), "Invalid partitionedby format"));
+                    ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), "partitioned_by is not a json"));
+                    ctx.AddWarning(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), formattingTip));
                     return false;
                 }
 
+                if (!partitioningJson.IsArray()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), "partitioned_by is not a json array"));
+                    ctx.AddWarning(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), formattingTip));
+                    return false;
+                }
+
+                THashSet<TString> uniqs;
                 for (const auto& value : partitioningJson.GetArray()) {
                     if (!value.IsString()) {
-                        ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), "Invalid partitionedby format"));
+                        ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), "partitioned_by is not a json array of strings"));
+                        ctx.AddWarning(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), formattingTip));
+                        return false;
+                    }
+                    const TString& column = value.GetString();
+                    if (!uniqs.emplace(column).second) {
+                        ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), TStringBuilder() << "Duplicate partitioned_by column '" << column << "'"));
                         return false;
                     }
                     partitionedBy.push_back(value.GetString());
@@ -793,7 +808,7 @@ private:
         }
         if (auto projectionSetting = GetSetting(settings, "projection")) {
             if (!projection.empty()) {
-                ctx.AddError(TIssue(ctx.GetPosition(projectionSetting->Pos()), "Should use both projection synaxis at the same time"));
+                ctx.AddError(TIssue(ctx.GetPosition(projectionSetting->Pos()), "Cannot use both projection syntax at the same time"));
                 return false;
             }
 

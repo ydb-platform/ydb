@@ -285,12 +285,15 @@ class ParallelWorkloadTestBase:
 
         # --- Переключатель: если cluster_log=all, то всегда прикладываем логи ---
         cluster_log_mode = get_external_param('cluster_log', 'default')
-        try:
-            if cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors:
-                errors_collector.attach_kikimr_logs(result.start_time)
+        if cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors:
+            try:
                 errors_collector.attach_nemesis_logs(result.start_time)
-        except Exception as e:
-            logging.warning(f"Failed to attach nemesis logs: {e}")
+            except Exception as e:
+                logging.warning(f"Failed to attach nemesis logs: {e}")
+            try:
+                errors_collector.attach_kikimr_logs(result.start_time, "kikimr")
+            except Exception as e:
+                logging.warning(f"Failed to attach kikimr logs: {e}")
 
         # --- FAIL TEST IF CORES OR OOM FOUND ---
         if nodes_with_issues > 0:

@@ -509,5 +509,58 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             }, event);
 
     }
+
+    Y_UNIT_TEST(CreateTopicWithCustomName) {
+        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto& client = setup->GetPersQueueClient();
+        const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
+        const TString path = setup->GetServer().ServerSettings.PQConfig.GetRoot() + "/" +  ::NPersQueue::BuildFullTopicName(name, setup->GetLocalCluster());
+        NPersQueue::TCreateTopicSettings settings{};
+        TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
+        rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(setup->GetTestConsumer())});
+        settings.ReadRules(rrSettings);
+        const auto creat = client.CreateTopic(path, settings).GetValueSync();
+        UNIT_ASSERT_C(creat.IsSuccess(), creat.GetIssues().ToOneLineString());
+
+        const auto descr = client.DescribeTopic(path).GetValueSync();
+        UNIT_ASSERT_C(descr.IsSuccess(), descr.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().size(), 1);
+    }
+
+    Y_UNIT_TEST(CreateTopicWithAvailabilityPeriod) {
+        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto& client = setup->GetPersQueueClient();
+        const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
+        const TString path = setup->GetServer().ServerSettings.PQConfig.GetRoot() + "/" +  ::NPersQueue::BuildFullTopicName(name, setup->GetLocalCluster());
+        {
+            NPersQueue::TCreateTopicSettings settings{};
+            TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
+            rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(setup->GetTestConsumer()).AvailabilityPeriod(TDuration::Minutes(250))});
+            settings.ReadRules(rrSettings);
+            const auto creat = client.CreateTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(creat.IsSuccess(), creat.GetIssues().ToOneLineString());
+        }
+        {
+            const auto descr = client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(descr.IsSuccess(), descr.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().at(0).AvailabilityPeriod().Seconds(), TDuration::Minutes(250).Seconds());
+        }
+
+        for (const TDuration& availabilityPeriod : {TDuration::Zero(), TDuration::Minutes(125), TDuration::Minutes(250), TDuration::Minutes(1000), TDuration::Zero()}) {
+            NPersQueue::TAlterTopicSettings settings{};
+            TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
+            rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(setup->GetTestConsumer()).AvailabilityPeriod(availabilityPeriod)});
+            settings.ReadRules(rrSettings);
+            const auto alter = client.AlterTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(alter.IsSuccess(), alter.GetIssues().ToOneLineString());
+
+            const auto descr = client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(descr.IsSuccess(), descr.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().at(0).AvailabilityPeriod().Seconds(), availabilityPeriod.Seconds());
+            UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().at(0).ConsumerName(), setup->GetTestConsumer());
+        }
+    }
 }
 } // namespace NYdb::NPersQueue::NTests

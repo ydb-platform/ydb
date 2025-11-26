@@ -1412,6 +1412,7 @@ template <bool Fast>
 void TValuePackerTransport<Fast>::UnpackBatchBlocks(TChunkedBuffer&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
     while (!buf.Empty()) {
         TChunkedInputBuffer chunked(std::move(buf));
+        buf = {};
 
         // unpack block length
         const ui64 len = UnpackData<false, ui64>(chunked);

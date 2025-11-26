@@ -21,6 +21,8 @@
 * [CREATE TABLE](create_table/index.md)
 * [DROP TABLE](drop_table.md)
 * [INSERT](insert_into.md)
+* [BATCH UPDATE](batch-update.md)
+* [BATCH DELETE](batch-delete.md)
 
 {% if feature_map_tables %}
 

@@ -12,3 +12,16 @@ items:
   include:
     mode: link
     path: ../yql/reference/recipes/toc_i.yaml
+<<<<<<< HEAD
+=======
+- name: AI
+  href: vector-search/index.md
+  include:
+    mode: link
+    path: vector-search/toc_p.yaml
+- name: Transfer
+  href: transfer/index.md
+  include:
+    mode: link
+    path: transfer/toc_p.yaml
+>>>>>>> 83b7aa621 (Docsup 115641 translation for data transfer (#27513))

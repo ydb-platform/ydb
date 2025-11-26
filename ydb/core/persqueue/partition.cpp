@@ -4083,12 +4083,7 @@ size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request) {
 
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
-<<<<<<< HEAD:ydb/core/persqueue/partition.cpp
         Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC,  EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
-        TabletCounters
-=======
-        RegisterWithSameMailbox(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, GetEndOffset(), Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters))
->>>>>>> 05ce178e7e3 (Fixed an error in calculating metrics in the PQ tablet (#29321)):ydb/core/persqueue/pqtablet/partition/partition.cpp
     );
 }
 

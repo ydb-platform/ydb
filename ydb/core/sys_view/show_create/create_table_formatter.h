@@ -56,7 +56,7 @@ private:
     void Format(const NKikimrSchemeOp::TColumnTableSharding& tableSharding);
     void Format(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings);
 
-    void FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc, const NKikimrSchemeOp::TFamilyDescription* family);
+    void FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc);
     void FormatUpsertIndex(const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
         const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
     void FormatUpsertOptions(const TString& fullPath, const NKikimrSchemeOp::TColumnTableSchemeOptions& options);

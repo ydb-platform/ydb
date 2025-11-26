@@ -6,20 +6,58 @@ The terms "simple", "primitive", and "elementary" data types are used synonymous
 
 ## Numeric types {#numeric}
 
-| Type | Description | Notes |
-| ----- | ----- | ----- |
-| `Bool` | Boolean value. | — |
-| `Int8` | A signed integer.<br/>Acceptable values: from -2<sup>7</sup> to 2<sup>7</sup>–1. | — |
-| `Int16` | A signed integer.<br/>Acceptable values: from –2<sup>15</sup> to 2<sup>15</sup>–1. | — |
-| `Int32` | A signed integer.<br/>Acceptable values: from –2<sup>31</sup> to 2<sup>31</sup>–1. | — |
-| `Int64` | A signed integer.<br/>Acceptable values: from –2<sup>63</sup> to 2<sup>63</sup>–1. | — |
-| `Uint8` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>8</sup>–1. | — |
-| `Uint16` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>16</sup>–1. | — |
-| `Uint32` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>32</sup>–1. | — |
-| `Uint64` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>64</sup>–1. | — |
-| `Float` | A real number with variable precision, 4 bytes in size. | {% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index{% endif %} |
-| `Double` | A real number with variable precision, 8 bytes in size. | {% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index{% endif %} |
-| `Decimal(precision, scale)` | A real number with the specified precision, 16 bytes in size. Precision is the maximum total number of decimal digits stored and can range from 1 to 35. Scale is the maximum number of decimal digits stored to the right of the decimal point and can range from 0 to the precision value. | {% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index{% endif %} |
+#|
+|| Type |
+Description |
+Notes
+    ||
+|| `Bool` |
+Boolean value |
+    ||
+|| `Int8` |
+Signed integer
+| Acceptable values: from –2<sup>7</sup> to 2<sup>7</sup>–1 |
+    ||
+|| `Int16` |
+Signed integer
+| Acceptable values: from –2<sup>15</sup> to 2<sup>15</sup>–1 |
+    ||
+|| `Int32` |
+Signed integer
+| Acceptable values: from –2<sup>31</sup> to 2<sup>31</sup>–1 |
+    ||
+|| `Int64` |
+Signed integer
+| Acceptable values: from –2<sup>63</sup> to 2<sup>63</sup>–1 |
+    ||
+|| `Uint8` |
+Unsigned integer
+| Acceptable values: from 0 to 2<sup>8</sup>–1 |
+    ||
+|| `Uint16` |
+Unsigned integer
+| Acceptable values: from 0 to 2<sup>16</sup>–1 |
+    ||
+|| `Uint32` |
+Unsigned integer
+| Acceptable values: from 0 to 2<sup>32</sup>–1 |
+    ||
+|| `Uint64` |
+Unsigned integer
+| Acceptable values: from 0 to 2<sup>64</sup>–1 |
+    ||
+|| `Float` |
+Real number with variable precision, 4 bytes in size |
+{% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index{% endif %}
+    ||
+|| `Double` |
+Real number with variable precision, 8 bytes in size |
+{% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index{% endif %}
+    ||
+|| `Decimal(precision, scale)` |
+Real number with fixed precision, 16 bytes in size. Precision is the maximum total number of decimal digits stored, takes values from 1 to 35. Scale is the maximum number of decimal digits stored to the right of the decimal point, takes values from 0 to the precision value. |
+{% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index{% endif %}
+    ||
 {% if feature_map_tables %}
 |`DyNumber` | A binary representation of a real number with an accuracy of up to 38 digits.<br/>Acceptable values: positive numbers from 1×10<sup>-130</sup> up to 1×10<sup>126</sup>–1, negative numbers from -1×10<sup>126</sup>–1 to -1×10<sup>-130</sup>, and 0.<br/>Compatible with the `Number` type in AWS DynamoDB. It's not recommended for {{ backend_name_lower }}-native applications. | — |
 {% endif %}
@@ -58,19 +96,181 @@ To store numbers (JSON Number) in `JsonDocument`, as well as for arithmetic oper
 
 ## Date and time {#datetime}
 
-| Type | Description | Notes |
-| ----- | ----- | ----- |
-| `Date` | Date, precision to the day | Range of values for all time types except `Interval`: From 00:00 01.01.1970 to 00:00 01.01.2106. Internal `Date` representation: Unsigned 16-bit integer |
-| `Datetime` | Date/time, precision to the second | Internal representation: Unsigned 32-bit integer |
-| `Timestamp` | Date/time, precision to the microsecond | Internal representation: Unsigned 64-bit integer |
-| `Interval` | Time interval (signed), precision to microseconds | Value range: From -136 years to +136 years. Internal representation: Signed 64-bit integer. {% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index{% endif %} |
-| `TzDate` | Date with time zone label, precision to the day | Not supported in table columns |
-| `TzDateTime` | Date/time with time zone label, precision to the second | Not supported in table columns |
-| `TzTimestamp` | Date/time with time zone label, precision to the microsecond | Not supported in table columns |
+#|
+|| Type | Description | Possible values | Size (bytes) | Notes ||
 
+||
+`Date`
+|
+A moment in time corresponding to midnight<sup>1</sup> in UTC, precision to the day
+|
+from 00:00 01.01.1970 to 00:00 01.01.2106
+|
+2
+|
+—
+||
 
+||
+`Date32`
+|
+A moment in time corresponding to midnight<sup>1</sup> in UTC, precision to the day
+|
+from 00:00 01.01.144169 BC to 00:00 01.01.148107 AD
+|
+4
+|
+—
+||
 
-### Supporting types with a time zone label
+||
+`Datetime`
+|
+A moment in time in UTC, precision to the second
+|
+from 00:00 01.01.1970 to 00:00 01.01.2106
+|
+4
+|
+—
+||
+
+||
+`Datetime64`
+|
+A moment in time in UTC, precision to the second
+|
+from 00:00 01.01.144169 BC to 00:00 01.01.148107 AD
+|
+8
+|
+—
+||
+
+||
+`Timestamp`
+|
+A moment in time in UTC, precision to the microsecond
+|
+from 00:00 01.01.1970 to 00:00 01.01.2106
+|
+8
+|
+—
+||
+
+||
+`Timestamp64`
+|
+A moment in time in UTC, precision to the microsecond
+|
+from 00:00 01.01.144169 BC to 00:00 01.01.148107 AD
+|
+8
+|
+—
+||
+
+||
+`Interval`
+|
+Time interval, precision to the microsecond
+|
+from -136 years to +136 years
+|
+8
+|
+{% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index.{% else %}—{% endif %} Not available for column-oriented tables
+||
+
+||
+`Interval64`
+|
+Time interval, precision to the microsecond
+|
+from -292277 years to +292277 years
+|
+8
+|
+Not available for column-oriented tables
+||
+
+||
+`TzDate`
+|
+A moment in time in UTC corresponding to midnight in the specified timezone
+|
+from 00:00 01.01.1970 to 00:00 01.01.2106
+|
+
+|
+Not supported in table columns
+||
+
+||
+`TzDate32`
+|
+A moment in time in UTC corresponding to midnight in the specified timezone
+|
+from 00:00 01.01.144169 BC to 00:00 01.01.148107 AD
+|
+4 and timezone label
+|
+—
+||
+
+||
+`TzDateTime`
+|
+A moment in time in UTC with timezone label and precision to the second
+|
+from 00:00 01.01.1970 to 00:00 01.01.2106
+|
+
+|
+Not supported in table columns
+||
+
+||
+`TzDateTime64`
+|
+A moment in time in UTC with timezone label and precision to the second
+|
+from 00:00 01.01.144169 BC to 00:00 01.01.148107 AD
+|
+8 and timezone label
+|
+—
+||
+
+||
+`TzTimestamp`
+|
+A moment in time in UTC with timezone label and precision to the microsecond
+|
+from 00:00 01.01.1970 to 00:00 01.01.2106
+|
+
+|
+Not supported in table columns
+||
+
+||
+`TzTimestamp64`
+|
+A moment in time in UTC with timezone label and precision to the microsecond
+|
+from 00:00 01.01.144169 BC to 00:00 01.01.148107 AD
+|
+8 and timezone label
+|
+—
+||
+|#
+
+<sup>1</sup> Midnight refers to the time point where all _time_ components equal zero.
+
+### Features of supporting types with timezone label
 
 Time zone label for the `TzDate`, `TzDatetime`, `TzTimestamp` types is an attribute that is used:
 

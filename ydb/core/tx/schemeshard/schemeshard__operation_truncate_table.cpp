@@ -13,34 +13,6 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TConfigureParts: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TTruncateTable TConfigureParts"
-            << " operationId# " << OperationId;
-    }
-
-public:
-    TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
-    }
-
-    bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-        Y_UNUSED(ev);
-        Y_UNUSED(context);
-        return true;
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        Y_UNUSED(context);
-        return false;
-    }
-};
 
 class TPropose: public TSubOperationState {
 private:
@@ -60,19 +32,73 @@ public:
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        Y_UNUSED(ev);
-        Y_UNUSED(context);
+        TTabletId ssId = context.SS->SelfTabletId();
+        const auto& evRecord = ev->Get()->Record;
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     DebugHint() << " HandleReply TEvSchemaChanged"
+                     << " at tablet: " << ssId);
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint() << " HandleReply TEvSchemaChanged"
+                     << " triggered early"
+                     << ", message: " << evRecord.ShortDebugString());
+
+        NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+        // TODO flown4qqqq
         Y_UNUSED(ev);
         Y_UNUSED(context);
         return true;
     }
 
     bool ProgressState(TOperationContext& context) override {
-        Y_UNUSED(context);
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     DebugHint() << " HandleReply ProgressState"
+                     << " at tablet: " << ssId);
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxTruncateTable);
+
+        txState->ClearShardsInProgress();
+
+        // Send TruncateTable scheme transaction to all datashards
+        TString txBody;
+        {
+            auto seqNo = context.SS->StartRound(*txState);
+
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            context.SS->FillSeqNo(tx, seqNo);
+            auto truncateTable = tx.MutableTruncateTable();
+            txState->TargetPathId.ToProto(truncateTable->MutablePathId());
+
+            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+        }
+
+        Y_ABORT_UNLESS(txState->Shards.size());
+        for (ui32 i = 0; i < txState->Shards.size(); ++i) {
+            auto idx = txState->Shards[i].Idx;
+            auto datashardId = context.SS->ShardInfos[idx].TabletID;
+
+            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, txBody, context.Ctx);
+            context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
+        }
+
+        txState->UpdateShardsInProgress(TTxState::Propose);
+
+        TSet<TTabletId> shardSet;
+        for (const auto& shard : txState->Shards) {
+            TShardIdx idx = shard.Idx;
+            TTabletId tablet = context.SS->ShardInfos.at(idx).TabletID;
+            shardSet.insert(tablet);
+        }
+
+        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, txState->MinStep, shardSet);
         return false;
     }
 };
@@ -82,14 +108,12 @@ class TTruncateTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
     static TTxState::ETxState NextState() {
-        return TTxState::ConfigureParts;
+        return TTxState::Propose;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
         case TTxState::ProposedWaitParts:
@@ -102,8 +126,6 @@ public:
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
@@ -168,10 +190,12 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
+        // TODO flown4qqqq
         Y_ABORT("no AbortPropose for TTruncateTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
+        // TODO flown4qqqq
         Y_UNUSED(forceDropTxId);
         Y_UNUSED(context);
         Y_ABORT("no AbortUnsafe for TTruncateTable");

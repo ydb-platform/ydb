@@ -70,6 +70,9 @@ const TString StaticCredentialsLabel = "Credentials";
 const TString DynamicCredentialsLabel = "DynamicCredentials";
 const TString FullCaptureLabel = "FullCapture";
 
+const TString GeneralInfoComponent = "GeneralInfo";
+const TString StartTimeLabel = "StartTime";
+
 class TUrlLoader: public IUrlLoader {
 public:
     TUrlLoader(TFileStoragePtr storage)
@@ -392,6 +395,7 @@ TProgram::TProgram(
     }
 
     if (QContext_.CanWrite()) {
+        QContext_.GetWriter()->Put({GeneralInfoComponent, StartTimeLabel}, TInstant::Now().ToStringLocalUpToSeconds()).GetValueSync();
         NYT::TNode credListNode = NYT::TNode::CreateList();
         Credentials_->ForEach([&](const TString name, const TCredential& cred) {
             credListNode.Add(NYT::TNode()("Name", name)("Category", cred.Category)("Subcategory", cred.Subcategory));

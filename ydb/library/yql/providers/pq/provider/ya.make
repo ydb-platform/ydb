@@ -55,6 +55,7 @@ PEERDIR(
     yql/essentials/providers/result/expr_nodes
     yql/essentials/public/udf
 
+    yt/yql/providers/ytflow/integration/interface
     yt/yql/providers/ytflow/integration/proto
     yt/yql/providers/ytflow/expr_nodes
 )

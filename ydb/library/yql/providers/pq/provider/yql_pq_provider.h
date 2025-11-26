@@ -74,7 +74,8 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     const NPq::NProto::StreamingDisposition& disposition = {},
     const std::vector<std::pair<TString, TString>>& taskSensorLabels = {},
     const std::vector<ui64>& nodeIds = {},
-    bool useActorSystemThreadsInTopicClient = true
+    bool useActorSystemThreadsInTopicClient = true,
+    bool useYtflowEngine = false
 );
 
 TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);

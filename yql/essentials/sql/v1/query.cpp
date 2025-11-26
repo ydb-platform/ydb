@@ -2032,7 +2032,7 @@ public:
         if (NAME##Val.IsSet()) {                                                              \
             settings = L(settings, Q(Y(Q(Y_STRINGIZE(set##NAME)), NAME##Val.GetValueSet()))); \
         } else {                                                                              \
-            settings = L(settings, Q(Y(Q(Y_STRINGIZE(reset##NAME)), Q(Y()))));                \
+            settings = L(settings, Q(Y(Q(Y_STRINGIZE(reset##NAME)), Y())));                   \
         }                                                                                     \
     }
 

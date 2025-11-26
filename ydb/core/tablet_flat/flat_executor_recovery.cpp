@@ -208,7 +208,7 @@ TRawTypeValue MakeTypeValueFromJson(NScheme::TTypeInfo type, const NJson::TJsonV
 }
 
 const NTable::TScheme::TTableInfo* FindTableFromJson(const NJson::TJsonValue& json, TTransactionContext& txc) {
-        if (!json.IsMap()) {
+    if (!json.IsMap()) {
         throw yexception() << TStringBuilder() << "Invalid JSON format, expected object: " << json;
     }
     const auto& jsonMap = json.GetMap();
@@ -404,11 +404,11 @@ public:
 
     void CompleteRestore(bool success, const TString& error) {
         if (success) {
-            if (!error) {
-                RestoreState = ERestoreState::Done;
-            } else {
+            if (error) {
                 RestoreState = ERestoreState::DoneWithWarning;
                 Error = error;
+            } else {
+                RestoreState = ERestoreState::Done;
             }
         } else {
             RestoreState = ERestoreState::Error;
@@ -656,9 +656,9 @@ public:
 
         for (const auto& line : Snapshot->Get()->Lines) {
             NJson::TJsonValue json;
-            NJson::ReadJsonTree(line, &json);
 
             try {
+                NJson::ReadJsonTree(line, &json);
                 UploadData(json, &table, NTable::ERowOp::Upsert, Pool, txc);
             } catch (const std::exception& e) {
                 Error = TStringBuilder() << "Failed to upload snapshot data: " << e.what() << ", line: " << line;
@@ -844,6 +844,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvReadBackup, Handle);
             hFunc(TEvDataAck, Handle);
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 
@@ -867,64 +868,65 @@ public:
     }
 
     void ProcessNextChunk() {
-        // Get current file or open next one
-        if (!CurrentFileInput) {
-            if (!SnapshotFiles.empty()) {
-                CurrentFilePath = SnapshotFiles.front();
-                SnapshotFiles.pop_front();
+        while (true) {
+            // Get current file or open next one
+            if (!CurrentFileInput) {
+                if (!SnapshotFiles.empty()) {
+                    CurrentFilePath = SnapshotFiles.front();
+                    SnapshotFiles.pop_front();
 
-                CurrentTableName = CurrentFilePath.Basename();
-                // Remove .json extension
-                if (CurrentTableName.EndsWith(".json")) {
-                    CurrentTableName = CurrentTableName.substr(0, CurrentTableName.size() - 5);
-                }
+                    CurrentTableName = CurrentFilePath.Basename();
+                    // Remove .json extension
+                    if (CurrentTableName.EndsWith(".json")) {
+                        CurrentTableName = CurrentTableName.substr(0, CurrentTableName.size() - 5);
+                    }
 
-                try {
-                    CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
-                } catch (const TIoException& e) {
-                    return SendResultAndDie(false, TStringBuilder() << "Failed to open snapshot file " << CurrentFilePath << ": " << e.what());
-                }
-            } else if (!ChangelogProcessed) {
-                CurrentFilePath = ChangelogFilePath;
-                CurrentTableName.clear();
-                ChangelogProcessed = true;
+                    try {
+                        CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
+                    } catch (const TIoException& e) {
+                        return SendResultAndDie(false, TStringBuilder() << "Failed to open snapshot file " << CurrentFilePath << ": " << e.what());
+                    }
+                } else if (!ChangelogProcessed) {
+                    CurrentFilePath = ChangelogFilePath;
+                    CurrentTableName.clear();
+                    ChangelogProcessed = true;
 
-                try {
-                    CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
-                } catch (const TIoException& e) {
-                    return SendResultAndDie(false, TStringBuilder() << "Failed to open changelog file " << CurrentFilePath << ": " << e.what());
+                    try {
+                        CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
+                    } catch (const TIoException& e) {
+                        return SendResultAndDie(false, TStringBuilder() << "Failed to open changelog file " << CurrentFilePath << ": " << e.what());
+                    }
+                } else {
+                    // All files processed
+                    return SendResultAndDie(true);
                 }
+            }
+
+            // Read lines until buffer is full
+            TVector<TString> lines;
+            ui64 linesSize = 0;
+            try {
+                TString line;
+                while (linesSize < 1_MB && CurrentFileInput->ReadLine(line)) {
+                    linesSize += line.size() + 1; // +1 for \n
+                    lines.push_back(std::move(line));
+                }
+            } catch (const TIoException& e) {
+                return SendResultAndDie(false, TStringBuilder() << "Failed to read from file " << CurrentFilePath << ": " << e.what());
+            }
+
+            if (lines.empty()) {
+                // End of file reached, try next file
+                CurrentFileInput.Reset();
+                continue;
+            }
+
+            if (CurrentTableName) {
+                Send(Owner, new TEvSnapshotData(CurrentTableName, std::move(lines), linesSize));
             } else {
-                // All files processed
-                return SendResultAndDie(true);
+                Send(Owner, new TEvChangelogData(std::move(lines), linesSize));
             }
-        }
-
-        // Read lines until buffer is full
-        TVector<TString> lines;
-        ui64 linesSize = 0;
-
-        try {
-            TString line;
-            while (linesSize < 1_MB && CurrentFileInput->ReadLine(line)) {
-                linesSize += line.size() + 1; // +1 for \n
-                lines.push_back(std::move(line));
-            }
-        } catch (const TIoException& e) {
-            return SendResultAndDie(false, TStringBuilder() << "Failed to read from file " << CurrentFilePath << ": " << e.what());
-        }
-
-        if (lines.empty()) {
-            // End of file reached
-            CurrentFileInput.Reset();
-            ProcessNextChunk();
             return;
-        }
-
-        if (CurrentTableName) {
-            Send(Owner, new TEvSnapshotData(CurrentTableName, std::move(lines), linesSize));
-        } else {
-            Send(Owner, new TEvChangelogData(std::move(lines), linesSize));
         }
     }
 

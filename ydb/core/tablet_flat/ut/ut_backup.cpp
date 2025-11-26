@@ -1543,6 +1543,16 @@ Y_UNIT_TEST_SUITE(Backup) {
         auto changelog = genDirs.back().Child("changelog.json");
         UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
 
+        env.WaitChangelogFlush();
+
+        TString content = TFileInput(changelog).ReadAll();
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(content, &json);
+
+        UNIT_ASSERT_VALUES_EQUAL(json["step"].GetInteger(), 2);
+        UNIT_ASSERT_C(json.Has("schema_changes"), "Schema changes must be in changelog");
+        UNIT_ASSERT_C(json.Has("data_changes"), "Data changes must be in changelog");
+
         // Check state before and after restore
         auto assertState = [&env]() {
             UNIT_ASSERT_VALUES_EQUAL(env.CountRows(), 1);
@@ -1554,16 +1564,6 @@ Y_UNIT_TEST_SUITE(Backup) {
         assertState();
         env.RestoreLastBackup(TestTabletFlags);
         assertState();
-
-        env.WaitChangelogFlush();
-
-        TString content = TFileInput(changelog).ReadAll();
-        NJson::TJsonValue json;
-        NJson::ReadJsonTree(content, &json);
-
-        UNIT_ASSERT_VALUES_EQUAL(json["step"].GetInteger(), 2);
-        UNIT_ASSERT_C(json.Has("schema_changes"), "Schema changes must be in changelog");
-        UNIT_ASSERT_C(json.Has("data_changes"), "Data changes must be in changelog");
     }
 
     Y_UNIT_TEST(ChangelogSchemaNewColumn) {

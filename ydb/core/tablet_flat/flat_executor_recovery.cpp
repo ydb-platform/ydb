@@ -658,7 +658,7 @@ public:
             NJson::TJsonValue json;
 
             try {
-                NJson::ReadJsonTree(line, &json);
+                NJson::ReadJsonTree(line, &json, true);
                 UploadData(json, &table, NTable::ERowOp::Upsert, Pool, txc);
             } catch (const std::exception& e) {
                 Error = TStringBuilder() << "Failed to upload snapshot data: " << e.what() << ", line: " << line;
@@ -697,9 +697,9 @@ public:
             NJson::TJsonValue json;
 
             try {
-                NJson::ReadJsonTree(line, &json);
+                NJson::ReadJsonTree(line, &json, true);
             } catch (const std::exception& e) {
-                Error = TStringBuilder() << "Failed to parse changelog line: " << e.what();
+                Error = TStringBuilder() << "Failed to parse changelog: " << e.what() << ", line: " << line;
                 return true;
             }
 

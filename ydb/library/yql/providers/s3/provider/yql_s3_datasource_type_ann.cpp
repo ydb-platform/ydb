@@ -846,8 +846,8 @@ public:
                     return false;
                 }
 
-                if (partitioningColumns.contains(name)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected projection column parameter to contain partitioned column name"));
+                if (!partitioningColumns.contains(name)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected parameter to contain partitioned column name"));
                     return false;
                 }
 

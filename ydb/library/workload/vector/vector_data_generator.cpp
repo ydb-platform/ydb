@@ -174,7 +174,7 @@ private:
             ythrow yexception() << "Cannot find embedding column '" << EmbeddingColumnName << "'";
         }
 
-        if (Y_UNLIKELY(embeddingColumn->type()->id() == arrow::Type::STRING)) {
+        if (Y_UNLIKELY(embeddingColumn->type()->id() != arrow::Type::STRING)) {
             ythrow yexception() << "For CSV/TSV embedding column must be string";
         }
 

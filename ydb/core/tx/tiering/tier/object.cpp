@@ -6,6 +6,8 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/uri/uri.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NKikimr::NColumnShard::NTiers {
 
 TConclusion<NKikimrSchemeOp::TS3Settings> TTierConfig::GetPatchedConfig(

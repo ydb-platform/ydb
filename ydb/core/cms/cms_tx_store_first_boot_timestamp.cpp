@@ -15,7 +15,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::CMS, "TTxStoreFirstBootTimestamp Execute");
 
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::Param>().Key(1)
+        db.Table<Schema::Param>().Key(Schema::Param::Key)
             .Update<Schema::Param::FirstBootTimestamp>(Self->State->FirstBootTimestamp.MicroSeconds());
 
         return true;

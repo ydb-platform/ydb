@@ -38,7 +38,7 @@ public:
         if (!db.Precharge<Schema>())
             return false;
 
-        auto paramRow = db.Table<Schema::Param>().Key(1).Select<Schema::Param::TColumns>();
+        auto paramRow = db.Table<Schema::Param>().Key(Schema::Param::Key).Select<Schema::Param::TColumns>();
         auto permissionRowset = db.Table<Schema::Permission>().Range().Select<Schema::Permission::TColumns>();
         auto requestRowset = db.Table<Schema::Request>().Range().Select<Schema::Request::TColumns>();
         auto walleTaskRowset = db.Table<Schema::WalleTask>().Range().Select<Schema::WalleTask::TColumns>();

@@ -9,6 +9,8 @@ namespace NKikimr::NCms {
 
 struct Schema : NIceDb::Schema {
     struct Param : Table<1> {
+        static constexpr ui32 Key = 1;
+
         struct ID : Column<1, NScheme::NTypeIds::Uint32> {};
         struct NextPermissionID : Column<2, NScheme::NTypeIds::Uint64> {};
         struct NextRequestID : Column<3, NScheme::NTypeIds::Uint64> {};

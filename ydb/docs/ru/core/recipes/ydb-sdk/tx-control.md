@@ -320,13 +320,6 @@
   }
   ```
 
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-  }
-  ```
-
 - Java
 
   ```java

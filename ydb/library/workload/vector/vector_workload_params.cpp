@@ -1,3 +1,4 @@
+#include "vector_data_generator.h"
 #include "vector_enums.h"
 #include "vector_workload_params.h"
 #include "vector_workload_generator.h"
@@ -55,6 +56,9 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
         ConfigureCommonOpts(opts);
         addInitParam();
         break;
+    case TWorkloadParams::ECommandType::Import:
+        ConfigureCommonOpts(opts);
+        break;
     case TWorkloadParams::ECommandType::Run:
         ConfigureCommonOpts(opts);
         switch (static_cast<EWorkloadRunType>(workloadType)) {
@@ -89,6 +93,15 @@ void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
         .Required().StoreResult(&KmeansTreeLevels);
     opts.AddLongOption( "kmeans-tree-clusters", "Number of clusters in kmeans. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
         .Required().StoreResult(&KmeansTreeClusters);
+}
+
+TVector<TString> TVectorWorkloadParams::GetColumns() const {
+    TVector<TString> result(KeyColumns.begin(), KeyColumns.end());
+    result.emplace_back(EmbeddingColumn);
+    if (PrefixColumn.has_value()) {
+        result.emplace_back(PrefixColumn.value());
+    }
+    return result;
 }
 
 void TVectorWorkloadParams::Init() {
@@ -191,6 +204,12 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
 
 THolder<IWorkloadQueryGenerator> TVectorWorkloadParams::CreateGenerator() const {
     return MakeHolder<TVectorWorkloadGenerator>(this);
+}
+
+TWorkloadDataInitializer::TList TVectorWorkloadParams::CreateDataInitializers() const {
+    return {
+        std::make_shared<TWorkloadVectorFilesDataInitializer>(*this)
+    };
 }
 
 TString TVectorWorkloadParams::GetWorkloadName() const {

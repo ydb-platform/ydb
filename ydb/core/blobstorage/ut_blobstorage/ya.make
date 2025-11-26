@@ -16,7 +16,7 @@ SRCS(
     assimilation.cpp
     backpressure.cpp
     block_race.cpp
-    bsc_cache.cpp
+    bsc.cpp
     counting_events.cpp
     corrupted_reads.cpp
     deadlines.cpp

@@ -334,8 +334,8 @@ namespace NKikimr::NBsController {
         };
 
         bool TBlobStorageController::CommitConfigUpdates(TConfigState& state, bool suppressFailModelChecking,
-                bool suppressDegradedGroupsChecking, bool suppressDisintegratedGroupsChecking,
-                TTransactionContext& txc, TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
+                bool suppressDegradedGroupsChecking, TTransactionContext& txc, TString *errorDescription,
+                NKikimrBlobStorage::TConfigResponse *response) {
             NIceDb::TNiceDb db(txc.DB);
 
             // when bridged non-proxy groups get updated, we update parent group too
@@ -399,23 +399,8 @@ namespace NKikimr::NBsController {
             }
 
             bool errors = false;
-            std::vector<TGroupId> disintegratedByExpectedStatus;
             std::vector<TGroupId> disintegrated;
             std::vector<TGroupId> degraded;
-
-            if (!suppressDisintegratedGroupsChecking) {
-                for (auto&& [base, overlay] : state.Groups.Diff()) {
-                    if (base && overlay->second) {
-                        const TGroupInfo::TGroupStatus& prev = base->second->Status;
-                        const TGroupInfo::TGroupStatus& status = overlay->second->Status;
-                        if (status.ExpectedStatus == NKikimrBlobStorage::TGroupStatus::DISINTEGRATED &&
-                                status.ExpectedStatus != prev.ExpectedStatus) { // status did really change
-                            disintegratedByExpectedStatus.push_back(overlay->first);
-                            errors = true;
-                        }
-                    }
-                }
-            }
 
             // check that group modification would not degrade failure model
             if (!suppressFailModelChecking) {
@@ -480,14 +465,6 @@ namespace NKikimr::NBsController {
                     if (response) {
                         for (const auto& id: disintegrated) {
                             response->MutableGroupsGetDisintegrated()->Add(id.GetRawId());
-                        }
-                    }
-                }
-                if (!disintegratedByExpectedStatus.empty()) {
-                    msg << "DisintegratedByExpectedStatus GroupIds# " << FormatList(disintegratedByExpectedStatus) << ' ';
-                    if (response) {
-                        for (const auto& id: disintegratedByExpectedStatus) {
-                            response->MutableGroupsGetDisintegratedByExpectedStatus()->Add(id.GetRawId());
                         }
                     }
                 }

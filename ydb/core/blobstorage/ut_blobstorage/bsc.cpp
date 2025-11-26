@@ -122,3 +122,43 @@ Y_UNIT_TEST(BscRestart) {
 }
 
 }
+
+Y_UNIT_TEST_SUITE(DriveStatus) {
+    void TestSetDriveStatus(TBlobStorageGroupType erasure, NKikimrBlobStorage::EDriveStatus status) {
+        TEnvironmentSetup env({
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure,
+        });
+
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Minutes(180));
+
+        auto config = env.FetchBaseConfig();
+        NKikimrBlobStorage::TConfigRequest request;
+        for (const auto& pdisk : config.GetPDisk()) {
+            auto* cmd = request.AddCommand()->MutableUpdateDriveStatus();
+            cmd->MutableHostKey()->SetNodeId(pdisk.GetNodeId());
+            cmd->SetPDiskId(pdisk.GetPDiskId());
+            cmd->SetStatus(status);
+        }
+
+        auto res = env.Invoke(request);
+        UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
+        for (const auto& status : res.GetStatus()) {
+            UNIT_ASSERT_C(status.GetSuccess(), status.GetErrorDescription());
+        }
+    }
+
+    #define STATUS_TEST_CASE(erasure, status)                                                       \
+    Y_UNIT_TEST(Test##status##erasure) {                                                            \
+        TestSetDriveStatus(TBlobStorageGroupType::Erasure##erasure, NKikimrBlobStorage::status);    \
+    }
+
+    STATUS_TEST_CASE(4Plus2Block, INACTIVE);
+    STATUS_TEST_CASE(Mirror3dc, INACTIVE);
+
+    STATUS_TEST_CASE(4Plus2Block, FAULTY);
+    STATUS_TEST_CASE(Mirror3dc, FAULTY);
+
+    #undef STATUS_TEST_CASE
+}

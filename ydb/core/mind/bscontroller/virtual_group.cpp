@@ -265,7 +265,7 @@ namespace NKikimr::NBsController {
                     return TGroupGeometryInfo();
                 });
                 TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
+                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, txc, &error)) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG08, "failed to commit update", (VirtualGroupId, GroupId), (Error, error));
                     State->Rollback();
                     State.reset();
@@ -307,7 +307,7 @@ namespace NKikimr::NBsController {
                 const size_t n = State->BlobDepotDeleteQueue.Unshare().erase(GroupId);
                 Y_ABORT_UNLESS(n == 1);
                 TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
+                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, txc, &error)) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG17, "failed to commit update", (VirtualGroupId, GroupId), (Error, error));
                     State->Rollback();
                     State.reset();
@@ -918,7 +918,7 @@ namespace NKikimr::NBsController {
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 Action(*State);
                 TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
+                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, txc, &error)) {
                     STLOG(PRI_INFO, BS_CONTROLLER, BSCVG09, "failed to commit update", (Error, error));
                     State->Rollback();
                     State.reset();

@@ -136,8 +136,9 @@ ui32 TStagePredictor::GetMaxExecutorThreadLimit() {
     if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
         TExecutorPoolState poolState;
         TlsActivationContext->ActorSystem()->GetExecutorPoolState(AppData()->UserPoolId, poolState);
+        userPoolMaxThreadsCount = poolState.PossibleMaxLimit;
     }
-    
+
     if (!userPoolMaxThreadsCount) {
         ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "user pool max threads count is undefined for executer tasks construction";
         userPoolMaxThreadsCount = NSystemInfo::NumberOfCpus();

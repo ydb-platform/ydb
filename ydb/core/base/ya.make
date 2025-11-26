@@ -42,6 +42,7 @@ SRCS(
     logoblob.h
     memory_controller_iface.h
     nameservice.h
+    nodestate.h
     path.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h

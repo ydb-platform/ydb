@@ -15,6 +15,7 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <util/system/env.h>
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
@@ -186,7 +187,20 @@ public:
     std::function<bool(ui32, std::unique_ptr<IEventHandle>&)> FilterFunction;
     std::function<bool(ui32, std::unique_ptr<IEventHandle>&, ISchedulerCookie*, TInstant)> FilterEnqueue;
     IOutputStream *LogStream = &Cerr;
-
+    std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator
+        = [](std::function<TActorId(ui32, ui32)> generateId, ui32 stateStorageNodeId) {
+        ui32 numReplicas = 5;
+        auto info = MakeIntrusive<TStateStorageInfo>();
+        info->RingGroups.resize(1);
+        auto& ringGroup = info->RingGroups.front();
+        ringGroup.NToSelect = numReplicas;
+        ringGroup.Rings.resize(numReplicas);
+        for (ui32 i = 0; i < numReplicas; ++i) {
+            ringGroup.Rings[i].Replicas.push_back(generateId(stateStorageNodeId, i));
+        }
+        return info;
+    };
+    
 public:
     TTestActorSystem(ui32 numNodes, NLog::EPriority defaultPrio = NLog::PRI_ERROR, TIntrusivePtr<TDomainsInfo> domainsInfo = nullptr, TFeatureFlags featureFlags = {})
         : MaxNodeId(numNodes)

@@ -21,7 +21,12 @@ private:
 
 public:
     TTierConfig() = default;
-    TTierConfig(const TTierProto& config)
+    TTierConfig(const TTierProto& config, const NKikimrSchemeOp::TCompressionOptions& compression)
+        : ProtoConfig(config)
+        , Compression(compression) {
+    }
+
+    explicit TTierConfig(const TTierProto& config)
         : ProtoConfig(config) {
     }
 

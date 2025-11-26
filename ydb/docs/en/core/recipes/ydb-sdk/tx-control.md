@@ -96,8 +96,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
    ```java
    import tech.ydb.query.QueryClient;
+   import tech.ydb.query.TxMode;
    import tech.ydb.query.tools.QueryReader;
    import tech.ydb.query.tools.SessionRetryContext;
+   import tech.ydb.core.Result;
+   import java.util.concurrent.CompletableFuture;
 
    // ...
 
@@ -344,8 +347,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
    ```java
    import tech.ydb.query.QueryClient;
+   import tech.ydb.query.TxMode;
    import tech.ydb.query.tools.QueryReader;
    import tech.ydb.query.tools.SessionRetryContext;
+   import tech.ydb.core.Result;
+   import java.util.concurrent.CompletableFuture;
 
    // ...
 
@@ -436,8 +442,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
    ```java
    import tech.ydb.query.QueryClient;
+   import tech.ydb.query.TxMode;
    import tech.ydb.query.tools.QueryReader;
    import tech.ydb.query.tools.SessionRetryContext;
+   import tech.ydb.core.Result;
+   import java.util.concurrent.CompletableFuture;
 
    // ...
 
@@ -575,8 +584,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
    ```java
    import tech.ydb.query.QueryClient;
+   import tech.ydb.query.TxMode;
    import tech.ydb.query.tools.QueryReader;
    import tech.ydb.query.tools.SessionRetryContext;
+   import tech.ydb.core.Result;
+   import java.util.concurrent.CompletableFuture;
 
    // ...
 
@@ -767,8 +779,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
    ```java
    import tech.ydb.query.QueryClient;
+   import tech.ydb.query.TxMode;
    import tech.ydb.query.tools.QueryReader;
    import tech.ydb.query.tools.SessionRetryContext;
+   import tech.ydb.core.Result;
+   import java.util.concurrent.CompletableFuture;
 
    // ...
 

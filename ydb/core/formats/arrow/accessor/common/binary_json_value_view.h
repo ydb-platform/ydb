@@ -1,6 +1,5 @@
 #pragma once
 
-#include <library/cpp/json/writer/json_value.h>
 #include <util/generic/string.h>
 
 #include <optional>
@@ -16,7 +15,7 @@ public:
 private:
     TStringBuf RawValue;
     mutable TString ScalarHolder;
-    mutable TStringBuf ScalarView;
+    mutable std::optional<TStringBuf> ScalarView;
 };
 
 } // namespace NKikimr::NArrow::NAccessor

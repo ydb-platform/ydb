@@ -18,8 +18,8 @@ std::optional<TStringBuf> TBinaryJsonValueView::GetScalarOptional() const {
         return std::nullopt;
     }
 
-    if (!ScalarView.empty()) {
-        return ScalarView;
+    if (!ScalarView.has_value()) {
+        return ScalarView.value();
     }
 
     auto reader = NBinaryJson::TBinaryJsonReader::Make(RawValue);
@@ -62,7 +62,7 @@ std::optional<TStringBuf> TBinaryJsonValueView::GetScalarOptional() const {
             return std::nullopt;
     }
 
-    return ScalarView;
+    return ScalarView.value();
 }
 
 } // namespace NKikimr::NArrow::NAccessor

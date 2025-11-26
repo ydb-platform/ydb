@@ -20,13 +20,13 @@
 
 #include <cstdint>
 
-#include "arrow/array.h"
-#include "arrow/compute/exec.h"
-#include "arrow/compute/util.h"
-#include "arrow/compute/util_internal.h"
-#include "arrow/type.h"
-#include "arrow/util/cpu_info.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/exec.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/cpu_info.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 /// This file contains lightweight containers for Arrow buffers.  These containers
 /// makes compromises in terms of strong ownership and the range of data types supported

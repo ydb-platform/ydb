@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/statistics.h"
 
 #include <algorithm>
 #include <cmath>
@@ -25,19 +25,19 @@
 #include <type_traits>
 #include <utility>
 
-#include "arrow/array.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/bit_run_reader.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/float16.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/ubsan.h"
-#include "arrow/visit_data_inline.h"
-#include "parquet/encoding.h"
-#include "parquet/exception.h"
-#include "parquet/platform.h"
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_run_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/float16.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_data_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encoding.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
 
 using arrow20::default_memory_pool;
 using arrow20::MemoryPool;

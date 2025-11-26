@@ -177,6 +177,7 @@ PEERDIR(
     ydb/services/rate_limiter
     ydb/services/replication
     ydb/services/tablet
+    ydb/services/test_shard
     ydb/services/view
     ydb/services/ydb
     yql/essentials/minikql/comp_nodes/llvm16

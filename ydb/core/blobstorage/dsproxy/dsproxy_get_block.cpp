@@ -54,6 +54,7 @@ class TBlobStorageGroupGetBlockRequest : public TBlobStorageGroupRequestActor {
         auto result = std::make_unique<TEvBlobStorage::TEvGetBlockResult>(status, TabletId, Generation);
         result->ErrorReason = ErrorReason;
         DSP_LOG_DEBUG_S("DSPGB02", "ReplyAndDie Result# " << result->Print(false));
+        Mon->CountGetBlockResponseTime(Info->GetDeviceType(), TActivationContext::Monotonic() - RequestStartTime);
         SendResponseAndDie(std::move(result));
     }
 

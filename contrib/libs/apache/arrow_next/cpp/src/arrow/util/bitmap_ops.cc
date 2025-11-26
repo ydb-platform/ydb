@@ -15,21 +15,21 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
 
 #include <cstdint>
 #include <cstring>
 #include <functional>
 #include <memory>
 
-#include "arrow/buffer.h"
-#include "arrow/result.h"
-#include "arrow/util/align_util.h"
-#include "arrow/util/bit_block_counter.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/bitmap_reader.h"
-#include "arrow/util/bitmap_writer.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/align_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_block_counter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace internal {

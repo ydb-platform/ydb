@@ -5,12 +5,13 @@
 #include <yt/yt/client/table_client/logical_type.h>
 
 namespace NYT::NComplexTypes {
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
 
 using namespace NYT::NTableClient;
 
 ////////////////////////////////////////////////////////////////////////////////
-
-namespace {
 
 std::vector<TLogicalTypePtr> MergeTupleTypes(
     const TComplexTypeFieldDescriptor& firstDescriptor,
@@ -27,9 +28,7 @@ std::vector<TLogicalTypePtr> MergeTupleTypes(
     auto secondSize = std::ssize(secondDescriptor.GetType()->GetElements());
 
     if (firstSize > secondSize) {
-        return MergeTupleTypes(
-            secondDescriptor,
-            firstDescriptor);
+        return MergeTupleTypes(secondDescriptor, firstDescriptor);
     }
 
     if (!allowNewElements && firstSize != secondSize) {
@@ -176,13 +175,11 @@ TString ExtractTagFromOneOfTypes(
     YT_ABORT();
 }
 
-} // namespace
-
 ////////////////////////////////////////////////////////////////////////////////
 
-TLogicalTypePtr MergeTypes(
-    const TLogicalTypePtr& firstType,
-    const TLogicalTypePtr& secondType)
+} // namespace
+
+TLogicalTypePtr MergeTypes(const TLogicalTypePtr& firstType, const TLogicalTypePtr& secondType)
 {
     auto firstDescriptor = TComplexTypeFieldDescriptor(firstType);
     auto secondDescriptor = TComplexTypeFieldDescriptor(secondType);
@@ -243,12 +240,17 @@ TLogicalTypePtr MergeTypes(
             << TErrorAttribute("second_type", ToString(*secondDescriptor.GetType()));
     }
 
+    auto areTypesCompatible = [] (const TLogicalTypePtr& lhs, const TLogicalTypePtr& rhs) {
+        auto [result, error] = CheckTypeCompatibility(lhs, rhs);
+        return result == ESchemaCompatibility::FullyCompatible;
+    };
+
     switch (firstMetatype) {
         case ELogicalMetatype::Simple: {
-            if (CheckTypeCompatibility(firstType, secondType).first == ESchemaCompatibility::FullyCompatible) {
+            if (areTypesCompatible(firstType, secondType)) {
                 return secondType;
             }
-            if (CheckTypeCompatibility(secondType, firstType).first == ESchemaCompatibility::FullyCompatible) {
+            if (areTypesCompatible(secondType, firstType)) {
                 return firstType;
             }
             THROW_ERROR_EXCEPTION(
@@ -267,40 +269,24 @@ TLogicalTypePtr MergeTypes(
             return New<TListLogicalType>(std::move(mergedType));
         }
         case ELogicalMetatype::VariantStruct: {
-            auto mergedFields = MergeStructTypes(
-                firstDescriptor,
-                secondDescriptor);
-
+            auto mergedFields = MergeStructTypes(firstDescriptor, secondDescriptor);
             return New<TVariantStructLogicalType>(std::move(mergedFields));
         }
-
         case ELogicalMetatype::Struct: {
-            auto mergedFields = MergeStructTypes(
-                firstDescriptor,
-                secondDescriptor);
-
+            auto mergedFields = MergeStructTypes(firstDescriptor, secondDescriptor);
             return New<TStructLogicalType>(std::move(mergedFields));
         }
-
         case ELogicalMetatype::Tuple: {
-            auto mergedElements = MergeTupleTypes(
-                firstDescriptor,
-                secondDescriptor);
-
+            auto mergedElements = MergeTupleTypes(firstDescriptor, secondDescriptor);
             return New<TTupleLogicalType>(std::move(mergedElements));
         }
-
         case ELogicalMetatype::VariantTuple: {
-            auto mergedElements = MergeTupleTypes(
-                firstDescriptor,
-                secondDescriptor);
-
+            auto mergedElements = MergeTupleTypes(firstDescriptor, secondDescriptor);
             return New<TVariantTupleLogicalType>(std::move(mergedElements));
         }
-
-        case ELogicalMetatype::Dict:
+        case ELogicalMetatype::Dict: {
             return MergeDictTypes(firstDescriptor, secondDescriptor);
-
+        }
         case ELogicalMetatype::Decimal: {
             if (*firstDescriptor.GetType() == *secondDescriptor.GetType()) {
                 return firstType;
@@ -313,7 +299,6 @@ TLogicalTypePtr MergeTypes(
                     << TErrorAttribute("second_type", ToString(*secondDescriptor.GetType()));
             }
         }
-
         case ELogicalMetatype::Optional:
         case ELogicalMetatype::Tagged:
             // Optional and Tagged cases were checked earlier in this function.

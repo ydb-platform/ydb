@@ -174,7 +174,7 @@ message FulltextIndexSettings {
         // See Tokenizer enum
         optional Tokenizer tokenizer = 1;
     
-        // Language used for language-sensitive operations like stopword filtering
+        // Language used for language-sensitive operations like stopword filtering and stemming
         // Example: language = "english"
         // By default is not specified and no language-specific logic is applied
         optional string language = 2;
@@ -229,6 +229,13 @@ message FulltextIndexSettings {
         // Maximum token length to keep (inclusive)
         // Must be used with use_filter_length
         optional int32 filter_length_max = 132 [(Ydb.value) = ">= 0"];
+
+        // Whether to apply snowball stemming to each token
+        // Must be used with language option
+        // Example: language = "english"
+        //   Tokens: ["cars", "beautifully", "conspired"]
+        //   Output: ["car", "beauti", "conspir"]
+        optional bool use_filter_snowball = 140;
     }
 
     // Represents text analyzers settings for a specific column

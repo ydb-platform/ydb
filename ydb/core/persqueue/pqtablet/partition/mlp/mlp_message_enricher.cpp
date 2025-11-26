@@ -110,16 +110,7 @@ void TMessageEnricherActor::ProcessQueue() {
         auto lastOffset = Queue.back().Offsets.back();
         auto count = lastOffset - firstOffset + 1;
         LOG_D("Fetching from offset " << firstOffset << " count " << count << " from " << TabletId);
-
-        auto request = std::make_unique<TEvPersQueue::TEvRequest>();
-        auto* partitionRequest = request->Record.MutablePartitionRequest();
-        partitionRequest->SetPartition(PartitionId);
-        auto* read = partitionRequest->MutableCmdRead();
-        read->SetClientId(ConsumerName);
-        read->SetOffset(firstOffset);
-        read->SetTimeoutMs(0);
-
-        SendToPQTablet(std::move(request));
+        SendToPQTablet(MakeEvPQRead(ConsumerName, PartitionId, firstOffset, count));
 
         return;
     }

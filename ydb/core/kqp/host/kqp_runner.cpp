@@ -372,7 +372,7 @@ private:
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             //.AddCommonOptimization()
 
-            .Add(CreateKqpPgRewriteTransformer(OptimizeCtx, *typesCtx), "RewritePgSelect")
+            .Add(CreateKqpRewriteSelectTransformer(OptimizeCtx, *typesCtx), "RewriteSelect")
             .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, rboKqpTypeAnnTransformer, kqpTypeAnnTransformer, newRBOPhysicalPeepholeTransformer, funcRegistry), "NewRBOTransformer")
             .Add(CreateKqpRBOCleanupTransformer(*typesCtx), "RBOCleanupTransformer")
 

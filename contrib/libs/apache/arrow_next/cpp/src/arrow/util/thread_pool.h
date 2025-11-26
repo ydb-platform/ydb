@@ -25,15 +25,15 @@
 #include <unordered_set>
 #include <utility>
 
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/util/cancel.h"
-#include "arrow/util/config.h"
-#include "arrow/util/functional.h"
-#include "arrow/util/future.h"
-#include "arrow/util/iterator.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/cancel.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/functional.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/iterator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 #if defined(_MSC_VER)
 // Disable harmless warning for decorated name length limit

@@ -35,6 +35,7 @@ public:
     // The maximum supported time delta. If it has reached this value, then it is necessary
     // to shift the BaseDeadline. Allows you to store deadlines for up to 18 hours.
     static constexpr size_t MaxDeadlineDelta = Max<ui16>();
+    static constexpr TDuration MaxDeadline = TDuration::Hours(12);
 
 public:
     enum EMessageStatus {
@@ -45,7 +46,9 @@ public:
         // Message processing completed successfully.
         Committed = 2,
         // The message needs to be moved to the DLQ queue.
-        DLQ = 3
+        DLQ = 3,
+        // The message is delayed and will be processed after the delay expires.
+        Delayed = 4,
     };
 
     struct TMessage {
@@ -134,6 +137,7 @@ public:
         size_t UnprocessedMessageCount = 0;
         size_t LockedMessageCount = 0;
         size_t LockedMessageGroupCount = 0;
+        size_t DelayedMessageCount = 0;
         size_t CommittedMessageCount = 0;
         size_t DeadlineExpiredMessageCount = 0;
         size_t DLQMessageCount = 0;
@@ -175,7 +179,7 @@ public:
     // For SQS compatibility
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(ui64 message, TInstant deadline);
-    bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp);
+    bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay = TDuration::Zero());
     bool MarkDLQMoved(TDLQMessage message);
     bool WakeUpDLQ();
 
@@ -207,6 +211,7 @@ private:
     bool DoCommit(ui64 offset);
     bool DoUnlock(ui64 offset);
     void DoUnlock(ui64 offset, TMessage& message);
+    bool DoUndelay(ui64 offset);
 
     void UpdateFirstUncommittedOffset();
 

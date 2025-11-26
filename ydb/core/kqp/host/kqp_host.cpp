@@ -1905,6 +1905,7 @@ private:
         TString sessionId = CreateGuidAsString();
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
+        state->AllowTransparentSystemColumns = false;
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
@@ -1989,6 +1990,7 @@ private:
         const TGatewaysConfig* gatewaysConfig = nullptr; // TODO: can we get real gatewaysConfig here?
         auto allowSettings = [](TStringBuf settingName) {
             return settingName == "OrderedColumns"
+                || settingName == "DeriveColumnOrder"
                 || settingName == "DisableOrderedColumns"
                 || settingName == "Warning"
                 || settingName == "UseBlocks"

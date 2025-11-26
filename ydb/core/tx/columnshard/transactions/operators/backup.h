@@ -13,27 +13,22 @@ private:
     std::shared_ptr<NOlap::NExport::TExportTask> ExportTask;
     bool TaskExists = false;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTask;
-    std::unique_ptr<NTabletFlatExecutor::ITransaction> TxConfirm;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAbort;
+    THashSet<TActorId> NotifySubscribers;
     using TProposeResult = TTxController::TProposeResult;
     static inline auto Registrator = TFactory::TRegistrator<TBackupTransactionOperator>(NKikimrTxColumnShard::TX_KIND_BACKUP);
 
     virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
     virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override;
-    virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
-    }
-    virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
-    }
-    virtual TString DoGetOpType() const override {
-        return "Backup";
-    }
-    virtual bool DoIsAsync() const override {
-        return true;
-    }
+    virtual void DoFinishProposeOnExecute(TColumnShard & /*owner*/, NTabletFlatExecutor::TTransactionContext & /*txc*/) override;
+    virtual void DoFinishProposeOnComplete(TColumnShard & /*owner*/,
+                              const TActorContext & /*ctx*/) override;
+    virtual TString DoGetOpType() const override;
+    virtual bool DoIsAsync() const override;
     virtual bool DoParse(TColumnShard& owner, const TString& data) override;
-    virtual TString DoDebugString() const override {
-        return "BACKUP";
-    }
+    virtual TString DoDebugString() const override;
+
+    virtual void RegisterSubscriber(const TActorId &actorId) override;
 
 public:
     using TBase::TBase;
@@ -43,9 +38,7 @@ public:
     virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) override;
 
     virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
-    virtual bool CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
-        return true;
-    }
+    virtual bool CompleteOnAbort(TColumnShard & /*owner*/, const TActorContext & /*ctx*/) override;
 };
 }
 

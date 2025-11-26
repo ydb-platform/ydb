@@ -27,16 +27,16 @@ psutil_sys_vminfo(vm_statistics64_t vmstat) {
 
     mport = mach_host_self();
     if (mport == MACH_PORT_NULL) {
-        PyErr_SetString(PyExc_RuntimeError,
-                        "mach_host_self() returned MACH_PORT_NULL");
+        psutil_runtime_error("mach_host_self() returned MACH_PORT_NULL");
         return -1;
     }
 
-    ret = host_statistics64(mport, HOST_VM_INFO64, (host_info64_t)vmstat, &count);
+    ret = host_statistics64(
+        mport, HOST_VM_INFO64, (host_info64_t)vmstat, &count
+    );
     mach_port_deallocate(mach_task_self(), mport);
     if (ret != KERN_SUCCESS) {
-        PyErr_Format(
-            PyExc_RuntimeError,
+        psutil_runtime_error(
             "host_statistics64(HOST_VM_INFO64) syscall failed: %s",
             mach_error_string(ret)
         );
@@ -54,7 +54,7 @@ psutil_sys_vminfo(vm_statistics64_t vmstat) {
  */
 PyObject *
 psutil_virtual_mem(PyObject *self, PyObject *args) {
-    int      mib[2];
+    int mib[2];
     uint64_t total;
     vm_statistics64_data_t vm;
     long pagesize = psutil_getpagesize();
@@ -72,12 +72,12 @@ psutil_virtual_mem(PyObject *self, PyObject *args) {
 
     return Py_BuildValue(
         "KKKKKK",
-        (unsigned long long) total,
-        (unsigned long long) vm.active_count * pagesize,  // active
-        (unsigned long long) vm.inactive_count * pagesize,  // inactive
-        (unsigned long long) vm.wire_count * pagesize,  // wired
-        (unsigned long long) vm.free_count * pagesize,  // free
-        (unsigned long long) vm.speculative_count * pagesize  // speculative
+        (unsigned long long)total,
+        (unsigned long long)vm.active_count * pagesize,  // active
+        (unsigned long long)vm.inactive_count * pagesize,  // inactive
+        (unsigned long long)vm.wire_count * pagesize,  // wired
+        (unsigned long long)vm.free_count * pagesize,  // free
+        (unsigned long long)vm.speculative_count * pagesize  // speculative
     );
 }
 
@@ -96,17 +96,17 @@ psutil_swap_mem(PyObject *self, PyObject *args) {
     mib[1] = VM_SWAPUSAGE;
 
     if (psutil_sysctl(mib, 2, &totals, sizeof(totals)) != 0)
-        return psutil_PyErr_SetFromOSErrnoWithSyscall("sysctl(VM_SWAPUSAGE)");
+        return psutil_oserror_wsyscall("sysctl(VM_SWAPUSAGE)");
 
     if (psutil_sys_vminfo(&vmstat) != 0)
         return NULL;
 
     return Py_BuildValue(
         "KKKKK",
-        (unsigned long long) totals.xsu_total,
-        (unsigned long long) totals.xsu_used,
-        (unsigned long long) totals.xsu_avail,
-        (unsigned long long) vmstat.pageins * pagesize,
-        (unsigned long long) vmstat.pageouts * pagesize
+        (unsigned long long)totals.xsu_total,
+        (unsigned long long)totals.xsu_used,
+        (unsigned long long)totals.xsu_avail,
+        (unsigned long long)vmstat.pageins * pagesize,
+        (unsigned long long)vmstat.pageouts * pagesize
     );
 }

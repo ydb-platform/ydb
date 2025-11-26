@@ -2099,7 +2099,8 @@ void ExecSQL(Tests::TServer::TPtr server,
              TActorId sender,
              const TString &sql,
              bool dml,
-             Ydb::StatusIds::StatusCode code)
+             Ydb::StatusIds::StatusCode code,
+             NYdb::NUt::TTestContext testCtx)
 {
     auto &runtime = *server->GetRuntime();
     auto request = MakeSQLRequest(sql, dml);
@@ -2107,9 +2108,9 @@ void ExecSQL(Tests::TServer::TPtr server,
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
     auto& response = ev->Get()->Record;
     auto& issues = response.GetResponse().GetQueryIssues();
-    UNIT_ASSERT_VALUES_EQUAL_C(response.GetYdbStatus(),
-                               code,
-                               issues.empty() ? response.DebugString() : issues.Get(0).DebugString()
+    CTX_UNIT_ASSERT_VALUES_EQUAL_C(response.GetYdbStatus(),
+                                   code,
+                                   issues.empty() ? response.DebugString() : issues.Get(0).DebugString()
     );
 }
 

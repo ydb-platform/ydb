@@ -20,6 +20,11 @@ TEST_SRCS(
     test_retry_high_rate.py
 )
 
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 END()

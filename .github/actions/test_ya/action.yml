@@ -71,6 +71,10 @@ inputs:
     type: string
     required: false
     description: "Telegram alert chat"
+  collect_coredumps:
+    type: boolean
+    default: false
+    description: "Collect coredumps via enabling ulimit -c unlimited"
 
 outputs:
   success:
@@ -145,11 +149,22 @@ runs:
       id: build
       shell: bash
       env:
+        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
         TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
         GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
         GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
       run: |
         set -ex
+        
+        if [ "$COLLECT_COREDUMPS" = "true" ]; then
+          sudo mkdir -p /coredumps
+          sudo chmod 1777 /coredumps
+          echo "/coredumps/%p.%s" | sudo tee /proc/sys/kernel/core_pattern
+          ulimit -c unlimited
+        else
+          ulimit -c 0
+        fi
+
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
@@ -387,6 +402,7 @@ runs:
 
           monitor_memory() {
               set +x
+              rm -f ram_usage.txt
               while true; do
                   used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | 
                             awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')

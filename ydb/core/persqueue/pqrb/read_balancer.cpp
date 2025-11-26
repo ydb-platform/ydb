@@ -324,7 +324,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     for (auto& p : record.GetPartitions()) {
         auto it = PartitionsInfo.find(p.GetPartition());
         if (it == PartitionsInfo.end()) {
-            PQ_ENSURE(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
+            PQ_ENSURE((p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId) || NextPartitionId == 0);
 
             partitionsInfo[p.GetPartition()] = {p.GetTabletId()};
 
@@ -911,7 +911,7 @@ void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPa
     }
 
     if (SchemeShardId == msg->SchemeShardId &&
-       !SubDomainPathId || SubDomainPathId->OwnerId != msg->SchemeShardId)
+       (!SubDomainPathId || SubDomainPathId->OwnerId != msg->SchemeShardId))
     {
         PQ_LOG_D("Discovered subdomain " << msg->LocalPathId << " at RB " << TabletID());
 

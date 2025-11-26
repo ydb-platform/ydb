@@ -3,28 +3,58 @@
 {%-         set annotation_processors = annotation_processors|unique|sort -%}
 {%-         set lomboks = annotation_processors|select('startsWith', 'contrib/java/org/projectlombok/lombok') -%}
 {%-         set nolomboks = annotation_processors|reject('startsWith', 'contrib/java/org/projectlombok/lombok') -%}
-{%-         set annotation_processors = lomboks + nolomboks -%}
-{%-         for annotation_processor in annotation_processors -%}
-{%-             set parts = rsplit(annotation_processor, "/", 4) %}
+{%-         if lomboks|length -%}
+{%-             for annotation_processor in lomboks -%}
+{%-                 set parts = rsplit(annotation_processor, "/", 4) %}
     {{ func }}("{{ parts[0]|replace("contrib/java/", "")|replace("/", ".") }}:{{ parts[1] }}:{{ parts[2] }}")
-{%-         endfor -%}
+{%-             endfor -%}
+{%-         endif -%}
+{%-         if nolomboks|length -%}
+{%-             if nolomboks|reject('startsWith', 'contrib/java/')|length -%}
+{#-                 Has handmade AP, put all APs as jars in one list #}
+    {{ func }}(files(listOf(
+{%-                 for annotation_processor in nolomboks %}
+        {{ PatchRoots(annotation_processor) }},
+{%-                 endfor %}
+    )))
+{%-             else -%}
+{%-                 for annotation_processor in nolomboks -%}
+{%-                     set parts = rsplit(annotation_processor, "/", 4) %}
+    {{ func }}("{{ parts[0]|replace("contrib/java/", "")|replace("/", ".") }}:{{ parts[1] }}:{{ parts[2] }}")
+{%-                 endfor -%}
+{%-             endif -%}
+{%-         endif -%}
 {%-     endif -%}
 {%- endmacro -%}
 
 {%- macro Kapts(func, kapts, file_jars, test_file_jars) -%}
 {%-     if kapts|length -%}
-{%-         for kapt in kapts|unique|sort -%}
-{%-             if (kapt in file_jars) or (kapt in test_file_jars) -%}
-{#-                 found KAPT jar in depends => use kapt as jar #}
-    {{ func }}(files("$output_root/{{ kapt }}"))
-{%-             else -%}
-{#-                 no in depends jar => use KAPT as project() -#}
+{%-         set srt_kapts = kapts|unique|sort -%}
+{%-         set jar_kapts = [] -%}
+{%-         set cls_kapts = srt_kapts -%}
+{%-         if file_jars|length -%}
+{%-             set jar_kapts = jar_kapts + srt_kapts|select('in', file_jars) -%}
+{%-             set cls_kapts = cls_kapts|reject('in', file_jars) -%}
+{%-         endif -%}
+{%-         if test_file_jars|length -%}
+{%-             set jar_kapts = jar_kapts + srt_kapts|select('in', test_file_jars) -%}
+{%-             set cls_kapts = cls_kapts|reject('in', test_file_jars) -%}
+{%-         endif -%}
+{%-         if jar_kapts|length %}
+    {{ func }}(files(listOf(
+{%-             for kapt in jar_kapts %}
+        "$output_root/{{ kapt }}",
+{%-             endfor %}
+    )))
+{%-         endif -%}
+{%-         if cls_kapts|length -%}
+{%-             for kapt in cls_kapts -%}
 {%-                 set path_and_jar = rsplit(kapt, "/", 2) -%}
 {%-                 set classpath = 'project(":' + path_and_jar[0]|replace("/", ":") + '")' -%}
 {%-                 include "[generator]/patch_classpath.jinja" %}
     {{ func }}({{ classpath }})
-{%-             endif -%}
-{%-         endfor -%}
+{%-             endfor -%}
+{%-         endif -%}
 {%-     endif -%}
 {%- endmacro -%}
 

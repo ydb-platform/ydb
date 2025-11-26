@@ -99,6 +99,7 @@ public:
     NCommon::TConfSetting<ui32, Static> MaxSequentialReadsInFlight;
 
     NCommon::TConfSetting<ui32, Static> KMeansTreeSearchTopSize;
+    NCommon::TConfSetting<bool, Static> DisableCheckpoints;
 
     /* Runtime */
     NCommon::TConfSetting<bool, Dynamic> ScanQuery;
@@ -226,6 +227,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableDqHashCombineByDefault = true;
 
     bool Antlr4ParserIsAmbiguityError = false;
+
+    bool EnableFallbackToYqlOptimizer = false;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;

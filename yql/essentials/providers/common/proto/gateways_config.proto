@@ -542,6 +542,7 @@ message TSqlCoreConfig {
     repeated string NoV0SyntaxErrorForUsers = 3;
 
     repeated string TranslationFlags = 4;
+    repeated TCoreAttr ExtendedTranslationFlags = 5;
 }
 
 /////////////////////////////// Db Tool ///////////////////////////////

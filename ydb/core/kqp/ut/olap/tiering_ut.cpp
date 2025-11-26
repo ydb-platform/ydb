@@ -306,6 +306,59 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
     }
 
+    Y_UNIT_TEST(DeletedTierLookup) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        testHelper.GetKikimr().GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_TRACE);
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        tieringHelper.WriteSampleData();
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
+        testHelper.ResetTiering(DEFAULT_TABLE_PATH);
+        testHelper.RebootTablets(DEFAULT_TABLE_PATH);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        TString selectQuery = R"(SELECT MAX(level) AS level FROM `/Root/olapStore/olapTable`)";
+        ui64 scanResult;
+        {
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            scanResult = GetInt32(rows[0].at("level"));
+        }
+
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(DROP EXTERNAL DATA SOURCE `/Root/tier1`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        testHelper.RebootTablets(DEFAULT_TABLE_PATH);
+
+        {
+            auto it = tableClient.StreamExecuteScanQuery(selectQuery, NYdb::NTable::TStreamExecScanQuerySettings()).GetValueSync();
+            auto streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT(!streamPart.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(streamPart.GetIssues().ToString(), "/Root/tier1");
+        }
+
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+
+        Cerr << "Wait for 40 seconds for tiers to be fetched" << Endl;
+        Sleep(TDuration::Seconds(40));
+        {
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetInt32(rows[0].at("level")), scanResult);
+        }
+    }
+
     Y_UNIT_TEST(TtlBorders) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();

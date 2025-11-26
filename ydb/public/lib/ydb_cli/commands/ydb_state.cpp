@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <util/generic/xrange.h>
+#include <util/stream/mem.h>
 #include <library/cpp/streams/bzip2/bzip2.h>
 
 namespace NYdb::NConsoleClient {
@@ -111,13 +112,12 @@ int TCommandClusterStateFetch::Run(TConfig& config) {
 
     TFileOutput out(FileName);
     TBZipCompress compress(&out);
-    TString r = proto.Getresult();
-    if (!r.empty()) {
-        TARFile::ToStream(compress, "result.json", r, TInstant::Now());
-    }
     for (ui32 i : xrange(proto.blocksSize())) {
         auto& block = proto.Getblocks(i);
-        TARFile::ToStream(compress, block.Getname(), block.Getcontent(), TInstant::Seconds(block.Gettimestamp().seconds()));
+        TString data = block.Getcontent();
+        TMemoryInput input(data.data(), data.size());
+        TBZipDecompress decompress(&input);
+        TARFile::ToStream(compress, block.Getname(), decompress.ReadAll(), TInstant::Seconds(block.Gettimestamp().seconds()));
     }
     return EXIT_SUCCESS;
 }

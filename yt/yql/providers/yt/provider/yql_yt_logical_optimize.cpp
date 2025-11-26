@@ -394,11 +394,8 @@ protected:
             if (TCoTablePath::Match(node.Get()) || TCoTableRecord::Match(node.Get())) {
                 if (node->ChildrenSize() == 0) {
                     nodesToOptimize.insert(node.Get());
-                } else {
-                    auto row = directRowDependsOn ? node->Head().HeadPtr() : node->HeadPtr();
-                    if (row == arg.Ptr()) {
-                        nodesToOptimize.insert(node.Get());
-                    }
+                } else if (!directRowDependsOn || node->Head().HeadPtr() == arg.Ptr()) {
+                    nodesToOptimize.insert(node.Get());
                 }
             }
             else if (TYtOutput::Match(node.Get())) {
@@ -429,11 +426,11 @@ protected:
         TPositionHandle tablePos;
         TOptimizeExprSettings settings(State_->Types);
         settings.ProcessedNodes = &processedNodes; // Prevent optimizer to go deeper than current operation
-        auto status = OptimizeExpr(newBody, newBody, [&nodesToOptimize, &tablePos, arg, rowLambda](const TExprNode::TPtr& input, TExprContext& ctx) -> TExprNode::TPtr {
+        auto status = OptimizeExpr(newBody, newBody, [&nodesToOptimize, &tablePos, arg, rowLambda, directRowDependsOn = State_->Types->DirectRowDependsOn](const TExprNode::TPtr& input, TExprContext& ctx) -> TExprNode::TPtr {
             if (nodesToOptimize.find(input.Get()) != nodesToOptimize.end()) {
                 if (TCoTablePath::Match(input.Get())) {
                     tablePos = input->Pos();
-                    if (input->ChildrenSize() == 1) {
+                    if (directRowDependsOn && input->ChildrenSize() == 1) {
                         return ctx.RenameNode(*input, TYtTablePath::CallableName());
                     }
                     return Build<TYtTablePath>(ctx, input->Pos())
@@ -444,7 +441,7 @@ protected:
                         .Done().Ptr();
                 } else if (TCoTableRecord::Match(input.Get())) {
                     tablePos = input->Pos();
-                    if (input->ChildrenSize() == 1) {
+                    if (directRowDependsOn && input->ChildrenSize() == 1) {
                         return ctx.RenameNode(*input, TYtTableRecord::CallableName());
                     }
                     return Build<TYtTableRecord>(ctx, input->Pos())

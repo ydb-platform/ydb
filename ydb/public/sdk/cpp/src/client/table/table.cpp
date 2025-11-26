@@ -1430,18 +1430,20 @@ TSessionInspectorFn TSession::TImpl::GetSessionInspector(
     NThreading::TPromise<TCreateSessionResult>& promise,
     std::shared_ptr<TTableClient::TImpl> client,
     const TCreateSessionSettings& settings,
+    const TRpcRequestSettings& rpcSettings,
     ui32 counter, bool needUpdateActiveSessionCounter)
 {
-    return [promise, client, settings, counter, needUpdateActiveSessionCounter](TAsyncCreateSessionResult future) mutable {
+    return [promise, client, settings, rpcSettings, counter, needUpdateActiveSessionCounter](TAsyncCreateSessionResult future) mutable {
         Y_ASSERT(future.HasValue());
         auto session = future.ExtractValue();
         if (IsSessionStatusRetriable(session) && counter < client->GetSessionRetryLimit()) {
             counter++;
-            client->CreateSession(settings, false)
+            client->CreateSession(settings, rpcSettings, false)
                 .Subscribe(GetSessionInspector(
                     promise,
                     client,
                     settings,
+                    rpcSettings,
                     counter,
                     needUpdateActiveSessionCounter)
                 );
@@ -1461,7 +1463,9 @@ TTableClient::TTableClient(const TDriver& driver, const TClientSettings& setting
 
 TAsyncCreateSessionResult TTableClient::CreateSession(const TCreateSessionSettings& settings) {
     // Returns standalone session
-    return Impl_->CreateSession(settings, true);
+    auto rpcSettings = TRpcRequestSettings::Make(settings);
+    rpcSettings.Header.push_back({NYdb::YDB_CLIENT_CAPABILITIES, NYdb::YDB_CLIENT_CAPABILITY_SESSION_BALANCER});
+    return Impl_->CreateSession(settings, rpcSettings, true);
 }
 
 TAsyncCreateSessionResult TTableClient::GetSession(const TCreateSessionSettings& settings) {

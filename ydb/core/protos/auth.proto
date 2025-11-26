@@ -60,6 +60,9 @@ message TAuthConfig {
     optional TAccountLockout AccountLockout = 84;
     optional string AccessServiceTokenName = 85;
     optional TTokenManager TokenManager = 86;
+    optional string AccessServiceSslTargetNameOverride = 87;
+    optional string UserAccountServiceSslTargetNameOverride = 88;
+    optional string ServiceAccountServiceSslTargetNameOverride = 89;
 }
 
 message TUserRegistryConfig {

@@ -729,14 +729,10 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
 
     const bool isSink = NeedSinks(tableData, kqpCtx);
 
-    const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
-        && std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            return index.second->Type == TIndexDescription::EType::GlobalSync
-                || index.second->Type == TIndexDescription::EType::GlobalSyncUnique;
-        });
+    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
 
     // For unique or vector index rewrite UPDATE to UPDATE ON
-    if (needsKqpEffect || (isSink && canUseStreamIndex)) {
+    if (needsKqpEffect || useStreamIndex) {
         return Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
             .Table(BuildTableMeta(tableData, update.Pos(), ctx))
             .Input<TKqpWriteConstraint>()
@@ -747,7 +743,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             .Columns<TCoAtomList>()
                 .Add(updateColumnsList)
                 .Build()
-            .Settings(IsConditionalUpdateSetting(isSink && canUseStreamIndex, ctx, update.Pos()))
+            .Settings(IsConditionalUpdateSetting(useStreamIndex, ctx, update.Pos()))
             .Done();
     }
 

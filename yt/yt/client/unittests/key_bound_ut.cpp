@@ -55,7 +55,7 @@ TEST(TKeyBoundTest, Simple)
     }
 }
 
-TEST(TKeyBound, Helper)
+TEST(TKeyBoundTest, Helper)
 {
     TUnversionedOwningRowBuilder builder;
     builder.AddValue(MakeUnversionedDoubleValue(3.14, 0));

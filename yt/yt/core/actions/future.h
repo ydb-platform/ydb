@@ -159,6 +159,8 @@ private:
     template <class U>
     friend struct ::THash;
     friend class NDetail::TFutureState<void>;
+    template <class U>
+    friend class TFutureBase;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -332,7 +334,8 @@ public:
     TFuture<U> As() const;
 
     //! Converts to TFuture<void> by discarding the value; propagates errors as is.
-    TFuture<void> AsVoid() const;
+    TFuture<void> AsVoid() const&;
+    TFuture<void> AsVoid() &&;
 
     //! Converts to TCancelable interface.
     TCancelable AsCancelable() const;
@@ -383,7 +386,8 @@ public:
     TFuture<R> ApplyUnique(TCallback<TFuture<R>(T&&)> callback) const;
 
     //! Converts to TUniqueFuture interface.
-    TUniqueFuture<T> AsUnique() const;
+    TUniqueFuture<T> AsUnique() const&;
+    TUniqueFuture<T> AsUnique() &&;
 
     using TFutureBase<T>::Apply;
     using TFutureBase<T>::ApplyUnique;

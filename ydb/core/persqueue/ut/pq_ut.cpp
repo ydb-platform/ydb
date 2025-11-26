@@ -2832,7 +2832,7 @@ Y_UNIT_TEST(IncompleteProxyResponse) {
                         }
                         newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetData("");
                         newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetUncompressedSize(0);
-                    } if (res.GetOffset() == 5) { // All parts null
+                    } else if (res.GetOffset() == 5) { // All parts null
                         newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetData("");
                         newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetUncompressedSize(0);
                     }

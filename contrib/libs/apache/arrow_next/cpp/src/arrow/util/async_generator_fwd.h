@@ -20,8 +20,8 @@
 
 #include <functional>
 
-#include "arrow/type_fwd.h"
-#include "arrow/util/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/type_fwd.h"
 
 namespace arrow20 {
 

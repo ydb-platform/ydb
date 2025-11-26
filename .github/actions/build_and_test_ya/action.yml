@@ -59,6 +59,10 @@ inputs:
     type: boolean
     default: false
     description: "add ya make vars with git info"
+  collect_coredumps:
+    type: boolean
+    default: false
+    description: "Collect coredumps via enabling ulimit -c unlimited"
 defaults:
   run:
     shell: bash
@@ -119,3 +123,4 @@ runs:
         telegram_ydbot_token:  ${{ fromJSON( inputs.secs ).TELEGRAM_YDBOT_TOKEN || '' }}
         telegram_alert_logins: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_LOGINS || '' }}
         telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
+        collect_coredumps: ${{ inputs.collect_coredumps }}

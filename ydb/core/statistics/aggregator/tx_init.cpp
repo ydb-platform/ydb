@@ -242,7 +242,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 TForceTraversalTable::EStatus status = (TForceTraversalTable::EStatus)rowset.GetValue<Schema::ForceTraversalTables::Status>();
 
                 if (status == TForceTraversalTable::EStatus::AnalyzeStarted) {
-                    // Resent TEvAnalyzeTable to shards
+                    // Resent TEvAnalyzeShard to shards
                     status = TForceTraversalTable::EStatus::None;
                 } else if (status == TForceTraversalTable::EStatus::TraversalStarted) {
                     // Reset traversal

@@ -77,6 +77,10 @@ on:
           - release-msan
           - release-tsan
         default: relwithdebinfo
+      collect_coredumps:
+        type: boolean
+        default: false
+        description: "Collect coredumps via ulimit -c unlimited"
 
 jobs:
   prepare:
@@ -214,6 +218,7 @@ jobs:
           test_threads: ${{ fromJson(env.threads_count) }}
           custom_branch_name: ${{ matrix.branch }}
           put_build_results_to_cache: true
+          collect_coredumps: ${{ inputs.collect_coredumps }}
           additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ inputs.additional_ya_make_args }}
           secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","TELEGRAM_YDBOT_TOKEN":"{4}"}}',
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.TELEGRAM_YDBOT_TOKEN ) }}

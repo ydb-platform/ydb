@@ -258,7 +258,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
         astRes = SqlToYql(translators, TString(query), settings);
     } else {
-        astRes = ParseAst(TString(query));
+        astRes = ParseAst(query);
     }
 
     if (verIssue) {

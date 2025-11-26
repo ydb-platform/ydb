@@ -334,6 +334,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
                 SELECT
                     Rows
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
             )")
                           .GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());

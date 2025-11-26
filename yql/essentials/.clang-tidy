@@ -1,0 +1,35 @@
+# TODO:
+# - Enable    bugprone-exception-escape
+# - Enable    bugprone-undefined-memory-manipulation
+# - Configure bugprone-dangling-handle
+Checks: >
+  -*,
+  arcadia-*,
+  -arcadia-taxi-*,
+  bugprone-*,
+  -bugprone-bool-pointer-implicit-conversion,
+  -bugprone-branch-clone,
+  -bugprone-dynamic-static-initializers,
+  -bugprone-exception-escape,
+  -bugprone-lambda-function-name,
+  -bugprone-macro-parentheses,
+  -bugprone-misplaced-widening-cast,
+  -bugprone-narrowing-conversions,
+  -bugprone-reserved-identifier,
+  -bugprone-signed-char-misuse,
+  -bugprone-suspicious-enum-usage,
+  -bugprone-suspicious-memory-comparison,
+  -bugprone-too-small-loop-variable,
+  -bugprone-sizeof-expression,
+  -bugprone-unchecked-optional-access,
+  -bugprone-undefined-memory-manipulation,
+  -bugprone-unhandled-self-assignment,
+CheckOptions:
+  - key: readability-identifier-naming.StructPrefix
+    value: T
+  - key: readability-identifier-naming.EnumPrefix
+    value: E
+  - key: readability-identifier-naming.NamespacePrefix
+    value: N
+  - key: readability-identifier-naming.StaticVariableCase
+    value: CamelCase

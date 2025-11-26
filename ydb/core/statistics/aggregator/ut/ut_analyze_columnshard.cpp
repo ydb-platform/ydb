@@ -10,13 +10,13 @@ namespace NKikimr {
 namespace NStat {
 
 Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
-    Y_UNIT_TEST(AnalyzeTable) {
+    Y_UNIT_TEST(AnalyzeShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
         const auto& tableInfo = databaseInfo.Tables[0];
 
-        AnalyzeTable(runtime, tableInfo.ShardIds[0], tableInfo.PathId);
+        AnalyzeShard(runtime, tableInfo.ShardIds[0], tableInfo.PathId);
     }
 
     Y_UNIT_TEST(Analyze) {
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto& runtime = *env.GetServer().GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        TBlockEvents<TEvStatistics::TEvAnalyzeTableResponse> block(runtime);
+        TBlockEvents<TEvStatistics::TEvAnalyzeShardResponse> block(runtime);
         const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
         const auto& tableInfo = databaseInfo.Tables[0];
 
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto analyzeRequest = MakeAnalyzeRequest({{tableInfo.PathId, {1, 2}}}, operationId);
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
 
-        runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return block.size(); });
+        runtime.WaitFor("TEvAnalyzeShardResponse", [&]{ return block.size(); });
 
         AnalyzeStatus(runtime, sender, tableInfo.SaTabletId, operationId, NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
 
@@ -102,14 +102,14 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto sender = runtime.AllocateEdgeActor();
         const TString operationId = "operationId";
 
-        TBlockEvents<TEvStatistics::TEvAnalyzeTableResponse> block(runtime);
+        TBlockEvents<TEvStatistics::TEvAnalyzeShardResponse> block(runtime);
 
         auto tabletPipe = runtime.ConnectToPipe(tableInfo.SaTabletId, sender, 0, {});
 
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId}, operationId);
         runtime.SendToPipe(tabletPipe, sender, analyzeRequest1.release());
 
-        runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return block.size(); });
+        runtime.WaitFor("TEvAnalyzeShardResponse", [&]{ return block.size(); });
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId}, operationId);
         runtime.SendToPipe(tabletPipe, sender, analyzeRequest2.release());
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         auto GetOperationId = [] (size_t i) { return TStringBuilder() << "operationId" << i; };
 
-        TBlockEvents<TEvStatistics::TEvAnalyzeTableResponse> block(runtime);
+        TBlockEvents<TEvStatistics::TEvAnalyzeShardResponse> block(runtime);
 
         const size_t numEvents = 10;
 
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
             runtime.SendToPipe(tabletPipe, sender, analyzeRequest.release());
         }
 
-        runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return block.size() == numEvents; });
+        runtime.WaitFor("TEvAnalyzeShardResponse", [&]{ return block.size() == numEvents; });
 
         block.Unblock();
         block.Stop();
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         }        
     }    
 
-    Y_UNIT_TEST(AnalyzeRebootSaBeforeAnalyzeTableResponse) {
+    Y_UNIT_TEST(AnalyzeRebootSaBeforeAnalyzeShardResponse) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeTableResponse>([&](auto& ev) {
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeShardResponse>([&](auto& ev) {
             eventSeen = true;
             ev.Reset();
         });
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
 
-        runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return eventSeen; });
+        runtime.WaitFor("TEvAnalyzeShardResponse", [&]{ return eventSeen; });
         observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         bool eventSeen = false;
         bool tabletRebooted = false;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeTableResponse>([&](auto& ev) {
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeShardResponse>([&](auto& ev) {
             if (!tabletRebooted) {
                 eventSeen = true;
                 ev.Reset();
@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto analyzeRequest = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
 
-        runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return eventSeen; });
+        runtime.WaitFor("TEvAnalyzeShardResponse", [&]{ return eventSeen; });
         RebootTablet(runtime, tableInfo.ShardIds[0], sender);
         tabletRebooted = true;
         observer.Remove();
@@ -351,12 +351,12 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
-        TBlockEvents<TEvStatistics::TEvAnalyzeTableResponse> block(runtime);
+        TBlockEvents<TEvStatistics::TEvAnalyzeShardResponse> block(runtime);
 
         auto analyzeRequest = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
 
-        runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return block.size(); });
+        runtime.WaitFor("TEvAnalyzeShardResponse", [&]{ return block.size(); });
         runtime.AdvanceCurrentTime(TDuration::Days(2));
 
         auto analyzeResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);

@@ -1,6 +1,7 @@
 #include <ydb/library/actors/interconnect/outgoing_stream.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/entropy.h>
+#include <util/random/fast.h>
 #include <util/stream/null.h>
 
 #define Ctest Cnull

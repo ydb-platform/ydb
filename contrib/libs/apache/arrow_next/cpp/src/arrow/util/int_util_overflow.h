@@ -22,15 +22,15 @@
 #include <limits>
 #include <type_traits>
 
-#include "arrow/status.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 // "safe-math.h" includes <intsafe.h> from the Windows headers.
-#include "arrow/util/windows_compatibility.h"
-#include "arrow/vendored/portable-snippets/safe-math.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_compatibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/portable-snippets/safe-math.h"
 // clang-format off (avoid include reordering)
-#include "arrow/util/windows_fixup.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_fixup.h"
 // clang-format on
 
 namespace arrow20 {

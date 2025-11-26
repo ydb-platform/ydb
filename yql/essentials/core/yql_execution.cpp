@@ -978,16 +978,16 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
 
             return true;
         };
-        static const THashSet<TStringBuf> noExecutionList = {"InstanceOf", "Lag", "Lead", "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "NTile"};
-        static const THashSet<TStringBuf> noExecutionListForCalcOverWindow = {"InstanceOf"};
+        static const THashSet<TStringBuf> NoExecutionList = {"InstanceOf", "Lag", "Lead", "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "NTile"};
+        static const THashSet<TStringBuf> NoExecutionListForCalcOverWindow = {"InstanceOf"};
         VisitExpr(input, [funcCheckExecution](const TExprNode::TPtr& node) {
             bool collectCalcOverWindow = true;
-            return funcCheckExecution(noExecutionList, collectCalcOverWindow, node);
+            return funcCheckExecution(NoExecutionList, collectCalcOverWindow, node);
         });
         for (auto overWin: overWinNodes) {
             VisitExpr(overWin, [funcCheckExecution](const TExprNode::TPtr& node) {
                 bool collectCalcOverWindow = false;
-                return funcCheckExecution(noExecutionListForCalcOverWindow, collectCalcOverWindow, node);
+                return funcCheckExecution(NoExecutionListForCalcOverWindow, collectCalcOverWindow, node);
             });
         }
 

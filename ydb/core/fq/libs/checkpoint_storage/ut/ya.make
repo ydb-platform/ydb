@@ -1,6 +1,11 @@
 UNITTEST_FOR(ydb/core/fq/libs/checkpoint_storage)
 
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 FORK_SUBTESTS()
 

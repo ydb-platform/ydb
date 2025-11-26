@@ -103,11 +103,19 @@ class TestPDiskMetadata(object):
             with open(yaml_path_mod, 'w') as f:
                 yaml.safe_dump(y, f)
 
-            run_cli(["admin", "blobstorage", "disk", "metadata", "write", pdisk_path_n1,
-                     "--from-json", json_path,
-                     "--committed-yaml", yaml_path_mod,
-                     "--clear-proposed",
-                     "--validate-config"])
+            num_nodes = len(self.cluster.nodes)
+            majority = num_nodes//2 + 1
+            for node_id in self.cluster.nodes:
+                majority -= 1
+                if not majority:
+                    break
+
+                pdisk_path = self.node_to_pdisk_path[node_id]
+                run_cli(["admin", "blobstorage", "disk", "metadata", "write", pdisk_path,
+                         "--from-json", json_path,
+                         "--committed-yaml", yaml_path_mod,
+                         "--clear-proposed",
+                         "--validate-config"])
 
             for n in self.cluster.nodes.values():
                 n.start()

@@ -1931,6 +1931,17 @@ namespace NKikimr {
             ApplyHugeBlobSize(Config->MinHugeBlobInBytes);
             Y_VERIFY_S(MinHugeBlobInBytes, VCtx->VDiskLogPrefix);
 
+            if (Config->GroupSizeInUnits != GInfo->GroupSizeInUnits) {
+                Config->GroupSizeInUnits = GInfo->GroupSizeInUnits;
+                Y_VERIFY(PDiskCtx);
+                Y_VERIFY(PDiskCtx->Dsk);
+                ctx.Send(PDiskCtx->PDiskId,
+                    new NPDisk::TEvYardResize(
+                        PDiskCtx->Dsk->Owner,
+                        PDiskCtx->Dsk->OwnerRound,
+                        Config->GroupSizeInUnits));
+            }
+
             // handle special case when donor disk starts and finds out that it has been wiped out
             if (ev->Get()->LsnMngr->GetOriginallyRecoveredLsn() == 0 && Config->BaseInfo.DonorMode) {
                 // send drop donor cmd to NodeWarden
@@ -2449,10 +2460,11 @@ namespace NKikimr {
             GInfo = msg->NewInfo;
             SelfVDiskId = msg->NewVDiskId;
 
-            if (Config->GroupSizeInUnits != GInfo->GroupSizeInUnits) {
+            if (PDiskCtx && Config->GroupSizeInUnits != GInfo->GroupSizeInUnits) {
                 Config->GroupSizeInUnits = GInfo->GroupSizeInUnits;
                 UpdateWhiteboard(ctx);
 
+                Y_VERIFY(PDiskCtx->Dsk);
                 ctx.Send(PDiskCtx->PDiskId,
                     new NPDisk::TEvYardResize(
                         PDiskCtx->Dsk->Owner,

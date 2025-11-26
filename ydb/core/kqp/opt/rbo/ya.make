@@ -10,6 +10,7 @@ SRCS(
     kqp_rbo_type_ann.cpp
     kqp_rename_unused_stage.cpp
     kqp_constant_folding_stage.cpp
+    kqp_rewrite_select.cpp
 )
 
 PEERDIR(

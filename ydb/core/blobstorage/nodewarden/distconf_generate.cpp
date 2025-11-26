@@ -266,7 +266,7 @@ namespace NKikimr::NStorage {
                         }
                     }
                 } else {
-                    Y_ABORT("duplicate PDisk record in TBaseConfig");
+                    throw TExConfigError() << "duplicate PDisk record in TBaseConfig";
                 }
             }
 
@@ -305,18 +305,14 @@ namespace NKikimr::NStorage {
         if (bsConfig->HasServiceSet()) {
             const auto& ss = bsConfig->GetServiceSet();
 
-            for (const auto& vdisk : ss.GetVDisks()) {
-                const TVDiskID vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-                if (vdiskId.GroupID == groupId) {
-                    vdiskLocations.emplace(vdiskId, vdisk.GetVDiskLocation());
-                }
-            }
-
             std::vector<std::tuple<TPDiskId, i32>> usageIncr;
-
             THashSet<TPDiskId> requiredPDiskIds;
+            std::optional<ui32> generation;
+
             for (const auto& group : ss.GetGroups()) {
                 if (TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID) == groupId) {
+                    generation.emplace(group.GetGroupGeneration());
+
                     ui32 failRealmIdx = 0;
                     Y_DEBUG_ABORT_UNLESS(groupDefinition.empty());
                     groupDefinition.clear();
@@ -341,7 +337,6 @@ namespace NKikimr::NStorage {
                                     if (pdiskId != TPDiskId()) {
                                         usageIncr.emplace_back(pdiskId, +1); // and increase for the new PDisk
                                     }
-                                    vdiskLocations.erase(vdiskId);
                                 }
                                 grDefDomain.emplace_back(pdiskId);
 
@@ -350,6 +345,19 @@ namespace NKikimr::NStorage {
                             ++failDomainIdx;
                         }
                         ++failRealmIdx;
+                    }
+                }
+            }
+
+            for (const auto& vdisk : ss.GetVDisks()) {
+                const TVDiskID vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+                if (vdiskId.GroupID == groupId) {
+                    if (!generation) {
+                        throw TExConfigError() << "missing record for group being reconfigured";
+                    } else if (vdiskId.GroupGeneration == *generation && !replacedDisks.contains(vdiskId)) {
+                        Y_ABORT_UNLESS(vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY);
+                        Y_ABORT_UNLESS(!vdisk.HasDonorMode());
+                        vdiskLocations.emplace(vdiskId, vdisk.GetVDiskLocation());
                     }
                 }
             }
@@ -373,7 +381,7 @@ namespace NKikimr::NStorage {
                 if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
                     it->second.UsedSlots += incr; // TODO(ydynnikov): account GroupSizeInUnits
                 } else {
-                    Y_ABORT("missing PDiskId from group");
+                    throw TExConfigError() << "missing PDiskId from group";
                 }
             }
 
@@ -415,7 +423,7 @@ namespace NKikimr::NStorage {
                         r.MutablePDiskConfig()->CopyFrom(drive.GetPDiskConfig());
                     }
                 } else {
-                    Y_ABORT("duplicate PDiskId");
+                    throw TExConfigError() << "duplicate PDiskId";
                 }
             }
         };
@@ -507,10 +515,6 @@ namespace NKikimr::NStorage {
         }
         bridgePileId.CopyToProto(sGroup, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
 
-        TVDiskIdShort prev;
-        NKikimrBlobStorage::TGroupInfo::TFailRealm *sRealm = nullptr;
-        NKikimrBlobStorage::TGroupInfo::TFailRealm::TFailDomain *sDomain = nullptr;
-
         THashMap<TVDiskIdShort, NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk::TDonor>> donors;
 
         for (size_t i = 0; i < sSet->VDisksSize(); ++i) {
@@ -542,6 +546,10 @@ namespace NKikimr::NStorage {
                 m->MutableVDiskID()->SetGroupGeneration(groupGeneration);
             }
         }
+
+        TVDiskIdShort prev;
+        NKikimrBlobStorage::TGroupInfo::TFailRealm *sRealm = nullptr;
+        NKikimrBlobStorage::TGroupInfo::TFailRealm::TFailDomain *sDomain = nullptr;
 
         NBsController::TGroupMapper::Traverse(groupDefinition, [&](TVDiskIdShort vdiskId, TPDiskId pdiskId) {
             if (!sRealm || vdiskId.FailRealm != prev.FailRealm) {

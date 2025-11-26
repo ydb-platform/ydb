@@ -15,14 +15,16 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
     AFL_VERIFY(!Constructed);
     Constructed = true;
     std::shared_ptr<TPortionInfo> result;
+    const bool enableGranularMemoryProfile = IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY);
+    TMemoryProfileGuard mGuard0("portion_construct/general", !enableGranularMemoryProfile);
     {
-        TMemoryProfileGuard mGuard0("portion_construct/meta::" + ::ToString(GetType()));
+        TMemoryProfileGuard mGuard0("portion_construct/meta::" + ::ToString(GetType()), enableGranularMemoryProfile);
         auto meta = MetaConstructor.Build();
-        TMemoryProfileGuard mGuard("portion_construct/main::" + ::ToString(GetType()));
+        TMemoryProfileGuard mGuard("portion_construct/main::" + ::ToString(GetType()), enableGranularMemoryProfile);
         result = BuildPortionImpl(std::move(meta));
     }
     {
-        TMemoryProfileGuard mGuard1("portion_construct/others::" + ::ToString(GetType()));
+        TMemoryProfileGuard mGuard1("portion_construct/others::" + ::ToString(GetType()), enableGranularMemoryProfile);
         AFL_VERIFY(PathId);
         result->PathId = PathId;
         result->PortionId = GetPortionIdVerified();

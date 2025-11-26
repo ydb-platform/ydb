@@ -812,6 +812,7 @@ message TGRpcConfig {
     }
 
     optional YdbGrpcCompressionLevel DefaultCompressionLevel = 31 [default = YDB_GRPC_COMPRESS_LEVEL_NONE];
+    optional TXdsBootstrap XdsBootstrap = 32;
 
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
@@ -827,6 +828,44 @@ message TGRpcConfig {
     optional string EndpointId = 108;
 
     repeated TGRpcConfig ExtEndpoints = 200; // run specific services on separate endpoints
+
+    // TXdsBootstrap is used to configure XDS (Envoy's discovery service) support for gRPC endpoints.
+    // This enables dynamic service discovery, load balancing, and configuration via an XDS server.
+    // Configure these fields when you want your gRPC endpoints to use XDS for advanced traffic management.
+    // For more details, see: https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/bootstrap/v3/bootstrap.proto
+    // Format XDS bootstrap file: https://grpc.github.io/grpc/core/md_doc_grpc_xds_bootstrap_format.html
+    message TXdsBootstrap {
+        // TXdsServer describes an XDS server to connect to for configuration and service discovery.
+        message TXdsServer {
+            // TChannelCred specifies the credentials used to connect to the XDS server.
+            message TChannelCred {
+                optional string Type = 1; // Type of channel credentials (e.g., "insecure", "tls")
+                optional string Config = 2; // String in JSON format containing config for the type
+            }
+
+            optional string ServerUri = 1; // URI of the XDS server (e.g., "xds.example.com:443")
+            repeated TChannelCred ChannelCreds = 2; // Credentials for connecting to the XDS server
+            repeated string ServerFeatures = 3; // List of supported XDS server features (e.g., "xds_v3")
+        }
+
+        // TNode describes the node identity and locality information sent to the XDS server.
+        message TNode {
+            // TLocality specifies the region, zone, and subzone of the node.
+            message TLocality {
+                optional string Region = 1;
+                optional string Zone = 2;
+                optional string SubZone = 3;
+            }
+
+            optional string Id = 1; // Unique node identifier (e.g., "node-123")
+            optional string Cluster = 2; // Cluster name (e.g., "my-grpc-cluster")
+            optional TLocality Locality = 3; // Locality information for the node
+            optional string Meta = 4; // String in JSON format containing opaque metadata extending the node identifier. This field will be converted to 'metadata' in XDS bootstrap config
+        }
+
+        repeated TXdsServer XdsServers = 1; // List of XDS servers to connect to
+        optional TNode Node = 2; // Node identity and locality information
+    }
 }
 
 message TDynamicNodeConfig {
@@ -2794,6 +2833,7 @@ message TSystemTabletBackupConfig {
     oneof Backend {
         TFilesystemBackend Filesystem = 1;
     }
+    repeated fixed64 ExcludeTabletIds = 2;
 }
 
 message TAppConfig {

@@ -47,9 +47,9 @@ private:
     struct TTxConfigure;
     struct TTxSchemeShardStats;
     struct TTxAnalyze;
-    struct TTxAnalyzeTableRequest;
-    struct TTxAnalyzeTableResponse;
-    struct TTxAnalyzeTableDeliveryProblem;
+    struct TTxAnalyzeShardRequest;
+    struct TTxAnalyzeShardResponse;
+    struct TTxAnalyzeShardDeliveryProblem;
     struct TTxAnalyzeDeadline;
     struct TTxNavigate;
     struct TTxResolve;
@@ -121,7 +121,7 @@ private:
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
     void Handle(TEvPrivate::TEvFastPropagateCheck::TPtr& ev);
     void Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr& ev);
-    void Handle(TEvStatistics::TEvAnalyzeTableResponse::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeShardResponse::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessUrgent::TPtr& ev);
     void Handle(TEvPrivate::TEvPropagateTimeout::TPtr& ev);
 
@@ -194,7 +194,7 @@ private:
             hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             hFunc(TEvPrivate::TEvFastPropagateCheck, Handle);
             hFunc(TEvStatistics::TEvPropagateStatisticsResponse, Handle);
-            hFunc(TEvStatistics::TEvAnalyzeTableResponse, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeShardResponse, Handle);
             hFunc(TEvPrivate::TEvProcessUrgent, Handle);
             hFunc(TEvPrivate::TEvPropagateTimeout, Handle);
 

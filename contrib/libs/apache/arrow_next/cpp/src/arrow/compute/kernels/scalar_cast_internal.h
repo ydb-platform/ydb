@@ -18,11 +18,11 @@
 
 #pragma once
 
-#include "arrow/compute/api_vector.h"
-#include "arrow/compute/cast.h"           // IWYU pragma: export
-#include "arrow/compute/cast_internal.h"  // IWYU pragma: export
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h"           // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast_internal.h"  // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/util_internal.h"
 
 namespace arrow20 {
 

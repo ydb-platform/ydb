@@ -20,6 +20,7 @@ SRCS(
     ydb_replication_v1.proto
     ydb_sqs_topic_v1.proto
     ydb_tablet_v1.proto
+    ydb_test_shard_v1.proto
     ydb_view_v1.proto
     ydb_ymq_v1.proto
 )

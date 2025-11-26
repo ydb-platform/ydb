@@ -167,7 +167,7 @@ namespace NKikimr::NStorage {
             }
         }
 
-        StartProposition(&config, /*acceptLocalQuorum=*/ false, /*requireScepter=*/ false, /*mindPrev=*/ false);
+        StartProposition(&config, /*mindPrev=*/ false);
     }
 
     void TInvokeRequestHandlerActor::NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd) {
@@ -294,7 +294,7 @@ namespace NKikimr::NStorage {
         }
 
         clusterState->SetPerPileState(pileId.GetPileIndex(), NKikimrBridge::TClusterState::DISCONNECTED);
-        StartProposition(&config, /*acceptLocalQuorum=*/ false, /*requireScepter=*/ false, /*mindPrev=*/ false);
+        StartProposition(&config, /*mindPrev=*/ false);
     }
 
 } // NKikimr::NStorage

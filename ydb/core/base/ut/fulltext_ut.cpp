@@ -80,6 +80,20 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "Invalid filter_length_max: 3000 should be between 1 and 1000");
 
+        columnAnalyzers->set_use_filter_snowball(true);
+        columnAnalyzers->clear_language();
+        UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "language required when use_filter_snowball is set");
+
+        columnAnalyzers->set_language("klingon");
+        UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by snowball");
+
+        columnAnalyzers->set_language("english");
+        columnAnalyzers->set_use_filter_ngram(true);
+        UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "cannot set use_filter_snowball with use_filter_ngram or use_filter_edge_ngram at the same time");
+
         columnSettings = settings.add_columns();
         columnSettings->set_column("text2");
         UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
@@ -269,6 +283,28 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_filter_ngram_min_length(2);
         analyzers.set_filter_ngram_max_length(3);
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"эт", "это", "те", "тек"}));
+    }
+
+    Y_UNIT_TEST(AnalyzeFilterSnowball) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        const TString russianText = "машины ездят по дорогам исправно";
+
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(russianText, analyzers), (TVector<TString>{"машины", "ездят", "по", "дорогам", "исправно"}));
+
+        analyzers.set_use_filter_snowball(true);
+        analyzers.set_language("russian");
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(russianText, analyzers), (TVector<TString>{"машин", "езд", "по", "дорог", "исправн"}));
+
+        const TString englishText = "cars are driving properly on the roads";
+        analyzers.set_language("english");
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(englishText, analyzers), (TVector<TString>{"car", "are", "drive", "proper", "on", "the", "road"}));
+
+        analyzers.set_language("klingon");
+        UNIT_ASSERT_EXCEPTION(Analyze(englishText, analyzers), yexception);
+
+        analyzers.clear_language();
+        UNIT_ASSERT_EXCEPTION(Analyze(englishText, analyzers), yexception);
     }
 }
 

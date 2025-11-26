@@ -91,7 +91,9 @@ void TKqpComputeActor::DoBootstrap() {
     auto wakeupCallback = [actorSystem, selfId]() {
         actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     };
-    auto errorCallback = [this](const TString& error){ SendError(error); };
+    auto errorCallback = [actorSystem, selfId](const TString& error) {
+        actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
+    };
     try {
         PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
     } catch (const NMiniKQL::TKqpEnsureFail& e) {

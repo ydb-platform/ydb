@@ -25,6 +25,13 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 YDS_CONNECTION = "yds"
 COMPUTE_NODE_COUNT = 3
 
+class Param(object):
+    def __init__(
+        self,
+        rebalancing_timeout_sec=60
+    ):
+        self.rebalancing_timeout_sec = rebalancing_timeout_sec
+
 
 @pytest.fixture
 def kikimr(request):
@@ -35,7 +42,8 @@ def kikimr(request):
     kikimr.compute_plane.fq_config['row_dispatcher']['enabled'] = True
     kikimr.compute_plane.fq_config['row_dispatcher']['without_consumer'] = True
     kikimr.compute_plane.fq_config['row_dispatcher']['json_parser'] = {}
-
+    if hasattr(request, "param"):
+        kikimr.compute_plane.fq_config['row_dispatcher']['coordinator']['rebalancing_timeout_sec'] = request.param.rebalancing_timeout_sec
     kikimr.start_mvp_mock_server()
     kikimr.start()
     yield kikimr
@@ -1283,6 +1291,9 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
 
     @yq_v1
+    @pytest.mark.parametrize(
+        "kikimr", [Param(rebalancing_timeout_sec=5)], indirect=["kikimr"]
+    )
     def test_redistribute_partition_after_timeout(self, kikimr, client):
         partitions_count = 3
         self.init(client, "redistribute", partitions=partitions_count)

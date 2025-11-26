@@ -249,11 +249,11 @@ message ClusterStateResponse {
 
 message ClusterStateResultBlock {
     string name = 1;
-    string content = 2;
+    bytes content = 2;
     google.protobuf.Timestamp timestamp = 3;
 }
 
 message ClusterStateResult {
-    string result = 1; // deprecated
+    reserved 1; // deprecated
     repeated ClusterStateResultBlock blocks = 2;
 }

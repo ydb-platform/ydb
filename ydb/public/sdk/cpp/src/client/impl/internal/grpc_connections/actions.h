@@ -26,6 +26,7 @@ struct TPlainStatus;
 template<typename TResponse>
 using TResponseCb = std::function<void(TResponse*, TPlainStatus status)>;
 using TDeferredOperationCb = std::function<void(Ydb::Operations::Operation*, TPlainStatus status)>;
+using TDelayedCb = std::function<void(bool ok)>;
 
 template<typename TCb>
 class TGenericCbHolder {
@@ -175,16 +176,14 @@ private:
     std::multimap<std::string, std::string> Metadata_;
 };
 
-class TSimpleCbResult
-    : public TGenericCbHolder<TSimpleCb>
-    , public IObjectInQueue
+class TSimpleCbResult : public IObjectInQueue
 {
 public:
-    TSimpleCbResult(
-        TSimpleCb&& cb,
-        TGRpcConnectionsImpl* connections,
-        std::shared_ptr<IQueueClientContext> context);
+    TSimpleCbResult(TSimpleCb&& cb);
     void Process(void*) override;
+
+private:
+    TSimpleCb UserResponseCb_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -231,6 +230,20 @@ public:
     void OnError() override;
 private:
     TDeadline::Duration Period_;
+};
+
+class TDelayedAction
+    : public TAlarmActionBase<TDelayedCb>
+{
+public:
+    TDelayedAction(
+        TDelayedCb&& userCb,
+        TGRpcConnectionsImpl* connection,
+        std::shared_ptr<IQueueClientContext> context,
+        TDeadline deadline);
+
+    void OnAlarm() override;
+    void OnError() override;
 };
 
 } // namespace NYdb

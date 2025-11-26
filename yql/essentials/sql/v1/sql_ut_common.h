@@ -272,14 +272,14 @@ Y_UNIT_TEST(QualifiedAsteriskBefore) {
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        static bool seenStar = false;
+        static bool SeenStar = false;
         if (word == "FlattenMembers") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table."));
         } else if (word == "SqlProjectItem") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("megahelpful_len")));
-            UNIT_ASSERT_VALUES_EQUAL(seenStar, true);
+            UNIT_ASSERT_VALUES_EQUAL(SeenStar, true);
         } else if (word == "SqlProjectStarItem") {
-            seenStar = true;
+            SeenStar = true;
         }
     };
     TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("SqlProjectItem"), 0}, {TString("SqlProjectStarItem"), 0}};
@@ -296,14 +296,14 @@ Y_UNIT_TEST(QualifiedAsteriskAfter) {
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        static bool seenStar = false;
+        static bool SeenStar = false;
         if (word == "FlattenMembers") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table."));
         } else if (word == "SqlProjectItem") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("megahelpful_len")));
-            UNIT_ASSERT_VALUES_EQUAL(seenStar, false);
+            UNIT_ASSERT_VALUES_EQUAL(SeenStar, false);
         } else if (word == "SqlProjectStarItem") {
-            seenStar = true;
+            SeenStar = true;
         }
     };
     TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("SqlProjectItem"), 0}, {TString("SqlProjectStarItem"), 0}};
@@ -2794,7 +2794,8 @@ Y_UNIT_TEST(JoinByUdf) {
                "from T1 as a\n"
                "join T2 as b\n"
                "on Yson::SerializeJsonEncodeUtf8(a.align)=b.align;";
-    UNIT_ASSERT(SqlToYql(req).IsOk());
+    auto res = SqlToYql(req);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
 
 Y_UNIT_TEST(EscapedIdentifierAsLambdaArg) {
@@ -9827,7 +9828,7 @@ Y_UNIT_TEST(SingleArg) {
 } // Y_UNIT_TEST_SUITE(AggregationPhases)
 
 Y_UNIT_TEST_SUITE(Watermarks) {
-Y_UNIT_TEST(Insert) {
+Y_UNIT_TEST(InsertAs) {
     const auto stmt = R"sql(
 USE plato;
 
@@ -9839,7 +9840,7 @@ WITH(
     SCHEMA(
         ts Timestamp,
     ),
-    WATERMARK AS (ts)
+    WATERMARK AS (CAST(ts AS TImestamp))
 );
 )sql";
     const auto& res = SqlToYql(stmt);
@@ -9847,7 +9848,7 @@ WITH(
     UNIT_ASSERT(res.IsOk());
 }
 
-Y_UNIT_TEST(Select) {
+Y_UNIT_TEST(SelectAs) {
     const auto stmt = R"sql(
 USE plato;
 
@@ -9858,7 +9859,45 @@ WITH(
     SCHEMA(
         ts Timestamp,
     ),
-    WATERMARK AS (ts)
+    WATERMARK AS (CAST(ts AS TImestamp))
+);
+)sql";
+    const auto& res = SqlToYql(stmt);
+    Err2Str(res, EDebugOutput::ToCerr);
+    UNIT_ASSERT(res.IsOk());
+}
+Y_UNIT_TEST(InsertEquals) {
+    const auto stmt = R"sql(
+USE plato;
+
+INSERT INTO Output
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK = CAST(ts AS TImestamp)
+);
+)sql";
+    const auto& res = SqlToYql(stmt);
+    Err2Str(res, EDebugOutput::ToCerr);
+    UNIT_ASSERT(res.IsOk());
+}
+
+Y_UNIT_TEST(SelectEquals) {
+    const auto stmt = R"sql(
+USE plato;
+
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK = CAST(ts AS TImestamp)
 );
 )sql";
     const auto& res = SqlToYql(stmt);

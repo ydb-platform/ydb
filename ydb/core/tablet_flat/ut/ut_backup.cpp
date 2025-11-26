@@ -1026,6 +1026,33 @@ Y_UNIT_TEST_SUITE(Backup) {
         );
     }
 
+    Y_UNIT_TEST(ExcludeTablet) {
+        TEnv env;
+
+        env->GetAppData().SystemTabletBackupConfig.AddExcludeTabletIds(env.Tablet);
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+
+        Cerr << "...sleeping while tablet is doing some work" << Endl;
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+
+        Cerr << "...sleeping while tablet is doing some work" << Endl;
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        UNIT_ASSERT_C(!tabletIdDir.Exists(), "Tablet is not excluded from backup");
+    }
+
     Y_UNIT_TEST(RecoveryModeKeepsData) {
         TEnv env;
 

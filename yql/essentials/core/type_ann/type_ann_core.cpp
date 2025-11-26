@@ -624,7 +624,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus FailMeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& /* output */, TContext& ctx) {
-        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -632,6 +632,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        ui32 maxCount = 1;
         auto failureKind = input->Child(0)->Content();
         Y_ABORT_UNLESS(!TryGetEnv("YQL_DETERMINISTIC_MODE") || failureKind != "crash");
         if (failureKind == "expr") {
@@ -642,9 +643,22 @@ namespace NTypeAnnImpl {
             input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String)));
         } else if (failureKind == "exception") {
             ythrow yexception() << "FailMe exception";
+        } else if (failureKind == "opt_cycle" || failureKind == "opt_inf") {
+            maxCount = 2;
+            input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()), TStringBuilder() << "Unknown failure kind: " << failureKind));
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureMaxArgsCount(*input, maxCount, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->ChildrenSize() == 2) {
+            if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         return IGraphTransformer::TStatus::Ok;
@@ -2891,7 +2905,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus DecimalBinaryWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return DecimalBinaryWrapperBase(input, output, ctx, /*block = */ false);
+        return DecimalBinaryWrapperBase(input, output, ctx, /*blocks = */ false);
     }
 
     IGraphTransformer::TStatus CountBitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -5294,6 +5308,11 @@ namespace NTypeAnnImpl {
                     }
                     return IGraphTransformer::TStatus::Repeat;
                 }
+
+                if (structType->GetSize() > 0 && !ctx.Types.DirectRowDependsOn) {
+                    output = ctx.Expr.ChangeChild(*input, 0, ctx.Expr.NewCallable(input->Pos(), "AsStruct", {}));
+                    return IGraphTransformer::TStatus::Repeat;
+                }
             }
         }
 
@@ -5397,6 +5416,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Seal()
                             .Build();
                     }
+                    return IGraphTransformer::TStatus::Repeat;
+                }
+
+                if (structType->GetSize() > 0 && !ctx.Types.DirectRowDependsOn) {
+                    output = ctx.Expr.ChangeChild(*input, 0, ctx.Expr.NewCallable(input->Pos(), "AsStruct", {}));
                     return IGraphTransformer::TStatus::Repeat;
                 }
             }
@@ -5892,9 +5916,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             const auto optionName = option->Head().Content();
-            static const THashSet<TStringBuf> supportedOptions =
+            static const THashSet<TStringBuf> SupportedOptions =
                 {"isCompact", "tableSource", "nullsProcessed", "ansi", "warnNoAnsi"};
-            if (!supportedOptions.contains(optionName)) {
+            if (!SupportedOptions.contains(optionName)) {
                 ctx.Expr.AddError(
                     TIssue(ctx.Expr.GetPosition(option->Pos()), TStringBuilder() << "Unknown IN option '" << optionName));
                 return IGraphTransformer::TStatus::Error;
@@ -8125,7 +8149,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return status;
         }
 
-        static const std::unordered_map<std::string_view, std::string_view> deprecated = {
+        static const std::unordered_map<std::string_view, std::string_view> Deprecated = {
             {"String.Reverse", "'Unicode::Reverse'"},
             {"String.ToLower", "'String::AsciiToLower' or 'Unicode::ToLower'"},
             {"String.ToUpper", "'String::AsciiToUpper' or 'Unicode::ToUpper'"},
@@ -8139,7 +8163,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             {"Math.Fabs", "'Abs' builtin function"},
         };
 
-        if (const auto bad = deprecated.find(name); deprecated.cend() != bad) {
+        if (const auto bad = Deprecated.find(name); Deprecated.cend() != bad) {
             auto issue = TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Deprecated UDF function '" << moduleName << "::" << funcName << "', use " << bad->second << " instead.");
             SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_YQL_DEPRECATED_UDF_FUNCTION, issue);
             if (!ctx.Expr.AddWarning(issue)) {
@@ -8578,6 +8602,30 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TSet<ui32> usedIndices;
         for (const auto& structItem : structType->GetItems()) {
             auto foundIndex = type->ArgumentIndexByName(structItem->GetName());
+            TStringBuf foundName;
+            if (foundIndex) {
+                foundName = structItem->GetName();
+            }
+
+            if (!foundIndex && ctx.Types.CaseInsensitiveNamedArgs) {
+                for (ui32 index = 0; index < type->GetArgumentsSize(); ++index) {
+                    const auto& arg = type->GetArguments()[index];
+                    if (arg.Name.empty()) {
+                        continue;
+                    }
+
+                    if (AsciiEqualsIgnoreCase(arg.Name, structItem->GetName())) {
+                        if (!foundIndex) {
+                            foundIndex = index;
+                            foundName = arg.Name;
+                        } else {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Ambigious argument name: " << structItem->GetName()));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    }
+                }
+            }
+
             if (!foundIndex) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Unknown argument name: " << structItem->GetName()));
                 return IGraphTransformer::TStatus::Error;
@@ -8589,7 +8637,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
 
-            expectedStructTypeItems.push_back(ctx.Expr.MakeType<TItemExprType>(structItem->GetName(),
+            expectedStructTypeItems.push_back(ctx.Expr.MakeType<TItemExprType>(foundName,
                 type->GetArguments()[*foundIndex].Type));
 
             usedIndices.insert(*foundIndex);
@@ -12738,8 +12786,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TStringBuf op = input->Head().Content();
-        static const THashSet<TStringBuf> ops = {"==", "!=", "<=", "<", ">=", ">", "Exists", "NotExists", "===", "StartsWith", "NotStartsWith"};
-        if (!ops.contains(op)) {
+        static const THashSet<TStringBuf> Ops = {"==", "!=", "<=", "<", ">=", ">", "Exists", "NotExists", "===", "StartsWith", "NotStartsWith"};
+        if (!Ops.contains(op)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()),
                 TStringBuilder() << "Unknown operation: " << op));
             return IGraphTransformer::TStatus::Error;

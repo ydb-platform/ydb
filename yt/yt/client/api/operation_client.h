@@ -130,6 +130,25 @@ struct TListOperationEventsOptions
     i64 Limit = 1000;
 };
 
+DEFINE_ENUM(EJobTraceProgress,
+    ((InProgress)   (0))
+    ((Finished)     (1))
+);
+
+DEFINE_ENUM(EJobTraceHealth,
+    ((Healthy)      (0))
+    ((Unhealthy)    (1))
+);
+
+struct TListJobTracesOptions
+    : public TTimeoutOptions
+    , public TMasterReadOptions
+{
+    std::optional<bool> PerProcess;
+
+    i64 Limit = 1000;
+};
+
 struct TListOperationsAccessFilter
     : public NYTree::TYsonStruct
 {
@@ -230,7 +249,7 @@ struct TListJobsOptions
 {
     // NB(bystrovserg): Do not forget to add new options to continuation token serializer!
     NJobTrackerClient::TJobId JobCompetitionId;
-    NJobTrackerClient::TJobId MainJobId;
+    NJobTrackerClient::TJobId DistributedGroupMainJobId;
     std::optional<NJobTrackerClient::EJobType> Type;
     std::optional<NJobTrackerClient::EJobState> State;
     std::optional<std::string> Address;
@@ -408,7 +427,7 @@ struct TJob
     std::optional<bool> HasSpec;
     std::optional<bool> HasCompetitors;
     std::optional<bool> HasProbingCompetitors;
-    NJobTrackerClient::TJobId MainJobId;
+    NJobTrackerClient::TJobId DistributedGroupMainJobId;
     NJobTrackerClient::TJobId JobCompetitionId;
     NJobTrackerClient::TJobId ProbingJobCompetitionId;
     NYson::TYsonString Error;
@@ -424,7 +443,7 @@ struct TJob
     std::optional<TString> Pool;
     std::optional<TString> MonitoringDescriptor;
     std::optional<ui64> JobCookie;
-    std::optional<ui64> JobCookieGroupIndex;
+    std::optional<ui64> DistributedGroupJobIndex;
     NYson::TYsonString ArchiveFeatures;
     std::optional<std::string> OperationIncarnation;
     std::optional<NScheduler::TAllocationId> AllocationId;
@@ -466,6 +485,24 @@ struct TOperationEvent
 };
 
 void Serialize(const TOperationEvent& operationEvent, NYson::IYsonConsumer* consumer);
+
+struct TProcessTraceMeta
+{
+    NJobTrackerClient::EJobTraceState State = NJobTrackerClient::EJobTraceState::Started;
+};
+
+void Serialize(const TProcessTraceMeta& processTrace, NYson::IYsonConsumer* consumer);
+
+struct TJobTraceMeta
+{
+    NJobTrackerClient::TJobTraceId TraceId;
+    EJobTraceProgress Progress = EJobTraceProgress::InProgress;
+    EJobTraceHealth Health = EJobTraceHealth::Healthy;
+
+    THashMap<int, TProcessTraceMeta> ProcessTraceMetas;
+};
+
+void Serialize(const TJobTraceMeta& jobTrace, NYson::IYsonConsumer* consumer);
 
 struct TListJobsStatistics
 {
@@ -591,6 +628,11 @@ struct IOperationClient
     virtual TFuture<TListJobsResult> ListJobs(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const TListJobsOptions& options = {}) = 0;
+
+    virtual TFuture<std::vector<TJobTraceMeta>> ListJobTraces(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NJobTrackerClient::TJobId jobId,
+        const TListJobTracesOptions& options = {}) = 0;
 
     virtual TFuture<NYson::TYsonString> GetJob(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,

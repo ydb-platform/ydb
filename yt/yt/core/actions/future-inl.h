@@ -1299,15 +1299,24 @@ TFuture<U> TFutureBase<T>::As() const
 }
 
 template <class T>
-TFuture<void> TFutureBase<T>::AsVoid() const
+TFuture<void> TFutureBase<T>::AsVoid() const&
 {
     return TFuture<void>(Impl_);
 }
 
 template <class T>
+TFuture<void> TFutureBase<T>::AsVoid() &&
+{
+    return TFuture<void>(std::move(Impl_));
+}
+
+// NB: In contrast to AsVoid, one cannot add (a more efficent) &&-overload
+// here as future-to-cancelable conversion must involve toggling ref-counters.
+// See TCancelableStateBase.
+template <class T>
 TCancelable TFutureBase<T>::AsCancelable() const
 {
-    return Impl_->AsCancelable();
+    return TCancelable(Impl_);
 }
 
 template <class T>
@@ -1378,9 +1387,15 @@ TFuture<R> TFuture<T>::ApplyUnique(TCallback<TFuture<R>(T&&)> callback) const
 }
 
 template <class T>
-TUniqueFuture<T> TFuture<T>::AsUnique() const
+TUniqueFuture<T> TFuture<T>::AsUnique() const&
 {
     return TUniqueFuture<T>(this->Impl_);
+}
+
+template <class T>
+TUniqueFuture<T> TFuture<T>::AsUnique() &&
+{
+    return TUniqueFuture<T>(std::move(this->Impl_));
 }
 
 template <class T>

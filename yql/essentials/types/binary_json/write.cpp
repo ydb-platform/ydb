@@ -727,6 +727,61 @@ template <typename TOnDemandValue>
     return simdjson::SUCCESS;
 #undef RETURN_IF_NOT_SUCCESS
 }
+
+void SerializeEntryCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const NBinaryJson::TEntryCursor& value) {
+    switch (value.GetType()) {
+        case NBinaryJson::EEntryType::BoolFalse:
+            callbacks.OnBoolean(false);
+            break;
+        case NBinaryJson::EEntryType::BoolTrue:
+            callbacks.OnBoolean(true);
+            break;
+        case NBinaryJson::EEntryType::Null:
+            callbacks.OnNull();
+            break;
+        case NBinaryJson::EEntryType::String:
+            callbacks.OnString(value.GetString());
+            break;
+        case NBinaryJson::EEntryType::Number:
+            callbacks.OnDouble(value.GetNumber());
+            break;
+        case NBinaryJson::EEntryType::Container: {
+            auto container = value.GetContainer();
+            if (container.GetType() == NBinaryJson::EContainerType::Array) {
+                callbacks.OnOpenArray();
+
+                auto it = container.GetArrayIterator();
+                while (it.HasNext()) {
+                    auto value = it.Next();
+                    SerializeEntryCursorToBinaryJson(callbacks, value);
+                }
+
+                callbacks.OnCloseArray();
+
+            } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
+                callbacks.OnOpenMap();
+
+                auto it = container.GetObjectIterator();
+                while (it.HasNext()) {
+                    auto [key, value] = it.Next();
+                    if (key.GetType() != NBinaryJson::EEntryType::String) {
+                        throw yexception() << "Unexpected non-string key: " << key.GetType();
+                    }
+
+                    callbacks.OnMapKey(key.GetString());
+                    SerializeEntryCursorToBinaryJson(callbacks, value);
+                }
+
+                callbacks.OnCloseMap();
+            } else {
+                throw yexception() << "Unexpected type in container iterator: " << container.GetType();
+            }
+            break;
+        }
+        default:
+            throw yexception() << "Unexpected entry type: " << value.GetType();
+    }
+}
 } // namespace
 
 std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json, bool allowInf) {
@@ -760,6 +815,19 @@ std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json, 
 TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {
     TBinaryJsonCallbacks callbacks(/* throwException */ false, /* allowInf */ false);
     DomToJsonIndex(value, callbacks);
+    TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
+    return std::move(serializer).Serialize();
+}
+
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(const NBinaryJson::TEntryCursor& value) {
+    TBinaryJsonCallbacks callbacks(/* throwException */ true, /* allowInf */ false);
+
+    try {
+        SerializeEntryCursorToBinaryJson(callbacks, value);
+    } catch (const yexception& ex) {
+        return TString(ex.what());
+    }
+
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
     return std::move(serializer).Serialize();
 }

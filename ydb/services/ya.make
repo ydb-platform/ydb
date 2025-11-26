@@ -24,6 +24,7 @@ RECURSE(
     replication
     sqs_topic
     tablet
+    test_shard
     view
     ydb
     ymq

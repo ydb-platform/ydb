@@ -1000,37 +1000,23 @@ public:
             , RowBatcher(ColumnsMapping.size(), std::nullopt, Alloc) {
     }
 
-    void Fill(const IDataBatchPtr& data) override {
-        YQL_ENSURE(RowBatcher.IsEmpty());
-        auto* batch = dynamic_cast<TRowBatch*>(data.Get());
-        AFL_ENSURE(batch);
-        const auto& rows = batch->GetRows();
-        AddDataShard(rows.begin(), rows.end());
-    }
-
-    void Fill(const TRowsRef& data) override {
-        YQL_ENSURE(RowBatcher.IsEmpty());
-        AddDataShard(data.begin(), data.end());
-    }
-
-    void AddDataShard(
-            TVector<TConstArrayRef<TCell>>::const_iterator begin,
-            TVector<TConstArrayRef<TCell>>::const_iterator end) {
+    void AddRow(TConstArrayRef<TCell> row) override {
         const size_t columnsCount = ColumnsMapping.size();
         std::vector<TCell> cells(columnsCount);
-        for (auto it = begin; it != end; ++it) {
-            const auto& row = *it;
-            for (size_t index = 0; index < columnsCount; ++index) {
-                cells[index] = row[ColumnsMapping[index]];
-            }
-            RowBatcher.AddRow(cells);
+        for (size_t index = 0; index < columnsCount; ++index) {
+            cells[index] = row[ColumnsMapping[index]];
         }
+        RowBatcher.AddRow(std::move(cells));
     }
 
     IDataBatchPtr Flush() override {
         auto result = RowBatcher.Flush(true);
         YQL_ENSURE(RowBatcher.IsEmpty());
         return result;
+    }
+
+    bool IsEmpty() const override {
+        return RowBatcher.IsEmpty();
     }
 
 private:
@@ -1096,7 +1082,7 @@ std::vector<ui32> CreateMapping(
     return columnsMapping;
 }
 
-std::vector<ui32> GetKeyIndexes(
+std::vector<ui32> GetIndexes(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const TConstArrayRef<ui32> inputWriteIndex,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
@@ -1111,6 +1097,29 @@ std::vector<ui32> GetKeyIndexes(
         outputWriteIndex,
         preferAdditionalInputColumns);
     return columnsMapping;
+}
+
+bool IsEqual(
+        TConstArrayRef<TCell> firstCells,
+        TConstArrayRef<TCell> secondCells,
+        const std::vector<ui32>& newIndexes,
+        const std::vector<ui32>& oldIndexes,
+        TConstArrayRef<NScheme::TTypeInfo> types) {
+    AFL_ENSURE(newIndexes.size() == types.size());
+    AFL_ENSURE(oldIndexes.size() == types.size());
+    auto getCell = [&](const size_t index) {
+        if (index < firstCells.size()) {
+            return firstCells[index];
+        }
+        AFL_ENSURE(secondCells.size() + firstCells.size() > index);
+        return secondCells[index - firstCells.size()];
+    };
+    for (size_t index = 0; index < types.size(); ++index) {
+        if (0 != CompareTypedCells(getCell(newIndexes[index]), getCell(oldIndexes[index]), types[index])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 IDataBatchProjectionPtr CreateDataBatchProjection(
@@ -1140,58 +1149,6 @@ std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& b
     return std::vector<TConstArrayRef<TCell>>(batchRows.begin(), batchRows.end());
 }
 
-std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
-        const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
-        const std::vector<TConstArrayRef<bool>>& masks,
-        const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes) {
-    size_t totalRows = 0;
-    for (const auto& batch : batches) {
-        auto* data = dynamic_cast<TRowBatch*>(batch.Get());
-        AFL_ENSURE(data);
-        totalRows += data->GetRows().Size();
-    }
-
-    std::vector<TConstArrayRef<TCell>> rows;
-    rows.reserve(totalRows);
-
-    for (size_t batchIndex = 0; batchIndex < batches.size(); ++batchIndex) {
-        const auto& batch = batches[batchIndex];
-
-        auto* data = dynamic_cast<TRowBatch*>(batch.Get());
-        AFL_ENSURE(data);
-        const auto& batchRows = data->GetRows();
-        
-        for (size_t rowIndex = 0; rowIndex < batchRows.Size(); ++rowIndex) {
-            if (masks.empty() || masks[batchIndex][rowIndex]) {
-                rows.push_back(batchRows[rowIndex]);
-            }
-        }
-    }
-    // We need only last written row for each key
-    std::reverse(rows.begin(), rows.end());
-
-    std::stable_sort(
-        rows.begin(),
-        rows.end(),
-        [&keyColumnTypes](const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
-            AFL_ENSURE(lhs.size() == rhs.size());
-            AFL_ENSURE(lhs.size() >= keyColumnTypes.size());
-            return CompareTypedCellVectors(lhs.data(), rhs.data(), keyColumnTypes.data(), keyColumnTypes.size()) < 0;
-        });
-
-    auto rowsToEraseBegin = std::unique(
-        rows.begin(),
-        rows.end(),
-        [&keyColumnTypes](const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
-            AFL_ENSURE(lhs.size() == rhs.size());
-            AFL_ENSURE(lhs.size() >= keyColumnTypes.size());
-            return CompareTypedCellVectors(lhs.data(), rhs.data(), keyColumnTypes.data(), keyColumnTypes.size()) == 0;
-        });
-
-    rows.erase(rowsToEraseBegin, rows.end());
-    return rows;
-}
-
 std::vector<TConstArrayRef<TCell>> CutColumns(
        const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount) {
     std::vector<TConstArrayRef<TCell>> result;
@@ -1213,18 +1170,21 @@ TUniqueSecondaryKeyCollector::TUniqueSecondaryKeyCollector(
         , SecondaryKeyColumns(secondaryKeyColumns)
         , SecondaryTableKeyColumns(secondaryTableKeyColumns)
         , PrimaryKeyInSecondaryTableKeyColumns(primaryKeyInSecondaryTableKeyColumns) {
-    AFL_ENSURE(PrimaryKeyInSecondaryTableKeyColumns.size() == primaryKeyColumnTypes.size());
-    AFL_ENSURE(PrimaryKeyInSecondaryTableKeyColumns.size() <= secondaryTableKeyColumns.size());
-    AFL_ENSURE(secondaryTableKeyColumns.size() == secondaryKeyColumnTypes.size());
-    AFL_ENSURE(secondaryKeyColumns.size() <= secondaryTableKeyColumns.size());
-    AFL_ENSURE(secondaryTableKeyColumns.size() <= primaryKeyColumnTypes.size() + secondaryKeyColumnTypes.size());
+    AFL_ENSURE(PrimaryKeyInSecondaryTableKeyColumns.size() == PrimaryKeyColumnTypes.size());
+    AFL_ENSURE(PrimaryKeyInSecondaryTableKeyColumns.size() <= SecondaryKeyColumnTypes.size());
+    AFL_ENSURE(SecondaryTableKeyColumns.size() == SecondaryKeyColumnTypes.size());
+    AFL_ENSURE(SecondaryKeyColumns.size() <= SecondaryTableKeyColumns.size());
+    AFL_ENSURE(SecondaryTableKeyColumns.size() <= PrimaryKeyColumnTypes.size() + SecondaryKeyColumnTypes.size());
 }
 
 bool TUniqueSecondaryKeyCollector::AddRow(const TConstArrayRef<TCell> row) {
     Cells.emplace_back();
-    Cells.back().reserve(SecondaryTableKeyColumns.size());
+    Cells.back().reserve(SecondaryTableKeyColumns.size() + PrimaryKeyColumnTypes.size());
     for (const auto& index : SecondaryTableKeyColumns) {
         Cells.back().push_back(row[index]);
+    }
+    for (size_t index = 0; index < PrimaryKeyColumnTypes.size(); ++index) {
+        Cells.back().push_back(Cells.back()[PrimaryKeyInSecondaryTableKeyColumns[index]]);
     }
 
     return AddRowImpl();
@@ -1233,9 +1193,12 @@ bool TUniqueSecondaryKeyCollector::AddRow(const TConstArrayRef<TCell> row) {
 bool TUniqueSecondaryKeyCollector::AddSecondaryTableRow(const TConstArrayRef<TCell> row) {
     AFL_ENSURE(row.size() == SecondaryTableKeyColumns.size());
     Cells.emplace_back();
-    Cells.back().reserve(SecondaryTableKeyColumns.size());
+    Cells.back().reserve(SecondaryTableKeyColumns.size() + PrimaryKeyColumnTypes.size());
     for (const auto& cell : row) {
         Cells.back().push_back(cell);
+    }
+    for (size_t index = 0; index < PrimaryKeyColumnTypes.size(); ++index) {
+        Cells.back().push_back(Cells.back()[PrimaryKeyInSecondaryTableKeyColumns[index]]);
     }
 
     return AddRowImpl();
@@ -1244,15 +1207,7 @@ bool TUniqueSecondaryKeyCollector::AddSecondaryTableRow(const TConstArrayRef<TCe
 bool TUniqueSecondaryKeyCollector::AddRowImpl() {
     const auto& row = TConstArrayRef<TCell>(Cells.back());
 
-    auto createPrimaryKey = [&](TConstArrayRef<TCell> data) {
-        std::vector<TCell> primaryKey(PrimaryKeyColumnTypes.size());
-        for (size_t index = 0; index < PrimaryKeyColumnTypes.size(); ++index) {
-            primaryKey[index] = data[PrimaryKeyInSecondaryTableKeyColumns[index]];
-        }
-        return primaryKey;
-    };
-
-    const auto primaryKey = createPrimaryKey(row);
+    const auto primaryKey = row.last(PrimaryKeyColumnTypes.size());
     const auto secondaryKey = row.first(SecondaryKeyColumns.size());
     const auto iterPrimary = PrimaryToSecondary.find(primaryKey);
 
@@ -1265,7 +1220,8 @@ bool TUniqueSecondaryKeyCollector::AddRowImpl() {
     if (secondaryKeyHasNull) {
         // Can't conflict with other keys
         if (iterPrimary != PrimaryToSecondary.end()) {
-            const auto& oldSecondaryKey = TConstArrayRef<TCell>(Cells.at(iterPrimary->second)).first(SecondaryKeyColumns.size());
+            const auto& oldSecondaryKey = TConstArrayRef<TCell>(Cells.at(iterPrimary->second))
+                .first(SecondaryKeyColumns.size());
             SecondaryToPrimary.erase(oldSecondaryKey);
             PrimaryToSecondary.erase(primaryKey);
         }
@@ -1273,7 +1229,8 @@ bool TUniqueSecondaryKeyCollector::AddRowImpl() {
         const auto iterSecondary = SecondaryToPrimary.find(secondaryKey);
 
         if (iterSecondary != SecondaryToPrimary.end()) {
-            const auto oldPrimaryKey = createPrimaryKey(Cells.at(iterSecondary->second));
+            const auto oldPrimaryKey = TConstArrayRef<TCell>(Cells.at(iterSecondary->second))
+                .last(PrimaryKeyColumnTypes.size());
             if (0 != CompareTypedCellVectors(
                             oldPrimaryKey.data(),
                             primaryKey.data(),
@@ -1285,7 +1242,8 @@ bool TUniqueSecondaryKeyCollector::AddRowImpl() {
         }
 
         if (iterPrimary != PrimaryToSecondary.end()) {
-            const auto& oldSecondaryKey = TConstArrayRef<TCell>(Cells.at(iterPrimary->second)).first(SecondaryKeyColumns.size());
+            const auto& oldSecondaryKey = TConstArrayRef<TCell>(Cells.at(iterPrimary->second))
+                .first(SecondaryKeyColumns.size());
             if (0 == CompareTypedCellVectors(
                     secondaryKey.data(),
                     oldSecondaryKey.data(),
@@ -1298,7 +1256,7 @@ bool TUniqueSecondaryKeyCollector::AddRowImpl() {
         }
 
         PrimaryToSecondary[primaryKey] = Cells.size() - 1;
-        SecondaryToPrimary[std::vector<TCell>(secondaryKey.begin(), secondaryKey.end())] = Cells.size() - 1;
+        SecondaryToPrimary[secondaryKey] = Cells.size() - 1;
 
         UniqueCellsSet.insert(secondaryKey);
     }

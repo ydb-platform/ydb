@@ -335,7 +335,13 @@ std::optional<std::string> FindHeader(const IRequestPtr& req, TStringBuf headerN
 
 std::optional<std::string> FindBalancerRequestId(const IRequestPtr& req)
 {
-    return FindHeader(req, "X-Req-Id");
+    if (auto result = FindHeader(req, "X-Req-Id")) {
+        return *result;
+    }
+    if (auto result = FindHeader(req, "X-Request-Id")) {
+        return *result;
+    }
+    return std::nullopt;
 }
 
 std::optional<std::string> FindBalancerRealIP(const IRequestPtr& req)

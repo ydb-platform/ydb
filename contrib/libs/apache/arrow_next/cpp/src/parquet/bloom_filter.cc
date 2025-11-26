@@ -19,16 +19,16 @@
 #include <cstring>
 #include <memory>
 
-#include "arrow/result.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
 
-#include "generated/parquet_types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/generated/parquet_types.h"
 
-#include "parquet/bloom_filter.h"
-#include "parquet/exception.h"
-#include "parquet/thrift_internal.h"
-#include "parquet/xxhasher.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/bloom_filter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/thrift_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/xxhasher.h"
 
 namespace parquet20 {
 constexpr uint32_t BlockSplitBloomFilter::SALT[kBitsSetPerBlock];

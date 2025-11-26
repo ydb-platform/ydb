@@ -341,15 +341,16 @@ std::set<std::string> BuildNotNullColumns(const TConstArrayRef<NKikimrKqp::TKqpC
 }
 
 std::vector<std::pair<TString, NScheme::TTypeInfo>> BuildBatchBuilderColumns(
+    const std::vector<ui32>& writeIndex,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
-    std::vector<std::pair<TString, NScheme::TTypeInfo>> result(inputColumns.size());
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> result(writeIndex.size());
     for (size_t index = 0; index < inputColumns.size(); ++index) {
         const auto& column = inputColumns[index];
         AFL_ENSURE(column.HasTypeId());
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
             column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-        result[index].first = column.GetName();
-        result[index].second = typeInfoMod.TypeInfo;
+        result[writeIndex[index]].first = column.GetName();
+        result[writeIndex[index]].second = typeInfoMod.TypeInfo;
     }
     return result;
 }
@@ -384,7 +385,7 @@ public:
                 alloc ? NKikimr::NMiniKQL::GetArrowMemoryPool() : arrow::default_memory_pool()))
             , Alloc(std::move(alloc)) {
         TString err;
-        if (!BatchBuilder->Start(BuildBatchBuilderColumns(/*WriteIndex,*/ inputColumns), 0, 0, err)) {
+        if (!BatchBuilder->Start(BuildBatchBuilderColumns(WriteIndex, inputColumns), 0, 0, err)) {
             yexception() << "Failed to start batch builder: " + err;
         }
     }

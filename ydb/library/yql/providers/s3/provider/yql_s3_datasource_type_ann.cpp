@@ -655,12 +655,12 @@ public:
                         return false;
                     }
 
+                    THashSet<TStringBuf> uniqs;
                     for (size_t i = 1; i < setting.ChildrenSize(); ++i) {
                         const auto& column = setting.Child(i);
                         if (!EnsureAtom(*column, ctx)) {
                             return false;
                         }
-                        THashSet<TStringBuf> uniqs;
                         if (!uniqs.emplace(column->Content()).second) {
                             ctx.AddError(TIssue(ctx.GetPosition(column->Pos()),
                                 TStringBuilder() << "Duplicate partitioned_by column '" << column->Content() << "'"));

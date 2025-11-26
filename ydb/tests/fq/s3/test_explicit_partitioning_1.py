@@ -687,7 +687,7 @@ text3''',
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_valid_new_syntaxis(self, kikimr, s3, client, yq_version, unique_prefix):
+    def test_valid_new_syntax(self, kikimr, s3, client, yq_version, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )

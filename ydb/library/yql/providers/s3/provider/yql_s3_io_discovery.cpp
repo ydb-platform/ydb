@@ -735,8 +735,8 @@ private:
                 partitioningStr = partitionedBySetting->Tail().Content();
                 partitioningPos = partitionedBySetting->Tail().Pos();
 
-                if (!(partitioningStr.starts_with("[\'") && partitioningStr.ends_with("\']"))) {
-                    partitioningStr = TStringBuilder{} << "[\'" << partitioningStr << "\']";
+                if (!(partitioningStr.starts_with("['") && partitioningStr.ends_with("']"))) {
+                    partitioningStr = TStringBuilder{} << "['" << partitioningStr << "']";
                 }
                 std::replace(partitioningStr.begin(), partitioningStr.end(), '\'', '\"');
 
@@ -744,7 +744,7 @@ private:
                 try {
                     NJson::ReadJsonTree(partitioningStr, &partitioningJson, /*throwOnError*/ true);
                 } catch (const std::exception& e) {
-                    ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), "partitioned_by is not a json"));
+                    ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), TStringBuilder() << "Failed to parse partitioned_by as JSON: " << e.what()));
                     ctx.AddWarning(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), formattingTip));
                     return false;
                 }

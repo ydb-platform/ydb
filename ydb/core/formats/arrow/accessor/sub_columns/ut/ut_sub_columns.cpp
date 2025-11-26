@@ -1,6 +1,7 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/data_extractor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -220,7 +221,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         }
     }
 
-    Y_UNIT_TEST(JsonRestorerValidation) {
+    Y_UNIT_TEST(JsonRestorer) {
         NKikimr::NArrow::NAccessor::TJsonRestorer restorer;
         restorer.SetValueByPath("a", "b");
         restorer.SetValueByPath("b.c", "d");
@@ -238,6 +239,76 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         expected["."]["k"] = "l";
         expected["\""] = "o";
         expected["'"] = "p";
+
         UNIT_ASSERT_VALUES_EQUAL(expected, restorer.GetResult());
+    }
+
+    Y_UNIT_TEST(SplitJsonPath) {
+        TString path = R"($.a."b".'c'.'d"'."'"."\"".""."."[0,2].b[0].c[3][4].d[2 to 5].e[last])";
+        TVector<TString> expectedItems = {"a", "b", "c", "d\"", "'", "\"", "", ".", "[0,2]", "b", "[0]", "c", "[3]", "[4]", "d", "[2 to 5]", "e", "[last]"};
+        using enum NYql::NJsonPath::EJsonPathItemType;
+        TVector<NYql::NJsonPath::EJsonPathItemType> expectedTypes = {MemberAccess, MemberAccess, MemberAccess, MemberAccess, MemberAccess, MemberAccess, MemberAccess, MemberAccess, ArrayAccess,
+            MemberAccess, ArrayAccess, MemberAccess, ArrayAccess, ArrayAccess, MemberAccess, ArrayAccess, MemberAccess, ArrayAccess};
+        TVector<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathBuf::size_type> expectedStartPositions = {1, 3, 7, 11, 16, 20, 25, 28, 32, 37, 39, 42, 44, 47, 50, 52, 60, 62};
+
+        auto result = NKikimr::NArrow::NAccessor::NSubColumns::SplitJsonPath(path, NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = true});
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
+        const auto [pathItems, pathTypes, startPositions] = result.DetachResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedItems, pathItems);
+        UNIT_ASSERT_EQUAL(expectedTypes, pathTypes);
+        UNIT_ASSERT_VALUES_EQUAL(expectedStartPositions, startPositions);
+    }
+
+    Y_UNIT_TEST(JsonPathTrie) {
+        TVector<TString> testPaths = {"$.a.b", "$.b", "$.c.d"};
+        TVector<std::shared_ptr<IChunkedArray>> testAccessors;
+        NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
+
+        for (const auto& path : testPaths) {
+            testAccessors.emplace_back(TTrivialArray::BuildEmpty(std::make_shared<arrow::BinaryType>()));
+            jsonPathAccessorTrie.Insert(path, testAccessors.back());
+        }
+
+        {
+            for (decltype(testPaths)::size_type i = 0; i < testPaths.size(); ++i) {
+                auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(testPaths[i]);
+                UNIT_ASSERT_C(jsonPathAccessorResult.IsSuccess(), testPaths[i] + " error: " + jsonPathAccessorResult.GetErrorMessage());
+                UNIT_ASSERT(jsonPathAccessorResult->IsValid());
+                UNIT_ASSERT_VALUES_EQUAL(testAccessors[i].get(), jsonPathAccessorResult->GetChunkedArrayAccessor().get());
+                UNIT_ASSERT_VALUES_EQUAL(TString{}, jsonPathAccessorResult->GetRemainingPath());
+            }
+        }
+
+        {
+            TVector<TString> testShortPaths = {"$.a", "$.\"\"", "$.c"};
+            for (const auto& path : testShortPaths) {
+                auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(path);
+                UNIT_ASSERT_C(jsonPathAccessorResult.IsSuccess(), path + " error: " + jsonPathAccessorResult.GetErrorMessage());
+                UNIT_ASSERT(!jsonPathAccessorResult->IsValid());
+                UNIT_ASSERT_VALUES_EQUAL(nullptr, jsonPathAccessorResult->GetChunkedArrayAccessor().get());
+                UNIT_ASSERT_VALUES_EQUAL(TString{}, jsonPathAccessorResult->GetRemainingPath());
+            }
+        }
+
+        {
+            TVector<TString> testLongPaths = {"$.a.b.e", "$.b.\"\".g[3].h", "$.c.d[54]"};
+            TVector<TString> testLongRemainingPaths = {"$.e", "$.\"\".g[3].h", "$[54]"};
+            for (decltype(testPaths)::size_type i = 0; i < testPaths.size(); ++i) {
+                auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(testLongPaths[i]);
+                UNIT_ASSERT_C(jsonPathAccessorResult.IsSuccess(), testPaths[i] + " error: " + jsonPathAccessorResult.GetErrorMessage());
+                UNIT_ASSERT(jsonPathAccessorResult->IsValid());
+                UNIT_ASSERT_VALUES_EQUAL(testAccessors[i].get(), jsonPathAccessorResult->GetChunkedArrayAccessor().get());
+                UNIT_ASSERT_VALUES_EQUAL(testLongRemainingPaths[i], jsonPathAccessorResult->GetRemainingPath());
+            }
+        }
+
+        {
+            TVector<TString> testInvalidPaths = {"$.a.b.[2]", "$.b.", "$.c[]"};
+            for (decltype(testPaths)::size_type i = 0; i < testPaths.size(); ++i) {
+                auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(testInvalidPaths[i]);
+                UNIT_ASSERT(jsonPathAccessorResult.IsFail());
+            }
+        }
     }
 };

@@ -4,6 +4,7 @@
 
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
@@ -190,45 +191,24 @@ const NJson::TJsonValue& TJsonRestorer::GetResult() const {
     return Result;
 }
 
-// To avoid string copies return TStringBuf
-// TJsonPathPtr holds the original parsed string, so it is needed to return it to avoid heap-use-after-free problems
-// Path is returned in reversed order
-TConclusion<std::pair<std::vector<TStringBuf>, const NYql::NJsonPath::TJsonPathPtr>> SplitJsonPath(const std::string_view& svPath) {
-    NYql::TIssues issues;
-    auto path = NYql::NJsonPath::ParseJsonPath(svPath, issues, 5);
-    if (!path) {
-        return TConclusionStatus::Fail(issues.ToOneLineString());
-    }
-    NYql::NJsonPath::TJsonPathReader reader(path);
-    auto it = &reader.ReadFirst();
-    std::vector<TStringBuf> result;
-    while (it->Type == NYql::NJsonPath::EJsonPathItemType::MemberAccess) {
-        result.push_back(it->GetString());
-        it = &reader.ReadInput(*it);
-    }
-    if (it->Type != NYql::NJsonPath::EJsonPathItemType::ContextObject) {
-        return TConclusionStatus::Fail("Unsupported path");
-    }
-
-    return std::make_pair(result, path);
-}
-
 void TJsonRestorer::SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue) {
-    // Path maybe empty (for backward compatibility), so make it $."" in this case
-    auto splitResult = SplitJsonPath("$." + (path.empty() ? "\"\"" : path));
+    // Path may be empty (for backward compatibility), so make it $."" in this case
+    auto splitResult = NSubColumns::SplitJsonPath("$." + (path.empty() ? "\"\"" : path), NSubColumns::TJsonPathSplitSettings{.FillTypes = true});
     AFL_VERIFY(splitResult.IsSuccess())("error", splitResult.GetErrorMessage());
-    const auto [keys, pathPtr] = splitResult.DetachResult();
-    AFL_VERIFY(keys.size() > 0);
+    const auto [pathItems, pathTypes, _] = splitResult.DetachResult();
+    AFL_VERIFY(pathItems.size() > 0);
+    AFL_VERIFY(pathItems.size() == pathTypes.size());
     NJson::TJsonValue* current = &Result;
-    for (decltype(keys)::size_type i = keys.size() - 1; i > 0; --i) {
+    for (decltype(pathItems)::size_type i = 0; i < pathItems.size() - 1; ++i) {
+        AFL_VERIFY(pathTypes[i] == NYql::NJsonPath::EJsonPathItemType::MemberAccess);
         NJson::TJsonValue* currentNext = nullptr;
-        if (current->GetValuePointer(keys[i], &currentNext)) {
+        if (current->GetValuePointer(pathItems[i], &currentNext)) {
             current = currentNext;
         } else {
-            current = &current->InsertValue(keys[i], NJson::JSON_MAP);
+            current = &current->InsertValue(pathItems[i], NJson::JSON_MAP);
         }
     }
-    current->InsertValue(keys[0], jsonValue);
+    current->InsertValue(pathItems[pathItems.size() - 1], jsonValue);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

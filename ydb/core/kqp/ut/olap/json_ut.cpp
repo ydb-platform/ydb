@@ -1289,38 +1289,6 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         //     CompareYson(result, R"([[["e"]]])");
         // }
     }
-
-
-
-    std::vector<TString> SplitJsonPaths(const std::string_view& svPath) {
-        NYql::TIssues issues;
-        auto path = NYql::NJsonPath::ParseJsonPath(svPath, issues, 1);
-        if (!path) {
-            return {};
-        }
-        NYql::NJsonPath::TJsonPathReader reader(path);
-        auto it = &reader.ReadFirst();
-        std::vector<TString> result;
-        while (it->Type == NYql::NJsonPath::EJsonPathItemType::MemberAccess) {
-            const auto& str = it->GetString();
-            result.push_back(TString(str));
-            it = &reader.ReadInput(*it);
-        }
-
-        std::ranges::reverse(result);
-
-        return result;
-    }
-
-    Y_UNIT_TEST(CheckSplitter) {
-        std::string path = R"($.a."b".'c'.'d"'."\"")";
-        auto subs = SplitJsonPaths(path);
-        Cerr << "START!!!" << Endl;
-        for (const auto& s : subs) {
-            Cerr << s << Endl;
-        }
-        Cerr << "END!!!" << Endl;
-    }
 }
 
 }   // namespace NKikimr::NKqp

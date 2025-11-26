@@ -92,7 +92,12 @@ group by web_site.web_site_id);
         , profit
  from   $wsr wsr
  ) x
- group by rollup (channel, id)
+ -- group by rollup (channel, id)
+ group by grouping sets (
+  (channel, id),
+  (channel),
+  ((sales < 0) as FAKE)
+ )
  order by channel
          ,id
  limit 100;

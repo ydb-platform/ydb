@@ -615,6 +615,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
     app.SetEnableBackupService(opts.EnableBackupService_);
     app.SetEnableChecksumsExport(opts.EnableChecksumsExport_);
+    app.SetEnableReplication(opts.EnableReplication_);
     app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
     app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
     app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);

@@ -190,11 +190,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
                               const TActorId& actorId,
                               ui64 step);
 
-    void SchedulePlanStepAck(ui64 step,
-                             const THashMap<TActorId, TVector<ui64>>& txAcks);
-    void SchedulePlanStepAccepted(const TActorId& target,
-                                  ui64 step);
-
     ui64 GetAllowedStep() const;
 
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);

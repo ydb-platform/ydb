@@ -3933,26 +3933,6 @@ void TPersQueue::ScheduleProposeTransactionResult(const TDistributedTransaction&
     RepliesToActor.emplace_back(tx.SourceActor, std::move(event));
 }
 
-void TPersQueue::SchedulePlanStepAck(ui64 step,
-                                     const THashMap<TActorId, TVector<ui64>>& txAcks)
-{
-    for (auto& [actorId, txIds] : txAcks) {
-        auto event = std::make_unique<TEvTxProcessing::TEvPlanStepAck>(TabletID(),
-                                                                       step,
-                                                                       txIds.begin(), txIds.end());
-
-        RepliesToActor.emplace_back(actorId, std::move(event));
-    }
-}
-
-void TPersQueue::SchedulePlanStepAccepted(const TActorId& actorId,
-                                          ui64 step)
-{
-    auto event = std::make_unique<TEvTxProcessing::TEvPlanStepAccepted>(TabletID(), step);
-
-    RepliesToActor.emplace_back(actorId, std::move(event));
-}
-
 void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
                                           TDistributedTransaction& tx)
 {

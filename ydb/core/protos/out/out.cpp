@@ -82,6 +82,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EDecommitStatus, stream, value) {
     stream << NKikimrBlobStorage::EDecommitStatus_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TMaintenanceStatus::E, stream, value) {
+    stream << NKikimrBlobStorage::TMaintenanceStatus::E_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TGroupStatus::E, stream, value) {
     stream << NKikimrBlobStorage::TGroupStatus::E_Name(value);
 }

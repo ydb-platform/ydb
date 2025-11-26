@@ -4,7 +4,7 @@
 
 Это руководство по использованию [LinqToDB](https://linq2db.github.io/) с {{ ydb-short-name }}.
 
-linq2db — лёгкий и быстрый ORM/µ-ORM для .NET, предоставляющий типобезопасные [LINQ](https://learn.microsoft.com/en-us/dotnet/csharp/linq/) запросы и точный контроль над SQL. Провайдер {{ ydb-short-name }} формирует корректный YQL, поддерживает типы YDB, генерацию схемы и массовые операции (Bulk Copy).
+linq2db — лёгкий и быстрый ORM для .NET, предоставляющий типобезопасные [LINQ](https://learn.microsoft.com/en-us/dotnet/csharp/linq/) запросы и точный контроль над SQL. Провайдер {{ ydb-short-name }} формирует корректный YQL, поддерживает типы YDB, генерацию схемы и массовые операции (Bulk Copy).
 
 ## Установка провайдера {{ ydb-short-name }} {#install-provider}
 

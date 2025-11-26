@@ -4,7 +4,7 @@
 
 This guide explains how to use [LinqToDB](https://linq2db.github.io/) with {{ ydb-short-name }}.
 
-linq2db is a lightweight and fast ORM/µ-ORM for .NET that provides type-safe [LINQ](https://learn.microsoft.com/en-us/dotnet/csharp/linq/) queries and precise SQL control. The {{ ydb-short-name }} provider generates correct YQL, supports {{ ydb-short-name }} types, schema generation, and bulk operations (Bulk Copy).
+linq2db is a lightweight and fast ORM for .NET that provides type-safe [LINQ](https://learn.microsoft.com/en-us/dotnet/csharp/linq/) queries and precise SQL control. The {{ ydb-short-name }} provider generates correct YQL, supports {{ ydb-short-name }} types, schema generation, and bulk operations (Bulk Copy).
 
 ## Installing the {{ ydb-short-name }} provider {#install-provider}
 

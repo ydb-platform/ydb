@@ -299,6 +299,8 @@ private:
                 }
                 if (outputRowItems[i].IsString()) {
                     PayloadExtraSize += outputRowItems[i].AsStringRef().size();
+                } else if (outputRowItems[i].IsBoxed()) {
+                    PayloadExtraSize += TDqDataSerializer::EstimateSize(outputRowItems[i], OutputRowType->GetElementType(i));
                 }
             }
             ReadyQueue.PushRow(outputRowItems, OutputRowType->GetElementsCount());

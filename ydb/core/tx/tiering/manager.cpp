@@ -1,6 +1,8 @@
 #include "common.h"
 #include "manager.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/tiering/fetcher.h>
 #include <ydb/core/tx/tiering/tier/identifier.h>
@@ -77,9 +79,11 @@ private:
         const auto& description = ev->Get()->GetDescription();
         ResetRetryState(tierId);
         if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeExternalDataSource) {
-            NKikimrSchemeOp::TS3Settings proto;
-            proto.CopyFrom(description.GetExternalDataSourceDescription());
-            NTiers::TTierConfig tier(proto);
+            NTiers::TTierConfig tier;
+            if (HasAppData() && AppDataVerified().ColumnShardConfig.HasS3Client()) {
+                tier = NTiers::TTierConfig(AppDataVerified().ColumnShardConfig.GetS3Client());
+            }
+
             if (const auto status = tier.DeserializeFromProto(description.GetExternalDataSourceDescription()); status.IsFail()) {
                 AFL_WARN(NKikimrServices::TX_TIERING)("event", "fetched_invalid_tier_settings")("error", status.GetErrorMessage());
                 Owner->UpdateTierConfig(std::nullopt, tierId);

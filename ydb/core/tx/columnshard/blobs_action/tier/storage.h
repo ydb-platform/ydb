@@ -31,7 +31,6 @@ private:
     void InitNewExternalOperator();
     void DoInitNewExternalOperator(const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr& storageOperator,
         const std::optional<NKikimrSchemeOp::TS3Settings>& settings);
-    void ApplyS3DefaultsFromShardConfig(NKikimrSchemeOp::TS3Settings& settings) const;
 
     virtual TString DoDebugString() const override {
         return GetCurrentOperator()->DebugString();

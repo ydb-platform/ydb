@@ -2386,7 +2386,7 @@ message TColumnShardConfig {
         CAST_TO_INFINITY = 1;
     }
 
-    optional uint32 MaxInFlightIntervalsOnRequest = 16 [deprecated=true];
+    optional uint32 MaxInFlightIntervalsOnRequest = 16;
     optional uint32 MaxReadStaleness_ms = 18 [default = 1800000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
     optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
@@ -2434,8 +2434,6 @@ message TColumnShardConfig {
 
     optional TStatistics Statistics = 57;
     optional NKikimrSchemeOp.TS3Settings S3Client = 58;
-    optional uint32 BlobStorageMaxInFlightIntervalsOnRequest = 59;
-    optional uint32 S3MaxInFlightIntervalsOnRequest = 60;
 }
 
 message TSchemeShardConfig {

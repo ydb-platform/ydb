@@ -11,8 +11,8 @@ ISourcesCollection::ISourcesCollection(
     const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
     : Context(context)
     , SourcesConstructor(std::move(sourcesConstructor)) {
-    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasBlobStorageMaxInFlightIntervalsOnRequest()) {
-        MaxInFlight = AppDataVerified().ColumnShardConfig.GetBlobStorageMaxInFlightIntervalsOnRequest();
+    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
+        MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
     }
 }
 

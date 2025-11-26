@@ -38,6 +38,10 @@ TConclusionStatus TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExte
         return TConclusionStatus::Fail("AWS auth is not defined for storage tier");
     }
 
+    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasS3Client()) {
+        ProtoConfig.MergeFrom(AppDataVerified().ColumnShardConfig.GetS3Client());
+    }
+
     {
         const auto aws = proto.GetAuth().GetAws();
         ProtoConfig.SetAccessKey(NMetadata::NSecret::TSecretName(aws.GetAwsAccessKeyIdSecretName()).SerializeToString());

@@ -333,7 +333,7 @@ class StressUtilDeployer:
         try:
             # Get all unique cluster hosts
             nodes = self.nodes
-            unique_hosts = list(filter(lambda h: h != 'localhost', [node.host for node in nodes]))
+            unique_hosts = list(set(filter(lambda h: h != 'localhost', [node.host for node in nodes])))
 
             if enable_nemesis:
                 action = "restart"

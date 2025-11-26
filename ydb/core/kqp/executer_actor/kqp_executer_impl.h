@@ -887,7 +887,6 @@ protected:
 
             TActorId computeActorId = ActorIdFromProto(startedTask.GetActorId());
             LOG_D("Executing task: " << taskId << " on compute actor: " << computeActorId);
-            
             YQL_ENSURE(Planner);
             bool ack = Planner->AcknowledgeCA(taskId, computeActorId, nullptr);
             if (ack) {

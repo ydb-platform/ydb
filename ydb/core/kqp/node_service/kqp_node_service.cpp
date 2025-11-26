@@ -312,7 +312,7 @@ private:
 
             // NOTE: keep in mind that a task can start, execute and finish before we reach the end of this method.
 
-            if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {                
+            if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
                 ReplyError(txId, executerId, msg, rmResult->GetStatus(), ev->Cookie, rmResult->GetFailReason());
                 TerminateTx(txId, rmResult->GetFailReason());
                 co_return;
@@ -421,6 +421,7 @@ private:
     void HandleShuttingDown(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         if (msg.HasSupportShuttingDown() && msg.GetSupportShuttingDown()) {
+            LOG_D("Can't handle StartRequest TxId" << msg.GetTxId() << " in ShuttingDown State");
             ReplyError(msg.GetTxId(), ev->Sender, msg, NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN, ev->Cookie);
         } else {
             HandleWork(ev);

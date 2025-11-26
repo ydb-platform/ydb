@@ -238,6 +238,8 @@ public:
         std::atomic<int> ready = 0;
 
         while(true) {
+            Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
+
             currentRm->RequestClusterResourcesInfo(
                     [&](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
                 snapshot = std::move(resources);
@@ -471,8 +473,6 @@ void KqpRm::Snapshot() {
     AssertResourceManagerStats(rm, 800, 80);
     AssertResourceBrokerSensors(0, 200, 0, 0, 2);
 
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
-
     CheckSnapshot(0, {{800, 80}, {1000, 100}}, rm);
 
     rm->FreeResources(tx1, task2);
@@ -481,7 +481,6 @@ void KqpRm::Snapshot() {
     AssertResourceManagerStats(rm, 1000, 100);
     AssertResourceBrokerSensors(0, 0, 0, 2, 0);
 
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 
     CheckSnapshot(0, {{1000, 100}, {1000, 100}}, rm);
 }
@@ -536,8 +535,6 @@ void KqpRm::SnapshotSharing() {
     auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());
     auto rm_second = GetKqpResourceManager(ResourceManagers[1].NodeId());
 
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
-
     CheckSnapshot(0, {{1000, 100}, {1000, 100}}, rm_first);
     CheckSnapshot(1, {{1000, 100}, {1000, 100}}, rm_second);
 
@@ -563,8 +560,6 @@ void KqpRm::SnapshotSharing() {
         allocated &= rm_first->AllocateResources(tx2Rm1, task2Rm1, request);
         UNIT_ASSERT(allocated);
 
-        Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
-
         CheckSnapshot(0, {{800, 80}, {1000, 100}}, rm_second);
     }
 
@@ -575,8 +570,6 @@ void KqpRm::SnapshotSharing() {
         allocated &= rm_second->AllocateResources(tx2Rm2, task2Rm2, request);
         UNIT_ASSERT(allocated);
 
-        Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
-
         CheckSnapshot(1, {{800, 80}, {800, 80}}, rm_first);
     }
 
@@ -584,16 +577,12 @@ void KqpRm::SnapshotSharing() {
         rm_first->FreeResources(tx1Rm1, task1Rm1);
         rm_first->FreeResources(tx2Rm1, task2Rm1);
 
-        Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
-
         CheckSnapshot(0, {{1000, 100}, {800, 80}}, rm_second);
     }
 
     {
         rm_second->FreeResources(tx1Rm2, task1Rm2);
         rm_second->FreeResources(tx2Rm2, task2Rm2);
-
-        Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 
         CheckSnapshot(1, {{1000, 100}, {1000, 100}}, rm_first);
     }
@@ -610,8 +599,6 @@ void KqpRm::NodesMembership() {
     auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());
     auto rm_second = GetKqpResourceManager(ResourceManagers[1].NodeId());
 
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
-
     CheckSnapshot(0, {{1000, 100}, {1000, 100}}, rm_first);
     CheckSnapshot(1, {{1000, 100}, {1000, 100}}, rm_second);
 
@@ -623,8 +610,6 @@ void KqpRm::NodesMembership() {
     TDispatchOptions options;
     options.FinalEvents.emplace_back(TEvents::TSystem::Poison, 1);
     UNIT_ASSERT(Runtime->DispatchEvents(options));
-
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 
     CheckSnapshot(0, {{1000, 100}}, rm_first);
 }
@@ -641,8 +626,6 @@ void KqpRm::DisonnectNodes() {
     auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());
     auto rm_second = GetKqpResourceManager(ResourceManagers[1].NodeId());
 
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
-
     CheckSnapshot(0, {{1000, 100}, {1000, 100}}, rm_first);
     CheckSnapshot(1, {{1000, 100}, {1000, 100}}, rm_second);
 
@@ -656,8 +639,6 @@ void KqpRm::DisonnectNodes() {
     });
 
     Disconnect(0, 1);
-
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 
     CheckSnapshot(0, {{1000, 100}}, rm_first);
 }

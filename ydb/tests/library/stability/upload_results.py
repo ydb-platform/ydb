@@ -75,7 +75,7 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
     stats["total_runs"] = result.get_total_runs()
     stats["successful_runs"] = result.get_successful_runs()
     stats["failed_runs"] = stats["total_runs"] - stats["successful_runs"]
-    stats["total_iterations"] = stats["total_runs"]
+    stats["total_iterations"] = 1
     stats["successful_iterations"] = stats["successful_runs"]
     stats["failed_iterations"] = stats["total_runs"] - stats["successful_runs"]
     stats["planned_duration"] = run_config.duration
@@ -84,7 +84,7 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
     stats["success_rate"] = stats["successful_runs"] / stats["total_runs"]
     # obsolete
     stats["avg_threads_per_iteration"] = 0
-    stats["total_threads"] = 0
+    stats["total_threads"] = 1
     stats["use_iterations"] = False
 
     stats["nodes_percentage"] = run_config.nodes_percentage

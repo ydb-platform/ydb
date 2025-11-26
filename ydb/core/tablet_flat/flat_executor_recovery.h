@@ -64,7 +64,7 @@ struct TEvBackupInfo : public TEventLocal<TEvBackupInfo, EvBackupInfo> {
 struct TEvReadBackup : public TEventLocal<TEvReadBackup, EvReadBackup> {};
 
 struct TEvSchemaData : public TEventLocal<TEvSchemaData, EvSchemaData> {
-    TEvSchemaData(const TString&& data)
+    TEvSchemaData(TString&& data)
         : Data(std::move(data))
     {}
 

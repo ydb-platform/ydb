@@ -171,17 +171,10 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         return true;
 
     size_t readPhases = 0;
-    bool hasEffects = false;
-    bool hasStreamLookup = false;
-    bool hasVectorResolve = false;
 
     for (const auto &tx : physicalQuery.GetTransactions()) {
         if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
             ++readPhases;
-        }
-
-        if (tx.GetHasEffects()) {
-            hasEffects = true;
         }
 
         for (const auto &stage : tx.GetStages()) {
@@ -215,13 +208,16 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
             }
 
             for (const auto &input : stage.GetInputs()) {
-                hasStreamLookup |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup;
-                hasVectorResolve |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve;
+                if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup
+                        || input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve) {
+                    // We need snapshot for stream lookup, besause it's used for dependent reads
+                    return true;
+                }
             }
 
             for (const auto &tableOp : stage.GetTableOps()) {
                 if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
-                    // always need snapshot for OLAP reads
+                    // Always need snapshot for OLAP reads
                     return true;
                 }
             }
@@ -230,24 +226,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
     if (txCtx.NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
         return true;
-    }
-
-    // We need snapshot for stream lookup, besause it's used for dependent reads
-    if (hasStreamLookup || hasVectorResolve) {
-        return true;
-    }
-
-    if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
-        if (hasEffects && !txCtx.HasTableRead) {
-            YQL_ENSURE(txCtx.HasTableWrite);
-            // Don't need snapshot for WriteOnly transaction.
-            return false;
-        } else if (hasEffects) {
-            YQL_ENSURE(txCtx.HasTableWrite);
-            // ReadWrite transaction => need snapshot
-            return true;
-        }
-        // ReadOnly transaction here
     }
 
     // We need snapshot when there are multiple table read phases, most

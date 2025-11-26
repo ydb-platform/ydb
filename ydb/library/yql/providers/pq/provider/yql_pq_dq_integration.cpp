@@ -476,7 +476,7 @@ public:
             .Done());
 
         TExprNode::TListType metadataFieldsList;
-        for (const auto& sysColumn : AllowedPqMetaSysColumns()) {
+        for (const auto& sysColumn : AllowedPqMetaSysColumns(State_->AllowTransparentSystemColumns)) {
             metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));
         }
 
@@ -531,10 +531,10 @@ private:
     TPqState* State_; // State owns dq integration, so back reference must be not smart.
 };
 
-}
+} // anonymous namespace
 
 THolder<IDqIntegration> CreatePqDqIntegration(const TPqState::TPtr& state) {
     return MakeHolder<TPqDqIntegration>(state);
 }
 
-}
+} // namespace NYql

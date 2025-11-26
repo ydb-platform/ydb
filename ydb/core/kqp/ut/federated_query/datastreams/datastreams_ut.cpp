@@ -161,7 +161,7 @@ public:
     std::shared_ptr<TQueryClient> GetQueryClient() {
         if (!QueryClient) {
             QueryClient = std::make_shared<TQueryClient>(
-                GetKikimrRunner()->GetQueryClient(TClientSettings().AuthToken(BUILTIN_ACL_ROOT))
+                GetKikimrRunner()->GetQueryClient(QueryClientSettings)
             );
         }
 
@@ -374,11 +374,12 @@ public:
                 DATABASE_NAME = "{pq_database_name}",
                 AUTH_METHOD = "BASIC",
                 LOGIN = "root",
-                PASSWORD_SECRET_NAME = "secret_local_password"
+                PASSWORD_SECRET_NAME = "{secret_name}"
             );)",
             "pq_source"_a = pqSourceName,
             "pq_location"_a = YDB_ENDPOINT,
-            "pq_database_name"_a = YDB_DATABASE
+            "pq_database_name"_a = YDB_DATABASE,
+            "secret_name"_a = secretName
         ));
     }
 
@@ -521,6 +522,7 @@ public:
         req.SetQuery(query);
         req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+        req.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
 
         auto ev = std::make_unique<TEvKqp::TEvScriptRequest>();
         ev->Record = queryProto;
@@ -530,6 +532,7 @@ public:
         ev->SaveQueryPhysicalGraph = settings.SaveState;
         ev->QueryPhysicalGraph = settings.PhysicalGraph;
         ev->CheckpointId = settings.CheckpointId;
+        ev->ProgressStatsPeriod = TDuration::Seconds(1);
 
         const auto edgeActor = runtime.AllocateEdgeActor();
         runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, ev.release());
@@ -736,6 +739,7 @@ private:
 protected:
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     TTestLogSettings LogSettings;
+    TClientSettings QueryClientSettings = TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
 
 private:
     std::optional<NKikimrConfig::TAppConfig> AppConfig;
@@ -1070,7 +1074,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CreatePqSourceBasicAuth(sourceName, useSchemaSecrets);
 
             const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
-                SELECT * FROM `{source}`.`{topic}`
+                SELECT key || "{id}", value FROM `{source}`.`{topic}`
                     WITH (
                         FORMAT="json_each_row",
                         SCHEMA=(
@@ -1080,19 +1084,25 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     LIMIT 1;
                 )",
                 "source"_a=sourceName,
-                "topic"_a=topicName
+                "topic"_a=topicName,
+                "id"_a = i
             ));
 
             WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
 
-            CheckScriptResult(scriptExecutionOperation, 2, 1, [](TResultSetParser& result) {
-                UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
+            CheckScriptResult(scriptExecutionOperation, 2, 1, [i](TResultSetParser& result) {
+                UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1" + ToString(i));
                 UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
             });
+
+            const auto metadata = GetScriptExecutionOperation(scriptExecutionOperation).Metadata();
+            const auto& plan = metadata.ExecStats.GetPlan();
+            UNIT_ASSERT(plan);
+            UNIT_ASSERT_STRING_CONTAINS(*plan, "Mkql_TotalNodes");
         }
     }
 
-    Y_UNIT_TEST_F(ExplainReadTopicBasic, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(ReadTopicExplainBasic, TStreamingTestFixture) {
         const TString sourceName = "sourceName";
         const TString topicName = "topicName";
         CreateTopic(topicName);
@@ -1483,6 +1493,17 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         CheckScriptResult(result[0], 1, 1, [](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 2);
+        });
+
+        WaitFor(TDuration::Seconds(5), "operation stats", [&](TString& error) {
+            const auto metadata = GetScriptExecutionOperation(operationId).Metadata();
+            const auto& plan = metadata.ExecStats.GetPlan();
+            if (plan && plan->contains("MultiHop_NewHopsCount")) {
+                return true;
+            }
+
+            error = TStringBuilder() << "plan is not available, status: " << metadata.ExecStatus << ", plan: " << plan.value_or("");
+            return false;
         });
     }
 
@@ -2672,6 +2693,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnInternalRetry, TStreamingTestFixture) {
+        QueryClientSettings = TClientSettings();
+
         // Join with S3 used for introducing temporary failure and force retry on specific key
 
         constexpr char sourceBucket[] = "test_streaming_query_recovery_on_internal_retry";
@@ -3342,6 +3365,62 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CheckScriptExecutionsCount(0, 0);
         }
     }
+
+    Y_UNIT_TEST_F(WritingInLocalYdbTablesWithProjection, TStreamingTestFixture) {
+        constexpr char pqSourceName[] = "pqSource";
+        CreatePqSource(pqSourceName);
+
+        for (const bool rowTables : {true, false}) {
+            const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
+            CreateTopic(inputTopicName);
+
+            const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
+            ExecQuery(fmt::format(R"(
+                CREATE TABLE `{table}` (
+                    Key String NOT NULL,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key)
+                ) {settings})",
+                "table"_a = ydbTable,
+                "settings"_a = rowTables ? "" : "WITH (STORE = COLUMN)"
+            ));
+
+            const auto queryName = TStringBuilder() << "streamingQuery" << rowTables;
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    UPSERT INTO `{ydb_table}`
+                    SELECT (Key || "x") AS Key, Value FROM `{pq_source}`.`{input_topic}` WITH (
+                        FORMAT = json_each_row,
+                        SCHEMA (
+                            Key String NOT NULL,
+                            Value String NOT NULL
+                        )
+                    ) LIMIT 1
+                END DO;)",
+                "query_name"_a = queryName,
+                "pq_source"_a = pqSourceName,
+                "input_topic"_a = inputTopicName,
+                "ydb_table"_a = ydbTable
+            ));
+
+            CheckScriptExecutionsCount(1, 1);
+            Sleep(TDuration::Seconds(1));
+
+            WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
+            Sleep(TDuration::Seconds(1));
+            CheckTable(*this, ydbTable, {{"message1x", "value1"}});
+
+            Sleep(TDuration::Seconds(1));
+            CheckScriptExecutionsCount(1, 0);
+
+            ExecQuery(fmt::format(
+                "DROP STREAMING QUERY `{query_name}`",
+                "query_name"_a = queryName
+            ));
+            CheckScriptExecutionsCount(0, 0);
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
@@ -3391,6 +3470,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         CheckSysView({
             {"C"}
         }, "Path = '/Root/C'");
+    }
+
+    Y_UNIT_TEST_F(ReadWithoutAuth, TStreamingSysViewTestFixture) {
+        QueryClientSettings = TClientSettings();
+        Setup();
+
+        StartQuery("A");
+        StartQuery("B");
+        StartQuery("C");
+        Sleep(STATS_WAIT_DURATION);
+
+        CheckSysView({
+            {"A"}, {"B"}, {"C"}
+        });
     }
 
     Y_UNIT_TEST_F(SortOrderForSysView, TStreamingSysViewTestFixture) {

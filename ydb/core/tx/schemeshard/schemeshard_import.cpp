@@ -88,9 +88,7 @@ namespace {
             itemProgress.set_parts_total(itemProgress.parts_total() + restoreResult.TotalShardCount);
             itemProgress.set_parts_completed(itemProgress.parts_completed() + restoreResult.TotalShardCount);
             *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(restoreResult.StartDateTime);
-            if (item.Table && item.Table->indexes_size() == 0) {
-                *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(restoreResult.CompletionDateTime);
-            }
+            *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(restoreResult.CompletionDateTime);
         }
     }
 
@@ -120,11 +118,12 @@ namespace {
 
             itemProgress.set_parts_total(itemProgress.parts_total() + partsTotal);
             itemProgress.set_parts_completed(itemProgress.parts_completed() + partsCompleted);
-            if (indexIdx == item.Table->indexes_size() - 1 && indexBuild->IsFinished()) {
+            if (indexBuild->IsFinished()) {
                 *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(indexBuild->EndTime.Seconds());
             }
         } else if (indexIdx >= item.NextIndexIdx) {
             itemProgress.set_parts_total(itemProgress.parts_total() + partsTotal);
+            itemProgress.clear_end_time();
         }
     }
 

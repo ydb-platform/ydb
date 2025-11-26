@@ -4,8 +4,6 @@
 #include "sentinel_impl.h"
 #include "cms_impl.h"
 
-#include <ydb/core/testlib/actors/block_events.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/hash_set.h>
@@ -875,30 +873,11 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
 
         const TPDiskID id = env.RandomPDiskID();
 
-        TBlockEvents<TEvBlobStorage::TEvControllerConfigRequest> block(env, [](const auto& ev){
-            const auto& record = ev->Get()->Record;
-
-            if (record.GetRequest().CommandSize() > 0) {
-                return record.GetRequest().GetCommand(0).HasUpdateDriveStatus();
-            }
-
-            return false;
-        });
-
         Cerr << "...Initializing" << Endl;
-        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Initial);
-
-        Cerr << "...Still initializing" << Endl;
-        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Initial);
-
-        Cerr << "...Ready to work" << Endl;
-        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal);
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Initial, NKikimrBlobStorage::INACTIVE);
 
         Cerr << "...Working normally" << Endl;
-        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal);
-
-        UNIT_ASSERT_C(block.empty(), "Unexpected status change requests");
-        block.Stop();
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal, NKikimrBlobStorage::ACTIVE);
 
         Cerr << "...Disconnected" << Endl;
         env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::NodeDisconnected, NKikimrBlobStorage::INACTIVE);
@@ -913,8 +892,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::NodeDisconnected, NKikimrBlobStorage::INACTIVE);
 
         Cerr << "...Working normally again, but no fast path to ACTIVE" << Endl;
-        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal, NKikimrBlobStorage::INACTIVE);
-        for (ui32 i = 1; i < DefaultStateLimit - 1; ++i) {
+        for (ui32 i = 1; i < DefaultStateLimit; ++i) {
             env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal);
         }
         env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);

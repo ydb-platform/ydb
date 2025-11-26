@@ -1881,11 +1881,11 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
             writer.OnEndMap();
     }
 
-    if (TypeCtx_->EnableLineage && TypeCtx_->CorrectStandaloneLineage.Empty()) {
+    if (TypeCtx_->CorrectLineage) {
         writer.OnKeyedItem("CorrectLineage");
         writer.OnBeginMap();
         writer.OnKeyedItem("count");
-        writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
+        writer.OnInt64Scalar(*TypeCtx_->CorrectLineage);
         writer.OnEndMap();
     }
     if (TypeCtx_->CorrectStandaloneLineage) {

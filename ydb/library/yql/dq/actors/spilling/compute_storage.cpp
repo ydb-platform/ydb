@@ -8,7 +8,10 @@ namespace NYql::NDq {
 using namespace NActors;
 
 TDqComputeStorage::TDqComputeStorage(TTxId txId, TWakeUpCallback wakeUpCallback, TErrorCallback errorCallback,
-    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, TActorSystem* actorSystem) : ActorSystem_(actorSystem) {
+    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, TSpillerMemoryUsageReporter::TPtr memoryUsageReporter, TActorSystem* actorSystem)
+        : ActorSystem_(actorSystem)
+        , MemoryUsageReporter_(memoryUsageReporter)
+    {
     TStringStream spillerName;
     spillerName << "Spiller" << "_" << CreateGuidAsString();
     ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName.Str(), wakeUpCallback, errorCallback, spillingTaskCounters);
@@ -54,10 +57,10 @@ NThreading::TFuture<std::optional<TChunkedBuffer>> TDqComputeStorage::GetInterna
 }
 
 void TDqComputeStorage::ReportAlloc(ui64 bytes) {
-    Y_UNUSED(bytes);
+    MemoryUsageReporter_->ReportAlloc(bytes);
 }
 void TDqComputeStorage::ReportFree(ui64 bytes) {
-    Y_UNUSED(bytes);
+    MemoryUsageReporter_->ReportFree(bytes);
 }
 
 } // namespace NYql::NDq

@@ -178,7 +178,15 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void TryReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status = NKikimrProto::OK);
     void ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status);
 
-    void TrySchedulePlanStepAcks(const TDistributedTransaction& tx);
+    void SendPlanStepAcks(const TActorContext& ctx,
+                          const TDistributedTransaction& tx);
+    void SendPlanStepAck(const TActorContext& ctx,
+                         ui64 step,
+                         const THashMap<TActorId, TVector<ui64>>& txAcks);
+    void SendPlanStepAccepted(const TActorContext& ctx,
+                              const TActorId& actorId,
+                              ui64 step);
+
     void SchedulePlanStepAck(ui64 step,
                              const THashMap<TActorId, TVector<ui64>>& txAcks);
     void SchedulePlanStepAccepted(const TActorId& target,

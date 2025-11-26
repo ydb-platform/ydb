@@ -3542,7 +3542,7 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
 
     bool canProcess =
         CanProcessProposeTransactionQueue() ||
-        CanProcessPlanStepQueue() ||
+        //CanProcessPlanStepQueue() ||
         CanProcessWriteTxs() ||
         CanProcessDeleteTxs() ||
         CanProcessTxWrites() ||
@@ -3556,7 +3556,7 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     request->Record.SetCookie(WRITE_TX_COOKIE);
 
     ProcessProposeTransactionQueue(ctx);
-    ProcessPlanStepQueue(ctx);
+    //ProcessPlanStepQueue(ctx);
     ProcessWriteTxs(ctx, request->Record);
     ProcessDeleteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
@@ -3727,7 +3727,8 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
     PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
 }
 
-void TPersQueue::TrySchedulePlanStepAcks(const TDistributedTransaction& tx)
+void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
+                                  const TDistributedTransaction& tx)
 {
     if (!tx.PlanStepSender) {
         return;
@@ -3746,8 +3747,29 @@ void TPersQueue::TrySchedulePlanStepAcks(const TDistributedTransaction& tx)
         }
     }
 
-    SchedulePlanStepAck(tx.Step, txAcks);
-    SchedulePlanStepAccepted(tx.PlanStepSender, tx.Step);
+    SendPlanStepAck(ctx, tx.Step, txAcks);
+    SendPlanStepAccepted(ctx, tx.PlanStepSender, tx.Step);
+}
+
+void TPersQueue::SendPlanStepAck(const TActorContext& ctx,
+                                 ui64 step,
+                                 const THashMap<TActorId, TVector<ui64>>& txAcks)
+{
+    for (auto& [actorId, txIds] : txAcks) {
+        auto event = std::make_unique<TEvTxProcessing::TEvPlanStepAck>(TabletID(),
+                                                                       step,
+                                                                       txIds.begin(), txIds.end());
+        ctx.Send(actorId, event.release());
+    }
+}
+
+void TPersQueue::SendPlanStepAccepted(const TActorContext& ctx,
+                                      const TActorId& actorId,
+                                      ui64 step)
+{
+    auto event = std::make_unique<TEvTxProcessing::TEvPlanStepAccepted>(TabletID(), step);
+
+    ctx.Send(actorId, event.release());
 }
 
 void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
@@ -3844,7 +3866,7 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
         // There may be cases when in one iteration of a record we change the state of a transaction and delete it
         auto tx = GetTransaction(ctx, txId);
         if (tx) {
-            PQ_LOG_TX_D("write key for TxId " << txId);
+            PQ_LOG_TX_D("Persist state TxId " << txId);
             tx->AddCmdWrite(request, state);
 
             ChangedTxs.emplace(tx->Step, txId);
@@ -3874,8 +3896,6 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
             tx->BeginDeleteSpan(TabletID(), WriteTxsSpan.GetTraceId());
 
             ChangedTxs.emplace(tx->Step, txId);
-
-            TrySchedulePlanStepAcks(*tx);
         }
     }
 
@@ -4557,6 +4577,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         TxQueue.pop_front();
         SetTxCompleteLagCounter();
 
+        SendPlanStepAcks(ctx, tx);
         SendEvReadSetAckToSenders(ctx, tx);
 
         PQ_LOG_TX_I("delete partitions for TxId " << tx.TxId);

@@ -1,7 +1,13 @@
 items:
 - name: Видеоматериалы
   href: videos.md
+  include:
+    mode: link
+    path: videos/toc_i.yaml
 - name: Статьи
   href: articles.md
+  include:
+    mode: link
+    path: publications/toc_i.yaml
 - name: Подкасты
   href: podcasts.md

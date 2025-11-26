@@ -1,48 +1,12 @@
 # Videos
 
-Video recordings from conferences and webinars. The materials are divided by categories and tagged:
+This section contains video recordings from conferences and webinars:
+
+- [{#T}](videos/2025.md)
+- [{#T}](videos/2024.md)
+- [{#T}](videos/2023.md)
+- [{#T}](videos/2022.md)
+
+The materials are divided by categories and tagged:
 
 {% include [tags_list](./_includes/tags_list.md) %}
-
-
-{% list tabs %}
-
-- 2025
-
-  {% include [FOSDEM](./_includes/conferences/2025/fosdem.md) %}
-
-
-- 2024
-
-  {% include [IndiaFOSS](./_includes/conferences/2024/indiafoss.md) %}
-
-  {% include [KubeCon + CloudNativeCon + Open Source Summit](./_includes/conferences/2024/kubecon-hongkong.md) %}
-
-  {% include [COSCUP](./_includes/conferences/2024/coscup.md) %}
-
-  {% include [Qcon](./_includes/conferences/2024/Qcon.md) %}
-
-  {% include [stackconf](./_includes/conferences/2024/stackconf.md) %}
-
-  {% include [TechInternals](./_includes/conferences/2024/TechInternals.md) %}
-
-  {% include [Conf42](./_includes/conferences/2024/Conf42.md) %}
-
-  {% include [Devworld](./_includes/conferences/2024/Devworld.md) %}
-
-- 2023
-
-  {% include [HighLoad](./_includes/conferences/2023/HighLoad.md) %}
-
-  {% include [Fossasia](./_includes/conferences/2023/Fossasia.md) %}
-
-  {% include [webinars](./_includes/webinars/2023/webinars.md) %}
-
-- 2022
-
-  {% include [Hydra](./_includes/conferences/2022/Hydra.md) %}
-
-  {% include [webinars](./_includes/webinars/2022/webinars.md) %}
-
-
-{% endlist %}

@@ -207,105 +207,105 @@ TRawTypeValue MakeTypeValueFromJson(NScheme::TTypeInfo type, const NJson::TJsonV
     }
 }
 
-    const NTable::TScheme::TTableInfo* FindTableFromJson(const NJson::TJsonValue& json, TTransactionContext& txc) {
-         if (!json.IsMap()) {
-            throw yexception() << TStringBuilder() << "Invalid JSON format, expected object: " << json;
-        }
-        const auto& jsonMap = json.GetMap();
+const NTable::TScheme::TTableInfo* FindTableFromJson(const NJson::TJsonValue& json, TTransactionContext& txc) {
+        if (!json.IsMap()) {
+        throw yexception() << TStringBuilder() << "Invalid JSON format, expected object: " << json;
+    }
+    const auto& jsonMap = json.GetMap();
 
-        auto it = jsonMap.find("table");
-        if (it == jsonMap.end()) {
-            throw yexception() << "Table name is not found in json: " << json;
-        }
-
-        if (!it->second.IsString()) {
-            throw yexception() << "Table name is not string in json: " << json;
-        }
-
-        TString tableName = it->second.GetString();
-        const auto& scheme = txc.DB.GetScheme();
-        auto tableIt = scheme.TableNames.find(tableName);
-        if (tableIt == scheme.TableNames.end()) {
-            throw yexception() << "Table " << tableName << " not found in database schema";
-        }
-
-        return &scheme.Tables.at(tableIt->second);
+    auto it = jsonMap.find("table");
+    if (it == jsonMap.end()) {
+        throw yexception() << "Table name is not found in json: " << json;
     }
 
-    NTable::ERowOp FindOpFromJson(const NJson::TJsonValue& json) {
-        if (!json.IsMap()) {
-            throw yexception() << TStringBuilder() << "Invalid JSON format, expected object: " << json;
-        }
-        const auto& jsonMap = json.GetMap();
+    if (!it->second.IsString()) {
+        throw yexception() << "Table name is not string in json: " << json;
+    }
 
-        auto it = jsonMap.find("op");
-        if (it == jsonMap.end()) {
-            throw yexception() << "Operation name is not found in json: " << json;
+    TString tableName = it->second.GetString();
+    const auto& scheme = txc.DB.GetScheme();
+    auto tableIt = scheme.TableNames.find(tableName);
+    if (tableIt == scheme.TableNames.end()) {
+        throw yexception() << "Table " << tableName << " not found in database schema";
+    }
+
+    return &scheme.Tables.at(tableIt->second);
+}
+
+NTable::ERowOp FindOpFromJson(const NJson::TJsonValue& json) {
+    if (!json.IsMap()) {
+        throw yexception() << TStringBuilder() << "Invalid JSON format, expected object: " << json;
+    }
+    const auto& jsonMap = json.GetMap();
+
+    auto it = jsonMap.find("op");
+    if (it == jsonMap.end()) {
+        throw yexception() << "Operation name is not found in json: " << json;
+    }
+
+    if (!it->second.IsString()) {
+        throw yexception() << "Operation name is not string in json: " << json;
+    }
+
+    TString opName = it->second.GetString();
+    if (opName == "upsert") {
+        return NTable::ERowOp::Upsert;
+    } else if (opName == "erase") {
+        return NTable::ERowOp::Erase;
+    } else if (opName == "replace") {
+        return NTable::ERowOp::Reset;
+    } else {
+        throw yexception() << "Unknown operation name: " << opName << " in json: " << json;
+    }
+}
+
+void UploadData(const NJson::TJsonValue& json,  const NTable::TScheme::TTableInfo* table,
+                std::optional<NTable::ERowOp> op, TMemoryPool& pool, TTransactionContext &txc) {
+
+    if (table == nullptr) {
+        table = FindTableFromJson(json, txc);
+    }
+
+    if (!op.has_value()) {
+        op = FindOpFromJson(json);
+    }
+
+    TVector<TRawTypeValue> key(table->KeyColumns.size());
+    TVector<NTable::TUpdateOp> ops;
+
+    if (!json.IsMap()) {
+        throw yexception() << TStringBuilder() << "Invalid JSON format, expected object: " << json;
+    }
+    const auto& columns = json.GetMap();
+    for (const auto& [columnName, value] : columns) {
+        if (columnName == "table" || columnName == "op") {
+            continue;
         }
 
-        if (!it->second.IsString()) {
-            throw yexception() << "Operation name is not string in json: " << json;
+        auto it = table->ColumnNames.find(columnName);
+        if (it == table->ColumnNames.end()) {
+            throw yexception() << "Column " << columnName << " not found in table " << table->Name;
         }
 
-        TString opName = it->second.GetString();
-        if (opName == "upsert") {
-            return NTable::ERowOp::Upsert;
-        } else if (opName == "erase") {
-            return NTable::ERowOp::Erase;
-        } else if (opName == "replace") {
-            return NTable::ERowOp::Reset;
+        const auto& column = table->Columns.at(it->second);
+
+        if (column.KeyOrder != Max<ui32>()) {
+            key.at(column.KeyOrder) = MakeTypeValueFromJson(column.PType.GetTypeId(), value, pool);
         } else {
-            throw yexception() << "Unknown operation name: " << opName << " in json: " << json;
+            ops.emplace_back(NIceDb::TUpdateOp(
+                column.Id,
+                NTable::ECellOp::Set,
+                MakeTypeValueFromJson(column.PType.GetTypeId(), value, pool)
+            ));
         }
     }
 
-    void UploadData(const NJson::TJsonValue& json,  const NTable::TScheme::TTableInfo* table,
-                    std::optional<NTable::ERowOp> op, TMemoryPool& pool, TTransactionContext &txc) {
-
-        if (table == nullptr) {
-            table = FindTableFromJson(json, txc);
-        }
-
-        if (!op.has_value()) {
-            op = FindOpFromJson(json);
-        }
-
-        TVector<TRawTypeValue> key(table->KeyColumns.size());
-        TVector<NTable::TUpdateOp> ops;
-
-        if (!json.IsMap()) {
-            throw yexception() << TStringBuilder() << "Invalid JSON format, expected object: " << json;
-        }
-        const auto& columns = json.GetMap();
-        for (const auto& [columnName, value] : columns) {
-            if (columnName == "table" || columnName == "op") {
-                continue;
-            }
-
-            auto it = table->ColumnNames.find(columnName);
-            if (it == table->ColumnNames.end()) {
-                throw yexception() << "Column " << columnName << " not found in table " << table->Name;
-            }
-
-            const auto& column = table->Columns.at(it->second);
-
-            if (column.KeyOrder != Max<ui32>()) {
-                key.at(column.KeyOrder) = MakeTypeValueFromJson(column.PType.GetTypeId(), value, pool);
-            } else {
-                ops.emplace_back(NIceDb::TUpdateOp(
-                    column.Id,
-                    NTable::ECellOp::Set,
-                    MakeTypeValueFromJson(column.PType.GetTypeId(), value, pool)
-                ));
-            }
-        }
-
-        try {
-            txc.DB.Update(table->Id, *op, key, ops);
-        } catch (const std::exception& e) {
-            throw yexception() << "Failed to update table " << table->Name << " with value " << json << ": " << e.what();
-        }
+    try {
+        txc.DB.Update(table->Id, *op, key, ops);
+    } catch (const std::exception& e) {
+        throw yexception() << "Failed to update table " << table->Name << " with value " << json << ": " << e.what();
     }
+}
 
 } // anonymous namespace
 

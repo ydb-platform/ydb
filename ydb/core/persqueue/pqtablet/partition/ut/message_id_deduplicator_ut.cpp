@@ -96,7 +96,7 @@ TEST(TDeduplicatorTest, AddDeduplicatedMessages) {
     scenario.CreateWAL();
     auto r = scenario.AddMessage("message1", 7);
     EXPECT_TRUE(r.has_value());
-    EXPECT_EQ(r.value(), 7ul);
+    EXPECT_EQ(r.value(), 3ul);
     scenario.CreateWAL();
 
     EXPECT_EQ(scenario.WALs.size(), 1ul);

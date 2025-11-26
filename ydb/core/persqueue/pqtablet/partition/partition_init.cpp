@@ -36,9 +36,9 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitMetaStep>(this));
     Steps.push_back(MakeHolder<TInitInfoRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
-    Steps.push_back(MakeHolder<TInitMessageDeduplicatorStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
     Steps.push_back(MakeHolder<TInitEndWriteTimestampStep>(this));
+    Steps.push_back(MakeHolder<TInitMessageDeduplicatorStep>(this));
     Steps.push_back(MakeHolder<TInitFieldsStep>(this));
 
     CurrentStep = Steps.begin();

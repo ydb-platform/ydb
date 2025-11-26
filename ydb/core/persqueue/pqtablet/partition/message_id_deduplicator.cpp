@@ -169,9 +169,6 @@ void TPartition::AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request) {
 }
 
 std::optional<ui64> TPartition::DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset) {
-    if (!Config.GetEnableDeduplicationByMessageDeduplicationId()) {
-        return std::nullopt;
-    }
     if (msg.TotalParts > 1) {
         // Working with messages consisting of several parts is not supported.
         return std::nullopt;

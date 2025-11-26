@@ -470,8 +470,6 @@ message TPQTabletConfig {
 
     // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
     optional string MonitoringProjectId = 41;
-
-    optional bool EnableDeduplicationByMessageDeduplicationId = 42 [default = true];
 }
 
 message THeartbeat {

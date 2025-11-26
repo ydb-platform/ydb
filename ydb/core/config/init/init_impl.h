@@ -342,6 +342,7 @@ struct TCommonAppOptions {
     EWorkload Workload = EWorkload::Hybrid;
     TString SeedNodesFile;
     TVector<TString> SeedNodes;
+    bool ForceDatabaseLabels = false;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -433,15 +434,14 @@ struct TCommonAppOptions {
             .RequiredArgument("NUM").StoreResult(&Body);
         opts.AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").StoreResult(&YamlConfigFile);
         opts.AddLongOption("config-dir", "Directory to store Yaml config").RequiredArgument("PATH").StoreResult(&ConfigDirPath);
-
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
-
         opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are %s", GetEnumAllNames<EWorkload>().data()))
             .RequiredArgument("NAME").StoreResult(&Workload);
-
         opts.AddLongOption("seed-nodes", "Path to seed nodes configuration file")
             .RequiredArgument("PATH").StoreResult(&SeedNodesFile);
+        opts.AddLongOption("force-database-labels", "Forced reporting of a label with the name of the database (tenant/domain)")
+            .NoArgument().SetFlag(&ForceDatabaseLabels);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
@@ -619,7 +619,7 @@ struct TCommonAppOptions {
             }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
-	if (KafkaPort) {
+	    if (KafkaPort) {
             auto& conf = *appConfig.MutableKafkaProxyConfig();
             conf.SetEnableKafkaProxy(true);
             conf.SetListeningPort(KafkaPort);
@@ -695,6 +695,11 @@ struct TCommonAppOptions {
                     // default, do nothing
                     break;
             }
+        }
+
+        if (ForceDatabaseLabels) {
+            appConfig.MutableMonitoringConfig()->SetForceDatabaseLabels(ForceDatabaseLabels);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
     }
 

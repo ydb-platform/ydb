@@ -1,6 +1,11 @@
 # Развёртывание {{ ydb-short-name }} кластера вручную
 
 <!-- markdownlint-disable blanks-around-fences -->
+{% note warning %}
+
+Данная инструкция предназначена только для развёртывания кластеров с [конфигурацией V1](../../configuration-management/configuration-v1/index.md). Развёртывание кластеров с [конфигурацией V2](../../configuration-management/configuration-v2/index.md) в настоящий момент находится в разработке.
+
+{% endnote %}
 
 Этот документ описывает способ развернуть мультитенантный кластер {{ ydb-short-name }} на нескольких физических или виртуальных серверах.
 
@@ -104,8 +109,9 @@ ydb hard nofile 10000
 
     ```bash
     mkdir ydbd-stable-linux-amd64
-    curl -L {{ ydb-binaries-url }}/{{ ydb-stable-binary-archive }} | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
+    curl -L <binaries_url> | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
     ```
+    где `binaries_url` ссылка на архив нужной вам версии со страницы [загрузок](../../../downloads/index.md)
 
 1. Скопируйте исполняемый файл и библиотеки в соответствующие директории:
 
@@ -179,99 +185,215 @@ vdb    252:16   0   186G  0 disk
 
     Проделайте данную операцию для каждого диска, который будет использоваться для хранения данных {{ ydb-short-name }}.
 
+### Пример полной команды для разметки 3-х дисков
+
+```bash
+DISK=/dev/vdb
+sudo parted ${DISK} mklabel gpt -s
+sudo parted -a optimal ${DISK} mkpart primary 0% 100%
+sudo parted ${DISK} name 1 ydb_disk_ssd_01
+sudo partx --u ${DISK}
+sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
+
+DISK=/dev/vdc
+sudo parted ${DISK} mklabel gpt -s
+sudo parted -a optimal ${DISK} mkpart primary 0% 100%
+sudo parted ${DISK} name 1 ydb_disk_ssd_02
+sudo partx --u ${DISK}
+sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_02
+
+DISK=/dev/vdd
+sudo parted ${DISK} mklabel gpt -s
+sudo parted -a optimal ${DISK} mkpart primary 0% 100%
+sudo parted ${DISK} name 1 ydb_disk_ssd_03
+sudo partx --u ${DISK}
+sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_03
+```
+
 ## Подготовьте конфигурационные файлы {#config}
 
 Подготовьте конфигурационный файл {{ ydb-short-name }}:
+```yaml
+static_erasure: mirror-3-dc
+host_configs:
+- drive:
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+    type: SSD
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+    type: SSD
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+    type: SSD
+  host_config_id: 1
+hosts:
+- host: static-node-1.ydb-cluster.com
+  host_config_id: 1
+  walle_location:
+    body: 1
+    data_center: 'zone-a'
+    rack: '1'
+- host: static-node-2.ydb-cluster.com
+  host_config_id: 1
+  walle_location:
+    body: 2
+    data_center: 'zone-b'
+    rack: '2'
+- host: static-node-3.ydb-cluster.com
+  host_config_id: 1
+  walle_location:
+    body: 3
+    data_center: 'zone-d'
+    rack: '3'
+domains_config:
+  domain:
+  - name: Root
+    storage_pool_types:
+    - kind: ssd
+      pool_config:
+        box_id: 1
+        erasure_species: mirror-3-dc
+        kind: ssd
+        geometry:
+          realm_level_begin: 10
+          realm_level_end: 20
+          domain_level_begin: 10
+          domain_level_end: 256
+        pdisk_filter:
+        - property:
+          - type: SSD
+        vdisk_kind: Default
+  state_storage:
+  - ring:
+      node: [1, 2, 3]
+      nto_select: 3
+    ssid: 1
+table_service_config:
+  sql_version: 1
+actor_system_config:
+  executor:
+  - name: System
+    threads: 2
+    type: BASIC
+  - name: User
+    threads: 3
+    type: BASIC
+  - name: Batch
+    threads: 2
+    type: BASIC
+  - name: IO
+    threads: 1
+    time_per_mailbox_micro_secs: 100
+    type: IO
+  - name: IC
+    spin_threshold: 10
+    threads: 1
+    time_per_mailbox_micro_secs: 100
+    type: BASIC
+  scheduler:
+    progress_threshold: 10000
+    resolution: 256
+    spin_threshold: 0
+blob_storage_config:
+  service_set:
+    groups:
+    - erasure_species: mirror-3-dc
+      rings:
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: static-node-1.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: static-node-1.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+        - vdisk_locations:
+          - node_id: static-node-1.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: static-node-2.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: static-node-2.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+        - vdisk_locations:
+          - node_id: static-node-2.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: static-node-3.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: static-node-3.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+        - vdisk_locations:
+          - node_id: static-node-3.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+channel_profile_config:
+  profile:
+  - channel:
+    - erasure_species: mirror-3-dc
+      pdisk_category: 0
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 0
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 0
+      storage_pool_kind: ssd
+    profile_id: 0
+interconnect_config:
+    start_tcp: true
+    encryption_mode: OPTIONAL
+    path_to_certificate_file: "/opt/ydb/certs/node.crt"
+    path_to_private_key_file: "/opt/ydb/certs/node.key"
+    path_to_ca_file: "/opt/ydb/certs/ca.crt"
+grpc_config:
+    cert: "/opt/ydb/certs/node.crt"
+    key: "/opt/ydb/certs/node.key"
+    ca: "/opt/ydb/certs/ca.crt"
+    services_enabled:
+    - legacy
+```
 
-1. Скачайте пример конфига для соответствующей модели отказа вашего кластера:
+Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN на актуальные в разделах `hosts` и `blob_storage_config`.
 
-    * [block-4-2](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/block-4-2.yaml) - для однодатацентрового кластера.
-    * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-9-nodes.yaml) - для cross-DC кластера из 9 нод.
-    * [mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml) - для cross-DC кластера из 3 нод.
-    * [bridge-mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/bridge-mirror-3dc-3-nodes.yaml) - для cross-DC кластера из 6 нод в режиме bridge.
+* Раздел `hosts`:
 
-1. В секции `host_configs` укажите все диски и их тип на каждой из нод кластера. Возможные варианты типов дисков:
-
-    * ROT: rotational, HDD диски.
-    * SSD: SSD или NVMe диски.
-
-    ```yaml
-    host_configs:
-    - drive:
-      - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-        type: SSD
+  ```yaml
+  ...
+  hosts:
+    - host: static-node-1.ydb-cluster.com #FQDN ВМ
       host_config_id: 1
-    ```
-
-1. В секции `hosts` укажите FQDN всех нод, их конфигурацию и расположение по датацентрам (`data_center`) и стойкам (`rack`):
-
-    ```yaml
-    hosts:
-    - host: node1.ydb.tech
-      host_config_id: 1
-      location:
+      walle_location:
         body: 1
         data_center: 'zone-a'
         rack: '1'
-    - host: node2.ydb.tech
-      host_config_id: 1
-      location:
-        body: 2
-        data_center: 'zone-b'
-        rack: '1'
-    - host: node3.ydb.tech
-      host_config_id: 1
-      location:
-        body: 3
-        data_center: 'zone-c'
-        rack: '1'
-    ```
+  ...
+  ```
 
-1. Включите аутентификацию пользователей (опционально).
+* Раздел `blob_storage_config`:
 
-    Если вы планируете использовать в кластере {{ ydb-short-name }} возможности аутентификации и разграничения доступа пользователей, добавьте секцию `security_config`.
+  ```yaml
+  ...
+  - fail_domains:
+    - vdisk_locations:
+      - node_id: static-node-1.ydb-cluster.com #FQDN ВМ
+        pdisk_category: SSD
+        path: /dev/disk/by-partlabel/ydb_disk_1
+  ...
+  ```
 
-    {% note warning %}
+Остальные секции и настройки конфигурационного файла остаются без изменений.
 
-    Для первоначальной установки кластера обязательно установите параметр `enforce_user_token_requirement` в значение `false`. Включение защищенного режима будет произведено на последующих шагах, после инициализации кластера.
-
-    {% endnote %}
-
-    ```yaml
-    security_config:
-      enforce_user_token_requirement: false
-      monitoring_allowed_sids:
-      - "root"
-      - "ADMINS"
-      - "DATABASE-ADMINS"
-      administration_allowed_sids:
-      - "root"
-      - "ADMINS"
-      - "DATABASE-ADMINS"
-      viewer_allowed_sids:
-      - "root"
-      - "ADMINS"
-      - "DATABASE-ADMINS"
-    ```
-
-При использовании режима шифрования трафика убедитесь в наличии в конфигурационном файле {{ ydb-short-name }} установленных путей к файлам ключей и сертификатов в секциях `interconnect_config` и `grpc_config`:
-
-```yaml
-interconnect_config:
-  start_tcp: true
-  encryption_mode: OPTIONAL
-  path_to_certificate_file: "/opt/ydb/certs/node.crt"
-  path_to_private_key_file: "/opt/ydb/certs/node.key"
-  path_to_ca_file: "/opt/ydb/certs/ca.crt"
-grpc_config:
-  cert: "/opt/ydb/certs/node.crt"
-  key: "/opt/ydb/certs/node.key"
-  ca: "/opt/ydb/certs/ca.crt"
-  services_enabled:
-  - legacy
-```
-
-Сохраните конфигурационный файл {{ ydb-short-name }} под именем `/tmp/config.yaml` на каждом сервере кластера.
+Сохраните конфигурационный файл YDB под именем `/opt/ydb/cfg/config.yaml` на каждом сервере кластера.
 
 Более подробная информация по созданию файла конфигурации приведена в разделе [{#T}](../../../devops/configuration-management/configuration-v2/config-settings.md).
 
@@ -288,18 +410,6 @@ sudo cp -v web.pem /opt/ydb/certs/
 sudo chown -R ydb:ydb /opt/ydb/certs
 sudo chmod 700 /opt/ydb/certs
 ```
-
-## Подготовьте конфигурацию на статических узлах кластера
-
-Создайте на каждой машине пустую директорию `opt/ydb/cfg` для работы кластера с конфигурацией. В случае запуска нескольких узлов кластера на одной машине создайте отдельные директории под каждый узел. Выполнив специальную команду на каждой машине, инициализируйте эту директорию файлом конфигурации.
-
-```bash
-sudo mkdir -p /opt/ydb/cfg
-sudo chown -R ydb:ydb /opt/ydb/cfg
-ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.yaml
-```
-
-Исходный файл `/tmp/config.yaml` после выполнения этой команды больше не используется, его можно удалить.
 
 ## Запустите статические узлы {#start-storage}
 
@@ -366,14 +476,12 @@ ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.y
 
 Для инициализации кластера потребуется файл сертификата центра регистрации `ca.crt`, путь к которому должен быть указан при выполнении соответствующих команд. Перед выполнением соответствующих команд скопируйте файл `ca.crt` на сервер, на котором эти команды будут выполняться.
 
-Инициализация кластера всегда производится в режиме с отключенной обязательной проверкой аутентификации. Убедитесь, что в конфигурационном файле установлен параметр `enforce_user_token_requirement: false`, как описано в разделе [«Подготовьте конфигурационные файлы»](#config). Включение обязательной аутентификации выполняется на последующих шагах, после завершения инициализации кластера и создания базы данных.
-
 На одном из серверов хранения в составе кластера выполните команды:
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
-ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 \
-    admin cluster bootstrap --uuid <строка>
+/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+    admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
 echo $?
 ```
 
@@ -392,7 +500,7 @@ echo $?
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
 /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
-    admin database /Root/testdb create ssd:1
+    admin database /Root/testdb create ssd:8
 echo $?
 ```
 
@@ -402,17 +510,7 @@ echo $?
 
 * `/Root` - имя корневого домена, сгенерированного автоматически при инициализации кластера;
 * `testdb` - имя создаваемой базы данных;
-* `ssd:1` - задает пул хранения для базы данных и количество групп в нем. Имя пула (`ssd`) должно соответствовать типу диска, указанному в конфигурации кластера (например, в `default_disk_type`), и является регистронезависимым. Число после двоеточия — это количество выделяемых групп хранения.
-
-Создайте на каждом динамическом узле директорию `/opt/ydb/cfg` для работы кластера с конфигурацией. В случае поднятия нескольких узлов на одной машине, используйте одну и ту же директорию. Выполнив специальную команду на каждой машине, инициализируйте эту директорию с использованием произвольного статического узла кластера в качестве источника конфигурации.
-
-```bash
-sudo mkdir -p /opt/ydb/cfg
-sudo chown -R ydb:ydb /opt/ydb/cfg
-ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:2135>
-```
-
-В примере команды выше `<node.ydb.tech>` - FQDN статического узла кластера, с которого будет загружен файл конфигурации.
+* `ssd:8` - задает пул хранения для базы данных и количество групп в нем. Имя пула (`ssd`) должно соответствовать типу диска, указанному в конфигурации кластера (например, в `default_disk_type`), и является регистронезависимым. Число после двоеточия — это количество выделяемых групп хранения.
 
 ## Запустите динамические узлы {#start-dynnode}
 
@@ -431,12 +529,12 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
       --config-dir /opt/ydb/cfg \
       --tenant /Root/testdb \
-      --node-broker grpcs://<ydb1>:2135 \
-      --node-broker grpcs://<ydb2>:2135 \
-      --node-broker grpcs://<ydb3>:2135
+      --node-broker grpcs://<ydb-static-node1>:2135 \
+      --node-broker grpcs://<ydb-static-node2>:2135 \
+      --node-broker grpcs://<ydb-static-node3>:2135
   ```
 
-  В примере команды выше `<ydbN>` - FQDN трех любых серверов, на которых запущены статические узлы кластера.
+  В примере команды выше `<ydb-static-node1>` , `<ydb-static-node2>`, `<ydb-static-node3>`  - FQDN трех любых серверов, на которых запущены статические узлы кластера.
 
 - С использованием systemd
 
@@ -467,9 +565,9 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
       --config-dir /opt/ydb/cfg \
       --tenant /Root/testdb \
-      --node-broker grpcs://<ydb1>:2135 \
-      --node-broker grpcs://<ydb2>:2135 \
-      --node-broker grpcs://<ydb3>:2135
+      --node-broker grpcs://<ydb-static-node1>:2135 \
+      --node-broker grpcs://<ydb-static-node2>:2135 \
+      --node-broker grpcs://<ydb-static-node3>:2135
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=32212254720
@@ -478,13 +576,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
   WantedBy=multi-user.target
   ```
 
-  В примере файла выше `<ydbN>` - FQDN трех любых серверов, на которых запущены статические узлы кластера.
-
-  {% note info %}
-
-  При использовании [режима bridge](../../../concepts/bridge.md) добавьте параметр `--bridge-pile-name <pile_name>` в команду запуска.
-
-  {% endnote %}
+  В примере команды выше `<ydb-static-node1>` , `<ydb-static-node2>`, `<ydb-static-node3>`  - FQDN трех любых серверов, на которых запущены статические узлы кластера.
   
   Запустите динамический узел {{ ydb-short-name }} для базы `/Root/testdb`:
 
@@ -496,7 +588,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
 Запустите дополнительные динамические узлы на других серверах для масштабирования и обеспечения отказоустойчивости базы данных.
 
-## Включение аутентификации и настройка учетных записей {#security-setup}
+## Включение аутентификации и настройка учетных записей (опционально) {#security-setup}
 
 После инициализации кластера и создания базы данных, кластер работает в режиме, разрешающем доступ без аутентификации (`enforce_user_token_requirement: false`). Для производственных инсталляций рекомендуется включить обязательную проверку аутентификации и настроить учетные записи.
 

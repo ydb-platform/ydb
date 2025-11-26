@@ -74,9 +74,16 @@ size_t TMessageIdDeduplicator::Compact() {
         return value > removed ? value - removed : 0;
     };
 
-    CurrentBucket.StartMessageIndex = normalize(CurrentBucket.StartMessageIndex);
-    CurrentBucket.LastWrittenMessageIndex = normalize(CurrentBucket.LastWrittenMessageIndex);
-    CurrentBucket.StartTime = Queue.empty() ? TInstant::Zero() : Queue.front().ExpirationTime;
+    auto compactBucket = [&](TBucket& bucket) {
+        bucket.StartMessageIndex = normalize(bucket.StartMessageIndex);
+        bucket.LastWrittenMessageIndex = normalize(bucket.LastWrittenMessageIndex);
+        bucket.StartTime = Queue.empty() ? TInstant::Zero() : Queue.front().ExpirationTime;
+    };
+
+    compactBucket(CurrentBucket);
+    if (PendingBucket) {
+        compactBucket(*PendingBucket);
+    }
 
     return removed;
 }

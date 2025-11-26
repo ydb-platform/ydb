@@ -13,3 +13,7 @@
   * YQ-4447 disabled thread pool in s3 by default (https://github.com/ydb-platform/ydb/pull/22160)
   * YQ-4454 fixed clickhouse udf includes (https://github.com/ydb-platform/ydb/pull/21698)
 * 22678:Fixed [false-positive unresponsive tablet issues](https://github.com/ydb-platform/ydb/issues/22390) in healthcheck during restarts. [#22678](https://github.com/ydb-platform/ydb/pull/22678) ([vporyadke](https://github.com/vporyadke))
+* 26571:Fix backup of out-of-range decimal values which may have been accidentally inserted into tables. Fixes #26470. [#26571](https://github.com/ydb-platform/ydb/pull/26571) ([Aleksei Borzenkov](https://github.com/snaury))
+* 26445:Fix duplicated replicas selection when bad state storage config (nToSelect = 5, ringsCount = 9) applied
+[Issue](https://st.yandex-team.ru/SPI-162924) [#26445](https://github.com/ydb-platform/ydb/pull/26445) ([Evgenik2](https://github.com/Evgenik2))
+

@@ -19,11 +19,15 @@ void DFS(int vertex, TVector<int> &sortedStages, THashSet<int> &visited, const T
     sortedStages.push_back(vertex);
 }
 
-TExprNode::TPtr AddRenames(TExprNode::TPtr input, TExprContext &ctx, TVector<std::pair<TString, TInfoUnit>> renames) {
+TExprNode::TPtr AddRenames(TExprNode::TPtr input, const TStageGraph::TSourceStageTraits& sourceStagesTraits, TExprContext &ctx) {
+    if (sourceStagesTraits.Renames.empty()) {
+        return input;
+    }
+
     TVector<TExprBase> items;
     auto arg = Build<TCoArgument>(ctx, input->Pos()).Name("arg").Done().Ptr();
 
-    for (auto rename : renames) {
+    for (const auto& rename : sourceStagesTraits.Renames) {
         // clang-format off
         auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
             .Name().Build(rename.second.GetFullName())
@@ -315,8 +319,8 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(int 
     auto arg = Build<TCoArgument>(ctx, node->Pos()).Name(inputName).Done().Ptr();
     auto output = arg;
 
-    if (IsSourceStage(fromStage) && !SourceStageRenames.at(fromStage).empty()) {
-        output = AddRenames(arg, ctx, SourceStageRenames.at(fromStage));
+    if (IsSourceStage(fromStage)) {
+        output = AddRenames(arg, SourceStageRenames.at(fromStage), ctx);
     }
 
     return std::make_pair(arg, output);
@@ -413,6 +417,7 @@ TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node->Pos(
     }
 
     Alias = alias;
+    SourceType = opSource.SourceType().StringValue() == "Row" ? ETableSourceType::Row : ETableSourceType::Column;
     TableCallable = opSource.Table().Ptr();
     Pos = node->Pos();
 }
@@ -453,6 +458,8 @@ TString TOpRead::ToString(TExprContext& ctx) {
         }
     }
     res << "])";
+    TString sourceType = SourceType == ETableSourceType::Row ? "Row" : "Column";
+    res << " (SourceType: " << sourceType << ")";
     return res;
 }
 

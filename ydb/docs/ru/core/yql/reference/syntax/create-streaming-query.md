@@ -2,7 +2,7 @@
 
 <!-- markdownlint-disable proper-names -->
 
-Вызов `CREATE STREAMING QUERY` создает [стриминговый запрос](../../../concepts/streaming_query/index.md).
+Вызов `CREATE STREAMING QUERY` создает [потоковый запрос](../../../concepts/streaming_query/index.md).
 
 ```sql
 CREATE [OR REPLACE] STREAMING QUERY [IF NOT EXISTS] <query name> [WITH (

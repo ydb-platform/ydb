@@ -2,7 +2,7 @@
 
 <!-- markdownlint-disable proper-names -->
 
-Вызов `DROP STREAMING QUERY` удаляет [стриминговый запрос](../../../concepts/streaming_query/index.md).
+Вызов `DROP STREAMING QUERY` удаляет [потоковый запрос](../../../concepts/streaming_query/index.md).
 
 ```sql
 DROP STREAMING QUERY [IF EXISTS] <query name>;

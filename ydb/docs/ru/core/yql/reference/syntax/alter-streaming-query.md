@@ -2,7 +2,7 @@
 
 <!-- markdownlint-disable proper-names -->
 
-Вызов `ALTER STREAMING QUERY` изменяет настройки или текст [стриминговых запросов](../../../concepts/streaming_query/index.md), а также управляет состоянием запроса (остановкой/запуском).
+Вызов `ALTER STREAMING QUERY` изменяет настройки или текст [потоковых запросов](../../../concepts/streaming_query/index.md), а также управляет состоянием запроса (остановкой/запуском).
 
 ```sql
 ALTER STREAMING QUERY [IF EXISTS] <query name> [SET (

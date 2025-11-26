@@ -3529,6 +3529,45 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructMergeIfPossible)
     EXPECT_EQ(drv1Ptr->Field1, 18);
 }
 
+DEFINE_POLYMORPHIC_YSON_STRUCT(MyPolyWithoutBaseMapping, TPolyBase,
+    ((Drv1) (TPolyDerived1))
+    ((Drv2) (TPolyDerived2))
+);
+
+TEST(TYsonStructTest, TestPolymorphicYsonWithoutBaseMapping)
+{
+    TMyPolyWithoutBaseMapping poly;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv1")
+            .Item("base_field").Value(14)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyWithoutBaseMappingType::Drv1);
+
+    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 14);
+    EXPECT_EQ(drv1Ptr->Field1, 33);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv2")
+            .Item("base_field").Value(15)
+            .Item("field2").Value(18)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyWithoutBaseMappingType::Drv2);
+
+    auto drv2Ptr = poly.TryGetConcrete<TPolyDerived2>();
+    EXPECT_TRUE(drv2Ptr.operator bool());
+    EXPECT_EQ(drv2Ptr->BaseField, 15);
+    EXPECT_EQ(drv2Ptr->Field2, 18);
+}
+
 DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(MyPolyDefaultWithoutBaseMapping, Drv1, TPolyBase,
     ((Drv1) (TPolyDerived1))
     ((Drv2) (TPolyDerived2))
@@ -3575,17 +3614,6 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructDefaultWithoutBaseMapping)
 
     Deserialize(poly, node->AsMap());
     EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultWithoutBaseMappingType::Drv2);
-
-    ///////////////
-
-    node = BuildYsonNodeFluently()
-    .BeginMap()
-        .Item("base_field").Value(11)
-        .Item("field1").Value(123)
-    .EndMap();
-
-    Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultWithoutBaseMappingType::Drv1);
 }
 
 DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(MyPolyDefault, Drv1, TPolyBase,

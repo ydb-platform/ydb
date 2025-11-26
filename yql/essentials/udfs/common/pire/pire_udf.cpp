@@ -106,17 +106,17 @@ public:
                     if (!part.empty()) {
                         if (Fsm_) {
                             try {
-                                *Fsm_ = *Fsm_ | TFsm(TString(part), options);
+                                *Fsm_ = *Fsm_ | TFsm(part, options);
                             } catch (const yexception&) {
                                 UdfTerminate((TStringBuilder() << Pos_ << " Failed to glue up regexes, probably the finite state machine appeared to be too large").c_str());
                             }
                         } else {
-                            Fsm_.Reset(new TFsm(TString(part), options));
+                            Fsm_.Reset(new TFsm(part, options));
                         }
                     }
                 }
             } else {
-                Fsm_.Reset(new TFsm(TString(regex), options));
+                Fsm_.Reset(new TFsm(regex, options));
             }
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
@@ -200,7 +200,7 @@ public:
         std::string_view regex(runConfig.AsStringRef());
         TFsm::TOptions options;
         SetCommonOptions(regex, options);
-        Fsm_.Reset(new TSlowCapturingFsm(TString(regex), options));
+        Fsm_.Reset(new TSlowCapturingFsm(regex, options));
     }
 
 private:
@@ -255,7 +255,7 @@ public:
         std::string_view regex(runConfig.AsStringRef());
         TFsm::TOptions options;
         SetCommonOptions(regex, options);
-        Fsm_.Reset(new TSlowCapturingFsm(TString(regex), options));
+        Fsm_.Reset(new TSlowCapturingFsm(regex, options));
     }
 
 private:

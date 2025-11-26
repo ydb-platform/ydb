@@ -1881,7 +1881,7 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
             writer.OnEndMap();
     }
 
-    if (TypeCtx_->EnableLineage) {
+    if (TypeCtx_->EnableLineage && TypeCtx_->CorrectStandaloneLineage.Empty()) {
         writer.OnKeyedItem("CorrectLineage");
         writer.OnBeginMap();
         writer.OnKeyedItem("count");

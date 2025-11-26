@@ -527,6 +527,16 @@ TFuture<void> TTransaction::AdvanceQueueConsumer(
 
     // COMPAT(nadya73): Use AdvaceConsumer (not AdvanceQueueConsumer) for compatibility with old clusters.
     auto req = Proxy_.AdvanceConsumer();
+
+    YT_LOG_DEBUG(
+        "Advancing queue consumer (RequestId: %v, ConsumerPath: %v, QueuePath: %v, PartitionIndex: %v, OldOffset: %v, NewOffset: %v)",
+        req->GetRequestId(),
+        consumerPath,
+        queuePath,
+        partitionIndex,
+        oldOffset,
+        newOffset);
+
     SetTimeoutOptions(*req, options);
 
     if (NTracing::IsCurrentTraceContextRecorded()) {
@@ -564,6 +574,16 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
         "Sequence number %v cannot be negative", *options.SequenceNumber);
 
     auto req = Proxy_.PushQueueProducer();
+
+    YT_LOG_DEBUG(
+        "Pushing queue producer (RequestId: %v, ProducerPath: %v, QueuePath: %v, SessionId: %v, Epoch: %v, RowCount: %v)",
+        req->GetRequestId(),
+        producerPath,
+        queuePath,
+        sessionId,
+        epoch,
+        serializedRows.size());
+
     SetTimeoutOptions(*req, options);
     if (options.SequenceNumber) {
         req->set_sequence_number(options.SequenceNumber->Underlying());
@@ -600,12 +620,39 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
 
     req->Attachments() = serializedRows;
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPushQueueProducerPtr& rsp) {
+    auto resultFuture = req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPushQueueProducerPtr& rsp) {
         return TPushQueueProducerResult{
             .LastSequenceNumber = TQueueProducerSequenceNumber(rsp->last_sequence_number()),
             .SkippedRowCount = rsp->skipped_row_count(),
         };
     }));
+
+    resultFuture.Subscribe(BIND([
+            =,
+            requestId = req->GetRequestId(),
+            rowCount = serializedRows.size(),
+            Logger = Logger] (
+            const TErrorOr<TPushQueueProducerResult>& resultOrError)
+        {
+            if (!resultOrError.IsOK()) {
+                return;
+            }
+
+            const auto& result = resultOrError.Value();
+
+            YT_LOG_DEBUG(
+                "Pushed queue producer (RequestId: %v, ProducerPath: %v, QueuePath: %v, SessionId: %v, Epoch: %v, RowCount: %v, LastSequenceNumber: %v, SkippedRowCount: %v)",
+                requestId,
+                producerPath,
+                queuePath,
+                sessionId,
+                epoch,
+                rowCount,
+                result.LastSequenceNumber,
+                result.SkippedRowCount);
+        }));
+
+    return resultFuture;
 }
 
 TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(

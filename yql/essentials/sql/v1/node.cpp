@@ -2669,7 +2669,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_DEBUG_ABORT_UNLESS(Node_);
+        Y_DEBUG_ABORT_UNLESS(Node_, "Oh, no Node! Maybe you forgot to call Init");
         return Node_->Translate(ctx);
     }
 

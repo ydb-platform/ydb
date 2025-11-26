@@ -201,7 +201,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
       auto retrySettings = NYdb::NRetry::TRetryOperationSettings()
           .Idempotent(true)
           .MaxRetries(20)
-          .MaxTimeout(NYdb::TDuration::Seconds(30));
+          .MaxTimeout(TDuration::Seconds(30));
       
       auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
           auto query = R"(

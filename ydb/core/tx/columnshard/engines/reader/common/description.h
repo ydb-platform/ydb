@@ -65,12 +65,12 @@ public:
         LockId = lockId;
         LockMode = lockMode;
 
-        auto snapshotIsolation = lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
+        auto snapshotIsolation = lockId.has_value() && lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
 
         readNonconflictingPortions = !readOnlyConflicts;
 
-        // do not check conflicts for Snapshot isolated txs or txs with no lock
-        readConflictingPortions = readOnlyConflicts || LockId.has_value() && !snapshotIsolation;
+        // do not check conflicts for Snapshot isolated txs
+        readConflictingPortions = !snapshotIsolation || readOnlyConflicts;
 
         // if we need conflicting portions, we just take all uncommitted portions (from other txs and own)
         // but if we do not need conflicting portions, we need to remember own portions ids,
@@ -89,7 +89,7 @@ public:
         if (ownPortions.has_value() && !ownPortions->empty()) {
             AFL_VERIFY(readNonconflictingPortions);
         }
-        // we do not have cases (at the momemt) when we need to read only conflicts for a scan with no transaction
+        // we do not have cases (at the moment) when we need to read only conflicts for a scan with no transaction
         if (!LockId.has_value()) {
             AFL_VERIFY(!readOnlyConflicts);
         }

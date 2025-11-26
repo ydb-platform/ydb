@@ -3491,11 +3491,6 @@ bool TPersQueue::CanProcessProposeTransactionQueue() const
         && (!UseMediatorTimeCast || MediatorTimeCastEntry);
 }
 
-bool TPersQueue::CanProcessPlanStepQueue() const
-{
-    return !EvPlanStepQueue.empty();
-}
-
 bool TPersQueue::CanProcessWriteTxs() const
 {
     return !WriteTxs.empty();
@@ -3542,7 +3537,6 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
 
     bool canProcess =
         CanProcessProposeTransactionQueue() ||
-        //CanProcessPlanStepQueue() ||
         CanProcessWriteTxs() ||
         CanProcessDeleteTxs() ||
         CanProcessTxWrites() ||
@@ -3556,7 +3550,6 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     request->Record.SetCookie(WRITE_TX_COOKIE);
 
     ProcessProposeTransactionQueue(ctx);
-    //ProcessPlanStepQueue(ctx);
     ProcessWriteTxs(ctx, request->Record);
     ProcessDeleteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
@@ -3770,87 +3763,6 @@ void TPersQueue::SendPlanStepAccepted(const TActorContext& ctx,
     auto event = std::make_unique<TEvTxProcessing::TEvPlanStepAccepted>(TabletID(), step);
 
     ctx.Send(actorId, event.release());
-}
-
-void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
-{
-    PQ_ENSURE(!WriteTxsInProgress);
-
-    while (CanProcessPlanStepQueue()) {
-        const auto front = std::move(EvPlanStepQueue.front());
-        EvPlanStepQueue.pop_front();
-
-        const TActorId& sender = front.first;
-        const NKikimrTx::TEvMediatorPlanStep& event = front.second->Record;
-
-        ui64 step = event.GetStep();
-
-        TVector<ui64> txIds;
-        THashMap<TActorId, TVector<ui64>> txAcks;
-
-        for (auto& tx : event.GetTransactions()) {
-            PQ_ENSURE(tx.HasTxId());
-
-            txIds.push_back(tx.GetTxId());
-
-            // Note: we plan to remove AckTo in the future
-            if (tx.HasAckTo()) {
-                TActorId txOwner = ActorIdFromProto(tx.GetAckTo());
-                // Note: when mediators ack transactions on their own they also
-                // specify an empty AckTo. Sends to empty actors are a no-op anyway.
-                if (txOwner) {
-                    txAcks[txOwner].push_back(tx.GetTxId());
-                }
-            }
-        }
-
-        if (step >= PlanStep) {
-            ui64 lastPlannedTxId = 0;
-
-            for (ui64 txId : txIds) {
-                PQ_ENSURE(lastPlannedTxId < txId);
-
-                if (auto p = Txs.find(txId); p != Txs.end()) {
-                    TDistributedTransaction& tx = p->second;
-
-                    auto span = tx.CreatePlanStepSpan(TabletID(), step);
-                    tx.BeginWaitRSSpan(TabletID());
-
-                    PQ_ENSURE(tx.MaxStep >= step);
-
-                    if (tx.Step == Max<ui64>()) {
-                        PQ_ENSURE(TxQueue.empty() || (TxQueue.back() < std::make_pair(step, txId)));
-
-                        tx.OnPlanStep(step);
-                        TryExecuteTxs(ctx, tx);
-
-                        TxQueue.emplace_back(step, txId);
-                        SetTxCompleteLagCounter();
-                    } else {
-                        PQ_LOG_TX_W("Transaction already planned for step " << tx.Step <<
-                                    ", Step: " << step <<
-                                    ", TxId: " << txId);
-                    }
-                } else {
-                    PQ_LOG_TX_W("Unknown transaction " << txId <<
-                                ", Step: " << step);
-                }
-
-                lastPlannedTxId = txId;
-            }
-
-            PlanStep = step;
-            PlanTxId = lastPlannedTxId;
-
-            PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
-        } else {
-            PQ_LOG_ERROR("Old plan step " << step <<
-                        ", PlanStep: " << PlanStep);
-        }
-
-        SchedulePlanStepAck(step, txAcks);
-        SchedulePlanStepAccepted(sender, step);
-    }
 }
 
 void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,

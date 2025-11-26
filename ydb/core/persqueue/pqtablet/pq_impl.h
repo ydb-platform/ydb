@@ -315,7 +315,6 @@ private:
     ui64 ExecTxId = 0;
 
     TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
-    TDeque<std::pair<TActorId, std::unique_ptr<TEvTxProcessing::TEvPlanStep>>> EvPlanStepQueue;
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
     THashSet<ui64> DeleteTxs;
     TSet<std::pair<ui64, ui64>> ChangedTxs;
@@ -358,7 +357,6 @@ private:
     void TryWriteTxs(const TActorContext& ctx);
 
     void ProcessProposeTransactionQueue(const TActorContext& ctx);
-    void ProcessPlanStepQueue(const TActorContext& ctx);
     void ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& ev,
                          const TActorContext& ctx);
     void ProcessWriteTxs(const TActorContext& ctx,
@@ -506,7 +504,6 @@ private:
     void SetTxInFlyCounter();
 
     bool CanProcessProposeTransactionQueue() const;
-    bool CanProcessPlanStepQueue() const;
     bool CanProcessWriteTxs() const;
     bool CanProcessDeleteTxs() const;
     bool CanProcessTxWrites() const;

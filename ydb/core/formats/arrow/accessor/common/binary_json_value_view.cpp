@@ -1,10 +1,10 @@
 #include "binary_json_value_view.h"
 
-#include <library/cpp/json/json_reader.h>
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/types/binary_json/read.h>
 
 #include <limits>
+#include <cmath>
 
 namespace NKikimr::NArrow::NAccessor {
 

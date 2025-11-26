@@ -12,6 +12,7 @@ cms_config:
   cluster_limits:
     disabled_nodes_limit: 1000
     disabled_nodes_ratio_limit: 30
+  disable_maintenance: true
 ```
 
 ## Параметры
@@ -22,10 +23,4 @@ cms_config:
 | `tenant_limits.disabled_nodes_ratio_limit`    | `13`                  | Максимальный процент [узлов базы данных](../../concepts/glossary.md#database-node), которые могут быть одновременно недоступны или заблокированы.                                                                                                                          |
 | `cluster_limits.disabled_nodes_limit`         | -                     | Максимальное количество узлов [кластера](../../concepts/glossary.md#cluster), которые могут быть одновременно недоступны или заблокированы.                                                                           |
 | `cluster_limits.disabled_nodes_ratio_limit`   | `13`                  | Максимальный процент узлов [кластера](../../concepts/glossary.md#cluster), которые могут быть одновременно недоступны.                                                                                                                             |
-| `disable_maintenance`                         | `false`               | Флаг приостанавливает новые [работы по обслуживанию кластера](../../devops/concepts/maintenance-without-downtime.md#maintenance-task). Уже начатые работы продолжат выполняться.
-
-{% note warning %}
-
-Длительная приостановка обслуживания кластера может привести к потере доступности из-за поломок оборудования.
-
-{% endnote %}                                                                                                                                      |
+| `disable_maintenance`                         | `false`               | Флаг [приостанавливает](../../devops/concepts/maintenance-without-downtime.md#disable-maintenance) новые работы по обслуживанию кластера.       |

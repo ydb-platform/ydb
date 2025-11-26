@@ -3242,7 +3242,9 @@ const TUdfNode* TUdfNode::GetUdfNode() const {
 }
 
 TAstNode* TUdfNode::Translate(TContext& ctx) const {
-    ctx.Error(Pos_) << "Abstract Udf Node can't be used as a part of expression.";
+    ctx.Error(Pos_)
+        << "Abstract Udf Node can't be used as a part of expression. "
+        << "It should be applied immediately to its arguments";
     return nullptr;
 }
 

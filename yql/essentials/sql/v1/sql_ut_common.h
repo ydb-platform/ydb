@@ -4694,9 +4694,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 Y_UNIT_TEST(UdfSyntaxSugarMissingCall) {
     auto req = "SELECT Udf(DateTime::FromString, \"foo\" as RunConfig);";
     auto res = SqlToYql(req);
-    TString a1 = Err2Str(res);
-    TString a2("<main>:1:8: Error: Abstract Udf Node can't be used as a part of expression.\n");
-    UNIT_ASSERT_NO_DIFF(a1, a2);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:1:8: Error: Abstract Udf Node can't be used as a part of expression.");
 }
 
 Y_UNIT_TEST(UdfSyntaxSugarIsNotCallable) {

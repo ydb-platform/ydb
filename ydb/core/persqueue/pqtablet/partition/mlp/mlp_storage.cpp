@@ -546,7 +546,7 @@ ui64 TStorage::NormalizeDeadline(TInstant deadline) {
 }
 
 ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
-    AFL_VERIFY(message.GetStatus() == EMessageStatus::Unprocessed)("status", message.Status);
+    AFL_VERIFY(message.GetStatus() == EMessageStatus::Unprocessed)("status", message.GetStatus());
     message.SetStatus(EMessageStatus::Locked);
     message.DeadlineDelta = NormalizeDeadline(deadline);
     if (message.ProcessingCount < MAX_PROCESSING_COUNT) {

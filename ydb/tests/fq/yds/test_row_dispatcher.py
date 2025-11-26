@@ -25,6 +25,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 YDS_CONNECTION = "yds"
 COMPUTE_NODE_COUNT = 3
 
+
 class Param(object):
     def __init__(
         self,

@@ -3,5 +3,36 @@ items:
   href: tls.md
 - name: client_certificate_authorization
   href: client_certificate_authorization.md
+<<<<<<< HEAD
+=======
+- name: domains_config
+  href: domains_config.md
+- name: feature_flags
+  href: feature_flags.md
+- name: query_service_config
+  href: query_service_config.md
+- name: healthcheck_config
+  href: healthcheck_config.md
+- name: hive_config
+  href: hive_config.md
+- name: host_configs
+  href: host_configs.md
+- name: hosts
+  href: hosts.md
+- name: kafka_proxy_config
+  href: kafka_proxy_config.md
+- name: log_config
+  href: log_config.md
+- name: memory_controller_config
+  href: memory_controller_config.md
+- name: node_broker_config
+  href: node_broker_config.md
+- name: resource_broker_config
+  href: resource_broker_config.md
+- name: security_config
+  href: security_config.md
+- name: tls
+  href: tls.md
+>>>>>>> 1e44e81dd ([docs] Edited links and renamed files ru (#27616))
 - name: table_service_config
   href: table_service_config.md

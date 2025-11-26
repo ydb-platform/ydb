@@ -1,12 +1,9 @@
 #include "object.h"
 #include "s3_uri.h"
 
-#include <ydb/core/base/appdata.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/uri/uri.h>
-
-#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NColumnShard::NTiers {
 
@@ -36,15 +33,9 @@ TConclusion<NKikimrSchemeOp::TS3Settings> TTierConfig::GetPatchedConfig(
     return config;
 }
 
-TConclusionStatus TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto, bool mergeFromAppData) {
+TConclusionStatus TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto) {
     if (!proto.GetAuth().HasAws()) {
         return TConclusionStatus::Fail("AWS auth is not defined for storage tier");
-    }
-
-    if (mergeFromAppData) {
-        if (HasAppData() && AppDataVerified().ColumnShardConfig.HasS3Client()) {
-            ProtoConfig.MergeFrom(AppDataVerified().ColumnShardConfig.GetS3Client());
-        }
     }
 
     {

@@ -114,7 +114,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
             AFL_VERIFY(findExternalDataSource);
             NKikimrSchemeOp::TExternalDataSourceDescription proto;
             (*findExternalDataSource)->FillProto(proto, false);
-            if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(proto, true); status.IsFail()) {
+            if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(proto); status.IsFail()) {
                 errors.AddError("Cannot use external data source \"" + tierPathString + "\" for tiering: " + status.GetErrorMessage());
                 return false;
             }

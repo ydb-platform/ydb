@@ -96,7 +96,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
    ```java
    import tech.ydb.query.QueryClient;
-   import tech.ydb.query.QueryTransaction;
    import tech.ydb.query.tools.QueryReader;
    import tech.ydb.query.tools.SessionRetryContext;
 
@@ -188,7 +187,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - Node.js
 
    ```typescript
-   import { Driver, QuerySession, TxMode } from 'ydb-sdk';
+   import { Driver, QuerySession } from 'ydb-sdk';
 
    // ...
 
@@ -655,7 +654,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - Node.js
 
    ```typescript
-   import { Driver, QuerySession, TxMode } from 'ydb-sdk';
+   import { Driver, QuerySession } from 'ydb-sdk';
 
    // ...
 

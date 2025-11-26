@@ -1,6 +1,9 @@
 PROGRAM(ydbd)
 
 IF (NOT SANITIZER_TYPE)  # for some reasons some tests with asan are failed, see comment in CPPCOM-32
+    # Disabling export of dynamic symbols allows to significantly reduce size of the stripped binary,
+    # however, to be able to use dynamic UDFs (the --udfs-dir flag of ydbd server),
+    # required explicit export of symbols from yql/essentials/public/udf/service/exception_policy/udf_service.cpp
     EXPORTS_SCRIPT(ydb/apps/ydbd/exports.symlist)
 ENDIF()
 

@@ -1,0 +1,133 @@
+#include "model_anthropic.h"
+#include "model_base.h"
+
+#include <ydb/core/base/validation.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_ai/common/json_utils.h>
+
+#include <library/cpp/json/json_reader.h>
+
+#include <util/string/builder.h>
+#include <util/string/strip.h>
+
+namespace NYdb::NConsoleClient::NAi {
+
+namespace {
+
+class TModelAnthropic final : public TModelBase {
+    using TBlase = TModelBase;
+
+    static constexpr ui64 MAX_COMPLETION_TOKENS = 1024;
+
+public:
+    TModelAnthropic(const TAnthropicModelSettings& settings, const TClientCommand::TConfig& config)
+        : TBlase(CreateApiUrl(settings.BaseUrl, "/v1/messages"), settings.ApiKey, config)
+        , Tools(ChatCompletionRequest["tools"].SetType(NJson::JSON_ARRAY).GetArraySafe())
+        , Conversation(ChatCompletionRequest["messages"].SetType(NJson::JSON_ARRAY).GetArraySafe())
+    {
+        ChatCompletionRequest["model"] = settings.ModelId;
+        ChatCompletionRequest["max_tokens"] = MAX_COMPLETION_TOKENS;
+    }
+
+    void RegisterTool(const TString& name, const NJson::TJsonValue& parametersSchema, const TString& description) final {
+        Y_DEBUG_VERIFY(ValidateToolName(name), "Internal error. Invalid tool name: %s", name.c_str());
+
+        auto& tool = Tools.emplace_back();
+        tool["name"] = name;
+        tool["input_schema"] = parametersSchema;
+        tool["description"] = description;
+    }
+
+protected:
+    void AdvanceConversation(const std::vector<TMessage>& messages) final {
+        auto& conversationItem = Conversation.emplace_back();
+        conversationItem["role"] = "user";
+
+        auto& content = conversationItem["content"].SetType(NJson::JSON_ARRAY).GetArraySafe();
+        for (const auto& message : messages) {
+            auto& item = content.emplace_back();
+            auto& type = item["type"];
+
+            if (std::holds_alternative<TUserMessage>(message)) {
+                item["text"] = std::get<TUserMessage>(message).Text;
+                type = "text";
+            } else {
+                const auto& toolResponse = std::get<TToolResponse>(message);
+                item["content"] = toolResponse.Text;
+                item["tool_use_id"] = toolResponse.ToolCallId;
+                item["is_error"] = !toolResponse.IsSuccess;
+                type = "tool_result";
+            }
+        }
+    }
+
+    TResponse HandleModelResponse(const NJson::TJsonValue& response) final {
+        TResponse result;
+
+        TJsonParser parser(response);
+        if (auto child = parser.MaybeKey("response")) {
+            parser = std::move(*child);
+        }
+
+        parser = parser.GetKey("content");
+        auto& conversationItem = Conversation.emplace_back();
+        conversationItem["role"] = "assistant";
+        conversationItem["content"] = parser.GetValue();
+
+        parser.Iterate([&](TJsonParser item) {
+            const auto& type = item.GetKey("type").GetString();
+            if (type == "text") {
+                if (result.Text) {
+                    throw yexception() << "Multiple conversation items contains text";
+                }
+                result.Text = Strip(item.GetKey("text").GetString());
+            } else if (type == "tool_use") {
+                result.ToolCalls.push_back({
+                    .Id = item.GetKey("id").GetString(),
+                    .Name = item.GetKey("name").GetString(),
+                    .Parameters = item.GetKey("input").GetValue(),
+                });
+            } else {
+                throw yexception() << "Unknown conversation item type: " << type << ", expected text or tool_use";
+            }
+        });
+
+        return result;
+    }
+
+    TString HandleErrorResponse(ui64 httpCode, const TString& response) final {
+        TJsonParser parser;
+        if (!parser.Parse(response)) {
+            return TBlase::HandleErrorResponse(httpCode, response);
+        }
+
+        auto error = TStringBuilder() << "Request to model API failed:\n";
+        if (const auto& info = parser.MaybeKey("error")) {
+            return error << info->ToString();
+        }
+        if (const auto& response = parser.MaybeKey("response")) {
+            if (const auto& info = parser.MaybeKey("error")) {
+                return error << info->ToString();
+            }
+            return error << response->ToString();
+        }
+
+        return TBlase::HandleErrorResponse(httpCode, response);
+    }
+
+private:
+    static bool ValidateToolName(const TString& name) {
+        return 1 <= name.size() && name.size() <= 128;
+    }
+
+private:
+    NJson::TJsonValue::TArray& Tools;
+    NJson::TJsonValue::TArray& Conversation;
+};
+
+} // anonymous namespace
+
+IModel::TPtr CreateAnthropicModel(const TAnthropicModelSettings& settings, const TClientCommand::TConfig& config) {
+    return std::make_shared<TModelAnthropic>(settings, config);
+}
+
+} // namespace NYdb::NConsoleClient::NAi

@@ -24,7 +24,7 @@ class ColumnTableHelper:
 
     def get_portion_stat_by_tier(self) -> dict[str, dict[str, int]]:
         results = self.ydb_client.query(
-            f"select TierName, sum(Rows) as Rows, count(*) as Portions from `{self.path}/.sys/primary_index_portion_stats` group by TierName"
+            f"select TierName, sum(Rows) as Rows, count(*) as Portions from `{self.path}/.sys/primary_index_portion_stats` where Activity = 1 group by TierName"
         )
         return {
             row["TierName"]: {"Rows": row["Rows"], "Portions": row["Portions"]}

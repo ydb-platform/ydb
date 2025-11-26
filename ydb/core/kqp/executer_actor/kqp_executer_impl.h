@@ -462,7 +462,7 @@ protected:
             << ", task: " << taskId
             << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())
             << ", stats: " << state.GetStats());
-        
+
         YQL_ENSURE(Stats);
 
         if (state.HasStats()) {

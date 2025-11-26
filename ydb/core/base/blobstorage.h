@@ -988,7 +988,7 @@ struct TEvBlobStorage {
             }
         };
         const TLogoBlobID Id;
-        const TRcBuf Buffer; //FIXME(innokentii) const members prevent usage of move-semantics elsewhere
+        TRope Buffer;
         const TInstant Deadline;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
         const ETactic Tactic;
@@ -997,7 +997,7 @@ struct TEvBlobStorage {
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
-        TEvPut(const TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
+        TEvPut(const TLogoBlobID &id, TRope &&buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault)
             : Id(id)
@@ -1020,17 +1020,23 @@ struct TEvBlobStorage {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&tactic, sizeof(tactic));
         }
 
+        TEvPut(const TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
+               NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
+               ETactic tactic = TacticDefault)
+            : TEvPut(id, TRope(std::move(buffer)), deadline, handleClass, tactic)
+        {}
+
         TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault)
-            : TEvPut(id, TRcBuf(buffer), deadline, handleClass, tactic)
+            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic)
         {}
 
 
         TEvPut(const TLogoBlobID &id, const TSharedData &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault)
-            : TEvPut(id, TRcBuf(buffer), deadline, handleClass, tactic)
+            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic)
         {}
 
         TString Print(bool isFull) const {

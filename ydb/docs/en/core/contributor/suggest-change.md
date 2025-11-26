@@ -296,7 +296,37 @@ git rebase main
 
 ### Cherry-picking fixes to the stable branch {#cherry_pick_stable}
 
-When required to cherry-pick a fix to the stable branch, first branch off of the stable branch:
+#### Automatic Cherry-pick (Recommended) {#auto_cherry_pick}
+
+After your PR is merged to `main`, you can use the automatic cherry-pick feature to easily create cherry-pick PRs to stable branches.
+
+1. **Suggestion**: After your PR is merged, a bot will automatically post a comment suggesting available stable branches for cherry-picking.
+
+2. **Cherry-pick command**: Reply to the merged PR with a comment containing the cherry-pick command:
+   ```
+   /cherry-pick stable-25-1 stable-24-4
+   ```
+
+3. **Automated process**: The system will:
+   - Validate the specified branches exist
+   - Create new branches for each target stable branch
+   - Apply your changes via `git cherry-pick`
+   - Create pull requests for each branch
+   - Report any conflicts or errors
+
+**Usage examples:**
+- Cherry-pick to multiple branches: `/cherry-pick stable-25-1 stable-24-4 stable-23-3`
+- Cherry-pick to a single branch: `/cherry-pick stable-25-1`
+
+**Who can use this feature:**
+- The original PR author
+- Repository collaborators with write access
+
+**Note**: If cherry-pick fails due to conflicts, you'll need to create the PR manually using the process below.
+
+#### Manual Cherry-pick {#manual_cherry_pick}
+
+When required to cherry-pick a fix manually to the stable branch, first branch off of the stable branch:
 
 ```bash
 git fetch official

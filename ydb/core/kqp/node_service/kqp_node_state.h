@@ -52,7 +52,6 @@ class TNodeState {
 public:
     void AddRequest(TNodeRequest&& request);
     bool HasRequest(ui64 txId) const;
-    void RemoveRequest(ui64 txId, TActorId executerId);
     std::vector<ui64 /* txId */> ClearExpiredRequests();
 
     bool OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId, TActorId executerId);

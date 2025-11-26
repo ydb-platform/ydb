@@ -20,21 +20,6 @@ bool TNodeState::HasRequest(ui64 txId) const {
     return bucket.Requests.contains(txId);
 }
 
-void TNodeState::RemoveRequest(ui64 txId, TActorId executerId) {
-    auto& bucket = GetBucketByTxId(txId);
-    
-    TWriteGuard guard(bucket.Mutex);
-    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
-    
-    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
-        if (requestIt->second.ExecuterId == executerId) {
-            bucket.ExpiringRequests.erase(requestIt->second.GetExpirationInfo());
-            bucket.Requests.erase(requestIt);
-            return;
-        }
-    }
-}
-
 std::vector<ui64> TNodeState::ClearExpiredRequests() {
     std::vector<ui64> requests;
 
@@ -95,6 +80,7 @@ void TNodeState::OnTaskFinished(ui64 txId, ui64 taskId, bool success) {
                     auto* actorSystem = TlsActivationContext->ActorSystem();
                     actorSystem->Send(MakeKqpSchedulerServiceId(actorSystem->NodeId), removeQueryEvent.Release());
                 }
+
                 bucket.Requests.erase(requestIt);
             }
 

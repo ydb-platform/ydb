@@ -655,6 +655,20 @@ namespace NKikimr::NYaml {
                         }
                     }
                 }
+
+                if (hostConfig.HasInferPDiskSlotCountMax()) {
+                    auto maxSlotsByType = hostConfig.GetInferPDiskSlotCountMax();
+                    for(auto& drive : *hostConfig.MutableDrive()) {
+                        if (drive.HasInferPDiskSlotCountMax()) {
+                            continue;
+                        }
+                        if (drive.GetType() == "ROT" && maxSlotsByType.HasRot()) {
+                            drive.SetInferPDiskSlotCountMax(maxSlotsByType.GetRot());
+                        } else if (auto& type = drive.GetType(); (type == "SSD" || type == "NVME") && maxSlotsByType.HasSsd()) {
+                            drive.SetInferPDiskSlotCountMax(maxSlotsByType.GetSsd());
+                        }
+                    }
+                }
             }
         }
 

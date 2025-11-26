@@ -194,17 +194,6 @@ struct TEvents {
         NThreading::TPromise<NYql::IDqGateway::TResult> Result;
     };
 
-    struct TEvRaiseTransientIssues : public NActors::TEventLocal<TEvRaiseTransientIssues, TEventIds::EvRaiseTransientIssues> {
-        TEvRaiseTransientIssues() = default;
-
-        explicit TEvRaiseTransientIssues(NYql::TIssues issues)
-            : TransientIssues(std::move(issues))
-        {
-        }
-
-        NYql::TIssues TransientIssues;
-    };
-
     struct TEvSchemaCreated : public NActors::TEventLocal<TEvSchemaCreated, TEventIds::EvSchemaCreated> {
         explicit TEvSchemaCreated(NYdb::TStatus result)
             : Result(std::move(result))

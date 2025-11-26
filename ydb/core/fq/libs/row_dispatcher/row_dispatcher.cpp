@@ -5,6 +5,9 @@
 #include "leader_election.h"
 #include "probes.h"
 
+#include "ydb/core/base/appdata_fwd.h"
+#include "ydb/core/base/feature_flags.h"
+
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/metrics/sanitize_label.h>
@@ -117,9 +120,13 @@ struct TQueryStatKeyHash {
 
 struct TAggQueryStat {
     TAggQueryStat() = default;
-    TAggQueryStat(const TString& queryId, const ::NMonitoring::TDynamicCounterPtr& counters, const NYql::NPq::NProto::TDqPqTopicSource& sourceParams)
+    TAggQueryStat(const TString& queryId, const ::NMonitoring::TDynamicCounterPtr& counters, const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
         : QueryId(queryId)
         , SubGroup(counters) {
+            Cerr << "enableStreamingQueriesCounters " << enableStreamingQueriesCounters <<Endl;
+        if (!enableStreamingQueriesCounters) {
+            SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        }
         for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
             SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
         }
@@ -411,6 +418,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TMap<ui64, TAtomicSharedPtr<TConsumerInfo>> ConsumersByEventQueueId;
     THashMap<TTopicSessionKey, TTopicSessionInfo, TTopicSessionKeyHash> TopicSessions;
     TMap<TActorId, TReadActorInfo> ReadActorsInternalState;
+    bool EnableStreamingQueriesCounters = false;
 
 public:
     explicit TRowDispatcher(
@@ -552,6 +560,7 @@ void TRowDispatcher::Bootstrap() {
             TlsActivationContext->ActorSystem(), SelfId());
     }
     NodesTracker.Init(SelfId());
+    EnableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
@@ -665,7 +674,7 @@ void TRowDispatcher::UpdateMetrics() {
                 TQueryStatKey statKey{consumer->QueryId, key.ReadGroup};
                 auto& stats = AggrStats.LastQueryStats.emplace(
                     statKey,
-                    TAggQueryStat(consumer->QueryId, Metrics.Counters, consumer->SourceParams)).first->second;
+                    TAggQueryStat(consumer->QueryId, Metrics.Counters, consumer->SourceParams, EnableStreamingQueriesCounters)).first->second;
                 stats.Add(partition.Stat, partition.FilteredBytes);
                 partition.FilteredBytes = 0;
             }
@@ -841,9 +850,11 @@ void TRowDispatcher::UpdateReadActorsInternalState() {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", read group " << ev->Get()->Record.GetSource().GetReadGroup() << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " part id " << JoinSeq(',', ev->Get()->Record.GetPartitionIds()) << " query id " << ev->Get()->Record.GetQueryId() << " cookie " << ev->Cookie);
-    auto queryGroup = Metrics.Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
-    auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(ev->Get()->Record.GetSource().GetReadGroup()));
-    topicGroup->GetCounter("StartSession", true)->Inc();
+    if (EnableStreamingQueriesCounters) {
+        auto queryGroup = Metrics.Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
+        auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(ev->Get()->Record.GetSource().GetReadGroup()));
+        topicGroup->GetCounter("StartSession", true)->Inc();
+    }
 
     LWPROBE(StartSession, ev->Sender.ToString(), ev->Get()->Record.GetQueryId(), ev->Get()->Record.ByteSizeLong());
 

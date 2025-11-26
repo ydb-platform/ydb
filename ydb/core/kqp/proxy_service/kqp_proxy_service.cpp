@@ -1819,7 +1819,7 @@ private:
             "cs",
             NKikimr::CreateYdbCredentialsProviderFactory,
             *FederatedQuerySetup->Driver,
-            Counters->GetKqpCounters()->GetSubgroup("subsystem", "storage_service"));
+            Counters->GetKqpCounters()->GetSubgroup("subsystem", "checkpoints_storage_service"));
 
         CheckpointStorageService = TActivationContext::Register(service.release());
         TActivationContext::ActorSystem()->RegisterLocalService(

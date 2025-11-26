@@ -1,5 +1,8 @@
 #include "topic_session.h"
 
+#include "ydb/core/base/appdata_fwd.h"
+#include "ydb/core/base/feature_flags.h"
+
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
@@ -23,8 +26,10 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTopicSessionMetrics {
-    void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, const TString& readGroup, ui32 partitionId) {
-        TopicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
+    void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, const TString& readGroup, ui32 partitionId, bool enableStreamingQueriesCounters) {
+        TopicGroup = enableStreamingQueriesCounters
+            ? counters->GetSubgroup("topic", SanitizeLabel(topicPath))
+            : MakeIntrusive<::NMonitoring::TDynamicCounters>();
         ReadGroup = TopicGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
         PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
 
@@ -98,7 +103,7 @@ private:
     struct TClientsInfo : public IClientDataConsumer {
         using TPtr = TIntrusivePtr<TClientsInfo>;
 
-        TClientsInfo(TTopicSession& self, const TString& logPrefix, const ITopicFormatHandler::TSettings& handlerSettings, const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev, const NMonitoring::TDynamicCounterPtr& counters, const TString& readGroup, TMaybe<ui64> offset)
+        TClientsInfo(TTopicSession& self, const TString& logPrefix, const ITopicFormatHandler::TSettings& handlerSettings, const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev, const NMonitoring::TDynamicCounterPtr& counters, const TString& readGroup, TMaybe<ui64> offset, bool enableStreamingQueriesCounters)
             : Self(self)
             , LogPrefix(logPrefix)
             , HandlerSettings(handlerSettings)
@@ -122,7 +127,9 @@ private:
             for (const auto& sensor : ev->Get()->Record.GetSource().GetTaskSensorLabel()) {
                 Counters = Counters->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
             }
-            auto queryGroup = Counters->GetSubgroup("query_id", QueryId);
+            auto queryGroup = enableStreamingQueriesCounters
+                ? Counters->GetSubgroup("query_id", QueryId)
+                : MakeIntrusive<::NMonitoring::TDynamicCounters>();
             auto readSubGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
             FilteredDataRate = readSubGroup->GetCounter("FilteredDataRate", true);
             RestartSessionByOffsetsByQuery = readSubGroup->GetCounter("RestartSessionByOffsetsByQuery", true);
@@ -295,6 +302,7 @@ private:
     TTopicSessionMetrics Metrics;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
+    bool EnableStreamingQueriesCounters = false;
 
 public:
     TTopicSession(
@@ -419,7 +427,8 @@ TTopicSession::TTopicSession(
 
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
-    Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId);
+    EnableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
+    Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId, EnableStreamingQueriesCounters);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
         << ", Timeout " << Config.GetTimeoutBeforeStartSession() << " sec");
@@ -783,7 +792,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     const TString& format = source.GetFormat();
     ITopicFormatHandler::TSettings handlerSettings = {.ParsingFormat = format ? format : "raw"};
 
-    auto clientInfo = Clients.insert({ev->Sender, MakeIntrusive<TClientsInfo>(*this, LogPrefix, handlerSettings, ev, Counters, ReadGroup, offset)}).first->second;
+    auto clientInfo = Clients.insert({ev->Sender, MakeIntrusive<TClientsInfo>(*this, LogPrefix, handlerSettings, ev, Counters, ReadGroup, offset, EnableStreamingQueriesCounters)}).first->second;
     auto formatIt = FormatHandlers.find(handlerSettings);
     if (formatIt == FormatHandlers.end()) {
         auto config = CreateFormatHandlerConfig(Config, FunctionRegistry, CompileServiceActorId, source.GetSkipJsonErrors());

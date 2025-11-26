@@ -2814,13 +2814,17 @@ private:
             }
         }
 
+        auto counters = Counters->Counters->GetKqpCounters();
+        if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
+            counters = counters->GetSubgroup("path", context->StreamingQueryPath);
+        }
         const auto& checkpointId = context->CheckpointId;
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
             ::NFq::TCoordinatorId(checkpointId, Generation),
             NYql::NDq::MakeCheckpointStorageID(),
             SelfId(),
             {},
-            Counters->Counters->GetKqpCounters()->GetSubgroup("path", context->StreamingQueryPath),
+            counters,
             graphParams,
             stateLoadMode,
             streamingDisposition).Release());

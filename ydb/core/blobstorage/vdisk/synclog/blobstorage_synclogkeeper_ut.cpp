@@ -120,7 +120,7 @@ namespace NKikimr {
 
         State = std::make_unique<TSyncLogKeeperState>(slCtx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,
                 syncLogMaxEntryPointSize, TActorId{});
-        State->Init(nullptr, std::make_shared<TFakeLoggerCtx>());
+        State->Init(nullptr, std::make_shared<TFakeLoggerCtx>(), TActorId{});
 
         STR << "CREATE STATE entryPointLsn# " << ep.EntryPointLsn <<
             " entryPoint# " << (ep.EntryPoint.empty() ? "<empty>" : "<exists>") << "\n";

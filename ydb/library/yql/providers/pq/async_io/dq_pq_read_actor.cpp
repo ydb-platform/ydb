@@ -4,6 +4,9 @@
 #include "dq_pq_read_actor_base.h"
 #include "probes.h"
 
+#include "ydb/core/base/appdata_fwd.h"
+#include "ydb/core/base/feature_flags.h"
+
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -137,7 +140,7 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
             const NPq::NProto::TDqPqTopicSource& sourceParams)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
-            if (counters) {
+            if (counters && NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
                 SubGroup = Counters->GetSubgroup("source", "PqRead");
             } else {
                 SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
@@ -974,12 +977,17 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
         ui32 topicPartitionsCount = ExtractPartitionsFromParams(readTaskParamsMsg, args.TaskParams, args.ReadRanges);
 
+        auto txId = args.TxId;
+        auto taskParamsIt = args.TaskParams.find("query_path");
+        if (taskParamsIt != args.TaskParams.end()) {
+            txId = taskParamsIt->second;
+        }
         if (!settings.GetSharedReading()) {
             return CreateDqPqReadActor(
                 std::move(settings),
                 args.InputIndex,
                 args.StatsLevel,
-                args.TxId,
+                txId,
                 args.TaskId,
                 args.SecureParams,
                 std::move(readTaskParamsMsg),
@@ -998,7 +1006,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             std::move(settings),
             args.InputIndex,
             args.StatsLevel,
-            args.TxId,
+            txId,
             args.TaskId,
             args.SecureParams,
             std::move(readTaskParamsMsg),

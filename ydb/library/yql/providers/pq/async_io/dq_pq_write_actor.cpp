@@ -1,6 +1,9 @@
 #include "dq_pq_write_actor.h"
 #include "probes.h"
 
+#include "ydb/core/base/appdata_fwd.h"
+#include "ydb/core/base/feature_flags.h"
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
@@ -105,7 +108,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
         TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
-            if (Counters) {
+            if (Counters && NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
                 SubGroup = Counters->GetSubgroup("sink", "PqSink");
             } else {
                 SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
@@ -569,12 +572,17 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
             NPq::NProto::TDqPqTopicSink&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
+            auto txId = args.TxId;
+            auto taskParamsIt = args.TaskParams.find("query_path");
+            if (taskParamsIt != args.TaskParams.end()) {
+                txId = taskParamsIt->second;
+            }
             NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
             return CreateDqPqWriteActor(
                 std::move(settings),
                 args.OutputIndex,
                 args.StatsLevel,
-                args.TxId,
+                txId,
                 args.TaskId,
                 args.SecureParams,
                 driver,

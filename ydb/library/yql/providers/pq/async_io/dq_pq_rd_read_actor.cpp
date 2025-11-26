@@ -23,6 +23,8 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include "ydb/core/base/appdata_fwd.h"
+#include "ydb/core/base/feature_flags.h"
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 
@@ -80,7 +82,7 @@ struct TRowDispatcherReadActorMetrics {
     explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
-        if (Counters) {
+        if (Counters && NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
             SubGroup = Counters->GetSubgroup("source", "RdPqRead");
         } else {
             SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();

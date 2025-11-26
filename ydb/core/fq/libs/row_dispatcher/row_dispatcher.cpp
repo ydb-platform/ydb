@@ -123,7 +123,6 @@ struct TAggQueryStat {
     TAggQueryStat(const TString& queryId, const ::NMonitoring::TDynamicCounterPtr& counters, const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
         : QueryId(queryId)
         , SubGroup(counters) {
-            Cerr << "enableStreamingQueriesCounters " << enableStreamingQueriesCounters <<Endl;
         if (!enableStreamingQueriesCounters) {
             SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         }

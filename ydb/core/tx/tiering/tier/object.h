@@ -7,9 +7,6 @@
 
 #include <library/cpp/json/writer/json_value.h>
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/protos/config.pb.h>
-
 namespace NKikimr::NMetadata::NSecret {
 class TSnapshot;
 }
@@ -24,17 +21,9 @@ private:
 
 public:
     TTierConfig() = default;
-    TTierConfig(const TTierProto& config, const NKikimrSchemeOp::TCompressionOptions& compression)
-        : ProtoConfig(config)
-        , Compression(compression) {
-    }
-
-    explicit TTierConfig(const TTierProto& config)
+    TTierConfig(const TTierProto& config)
         : ProtoConfig(config) {
-        if (HasAppData() && AppDataVerified().ColumnShardConfig.HasS3Client()) {
-            ProtoConfig.MergeFrom(AppDataVerified().ColumnShardConfig.GetS3Client());
-        }
-}
+    }
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto);
 

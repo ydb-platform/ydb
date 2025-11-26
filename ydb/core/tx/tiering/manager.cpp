@@ -77,12 +77,15 @@ private:
         const auto& description = ev->Get()->GetDescription();
         ResetRetryState(tierId);
         if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeExternalDataSource) {
-            NTiers::TTierConfig tier;
+            NKikimrSchemeOp::TS3Settings proto;
+            proto.CopyFrom(description.GetExternalDataSourceDescription());
+            NTiers::TTierConfig tier(proto);
             if (const auto status = tier.DeserializeFromProto(description.GetExternalDataSourceDescription()); status.IsFail()) {
                 AFL_WARN(NKikimrServices::TX_TIERING)("event", "fetched_invalid_tier_settings")("error", status.GetErrorMessage());
                 Owner->UpdateTierConfig(std::nullopt, tierId);
                 return;
             }
+
             Owner->UpdateTierConfig(tier, tierId);
         } else {
             AFL_WARN(NKikimrServices::TX_TIERING)("error", "invalid_object_type")("type", static_cast<ui64>(description.GetSelf().GetPathType()))("path", tierId.GetConfigPath());

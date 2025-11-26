@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    ///*
+    /*
     Y_UNIT_TEST(ScalarSubquery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -1115,7 +1115,7 @@ CREATE TABLE `/Root/foo_0` (
         Cout << "Time per query: " << time;     
     }
 
-    //*/
+    */
 }
 
 } // namespace NKqp

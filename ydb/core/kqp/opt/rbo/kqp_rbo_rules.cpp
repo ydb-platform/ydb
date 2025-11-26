@@ -150,6 +150,43 @@ bool IsNullRejectingPredicate(const TFilterInfo &filter, TExprContext &ctx) {
 namespace NKikimr {
 namespace NKqp {
 
+// Remove extra maps that arrise during translation
+// Identity map that doesn't project can always be removed
+// Identity map that projects maybe a projection operator and can be removed if it doesn't do any extra
+// projections
+
+std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+
+    Y_UNUSED(ctx);
+    Y_UNUSED(props);
+    
+    if (input->Kind != EOperator::Map) {
+        return input;
+    }
+
+    auto map = CastOperator<TOpMap>(input);
+
+    /***
+     * If its a project map, check that it output the same number of columns as the operator below
+     */
+
+    if (map->Project && map->GetOutputIUs().size() != map->GetInput()->GetOutputIUs().size()) {
+        return input;
+    }
+
+    for (auto [toColumn, body] : map->MapElements) {
+        if (! std::holds_alternative<TInfoUnit>(body)) {
+            return input;
+        }
+        auto fromColumn = std::get<TInfoUnit>(body);
+        if (fromColumn != toColumn) {
+            return input;
+        }
+    }
+
+    return map->GetInput();
+}
+
 // Currently we only extract simple expressions where there is only one variable on either side
 
 bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
@@ -560,7 +597,7 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
         TString readName;
         if (input->Kind == EOperator::Source) {
             auto opRead = CastOperator<TOpRead>(input);
-            auto newStageId = props.StageGraph.AddSourceStage(opRead->GetOutputIUs());
+            auto newStageId = props.StageGraph.AddSourceStage(opRead->Columns, opRead->GetOutputIUs(), opRead->NeedsMap());
             input->Props.StageId = newStageId;
             readName = opRead->Alias;
         } else {
@@ -663,14 +700,17 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
     return true;
 }
 
-TRuleBasedStage RuleStage1 = TRuleBasedStage(
+TRuleBasedStage RuleStage1 = TRuleBasedStage({std::make_shared<TInlineScalarSubplanRule>()});
+
+TRuleBasedStage RuleStage2 = TRuleBasedStage(
     {
-        std::make_shared<TInlineScalarSubplanRule>(),
+        std::make_shared<TRemoveIdenityMapRule>(),
         std::make_shared<TExtractJoinExpressionsRule>(), 
         std::make_shared<TPushMapRule>(), 
         std::make_shared<TPushFilterRule>()
     });
-TRuleBasedStage RuleStage2 = TRuleBasedStage({std::make_shared<TAssignStagesRule>()});
+
+TRuleBasedStage RuleStage3 = TRuleBasedStage({std::make_shared<TAssignStagesRule>()});
 
 } // namespace NKqp
 } // namespace NKikimr

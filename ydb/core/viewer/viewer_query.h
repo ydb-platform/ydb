@@ -680,7 +680,7 @@ private:
         ui32 month;
         ui32 day;
         if (!NKikimr::NMiniKQL::SplitDate32(value, year, month, day)) {
-            throw yexception() << "Failed to split Date32: " << value;
+            return TStringBuilder() << "Error: failed to split Date32: " << value;
         }
 
         return TStringBuilder() << year << "-" << LeftPad(month, 2, '0') << '-' << LeftPad(day, 2, '0');
@@ -690,7 +690,7 @@ private:
         auto value = tp.time_since_epoch().count();
 
         if (Y_UNLIKELY(NUdf::MIN_DATETIME64 > value || value > NUdf::MAX_DATETIME64)) {
-            throw yexception() << "Value out of range for Datetime64: " << value << " (min: " << NUdf::MIN_DATETIME64 << ", max: " << NUdf::MAX_DATETIME64 << ")";
+            return TStringBuilder() << "Error: value out of range for Datetime64: " << value << " (min: " << NUdf::MIN_DATETIME64 << ", max: " << NUdf::MAX_DATETIME64 << ")";
         }
 
         auto date = value / 86400;
@@ -707,7 +707,7 @@ private:
         auto value = tp.time_since_epoch().count();
 
         if (Y_UNLIKELY(NUdf::MIN_TIMESTAMP64 > value || value > NUdf::MAX_TIMESTAMP64)) {
-            throw yexception() << "Value out of range for Timestamp64: " << value << " (min: " << NUdf::MIN_TIMESTAMP64 << ", max: " << NUdf::MAX_TIMESTAMP64 << ")";
+            return TStringBuilder() << "Error: value out of range for Timestamp64: " << value << " (min: " << NUdf::MIN_TIMESTAMP64 << ", max: " << NUdf::MAX_TIMESTAMP64 << ")";
         }
         auto date = value / 86400000000ll;
         value -= date * 86400000000ll;

@@ -152,6 +152,7 @@ TSparsedArrayChunk::TSparsedArrayChunk(
             if (idx - startIndexInt) {
                 RemapExternalToInternal.emplace_back(startIndexExt, startIndexInt, idx - startIndexInt, false);
             }
+            AFL_VERIFY(UI32ColIndex->Value(idx) >= nextIndex)("next", nextIndex)("idx", idx)("val", UI32ColIndex->Value(idx));
             RemapExternalToInternal.emplace_back(nextIndex, 0, UI32ColIndex->Value(idx) - nextIndex, true);
             startIndexExt = UI32ColIndex->Value(idx);
             startIndexInt = idx;

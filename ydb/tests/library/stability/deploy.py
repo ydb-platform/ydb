@@ -5,10 +5,11 @@ import time as time_module
 import yatest.common
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
-from ydb.tests.library.stability.remote_execution import execute_command, deploy_binaries_to_hosts
+from ydb.tests.library.stability.collect_errors import create_cluster_issue
+from ydb.tests.library.stability.remote_execution import copy_file, execute_command, deploy_binaries_to_hosts
+from ydb.tests.library.stability.upload_results import test_event_report
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.library.stability.aggregate_results import StressUtilDeployResult
-
 
 
 class StressUtilDeployer:
@@ -16,10 +17,17 @@ class StressUtilDeployer:
     nemesis_started: bool
     hosts: list[str]
 
-    def __init__(self, binaries_deploy_path: str):
+    def __init__(self, binaries_deploy_path: str, cluster_path: str, yaml_config: str):
         self.binaries_deploy_path = binaries_deploy_path
         self.nemesis_started = False
         self.hosts = []
+        self.cluster_path = cluster_path
+        self.yaml_config = yaml_config
+        nodes = YdbCluster.get_cluster_nodes()
+
+        # Collect unique hosts and their corresponding nodes
+        unique_hosts = set(node.host for node in nodes)
+        self.hosts = list(filter(lambda h: h != 'localhost', unique_hosts))
 
     def prepare_stress_execution(
         self,
@@ -57,7 +65,7 @@ class StressUtilDeployer:
                 nemesis_log = [f"Workload preparation started at {prep_time}"]
 
                 # Stop nemesis using common method
-                self._manage_nemesis(False, "Stopping nemesis before workload execution", nemesis_log)
+                self._manage_nemesis(False, list(workload_params.keys()), "Stopping nemesis before workload execution", nemesis_log)
 
                 logging.info("Nemesis stopped successfully before workload execution")
 
@@ -144,7 +152,7 @@ class StressUtilDeployer:
         Raises:
             Exception: If deployment fails on all target nodes
         """
-        with allure.step("Deploy workload binary"):
+        with allure.step(f"Deploy {workload_name} binary"):
             logging.info(
                 f"Starting deployment for {workload_name} on {nodes_percentage}% of nodes"
             )
@@ -271,6 +279,20 @@ class StressUtilDeployer:
                         )
 
                     detailed_deploy_error = "\n".join(deploy_error_details)
+
+                    cluster_issue = create_cluster_issue(
+                        "deployment_failed",
+                        f"Binary deployment failed on all {len(selected_nodes)} nodes: {detailed_deploy_error}",
+                        0
+                    )
+
+                    test_event_report(
+                        event_kind='ClusterCheck',
+                        verification_phase="workload_deployment",
+                        check_type="deployment_failure",
+                        cluster_issue=cluster_issue
+                    )
+
                     logging.error(detailed_deploy_error)
                     raise Exception(detailed_deploy_error)
 
@@ -283,6 +305,7 @@ class StressUtilDeployer:
     def _manage_nemesis(
         self,
         enable_nemesis: bool,
+        stress_util_names: list[str] = [],
         operation_context: str = None,
         existing_log: list = None,
     ):
@@ -309,8 +332,8 @@ class StressUtilDeployer:
 
         try:
             # Get all unique cluster hosts
-            nodes = YdbCluster.get_cluster_nodes()
-            unique_hosts = set(node.host for node in nodes)
+            nodes = self.nodes
+            unique_hosts = list(filter(lambda h: h != 'localhost', [node.host for node in nodes]))
 
             if enable_nemesis:
                 action = "restart"
@@ -649,10 +672,35 @@ class StressUtilDeployer:
 
             # Set nemesis startup flag
             if enable_nemesis:
-                self.nemesis_started = True
-                nemesis_log.append("Nemesis service started successfully")
+                if error_count == 0:
+                    # Полный успех
+                    self._nemesis_started = True
+                    nemesis_log.append("Nemesis service started successfully on all hosts")
+                elif error_count < len(unique_hosts):
+                    # Частичный успех - создаем ClusterCheck запись с предупреждением
+                    self._nemesis_started = True  # Считаем что nemesis работает частично
+                    nemesis_log.append(f"Nemesis service started partially: {success_count}/{len(unique_hosts)} hosts")
+
+                    cluster_issue = create_cluster_issue(
+                        "nemesis_partial_startup",
+                        f"Nemesis started on {success_count}/{len(unique_hosts)} hosts. Failed hosts: {error_count}. Errors: {'; '.join(errors[:3])}{'...' if len(errors) > 3 else ''}",
+                        success_count
+                    )
+
+                    test_event_report(
+                        nemesis_enabled=enable_nemesis,
+                        workload_names=stress_util_names,
+                        event_kind='ClusterCheck',
+                        verification_phase="nemesis_management",
+                        check_type="nemesis_partial_failure",
+                        cluster_issue=cluster_issue
+                    )
+                else:
+                    # Полный провал - это уже обрабатывается в except блоке выше через raise Exception
+                    self._nemesis_started = False
+                    nemesis_log.append("Nemesis service failed to start on all hosts")
             else:
-                self.nemesis_started = False
+                self._nemesis_started = False
                 nemesis_log.append("Nemesis service stopped successfully")
 
             # Add summary log to Allure
@@ -665,6 +713,22 @@ class StressUtilDeployer:
             return nemesis_log
 
         except Exception as e:
+            # Создаем информацию о проблеме и репортим
+            cluster_issue = create_cluster_issue(
+                f"nemesis_{action_name.lower()}_exception",
+                f"Exception during nemesis {action_name.lower()}: {e}",
+                0
+            )
+
+            test_event_report(
+                nemesis_enabled=enable_nemesis,
+                workload_names=stress_util_names,
+                event_kind='ClusterCheck',
+                verification_phase="nemesis_management",
+                check_type=f"nemesis_{action_name.lower()}_exception",
+                cluster_issue=cluster_issue
+            )
+
             error_msg = f"Error managing nemesis: {e}"
             logging.error(error_msg)
             allure.attach(
@@ -672,7 +736,7 @@ class StressUtilDeployer:
             )
             return nemesis_log + [error_msg]
 
-    def delayed_nemesis_start(self, delay_seconds: int):
+    def delayed_nemesis_start(self, delay_seconds: int, stress_util_names: list[str]):
         """
         Starts nemesis with delay after workload begins
 
@@ -732,7 +796,7 @@ class StressUtilDeployer:
                 )
                 logging.info("Calling _manage_nemesis(True) to start nemesis service")
                 self._manage_nemesis(
-                    True, f"Delayed start after {delay_seconds}s", nemesis_log
+                    True, stress_util_names, f"Delayed start after {delay_seconds}s", nemesis_log
                 )
 
             logging.info("Nemesis started successfully after delay")
@@ -745,3 +809,80 @@ class StressUtilDeployer:
                 "Nemesis Delayed Start Error",
                 attachment_type=allure.attachment_type.TEXT,
             )
+
+    def _copy_cluster_config(self, host: str, host_log: list) -> dict:
+        """Копирует конфигурацию кластера на хост"""
+        logging.info(f"Cluster path for {host}: {self.cluster_path}")
+        logging.info(f"YAML config for {host}: {self.yaml_config}")
+
+        # Копируем cluster.yaml (если указан cluster_path)
+        cluster_result = self._copy_single_config(
+            host, self.cluster_path, "/Berkanavt/nemesis/cfg/config.yaml",
+            "cluster config", None, host_log
+        )
+        if not cluster_result["success"]:
+            return cluster_result
+
+        # Копируем databases.yaml (если указан yaml_config)
+        if self.yaml_config:
+            databases_result = self._copy_single_config(
+                host, self.yaml_config, "/Berkanavt/kikimr/cfg/databases.yaml",
+                "databases config", None, host_log
+            )
+            if not databases_result["success"]:
+                return databases_result
+
+        return {"host": host, "success": True, "log": host_log}
+
+    def _copy_single_config(self, host: str, config_path: str, remote_path: str,
+                            config_name: str, fallback_source: str, host_log: list) -> dict:
+        """Копирует один файл конфигурации"""
+        if config_path:
+            # Копируем внешний файл
+            if not os.path.exists(config_path):
+                error_msg = f"{config_name} file does not exist: {config_path}"
+                host_log.append(error_msg)
+                logging.error(error_msg)
+                return {"host": host, "success": False, "error": error_msg, "log": host_log}
+
+            source = config_path
+            success_msg = f"Copied external {config_name} from {config_path}"
+        elif fallback_source:
+            # Используем локальный fallback
+            source = fallback_source
+            success_msg = f"Copied local {config_name}"
+        else:
+            # Ничего не копируем
+            return {"host": host, "success": True, "log": host_log}
+
+        # Выполняем копирование
+        host_log.append(f"Copying {config_name} from {source}")
+
+        if config_path:
+            result = copy_file(
+                local_path=config_path,
+                host=host,
+                remote_path=remote_path,
+                raise_on_error=False
+            )
+        else:
+            result = execute_command(
+                host=host,
+                cmd=f"sudo cp {fallback_source} {remote_path}",
+                raise_on_error=False,
+                timeout=30
+            )
+
+        # Проверяем результат
+        if config_path and not result:
+            error_msg = f"Failed to copy {config_name} to {remote_path} on {host}"
+            host_log.append(error_msg)
+            return {"host": host, "success": False, "error": error_msg, "log": host_log}
+        elif not config_path and result.stderr and "error" in result.stderr.lower():
+            error_msg = f"Error copying {config_name} on {host}: {result.stderr}"
+            host_log.append(error_msg)
+            return {"host": host, "success": False, "error": error_msg, "log": host_log}
+
+        host_log.append(success_msg)
+        logging.info(f"Successfully copied {config_name} to {host}")
+        return {"host": host, "success": True, "log": host_log}

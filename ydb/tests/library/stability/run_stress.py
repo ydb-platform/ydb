@@ -131,13 +131,10 @@ class StressRunExecutor:
                 # Start nemesis 15 seconds after workload
                 # execution begins
                 if nemesis:
-                    # Set flag immediately when nemesis thread starts
-                    deploy.nemesis_started = True
-                    logging.info("Nemesis flag set to True - will start in 15 seconds")
-
+                    logging.info("Starting nemesis service")
                     nemesis_thread = threading.Thread(
                         target=stress_deployer.delayed_nemesis_start,
-                        args=(15,),  # 15 секунд задержки
+                        args=(15, list(workload_params.keys())),  # 15 секунд задержки
                         daemon=False,  # Remove daemon=True so thread isn't interrupted
                     )
                     nemesis_thread.start()
@@ -411,11 +408,11 @@ class StressRunExecutor:
                         )
 
                     if self._ignore_stderr_content:
-                        success = not is_timeout
+                        success = not is_timeout and execution_result.exit_code == 0
                     else:
                         # success=True only if stderr is empty (excluding SSH
                         # warnings) AND no timeout
-                        success = not bool(stderr.strip()) and not is_timeout
+                        success = not bool(stderr.strip()) and not is_timeout and execution_result.exit_code == 0
 
                     execution_time = time_module.time() - run_start_time
 

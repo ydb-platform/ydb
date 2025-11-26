@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 import logging
+import time
 import traceback
 import allure
 from ydb.tests.olap.lib.allure_utils import NodeErrors
@@ -21,17 +22,18 @@ def safe_upload_results(result: StressUtilTestResults, run_config: RunConfigInfo
             # Upload aggregated results
             for workload_name, runs in result.stress_util_runs.items():
                 _upload_results(runs, run_config, node_errors, verify_errors, suite_name, workload_name)
+                with allure.step(f"Process {workload_name} results"):
 
-                # Informative message about what was uploaded
-                upload_summary = [
-                    "Results uploaded successfully:",
-                    "• Aggregate results: 1 record (kind=Stability)",
-                    f"• Total iterations: {sum(len(node_run.runs) for node_run in runs.node_runs.values())}",
-                    f"• Workload: {workload_name}",
-                    f"• Suite: {suite_name}",
-                ]
-                allure.attach("\n".join(upload_summary),
-                              f"Upload summary [{workload_name}]", allure.attachment_type.TEXT)
+                    # Informative message about what was uploaded
+                    upload_summary = [
+                        "Results uploaded successfully:",
+                        "• Aggregate results: 1 record (kind=Stability)",
+                        f"• Total iterations: {sum(len(node_run.runs) for node_run in runs.node_runs.values())}",
+                        f"• Workload: {workload_name}",
+                        f"• Suite: {suite_name}",
+                    ]
+                    allure.attach("\n".join(upload_summary),
+                                  f"Upload summary for {workload_name}", allure.attachment_type.TEXT)
         except Exception as e:
             # Log upload error but don't interrupt execution
             error_msg = f"Failed to upload results: {e}\n{traceback.format_exc()}"
@@ -60,80 +62,78 @@ def safe_upload_results(result: StressUtilTestResults, run_config: RunConfigInfo
 def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_errors: list[NodeErrors], verify_errors, suite_name, workload_name):
     """Overridden method for workload tests"""
     stats = {}
-    is_success = True
-    # stats = result.get_stats(workload_name)
-    if stats is not None:
-        stats["aggregation_level"] = "aggregate"
-        stats["run_id"] = ResultsProcessor.get_run_id()
-        # Add workload timings for proper analysis
-        workload_start_time = result.start_time
-        if workload_start_time:
-            stats["workload_start_time"] = workload_start_time
-            stats["workload_end_time"] = result.end_time
-            stats["workload_duration"] = result.end_time - workload_start_time
 
-        stats["total_runs"] = result.get_total_runs()
-        stats["successful_runs"] = result.get_successful_runs()
-        stats["failed_runs"] = stats["total_runs"] - stats["successful_runs"]
-        stats["total_iterations"] = stats["total_runs"]
-        stats["successful_iterations"] = stats["successful_runs"]
-        stats["failed_iterations"] = stats["total_runs"] - stats["successful_runs"]
-        stats["planned_duration"] = run_config.duration
-        stats["actual_duration"] = result.end_time - result.start_time
-        stats["total_execution_time"] = sum(run.total_execution_time for run in result.node_runs.values())
-        stats["success_rate"] = stats["successful_runs"] / stats["total_runs"]
-        # obsolete
-        stats["avg_threads_per_iteration"] = 0
-        stats["total_threads"] = 0
-        stats["use_iterations"] = False
+    stats["aggregation_level"] = "aggregate"
+    stats["run_id"] = ResultsProcessor.get_run_id()
+    # Add workload timings for proper analysis
+    workload_start_time = result.start_time
+    if workload_start_time:
+        stats["workload_start_time"] = workload_start_time
+        stats["workload_end_time"] = result.end_time
+        stats["workload_duration"] = result.end_time - workload_start_time
 
-        stats["nodes_percentage"] = run_config.nodes_percentage
-        stats["nemesis_enabled"] = run_config.nemesis_enabled
-        stats["nemesis"] = run_config.nemesis_enabled
-        stats["table_type"] = run_config.table_type
-        stats["workload_type"] = workload_name
-        stats["test_timestamp"] = result.start_time
+    stats["total_runs"] = result.get_total_runs()
+    stats["successful_runs"] = result.get_successful_runs()
+    stats["failed_runs"] = stats["total_runs"] - stats["successful_runs"]
+    stats["total_iterations"] = stats["total_runs"]
+    stats["successful_iterations"] = stats["successful_runs"]
+    stats["failed_iterations"] = stats["total_runs"] - stats["successful_runs"]
+    stats["planned_duration"] = run_config.duration
+    stats["actual_duration"] = result.end_time - result.start_time
+    stats["total_execution_time"] = sum(run.total_execution_time for run in result.node_runs.values())
+    stats["success_rate"] = stats["successful_runs"] / stats["total_runs"]
+    # obsolete
+    stats["avg_threads_per_iteration"] = 0
+    stats["total_threads"] = 0
+    stats["use_iterations"] = False
 
-        stats["with_warnings"] = False
+    stats["nodes_percentage"] = run_config.nodes_percentage
+    stats["nemesis_enabled"] = run_config.nemesis_enabled
+    stats["nemesis"] = run_config.nemesis_enabled
+    stats["table_type"] = run_config.table_type
+    stats["workload_type"] = workload_name
+    stats["test_timestamp"] = result.start_time
 
-        aggregated_errors = []
-        nodes_with_issues = set()
-        had_oom = False
-        san_errors_count = 0
-        coredump_count = 0
+    stats["with_warnings"] = False
 
-        for error in node_errors:
-            nodes_with_issues.add(error.node)
-            if len(error.core_hashes) > 0:
-                coredump_count += 1
-            had_oom |= error.was_oom
-            san_errors_count += error.sanitizer_errors
+    aggregated_errors = []
+    nodes_with_issues = set()
+    had_oom = False
+    san_errors_count = 0
+    coredump_count = 0
 
-        if san_errors_count > 0:
-            aggregated_errors.append(f'SAN errors: {san_errors_count}')
-        if coredump_count > 0:
-            aggregated_errors.append(f'Collectedcoredumps: {coredump_count}')
-        if had_oom:
-            aggregated_errors.append('OOM occured')
+    for error in node_errors:
+        nodes_with_issues.add(error.node)
+        if len(error.core_hashes) > 0:
+            coredump_count += 1
+        had_oom |= error.was_oom
+        san_errors_count += error.sanitizer_errors
 
-        for error_summary, detailed_info in verify_errors.items():
-            aggregated_errors.append(f'VERIFY {error_summary} appeared on')
-            for host, hosts_count in detailed_info['hosts_count'].items():
-                aggregated_errors.append(f'  {host}: {hosts_count}')
+    if san_errors_count > 0:
+        aggregated_errors.append(f'SAN errors: {san_errors_count}')
+    if coredump_count > 0:
+        aggregated_errors.append(f'Collected coredumps: {coredump_count}')
+    if had_oom:
+        aggregated_errors.append('OOM occured')
 
-        stats["with_errors"] = len(aggregated_errors) > 0
-        stats["node_errors"] = len(aggregated_errors) > 0
+    for error_summary, detailed_info in verify_errors.items():
+        aggregated_errors.append(f'VERIFY {error_summary} appeared on')
+        for host, hosts_count in detailed_info['hosts_count'].items():
+            aggregated_errors.append(f'  {host}: {hosts_count}')
 
-        is_success = result.is_all_success() and len(aggregated_errors) > 0
-        stats["errors"] = {'other': True} if not is_success else None
+    stats["with_errors"] = len(aggregated_errors) > 0
+    stats["node_errors"] = len(aggregated_errors) > 0
 
-        stats["nodes_with_issues"] = list(node.host for node in nodes_with_issues)
-        stats["node_error_messages"] = aggregated_errors
+    is_success = result.is_all_success() and len(aggregated_errors) == 0
+    stats["errors"] = {'other': True} if not is_success else None
 
-        stats["workload_errors"] = None
-        stats["workload_warnings"] = None
-        stats["workload_error_messages"] = None
-        stats["workload_warning_messages"] = None
+    stats["nodes_with_issues"] = list(node.host for node in nodes_with_issues)
+    stats["node_error_messages"] = aggregated_errors
+
+    stats["workload_errors"] = None
+    stats["workload_warnings"] = None
+    stats["workload_error_messages"] = None
+    stats["workload_warning_messages"] = None
 
     end_time = datetime.now().timestamp()
 
@@ -155,3 +155,84 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
     )
 
     ResultsProcessor.upload_results(**upload_data)
+
+
+def test_event_report(
+        event_kind: str,
+        workload_names: list[str],
+        nemesis_enabled: bool,
+        verification_phase: str = None,
+        check_type: str = None,
+        cluster_issue: dict = None) -> None:
+    """
+    Универсальный метод для создания записей о событиях теста в базе данных.
+
+    Args:
+        event_kind: Тип события ('TestInit', 'ClusterCheck')
+        verification_phase: Фаза проверки (для ClusterCheck)
+        check_type: Тип проверки (для ClusterCheck)
+        cluster_issue: Информация о проблеме кластера (для ClusterCheck)
+    """
+    suite_name = 'SingleStressUtil' if len(workload_names) == 1 else 'ParallelStressUtil'
+    upload_data = []
+    if event_kind == 'TestInit':
+        # TestInit - инициализация теста
+        statistics = {
+            "event_type": "test_initialization",
+            "test_started": True
+        }
+
+        # Добавляем nemesis_enabled в статистику
+        statistics["nemesis_enabled"] = nemesis_enabled
+
+        for workload_name in workload_names:
+            upload_data.append({
+                "kind": 'TestInit',
+                "suite": suite_name,
+                "test": workload_name,
+                "timestamp": time.time(),
+                "is_successful": True,  # TestInit всегда успешен
+                "statistics": statistics
+            })
+
+        allure_title = f"Test initialization for {workload_name}"
+
+    elif event_kind == 'ClusterCheck':
+        # ClusterCheck - проверка кластера
+        if cluster_issue is None:
+            raise ValueError("cluster_issue is required for ClusterCheck events")
+
+        is_successful = cluster_issue.get("issue_type") is None
+
+        stats = {
+            "verification_phase": verification_phase,
+            "check_type": check_type,
+            **cluster_issue
+        }
+
+        # Добавляем nemesis_enabled в статистику
+        stats["nemesis_enabled"] = nemesis_enabled
+
+        for workload_name in workload_names:
+            upload_data.append({
+                "kind": 'ClusterCheck',
+                "suite": suite_name,
+                "test": workload_name,
+                "timestamp": time.time(),
+                "is_successful": is_successful,
+                "statistics": stats
+            })
+
+        allure_title = f"Cluster check results for {verification_phase} - {workload_name}"
+
+    else:
+        raise ValueError(f"Unknown event_kind: {event_kind}")
+
+    # Прикрепляем данные к Allure отчету
+    allure.attach(
+        json.dumps(upload_data, indent=2, default=str),
+        allure_title,
+        allure.attachment_type.JSON
+    )
+    for data in upload_data:
+        ResultsProcessor.upload_results(**data)

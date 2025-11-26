@@ -8,7 +8,10 @@ import os
 from time import time
 import re
 import logging
+from ydb.tests.library.stability.aggregate_results import StressUtilTestResults
 from ydb.tests.library.stability.remote_execution import execute_command, execute_ssh
+from ydb.tests.library.stability.upload_results import test_event_report
+from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 class ErrorsCollector:
@@ -281,3 +284,128 @@ class ErrorsCollector:
             archive = dir + '.tar.gz'
             yatest.common.execute(['tar', '-C', dir, '-czf', archive, '.'])
             allure.attach.file(archive, f'{attach_name}_{c}_logs', extension='tar.gz')
+
+    def perform_verification_with_cluster_check(self, workload_names: list[str], nemesis_enabled: bool) -> None:
+        """
+        Выполняет проверку кластера перед тестом и записывает результат.
+        """
+
+        with allure.step("Pre-test verification"):
+            # Выполняем проверки кластера
+            cluster_issue = self._check_cluster_health()
+
+            # Записываем результат проверки кластера через универсальный метод
+            test_event_report(
+                event_kind='ClusterCheck',
+                workload_names=workload_names,
+                nemesis_enabled=nemesis_enabled,
+                verification_phase="pre_test_verification",
+                check_type="cluster_availability",
+                cluster_issue=cluster_issue
+            )
+
+            # Если проверка кластера не прошла успешно, поднимаем исключение
+            if cluster_issue.get("issue_type") is not None:
+                raise Exception(f"Cluster verification failed: {cluster_issue['issue_description']}")
+
+    def _check_cluster_health(self) -> dict:
+        """
+        Проверяет состояние кластера и возвращает информацию о проблемах.
+
+        Returns:
+            dict: Информация о проблеме кластера или пустой dict если все OK
+        """
+        try:
+            # Проверяем доступность кластера
+            wait_error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)))
+            if wait_error:
+                return create_cluster_issue("cluster_not_alive", f"Cluster functionality check failed: {wait_error}")
+
+            # Проверяем наличие нод
+            nodes = YdbCluster.get_cluster_nodes(db_only=False)
+            if not nodes:
+                return create_cluster_issue("cluster_no_nodes", "No working cluster nodes found")
+
+            # Кластер OK
+            return create_cluster_issue(None, "Cluster check passed successfully", len(nodes))
+
+        except Exception as e:
+            return create_cluster_issue("cluster_check_exception", f"Exception during cluster check: {e}")
+
+    def check_nemesis_status(self, nemesis_started: bool, nemesis_enabled: bool, workload_names: list[str]) -> None:
+        """
+        Проверяет статус nemesis после выполнения workload.
+        Создает ClusterCheck запись если nemesis должен был работать, но не запустился.
+
+        Args:
+            additional_stats: Дополнительная статистика с информацией о nemesis
+        """
+        # Проверяем, должен ли был запуститься nemesis
+        if nemesis_enabled:
+            # Nemesis должен был запуститься - проверяем статус
+            if not nemesis_started:
+                # Nemesis должен был запуститься, но не запустился
+                cluster_issue = create_cluster_issue(
+                    "nemesis_startup_failed",
+                    "Nemesis was enabled for test but failed to start. Check nemesis management logs for details.",
+                    0
+                )
+
+                test_event_report(
+                    event_kind='ClusterCheck',
+                    workload_names=workload_names,
+                    nemesis_enabled=nemesis_enabled,
+                    verification_phase="post_workload_verification",
+                    check_type="nemesis_status_check",
+                    cluster_issue=cluster_issue
+                )
+
+                logging.warning("Nemesis was enabled but not started for test")
+            else:
+                # Nemesis запустился успешно - создаем успешную ClusterCheck запись
+                cluster_issue = create_cluster_issue(
+                    None,
+                    "Nemesis was successfully running during workload execution",
+                    1
+                )
+
+                test_event_report(
+                    event_kind='ClusterCheck',
+                    workload_names=workload_names,
+                    nemesis_enabled=nemesis_enabled,
+                    verification_phase="post_workload_verification",
+                    check_type="nemesis_status_check",
+                    cluster_issue=cluster_issue
+                )
+
+                logging.info("Nemesis was successfully running for test")
+
+
+def create_cluster_issue(issue_type: str, description: str, nodes_count: int = 0) -> dict:
+    """
+    Создает информацию о проблеме кластера.
+
+    Args:
+        issue_type: Тип проблемы (None если все OK)
+        description: Описание проблемы
+        nodes_count: Количество нод (0 если проблема, реальное количество если OK)
+
+    Returns:
+        dict: Статистика проблемы кластера
+    """
+    if issue_type is None:
+        # Кластер OK
+        return {
+            "issue_type": None,
+            "issue_description": description,
+            "nodes_count": nodes_count,
+            "is_critical": False
+        }
+    else:
+        # Есть проблема
+        return {
+            "issue_type": issue_type,
+            "issue_description": description,
+            "nodes_count": nodes_count,
+            "is_critical": True
+        }

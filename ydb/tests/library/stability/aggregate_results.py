@@ -11,6 +11,7 @@ class RunConfigInfo:
     stres_util_args: str = None
     duration: float = None
     all_hosts: list[str] = None
+    stress_util_names: list[str] = None
 
 
 class StressUtilRunResult:

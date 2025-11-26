@@ -6,7 +6,7 @@ import pytest
 from ydb.tests.library.stability.aggregate_results import StressUtilDeployResult, StressUtilTestResults
 from ydb.tests.library.stability.build_report import create_parallel_allure_report
 from ydb.tests.library.stability.collect_errors import ErrorsCollector
-from ydb.tests.library.stability.upload_results import RunConfigInfo, safe_upload_results
+from ydb.tests.library.stability.upload_results import RunConfigInfo, safe_upload_results, test_event_report
 from ydb.tests.library.stability.utils import external_param_is_true, get_external_param
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 from ydb.tests.library.stability.run_stress import StressRunExecutor
@@ -37,7 +37,7 @@ class ParallelWorkloadTestBase:
         binaries_deploy_path: str = (
             "/tmp/stress_binaries/"
         )
-        return StressUtilDeployer(binaries_deploy_path)
+        return StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config)
 
     @pytest.fixture(autouse=True, scope="session")
     def stress_executor(self) -> StressRunExecutor:
@@ -97,12 +97,22 @@ class ParallelWorkloadTestBase:
         additional_stats.nodes_percentage = nodes_percentage
         additional_stats.test_start_time = int(time_module.time())
         additional_stats.duration = duration_value
+        additional_stats.all_hosts = stress_deployer.hosts
+        additional_stats.stress_util_names = list(workload_params.keys())
+        errors_collector = ErrorsCollector(additional_stats.all_hosts)
+
+        # Publish TestInit record
+        with allure.step("Initialize test"):
+            test_event_report('TestInit', workload_names=additional_stats.stress_util_names, nemesis_enabled=nemesis_enabled)
+
+        # THEN execute cluster health check
+        with allure.step("Pre-workload cluster verification"):
+            errors_collector.perform_verification_with_cluster_check(workload_names=additional_stats.stress_util_names, nemesis_enabled=nemesis_enabled)
 
         logging.info("=== Starting environment preparation ===")
 
         # PHASE 1: PREPARATION (deploy binaries to nodes)
         preparation_result = stress_deployer.prepare_stress_execution(workload_params, nodes_percentage)
-        additional_stats.all_hosts = stress_deployer.hosts
 
         logging.debug(f"Deploy finished with {preparation_result}")
 
@@ -119,6 +129,8 @@ class ParallelWorkloadTestBase:
 
         # PHASE 3: RESULTS (collect diagnostics and finalize)
         self._finalize_workload_results(
+            stress_deployer,
+            errors_collector,
             execution_result,
             preparation_result['deployed_nodes'],
             additional_stats
@@ -129,6 +141,8 @@ class ParallelWorkloadTestBase:
 
     def _finalize_workload_results(
         self,
+        stress_deployer: StressUtilDeployer,
+        errors_collector: ErrorsCollector,
         execution_result: dict,
         preparation_result: dict[str, StressUtilDeployResult],
         run_config: RunConfigInfo
@@ -151,7 +165,7 @@ class ParallelWorkloadTestBase:
             successful_runs = execution_result["successful_runs"]
             total_runs = execution_result["total_runs"]
 
-            errors_collector = ErrorsCollector(run_config.all_hosts)
+            errors_collector.check_nemesis_status(stress_deployer.nemesis_started, run_config.nemesis_enabled, run_config.stress_util_names)
 
             # Final processing with diagnostics (prepares data for upload)
             overall_result.workload_start_time = execution_result["workload_start_time"]
@@ -171,7 +185,7 @@ class ParallelWorkloadTestBase:
 
     def process_workload_result_with_diagnostics(
         self,
-        errors_collector : ErrorsCollector,
+        errors_collector: ErrorsCollector,
         result: StressUtilTestResults,
     ):
         """

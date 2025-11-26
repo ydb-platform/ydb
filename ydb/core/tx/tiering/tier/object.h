@@ -26,7 +26,7 @@ public:
         , Compression(compression) {
     }
 
-    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto);
+    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto, bool mergeFromAppData = false);
 
     NJson::TJsonValue SerializeConfigToJson() const;
 

@@ -240,7 +240,7 @@ public:
                 }
             }
             if (isTieredStorage) {
-                if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(externalDataSourceDescription); status.IsFail()) {
+                if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(externalDataSourceDescription, true); status.IsFail()) {
                     result->SetError(NKikimrScheme::StatusInvalidParameter,
                         "Cannot make this change while the external data source is used as a tiered storage: " + status.GetErrorMessage());
                     return result;

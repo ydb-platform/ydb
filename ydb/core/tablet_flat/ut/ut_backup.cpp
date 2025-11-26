@@ -923,10 +923,25 @@ struct TEnv : public TMyEnvBase {
         Env.DispatchEvents(options);
     }
 
-    void RestoreLastBackup(ui32 TestTabletFlags) {
+    void RestoreBackup(const TString& backupPath, ui32 TestTabletFlags) {
         Cerr << "...restarting dummy tablet in recovery mode" << Endl;
         RestartTabletInRecoveryMode();
 
+        Cerr << "...restoring backup" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        if (result->Error) {
+            Cerr << "...restore has error: " << result->Error << Endl;
+        }
+        UNIT_ASSERT_C(result->Success, "Restore completed with unexpected result, error: " << result->Error);
+
+        Cerr << "...restarting tablet in normal mode" << Endl;
+        RestartTablet(TestTabletFlags);
+    }
+
+    void RestoreLastBackup(ui32 TestTabletFlags) {
         auto tabletIdDir = TFsPath(Env.GetTempDir())
             .Child("dummy")
             .Child(ToString(Tablet));
@@ -938,16 +953,7 @@ struct TEnv : public TMyEnvBase {
             return a.Basename() < b.Basename();
         });
 
-        Cerr << "...restoring backup" << Endl;
-        SendAsync(new NRecovery::TEvRestoreBackup(genDirs.back()));
-
-        TAutoPtr<IEventHandle> handle;
-        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
-
-        UNIT_ASSERT_C(result->Success, "Restore completed with unexpected result, error: " << result->Error);
-
-        Cerr << "...restarting tablet in normal mode" << Endl;
-        RestartTablet(TestTabletFlags);
+        RestoreBackup(genDirs.back(), TestTabletFlags);
     }
 }; // TEnv
 
@@ -1634,6 +1640,47 @@ Y_UNIT_TEST_SUITE(Backup) {
         assertState();
         env.RestoreLastBackup(TestTabletFlags);
         assertState();
+    }
+
+    Y_UNIT_TEST(ChangelogTornWrite) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        {
+            TFile changelogFile(changelog, OpenExisting | RdWr);
+            TString tornWrite = R"({"step":4,"data_changes":[{"table":"Data","op":"upsert","Key":1,"Value":10}]})""\n"
+                                R"({"step":5,"data_changes":[{"table":"Data","op":"upsert","Key":2,"Value":20}]})""\n"
+                                R"({"step":6,"data_changes":[{"table":"Data","op":"upsert","Key":3)";
+            changelogFile.Write(tornWrite.data(), tornWrite.size());
+            changelogFile.Flush();
+        }
+
+        env.RestoreBackup(genDirs.back(), TestTabletFlags);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows(), 2);
     }
 
     Y_UNIT_TEST(ExcludeTablet) {

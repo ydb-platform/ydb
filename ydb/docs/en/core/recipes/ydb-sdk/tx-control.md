@@ -320,13 +320,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
    }
    ```
 
-     )
-     if err != nil {
-       fmt.Printf("unexpected error: %v", err)
-     }
-   }
-   ```
-
 - Java
 
    ```java

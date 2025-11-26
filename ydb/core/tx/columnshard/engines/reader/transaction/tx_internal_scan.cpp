@@ -94,6 +94,12 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
             scanDiagnosticsEvent = std::make_unique<NColumnShard::TEvPrivate::TEvReportScanDiagnostics>(std::move(requestMessage), std::move(dotGraph), std::move(ssaProgram), std::move(pkRangesFilter), false);
         }
     }
+
+    if (request.GetSchemaVersion() && readMetadataRange->GetResultSchema()->GetVersion() != *request.GetSchemaVersion()) {
+        return SendError("invalid schema version",
+            TStringBuilder() << "request=" << *request.GetSchemaVersion() << ", actual=" << readMetadataRange->GetResultSchema()->GetVersion(), ctx);
+    }
+
     TStringBuilder detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD_SCAN)) {
         detailedInfo << " read metadata: (" << readMetadataRange->DebugString() << ")";

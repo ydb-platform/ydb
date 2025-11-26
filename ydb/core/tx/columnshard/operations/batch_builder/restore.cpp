@@ -11,6 +11,10 @@ namespace NKikimr::NOlap {
 std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBuildRequestInitiator() const {
     const auto& writeMetaData = WriteData.GetWriteMeta();
     auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(writeMetaData.GetPathId(), Context.GetApplyToSnapshot(), Context.GetLockId());
+    if (Context.GetActualSchema()) {
+        request->SetSchemaVersion(Context.GetActualSchema()->GetVersion());
+    }
+
     request->TaskIdentifier = GetTaskId();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")(
         "count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0)("task_id", WriteData.GetWriteMeta().GetId());

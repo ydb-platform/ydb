@@ -407,6 +407,16 @@ private:
             argsMap.emplace(inputArg.Raw(), makeParameterBinding(maybeBinding.Cast(), input.Pos()).Ptr());
         }
 
+        // Also scan the program body for TKqpTxResultBinding (for VectorTopK precompute settings)
+        VisitExpr(stage.Program().Body().Ptr(),
+            [&](const TExprNode::TPtr& node) {
+                TExprBase expr(node);
+                if (auto binding = expr.Maybe<TKqpTxResultBinding>()) {
+                    sourceReplaceMap.emplace(node.Get(), makeParameterBinding(binding.Cast(), node->Pos()).Ptr());
+                }
+                return true;
+            });
+
         auto inputs = Build<TExprList>(ctx, stage.Pos())
             .Add(newInputs)
             .Done();
@@ -415,7 +425,7 @@ private:
             .Inputs(ctx.ReplaceNodes(ctx.ReplaceNodes(inputs.Ptr(), stagesMap), sourceReplaceMap))
             .Program()
                 .Args(newArgs)
-                .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
+                .Body(ctx.ReplaceNodes(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap), sourceReplaceMap))
                 .Build()
             .Settings(stage.Settings())
             .Outputs(stage.Outputs())
@@ -491,6 +501,18 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
                   });
         }
     }
+
+    // Also scan the program body for precomputes in read settings (for VectorTopK pushdown)
+    VisitExpr(stage.Program().Body().Ptr(),
+          [&] (const TExprNode::TPtr& ptr) {
+            TExprBase node(ptr);
+            if (auto maybePrecompute = node.Maybe<TDqPhyPrecompute>()) {
+                result.push_back(maybePrecompute.Cast());
+                return false;
+            }
+            return true;
+          });
+
     return result;
 }
 

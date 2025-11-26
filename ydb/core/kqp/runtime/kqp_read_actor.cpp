@@ -893,6 +893,10 @@ public:
             record.SetLockNodeId(Settings->GetLockNodeId());
         }
 
+        if (Settings->HasVectorTopK()) {
+            *record.MutableVectorTopK() = Settings->GetVectorTopK();
+        }
+
         CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings->GetTable().GetTablePath()
             << ", ranges: " << DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)
             << ", limit: " << limit

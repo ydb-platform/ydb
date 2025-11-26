@@ -451,8 +451,10 @@ public:
 
         auto* newFeatureFlags = event.MutableConfig()->MutableFeatureFlags();
         if (newFeatureFlags->GetEnableSecureScriptExecutions() != FeatureFlags.GetEnableSecureScriptExecutions()) {
-            ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
             ScriptExecutionsTalesGeneration++;
+            if (ScriptExecutionsCreationStatus != EScriptExecutionsCreationStatus::NotStarted) {
+                StartScriptExecutionsTablesCreation();
+            }
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvResetManagerRegistration(TStreamingQueryBehaviour::GetInstance()));
         }
 

@@ -10,7 +10,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Go
 
-  {% cut "Native" %}
+  {% cut "ydb-go-sdk" %}
 
   ```go
   package main
@@ -109,7 +109,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Java
 
-  {% cut "Native" %}
+  {% cut "ydb-java-sdk" %}
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -162,7 +162,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Python
 
-  {% cut "Native" %}
+  {% cut "ydb-python-sdk" %}
 
   ```python
   import ydb
@@ -207,7 +207,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - C# (.NET)
 
-  {% cut "Native" %}
+  {% cut "ydb-dotnet-sdk" %}
 
   ```csharp
   using Ydb.Sdk.Services.Query;
@@ -500,7 +500,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Go
 
-  {% cut "Native" %}
+  {% cut "ydb-go-sdk" %}
 
   ```go
   package main
@@ -593,7 +593,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Java
 
-  {% cut "Native" %}
+  {% cut "ydb-java-sdk" %}
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -671,7 +671,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - C# (.NET)
 
-  {% cut "Native" %}
+  {% cut "ydb-dotnet-sdk" %}
 
   ```csharp
   using Ydb.Sdk.Services.Query;
@@ -725,7 +725,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Go
 
-  {% cut "Native" %}
+  {% cut "ydb-go-sdk" %}
 
   ```go
   package main

@@ -10,7 +10,7 @@
 
 - Go
 
-  {% cut "Native" %}
+  {% cut "ydb-go-sdk" %}
 
   ```go
   package main
@@ -108,7 +108,7 @@
 
 - Java
 
-  {% cut "Native" %}
+  {% cut "ydb-java-sdk" %}
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -161,7 +161,7 @@
 
 - Python
 
-  {% cut "Native" %}
+  {% cut "ydb-python-sdk" %}
 
   ```python
   import ydb
@@ -206,7 +206,7 @@
 
 - C# (.NET)
 
-  {% cut "Native" %}
+  {% cut "ydb-dotnet-sdk" %}
 
   ```csharp
   using Ydb.Sdk.Services.Query;
@@ -499,7 +499,7 @@
 
 - Go
 
-  {% cut "Native" %}
+  {% cut "ydb-go-sdk" %}
 
   ```go
   package main
@@ -592,7 +592,7 @@
 
 - Java
 
-  {% cut "Native" %}
+  {% cut "ydb-java-sdk" %}
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -670,7 +670,7 @@
 
 - C# (.NET)
 
-  {% cut "Native" %}
+  {% cut "ydb-dotnet-sdk" %}
 
   ```csharp
   using Ydb.Sdk.Services.Query;
@@ -724,7 +724,7 @@
 
 - Go
 
-  {% cut "Native" %}
+  {% cut "ydb-go-sdk" %}
 
   ```go
   package main

@@ -1448,18 +1448,6 @@ Y_UNIT_TEST_SUITE(Backup) {
         TVector<TFsPath> genDirs;
         tabletIdDir.List(genDirs);
 
-
-        // Check state before and after restore
-        auto assertState = [&env, &data]() {
-            UNIT_ASSERT_VALUES_EQUAL(env.CountRows(), 1'000);
-
-            UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(0), data);
-            UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(999), data);
-        };
-
-        assertState();
-        env.RestoreLastBackup(TestTabletFlags);
-        assertState();
         std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
             return a.Basename() < b.Basename();
         });
@@ -1472,6 +1460,18 @@ Y_UNIT_TEST_SUITE(Backup) {
         TString content = TFileInput(changelog).ReadAll();
         auto lines = StringSplitter(content).Split('\n').SkipEmpty();
         UNIT_ASSERT_VALUES_EQUAL(lines.Count(), 1'000);
+
+        // Check state before and after restore
+        auto assertState = [&env, &data]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows(), 1'000);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(0), data);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(999), data);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
     }
 
     Y_UNIT_TEST(ChangelogSchema) {

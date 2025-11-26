@@ -180,6 +180,9 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void SendPlanStepAcks(const TActorContext& ctx,
                           const TDistributedTransaction& tx);
+    void SendPlanStepAcks(const TActorContext& ctx,
+                          const TActorId& receiver,
+                          const TEvTxProcessing::TEvPlanStep& ev);
     void SendPlanStepAck(const TActorContext& ctx,
                          ui64 step,
                          const THashMap<TActorId, TVector<ui64>>& txAcks);

@@ -3690,31 +3690,40 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
 
                 tx.OnPlanStep(step);
                 TryExecuteTxs(ctx, tx);
-
-                lastPlannedTxId = txId;
             } else {
                 PQ_LOG_TX_W("Transaction already planned for step " << tx.Step <<
                             ", Step: " << step <<
                             ", TxId: " << txId);
             }
+
+            lastPlannedTxId = txId;
         } else {
             PQ_LOG_TX_W("Unknown transaction  TxId " << txId << ". Step " << step);
         }
     }
 
     if (step > PlanStep) {
+        // если это план из будущего, то надо запомнить, последнюю запланированную транзакцию
+        PQ_ENSURE(lastPlannedTxId.Defined());
         PlanStep = step;
-
-        if (lastPlannedTxId.Defined()) {
-            PlanTxId = *lastPlannedTxId;
-        }
+        PlanTxId = *lastPlannedTxId;
     }
 
     if (lastPlannedTxId.Defined()) {
+        // эту транзакцию ещё не удалили
         auto p = Txs.find(*lastPlannedTxId);
         TDistributedTransaction& tx = p->second;
 
+        // таблетка координатора могла перезапуститься надо обновить информацию
         tx.SendPlanStepAcksAfterCompletion(sender, std::move(ev));
+
+        if (tx.State >= NKikimrPQ::TTransaction::EXECUTED) {
+            // таблетка PQ могла отправить подтвержение, но координатор перезапустился и его не получил
+            SendPlanStepAcks(ctx, tx);
+        }
+    } else {
+        // таблетка PQ успела выполнить и удалить все транзакции этого шага. надо отправить подтверждение
+        SendPlanStepAcks(ctx, sender, *ev);
     }
 
     PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
@@ -3727,9 +3736,16 @@ void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
         return;
     }
 
+    SendPlanStepAcks(ctx, tx.PlanStepSender, *tx.PlanStepEvent);
+}
+
+void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
+                                  const TActorId& receiver,
+                                  const TEvTxProcessing::TEvPlanStep& ev)
+{
     THashMap<TActorId, TVector<ui64>> txAcks;
 
-    for (auto& m : tx.PlanStepEvent->Record.GetTransactions()) {
+    for (auto& m : ev.Record.GetTransactions()) {
         PQ_ENSURE(m.HasTxId());
 
         if (m.HasAckTo()) {
@@ -3740,8 +3756,10 @@ void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
         }
     }
 
-    SendPlanStepAck(ctx, tx.Step, txAcks);
-    SendPlanStepAccepted(ctx, tx.PlanStepSender, tx.Step);
+    const ui64 step = ev.Record.GetStep();
+
+    SendPlanStepAck(ctx, step, txAcks);
+    SendPlanStepAccepted(ctx, receiver, step);
 }
 
 void TPersQueue::SendPlanStepAck(const TActorContext& ctx,

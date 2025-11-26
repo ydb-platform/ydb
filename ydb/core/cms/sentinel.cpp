@@ -228,13 +228,18 @@ void TPDiskStatusComputer::ResetForcedStatus() {
 
 bool TPDiskStatusComputer::IsInitialDeploymentGracePeriod() const {
     if (TlsActivationContext) {
-        return CMSFirstBootTimestamp + InitialDeploymentGracePeriod < TActivationContext::Now();
+        return CMSFirstBootTimestamp + InitialDeploymentGracePeriod > TActivationContext::Now();
     } else {
         return false; // unsupported outside of actorsystem
     }
 }
 
 /// TPDiskStatus
+
+
+TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
+    : TPDiskStatus(defaultStateLimit, goodStateLimit, stateLimits, TInstant::Zero(), TDuration::Zero())
+{}
 
 TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit,
                            const ui32& goodStateLimit, const TLimitsMap& stateLimits,

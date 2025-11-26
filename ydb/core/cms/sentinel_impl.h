@@ -53,6 +53,7 @@ private:
 
 class TPDiskStatus: public TPDiskStatusComputer {
 public:
+    explicit TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits);
     explicit TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit,
                           const ui32& goodStateLimit, const TLimitsMap& stateLimits,
                           TInstant cmsFirstBootTimestamp, const TDuration& initialDeploymentGracePeriod);

@@ -4,10 +4,10 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks() const {
     std::vector<TCompactionTaskData> result;
-    AFL_VERIFY(Portions.size());
+    AFL_VERIFY(Portions.GetPortions().size());
     result.emplace_back(NextLevel->GetLevelId(), CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
     i64 tasksLeft = GetMaxConcurrency();
-    for (auto&& i : Portions) {
+    for (auto&& i : Portions.GetPortions()) {
         result.back().AddCurrentLevelPortion(
             i.GetPortion(), NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()), true);
         if (!result.back().CanTakeMore()) {
@@ -18,7 +18,7 @@ std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks() co
             result.emplace_back(NextLevel->GetLevelId(), CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
         }
     }
-    
+
     if (result.back().IsEmpty()) {
         result.pop_back();
     }
@@ -40,7 +40,7 @@ ui64 TZeroLevelPortions::DoGetWeight(bool highPriority) const {
     if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Disable) {
         return 0;
     }
-    if (!NextLevel || Portions.size() < PortionsCountAvailable || Portions.empty()) {
+    if (!NextLevel || Portions.GetCommittedPortionCount() < PortionsCountAvailable || !Portions.GetCommittedPortionCount()) {
         return 0;
     }
     if (PredOptimization && TInstant::Now() - *PredOptimization < DurationToDrop) {
@@ -49,17 +49,17 @@ ui64 TZeroLevelPortions::DoGetWeight(bool highPriority) const {
         }
     }
 
-    const ui64 affectedRawBytes =
-        NextLevel->GetAffectedPortionBytes(Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
+    const ui64 affectedRawBytes = NextLevel->GetAffectedPortionBytes(
+        Portions.GetPortions().begin()->GetPortion()->IndexKeyStart(), Portions.GetPortions().rbegin()->GetPortion()->IndexKeyEnd());
     /*
     THashSet<ui64> portionIds;
     auto chain =
-        targetLevel->GetAffectedPortions(Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
+        targetLevel->GetAffectedPortions(Portions.GetPortions().begin()->GetPortion()->IndexKeyStart(), Portions.GetPortions().rbegin()->GetPortion()->IndexKeyEnd());
     ui64 affectedRawBytes = 0;
     if (chain) {
-        auto it = Portions.begin();
+        auto it = Portions.GetPortions().begin();
         auto itNext = chain->GetPortions().begin();
-        while (it != Portions.end() && itNext != chain->GetPortions().end()) {
+        while (it != Portions.GetPortions().end() && itNext != chain->GetPortions().end()) {
             const auto& nextLevelPortion = *itNext;
             if (nextLevelPortion->IndexKeyEnd() < it->GetPortion()->IndexKeyStart()) {
                 ++itNext;

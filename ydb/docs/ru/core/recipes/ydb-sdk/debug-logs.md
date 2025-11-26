@@ -138,6 +138,29 @@
 
   {% endcut %}
 
+  {% cut "Реализовать получение информации о серверных ошибках `IterateByIssues`" %}
+
+  При работе с {{ ydb-short-name }} через Go SDK вы можете не только включать логирование запросов и ответов, но и программно получать детализированные сведения о серверных ошибках (issues) — дополнительных сообщениях, которые YDB возвращает в составе ответа при ошибках выполнения операций. Для итерации по списку issues, содержащихся в ответе от сервера, используйте метод **IterateByIssues** из пакета `github.com/ydb-platform/ydb-go-sdk/v3`.
+
+  ```go
+  package ydb
+
+  import (
+    "github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
+    grpcCodes "google.golang.org/grpc/codes"
+
+    ratelimiterErrors "github.com/ydb-platform/ydb-go-sdk/v3/internal/ratelimiter/errors"
+    "github.com/ydb-platform/ydb-go-sdk/v3/internal/xerrors"
+    "github.com/ydb-platform/ydb-go-sdk/v3/ratelimiter"
+  )
+
+  func IterateByIssues(err error, it func(message string, code Ydb.StatusIds_StatusCode, severity uint32)) {
+	  xerrors.IterateByIssues(err, it)
+  }
+  ```
+
+  {% endcut %}
+
 - Go (database/sql)
 
   Есть несколько способов включить логи в приложении, использующем `ydb-go-sdk`:

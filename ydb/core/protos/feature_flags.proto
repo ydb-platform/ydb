@@ -240,4 +240,5 @@ message TFeatureFlags {
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
     optional bool EnableColumnTablesBackup = 216 [default = true];
+    optional bool EnableReplication = 217 [default = true];
 }

@@ -1549,8 +1549,8 @@ message TImmediateControlsConfig {
         optional uint64 FastSplitCpuPercentageThreshold = 11 [(ControlOptions) = {
             Description: "Max Fast split cpu usage",
             MinValue: 1,
-            MaxValue: 50,
-            DefaultValue: 146 }];
+            MaxValue: 146,
+            DefaultValue: 50 }];
         optional uint64 SplitByLoadEnabled = 12 [(ControlOptions) = {
             Description: "Enables split by load",
             MinValue: 0,
@@ -1795,6 +1795,13 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0,
+        }];
+
+        optional uint64 PhantomFlagStorageLimitPerVDiskBytes = 39 [(ControlOptions) = {
+            Description: "Maximum size in bytes of in-memory structures of PhantomFlagStorage per VDisk",
+            MinValue: 0,
+            MaxValue: 100000000000, // 100 GB
+            DefaultValue: 10000000, // 10 MB
         }];
     }
 

@@ -1025,18 +1025,23 @@ inline ITableFragmentWriterPtr<TNode> IIOClient::CreateTableFragmentWriter<TNode
 
 template <>
 inline ITableFragmentWriterPtr<TYaMRRow> IIOClient::CreateTableFragmentWriter<TYaMRRow>(
-    const TDistributedWriteTableCookie& /*cookie*/,
-    const TTableFragmentWriterOptions& /*options*/)
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options)
 {
-    ythrow yexception() << "Not implemented";
+    return CreateYaMRFragmentWriter(cookie, options);
 }
 
 template <class T>
 inline ITableFragmentWriterPtr<T> IIOClient::CreateTableFragmentWriter(
-    const TDistributedWriteTableCookie& /*cookie*/,
-    const TTableFragmentWriterOptions& /*options*/)
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options)
 {
-    ythrow yexception() << "Not implemented";
+    if constexpr (TIsBaseOf<Message, T>::Value) {
+        auto prototype = std::make_unique<T>();
+        return CreateProtoFragmentWriter(cookie, options, prototype.get());
+    } else {
+        static_assert(TDependentFalse<T>, "Unsupported type for table fragment writer");
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

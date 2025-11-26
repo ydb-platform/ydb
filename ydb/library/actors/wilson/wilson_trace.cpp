@@ -111,17 +111,15 @@ namespace NWilson {
     }
 
     TTraceId::TTrace TTraceId::GenerateTraceId() {
+        static thread_local TReallyFastRng32 rng(RandomNumber<ui64>());
+
         for (;;) {
             TTrace res;
-            ui32 *p = reinterpret_cast<ui32*>(res.data());
 
-            TReallyFastRng32 rng(RandomNumber<ui64>());
-            p[0] = rng();
-            p[1] = rng();
-            p[2] = rng();
-            p[3] = rng();
+            res[0] = (ui64)rng() | ((ui64)rng() << 32);
+            res[1] = (ui64)rng() | ((ui64)rng() << 32);
 
-            if (res[0] || res[1]) {
+            if (Y_LIKELY(res[0])) {
                 return res;
             }
         }

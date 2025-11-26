@@ -463,10 +463,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
    }
    ```
 
-- Go (database/sql)
-
-   The Stale Read-Only mode is not directly supported in the standard `database/sql` interface. It is recommended to use the native Go SDK for this transaction mode.
-
 - Java
 
    ```java

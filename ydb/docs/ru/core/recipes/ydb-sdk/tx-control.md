@@ -320,52 +320,7 @@
   }
   ```
 
-- Go (database/sql)
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "database/sql"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/retry"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
     )
-    if err != nil {
-      panic(err)
-    }
-    defer nativeDriver.Close(ctx)
-
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
-
-    db := sql.OpenDB(connector)
-    defer db.Close()
-
-    // Online Read-Only — режим чтения, дающий доступ к актуальным данным
-    // без строгих гарантий согласованности
-    err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
-      row := tx.QueryRowContext(ctx, "SELECT 1")
-      var result int
-      return row.Scan(&result)
-    }, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
-      Isolation: sql.LevelReadCommitted,
-      ReadOnly:  true,
-    }))
     if err != nil {
       fmt.Printf("unexpected error: %v", err)
     }
@@ -462,10 +417,6 @@
     _ = row
   }
   ```
-
-- Go (database/sql)
-
-  Режим Stale Read-Only не поддерживается напрямую в стандартном интерфейсе `database/sql`. Рекомендуется использовать нативный Go SDK для этого режима транзакций.
 
 - Java
 

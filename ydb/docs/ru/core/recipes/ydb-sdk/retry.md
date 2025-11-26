@@ -86,10 +86,10 @@
           return session.ExecuteQuery(
               query,
               NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
-          ).Apply([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) {
-              auto result = asyncResult.GetValueSync();
+          ).Apply([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) -> NYdb::TStatus {
+              auto result = asyncResult.GetValue();
               if (!result.IsSuccess()) {
-                  return NYdb::TStatus(result);
+                  return result;
               }
               
               // Обработка результата запроса
@@ -102,7 +102,7 @@
                       << std::endl;
               }
               
-              return NYdb::TStatus(result);
+              return result;
           });
       });
       
@@ -217,6 +217,7 @@
               return result;
           }
           
+          // Обработка результата запроса
           std::cout << "Query executed successfully" << std::endl;
           return result;
       }, retrySettings);

@@ -87,10 +87,10 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
           return session.ExecuteQuery(
               query,
               NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
-          ).Apply([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) {
-              auto result = asyncResult.GetValueSync();
+          ).Apply([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) -> NYdb::TStatus {
+              auto result = asyncResult.GetValue();
               if (!result.IsSuccess()) {
-                  return NYdb::TStatus(result);
+                  return result;
               }
               
               // Process query results
@@ -103,7 +103,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
                       << std::endl;
               }
               
-              return NYdb::TStatus(result);
+              return result;
           });
       });
       
@@ -218,6 +218,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
               return result;
           }
           
+          // Process query result
           std::cout << "Query executed successfully" << std::endl;
           return result;
       }, retrySettings);

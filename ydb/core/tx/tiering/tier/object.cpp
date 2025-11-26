@@ -1,6 +1,7 @@
 #include "object.h"
 #include "s3_uri.h"
 
+#include <ydb/core/base/appdata.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/uri/uri.h>

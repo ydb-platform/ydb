@@ -66,8 +66,12 @@ class TestTpch100(TpchSuiteBase):
         'lineitem': 600037902,
     }
     scale: int = 100
+<<<<<<< HEAD
     check_canonical: bool = CheckCanonicalPolicy.ERROR
     timeout = max(TpchSuiteBase.timeout, 300.)
+=======
+    timeout = max(TpchSuiteBase.timeout, 3600.)
+>>>>>>> 72f72566f6b (increase timeout for tpch100 (#29440))
 
 
 class TestTpch1000(TpchSuiteBase):

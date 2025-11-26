@@ -98,10 +98,7 @@ public:
 
         auto topic = maybeReadTopic.Cast().Topic();
         auto federatedClustersIterator = FindIf(topic.Props(), [](TCoNameValueTuple property) {
-            if (property.Name() == "FederatedClusters") {
-                return true;
-            }
-            return false;
+            return property.Name() == "FederatedClusters";
         });
 
         auto clusterInfoIterator = State_->Configuration->ClustersConfigurationSettings.find(topic.Cluster());

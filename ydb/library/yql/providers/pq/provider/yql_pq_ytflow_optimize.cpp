@@ -24,7 +24,8 @@ public:
         auto readTopic = maybeReadTopic.Cast();
         auto topic = readTopic.Topic();
         auto rowSpecType = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        THashSet<TString> membersSet(TCoAtomList(members).begin(), TCoAtomList(members).end());
+        auto membersAtomList = TCoAtomList(members);
+        THashSet<TString> membersSet(membersAtomList.begin(), membersAtomList.end());
 
         TVector<TCoAtom> columns;
         TVector<const TItemExprType*> extractedMemberTypes;

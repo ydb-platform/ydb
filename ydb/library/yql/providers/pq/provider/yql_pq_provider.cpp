@@ -19,8 +19,9 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     const NPq::NProto::StreamingDisposition& disposition,
     const std::vector<std::pair<TString, TString>>& taskSensorLabels,
     const std::vector<ui64>& nodeIds,
-    bool useActorSystemThreadsInTopicClient) {
-    return [gateway, supportRtmrMode, dbResolver, disposition, taskSensorLabels, nodeIds, useActorSystemThreadsInTopicClient] (
+    bool useActorSystemThreadsInTopicClient,
+    bool useYtflowEngine) {
+    return [gateway, supportRtmrMode, dbResolver, disposition, taskSensorLabels, nodeIds, useActorSystemThreadsInTopicClient, useYtflowEngine] (
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -54,8 +55,10 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             }
             state->Gateway = gateway;
             state->DqIntegration = CreatePqDqIntegration(state);
-            state->YtflowIntegration = CreatePqYtflowIntegration(state);
-            state->YtflowOptimization = CreatePqYtflowOptimization(state);
+            if (useYtflowEngine) {
+                state->YtflowIntegration = CreatePqYtflowIntegration(state);
+                state->YtflowOptimization = CreatePqYtflowOptimization(state);
+            }
 
             TDataProviderInfo info;
 

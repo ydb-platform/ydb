@@ -238,7 +238,7 @@ bool TPDiskStatusComputer::IsInitialDeploymentGracePeriod() const {
 
 
 TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
-    : TPDiskStatus(defaultStateLimit, goodStateLimit, stateLimits, TInstant::Zero(), TDuration::Zero())
+    : TPDiskStatus(initialStatus, defaultStateLimit, goodStateLimit, stateLimits, TInstant::Zero(), TDuration::Zero())
 {}
 
 TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit,

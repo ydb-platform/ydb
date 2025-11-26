@@ -357,6 +357,8 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
     appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
     appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
 
+    appConfig.MutableFeatureFlags()->SetEnableTopicMessageLevelParallelism(true);
+
     if (enableMetering) {
         auto& sqsConfig = *appConfig.MutableSqsConfig();
 

@@ -477,6 +477,28 @@ private:
                     "Modification of dynamic table " << outTableInfo.Name.Quote() << " is supported only by UPSERT or INSERT WITH TRUNCATE"));
                 return TStatus::Error;
             }
+
+            static const EYtSettingTypes unsupportedSettings = EYtSettingType::CompressionCodec
+                | EYtSettingType::ErasureCodec
+                | EYtSettingType::ReplicationFactor
+                | EYtSettingType::Media
+                | EYtSettingType::PrimaryMedium
+                | EYtSettingType::Expiration
+                | EYtSettingType::KeepMeta
+                | EYtSettingType::MonotonicKeys
+                | EYtSettingType::ColumnGroups
+                | EYtSettingType::SecurityTags;
+
+            for (const auto& setting : settings.Children()) {
+                if (setting->ChildrenSize() != 0) {
+                    auto parsedSetting = FromString<EYtSettingType>(setting->Child(0)->Content());
+                    if (unsupportedSettings.HasFlags(parsedSetting)) {
+                        ctx.AddError(TIssue(pos, TStringBuilder() <<
+                            "Setting " << parsedSetting << " is not supported for dynamic tables"));
+                        return TStatus::Error;
+                    }
+                }
+            }
         }
         if (mode == EYtWriteMode::Upsert && !notFlowDynamic) {
             ctx.AddError(TIssue(pos, TStringBuilder() <<

@@ -269,9 +269,16 @@ public:
         // If the thread may sleep we need to start Wr processing from caller thread. It is not a problem due to thread safe ibverbs api.
         // If we can't finish wr prosessing (no more wr to allocate without waiting) it means there are some verbs infligh so we can process it
         // from cq thread.
-        if (!NonBlockingPolling && VerbsBuildingState.Lock.TryAcquire()) {
-            ProcessWr(VerbsBuildingState.CurCtx, VerbsBuildingState.PreparedWr, true);
-            VerbsBuildingState.Lock.Release();
+        if (!NonBlockingPolling) {
+            bool cont = false;
+            do {
+                if (VerbsBuildingState.Lock.TryAcquire()) {
+                    cont &= ProcessWr(VerbsBuildingState.CurCtx, VerbsBuildingState.PreparedWr, true);
+                    VerbsBuildingState.Lock.Release();
+                } else {
+                    cont = MaybeIdle.load();
+                }
+            } while (cont);
         }
         return {};
     }
@@ -354,12 +361,15 @@ public:
                     Err.store(true, std::memory_order_relaxed);
                 } else if (rv == 0) {
                     bool idleAllowed = false;
+                    MaybeIdle.store(true);
                     if (VerbsBuildingState.Lock.TryAcquire()) {
                         idleAllowed = !ProcessWr(VerbsBuildingState.CurCtx, VerbsBuildingState.PreparedWr, false);
+                        MaybeIdle.store(idleAllowed);
                         VerbsBuildingState.Lock.Release();
                     }
                     if (idleAllowed) {
                         Idle();
+                        MaybeIdle.store(false);
                     }
                 } else {
                     Y_ABORT_UNLESS(static_cast<size_t>(rv) <= wcs.size(), "ibv_poll_cq returns more then requested");
@@ -421,8 +431,10 @@ protected:
     struct {
         std::unique_ptr<TWaiterCtx> CurCtx;
         std::vector<TWr*> PreparedWr;
-        TSpinLock Lock;
+        TSpinLock Lock; // Is used to protect VerbsBulding due to cuncurrent access from one poller thred and multiple actor system threads
     } VerbsBuildingState;
+
+    std::atomic<bool> MaybeIdle = false;
 
     std::atomic<bool> Err;
     const bool NonBlockingPolling;

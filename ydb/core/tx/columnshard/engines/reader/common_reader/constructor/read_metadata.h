@@ -25,7 +25,7 @@ private:
     virtual TString DoDebugString() const = 0;
     bool InitCursorFlag = false;
     virtual void DoFillReadStats(TReadStats& /*stats*/) const {
-    
+
     }
 
 public:
@@ -188,6 +188,10 @@ public:
     std::shared_ptr<TReadStats> ReadStats;
 
     TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read);
+
+    bool OrderByLimitAllowed() const {
+        return TableMetadataAccessor->OrderByLimitAllowed() && !GetFakeSort();
+    }
 
     TReadMetadata(const TReadMetadata&) = delete;
     TReadMetadata& operator=(const TReadMetadata&) = delete;

@@ -1,6 +1,7 @@
 from collections import Counter, defaultdict
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime
+from pytz import timezone
 import json
 import allure
 import yatest

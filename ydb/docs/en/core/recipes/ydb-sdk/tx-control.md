@@ -34,6 +34,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
      }
      defer db.Close(ctx)
      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+       /* without explicit tx control option used serializable read-write tx control by default */
        query.WithTxControl(query.SerializableReadWriteTxControl(query.CommitTx())),
      )
      if err != nil {
@@ -80,15 +81,20 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
      db := sql.OpenDB(connector)
      defer db.Close()
 
-     // Serializable Read-Write mode is used by default for transactions
-     err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
-       row := tx.QueryRowContext(ctx, "SELECT 1")
-       var result int
-       return row.Scan(&result)
-	}, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
+     err = retry.DoTx(ctx, db, 
+       func(ctx context.Context, tx *sql.Tx) error {
+         row := tx.QueryRowContext(ctx, "SELECT 1")
+         var result int
+         return row.Scan(&result)
+	  }, 
+	  retry.WithIdempotent(true), 
+	  // The Serializable Read-Write mode is used by default for transactions.
+	  // Or it can be set explicitly as shown below
+	  retry.WithTxOptions(&sql.TxOptions{
 		Isolation: sql.LevelSerializable,
 		ReadOnly:  false,
-	}))
+	  }),
+	)
      if err != nil {
        fmt.Printf("unexpected error: %v", err)
      }

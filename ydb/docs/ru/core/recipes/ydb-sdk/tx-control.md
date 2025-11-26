@@ -80,15 +80,20 @@
     db := sql.OpenDB(connector)
     defer db.Close()
 
-    // Режим Serializable Read-Write используется по умолчанию для транзакций
-    err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
-      row := tx.QueryRowContext(ctx, "SELECT 1")
-      var result int
-      return row.Scan(&result)
-	}, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
+     err = retry.DoTx(ctx, db, 
+       func(ctx context.Context, tx *sql.Tx) error {
+         row := tx.QueryRowContext(ctx, "SELECT 1")
+         var result int
+         return row.Scan(&result)
+	  }, 
+	  retry.WithIdempotent(true), 
+	  // Режим Serializable Read-Write используется по умолчанию для транзакций
+	  // Либо его можно установить явно как приведено ниже
+	  retry.WithTxOptions(&sql.TxOptions{
 		Isolation: sql.LevelSerializable,
 		ReadOnly:  false,
-	}))
+	  }),
+	)
     if err != nil {
       fmt.Printf("unexpected error: %v", err)
     }

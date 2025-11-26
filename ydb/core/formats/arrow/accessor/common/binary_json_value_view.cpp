@@ -4,6 +4,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/types/binary_json/read.h>
 
+#include <limits>
+
 namespace NKikimr::NArrow::NAccessor {
 
 TBinaryJsonValueView::TBinaryJsonValueView(const TStringBuf& rawValue)

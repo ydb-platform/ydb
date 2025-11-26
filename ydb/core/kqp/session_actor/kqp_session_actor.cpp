@@ -2085,6 +2085,30 @@ public:
         }
     }
 
+    void HandleCleanup(TEvKqpBuffer::TEvError::TPtr& ev) {
+        auto& msg = *ev->Get();
+
+        TString logMsg = TStringBuilder() << "got TEvKqpBuffer::TEvError in " << CurrentStateFuncName()
+            << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << " send to: " << ExecuterId << " from: " << ev->Sender;
+
+        if (CleanupCtx->TransactionsToBeAborted.empty()) {
+            LOG_E(logMsg <<  ": Ignored error. TransactionsToBeAborted is empty.");
+        }
+
+        AFL_ENSURE(ExecuterId); // ExecuterId can't be empty during cleanup if TransactionsToBeAborted is not empty.
+
+        const auto& txCtx = CleanupCtx->TransactionsToBeAborted.front();
+        AFL_ENSURE(txCtx);
+        if (txCtx->BufferActorId != ev->Sender) {
+            LOG_E(logMsg <<  ": Ignored error. Current BufferActorId is not sender.");
+            return;
+        } else {
+            LOG_W(logMsg);
+        }
+
+        Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
+    }
+
     void CollectSystemViewQueryStats(const TKqpQueryStats* stats, TDuration queryDuration,
         const TString& database, ui64 requestUnits)
     {
@@ -2731,6 +2755,7 @@ public:
         if (QueryState) {
             QueryState->Orbit = std::move(ev->Get()->Orbit);
         }
+        ExecuterId = {};
 
         auto& response = ev->Get()->Record.GetResponse();
         if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -2743,6 +2768,8 @@ public:
                 // Terminate BufferActors without waiting
                 TerminateBufferActor(txCtx);
             }
+            CleanupCtx->TransactionsToBeAborted.clear();
+
             EndCleanup(CleanupCtx->Final);
             return;
         }
@@ -2986,7 +3013,7 @@ public:
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
                 hFunc(TEvKqp::TEvSplitResponse, HandleNoop);
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
-                hFunc(TEvKqpBuffer::TEvError, Handle);
+                hFunc(TEvKqpBuffer::TEvError, HandleCleanup);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);

@@ -2190,6 +2190,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, Handle);
             default:
                 AFL_ENSURE(false)("StateWaitTasks: unknown message", ev->GetTypeRewrite());
             }
@@ -2204,6 +2205,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, Handle);
             default:
                 AFL_ENSURE(false)("StateFlush: unknown message", ev->GetTypeRewrite());
             }
@@ -2218,6 +2220,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, Handle);
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandlePrepare);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
@@ -2241,6 +2244,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, Handle);
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, Handle);
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandleCommit);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleCommit);

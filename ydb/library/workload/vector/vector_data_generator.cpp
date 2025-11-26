@@ -258,34 +258,28 @@ TWorkloadVectorFilesDataInitializer::TWorkloadVectorFilesDataInitializer(const T
 void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
-    // --input
-    {
-        TStringBuilder description;
-        description
-            << "File or directory with the dataset to import. Only two columns are imported: "
-            << colors.BoldColor() << "id" << colors.OldColor() << " and "
-            << colors.BoldColor() << "embedding" << colors.OldColor() << ". "
-            << "Any additional columns present in the input files (such as extra key columns or prefix columns) will be ignored during import. "
-            << "If a directory is set, all supported files inside will be used."
-            << "\nSupported formats: CSV/TSV (zipped or unzipped) and Parquet."
-            << "\nIf embedding appears to be a list of floats, then it gets converted to YDB binary embedding format."
-            << "\nOtherwise embedding must already be binary; "
-            << "for CSV/TSV format, embeddings must always be represented as a list of floats e.g., \"[ 1.0 2.0 3.0 ]\", \"[ 1.0, 2.0, 3.0 ]\"."
-            << "\nExample dataset: https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings";
+    TStringBuilder inputDescription;
+    inputDescription
+        << "File or directory with the dataset to import. Only two columns are imported: "
+        << colors.BoldColor() << "id" << colors.OldColor() << " and "
+        << colors.BoldColor() << "embedding" << colors.OldColor() << ". "
+        << "Any additional columns present in the input files (such as extra key columns or prefix columns) will be ignored during import. "
+        << "If a directory is set, all supported files inside will be used."
+        << "\nSupported formats: CSV/TSV (zipped or unzipped) and Parquet."
+        << "\nIf embedding appears to be a list of floats, then it gets converted to YDB binary embedding format."
+        << "\nOtherwise embedding must already be binary; "
+        << "for CSV/TSV format, embeddings must always be represented as a list of floats e.g., \"[ 1.0 2.0 3.0 ]\", \"[ 1.0, 2.0, 3.0 ]\"."
+        << "\nExample dataset: https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings";
 
-        opts.AddLongOption('i', "input", description)
-            .RequiredArgument("PATH")
-            .Required()
-            .StoreResult(&DataFiles);
-    }
+    opts.AddLongOption('i', "input", inputDescription)
+        .RequiredArgument("PATH")
+        .Required()
+        .StoreResult(&DataFiles);
 
-    // --embedding-column-name
-    {
-        opts.AddLongOption("embedding-column-name", "Alternative source column name for the embedding field in input files.")
-            .RequiredArgument("NAME")
-            .DefaultValue(EmbeddingColumnName)
-            .StoreResult(&EmbeddingColumnName);
-    }
+    opts.AddLongOption("embedding-column-name", "Alternative source column name for the embedding field in input files.")
+        .RequiredArgument("NAME")
+        .DefaultValue(EmbeddingColumnName)
+        .StoreResult(&EmbeddingColumnName);
 }
 
 TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData() {

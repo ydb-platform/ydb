@@ -174,6 +174,10 @@ private:
             ythrow yexception() << "Cannot find embedding column '" << EmbeddingColumnName << "'";
         }
 
+        if (Y_UNLIKELY(embeddingColumn->type()->id() == arrow::Type::STRING)) {
+            ythrow yexception() << "For CSV/TSV embedding column must be string";
+        }
+
         arrow::StringBuilder newEmbeddingsBuilder;
         for (int64_t row = 0; row < table->num_rows(); ++row) {
             const auto embeddingListString = std::static_pointer_cast<arrow::StringArray>(embeddingColumn->Slice(row, 1)->chunk(0))->Value(0);

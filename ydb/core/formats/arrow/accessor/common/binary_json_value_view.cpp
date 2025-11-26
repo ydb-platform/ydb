@@ -18,7 +18,7 @@ std::optional<TStringBuf> TBinaryJsonValueView::GetScalarOptional() const {
         return std::nullopt;
     }
 
-    if (!ScalarView.has_value()) {
+    if (ScalarView.has_value()) {
         return ScalarView.value();
     }
 

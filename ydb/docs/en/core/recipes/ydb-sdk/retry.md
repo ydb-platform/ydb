@@ -28,33 +28,38 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   #include <ydb-cpp-sdk/client/query/client.h>
 
   void ExecuteQueryWithRetry(NYdb::NQuery::TQueryClient client) {
-      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) {
+      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
           auto query = R"(
               SELECT series_id, title
               FROM series
               WHERE series_id = 1;
           )";
           
-          return session.ExecuteQuery(
+          auto result = session.ExecuteQuery(
               query,
               NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
           ).GetValueSync();
+          
+          if (!result.IsSuccess()) {
+              return result;
+          }
+          
+          // Process query results
+          auto resultSet = result.GetResultSet(0);
+          NYdb::TResultSetParser parser(resultSet);
+          while (parser.TryNextRow()) {
+              std::cout << "Series"
+                  << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                  << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                  << std::endl;
+          }
+          
+          return result;
       });
       
       if (!result.IsSuccess()) {
           // Handle error after all retry attempts
           std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
-          return;
-      }
-      
-      // Process query results
-      auto resultSet = result.GetResultSet(0);
-      NYdb::TResultSetParser parser(resultSet);
-      while (parser.TryNextRow()) {
-          std::cout << "Series"
-              << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
-              << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
-              << std::endl;
       }
   }
   ```
@@ -72,7 +77,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   #include <ydb-cpp-sdk/client/query/client.h>
 
   void ExecuteQueryWithRetryAsync(NYdb::NQuery::TQueryClient client) {
-      auto future = client.RetryQuery([](NYdb::NQuery::TSession session) {
+      auto future = client.RetryQuery([](NYdb::NQuery::TSession session) -> NYdb::TAsyncStatus {
           auto query = R"(
               SELECT series_id, title, release_date
               FROM series
@@ -82,27 +87,31 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
           return session.ExecuteQuery(
               query,
               NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
-          );
+          ).Apply([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) {
+              auto result = asyncResult.GetValueSync();
+              if (!result.IsSuccess()) {
+                  return NYdb::TStatus(result);
+              }
+              
+              // Process query results
+              auto resultSet = result.GetResultSet(0);
+              NYdb::TResultSetParser parser(resultSet);
+              while (parser.TryNextRow()) {
+                  std::cout << "Series"
+                      << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                      << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                      << std::endl;
+              }
+              
+              return NYdb::TStatus(result);
+          });
       });
       
-      // Handle result asynchronously
-      future.Subscribe([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) {
-          auto result = asyncResult.GetValueSync();
-          if (!result.IsSuccess()) {
-              std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
-              return;
-          }
-          
-          // Process query results
-          auto resultSet = result.GetResultSet(0);
-          NYdb::TResultSetParser parser(resultSet);
-          while (parser.TryNextRow()) {
-              std::cout << "Series"
-                  << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
-                  << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
-                  << std::endl;
-          }
-      });
+      // Wait for completion
+      auto status = future.GetValueSync();
+      if (!status.IsSuccess()) {
+          std::cerr << "Query failed: " << status.GetIssues().ToString() << std::endl;
+      }
   }
   ```
 
@@ -119,7 +128,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   #include <ydb-cpp-sdk/client/query/client.h>
 
   void StreamQueryWithRetry(NYdb::NQuery::TQueryClient client) {
-      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) {
+      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
           auto query = R"(
               SELECT series_id, title, release_date
               FROM series
@@ -194,24 +203,28 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
           .MaxRetries(20)
           .MaxTimeout(NYdb::TDuration::Seconds(30));
       
-      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) {
+      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
           auto query = R"(
               UPSERT INTO series (series_id, title)
               VALUES (10, "New Series");
           )";
           
-          return session.ExecuteQuery(
+          auto result = session.ExecuteQuery(
               query,
               NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
           ).GetValueSync();
+          
+          if (!result.IsSuccess()) {
+              return result;
+          }
+          
+          std::cout << "Query executed successfully" << std::endl;
+          return result;
       }, retrySettings);
       
       if (!result.IsSuccess()) {
           std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
-          return;
       }
-      
-      std::cout << "Query executed successfully" << std::endl;
   }
   ```
 

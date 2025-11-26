@@ -653,9 +653,10 @@ void TStorageProxy::Handle(NKikimr::NConsole::TEvConsole::TEvConfigNotificationR
     bool changed = newFeatureFlags->GetEnableSecureScriptExecutions() != FeatureFlags.GetEnableSecureScriptExecutions();
     FeatureFlags.Swap(newFeatureFlags);
 
-    if (changed) {
-        InitStatus = EInitStatus::NotStarted;
+    if (changed && InitStatus != EInitStatus::NotStarted) {
         InitializationGeneration++;
+        StartInitialization();
+        InitStatus = EInitStatus::Pending;
     }
 }
 

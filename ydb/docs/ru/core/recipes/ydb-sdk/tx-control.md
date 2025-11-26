@@ -96,7 +96,6 @@
 
   ```java
   import tech.ydb.query.QueryClient;
-  import tech.ydb.query.QueryTransaction;
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
 
@@ -188,7 +187,7 @@
 - Node.js
 
   ```typescript
-  import { Driver, QuerySession, TxMode } from 'ydb-sdk';
+  import { Driver, QuerySession } from 'ydb-sdk';
 
   // ...
 
@@ -655,7 +654,7 @@
 - Node.js
 
   ```typescript
-  import { Driver, QuerySession, TxMode } from 'ydb-sdk';
+  import { Driver, QuerySession } from 'ydb-sdk';
 
   // ...
 

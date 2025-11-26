@@ -61,9 +61,9 @@ protected:
                         tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                         ++KickInFlight;
                         ++Movements;
-                        BLOG_D("Fill " << SelfId() << " moving tablet " << tablet->ToString() << " " << tablet->GetResourceValues()
-                               << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues
-                               << " to node " << node->Id << " " << node->ResourceValues);
+                        BLOG_D("Fill " << SelfId() << " moving tablet " << tablet->ToString()
+                               << " from node " << tablet->Node->Id
+                               << " to node " << node->Id);
                         Hive->TabletCounters->Cumulative()[NHive::COUNTER_FILL_EXECUTED].Increment(1);
                         Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, node->Id));
                         Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id), ctx);

@@ -85,17 +85,17 @@ protected:
                     ++KickInFlight;
                     ++Movements;
                     BLOG_D("Drain " << SelfId() << " moving tablet "
-                                << tablet->ToString() << " " << tablet->GetResourceValues()
-                                << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues
-                                << " to node " << node->Id << " " << node->ResourceValues);
+                                << tablet->ToString()
+                                << " from node " << tablet->Node->Id
+                                << " to node " << node->Id);
                     Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_EXECUTED].Increment(1);
                     Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, node->Id));
                     Hive->Execute(Hive->CreateRestartTablet(tabletId, node->Id));
                 } else {
                     if (std::holds_alternative<THive::TNoNodeFound>(result) || std::holds_alternative<THive::TNotEnoughResources>(result)) {
                         Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_FAILED].Increment(1);
-                        BLOG_D("Drain " << SelfId() << " could not move tablet " << tablet->ToString() << " " << tablet->GetResourceValues()
-                               << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues);
+                        BLOG_D("Drain " << SelfId() << " could not move tablet " << tablet->ToString()
+                               << " from node " << tablet->Node->Id);
                     } else if (std::holds_alternative<THive::TTooManyTabletsStarting>(result)){
                         BLOG_D("Drain " << SelfId() << " could not move tablet " << tablet->ToString() << " and will try again later");
                         Hive->WaitToMoveTablets(SelfId());

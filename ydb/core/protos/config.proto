@@ -1796,6 +1796,13 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+
+        optional uint64 PhantomFlagStorageLimitPerVDiskBytes = 39 [(ControlOptions) = {
+            Description: "Maximum size in bytes of in-memory structures of PhantomFlagStorage per VDisk",
+            MinValue: 0,
+            MaxValue: 100000000000, // 100 GB
+            DefaultValue: 10000000, // 10 MB
+        }];
     }
 
     message TTabletControls {

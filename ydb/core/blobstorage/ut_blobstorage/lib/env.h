@@ -66,6 +66,7 @@ struct TEnvironmentSetup {
         const bool AutomaticBootstrap = false;
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
         const bool EnablePhantomFlagStorage = false;
+        const bool TinySyncLog = false;
     };
 
     const TSettings Settings;
@@ -495,6 +496,7 @@ config:
                     config->ReplMaxDonorNotReadyCount = Settings.ReplMaxDonorNotReadyCount;
                 }
                 config->UseActorSystemTimeInBSQueue = Settings.UseActorSystemTimeInBSQueue;
+                config->TinySyncLog = Settings.TinySyncLog;
                 if (Settings.ConfigPreprocessor) {
                     Settings.ConfigPreprocessor(nodeId, *config);
                 }

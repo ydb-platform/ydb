@@ -41,7 +41,6 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     };
 
     struct TLoadingBlobInfo {
-        bool RemoveAfterRead;
         NThreading::TPromise<std::optional<TChunkedBuffer>> BlobPromise;
         TInstant OpBegin;
     };
@@ -59,8 +58,7 @@ public:
     }
 
     void Bootstrap() {
-        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, SpillerName_,
-            SelfId(), false);
+        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, SpillerName_, SelfId(), true);
         SpillingActorId_ = Register(spillingActor);
         Become(&TDqComputeStorageActor::WorkState);
     }
@@ -131,12 +129,10 @@ private:
             return;
         }
 
-        bool removeBlobAfterRead = msg.RemoveBlobAfterRead_;
-
-        auto loadingBlobInfo = TLoadingBlobInfo{removeBlobAfterRead, std::move(msg.Promise_), opBegin};
+        auto loadingBlobInfo = TLoadingBlobInfo{std::move(msg.Promise_), opBegin};
         LoadingBlobs_.emplace(msg.Key_, std::move(loadingBlobInfo));
 
-        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, removeBlobAfterRead));
+        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_));
     }
 
     void HandleWork(TEvDelete::TPtr& ev) {
@@ -149,7 +145,7 @@ private:
 
         DeletingBlobs_.emplace(msg.Key_, std::move(msg.Promise_));
 
-        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, true));
+        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_));
     }
 
     void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
@@ -209,9 +205,7 @@ private:
             SpillingTaskCounters_->ComputeReadTime += opDuration.MilliSeconds();
         }
 
-        if (blobInfo.RemoveAfterRead) {
-            UpdateStatsAfterBlobDeletion(msg.Blob.Size(), msg.BlobId);
-        }
+        UpdateStatsAfterBlobDeletion(msg.Blob.Size(), msg.BlobId);
 
         auto owner = std::make_shared<TBuffer>(std::move(msg.Blob));
         TChunkedBuffer res(TStringBuf(reinterpret_cast<const char*>(owner->Data()), owner->Size()), owner);
@@ -277,9 +271,9 @@ protected:
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, TWakeUpCallback wakeupCallback, 
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, TWakeUpCallback wakeupCallback,
     TErrorCallback errorCallback, TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters) {
     return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, errorCallback, spillingTaskCounters);
 }
 
-} // namespace NYql::NDq 
+} // namespace NYql::NDq

@@ -35,7 +35,7 @@ namespace {
     LOG_WARN_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s);
 
 #define LOG_T(s) \
-    LOG_TRACE_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s); 
+    LOG_TRACE_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s);
 
 class TDqChannelStorageActor : public IDqChannelStorageActor,
                                public NActors::TActorBootstrapped<TDqChannelStorageActor>
@@ -115,7 +115,7 @@ private:
         LOG_T("[TEvGet] blobId: " << msg.BlobId_);
 
         auto opBegin = TInstant::Now();
- 
+
         auto loadingBlobInfo = TLoadingBlobInfo{std::move(msg.Promise_), opBegin};
         LoadingBlobs_.emplace(msg.BlobId_, std::move(loadingBlobInfo));
 
@@ -203,7 +203,7 @@ private:
 
     // BlobId -> blob size + promise that blob is saved
     std::unordered_map<ui64, TWritingBlobInfo> WritingBlobs_;
-    
+
     // BlobId -> promise with requested blob
     std::unordered_map<ui64, TLoadingBlobInfo> LoadingBlobs_;
 

@@ -36,4 +36,3 @@ inline TString MakeIndexBuildUid(const NKikimr::NSchemeShard::TImportInfo& impor
     const auto& item = importInfo.Items.at(itemIdx);
     return MakeIndexBuildUid(importInfo, itemIdx, item.NextIndexIdx);
 }
-

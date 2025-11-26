@@ -6,7 +6,10 @@ Data in a {{ ydb-short-name }} table is stored and sorted by the primary key, en
 
 ## Characteristics of Vector Indexes {#characteristics}
 
-Vector indexes in {{ ydb-short-name }} address the nearest neighbor search problem using [similarity or distance functions](../yql/reference/udf/list/knn.md#functions). Several distance/similarity functions are supported: "inner_product", "cosine" (similarity) and "cosine", "euclidean", "manhattan" (distance).
+Vector indexes in {{ ydb-short-name }} address the nearest neighbor search problem using [similarity or distance functions](../yql/reference/udf/list/knn.md#functions). Distance/similarity function parameters for vector indices:
+
+* `distance` is a distance function ( `cosine` , `euclidean` , `manhattan` ), mutually exclusive with `similarity`.
+* `similarity` - similarity function ( `inner_product` , `cosine` ), mutually exclusive with `distance`.
 
 The current implementation offers one type of index: `vector_kmeans_tree`.
 
@@ -143,12 +146,12 @@ Over time, this can lead to index degradation, resulting in:
 
 The extent of degradation depends on the nature of the updates:
 
-- If the index was built on a representative sample (e.g., a random 50% of the data) and the remaining records are added later, the index structure remains mostly relevant, and degradation is minimal.
-- If entire groups of similar vectors were absent from the initial dataset, the clustering may fail to partition the space effectively, leading to a significant drop in result relevance.
+* If the index was built on a representative sample (e.g., a random 50% of the data) and the remaining records are added later, the index structure remains mostly relevant, and degradation is minimal.
+* If entire groups of similar vectors were absent from the initial dataset, the clustering may fail to partition the space effectively, leading to a significant drop in result relevance.
 
 A particularly problematic corner case arises when a vector index is created on an empty table. In this scenario, the index consists of a single cluster, and all new records are placed within it. As a result, searches using such an index are equivalent to full table scans.
 
 To prevent degradation:
 
-- Avoid creating a vector index on an empty table.
-- If a large volume of new data has been added, [build a new index](../yql/reference/syntax/alter_table/indexes.md) and [atomically replace](../reference/ydb-cli/commands/secondary_index.md#rename) the old index with the updated one.
+* Avoid creating a vector index on an empty table.
+* If a large volume of new data has been added, [build a new index](../yql/reference/syntax/alter_table/indexes.md) and [atomically replace](../reference/ydb-cli/commands/secondary_index.md#rename) the old index with the updated one.

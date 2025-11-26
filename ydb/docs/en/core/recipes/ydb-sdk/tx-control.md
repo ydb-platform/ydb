@@ -247,6 +247,32 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   })
   ```
 
+- C# (ADO.NET)
+
+   ```csharp
+   using Ydb.Sdk.Ado;
+   using Ydb.Sdk.Services.Query;
+
+   await using var connection = await dataSource.OpenConnectionAsync();
+   // Serializable is the default transaction mode
+   await using var transaction = await connection.BeginTransactionAsync(TxMode.SerializableRw);
+   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+   await command.ExecuteNonQueryAsync();
+   await transaction.CommitAsync();
+   ```
+
+- C# (Entity Framework)
+
+   ```csharp
+   using Microsoft.EntityFrameworkCore;
+
+   // Entity Framework uses Serializable isolation by default
+   await using var context = await dbContextFactory.CreateDbContextAsync();
+   await using var transaction = await context.Database.BeginTransactionAsync();
+   var result = await context.SomeEntities.FirstOrDefaultAsync();
+   await transaction.CommitAsync();
+   ```
+
 {% endlist %}
 
 ## Online Read-Only {#online-read-only}
@@ -663,6 +689,19 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
    );
    ```
 
+- C# (ADO.NET)
+
+   ```csharp
+   using Ydb.Sdk.Ado;
+   using Ydb.Sdk.Services.Query;
+
+   await using var connection = await dataSource.OpenConnectionAsync();
+   await using var transaction = await connection.BeginTransactionAsync(TxMode.SnapshotRo);
+   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+   await using var reader = await command.ExecuteReaderAsync();
+   await transaction.CommitAsync();
+   ```
+
 - Node.js
 
    ```typescript
@@ -822,6 +861,19 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
        "SELECT 1",
        NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
    ).GetValueSync();
+   ```
+
+- C# (ADO.NET)
+
+   ```csharp
+   using Ydb.Sdk.Ado;
+   using Ydb.Sdk.Services.Query;
+
+   await using var connection = await dataSource.OpenConnectionAsync();
+   await using var transaction = await connection.BeginTransactionAsync(TxMode.SnapshotRw);
+   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+   await command.ExecuteNonQueryAsync();
+   await transaction.CommitAsync();
    ```
 
 {% endlist %}

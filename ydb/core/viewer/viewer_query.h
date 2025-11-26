@@ -653,6 +653,74 @@ public:
     }
 
 private:
+    std::string WriteTime(ui32 value) {
+        ui32 hour, min, sec;
+
+        Y_ASSERT(value < 86400);
+        hour = value / 3600;
+        value -= hour * 3600;
+        min = value / 60;
+        sec = value - min * 60;
+
+        return TStringBuilder() << LeftPad(hour, 2, '0') << ':' << LeftPad(min, 2, '0') << ':' << LeftPad(sec, 2, '0');
+    }
+
+    std::string FormatDate32(const std::chrono::sys_time<NYdb::TWideDays>& tp) {
+        auto value = tp.time_since_epoch().count();
+
+        i32 year;
+        ui32 month;
+        ui32 day;
+        if (!NKikimr::NMiniKQL::SplitDate32(value, year, month, day)) {
+            return TStringBuilder() << "Error: failed to split Date32: " << value;
+        }
+
+        return TStringBuilder() << year << "-" << LeftPad(month, 2, '0') << '-' << LeftPad(day, 2, '0');
+    }
+
+    std::string FormatDatetime64(const std::chrono::sys_time<NYdb::TWideSeconds>& tp) {
+        auto value = tp.time_since_epoch().count();
+
+        if (Y_UNLIKELY(NUdf::MIN_DATETIME64 > value || value > NUdf::MAX_DATETIME64)) {
+            return TStringBuilder() << "Error: value out of range for Datetime64: " << value << " (min: " << NUdf::MIN_DATETIME64 << ", max: " << NUdf::MAX_DATETIME64 << ")";
+        }
+
+        auto date = value / 86400;
+        value -= date * 86400;
+        if (value < 0) {
+            date -= 1;
+            value += 86400;
+        }
+
+        return TStringBuilder() << FormatDate32(std::chrono::sys_time<NYdb::TWideDays>(NYdb::TWideDays(date))) << 'T' << WriteTime(value) << 'Z';
+    }
+
+    std::string FormatTimestamp64(const std::chrono::sys_time<NYdb::TWideMicroseconds>& tp) {
+        auto value = tp.time_since_epoch().count();
+
+        if (Y_UNLIKELY(NUdf::MIN_TIMESTAMP64 > value || value > NUdf::MAX_TIMESTAMP64)) {
+            return TStringBuilder() << "Error: value out of range for Timestamp64: " << value << " (min: " << NUdf::MIN_TIMESTAMP64 << ", max: " << NUdf::MAX_TIMESTAMP64 << ")";
+        }
+        auto date = value / 86400000000ll;
+        value -= date * 86400000000ll;
+        if (value < 0) {
+            date -= 1;
+            value += 86400000000ll;
+        }
+
+        TStringBuilder out;
+        out << FormatDate32(std::chrono::sys_time<NYdb::TWideDays>(NYdb::TWideDays(date)));
+        out << 'T';
+
+        const ui32 time = static_cast<ui32>(value / 1000000ull);
+        value -= time * 1000000ull;
+        out << WriteTime(time);
+        if (value) {
+            out << '.' << LeftPad(value, 6, '0');
+        }
+        return out << 'Z';
+    }
+
     NJson::TJsonValue ColumnPrimitiveValueToJsonValue(NYdb::TValueParser& valueParser) {
         switch (const auto primitive = valueParser.GetPrimitiveType()) {
             case NYdb::EPrimitiveType::Bool:
@@ -688,11 +756,11 @@ private:
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return std::format("{:%FT%TZ}", valueParser.GetDate32());
+                return FormatDate32(valueParser.GetDate32());
             case NYdb::EPrimitiveType::Datetime64:
-                return std::format("{:%FT%TZ}", valueParser.GetDatetime64());
+                return FormatDatetime64(valueParser.GetDatetime64());
             case NYdb::EPrimitiveType::Timestamp64:
-                return std::format("{:%FT%TZ}", valueParser.GetTimestamp64());
+                return FormatTimestamp64(valueParser.GetTimestamp64());
             case NYdb::EPrimitiveType::Interval64:
                 return valueParser.GetInterval64().count();
             case NYdb::EPrimitiveType::TzDate:

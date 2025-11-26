@@ -8,7 +8,9 @@
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
+
+  {% cut "Native" %}
 
   ```go
   package main
@@ -44,7 +46,9 @@
   }
   ```
 
-- Go (database/sql)
+  {% endcut %}
+
+  {% cut "database/sql" %}
 
   ```go
   package main
@@ -100,7 +104,11 @@
   }
   ```
 
+  {% endcut %}
+
 - Java
+
+  {% cut "Native" %}
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -123,7 +131,9 @@
   }).join().getValue();
   ```
 
-- JDBC
+  {% endcut %}
+
+  {% cut "JDBC" %}
 
   ```java
   import java.sql.Connection;
@@ -147,7 +157,11 @@
   }
   ```
 
+  {% endcut %}
+
 - Python
+
+  {% cut "Native" %}
 
   ```python
   import ydb
@@ -164,7 +178,9 @@
       pool.retry_operation_sync(callee)
   ```
 
-- Python (dbapi)
+  {% endcut %}
+
+  {% cut "dbapi" %}
 
   ```python
   import ydb.dbapi
@@ -175,6 +191,8 @@
           cursor.execute("SELECT 1")
           row = cursor.fetchone()
   ```
+
+  {% endcut %}
 
 - C++
 
@@ -188,6 +206,8 @@
 
 - C# (.NET)
 
+  {% cut "Native" %}
+
   ```csharp
   using Ydb.Sdk.Services.Query;
 
@@ -195,7 +215,39 @@
   var response = await queryClient.Exec("SELECT 1");
   ```
 
-- Node.js
+  {% endcut %}
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  await using var connection = await dataSource.OpenConnectionAsync();
+  // Режим Serializable используется по умолчанию
+  await using var transaction = await connection.BeginTransactionAsync(TxMode.SerializableRw);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await command.ExecuteNonQueryAsync();
+  await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  ```csharp
+  using Microsoft.EntityFrameworkCore;
+
+  // Entity Framework использует режим Serializable по умолчанию
+  await using var context = await dbContextFactory.CreateDbContextAsync();
+  await using var transaction = await context.Database.BeginTransactionAsync();
+  var result = await context.SomeEntities.FirstOrDefaultAsync();
+  await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+- Js/Ts
 
   ```typescript
   import { Driver, QuerySession } from 'ydb-sdk';
@@ -255,39 +307,13 @@
   })
   ```
 
-- C# (ADO.NET)
-
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
-
-  await using var connection = await dataSource.OpenConnectionAsync();
-  // Режим Serializable используется по умолчанию
-  await using var transaction = await connection.BeginTransactionAsync(TxMode.SerializableRw);
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
-  await command.ExecuteNonQueryAsync();
-  await transaction.CommitAsync();
-  ```
-
-- C# (Entity Framework)
-
-  ```csharp
-  using Microsoft.EntityFrameworkCore;
-
-  // Entity Framework использует режим Serializable по умолчанию
-  await using var context = await dbContextFactory.CreateDbContextAsync();
-  await using var transaction = await context.Database.BeginTransactionAsync();
-  var result = await context.SomeEntities.FirstOrDefaultAsync();
-  await transaction.CommitAsync();
-  ```
-
 {% endlist %}
 
 ## Online Read-Only {#online-read-only}
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
 
   ```go
   package main
@@ -380,7 +406,7 @@
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
 
   ```go
   package main
@@ -471,7 +497,9 @@
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
+
+  {% cut "Native" %}
 
   ```go
   package main
@@ -507,7 +535,9 @@
   }
   ```
 
-- Go (database/sql)
+  {% endcut %}
+
+  {% cut "database/sql" %}
 
   ```go
   package main
@@ -558,7 +588,11 @@
   }
   ```
 
+  {% endcut %}
+
 - Java
+
+  {% cut "Native" %}
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -581,7 +615,9 @@
   }).join().getValue();
   ```
 
-- JDBC
+  {% endcut %}
+
+  {% cut "JDBC" %}
 
   ```java
   import java.sql.Connection;
@@ -603,6 +639,8 @@
       connection.commit();
   }
   ```
+
+  {% endcut %}
 
 - Python
 
@@ -632,6 +670,8 @@
 
 - C# (.NET)
 
+  {% cut "Native" %}
+
   ```csharp
   using Ydb.Sdk.Services.Query;
 
@@ -641,7 +681,9 @@
   );
   ```
 
-- C# (ADO.NET)
+  {% endcut %}
+
+  {% cut "ADO.NET" %}
 
   ```csharp
   using Ydb.Sdk.Ado;
@@ -654,7 +696,9 @@
   await transaction.CommitAsync();
   ```
 
-- Node.js
+  {% endcut %}
+
+- Js/Ts
 
   ```typescript
   import { Driver, QuerySession } from 'ydb-sdk';
@@ -678,7 +722,9 @@
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
+
+  {% cut "Native" %}
 
   ```go
   package main
@@ -714,7 +760,9 @@
   }
   ```
 
-- Go (database/sql)
+  {% endcut %}
+
+  {% cut "database/sql" %}
 
   ```go
   package main
@@ -766,6 +814,8 @@
   }
   ```
 
+  {% endcut %}
+
 - Java
 
   ```java
@@ -815,7 +865,9 @@
   ).GetValueSync();
   ```
 
-- C# (ADO.NET)
+- C# (.NET)
+
+  {% cut "ADO.NET" %}
 
   ```csharp
   using Ydb.Sdk.Ado;
@@ -827,5 +879,7 @@
   await command.ExecuteNonQueryAsync();
   await transaction.CommitAsync();
   ```
+
+  {% endcut %}
 
 {% endlist %}

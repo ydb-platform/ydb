@@ -450,15 +450,14 @@ public:
         UpdateYqlLogLevels();
 
         auto* newFeatureFlags = event.MutableConfig()->MutableFeatureFlags();
-        if (newFeatureFlags->GetEnableSecureScriptExecutions() != FeatureFlags.GetEnableSecureScriptExecutions()) {
+        bool enableSecureChanged = newFeatureFlags->GetEnableSecureScriptExecutions() != FeatureFlags.GetEnableSecureScriptExecutions();
+        FeatureFlags.Swap(newFeatureFlags);
+        if (enableSecureChanged && ScriptExecutionsCreationStatus != EScriptExecutionsCreationStatus::NotStarted) {
             ScriptExecutionsTalesGeneration++;
-            if (ScriptExecutionsCreationStatus != EScriptExecutionsCreationStatus::NotStarted) {
-                StartScriptExecutionsTablesCreation();
-            }
+            StartScriptExecutionsTablesCreation();
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvResetManagerRegistration(TStreamingQueryBehaviour::GetInstance()));
         }
 
-        FeatureFlags.Swap(newFeatureFlags);
         WorkloadManagerConfig.Swap(event.MutableConfig()->MutableWorkloadManagerConfig());
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 

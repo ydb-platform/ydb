@@ -49,10 +49,6 @@ namespace {
         }
     }
 
-    TString MakeIndexBuildUid(const TImportInfo& importInfo, ui32 itemIdx, i32 indexIdx) {
-        return TStringBuilder() << importInfo.Id << "-" << itemIdx << "-" << indexIdx;
-    }
-
     void AddTransferringItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx,
         Ydb::Import::ImportItemProgress& itemProgress) {
 
@@ -138,7 +134,7 @@ namespace {
             return;
         }
 
-        for (i32 indexIdx: xrange(item.Table->indexes_size())) {
+        for (i32 indexIdx : xrange(item.Table->indexes_size())) {
             AddBuildIndexesItemProgress(ss, importInfo, itemIdx, indexIdx, itemProgress);
         }
     }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "schemeshard_info_types.h"
+
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #if defined LOG_T || \
@@ -23,4 +25,15 @@ void AddIssue(T& response, const TString& message, NYql::TSeverityIds::ESeverity
     auto& issue = *response.AddIssues();
     issue.set_severity(severity);
     issue.set_message(message);
+}
+
+inline TString MakeIndexBuildUid(const NKikimr::NSchemeShard::TImportInfo& importInfo, ui32 itemIdx) {
+    Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+    const auto& item = importInfo.Items.at(itemIdx);
+
+    return TStringBuilder() << importInfo.Id << "-" << itemIdx << "-" << item.NextIndexIdx;
+}
+
+inline TString MakeIndexBuildUid(const NKikimr::NSchemeShard::TImportInfo& importInfo, ui32 itemIdx, i32 indexIdx) {
+    return TStringBuilder() << importInfo.Id << "-" << itemIdx << "-" << indexIdx;
 }

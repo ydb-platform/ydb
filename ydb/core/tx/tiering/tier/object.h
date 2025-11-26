@@ -36,7 +36,7 @@ public:
         }
 }
 
-    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto, bool mergeFromAppData = false);
+    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto);
 
     NJson::TJsonValue SerializeConfigToJson() const;
 

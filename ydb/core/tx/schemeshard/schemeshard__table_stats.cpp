@@ -134,6 +134,22 @@ THolder<TProposeRequest> MergeRequest(
     return std::move(request);
 }
 
+const TString* GetPoolKind(const NKikimr::TChannelBind& channelBind, const TStoragePools& pools) {
+    auto findPoolByName = [](const auto& pools, const auto& name) {
+        return std::find_if(pools.begin(), pools.end(), [&name](const auto& pool) {
+            return pool.GetName() == name;
+        });
+    };
+    // fast: use pool kind specified by the channel bind
+    // slower: find pool kind by name
+    if (const auto& poolKind = channelBind.GetStoragePoolKind(); !poolKind.empty()) {
+        return &poolKind;
+    } else if (const auto& found = findPoolByName(pools, channelBind.GetStoragePoolName()); found != pools.end()) {
+        return &found->GetKind();
+    }
+    return nullptr;
+};
+
 template <typename T>
 TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
                                                  TInstant now,
@@ -153,17 +169,19 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
     newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime());
     newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime());
 
-    Y_UNUSED(pools);
-
     for (const auto& channelStats : tableStats.GetChannels()) {
         const ui32 channel = channelStats.GetChannel();
         if (channel < bindings.size()) {
             const auto& channelBind = bindings[channel];
-            const auto& poolKind = channelBind.GetStoragePoolKind();
-            auto& [dataSize, indexSize] = newStats.StoragePoolsStats[poolKind];
-            dataSize += channelStats.GetDataSize();
-            indexSize += channelStats.GetIndexSize();
+            if (auto* poolKindPtr = GetPoolKind(channelBind, pools); poolKindPtr != nullptr) {
+                auto& [dataSize, indexSize] = newStats.StoragePoolsStats[*poolKindPtr];
+                dataSize += channelStats.GetDataSize();
+                indexSize += channelStats.GetIndexSize();
+            }
+            // skip update for unknown pool kind
         }
+        // skip update for unknown channel
+        //NOTE: intentionally not logging to avoid flooding the log
     }
 
     newStats.ImmediateTxCompleted = tableStats.GetImmediateTxCompleted();

@@ -10,6 +10,9 @@ class TestYdbBackupWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(
+            extra_feature_flags={
+                "enable_backup_service": True
+            },
             additional_log_configs={
                 "BACKUP_SERVICE": LogLevels.DEBUG,
             },

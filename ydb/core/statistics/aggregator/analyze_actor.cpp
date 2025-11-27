@@ -209,8 +209,8 @@ void TAnalyzeActor::Bootstrap() {
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
 }
 
-void TAnalyzeActor::FinishWithFailure() {
-    auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(/*success=*/false);
+void TAnalyzeActor::FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus status) {
+    auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(status);
     Send(Parent, response.release());
     PassAway();
 }
@@ -226,7 +226,11 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
             << ", operationId: " << OperationId
             << ", PathId: " << PathId
             << ", DatabaseName: " << DatabaseName);
-        FinishWithFailure();
+
+        FinishWithFailure(
+            entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown
+            ? TEvStatistics::TEvFinishTraversal::EStatus::TableNotFound
+            : TEvStatistics::TEvFinishTraversal::EStatus::InternalError);
         return;
     }
 
@@ -272,7 +276,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     const auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
-        FinishWithFailure();
+        FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus::InternalError);
         return;
     }
 

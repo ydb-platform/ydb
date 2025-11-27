@@ -14,7 +14,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     TPathId PathId;
     TVector<ui32> ColumnTags;
 
-    void FinishWithFailure();
+    void FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus);
 
     // StateNavigate
 

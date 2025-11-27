@@ -277,10 +277,14 @@ struct TEvStatistics {
     struct TEvFinishTraversal : public TEventLocal<
         TEvFinishTraversal, EvFinishTraversal>
     {
-        // TODO: error conditions enum.
-        bool Success;
+        enum class EStatus {
+            Success,
+            InternalError,
+            TableNotFound,
+        };
+        EStatus Status;
 
-        explicit TEvFinishTraversal(bool success) : Success(success) {}
+        explicit TEvFinishTraversal(EStatus status) : Status(status) {}
     };
 };
 

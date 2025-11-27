@@ -31,7 +31,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist) {
                 Self->DeleteStatisticsFromTable();
             } else {
-                Self->FinishTraversal(db);
+                Self->FinishTraversal(db, /*finishAllForceTraversalTables=*/true);
             }
             return true;
         }
@@ -60,7 +60,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
         }
 
         if (Self->TraversalIsColumnTable && Self->TabletsForReqDistribution.empty()) {
-            Self->FinishTraversal(db);
+            Self->FinishTraversal(db, /*finishAllForceTraversalTables=*/false);
             StartColumnShardEventDistribution = false;
         }
 

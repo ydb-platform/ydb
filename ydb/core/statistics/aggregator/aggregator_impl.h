@@ -169,7 +169,7 @@ private:
     void ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActorContext& ctx);
     void ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db);
     void StartTraversal(NIceDb::TNiceDb& db);
-    void FinishTraversal(NIceDb::TNiceDb& db);
+    void FinishTraversal(NIceDb::TNiceDb& db, bool finishAllForceTraversalTables);
 
     void ReportBaseStatisticsCounters();
 

@@ -60,7 +60,9 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         DropTable(env, "Database", "Table");
 
-        Analyze(runtime, saTabletId, {pathId});
+        Analyze(
+            runtime, saTabletId, {pathId},
+            "operationId", {}, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
 
         ValidateCountMinAbsence(runtime, pathId);
     }

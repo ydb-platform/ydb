@@ -8,11 +8,13 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
     TString OperationId;
     TPathId PathId;
     TActorId ReplyToActorId;
+    bool Success;
 
-    TTxFinishTraversal(TSelf* self)
+    TTxFinishTraversal(TSelf* self, bool success)
         : TTxBase(self)
         , OperationId(self->ForceTraversalOperationId)
         , PathId(self->TraversalPathId)
+        , Success(success)
     {
         auto forceTraversal = Self->CurrentForceTraversalOperation();
         if (forceTraversal) {
@@ -26,7 +28,7 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
         SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Execute");
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->FinishTraversal(db);
+        Self->FinishTraversal(db, /*finishAllForceTraversalTables=*/!Success);
 
         return true;
     }
@@ -50,20 +52,29 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
                 "Send TEvAnalyzeResponse, OperationId=" << OperationId << ", ActorId=" << ReplyToActorId);
             auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
             response->Record.SetOperationId(OperationId);
-            response->Record.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+            response->Record.SetStatus(
+                Success
+                    ? NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS
+                    : NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
             ctx.Send(ReplyToActorId, response.release());
         }
     }
 };
 void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr&) {
-    Execute(new TTxFinishTraversal(this), TActivationContext::AsActorContext());
+    Execute(new TTxFinishTraversal(this, true), TActivationContext::AsActorContext());
 }
 void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr&) {
-    Execute(new TTxFinishTraversal(this), TActivationContext::AsActorContext());
+    Execute(new TTxFinishTraversal(this, false), TActivationContext::AsActorContext());
 }
-void TStatisticsAggregator::Handle(TEvStatistics::TEvFinishTraversal::TPtr&) {
-    // TODO: error handling
-    Execute(new TTxFinishTraversal(this), TActivationContext::AsActorContext());
+void TStatisticsAggregator::Handle(TEvStatistics::TEvFinishTraversal::TPtr& ev) {
+    using EStatus = TEvStatistics::TEvFinishTraversal::EStatus;
+    if (ev->Get()->Status == EStatus::TableNotFound) {
+        DeleteStatisticsFromTable();
+        return;
+    }
+    Execute(
+        new TTxFinishTraversal(this, ev->Get()->Status == EStatus::Success), 
+        TActivationContext::AsActorContext());
 }
 
 } // NKikimr::NStat

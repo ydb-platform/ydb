@@ -497,7 +497,8 @@ std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(
 
 void Analyze(
         TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& tables,
-        const TString operationId, TString databaseName) {
+        const TString operationId, TString databaseName,
+        NKikimrStat::TEvAnalyzeResponse::EStatus expectedStatus) {
     auto ev = MakeAnalyzeRequest(tables, operationId, databaseName);
 
     auto sender = runtime.AllocateEdgeActor();
@@ -506,7 +507,7 @@ void Analyze(
 
     const auto& record = evResponse->Get()->Record;
     UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), operationId);
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), expectedStatus);
 }
 
 void AnalyzeShard(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {

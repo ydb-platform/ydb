@@ -751,7 +751,7 @@ void TStatisticsAggregator::StartTraversal(NIceDb::TNiceDb& db) {
     Navigate();
 }
 
-void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
+void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db, bool finishAllForceTraversalTables) {
     auto pathId = TraversalPathId;
 
     auto pathIt = ScheduleTraversals.find(pathId);
@@ -768,14 +768,20 @@ void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
 
     auto forceTraversalOperation = CurrentForceTraversalOperation();
     if (forceTraversalOperation) {
-        auto operationTable = CurrentForceTraversalTable();
-
-        UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::TraversalFinished, forceTraversalOperation->OperationId, *operationTable,  db);
-
-        bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(),
-        [](const TForceTraversalTable& elem) { return elem.Status != TForceTraversalTable::EStatus::TraversalFinished;});
-        if (!tablesRemained) {
+        if (finishAllForceTraversalTables) {
             DeleteForceTraversalOperation(ForceTraversalOperationId, db);
+        } else {
+            auto operationTable = CurrentForceTraversalTable();
+
+            UpdateForceTraversalTableStatus(
+                TForceTraversalTable::EStatus::TraversalFinished,
+                forceTraversalOperation->OperationId, *operationTable,  db);
+
+            bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(),
+            [](const TForceTraversalTable& elem) { return elem.Status != TForceTraversalTable::EStatus::TraversalFinished;});
+            if (!tablesRemained) {
+                DeleteForceTraversalOperation(ForceTraversalOperationId, db);
+            }
         }
     }
 

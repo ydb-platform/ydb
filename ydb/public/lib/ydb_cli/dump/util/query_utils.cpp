@@ -257,6 +257,27 @@ TString GetDatabase(const TString& query) {
     return GetToken(query, R"(-- database: ")");
 }
 
+TMaybe<TSecretSetting> GetSecretSetting(const TString& query) {
+    static const TVector<TString> SECRET_SETTING_NAMES{
+        "PASSWORD_SECRET_NAME",
+        "PASSWORD_SECRET_PATH",
+        "TOKEN_SECRET_NAME",
+        "TOKEN_SECRET_PATH",
+    };
+    for (const auto& settingName : SECRET_SETTING_NAMES) {
+        auto secretSettingValue = GetToken(query, settingName + " = '");
+        if (!secretSettingValue) {
+            continue;
+        }
+        if (secretSettingValue.EndsWith("'")) {
+            secretSettingValue.resize(secretSettingValue.size() - 1);
+        }
+        return TSecretSetting{.Name = settingName, .Value = secretSettingValue};
+    }
+
+    return {};
+}
+
 TString GetSecretName(const TString& query) {
     TString secretName;
     if (auto pwd = GetToken(query, R"(PASSWORD_SECRET_NAME = ')")) {

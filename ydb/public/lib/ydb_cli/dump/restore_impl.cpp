@@ -1560,6 +1560,22 @@ TRestoreResult TRestoreClient::CheckSecretExistence(const TString& secretName) {
     return result;
 }
 
+TRestoreResult TRestoreClient::ProcessSecretInQuery(TString& query, const TString& dbRestoreRoot, const TFsPath& fsPath) {
+    if (auto secretSetting = GetSecretSetting(query)) {
+        if (IsSchemaSecret(secretSetting->Value)) {
+            secretSetting->Value = RewriteAbsolutePath(secretSetting->Value, GetDatabase(query), dbRestoreRoot);
+        }
+        if (auto result = CheckSecretExistence(secretSetting->Value); !result.IsSuccess()) {
+            return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
+        }
+        NYql::TIssues issues;
+        if (!RewriteCreateQuery(query, secretSetting->Name + " = '{}'", secretSetting->Value, issues)) {
+           return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
+        }
+    }
+    return Result<TRestoreResult>();
+}
+
 TRestoreResult TRestoreClient::RestoreReplication(
     const TFsPath& fsPath,
     const TString& dbRestoreRoot,
@@ -1577,17 +1593,21 @@ TRestoreResult TRestoreClient::RestoreReplication(
     }
 
     auto query = ReadAsyncReplicationQuery(fsPath, Log.get());
-    if (auto secretName = GetSecretName(query)) {
-        if (IsSchemaSecret(secretName)) {
-            secretName = RewriteAbsolutePath(secretName, GetDatabase(query), dbRestoreRoot);
-        }
-        if (auto result = CheckSecretExistence(secretName); !result.IsSuccess()) {
-            return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
-        }
-        NYql::TIssues issues;
-        if (!RewriteCreateQuery(query, "PASSWORD_SECRET_NAME = '{}'", secretName, issues)) { // change to path!!!!!!
-           return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
-        }
+    // if (auto secretName = GetSecretName(query)) {
+    //     if (IsSchemaSecret(secretName)) {
+    //         secretName = RewriteAbsolutePath(secretName, GetDatabase(query), dbRestoreRoot);
+    //     }
+    //     if (auto result = CheckSecretExistence(secretName); !result.IsSuccess()) {
+    //         return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
+    //     }
+    //     NYql::TIssues issues;
+    //     if (!RewriteCreateQuery(query, "PASSWORD_SECRET_NAME = '{}'", secretName, issues)) { // change to path!!!!!!
+    //        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
+    //     }
+    // }
+
+    if (const auto result = ProcessSecretInQuery(query, dbRestoreRoot, fsPath); !result.IsSuccess()) {
+        return result;
     }
 
     NYql::TIssues issues;

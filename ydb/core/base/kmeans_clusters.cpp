@@ -502,9 +502,9 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
                 error = "Target vector too short for bit type";
                 return nullptr;
             }
-            // For bit vectors: size = ceil(dim/8) + 1 (padding info) + 1 (format byte)
-            // padding = targetVector[size - 2], actual bits = (size - 2) * 8 - padding
-            settings.set_vector_dimension((targetVector.size() - 2) * 8 - static_cast<ui8>(targetVector[targetVector.size() - 2]));
+            // For bit vectors: size = HeaderLen + ceil(dim/8) + 1 (padding info) + 1 (format byte)
+            // padding = targetVector[size - 2], actual bits = (targetVector.size() - HeaderLen - 1) * 8 - padding
+            settings.set_vector_dimension((targetVector.size() - HeaderLen - 1) * 8 - static_cast<ui8>(targetVector[targetVector.size() - 2]));
             break;
         default:
             error = TStringBuilder() << "Unknown vector format byte: " << static_cast<int>(formatByte);

@@ -49,6 +49,8 @@ void SetVectorTopKMetric(Ydb::Table::VectorIndexSettings* indexSettings, const T
         indexSettings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN);
     } else if (metric == "EuclideanDistance") {
         indexSettings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN);
+    } else {
+        YQL_ENSURE(false, "Unrecognized VectorTopK metric: " << metric);
     }
 }
 

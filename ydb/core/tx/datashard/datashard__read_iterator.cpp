@@ -2219,7 +2219,7 @@ public:
                 } else {
                     topState->KMeans = NKMeans::CreateClusters(topK.GetSettings(), 0, error);
                 }
-                if (!topState->KMeans && error == "") {
+                if (!topState->KMeans && error.empty()) {
                     error = "CreateClusters failed";
                 }
                 if (topState->KMeans && !topState->KMeans->IsExpectedFormat(topK.GetTargetVector())) {

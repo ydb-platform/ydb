@@ -140,17 +140,20 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
             const NPq::NProto::TDqPqTopicSource& sourceParams)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
-            if (counters && NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
+            if (counters) {
                 SubGroup = Counters->GetSubgroup("source", "PqRead");
             } else {
                 SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             }
-
             for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
                 SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
             }
-            auto source = SubGroup->GetSubgroup("tx_id", TxId);
-            auto task = source->GetSubgroup("task_id", ToString(taskId));
+            auto source = SubGroup;
+            auto task = SubGroup;
+            if (NKikimr::AppData() && NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
+                source = source->GetSubgroup("tx_id", TxId);
+                task = source->GetSubgroup("task_id", ToString(taskId));
+            }
             InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
             InFlySubscribe = task->GetCounter("InFlySubscribe");
             AsyncInputDataRate = task->GetCounter("AsyncInputDataRate", true);

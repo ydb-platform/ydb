@@ -108,13 +108,16 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
         TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
-            if (Counters && NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
+            if (Counters) {
                 SubGroup = Counters->GetSubgroup("sink", "PqSink");
             } else {
                 SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             }
-            auto sink = SubGroup->GetSubgroup("tx_id", TxId);
-            auto task = sink->GetSubgroup("task_id", ToString(taskId));
+            auto task = SubGroup;
+            if (NKikimr::AppData() && NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
+                auto sink = SubGroup->GetSubgroup("tx_id", TxId);
+                task = sink->GetSubgroup("task_id", ToString(taskId));
+            }
             LastAckLatency = task->GetCounter("LastAckLatencyMs");
             InFlyCheckpoints = task->GetCounter("InFlyCheckpoints");
             InFlyData = task->GetCounter("InFlyData");

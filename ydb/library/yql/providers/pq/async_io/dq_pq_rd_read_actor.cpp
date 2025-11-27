@@ -82,7 +82,7 @@ struct TRowDispatcherReadActorMetrics {
     explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
-        if (Counters && NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
+        if (Counters) {
             SubGroup = Counters->GetSubgroup("source", "RdPqRead");
         } else {
             SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
@@ -90,8 +90,11 @@ struct TRowDispatcherReadActorMetrics {
         for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
             SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
         }
-        auto source = SubGroup->GetSubgroup("tx_id", TxId);
-        auto task = source->GetSubgroup("task_id", ToString(taskId));
+        auto task = SubGroup;
+        if (NKikimr::AppData() && NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
+            auto source = SubGroup->GetSubgroup("tx_id", TxId);
+            task = source->GetSubgroup("task_id", ToString(taskId));
+        }
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
         ReInit = task->GetCounter("ReInit", true);

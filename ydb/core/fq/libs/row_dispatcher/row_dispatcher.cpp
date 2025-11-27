@@ -123,14 +123,14 @@ struct TAggQueryStat {
     TAggQueryStat(const TString& queryId, const ::NMonitoring::TDynamicCounterPtr& counters, const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
         : QueryId(queryId)
         , SubGroup(counters) {
-        if (!enableStreamingQueriesCounters) {
-            SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-        }
         for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
             SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
         }
-        auto queryGroup = SubGroup->GetSubgroup("query_id", queryId);
-        auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(sourceParams.GetReadGroup()));
+        auto topicGroup = SubGroup;
+        if (enableStreamingQueriesCounters) {
+            topicGroup = topicGroup->GetSubgroup("query_id", queryId);
+            topicGroup = topicGroup->GetSubgroup("read_group", SanitizeLabel(sourceParams.GetReadGroup()));
+        }
         MaxQueuedBytesCounter = topicGroup->GetCounter("MaxQueuedBytes");
         AvgQueuedBytesCounter = topicGroup->GetCounter("AvgQueuedBytes");
         MaxReadLagCounter = topicGroup->GetCounter("MaxReadLag");

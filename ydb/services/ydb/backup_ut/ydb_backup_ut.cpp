@@ -143,6 +143,12 @@ struct TTransferTestConfig {
 
 namespace {
 
+enum class ESecretType {
+    SecretTypeNone,
+    SecretTypeOld,
+    SecretTypeScheme,
+};
+
 void ArePermissionsEqual(const THashMap<TString, THashSet<TString>>& lhs, const THashMap<TString, THashSet<TString>>& rhs) {
     UNIT_ASSERT_VALUES_EQUAL(lhs.size(), rhs.size());
 
@@ -1430,12 +1436,14 @@ void TestReplicationSettingsArePreserved(
         TReplicationClient& client,
         TBackupFunction&& backup,
         TRestoreFunction&& restore,
-        bool useSecret,
+        ESecretType secretType,
         const bool isOlap,
         const NDump::TRestoreSettings& restorationSettings = {})
 {
     using namespace fmt::literals;
-    if (useSecret) {
+    if (secretType == ESecretType::SecretTypeScheme) {
+        ExecuteQuery(session, "CREATE SECRET `secret` WITH (value = 'root@builtin');", true);
+    } else if (secretType == ESecretType::SecretTypeOld) {
         ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
     }
     ExecuteQuery(session, fmt::format("CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k)) WITH (STORE = {store});", "store"_a = isOlap ? "COLUMN" : "ROW"), true);
@@ -1445,10 +1453,12 @@ void TestReplicationSettingsArePreserved(
                 WITH (
                     CONNECTION_STRING = 'grpc://%s/?database=/Root'
                     %s
+                    %s
                 );
             )",
             endpoint.c_str(),
-            (useSecret ? ", TOKEN_SECRET_NAME = 'secret'" : "")
+            (secretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'secret'" : ""),
+            (secretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'secret'" : "")
         ), true
     );
 
@@ -1459,7 +1469,9 @@ void TestReplicationSettingsArePreserved(
         const auto& params = desc.GetConnectionParams();
         UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
         UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
-        if (useSecret) {
+        if (secretType == ESecretType::SecretTypeScheme) {
+            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "/Root/secret");
+        } else if (secretType == ESecretType::SecretTypeOld) {
             UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "secret");
         }
 
@@ -2600,12 +2612,15 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestReplicationBackupRestore(const bool isOlap, bool useSecret = true) {
+    void TestReplicationBackupRestore(const bool isOlap, ESecretType secretType) {
         TKikimrWithGrpcAndRootSchema server;
+        if (secretType == ESecretType::SecretTypeScheme) {
+            server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
+        }
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
-        if (useSecret) {
+        if (secretType != ESecretType::SecretTypeNone) {
             driverConfig.SetAuthToken("root@builtin");
         }
         auto driver = TDriver(driverConfig);
@@ -2614,7 +2629,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TReplicationClient replicationClient(driver);
 
-        if (useSecret) {
+        if (secretType != ESecretType::SecretTypeNone) {
             TPermissions permissions("root@builtin", {"ydb.generic.full"});
             const auto result = schemeClient.ModifyPermissions("/Root",
                 TModifyPermissionsSettings().AddGrantPermissions(permissions)
@@ -2629,8 +2644,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             endpoint, session, replicationClient,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup),
-            useSecret,
-            isOlap
+            secretType, isOlap
         );
     }
 
@@ -2875,8 +2889,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 return TestViewBackupRestore();
             case EPathTypeCdcStream:
                 return TestChangefeedBackupRestore(IsOlap);
-            case EPathTypeReplication:
-                return TestReplicationBackupRestore(IsOlap);
+            case EPathTypeReplication: {
+                TestReplicationBackupRestore(IsOlap, ESecretType::SecretTypeOld);
+                TestReplicationBackupRestore(IsOlap, ESecretType::SecretTypeScheme);
+                return;
+            }
             case EPathTypeTransfer:
                 return TestTransferBackupRestore();
             case EPathTypeExternalTable:
@@ -3030,7 +3047,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         cleanup();
         TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), true, IsOlap, restorationSettings
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeOld, IsOlap, restorationSettings
+        );
+
+        cleanup();
+        TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeScheme, IsOlap, restorationSettings
         );
 
         cleanup();
@@ -3136,7 +3158,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         cleanup();
         TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), true, IsOlap
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeOld, IsOlap
+        );
+
+        cleanup();
+        TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),ESecretType::SecretTypeScheme, IsOlap
         );
     }
 
@@ -3171,7 +3198,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
-        TestReplicationBackupRestore(false, false);
+        TestReplicationBackupRestore(false,  ESecretType::SecretTypeNone);
     }
 
     Y_UNIT_TEST(BackupRestoreTransfer_UseSecret) {

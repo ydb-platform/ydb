@@ -37,7 +37,7 @@ public:
     void MakeFullExport(bool encrypted = false) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
         if (encrypted) {
-            settings.SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+            settings.SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
         }
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
         WaitOpSuccess(res);
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
         }
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
         settings.AppendItem({"/Root/ExportParamsValidation/dir1/Table1", "dest"});
-        settings.SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+        settings.SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
         UNIT_ASSERT_C(!res.Status().IsSuccess(), "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, res.Status().GetIssues().ToString());
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTestFeatureDisabled, TBackupE
     Y_UNIT_TEST_TWIN(EncryptionParamsSpecifiedExport, IsOlap) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
         settings
-            .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+            .SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
 
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
         UNIT_ASSERT_C(!res.Status().IsSuccess(), "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1", "EncryptedExport");
             exportSettings
-                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+                .SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
 
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
             WaitOpSuccess(res);
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         {
             NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2", "Prefix");
             settings
-                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!")
+                .SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!")
                 .Compression("zstd");
 
             auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
@@ -491,7 +491,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         {
             NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2", "Prefix");
             settings
-                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+                .SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
 
             auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
             WaitOpSuccess(res);
@@ -544,7 +544,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         {
             NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2", "Prefix");
             settings
-                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!")
+                .SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!")
                 .Compression("zstd");
 
             auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
@@ -613,7 +613,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         {
             NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
             settings
-                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+                .SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
 
             auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
             WaitOpSuccess(res);
@@ -671,7 +671,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         {
             NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2/dir3", "Prefix");
             settings
-                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+                .SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
 
             auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
             WaitOpSuccess(res);
@@ -719,7 +719,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         {
             NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2/dir3", "Prefix");
             settings
-                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+                .SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
 
             auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
             WaitOpSuccess(res);
@@ -940,7 +940,7 @@ Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonReq
         {
             NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
             settings
-                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+                .SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
 
             auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
             WaitOpSuccess(res);
@@ -1025,7 +1025,7 @@ Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonReq
             checkImportFails(TStringBuilder() << "Remove key " << key);
 
             // Change IV (reencrypt with different, not expected, IV)
-            S3Mock().GetData()[key] = ReencryptWithDifferentIV(sourceValue, encryptionKey, NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM);
+            S3Mock().GetData()[key] = ReencryptWithDifferentIV(sourceValue, encryptionKey, NExport::TEncryptionAlgorithm::AES_128_GCM);
             checkImportFails(TStringBuilder() << "Change IV of " << key);
         }
     }

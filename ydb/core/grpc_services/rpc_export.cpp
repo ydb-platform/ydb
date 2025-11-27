@@ -465,6 +465,16 @@ public:
             }
         }
         if constexpr (IsFsExport) {
+            const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
+            if (!encryptedExportFeatureFlag) {
+                if (!settings.source_path().empty()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source path is not supported in current configuration");
+                }
+                if (settings.has_encryption_settings()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+                }
+            }
+
             if (!settings.base_path().StartsWith("/")) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
                     "base_path must be an absolute path");
@@ -480,6 +490,12 @@ public:
 
             if (settings.items().empty()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+            }
+
+            if (settings.has_encryption_settings()) {
+                if (!ValidateEncryptionParameters()) {
+                    return;
+                }
             }
         }
 

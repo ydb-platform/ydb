@@ -10,61 +10,41 @@ using namespace NKikimr::Tests;
 Y_UNIT_TEST_SUITE(DataShardTruncate) {
 
     Y_UNIT_TEST(SimpleTruncateTable) {
-        // TODO: flown4qqqq
-
-        // TPortManager pm;
-        // TServerSettings serverSettings(pm.GetPort(2134));
-        // serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
         
-        // Tests::TServer::TPtr server = new TServer(serverSettings);
-        // auto &runtime = *server->GetRuntime();
-        // auto edgeSender = runtime.AllocateEdgeActor();
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto edgeSender = runtime.AllocateEdgeActor();
         
-        // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        // InitRoot(server, edgeSender);
-        
-        // // Phase 0: Init table
-        // auto [shards, tableId] = CreateShardedTable(server, edgeSender, "/Root", "test_table", 1);
-        // UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
-        // ui64 shardId = shards[0];
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_TRACE);
+        InitRoot(server, edgeSender);
 
-        // ExecSQL(server, edgeSender, "UPSERT INTO `/Root/test_table` (key, value) VALUES (1, 100), (2, 200), (3, 300);");
-        
-        // auto beforeResult = ReadTable(server, shards, tableId);
-        // UNIT_ASSERT_VALUES_EQUAL(beforeResult, 
-        //     "key = 1, value = 100\n"
-        //     "key = 2, value = 200\n" 
-        //     "key = 3, value = 300\n");
+        auto [shards, tableId] = CreateShardedTable(server, edgeSender, "/Root", "test_table", 1);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
-        // ui64 txId = 12345678;
-        // ui64 seqNoGeneration = 87654321;
+        ExecSQL(server, edgeSender, "UPSERT INTO `/Root/test_table` (key, value) VALUES (1, 100), (2, 200), (3, 300);");
 
-        // NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
-        // schemeTx.MutableSeqNo()->SetGeneration(seqNoGeneration);
-        // schemeTx.MutableSeqNo()->SetRound(1);
+        auto beforeResult = ReadTable(server, shards, tableId);
+        UNIT_ASSERT_VALUES_EQUAL(beforeResult, 
+            "key = 1, value = 100\n"
+            "key = 2, value = 200\n" 
+            "key = 3, value = 300\n");
 
-        // auto& truncateOp = *schemeTx.MutableTruncateTable();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        Cerr << "===================================================================================== BEGIN TRUNCATE" << Endl;
+        Cerr << "TableId = " << tableId << Endl;
 
-        // truncateOp.MutablePathId()->SetOwnerId(tableId.PathId.OwnerId);
-        // truncateOp.MutablePathId()->SetLocalId(tableId.PathId.LocalPathId);
+        ui64 txId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
+        WaitTxNotification(server, edgeSender, txId);
 
-        // TString txBody = schemeTx.SerializeAsString();
-        // std::cerr << "========================================== BEGIN TRUNCATE TEST" << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        Cerr << "===================================================================================== END TRUNCATE" << Endl;
 
-
-        // {   // First Send
-        //     auto proposal = MakeHolder<TEvDataShard::TEvProposeTransaction>(
-        //         NKikimrTxDataShard::TX_KIND_SCHEME,
-        //         tableId.PathId.OwnerId,
-        //         edgeSender,
-        //         txId,
-        //         txBody,
-        //         NKikimrSubDomains::TProcessingParams());
-
-        //     runtime.Send(new IEventHandle(edgeSender, TActorId(), proposal), 0, true);
-        // }
-        // // Phase 3: Check table is empty
-        // auto afterResult = ReadTable(server, shards, tableId);
-        // UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
+        auto afterResult = ReadTable(server, shards, tableId);
+        UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
     }
 }

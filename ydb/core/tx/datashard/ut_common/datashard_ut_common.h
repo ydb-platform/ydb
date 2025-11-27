@@ -1019,4 +1019,9 @@ TString ReadTable(
     const TTableId& tableId,
     ui64 startReadId = 1000);
 
+ui64 AsyncTruncateTable(
+    const Tests::TServer::TPtr& server,
+    const TActorId& sender,
+    const TString& workingDir,
+    const TString& tableName);
 }

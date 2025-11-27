@@ -14,6 +14,12 @@ NKikimr::TConclusionStatus IIndexMetaConstructor::DeserializeFromJson(const NJso
             return TConclusionStatus::Fail("storage_id have to been one of variant ['__LOCAL_METADATA', '__DEFAULT']");
         }
     }
+    if (jsonInfo.Has("inherit_portion_storage")) {
+        if (!jsonInfo["inherit_portion_storage"].IsBoolean()) {
+            return TConclusionStatus::Fail("incorrect inherit_portion_storage field in json index description (have to be boolean)");
+        }
+        InheritPortionStorage = jsonInfo["inherit_portion_storage"].GetBooleanSafe();
+    }
     return DoDeserializeFromJson(jsonInfo);
 }
 

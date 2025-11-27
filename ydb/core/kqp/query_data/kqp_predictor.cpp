@@ -143,7 +143,7 @@ ui32 TStagePredictor::GetMaxExecutorThreadLimit() {
        return GetUsableThreads();
     }
 
-    return Max<ui32>(1, *userPoolMaxThreadsCount);
+    return Max<ui32>(GetUsableThreads(), *userPoolMaxThreadsCount);
 }
 
 ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const {

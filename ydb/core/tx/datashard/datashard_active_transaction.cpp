@@ -434,51 +434,110 @@ bool TActiveTransaction::BuildSchemeTx()
     if (!res)
         return false;
 
+    size_t count = 0;
+    SchemeTxType = TSchemaOperation::ETypeUnknown;
+
     if (SchemeTx->HasCreateTable()) {
         SchemeTxType = TSchemaOperation::ETypeCreate;
-    } else if (SchemeTx->HasDropTable()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasDropTable()) {
         SchemeTxType = TSchemaOperation::ETypeDrop;
-    } else if (SchemeTx->HasAlterTable()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasAlterTable()) {
         SchemeTxType = TSchemaOperation::ETypeAlter;
-    } else if (SchemeTx->HasBackup()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasBackup()) {
         SchemeTxType = TSchemaOperation::ETypeBackup;
-    } else if (SchemeTx->HasRestore()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasRestore()) {
         SchemeTxType = TSchemaOperation::ETypeRestore;
-    } else if (SchemeTx->HasSendSnapshot()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasSendSnapshot()) {
         SchemeTxType = TSchemaOperation::ETypeCopy;
-    } else if (SchemeTx->HasCreatePersistentSnapshot()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasCreatePersistentSnapshot()) {
         SchemeTxType = TSchemaOperation::ETypeCreatePersistentSnapshot;
-    } else if (SchemeTx->HasDropPersistentSnapshot()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasDropPersistentSnapshot()) {
         SchemeTxType = TSchemaOperation::ETypeDropPersistentSnapshot;
-    } else if (SchemeTx->HasInitiateBuildIndex()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasInitiateBuildIndex()) {
         SchemeTxType = TSchemaOperation::ETypeInitiateBuildIndex;
-    } else if (SchemeTx->HasFinalizeBuildIndex()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasFinalizeBuildIndex()) {
         SchemeTxType = TSchemaOperation::ETypeFinalizeBuildIndex;
-    } else if (SchemeTx->HasDropIndexNotice()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasDropIndexNotice()) {
         SchemeTxType = TSchemaOperation::ETypeDropIndexNotice;
-    } else if (SchemeTx->HasMoveTable()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasMoveTable()) {
         SchemeTxType = TSchemaOperation::ETypeMoveTable;
-    } else if (SchemeTx->HasCreateCdcStreamNotice()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasCreateCdcStreamNotice()) {
         SchemeTxType = TSchemaOperation::ETypeCreateCdcStream;
-    } else if (SchemeTx->HasAlterCdcStreamNotice()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasAlterCdcStreamNotice()) {
         SchemeTxType = TSchemaOperation::ETypeAlterCdcStream;
-    } else if (SchemeTx->HasDropCdcStreamNotice()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasDropCdcStreamNotice()) {
         SchemeTxType = TSchemaOperation::ETypeDropCdcStream;
-    } else if (SchemeTx->HasRotateCdcStreamNotice()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasRotateCdcStreamNotice()) {
         SchemeTxType = TSchemaOperation::ETypeRotateCdcStream;
-    } else if (SchemeTx->HasMoveIndex()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasMoveIndex()) {
         SchemeTxType = TSchemaOperation::ETypeMoveIndex;
-    } else if (SchemeTx->HasCreateIncrementalRestoreSrc()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasCreateIncrementalRestoreSrc()) {
         SchemeTxType = TSchemaOperation::ETypeCreateIncrementalRestoreSrc;
-    } else if (SchemeTx->HasCreateIncrementalBackupSrc()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasCreateIncrementalBackupSrc()) {
         SchemeTxType = TSchemaOperation::ETypeCreateIncrementalBackupSrc;
-    } else if (SchemeTx->HasTruncateTable()) {
+        count++;
+    }
+    
+    if (SchemeTx->HasTruncateTable()) {
         SchemeTxType = TSchemaOperation::ETypeTruncate;
-    } else {
-        SchemeTxType = TSchemaOperation::ETypeUnknown;
+        count++;
     }
 
-    return SchemeTxType != TSchemaOperation::ETypeUnknown;
+    return count > 0;
 }
 
 bool TActiveTransaction::BuildSnapshotTx()

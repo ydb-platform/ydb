@@ -249,4 +249,4 @@ jobs:
           TEST_STATUS: ${{ steps.run_tests.outcome }}
         run: |
           python3 -m pip install PyGithub -q
-          python3 ./.github/actions/run_tests/pr_comment.py complete "$GITHUB_STEP_SUMMARY"
+          python3 ./.github/actions/run_tests/pr_comment.py complete

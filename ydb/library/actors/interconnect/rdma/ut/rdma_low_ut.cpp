@@ -22,6 +22,7 @@ using namespace NActors;
 static const size_t MEM_REG_SZ = 4096;
 
 class TRdmaLow : public TSkipFixture {};
+class TCqMode : public TSkipFixtureWithParams<NInterconnect::NRdma::ECqMode> {};
 
 static NInterconnect::NRdma::TMemRegionPtr AllocSourceRegion(std::shared_ptr<IMemPool> memPool) {
     auto reg = memPool->Alloc(MEM_REG_SZ, IMemPool::EMPTY);
@@ -31,8 +32,8 @@ static NInterconnect::NRdma::TMemRegionPtr AllocSourceRegion(std::shared_ptr<IMe
     return reg;
 }
 
-void DoReadInOneProcess(TString bindTo) {
-    auto rdma = InitLocalRdmaStuff(bindTo);
+void DoReadInOneProcess(TString bindTo, NInterconnect::NRdma::ECqMode mode) {
+    auto rdma = InitLocalRdmaStuff(bindTo, mode);
 
     auto reg1 = AllocSourceRegion(rdma->MemPool);
     auto reg2 = rdma->MemPool->Alloc(MEM_REG_SZ, 0);
@@ -42,12 +43,12 @@ void DoReadInOneProcess(TString bindTo) {
     ASSERT_TRUE(strncmp((char*)reg1->GetAddr(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
 }
 
-TEST_F(TRdmaLow, ReadInOneProcessIpV4) {
-    DoReadInOneProcess("127.0.0.1");
+TEST_P(TCqMode, ReadInOneProcessIpV4) {
+    DoReadInOneProcess("127.0.0.1", GetParam());
 }
 
-TEST_F(TRdmaLow, ReadInOneProcessIpV6) {
-    DoReadInOneProcess("::1");
+TEST_P(TCqMode, ReadInOneProcessIpV6) {
+    DoReadInOneProcess("::1", GetParam());
 }
 
 /*
@@ -55,10 +56,10 @@ TEST_F(TRdmaLow, ReadInOneProcessIpV6) {
  * information about remote reading in progress.
  * In this case we change QP on the sender to the 'Reset' state and expect reader will fail with read error
  */
-TEST_F(TRdmaLow, ReadInOneProcessWithQpInterruption) {
+TEST_P(TCqMode, ReadInOneProcessWithQpInterruption) {
     TString addr = "127.0.0.1";
 
-    auto rdma = InitLocalRdmaStuff(addr);
+    auto rdma = InitLocalRdmaStuff(addr, GetParam());
 
     THolder<IThreadPool> pool = CreateThreadPool(2, 2);
     const int intialAttempts = 50000;
@@ -163,3 +164,20 @@ TEST_F(TRdmaLow, ReadInOneProcessWithQpInterruption) {
         }
     }
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    TRdmaLow,
+    TCqMode,
+    ::testing::Values(
+        NInterconnect::NRdma::ECqMode::POLLING,
+        NInterconnect::NRdma::ECqMode::EVENT
+    ),
+    [](const testing::TestParamInfo<NInterconnect::NRdma::ECqMode>& info) {
+        switch (info.param) {
+            case NInterconnect::NRdma::ECqMode::POLLING:
+                return "POLLING";
+            case NInterconnect::NRdma::ECqMode::EVENT:
+                return "EVENT";
+        }
+    }
+);

@@ -10,11 +10,32 @@
 #include <library/cpp/monlib/metrics/metric_sub_registry.h>
 
 #include <util/thread/lfqueue.h>
+#include <util/system/spinlock.h>
 #include <util/system/thread.h>
+#include <util/system/sanitizers.h>
+#include <util/system/compiler.h>
 
 #include <span>
 
 namespace NInterconnect::NRdma {
+
+void Y_FORCE_INLINE MemoryOrderAcquire(void* addr) {
+    atomic_thread_fence(std::memory_order_acquire);
+#if defined(_tsan_enabled_)
+    __tsan_acquire(addr);
+#else
+    Y_UNUSED(addr);
+#endif
+}
+
+void Y_FORCE_INLINE MemoryOrderRlease(void* addr) {
+    atomic_thread_fence(std::memory_order_release);
+#if defined(_tsan_enabled_)
+    __tsan_release(addr);
+#else
+    Y_UNUSED(addr);
+#endif
+}
 
 NMonitoring::TDynamicCounterPtr MakeCounters(NMonitoring::TDynamicCounters* counters);
 
@@ -39,6 +60,9 @@ private:
     };
     std::vector<TWrVerbData> WorkBuf;
 };
+
+void SetSigHandler() noexcept;
+
 class TCqCommon : public ICq {
 public:
     TCqCommon(NActors::TActorSystem* as)
@@ -46,7 +70,7 @@ public:
         , Cq(nullptr)
     {}
 
-    virtual ~TCqCommon();
+    virtual ~TCqCommon() = default;
 
     virtual void ReturnWr(IWr*) noexcept = 0;
 
@@ -54,8 +78,8 @@ public:
         return Cq;
     }
 
-    int Init(const TRdmaCtx* ctx, int maxCqe) noexcept {
-        Cq = ibv_create_cq(ctx->GetContext(), maxCqe, nullptr, nullptr, 0);
+    int Init(const TRdmaCtx* ctx, int maxCqe, struct ibv_comp_channel* ch) noexcept {
+        Cq = ibv_create_cq(ctx->GetContext(), maxCqe, nullptr, ch, 0);
         if (!Cq) {
             return errno;
         }
@@ -66,12 +90,17 @@ public:
         return ibv_poll_cq(Cq, wc.size(), &wc.front());
     }
 
-    void Idle() noexcept {
+    virtual void Idle() noexcept {
         SpinLockPause();
+    }
+
+    void DestroyCq () noexcept {
+        if (Cq) {
+            ibv_destroy_cq(Cq);
+        }
     }
 protected:
     NActors::TActorSystem* const As;
-private:
     ibv_cq* Cq;
 };
 
@@ -96,6 +125,7 @@ public:
     }
 
     void Reply(NActors::TActorSystem* as, const ibv_wc* wc) noexcept {
+        MemoryOrderAcquire(&Cb);
         if (Cb) {
             if (wc) {
                 if (wc->status == IBV_WC_SUCCESS) {
@@ -111,6 +141,7 @@ public:
     }
 
     void ReplyCqErr(NActors::TActorSystem* as) noexcept {
+        MemoryOrderAcquire(&Cb);
         if (Cb) {
             Cb(as, TEvRdmaIoDone::CqError());
             Cb = TCb();
@@ -118,6 +149,7 @@ public:
     }
 
     void ReplyWrErr(NActors::TActorSystem* as, int err) noexcept {
+        MemoryOrderAcquire(&Cb);
         if (Cb) {
             Cb(as, TEvRdmaIoDone::WrError(err));
             Cb = TCb();
@@ -127,6 +159,7 @@ public:
 
     void AttachCb(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept {
         Cb = std::move(cb);
+        MemoryOrderRlease(&Cb);
     }
 
     void ResetTimer() noexcept {
@@ -186,17 +219,13 @@ protected:
         std::unique_ptr<IIbVerbsBuilder> VerbsBuilder;
     };
 
-    void Stop() {
-        Cont.store(false, std::memory_order_relaxed);
-        if (Thread.Running())
-            Thread.Join();
-    }
-
 public:
-    TSimpleCqBase(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c) noexcept
+    TSimpleCqBase(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c, bool nonBlockingPolling) noexcept
         : TCqCommon(as)
         , Thread(ThreadFunc, this)
+        , Finished(false)
         , Err(false)
+        , NonBlockingPolling(nonBlockingPolling)
     {
         auto counter = MakeCounters(c);
         RdmaDeviceVerbTimeUs = counter->GetHistogram(
@@ -237,63 +266,88 @@ public:
             return TErr();
         }
         Waiters.Enqueue(new TWaiterCtx(std::move(qp), std::move(builder)));
+        // If the thread may sleep we need to start Wr processing from caller thread. It is not a problem due to thread safe ibverbs api.
+        // If we can't finish wr prosessing (no more wr to allocate without waiting) it means there are some verbs infligh so we can process it
+        // from cq thread.
+        if (!NonBlockingPolling) {
+            while (true) {
+                if (VerbsBuildingState.Lock.TryAcquire()) {
+                    ProcessWr(VerbsBuildingState.CurCtx, VerbsBuildingState.PreparedWr, true);
+                    VerbsBuildingState.Lock.Release();
+                    return {};
+                } else if (!MaybeIdle.load()) {
+                    return {};
+                }
+            }
+        }
         return {};
     }
 
-    bool ProcessWr(std::unique_ptr<TWaiterCtx>& ctx, std::vector<TWr*>& preparedWr) noexcept {
-        if (ctx) {
-            TWr* wr = nullptr;
-            Queue.Dequeue(&wr);
-            if (wr) {
-                preparedWr.emplace_back(wr);
-                if (preparedWr.size() < ctx->GetVerbsNum()) {
-                    // we need more work requests
-                    return true;
-                }
-
-                ibv_send_wr* wrList = ctx->BuildListOfVerbs(preparedWr);
-
-                if (Err.load(std::memory_order_relaxed)) {
-                    for (auto x : preparedWr) {
-                        x->ReplyCqErr(As);
-                    }
-                } else {
-                    Allocated.fetch_add(preparedWr.size());
-                    ibv_send_wr* wrErr = nullptr;
-                    int err = ctx->Qp->PostSend(wrList, &wrErr);
-                    if (err) {
-                        while (wrErr) {
-                            TWr* x = &WrBuf[wrErr->wr_id];
-                            x->ReplyWrErr(As, err);
-                            wrErr = wrErr->next;
+    // Build RDMA verbs and post it
+    // Returns false if it safe to sleep to wait for cq event
+    bool ProcessWr(std::unique_ptr<TWaiterCtx>& ctx, std::vector<TWr*>& preparedWr, bool tryBuildAtOnce) noexcept {
+        while (true) {
+            if (ctx) {
+                TWr* wr = nullptr;
+                Queue.Dequeue(&wr);
+                if (wr) {
+                    preparedWr.emplace_back(wr);
+                    if (preparedWr.size() < ctx->GetVerbsNum()) {
+                        if (tryBuildAtOnce) {
+                            continue;
+                        } else {
+                            return true;
                         }
                     }
-                }
 
-                preparedWr.clear();
-                ctx.reset();
-                return true;
+                    ibv_send_wr* wrList = ctx->BuildListOfVerbs(preparedWr);
+
+                    if (Err.load(std::memory_order_relaxed)) {
+                        for (auto x : preparedWr) {
+                            x->ReplyCqErr(As);
+                        }
+                    } else {
+                        Allocated.fetch_add(preparedWr.size());
+                        ibv_send_wr* wrErr = nullptr;
+                        int err = ctx->Qp->PostSend(wrList, &wrErr);
+                        if (err) {
+                            while (wrErr) {
+                                TWr* x = &WrBuf[wrErr->wr_id];
+                                x->ReplyWrErr(As, err);
+                                wrErr = wrErr->next;
+                            }
+                        }
+                    }
+
+                    preparedWr.clear();
+                    ctx.reset();
+                    return true;
+                } else {
+                    return false;
+                }
             } else {
-                return false;
+                TWaiterCtx* p = nullptr;
+                Waiters.Dequeue(&p);
+                if (p == nullptr) {
+                    // No wr to build
+                    return false;
+                }
+                ctx.reset(p);
             }
-        } else {
-            TWaiterCtx* p = nullptr;
-            Waiters.Dequeue(&p);
-            ctx.reset(p);
-            return true;
         }
         return false;
     }
 
     static void* ThreadFunc(void* p) {
         TThread::SetCurrentThreadName("RdmaCqThread");
-        reinterpret_cast<TSimpleCqBase*>(p)->Loop();
+        SetSigHandler();
+        TSimpleCqBase* cq = reinterpret_cast<TSimpleCqBase*>(p);
+        cq->CqThreadId = pthread_self();
+        cq->Loop();
         return nullptr;
     }
 
     void Loop() noexcept {
-        std::unique_ptr<TWaiterCtx> curCtx;
-        std::vector<TWr*> preparedWr;
         while (Cont.load(std::memory_order_relaxed)) {
             const constexpr size_t wcBatchSize = 16;
             std::array<ibv_wc, wcBatchSize> wcs;
@@ -306,8 +360,18 @@ public:
                     //TODO: Is it correct err handling?
                     Err.store(true, std::memory_order_relaxed);
                 } else if (rv == 0) {
-                    if (!ProcessWr(curCtx, preparedWr)) {
+                    bool idleAllowed = false;
+                    MaybeIdle.store(true);
+                    if (VerbsBuildingState.Lock.TryAcquire()) {
+                        idleAllowed = !ProcessWr(VerbsBuildingState.CurCtx, VerbsBuildingState.PreparedWr, false);
+                        if (!idleAllowed) {
+                            MaybeIdle.store(false);
+                        }
+                        VerbsBuildingState.Lock.Release();
+                    }
+                    if (idleAllowed) {
                         Idle();
+                        MaybeIdle.store(false);
                     }
                 } else {
                     Y_ABORT_UNLESS(static_cast<size_t>(rv) <= wcs.size(), "ibv_poll_cq returns more then requested");
@@ -315,6 +379,7 @@ public:
                 }
             }
         }
+        Finished.store(true, std::memory_order_relaxed);
     }
 
     void HandleErr() noexcept {
@@ -347,8 +412,13 @@ public:
         return 0;
     }
 
+    void Awake() noexcept {
+        pthread_kill(CqThreadId, SIGUSR1);
+    }
+
 protected:
     TThread Thread;
+    std::atomic<bool> Finished;
     std::atomic<bool> Cont;
 
     std::vector<TWr> WrBuf;
@@ -359,9 +429,21 @@ protected:
     TLockFreeQueue<TWr*> Queue;
 
     TLockFreeQueue<TWaiterCtx*> Waiters;
+
+    struct {
+        std::unique_ptr<TWaiterCtx> CurCtx;
+        std::vector<TWr*> PreparedWr;
+        TSpinLock Lock; // Is used to protect VerbsBulding due to cuncurrent access from one poller thred and multiple actor system threads
+    } VerbsBuildingState;
+
+    std::atomic<bool> MaybeIdle = false;
+
     std::atomic<bool> Err;
+    const bool NonBlockingPolling;
     std::atomic<ui64> Allocated;
     NMonitoring::THistogramPtr RdmaDeviceVerbTimeUs;
+private:
+    pthread_t CqThreadId;
 };
 
 }

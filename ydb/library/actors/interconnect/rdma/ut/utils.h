@@ -38,7 +38,7 @@ enum class EReadResult {
 
 std::tuple<THolder<NActors::TTestActorRuntimeBase>, NInterconnect::NRdma::TRdmaCtx*> PrepareTestRuntime(TString defIp);
 
-std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo="::1");
+std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo, NInterconnect::NRdma::ECqMode cqMode);
 
 EReadResult ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp,
     void* dstAddr, ui32 dstRkey, int dstSize, NInterconnect::NRdma::TMemRegionPtr& src, std::function<void()> hook = {});

@@ -470,6 +470,11 @@ message TInterconnectConfig {
         IC_SO_MSG_ZEROCOPY = 1;
     };
 
+    enum ERdmaCqMode {
+        CQ_POLLING = 0;
+        CQ_EVENT = 1;
+    };
+
     repeated TChannel Channel = 1;
     optional bool FirstTryBeforePoll = 2; // DEPRECATED
     optional bool StartTcp = 3 [default = false];
@@ -507,6 +512,7 @@ message TInterconnectConfig {
     optional bool UseRdma = 52;
     optional uint32 RdmaMaxWr = 53 [default = 4096];
     optional bool RdmaChecksum = 54 [default = true];
+    optional ERdmaCqMode RdmaCqMode = 55;
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;

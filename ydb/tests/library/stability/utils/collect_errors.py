@@ -6,18 +6,69 @@ import json
 import allure
 import yatest
 import os
-from time import time
+import time
 import re
 import logging
-from ydb.tests.library.stability.aggregate_results import StressUtilTestResults
-from ydb.tests.library.stability.remote_execution import execute_command, execute_ssh
-from ydb.tests.library.stability.upload_results import test_event_report
+from ydb.tests.library.stability.utils.remote_execution import execute_command, execute_ssh
+from ydb.tests.library.stability.utils.results_models import StressUtilTestResults
+from ydb.tests.library.stability.utils.upload_results import test_event_report
+from ydb.tests.olap.lib.allure_utils import NodeErrors
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 class ErrorsCollector:
-    def __init__(self, hosts: set[str]):
+    def __init__(self, hosts: set[str], nodes):
         self.hosts = hosts
+        self.nodes = nodes
+
+    def check_nodes_diagnostics_with_timing(self, result: StressUtilTestResults, start_time: float, end_time: float) -> list[NodeErrors]:
+        """
+        Собирает диагностическую информацию о нодах с кастомным временным интервалом.
+        Проверяет coredump'ы и OOM для всех нод из сохраненного состояния.
+
+        Args:
+            result: результат выполнения workload
+            start_time: время начала интервала для диагностики
+            end_time: время окончания интервала для диагностики
+        """
+
+        # Собираем диагностическую информацию для всех хостов
+        core_hashes = self.get_core_hashes_by_pod(start_time, end_time)
+        ooms = self.get_hosts_with_omms(start_time, end_time)
+        hosts_with_sanitizer = self.get_sanitizer_events(start_time, end_time)
+        hosts_with_verifies = self.count_verify_fails(start_time, end_time)
+
+        # Создаем NodeErrors для каждой ноды с диагностической информацией
+        node_errors = []
+        for node in self.nodes:
+            # Создаем NodeErrors только если есть coredump'ы или OOM
+            has_cores = bool(core_hashes.get(node.slot, []))
+            has_oom = node.host in ooms
+            has_verifies = node.host in hosts_with_verifies
+            has_san_errors = node.host in hosts_with_sanitizer
+
+            if has_cores or has_oom or node.host in hosts_with_verifies or node.host in hosts_with_sanitizer:
+                node_error = NodeErrors(node, 'diagnostic info collected')
+                node_error.core_hashes = core_hashes.get(node.slot, [])
+                node_error.was_oom = has_oom
+                if node.host in hosts_with_verifies:
+                    node_error.verifies = hosts_with_verifies[node.host]
+                if node.host in hosts_with_sanitizer:
+                    node_error.sanitizer_errors = hosts_with_sanitizer[node.host][0]
+                    node_error.sanitizer_output = hosts_with_sanitizer[node.host][1]
+                node_errors.append(node_error)
+
+                # Добавляем ошибки в результат (cores и OOM - это errors)
+                if has_verifies:
+                    result.add_error(f'Node {node.host} had {hosts_with_verifies[node.host]} VERIFY fails')
+                if has_cores:
+                    result.add_error(f'Node {node.slot} has {len(node_error.core_hashes)} coredump(s)')
+                if has_oom:
+                    result.add_error(f'Node {node.slot} experienced OOM')
+                if has_san_errors:
+                    result.add_error(f'Node {node.host} has SAN errors')
+
+        return node_errors
 
     def check_nodes_verifies_with_timing(self, start_time: float, end_time: float):
         """Aggregates information about VERIFY failed errors across hosts.

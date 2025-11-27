@@ -3,7 +3,7 @@ from copy import deepcopy
 import logging
 import allure
 from datetime import datetime
-from ydb.tests.library.stability.aggregate_results import StressUtilTestResults
+from ydb.tests.library.stability.utils.results_models import StressUtilTestResults
 from ydb.tests.olap.lib.allure_utils import (
     NodeErrors,
     _attach_sanitizer_outputs,
@@ -15,7 +15,7 @@ from ydb.tests.olap.lib.allure_utils import (
     _set_node_errors,
     _set_results_plot
 )
-from ydb.tests.library.stability.utils import external_param_is_true, get_ci_version, get_self_version
+from ydb.tests.library.stability.utils.utils import external_param_is_true, get_ci_version, get_self_version
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 

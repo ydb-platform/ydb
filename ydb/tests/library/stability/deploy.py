@@ -1,3 +1,4 @@
+from collections import defaultdict
 import allure
 import logging
 import os
@@ -5,11 +6,11 @@ import time as time_module
 import yatest.common
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
-from ydb.tests.library.stability.collect_errors import create_cluster_issue
-from ydb.tests.library.stability.remote_execution import copy_file, execute_command, deploy_binaries_to_hosts
-from ydb.tests.library.stability.upload_results import test_event_report
+from ydb.tests.library.stability.utils.collect_errors import create_cluster_issue
+from ydb.tests.library.stability.utils.remote_execution import copy_file, execute_command, deploy_binaries_to_hosts
+from ydb.tests.library.stability.utils.upload_results import test_event_report
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.library.stability.aggregate_results import StressUtilDeployResult
+from ydb.tests.library.stability.utils.results_models import StressUtilDeployResult
 
 
 class StressUtilDeployer:
@@ -23,10 +24,10 @@ class StressUtilDeployer:
         self.hosts = []
         self.cluster_path = cluster_path
         self.yaml_config = yaml_config
-        nodes = YdbCluster.get_cluster_nodes()
+        self.nodes = YdbCluster.get_cluster_nodes()
 
         # Collect unique hosts and their corresponding nodes
-        unique_hosts = set(node.host for node in nodes)
+        unique_hosts = set(node.host for node in self.nodes)
         self.hosts = list(filter(lambda h: h != 'localhost', unique_hosts))
 
     def prepare_stress_execution(
@@ -104,22 +105,31 @@ class StressUtilDeployer:
             deployed_nodes = {}
             # Deploy to selected percentage of nodes
             deploy_futures = []
+
+            processed_binaries = defaultdict(list)
             with ThreadPoolExecutor(max_workers=10) as tpe:
                 for workload_name, workload_info in workload_params.items():
+                    if workload_info['local_path'] in processed_binaries:
+                        continue
+                    processed_binaries[workload_info['local_path']].append(workload_name)
                     deploy_futures.append(
                         (
                             tpe.submit(self._deploy_workload_binary, workload_name, workload_info['local_path'], nodes_percentage),
-                            workload_name
+                            workload_name,
+                            workload_info['local_path'],
                         )
                     )
 
             total_hosts = []
-            for deploy_future, future_workload_name in deploy_futures:
+            for deploy_future, future_workload_name, future_binary_path in deploy_futures:
                 result = StressUtilDeployResult()
                 result.nodes = deploy_future.result()
                 deployed_hosts = list(map(lambda node: node['node'].host, result.nodes))
                 result.hosts = deployed_hosts
                 deployed_nodes[future_workload_name] = result
+
+                for stress_util_name in processed_binaries[future_binary_path]:
+                    deployed_nodes[stress_util_name] = result
 
                 total_hosts += deployed_hosts
 
@@ -287,6 +297,8 @@ class StressUtilDeployer:
                     )
 
                     test_event_report(
+                        workload_names=[workload_name],
+                        nemesis_enabled=self.nemesis_started,
                         event_kind='ClusterCheck',
                         verification_phase="workload_deployment",
                         check_type="deployment_failure",

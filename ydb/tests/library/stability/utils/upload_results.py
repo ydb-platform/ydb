@@ -5,8 +5,8 @@ import time
 import traceback
 import allure
 from ydb.tests.olap.lib.allure_utils import NodeErrors
-from ydb.tests.library.stability.results_processor import ResultsProcessor
-from ydb.tests.library.stability.aggregate_results import StressUtilResult, StressUtilTestResults, RunConfigInfo
+from ydb.tests.library.stability.utils.results_processor import ResultsProcessor
+from ydb.tests.library.stability.utils.results_models import StressUtilResult, StressUtilTestResults, RunConfigInfo
 
 
 def safe_upload_results(result: StressUtilTestResults, run_config: RunConfigInfo, node_errors: list[NodeErrors], verify_errors):

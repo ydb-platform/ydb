@@ -1,10 +1,12 @@
 PY3_LIBRARY()
 
     PY_SRCS (
-        build_report.py
-        deploy.py
-        run_stress.py
-        workload_executor_parallel.py
+        results_processor.py
+        remote_execution.py
+        collect_errors.py
+        utils.py
+        upload_results.py
+        results_models.py
     )
 
     PEERDIR (
@@ -16,7 +18,6 @@ PY3_LIBRARY()
         ydb/tests/olap/lib
         ydb/tests/olap/load/lib
         ydb/tests/olap/scenario/helpers
-        ydb/tests/library/stability/utils
         library/python/testing/yatest_common
         ydb/public/sdk/python
     )

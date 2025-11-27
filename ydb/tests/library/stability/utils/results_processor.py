@@ -5,7 +5,7 @@ import ydb
 import os
 import logging
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.library.stability.utils import external_param_is_true, get_external_param, get_ci_version, get_self_version
+from ydb.tests.library.stability.utils.utils import external_param_is_true, get_external_param, get_ci_version, get_self_version
 from time import time_ns
 
 

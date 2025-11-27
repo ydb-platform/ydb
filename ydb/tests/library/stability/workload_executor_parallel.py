@@ -3,11 +3,11 @@ import logging
 import time as time_module
 import pytest
 
-from ydb.tests.library.stability.aggregate_results import StressUtilDeployResult, StressUtilTestResults
+from ydb.tests.library.stability.utils.results_models import StressUtilDeployResult, StressUtilTestResults
 from ydb.tests.library.stability.build_report import create_parallel_allure_report
-from ydb.tests.library.stability.collect_errors import ErrorsCollector
-from ydb.tests.library.stability.upload_results import RunConfigInfo, safe_upload_results, test_event_report
-from ydb.tests.library.stability.utils import external_param_is_true, get_external_param
+from ydb.tests.library.stability.utils.collect_errors import ErrorsCollector
+from ydb.tests.library.stability.utils.upload_results import RunConfigInfo, safe_upload_results, test_event_report
+from ydb.tests.library.stability.utils.utils import external_param_is_true, get_external_param
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 from ydb.tests.library.stability.run_stress import StressRunExecutor
 
@@ -99,7 +99,7 @@ class ParallelWorkloadTestBase:
         additional_stats.duration = duration_value
         additional_stats.all_hosts = stress_deployer.hosts
         additional_stats.stress_util_names = list(workload_params.keys())
-        errors_collector = ErrorsCollector(additional_stats.all_hosts)
+        errors_collector = ErrorsCollector(additional_stats.all_hosts, stress_deployer.nodes)
 
         # Publish TestInit record
         with allure.step("Initialize test"):

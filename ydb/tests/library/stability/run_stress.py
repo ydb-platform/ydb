@@ -6,7 +6,7 @@ import time as time_module
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from ydb.tests.library.stability.aggregate_results import (
+from ydb.tests.library.stability.utils.results_models import (
     StressUtilDeployResult,
     StressUtilTestResults,
     StressUtilNodeResult,
@@ -15,9 +15,8 @@ from ydb.tests.library.stability.aggregate_results import (
 )
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 
-from ydb.tests.library.stability import deploy
-from ydb.tests.library.stability.remote_execution import execute_command
-from ydb.tests.library.stability.utils import external_param_is_true
+from ydb.tests.library.stability.utils.remote_execution import execute_command
+from ydb.tests.library.stability.utils.utils import external_param_is_true
 
 
 class StressRunExecutor:

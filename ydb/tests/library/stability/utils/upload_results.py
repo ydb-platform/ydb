@@ -4,13 +4,26 @@ import logging
 import time
 import traceback
 import allure
+from typing import Optional
 from ydb.tests.olap.lib.allure_utils import NodeErrors
 from ydb.tests.library.stability.utils.results_processor import ResultsProcessor
 from ydb.tests.library.stability.utils.results_models import StressUtilResult, StressUtilTestResults, RunConfigInfo
 
 
-def safe_upload_results(result: StressUtilTestResults, run_config: RunConfigInfo, node_errors: list[NodeErrors], verify_errors):
-    """Safe results upload with error handling and Allure reporting"""
+def safe_upload_results(
+    result: StressUtilTestResults,
+    run_config: RunConfigInfo,
+    node_errors: list[NodeErrors],
+    verify_errors: dict
+) -> None:
+    """Safely upload test results with error handling and Allure reporting.
+
+    Args:
+        result: Stress test results object
+        run_config: Run configuration info
+        node_errors: List of node error objects
+        verify_errors: Dictionary of verification errors
+    """
     with allure.step("Upload results to YDB"):
         if not ResultsProcessor.send_results:
             allure.attach("Results upload is disabled (send_results=false)",
@@ -59,8 +72,24 @@ def safe_upload_results(result: StressUtilTestResults, run_config: RunConfigInfo
                           "Upload error details", allure.attachment_type.TEXT)
 
 
-def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_errors: list[NodeErrors], verify_errors, suite_name, workload_name):
-    """Overridden method for workload tests"""
+def _upload_results(
+    result: StressUtilResult,
+    run_config: RunConfigInfo,
+    node_errors: list[NodeErrors],
+    verify_errors: dict,
+    suite_name: str,
+    workload_name: str
+) -> None:
+    """Upload results for a specific workload test.
+
+    Args:
+        result: Stress utility results
+        run_config: Run configuration info
+        node_errors: List of node errors
+        verify_errors: Verification errors dict
+        suite_name: Test suite name
+        workload_name: Workload name
+    """
     stats = {}
 
     stats["aggregation_level"] = "aggregate"
@@ -158,20 +187,23 @@ def _upload_results(result: StressUtilResult, run_config: RunConfigInfo, node_er
 
 
 def test_event_report(
-        event_kind: str,
-        workload_names: list[str],
-        nemesis_enabled: bool,
-        verification_phase: str = None,
-        check_type: str = None,
-        cluster_issue: dict = None) -> None:
+    event_kind: str,
+    workload_names: list[str],
+    nemesis_enabled: bool,
+    verification_phase: Optional[str] = None,
+    check_type: Optional[str] = None,
+    cluster_issue: Optional[dict] = None
+) -> None:
     """
-    Универсальный метод для создания записей о событиях теста в базе данных.
+    Universal method for creating test event records in database.
 
     Args:
-        event_kind: Тип события ('TestInit', 'ClusterCheck')
-        verification_phase: Фаза проверки (для ClusterCheck)
-        check_type: Тип проверки (для ClusterCheck)
-        cluster_issue: Информация о проблеме кластера (для ClusterCheck)
+        event_kind: Event type ('TestInit', 'ClusterCheck')
+        workload_names: List of workload names
+        nemesis_enabled: Whether nemesis was enabled
+        verification_phase: Verification phase (for ClusterCheck)
+        check_type: Check type (for ClusterCheck)
+        cluster_issue: Cluster issue information (for ClusterCheck)
     """
     suite_name = 'SingleStressUtil' if len(workload_names) == 1 else 'ParallelStressUtil'
     upload_data = []

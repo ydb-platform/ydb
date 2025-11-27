@@ -17,7 +17,7 @@ class ResultsProcessor:
             self._db = db
             self._table = table
 
-        def send_data(self, data):
+        def send_data(self, data: dict) -> None:
             try:
                 logging.info(f"[ResultsProcessor] Sending data to YDB endpoint: {self._endpoint}, db: {self._db}, table: {self._table}")
                 logging.debug(f"[ResultsProcessor] Data: {json.dumps(data)[:1000]}" + ("..." if len(json.dumps(data)) > 1000 else ""))
@@ -55,7 +55,7 @@ class ResultsProcessor:
     )
 
     @classmethod
-    def get_endpoints(cls):
+    def get_endpoints(cls) -> list['ResultsProcessor.Endpoint']:
         if cls._endpoints is None:
             endpoints = get_external_param('results-endpoint', 'grpc://ydb-ru-prestable.yandex.net:2135').split(',')
             dbs = get_external_param('results-db', '/ru-prestable/kikimr/preprod/olap-click-perf').split(',')
@@ -76,12 +76,22 @@ class ResultsProcessor:
 
     @classmethod
     def get_run_id(cls) -> int:
+        """Get unique run ID for test results.
+
+        Returns:
+            int: Nanosecond timestamp as unique run ID
+        """
         if cls._run_id is None:
             cls._run_id = time_ns()
         return cls._run_id
 
     @staticmethod
-    def get_cluster_id():
+    def get_cluster_id() -> str:
+        """Get unique cluster identifier.
+
+        Returns:
+            str: Cluster ID combining endpoint, database and tables path
+        """
         run_id = get_external_param('run-id', YdbCluster.get_tables_path())
         return os.path.join(YdbCluster.ydb_endpoint, YdbCluster.ydb_database, run_id)
 
@@ -100,7 +110,23 @@ class ResultsProcessor:
         duration: float | None = None,
         attempt: int | None = None,
         statistics: dict | None = None,
-    ):
+    ) -> None:
+        """Upload test results to YDB database.
+
+        Args:
+            kind: Test kind/category
+            suite: Test suite name
+            test: Test name
+            timestamp: Test timestamp
+            is_successful: Whether test succeeded
+            min_duration: Minimum duration in seconds (optional)
+            max_duration: Maximum duration in seconds (optional)
+            mean_duration: Mean duration in seconds (optional)
+            median_duration: Median duration in seconds (optional)
+            duration: Duration in seconds (used if others not specified)
+            attempt: Attempt number (optional)
+            statistics: Additional statistics dictionary (optional)
+        """
         if not cls.send_results:
             return
 
@@ -114,7 +140,7 @@ class ResultsProcessor:
 
             info = {'cluster': YdbCluster.get_cluster_info()}
 
-            # Добавляем дополнительную информацию о кластере
+            # Add additional cluster information
             try:
                 nodes = YdbCluster.get_cluster_nodes(db_only=True)
                 cluster_info = info['cluster']
@@ -122,7 +148,7 @@ class ResultsProcessor:
                 cluster_info['nodes_count'] = len(nodes)
                 cluster_info['nodes_info'] = []
 
-                # Собираем информацию о нодах
+                # Collect node information
                 for node in nodes:
                     node_info = {
                         'host': node.host,
@@ -135,7 +161,7 @@ class ResultsProcessor:
 
             except Exception as e:
                 logging.warning(f"Could not collect detailed cluster info: {e}")
-                # Добавляем базовую информацию
+                # Add basic information
                 info['cluster']['endpoint'] = YdbCluster.ydb_endpoint
                 info['cluster']['error'] = str(e)
 

@@ -5,6 +5,8 @@ import logging
 import time as time_module
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Union
+from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 from ydb.tests.library.stability.utils.results_models import (
     StressUtilDeployResult,
@@ -26,7 +28,7 @@ class StressRunExecutor:
     def __substitute_variables_in_template(
         self,
         command_args_template: str,
-        target_node,
+        target_node: 'YdbCluster.Node',  # Forward reference
         run_config: dict
     ) -> str:
         """
@@ -79,11 +81,11 @@ class StressRunExecutor:
     def execute_stress_runs(
         self,
         stress_deployer: StressUtilDeployer,
-        workload_params: dict,
+        workload_params: dict[str, dict],
         duration_value: float,
-        preparation_result: dict[str, StressUtilDeployResult],
+        preparation_result: dict[str, Union[set[str], float, dict[str, StressUtilDeployResult]]],
         nemesis: bool = False,
-    ) -> StressUtilTestResults:
+    ) -> dict[str, Union[StressUtilTestResults, int, float, set, dict]]:
         """
         PHASE 2: Parallel workload execution on all nodes
 
@@ -133,7 +135,7 @@ class StressRunExecutor:
                     logging.info("Starting nemesis service")
                     nemesis_thread = threading.Thread(
                         target=stress_deployer.delayed_nemesis_start,
-                        args=(15, list(workload_params.keys())),  # 15 секунд задержки
+                        args=(15, list(workload_params.keys())),  # 15 seconds delay
                         daemon=False,  # Remove daemon=True so thread isn't interrupted
                     )
                     nemesis_thread.start()
@@ -175,7 +177,7 @@ class StressRunExecutor:
                         run_config_copy["duration"] = round(run_duration)
                         run_config_copy["node_role"] = node['node'].role
                         run_config_copy["thread_id"] = (
-                            node_host  # Идентификатор потока - хост ноды
+                            node_host  # Thread identifier - node host
                         )
 
                         # Execute one run
@@ -278,12 +280,12 @@ class StressRunExecutor:
     def _execute_single_workload_run(
         self,
         deployed_binary_path: str,
-        target_node,
+        target_node: 'YdbCluster.Node',  # Forward reference
         run_name: str,
         command_args_template: str,
         duration_param: str,
         run_config: dict,
-    ):
+    ) -> tuple[bool, float, str, str, bool]:
         """
         Executes a single workload run with detailed logging and timeout handling
 

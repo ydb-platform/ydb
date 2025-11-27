@@ -1,5 +1,11 @@
 """
-Утилиты для выполнения команд на удаленных хостах и localhost
+Utilities for executing commands on remote hosts and localhost.
+
+Provides classes and functions for:
+- Remote command execution via SSH
+- Local command execution
+- File transfers
+- Host verification
 """
 
 import os
@@ -23,18 +29,25 @@ class ExecutionResult(NamedTuple):
 
 
 class RemoteExecutor:
-    """Класс для выполнения команд на удаленных хостах и localhost"""
+    """Class for executing commands on remote hosts and localhost.
+
+    Handles:
+    - Command execution with timeout
+    - Error handling and logging
+    - Output processing
+    - Local vs remote execution detection
+    """
 
     @staticmethod
     def _safe_decode(data) -> str:
         """
-        Безопасно декодирует данные в строку
+        Safely decodes data into a string.
 
         Args:
-            data: данные для декодирования (str, bytes или None)
+            data: Input data to decode (str, bytes or None)
 
         Returns:
-            str: декодированная строка
+            str: Decoded string (empty string if input is None)
         """
         if data is None:
             return ""
@@ -45,13 +58,13 @@ class RemoteExecutor:
     @staticmethod
     def _filter_ssh_warnings(stderr: str) -> str:
         """
-        Фильтрует SSH предупреждения из stderr
+        Filters SSH warnings from stderr output.
 
         Args:
-            stderr: строка с выводом stderr
+            stderr: stderr output string to filter
 
         Returns:
-            str: отфильтрованная строка stderr без SSH предупреждений
+            str: Filtered stderr without SSH warnings
         """
         if not stderr:
             return stderr
@@ -69,13 +82,13 @@ class RemoteExecutor:
     @staticmethod
     def _is_localhost(hostname: str) -> bool:
         """
-        Проверяет, является ли хост localhost
+        Checks if host is localhost.
 
         Args:
-            hostname: имя хоста для проверки
+            hostname: Hostname to check
 
         Returns:
-            bool: True если хост является localhost
+            bool: True if host is localhost, False otherwise
         """
         if not hostname:
             return False
@@ -143,7 +156,7 @@ class RemoteExecutor:
             full_cmd: Union[str, list],
             is_local: bool
         ) -> ExecutionResult:
-            """Обрабатывает ошибки таймаута"""
+            """Handles command timeout errors."""
             cmd_type = "Local" if is_local else "SSH"
             timeout_info = f"{cmd_type} command timed out after {timeout} seconds on {host}"
             stdout = ""
@@ -191,7 +204,7 @@ class RemoteExecutor:
             full_cmd: Union[str, list],
             is_local: bool
         ) -> ExecutionResult:
-            """Обрабатывает ошибки выполнения"""
+            """Handles command execution errors."""
             cmd_type = "Local" if is_local else "SSH"
             stdout = ""
             stderr = ""
@@ -239,7 +252,7 @@ class RemoteExecutor:
             )
 
         def _execute_local_command(cmd: Union[str, list]) -> ExecutionResult:
-            """Выполняет команду локально"""
+            """Executes command locally."""
             LOGGER.info(f"Detected localhost ({host}), executing command locally: {cmd}")
 
             full_cmd = cmd
@@ -288,7 +301,7 @@ class RemoteExecutor:
                 )
 
         def _execute_ssh_command(cmd: Union[str, list]) -> ExecutionResult:
-            """Выполняет команду через SSH"""
+            """Executes command via SSH."""
             LOGGER.info(f"Executing SSH command on {host}: {cmd}")
 
             ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
@@ -364,17 +377,21 @@ def execute_command(
     timeout: Optional[float] = 10, raise_on_timeout: bool = True
 ) -> ExecutionResult:
     """
-    Удобная функция для выполнения команды на хосте
+    Convenience function for executing a command on a host.
 
     Args:
-        host: имя хоста для выполнения команды
-        cmd: команда для выполнения (строка или список)
-        raise_on_error: вызывать ли исключение при ошибке
-        timeout: таймаут выполнения команды в секундах
-        raise_on_timeout: вызывать ли исключение при таймауте
+        host: Target hostname
+        cmd: Command to execute (str or list)
+        raise_on_error: Whether to raise exception on error
+        timeout: Command timeout in seconds
+        raise_on_timeout: Whether to raise exception on timeout
 
     Returns:
-        ExecutionResult: результат выполнения команды
+        ExecutionResult: Command execution results including:
+            - stdout: str
+            - stderr: str
+            - is_timeout: bool
+            - exit_code: Optional[int]
     """
     return RemoteExecutor.execute_command(host, cmd, raise_on_error, timeout, raise_on_timeout)
 
@@ -384,17 +401,17 @@ def execute_command_legacy(
     timeout: Optional[float] = None, raise_on_timeout: bool = True
 ) -> Tuple[str, str]:
     """
-    Backward compatibility функция для старого API
+    Backward compatibility function for old API.
 
     Args:
-        host: имя хоста для выполнения команды
-        cmd: команда для выполнения (строка или список)
-        raise_on_error: вызывать ли исключение при ошибке
-        timeout: таймаут выполнения команды в секундах
-        raise_on_timeout: вызывать ли исключение при таймауте
+        host: Target hostname
+        cmd: Command to execute (str or list)
+        raise_on_error: Whether to raise exception on error
+        timeout: Command timeout in seconds
+        raise_on_timeout: Whether to raise exception on timeout
 
     Returns:
-        Tuple[str, str]: (stdout, stderr) - вывод команды
+        Tuple[str, str]: (stdout, stderr) command output
     """
     result = RemoteExecutor.execute_command(host, cmd, raise_on_error, timeout, raise_on_timeout)
     return result.stdout, result.stderr
@@ -402,20 +419,28 @@ def execute_command_legacy(
 
 def is_localhost(hostname: str) -> bool:
     """
-    Удобная функция для проверки, является ли хост localhost
+    Convenience function to check if host is localhost.
 
     Args:
-        hostname: имя хоста для проверки
+        hostname: Hostname to check
 
     Returns:
-        bool: True если хост является localhost
+        bool: True if host is localhost, False otherwise
     """
     return RemoteExecutor._is_localhost(hostname)
 
 
 def ensure_directory_with_permissions(host: str, path: str, raise_on_error: bool = True) -> bool:
     """
-    Создает директорию и устанавливает права 777
+    Ensures directory exists with 777 permissions.
+
+    Args:
+        host: Target hostname
+        path: Directory path to create
+        raise_on_error: Whether to raise exception on failure
+
+    Returns:
+        bool: True if directory was created/set, False on error
     """
     try:
         # created_without_sudo = execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False, timeout=10).exit_code == 0
@@ -431,16 +456,16 @@ def ensure_directory_with_permissions(host: str, path: str, raise_on_error: bool
 
 def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool = True) -> str:
     """
-    Копирует файл на хост через SCP или локально
+    Copies file to host via SCP or locally.
 
     Args:
-        local_path: путь к локальному файлу
-        host: имя хоста
-        remote_path: путь на хосте
-        raise_on_error: вызывать ли исключение при ошибке
+        local_path: Local file path
+        host: Target hostname
+        remote_path: Destination path on host
+        raise_on_error: Whether to raise exception on error
 
     Returns:
-        str: результат копирования или None при ошибке
+        str: Copy result message or None on error
     """
     if not os.path.exists(local_path):
         error_msg = f"Local file does not exist: {local_path}"
@@ -462,7 +487,16 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
 
 def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: bool) -> str:
     """
-    Единая логика копирования файлов для локального и удаленного хостов
+    Unified file copy logic for local and remote hosts.
+
+    Args:
+        local_path: Source file path
+        host: Target hostname
+        remote_path: Destination path
+        is_local: Whether host is localhost
+
+    Returns:
+        str: Copy result message
     """
     # Создаем целевую директорию
     remote_dir = os.path.dirname(remote_path)
@@ -510,16 +544,20 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
 
 def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: bool = True) -> dict:
     """
-    Разворачивает бинарный файл на хосте
+    Deploys binary file to host.
 
     Args:
-        local_path: путь к локальному бинарному файлу
-        host: имя хоста
-        target_dir: директория на хосте
-        make_executable: делать ли файл исполняемым
+        local_path: Local binary file path
+        host: Target hostname
+        target_dir: Destination directory on host
+        make_executable: Whether to set executable permissions
 
     Returns:
-        dict: результат деплоя
+        dict: Deployment result with keys:
+            - name: str - Binary filename
+            - path: str - Full destination path
+            - success: bool - Whether deployment succeeded
+            - output: str - Success message or error details
     """
     binary_name = os.path.basename(local_path)
     target_path = os.path.join(target_dir, binary_name)
@@ -560,15 +598,15 @@ def deploy_binaries_to_hosts(
     target_dir: str = '/tmp/stress_binaries/'
 ) -> Dict[str, Dict[str, Any]]:
     """
-    Разворачивает бинарные файлы на указанных хостах
+    Deploys binary files to specified hosts.
 
     Args:
-        binary_files: список путей к бинарным файлам
-        hosts: список хостов для развертывания
-        target_dir: директория для размещения файлов на хостах
+        binary_files: List of binary file paths
+        hosts: List of target hostnames
+        target_dir: Destination directory on hosts
 
     Returns:
-        Dict: словарь с результатами деплоя по хостам
+        Dict[str, Dict[str, Any]]: Deployment results by host and binary
     """
     results = {}
 
@@ -593,7 +631,14 @@ def deploy_binaries_to_hosts(
 
 def fix_binaries_directory_permissions(hosts: List[str], target_dir: str = '/tmp/stress_binaries/') -> Dict[str, bool]:
     """
-    Исправляет права доступа к директории binaries на всех указанных хостах
+    Fixes directory permissions for binaries on specified hosts.
+
+    Args:
+        hosts: List of target hostnames
+        target_dir: Directory path to fix permissions for
+
+    Returns:
+        Dict[str, bool]: Permission fix results by host
     """
     results = {}
 

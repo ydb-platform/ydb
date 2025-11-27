@@ -1,4 +1,3 @@
-from collections import defaultdict
 from copy import deepcopy
 import logging
 import allure
@@ -12,8 +11,7 @@ from ydb.tests.olap.lib.allure_utils import (
     _set_coredumps,
     _set_logs_command,
     _set_monitoring,
-    _set_node_errors,
-    _set_results_plot
+    _set_node_errors
 )
 from ydb.tests.library.stability.utils.utils import external_param_is_true, get_ci_version, get_self_version
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
@@ -37,7 +35,7 @@ def parallel_allure_test_description(
     end_time: float,
     addition_table_strings: dict[str, any] = None,
     attachments: tuple[str, str, allure.attachment_type] = None,
-    refference_set: str = '',
+    reference_set: str = '',
     node_errors: list[NodeErrors] = None,
     verify_errors=None,
     addition_blocks: list[str] = [],
@@ -130,8 +128,15 @@ def parallel_allure_test_description(
     allure.attach(html, "description.html", allure.attachment_type.HTML)
 
 
-def __create_parallel_test_table(execution_result: StressUtilTestResults):
-    # Create table header with columns for each node
+def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str:
+    """Creates an HTML table showing workload iteration results per host
+
+    Args:
+        execution_result: Stress test execution results containing node run data
+
+    Returns:
+        str: HTML string containing the formatted results table
+    """
     table_html = """
     <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
         <tr style='background-color: #f0f0f0;'>

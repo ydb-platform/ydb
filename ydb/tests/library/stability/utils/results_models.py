@@ -4,52 +4,75 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 class RunConfigInfo:
-    test_start_time: int = None
-    nodes_percentage: float = None
-    nemesis_enabled: bool = None
-    table_type: str = None
-    stres_util_args: str = None
-    duration: float = None
-    all_hosts: list[str] = None
-    stress_util_names: list[str] = None
+    """Configuration information for test runs.
+
+    Attributes:
+        test_start_time: Test start timestamp
+        nodes_percentage: Percentage of nodes used (1-100)
+        nemesis_enabled: Whether nemesis was enabled
+        table_type: Type of table used in test
+        stress_util_args: Stress utility arguments
+        duration: Test duration in seconds
+        all_hosts: List of all hostnames used
+        stress_util_names: List of stress utility names
+    """
+    test_start_time: Optional[int] = None
+    nodes_percentage: Optional[float] = None
+    nemesis_enabled: Optional[bool] = None
+    table_type: Optional[str] = None
+    stress_util_args: Optional[str] = None
+    duration: Optional[float] = None
+    all_hosts: Optional[list[str]] = None
+    stress_util_names: Optional[list[str]] = None
 
 
 class StressUtilRunResult:
-    run_config: dict = None
-    is_success: bool = None
-    is_timeout: bool = None
-    iteration_number: int = None
-    stdout: str = None
-    stderr: str = None
-    start_time: float = None
-    end_time: float = None
-    execution_time: str = None
+    """Results of a single stress test run iteration.
+
+    Attributes:
+        run_config: Run configuration dictionary
+        is_success: Whether run succeeded
+        is_timeout: Whether run timed out
+        iteration_number: Iteration number
+        stdout: Standard output
+        stderr: Standard error
+        start_time: Run start timestamp
+        end_time: Run end timestamp
+        execution_time: Run duration in seconds
+    """
+    run_config: Optional[dict] = None
+    is_success: Optional[bool] = None
+    is_timeout: Optional[bool] = None
+    iteration_number: Optional[int] = None
+    stdout: Optional[str] = None
+    stderr: Optional[str] = None
+    start_time: Optional[float] = None
+    end_time: Optional[float] = None
+    execution_time: Optional[float] = None
 
 
 class StressUtilNodeResult:
-    """Aggregates results of multiple runs for a single stress test
+    """Aggregates results of multiple runs for a single stress test on a node.
 
     Attributes:
-        stress_name: Name of stress util
+        stress_name: Name of stress utility
         node: Node identifier where test ran
         host: Hostname where test ran
-        start_time: Timestamp when test started
-        end_time: Timestamp when test ended
-        total_execution_time: Total duration across all runs
-        successful_runs: Count of successful runs
-        total_runs: Total count of runs
+        start_time: Test start timestamp
+        end_time: Test end timestamp
+        total_execution_time: Total duration across all runs (seconds)
         runs: List of individual run results
     """
-    stress_name: str = None
-    node: str = None
-    host: str = None
-    start_time: float = None
-    end_time: float = None
-    total_execution_time: str = None
+    stress_name: Optional[str] = None
+    node: Optional[str] = None
+    host: Optional[str] = None
+    start_time: Optional[float] = None
+    end_time: Optional[float] = None
+    total_execution_time: Optional[float] = None
     runs: list[StressUtilRunResult] = []
 
-    def __init__(self):
-        """Initialize StressUtilNodeResult with empty runs list"""
+    def __init__(self) -> None:
+        """Initialize StressUtilNodeResult with empty runs list."""
         self.runs = []
 
     def __repr__(self):
@@ -61,23 +84,23 @@ class StressUtilNodeResult:
                 f"runs={self.runs})")
 
     def get_successful_runs(self) -> int:
-        """Get count of successful runs
+        """Count successful runs across all nodes.
 
         Returns:
-            int: Total count of successful runs
+            int: Total successful runs
         """
         return sum(run_result.is_success for run_result in self.runs)
 
     def get_total_runs(self) -> int:
-        """Get total count of runs
+        """Count total runs across all nodes.
 
         Returns:
-            int: Total count of runs
+            int: Total runs
         """
         return len(self.runs)
 
     def is_all_success(self) -> bool:
-        """Check if all runs across all nodes were successful
+        """Check if all runs across all nodes succeeded.
 
         Returns:
             bool: True if all runs succeeded, False otherwise
@@ -86,21 +109,21 @@ class StressUtilNodeResult:
 
 
 class StressUtilResult:
-    """Aggregates results of multiple runs for a single stress test
+    """Aggregates results of multiple runs for a single stress test utility.
 
     Attributes:
-        start_time: Timestamp when test started
-        end_time: Timestamp when test ended
-        total_execution_time: Total duration across all runs
-        runs: List of individual run results
+        start_time: Test start timestamp
+        end_time: Test end timestamp
+        execution_args: List of execution arguments
+        node_runs: Dictionary of node results by hostname
     """
-    start_time: float = None
-    end_time: float = None
-    execution_args: list[str] = None
+    start_time: Optional[float] = None
+    end_time: Optional[float] = None
+    execution_args: Optional[list[str]] = None
     node_runs: dict[str, StressUtilNodeResult] = dict()
 
-    def __init__(self):
-        """Initialize StressUtilResult with empty runs list"""
+    def __init__(self) -> None:
+        """Initialize StressUtilResult with empty collections."""
         self.node_runs = dict()
         self.execution_args = []
 
@@ -108,23 +131,23 @@ class StressUtilResult:
         return f"StressUtilResult(start_time={self.start_time}, end_time={self.end_time}, node_runs={self.node_runs})"
 
     def get_successful_runs(self) -> int:
-        """Get count of successful runs
+        """Count successful runs on this node.
 
         Returns:
-            int: Total count of successful runs
+            int: Number of successful runs
         """
         return sum(run_result.get_successful_runs() for run_result in self.node_runs.values())
 
     def get_total_runs(self) -> int:
-        """Get total count of runs
+        """Count total runs on this node.
 
         Returns:
-            int: Total count of runs
+            int: Total number of runs
         """
         return sum(run_result.get_total_runs() for run_result in self.node_runs.values())
 
     def is_all_success(self) -> bool:
-        """Check if all runs across all nodes were successful
+        """Check if all runs on this node succeeded.
 
         Returns:
             bool: True if all runs succeeded, False otherwise
@@ -133,43 +156,43 @@ class StressUtilResult:
 
 
 class StressUtilDeployResult:
-    """Stores deployment results for a stress test
+    """Stores deployment results for a stress test utility.
 
     Attributes:
-        stress_name: Name of the stress test
-        nodes: List of nodes where test was deployed
-        hosts: List of hostnames where test was deployed
+        stress_name: Name of stress utility
+        nodes: List of nodes where deployed
+        hosts: List of hostnames where deployed
     """
-    stress_name: str = None
-    nodes: list[YdbCluster.Node] = None
-    hosts: list[str] = None
+    stress_name: Optional[str] = None
+    nodes: Optional[list[YdbCluster.Node]] = None
+    hosts: Optional[list[str]] = None
 
-    def __init__(self):
-        """Initialize StressUtilDeployResult with empty nodes/hosts"""
+    def __init__(self) -> None:
+        """Initialize StressUtilDeployResult with empty collections."""
         self.nodes = None
         self.hosts = None
 
 
 class StressUtilTestResults:
-    """Aggregates results from all stress test runs
+    """Aggregates results from all stress test utility runs.
 
     Attributes:
-        start_time: Timestamp when testing started
-        end_time: Timestamp when testing ended
-        stress_util_runs: Dictionary mapping test names to their results
-        nemesis_deploy_results: Dictionary of nemesis deployment results
+        start_time: Test start timestamp
+        end_time: Test end timestamp
+        stress_util_runs: Dictionary of results by utility name
+        nemesis_deploy_results: Nemesis deployment results
         errors: List of error messages
-        error_message: Combined error message string
+        error_message: Combined error message
     """
-    start_time: float = None
-    end_time: float = None
+    start_time: Optional[float] = None
+    end_time: Optional[float] = None
     stress_util_runs: dict[str, StressUtilResult] = dict()
     nemesis_deploy_results: dict[str, list[str]] = dict()
     errors: list[str] = []
     error_message: str = ''
 
-    def __init__(self):
-        """Initialize StressUtilTestResults with empty collections"""
+    def __init__(self) -> None:
+        """Initialize StressUtilTestResults with empty collections."""
         self.start_time = None
         self.end_time = None
         self.stress_util_runs = dict()
@@ -178,13 +201,13 @@ class StressUtilTestResults:
         self.error_message = ''
 
     def add_error(self, msg: Optional[str]) -> bool:
-        """Add an error message to the test results
+        """Add error message to test results.
 
         Args:
             msg: Error message to add (can be None)
 
         Returns:
-            bool: True if message was added, False if msg was None
+            bool: True if message added, False if None
         """
         if msg:
             self.errors.append(msg)
@@ -196,32 +219,32 @@ class StressUtilTestResults:
         return False
 
     def get_stress_successful_runs(self, stress_name: str) -> int:
-        """Get count of successful runs for a specific stress test
+        """Count successful runs for specific stress utility.
 
         Args:
-            stress_name: Name of the stress test to query
+            stress_name: Name of stress utility
 
         Returns:
-            int: Total count of successful runs
+            int: Number of successful runs
         """
         return self.stress_util_runs[stress_name].get_successful_runs()
 
     def get_stress_total_runs(self, stress_name: str) -> int:
-        """Get total count of runs for a specific stress test
+        """Count total runs for specific stress utility.
 
         Args:
-            stress_name: Name of the stress test to query
+            stress_name: Name of stress utility
 
         Returns:
-            int: Total count of runs
+            int: Total number of runs
         """
         return self.stress_util_runs[stress_name].get_total_runs()
 
     def is_success_for_a_stress(self, stress_name: str) -> bool:
-        """Check if all runs in a stress test were successful
+        """Check if all runs succeeded for specific stress utility.
 
         Args:
-            stress_name: Name of the stress test to query
+            stress_name: Name of stress utility
 
         Returns:
             bool: True if all runs succeeded, False otherwise
@@ -229,26 +252,26 @@ class StressUtilTestResults:
         return self.stress_util_runs[stress_name].is_all_success()
 
     def is_all_success(self) -> bool:
-        """Check if all runs across all stress tests were successful
+        """Check if all runs across all stress utilities succeeded.
 
         Returns:
-            bool: True if all runs succeeded, False otherwise
+            bool: True if all succeeded, False otherwise
         """
         return all(result.is_all_success() for result in self.stress_util_runs.values())
 
     def get_successful_runs(self) -> int:
-        """Get count of successful runs
+        """Count successful runs across all stress utilities.
 
         Returns:
-            int: Total count of successful runs
+            int: Total successful runs
         """
         return sum(stress_info.get_successful_runs() for stress_info in self.stress_util_runs.values())
 
     def get_total_runs(self) -> int:
-        """Get total count of runs
+        """Count total runs across all stress utilities.
 
         Returns:
-            int: Total count of runs
+            int: Total runs
         """
         return sum(stress_info.get_total_runs() for stress_info in self.stress_util_runs.values())
 

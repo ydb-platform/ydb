@@ -23,13 +23,16 @@ class ErrorsCollector:
 
     def check_nodes_diagnostics_with_timing(self, result: StressUtilTestResults, start_time: float, end_time: float) -> list[NodeErrors]:
         """
-        Собирает диагностическую информацию о нодах с кастомным временным интервалом.
-        Проверяет coredump'ы и OOM для всех нод из сохраненного состояния.
+        Collects node diagnostic information within a custom time interval.
+        Checks for coredumps and OOMs across all nodes from saved state.
 
         Args:
-            result: результат выполнения workload
-            start_time: время начала интервала для диагностики
-            end_time: время окончания интервала для диагностики
+            result: Workload execution results
+            start_time: Start timestamp for diagnostics interval
+            end_time: End timestamp for diagnostics interval
+
+        Returns:
+            list[NodeErrors]: List of node error objects containing diagnostic info
         """
 
         # Собираем диагностическую информацию для всех хостов
@@ -41,7 +44,7 @@ class ErrorsCollector:
         # Создаем NodeErrors для каждой ноды с диагностической информацией
         node_errors = []
         for node in self.nodes:
-            # Создаем NodeErrors только если есть coredump'ы или OOM
+            # Create NodeErrors only if there are coredumps or OOMs
             has_cores = bool(core_hashes.get(node.slot, []))
             has_oom = node.host in ooms
             has_verifies = node.host in hosts_with_verifies
@@ -58,7 +61,7 @@ class ErrorsCollector:
                     node_error.sanitizer_output = hosts_with_sanitizer[node.host][1]
                 node_errors.append(node_error)
 
-                # Добавляем ошибки в результат (cores и OOM - это errors)
+                # Add errors to result (cores and OOMs are considered errors)
                 if has_verifies:
                     result.add_error(f'Node {node.host} had {hosts_with_verifies[node.host]} VERIFY fails')
                 if has_cores:
@@ -339,7 +342,11 @@ class ErrorsCollector:
 
     def perform_verification_with_cluster_check(self, workload_names: list[str], nemesis_enabled: bool) -> None:
         """
-        Выполняет проверку кластера перед тестом и записывает результат.
+        Performs pre-test cluster verification and records the results.
+
+        Args:
+            workload_names: List of workload names being tested
+            nemesis_enabled: Whether nemesis is enabled for the test
         """
 
         with allure.step("Pre-test verification"):
@@ -362,10 +369,10 @@ class ErrorsCollector:
 
     def _check_cluster_health(self) -> dict:
         """
-        Проверяет состояние кластера и возвращает информацию о проблемах.
+        Checks cluster health status and returns problem information.
 
         Returns:
-            dict: Информация о проблеме кластера или пустой dict если все OK
+            dict: Cluster issue information or empty dict if all OK
         """
         try:
             # Проверяем доступность кластера
@@ -386,11 +393,13 @@ class ErrorsCollector:
 
     def check_nemesis_status(self, nemesis_started: bool, nemesis_enabled: bool, workload_names: list[str]) -> None:
         """
-        Проверяет статус nemesis после выполнения workload.
-        Создает ClusterCheck запись если nemesis должен был работать, но не запустился.
+        Checks nemesis status after workload execution.
+        Creates ClusterCheck record if nemesis was supposed to run but didn't start.
 
         Args:
-            additional_stats: Дополнительная статистика с информацией о nemesis
+            nemesis_started: Whether nemesis actually started
+            nemesis_enabled: Whether nemesis was enabled for the test
+            workload_names: List of workload names being tested
         """
         # Проверяем, должен ли был запуститься nemesis
         if nemesis_enabled:
@@ -435,15 +444,19 @@ class ErrorsCollector:
 
 def create_cluster_issue(issue_type: str, description: str, nodes_count: int = 0) -> dict:
     """
-    Создает информацию о проблеме кластера.
+    Creates cluster issue information.
 
     Args:
-        issue_type: Тип проблемы (None если все OK)
-        description: Описание проблемы
-        nodes_count: Количество нод (0 если проблема, реальное количество если OK)
+        issue_type: Issue type (None if all OK)
+        description: Problem description
+        nodes_count: Node count (0 if problem, actual count if OK)
 
     Returns:
-        dict: Статистика проблемы кластера
+        dict: Cluster issue statistics with keys:
+            - issue_type: str or None
+            - issue_description: str
+            - nodes_count: int
+            - is_critical: bool
     """
     if issue_type is None:
         # Кластер OK

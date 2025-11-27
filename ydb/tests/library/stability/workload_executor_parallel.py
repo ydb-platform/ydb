@@ -57,11 +57,11 @@ class ParallelWorkloadTestBase:
         self,
         stress_executor: StressRunExecutor,
         stress_deployer: StressUtilDeployer,
-        workload_params: dict,
+        workload_params: dict[str, dict],
         duration_value: float = None,
         nemesis_enabled: bool = False,
         nodes_percentage: int = 100,
-    ):
+    ) -> None:
         """
         Executes full workload test cycle with three phases:
         1. Preparation (deploy binaries to nodes)
@@ -187,7 +187,7 @@ class ParallelWorkloadTestBase:
         self,
         errors_collector: ErrorsCollector,
         result: StressUtilTestResults,
-    ):
+    ) -> tuple[list, dict]:
         """
         Processes workload result with diagnostic information
 
@@ -220,10 +220,10 @@ class ParallelWorkloadTestBase:
                 )
             except Exception as e:
                 logging.error(f"Error getting nodes state: {e}")
-                # Добавляем ошибку в результат
+                # Add error to result
                 node_errors = []  # Set empty list if diagnostics failed
 
-            # Вычисляем время выполнения
+            # Calculate execution time
             end_time = time_module.time()
 
             # --- IMPORTANT: set nodes_with_issues for proper fail ---
@@ -263,7 +263,14 @@ class ParallelWorkloadTestBase:
             # Data is ready, now we can upload results
             return node_errors, verify_errors
 
-    def _handle_final_status(self, errors_collector: ErrorsCollector, result: StressUtilTestResults, preparation_result: dict[str, StressUtilDeployResult], node_errors, verify_errors):
+    def _handle_final_status(
+        self,
+        errors_collector: ErrorsCollector,
+        result: StressUtilTestResults,
+        preparation_result: dict[str, StressUtilDeployResult],
+        node_errors: list,
+        verify_errors: dict
+    ) -> None:
         """
         Handles final test status (fail, broken, etc.)
 
@@ -283,7 +290,7 @@ class ParallelWorkloadTestBase:
                 if "coredump" not in err.lower() and "oom" not in err.lower():
                     workload_errors.append(err)
 
-        # --- Переключатель: если cluster_log=all, то всегда прикладываем логи ---
+        # --- Switch: if cluster_log=all, always attach logs ---
         cluster_log_mode = get_external_param('cluster_log', 'default')
         if cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors:
             try:
@@ -303,9 +310,9 @@ class ParallelWorkloadTestBase:
         if workload_errors:
             raise Exception("Test marked as broken due to workload errors: " + "; ".join(workload_errors))
 
-        # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
+        # In diagnostic mode don't fail due to coredump/OOM warnings
         if not result.is_all_success() and result.error_message:
-            # Создаем детальное сообщение об ошибке с контекстом
+            # Create detailed error message with context
             error_details = []
             error_details.append("TEST EXECUTION FAILED: ")
             error_details.append(f"Main error: {result.error_message}")

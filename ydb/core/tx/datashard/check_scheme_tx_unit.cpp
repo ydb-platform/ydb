@@ -816,7 +816,24 @@ bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *act
     return true;
 }
 
-bool TCheckSchemeTxUnit::CheckTruncate(TActiveTransaction*) {
+bool TCheckSchemeTxUnit::CheckTruncate(TActiveTransaction *activeTx) {
+    const auto& tx = activeTx->GetSchemeTx();
+    
+    if (HasDuplicate(activeTx, "Truncate", &TPipeline::HasTruncate)) {
+        return false;
+    }
+
+    const auto& truncate = tx.GetTruncateTable();
+    if (!HasPathId(activeTx, truncate, "Truncate")) {
+        return false;
+    }
+
+    const auto pathId = GetPathId(truncate);
+    const auto tablePtr = DataShard.GetUserTables().FindPtr(pathId.LocalPathId);
+    if (!tablePtr) {
+        return false;
+    }
+
     return true;
 }
 

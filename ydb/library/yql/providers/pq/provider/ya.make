@@ -23,21 +23,11 @@ SRCS(
 PEERDIR(
     library/cpp/random_provider
     library/cpp/time_provider
-    yql/essentials/ast
-    yql/essentials/core
-    yql/essentials/core/type_ann
+
     ydb/library/yql/dq/expr_nodes
-    yql/essentials/core/dq_integration
     ydb/library/yql/dq/opt
-    yql/essentials/minikql/comp_nodes
-    yql/essentials/providers/common/config
     ydb/library/yql/providers/common/db_id_async_resolver
-    yql/essentials/providers/common/dq
-    yql/essentials/providers/common/proto
-    yql/essentials/providers/common/provider
     ydb/library/yql/providers/common/pushdown
-    yql/essentials/providers/common/structured_token
-    yql/essentials/providers/common/transform
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/dq/provider/exec
@@ -46,9 +36,22 @@ PEERDIR(
     ydb/library/yql/providers/pq/common
     ydb/library/yql/providers/pq/expr_nodes
     ydb/library/yql/providers/pq/proto
+    ydb/public/sdk/cpp/src/client/driver
+
+    yql/essentials/ast
+    yql/essentials/core
+    yql/essentials/core/type_ann
+    yql/essentials/core/dq_integration
+    yql/essentials/minikql
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/providers/common/config
+    yql/essentials/providers/common/dq
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/structured_token
+    yql/essentials/providers/common/transform
     yql/essentials/providers/result/expr_nodes
     yql/essentials/public/udf
-    ydb/public/sdk/cpp/src/client/driver
 )
 
 YQL_LAST_ABI_VERSION()

@@ -622,7 +622,7 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
                 group = group->GetSubgroup(subgroup.first, subgroup.second);
             }
 
-            for (ui32 i = 0; i < config->GetCounters().Size(); ++i) {
+            for (size_t i = 0; i < config->GetCounters().Size(); ++i) {
                 TString name = config->GetNames()[i];
                 if (skipPrefix) {
                     TStringBuf nameBuf = name;
@@ -701,8 +701,8 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
         }
     }
 
-    auto processAggregators = [milliSeconds = milliSeconds](auto& aggregator, auto& counters) {
-        for (ui32 i = 0; aggregator->HasCounters() && i < aggregator->GetCounters().Size(); ++i) {
+    auto processAggregators = [milliSeconds](auto& aggregator, auto& counters) {
+        for (size_t i = 0; aggregator->HasCounters() && i < aggregator->GetCounters().Size(); ++i) {
             if (!counters[i]) {
                 continue;
             }

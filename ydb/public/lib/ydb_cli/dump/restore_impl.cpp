@@ -1593,19 +1593,6 @@ TRestoreResult TRestoreClient::RestoreReplication(
     }
 
     auto query = ReadAsyncReplicationQuery(fsPath, Log.get());
-    // if (auto secretName = GetSecretName(query)) {
-    //     if (IsSchemaSecret(secretName)) {
-    //         secretName = RewriteAbsolutePath(secretName, GetDatabase(query), dbRestoreRoot);
-    //     }
-    //     if (auto result = CheckSecretExistence(secretName); !result.IsSuccess()) {
-    //         return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
-    //     }
-    //     NYql::TIssues issues;
-    //     if (!RewriteCreateQuery(query, "PASSWORD_SECRET_NAME = '{}'", secretName, issues)) { // change to path!!!!!!
-    //        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
-    //     }
-    // }
-
     if (const auto result = ProcessSecretInQuery(query, dbRestoreRoot, fsPath); !result.IsSuccess()) {
         return result;
     }
@@ -1647,10 +1634,8 @@ TRestoreResult TRestoreClient::RestoreTransfer(
     }
 
     auto query = ReadTransferQuery(fsPath, Log.get());
-    if (const auto secretName = GetSecretName(query)) {
-        if (auto result = CheckSecretExistence(secretName); !result.IsSuccess()) {
-            return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
-        }
+    if (const auto result = ProcessSecretInQuery(query, dbRestoreRoot, fsPath); !result.IsSuccess()) {
+        return result;
     }
 
     NYql::TIssues issues;

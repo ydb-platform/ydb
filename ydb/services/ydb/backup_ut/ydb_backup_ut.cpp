@@ -123,12 +123,18 @@ struct TTenantsTestSettings : TKikimrTestSettings {
     static constexpr bool PrecreatePools = false;
 };
 
+enum class ESecretType {
+    SecretTypeNone,
+    SecretTypeOld,
+    SecretTypeScheme,
+};
+
 struct TTransferTestConfig {
     TString TablePath = "/Root/test_table";
     TString TopicPath = "/Root/test_topic";
     TString TransferPath = "/Root/test_transfer";
     bool FakeTopicPath = false;
-    bool UseSecret = true;
+    ESecretType SecretType = ESecretType::SecretTypeNone;
     bool UseUserLogin = false;
     ui64 BatchSizeBytes = 1024;
     TDuration FlushInterval = TDuration::Seconds(55);
@@ -142,12 +148,6 @@ struct TTransferTestConfig {
 }
 
 namespace {
-
-enum class ESecretType {
-    SecretTypeNone,
-    SecretTypeOld,
-    SecretTypeScheme,
-};
 
 void ArePermissionsEqual(const THashMap<TString, THashSet<TString>>& lhs, const THashMap<TString, THashSet<TString>>& rhs) {
     UNIT_ASSERT_VALUES_EQUAL(lhs.size(), rhs.size());
@@ -1545,11 +1545,16 @@ void TestTransferSettingsArePreserved(
     TFsPath pathToBackup,
     const TTransferTestConfig& config = {}
 ) {
-    UNIT_ASSERT_C(!(config.UseSecret && config.UseUserLogin), "useSecret and useUserLogin options are mutually exclusive");
+    UNIT_ASSERT_C(!(config.SecretType != ESecretType::SecretTypeNone && config.UseUserLogin), "secrets and useUserLogin options are mutually exclusive");
     UNIT_ASSERT_C(config.BackupRestoreAttemptsCount < 10, "backup-restore attempts number must be less than 10");
 
-    if (config.UseSecret || config.UseUserLogin) {
-        ExecuteQuery(session, "CREATE OBJECT `transfer_secret_name` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+    if (config.SecretType != ESecretType::SecretTypeNone || config.UseUserLogin) {
+        if (config.SecretType == ESecretType::SecretTypeScheme) {
+            ExecuteQuery(session, "CREATE SECRET `transfer_secret` WITH (value = 'root@builtin');", true);
+        } else {
+            ExecuteQuery(session, "CREATE OBJECT `transfer_secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+            
+        }
     }
 
     if (config.UseUserLogin) {
@@ -1579,7 +1584,10 @@ void TestTransferSettingsArePreserved(
                     %s
                     BATCH_SIZE_BYTES = %lu,
                     FLUSH_INTERVAL = Interval('PT%luS')
-                    %s
+                    %s -- TOKEN_SECRET_NAME if needed
+                    %s -- TOKEN_SECRET_PATH if needed
+                    %s -- USER and PASSWORD_SECRET_NAME if needed
+                    %s -- USER and PASSWORD_SECRET_PATH if needed
                 );
             )",
             lambdaBodyQuery.c_str(),
@@ -1590,8 +1598,10 @@ void TestTransferSettingsArePreserved(
             (config.UseConnectionString ? Sprintf("CONNECTION_STRING = 'grpc://%s/?database=/Root',", endpoint.c_str()).c_str() : ""),
             config.BatchSizeBytes,
             config.FlushInterval.Seconds(),
-            (config.UseSecret ? ", TOKEN_SECRET_NAME = 'transfer_secret_name'" :
-            (config.UseUserLogin ? ", USER = 'transferuser', PASSWORD_SECRET_NAME = 'transfer_secret_name'" : ""))
+            (config.SecretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'transfer_secret'" : ""),
+            (config.SecretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'transfer_secret'" : ""),
+            (config.UseUserLogin && config.SecretType != ESecretType::SecretTypeScheme ? ", USER = 'transferuser', PASSWORD_SECRET_NAME = 'transfer_secret'" : ""),
+            (config.UseUserLogin && config.SecretType == ESecretType::SecretTypeScheme ? ", USER = 'transferuser', PASSWORD_SECRET_PATH = 'transfer_secret'" : "")
         ), NQuery::TTxControl::NoTx()
     ).ExtractValueSync();
 
@@ -1616,12 +1626,19 @@ void TestTransferSettingsArePreserved(
             UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
             UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
         }
-        if (config.UseSecret) {
-            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "transfer_secret_name");
+        if (config.SecretType == ESecretType::SecretTypeOld) {
+            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "transfer_secret");
+        } else if (config.SecretType == ESecretType::SecretTypeScheme) {
+            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "/Root/transfer_secret");
         }
+
         if (config.UseUserLogin) {
             UNIT_ASSERT_VALUES_EQUAL(params.GetStaticCredentials().User, "transferuser");
-            UNIT_ASSERT_VALUES_EQUAL(params.GetStaticCredentials().PasswordSecretName, "transfer_secret_name");
+            if (config.SecretType == ESecretType::SecretTypeOld) {
+                UNIT_ASSERT_VALUES_EQUAL(params.GetStaticCredentials().PasswordSecretName, "transfer_secret");
+            } else if (config.SecretType == ESecretType::SecretTypeScheme) {
+                UNIT_ASSERT_VALUES_EQUAL(params.GetStaticCredentials().PasswordSecretName, "/Root/transfer_secret");
+            }
         }
         UNIT_ASSERT_VALUES_EQUAL(desc.GetSrcPath(), config.TopicPath);
         UNIT_ASSERT_VALUES_EQUAL(desc.GetDstPath(), absoluteTablePath);
@@ -2649,14 +2666,17 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     void TestTransferBackupRestore(const TTransferTestConfig& config = {}) {
-        UNIT_ASSERT_C(!(config.UseSecret && config.UseUserLogin), "useSecret and useUserLogin options are mutually exclusive");
+        UNIT_ASSERT_C(!(config.SecretType != ESecretType::SecretTypeNone && config.UseUserLogin), "secrets and useUserLogin options are mutually exclusive");
 
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
+        if (config.SecretType == ESecretType::SecretTypeScheme || config.UseUserLogin) {
+            server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
+        }
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
-        if (config.UseSecret || config.UseUserLogin) {
+        if (config.SecretType != ESecretType::SecretTypeNone || config.UseUserLogin) {
             driverConfig.SetAuthToken("root@builtin");
         }
 
@@ -2666,7 +2686,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TReplicationClient replicationClient(driver);
 
-        if (config.UseSecret || config.UseUserLogin) {
+        if (config.SecretType != ESecretType::SecretTypeNone || config.UseUserLogin) {
             TPermissions permissionsToken("root@builtin", {"ydb.generic.full"});
             TPermissions permissionsUser("transferuser", {"ydb.generic.full"});
             const auto result = schemeClient.ModifyPermissions("/Root",
@@ -2961,6 +2981,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
         server.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
         server.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_DEBUG);
         server.GetRuntime()->SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::EPriority::PRI_DEBUG);
@@ -3077,6 +3098,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
@@ -3201,9 +3223,17 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestReplicationBackupRestore(false,  ESecretType::SecretTypeNone);
     }
 
-    Y_UNIT_TEST(BackupRestoreTransfer_UseSecret) {
+    Y_UNIT_TEST(BackupRestoreTransfer_UseOldSecret) {
         TestTransferBackupRestore(TTransferTestConfig {
-            .UseSecret = true,
+            .SecretType = ESecretType::SecretTypeOld,
+            .UseUserLogin = false,
+            .BackupRestoreAttemptsCount = 3,
+        });
+    }
+
+    Y_UNIT_TEST(BackupRestoreTransfer_UseSchemaSecret) {
+        TestTransferBackupRestore(TTransferTestConfig {
+            .SecretType = ESecretType::SecretTypeScheme,
             .UseUserLogin = false,
             .BackupRestoreAttemptsCount = 3,
         });
@@ -3211,7 +3241,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(BackupRestoreTransfer_UseUserPassword) {
         TestTransferBackupRestore(TTransferTestConfig {
-            .UseSecret = false,
+            .SecretType = ESecretType::SecretTypeNone,
             .UseUserLogin = true,
             .BackupRestoreAttemptsCount = 3,
         });
@@ -3219,7 +3249,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(BackupRestoreTransfer_NoSecretNoUserPassword) {
         TestTransferBackupRestore(TTransferTestConfig {
-            .UseSecret = false,
+            .SecretType = ESecretType::SecretTypeNone,
             .UseUserLogin = false,
             .BackupRestoreAttemptsCount = 3,
         });

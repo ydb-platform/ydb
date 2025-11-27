@@ -2,6 +2,7 @@ import random
 import threading
 import time
 import ydb
+import uuid
 
 from ydb.tests.stress.common.common import WorkloadBase
 
@@ -48,8 +49,9 @@ class WorkloadRunnerBackup:
         self.client = client
         self.duration = duration
         self.backup_interval = backup_interval
-        self.table_path = '/'.join([self.client.database, "table", str(random.randint(100, 999))])
-        self.collection_name = "backup_col_" + str(random.randint(1000, 9999))
+        uid = uuid.uuid4().hex
+        self.table_path = f"{self.client.database}/table/{uid}"
+        self.collection_name = f"backup_col_{uid}"
         ydb.interceptor.monkey_patch_event_handler()
 
     def __enter__(self):

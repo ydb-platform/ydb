@@ -615,7 +615,7 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
         return;
     }
 
-    auto initCounters = [&](auto& counters, auto& config, const std::vector<std::pair<TString, TString>>& subgroups = {}, bool skipPrefix = true) {
+    auto ensureCounters = [&](auto& counters, auto& config, const std::vector<std::pair<TString, TString>>& subgroups = {}, bool skipPrefix = true) {
         auto group = DynamicCounters;
         if (counters.empty()) {
             for (const auto& subgroup : subgroups) {
@@ -636,18 +636,18 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
 
     using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
     auto labeledCounters = std::make_unique<TPartitionLabeledCounters>("topic", 0, DatabasePath);
-    initCounters(AggregatedCounters, labeledCounters);
+    ensureCounters(AggregatedCounters, labeledCounters);
 
 
     using TPartitionExtendedLabeledCounters = TProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>;
     auto extendedLabeledCounters = std::make_unique<TPartitionExtendedLabeledCounters>("topic", 0, DatabasePath);
-    initCounters(AggregatedExtendedCounters, extendedLabeledCounters, {}, false);
+    ensureCounters(AggregatedExtendedCounters, extendedLabeledCounters, {}, false);
 
     using TPartitionKeyCompactionCounters = TProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>;
     auto compactionCounters = std::make_unique<TPartitionKeyCompactionCounters>("topic", 0, DatabasePath);
 
     if (TabletConfig.GetEnableCompactification()) {
-        initCounters(AggregatedCompactionCounters, compactionCounters);
+        ensureCounters(AggregatedCompactionCounters, compactionCounters);
     } else {
         AggregatedCompactionCounters.clear();
     }
@@ -657,7 +657,7 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
 
     for (auto& [consumer, info]: Consumers) {
         info.Aggr.Reset(new TTabletLabeledCountersBase{});
-        initCounters(info.AggregatedCounters, labeledConsumerCounters, {{"consumer", NPersQueue::ConvertOldConsumerName(consumer, ctx)}});
+        ensureCounters(info.AggregatedCounters, labeledConsumerCounters, {{"consumer", NPersQueue::ConvertOldConsumerName(consumer, ctx)}});
     }
 
     /*** apply counters ****/

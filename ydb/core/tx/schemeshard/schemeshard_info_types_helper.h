@@ -8,38 +8,39 @@ namespace NKikimr::NSchemeShard {
 template <typename TSettings>
 struct TItemSourcePathGetter;
 
-#define DEFINE_ITEM_SOURCE_PATH_GETTER(SettingsType, Method) \
-    template <> \
-    struct TItemSourcePathGetter<SettingsType> { \
-        static TString Get(const SettingsType& settings, size_t i) { \
-            if (i < ui32(settings.items_size())) { \
-                return settings.items(i).Method(); \
-            } \
-            return {}; \
-        } \
-    };
-
-DEFINE_ITEM_SOURCE_PATH_GETTER(Ydb::Import::ImportFromS3Settings, source_prefix)
-DEFINE_ITEM_SOURCE_PATH_GETTER(Ydb::Import::ImportFromFsSettings, source_path)
-
-#undef DEFINE_ITEM_SOURCE_PATH_GETTER
-
-// Macro to generate a getter method that retrieves a field from settings.
-#define IMPORT_SETTINGS_GETTER(MethodName, FieldAccessor) \
-    bool MethodName() const { \
-        return std::visit([](const auto& settings) { \
-            return settings.FieldAccessor(); \
-        }, Settings); \
+template <>
+struct TItemSourcePathGetter<Ydb::Import::ImportFromS3Settings> {
+    static TString Get(const Ydb::Import::ImportFromS3Settings& settings, size_t i) {
+        if (i < ui32(settings.items_size())) {
+            return settings.items(i).source_prefix();
+        }
+        return {};
     }
+};
 
-// Macro to generate a case statement for parsing settings from a serialized string.
-#define PARSE_SETTINGS_CASE(KindValue, SettingsType) \
-    case EKind::KindValue: { \
-        SettingsType tmpSettings; \
-        Y_ABORT_UNLESS(tmpSettings.ParseFromString(serializedSettings)); \
-        Settings = std::move(tmpSettings); \
-        break; \
+template <>
+struct TItemSourcePathGetter<Ydb::Import::ImportFromFsSettings> {
+    static TString Get(const Ydb::Import::ImportFromFsSettings& settings, size_t i) {
+        if (i < ui32(settings.items_size())) {
+            return settings.items(i).source_path();
+        }
+        return {};
     }
+};
+
+
+template <typename TVariant, typename TFunc>
+auto VisitSettings(const TVariant& settings, TFunc&& func) {
+    return std::visit(std::forward<TFunc>(func), settings);
+}
+
+
+template <typename TSettings>
+TSettings ParseSettings(const TString& serializedSettings) {
+    TSettings tmpSettings;
+    Y_ABORT_UNLESS(tmpSettings.ParseFromString(serializedSettings));
+    return tmpSettings;
+}
 
 } // namespace NKikimr::NSchemeShard
 

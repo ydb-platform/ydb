@@ -3121,10 +3121,10 @@ public:
 
         // Backward compatibility.
         // But there can be no paths in settings at all.
-        return std::visit([i](const auto& settings) -> TString {
+        return VisitSettings([i](const auto& settings) -> TString {
             using T = std::decay_t<decltype(settings)>;
             return TItemSourcePathGetter<T>::Get(settings, i);
-        }, Settings);
+        });
     }
 
     Ydb::Import::ImportFromS3Settings GetS3Settings() const {
@@ -3137,9 +3137,18 @@ public:
         return std::get<Ydb::Import::ImportFromFsSettings>(Settings);
     }
 
-    // Generate getters for common settings fields
-    IMPORT_SETTINGS_GETTER(GetNoAcl, no_acl)
-    IMPORT_SETTINGS_GETTER(GetSkipChecksumValidation, skip_checksum_validation)
+    // Getters for common settings fields
+    bool GetNoAcl() const {
+        return VisitSettings([](const auto& settings) {
+            return settings.no_acl();
+        });
+    }
+
+    bool GetSkipChecksumValidation() const {
+        return VisitSettings([](const auto& settings) {
+            return settings.skip_checksum_validation();
+        });
+    }
 
     explicit TImportInfo(
             const ui64 id,
@@ -3157,8 +3166,14 @@ public:
     {
         // Parse settings from serialized string based on import kind.
         switch (kind) {
-        PARSE_SETTINGS_CASE(S3, Ydb::Import::ImportFromS3Settings)
-        PARSE_SETTINGS_CASE(FS, Ydb::Import::ImportFromFsSettings)
+        case EKind::S3: {
+            Settings = ParseSettings<Ydb::Import::ImportFromS3Settings>(serializedSettings);
+            break;
+        }
+        case EKind::FS: {
+            Settings = ParseSettings<Ydb::Import::ImportFromFsSettings>(serializedSettings);
+            break;
+        }
         default:
             Y_ABORT("Unknown import kind");
         }
@@ -3188,6 +3203,11 @@ private:
         TString serialized;
         Y_PROTOBUF_SUPPRESS_NODISCARD settings.SerializeToString(&serialized);
         return serialized;
+    }
+
+    template <typename TFunc>
+    auto VisitSettings(TFunc&& func) const {
+        return NImportHelpers::VisitSettings(Settings, std::forward<TFunc>(func));
     }
 
 public:

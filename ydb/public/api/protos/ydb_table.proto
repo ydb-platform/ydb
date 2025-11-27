@@ -670,7 +670,7 @@ message ColumnMeta {
     // Sparse sparse = 8;
     // Dictionary dictionary = 9;
     // SubColumns sub_columns = 10;
-    ColumnCompression compression = 11;
+    optional ColumnCompression compression = 11;
 }
 
 message EvictionToExternalStorageSettings {

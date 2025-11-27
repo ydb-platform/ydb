@@ -1,19 +1,17 @@
-# Коллекции резервных копий: Распространенные рецепты и примеры
+# Рецепты и примеры
 
-Данное руководство предоставляет реальные сценарии и практические примеры для распространенных случаев использования коллекций резервных копий. Оно фокусируется на полных рабочих процессах и паттернах для конкретных ситуаций, таких как настройка мультиокружения, микросервисы и миграция данных.
+Примеры типовых сценариев работы с коллекциями резервных копий.
 
-Для пошаговых операционных инструкций и SQL-справки см. [руководство по операциям](../maintenance/manual/backup-collections.md). Для концептуальной информации см. [концепции коллекций резервных копий](../concepts/backup-collections.md).
-
-## Базовый рабочий процесс резервного копирования {#basic-workflow}
+## Базовый процесс {#basic-workflow}
 
 ### Создание первой коллекции резервных копий {#creating-first-collection}
 
 ```sql
 -- Создание коллекции для связанных таблиц
-CREATE BACKUP COLLECTION `production_backups`
-    ( TABLE `/Root/shop/orders`
-    , TABLE `/Root/shop/products`
-    , TABLE `/Root/shop/customers`
+CREATE BACKUP COLLECTION production_backups
+    ( TABLE orders
+    , TABLE products
+    , TABLE customers
     )
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 ```
@@ -22,13 +20,13 @@ WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 
 ```sql
 -- Создание первоначальной полной резервной копии
-BACKUP `production_backups`;
+BACKUP production_backups;
 
 -- Позже создание инкрементальных резервных копий
-BACKUP `production_backups` INCREMENTAL;
+BACKUP production_backups INCREMENTAL;
 ```
 
-### Мониторинг операций резервного копирования {#monitoring-backup-operations}
+### Мониторинг {#monitoring-backup-operations}
 
 ```bash
 # Проверка статуса операций резервного копирования
@@ -50,85 +48,85 @@ ydb scheme ls .backups/collections/production_backups/
 
 ```sql
 -- Создание коллекции с меньшим количеством таблиц для тестирования
-CREATE BACKUP COLLECTION `dev_test_backups`
-    ( TABLE `/Root/dev/users`
-    , TABLE `/Root/dev/test_data`
+CREATE BACKUP COLLECTION dev_test_backups
+    ( TABLE users
+    , TABLE test_data
     )
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 
 -- Ежедневные полные резервные копии в среде разработки
-BACKUP `dev_test_backups`;
+BACKUP dev_test_backups;
 ```
 
 ### Производственная среда {#production-environment}
 
 ```sql
 -- Создание комплексной коллекции для продакшена
-CREATE BACKUP COLLECTION `prod_daily_backups`
-    ( TABLE `/Root/production/orders`
-    , TABLE `/Root/production/products`
-    , TABLE `/Root/production/customers`
-    , TABLE `/Root/production/inventory`
-    , TABLE `/Root/production/transactions`
+CREATE BACKUP COLLECTION prod_daily_backups
+    ( TABLE orders
+    , TABLE products
+    , TABLE customers
+    , TABLE inventory
+    , TABLE transactions
     )
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 
 -- Еженедельная полная резервная копия
-BACKUP `prod_daily_backups`;
+BACKUP prod_daily_backups;
 
 -- Ежедневные инкрементальные резервные копии
-BACKUP `prod_daily_backups` INCREMENTAL;
+BACKUP prod_daily_backups INCREMENTAL;
 ```
 
-## Стратегия резервного копирования микросервисов {#microservices}
+## Микросервисы {#microservices}
 
 ### Коллекции для отдельных сервисов {#individual-service-collections}
 
 ```sql
 -- Коллекция резервных копий пользовательского сервиса
-CREATE BACKUP COLLECTION `user_service_backups`
-    ( TABLE `/Root/users/profiles`
-    , TABLE `/Root/users/preferences`
-    , TABLE `/Root/users/sessions`
+CREATE BACKUP COLLECTION user_service_backups
+    ( TABLE profiles
+    , TABLE preferences
+    , TABLE sessions
     )
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 
 -- Коллекция резервных копий сервиса заказов
-CREATE BACKUP COLLECTION `order_service_backups`
-    ( TABLE `/Root/orders/orders`
-    , TABLE `/Root/orders/order_items`
-    , TABLE `/Root/orders/payments`
+CREATE BACKUP COLLECTION order_service_backups
+    ( TABLE orders
+    , TABLE order_items
+    , TABLE payments
     )
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 
 -- Коллекция резервных копий сервиса инвентаря
-CREATE BACKUP COLLECTION `inventory_service_backups`
-    ( TABLE `/Root/inventory/products`
-    , TABLE `/Root/inventory/stock_levels`
-    , TABLE `/Root/inventory/warehouses`
+CREATE BACKUP COLLECTION inventory_service_backups
+    ( TABLE products
+    , TABLE stock_levels
+    , TABLE warehouses
     )
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 ```
 
-### Рабочий процесс резервного копирования сервисов {#service-backup-workflow}
+### Резервное копирование {#service-backup-workflow}
 
 ```sql
 -- Создание резервных копий для каждого сервиса независимо
-BACKUP `user_service_backups`;
-BACKUP `order_service_backups`;
-BACKUP `inventory_service_backups`;
+BACKUP user_service_backups;
+BACKUP order_service_backups;
+BACKUP inventory_service_backups;
 
 -- Позже создание инкрементальных резервных копий
-BACKUP `user_service_backups` INCREMENTAL;
-BACKUP `order_service_backups` INCREMENTAL;
-BACKUP `inventory_service_backups` INCREMENTAL;
+BACKUP user_service_backups INCREMENTAL;
+BACKUP order_service_backups INCREMENTAL;
+BACKUP inventory_service_backups INCREMENTAL;
 ```
 
 ## Экспорт данных и восстановление {#export-recovery}
 
-### Экспорт коллекций резервных копий {#exporting-backup-collections}
+### Экспорт {#exporting-backup-collections}
 
-Для аварийного восстановления или миграции экспортируйте коллекции резервных копий с использованием стандартных инструментов YDB:
+Экспорт коллекции с помощью YDB CLI:
 
 ```bash
 # Экспорт коллекции резервных копий
@@ -138,7 +136,7 @@ ydb tools dump -p .backups/collections/production_backups -o /backup/exports/pro
 ydb tools dump -p .backups/collections/production_backups/backup_20240315_120000 -o /backup/exports/backup_20240315
 ```
 
-### Импорт в целевую базу данных {#importing-to-target-database}
+### Импорт {#importing-to-target-database}
 
 ```bash
 # Импорт резервной копии в целевую базу данных
@@ -150,7 +148,7 @@ ydb tools restore -i /backup/exports/backup_20240315 -d /Root/restored_data
 
 ## Управление коллекциями {#collection-management}
 
-### Проверка статуса коллекции {#checking-collection-status}
+### Статус коллекции {#checking-collection-status}
 
 ```bash
 # Список всех коллекций
@@ -180,12 +178,12 @@ ydb scheme rmdir -r .backups/collections/production_backups/backup_20240302_0600
 
 ```sql
 -- Удаление коллекции, когда она больше не нужна (удаляет коллекцию и все резервные копии)
-DROP BACKUP COLLECTION `old_collection_name`;
+DROP BACKUP COLLECTION old_collection_name;
 ```
 
-## Простая проверка резервных копий {#validation}
+## Проверка {#validation}
 
-### Проверка завершения резервного копирования {#checking-backup-completion}
+### Проверка завершения {#checking-backup-completion}
 
 ```bash
 # Проверка успешного завершения операции резервного копирования
@@ -195,7 +193,7 @@ ydb operation list incbackup | grep -E "(COMPLETED|FAILED)"
 ydb scheme ls .backups/collections/production_backups/ | tail -1
 ```
 
-### Базовое тестирование резервных копий {#basic-backup-testing}
+### Тестирование {#basic-backup-testing}
 
 ```bash
 # Экспорт недавней резервной копии для тестирования
@@ -205,50 +203,50 @@ ydb tools dump -p .backups/collections/production_backups/backup_20240315_120000
 ydb tools restore -i /tmp/test_restore -d /Root/test_restore_verification
 ```
 
-## Сводка лучших практик {#best-practices}
+## Лучшие практики {#best-practices}
 
-### Стратегия резервного копирования {#backup-strategy}
+### Стратегия {#backup-strategy}
 
-- **Управление длиной цепочки**: Периодически создавайте новые полные резервные копии, чтобы избежать чрезмерно длинных инкрементальных цепочек.
-- **Отдельные коллекции по сервисам**: Используйте разные коллекции для разных приложений/сервисов.
-- **Регулярные полные резервные копии**: Создавайте полные резервные копии еженедельно или раз в две недели.
-- **Регулярное тестирование**: Периодически проверяйте, что резервные копии можно восстановить.
+- Периодически создавайте новые полные копии, чтобы цепочки не становились слишком длинными.
+- Используйте разные коллекции для разных сервисов.
+- Создавайте полные копии еженедельно или раз в две недели.
+- Периодически проверяйте, что копии можно восстановить.
 
 ### Операции {#operations}
 
-- **Мониторинг статуса операций**: Всегда проверяйте завершение операций резервного копирования.
-- **Ручная очистка**: Удаляйте старые цепи резервных копий вручную для управления хранилищем.
-- **Документирование процедур**: Ведите документацию процедур резервного копирования и восстановления.
-- **Планирование для катастроф**: Практикуйте процедуры восстановления в непроизводственных средах.
+- Всегда проверяйте завершение операций.
+- Удаляйте старые цепи вручную для экономии места.
+- Документируйте процедуры резервного копирования и восстановления.
+- Отрабатывайте восстановление в тестовых средах.
 
-### Управление хранилищем {#storage-management}
+### Хранилище {#storage-management}
 
-- **Мониторинг использования хранилища**: Отслеживайте потребление хранилища резервных копий.
-- **Планирование сохранности**: Определите, как долго хранить цепи резервных копий.
-- **Экспорт важных резервных копий**: Используйте экспорт/импорт для долгосрочного архивирования.
-- **Проверка целостности цепи**: Никогда не удаляйте частичные цепи резервных копий.
+- Отслеживайте потребление дискового пространства.
+- Определите политику хранения: как долго хранить цепи.
+- Используйте экспорт для долгосрочного архивирования.
+- Никогда не удаляйте частичные цепи.
 
-## Распространенные проблемы и решения {#troubleshooting}
+## Проблемы и решения {#troubleshooting}
 
-### Сбои операций резервного копирования {#backup-operation-failures}
+### Сбои операций {#backup-operation-failures}
 
-- **Проверка разрешений**: Убедитесь, что пользователь имеет разрешения на операции резервного копирования.
-- **Проверка доступа к таблицам**: Подтвердите, что все таблицы в коллекции доступны.
-- **Мониторинг ресурсов**: Проверьте системные ресурсы во время операций резервного копирования.
+- Проверьте права доступа пользователя.
+- Убедитесь, что все таблицы в коллекции доступны.
+- Проверьте системные ресурсы.
 
 ### Проблемы с хранилищем {#storage-issues}
 
-- **Очистка старых резервных копий**: Удалите старые цепи резервных копий для освобождения места.
-- **Мониторинг размеров резервных копий**: Отслеживайте рост инкрементальных резервных копий.
-- **Планирование емкости хранилища**: Оцените потребности в хранилище для сохранения резервных копий.
+- Удалите старые цепи для освобождения места.
+- Отслеживайте рост инкрементальных копий.
+- Оцените потребности в дисковом пространстве.
 
 ### Управление цепями {#chain-management}
 
-- **Избегайте частичных удалений**: Никогда не удаляйте отдельные резервные копии из цепи.
-- **Документируйте разрывы цепи**: Ведите учет любых прерываний цепи резервных копий.
-- **Создавайте новые цепи**: Создавайте новые полные резервные копии, когда цепи становятся слишком длинными.
+- Никогда не удаляйте отдельные копии из середины цепи.
+- Фиксируйте любые разрывы цепи.
+- Начинайте новую цепь, когда старая становится слишком длинной.
 
 ## См. также {#see-also}
 
-- [Концепции коллекций резервных копий](../concepts/backup-collections.md) - Основные концепции и архитектура.
-- [Руководство по операциям](../maintenance/manual/backup-collections.md) - Подробные операционные процедуры.
+- [Концепции коллекций резервных копий](../concepts/backup-collections.md)
+- [Руководство по операциям](../maintenance/manual/backup-collections.md)

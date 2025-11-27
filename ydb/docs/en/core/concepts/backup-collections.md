@@ -291,7 +291,7 @@ Without backup collections, only full export/import operations are available.
 ### Benefits
 
 - **Storage efficiency**: Incremental backups use significantly less storage compared to storing multiple full backups.
-- **Faster backups**: Only changes are processed after initial full backup (note: change capture still incurs storage and cpu costs).
+- **Faster backups**: Only changes are processed after initial full backup.
 - **SQL interface**: Familiar SQL commands for backup management.
 - **Background processing**: Non-blocking operations.
 

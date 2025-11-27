@@ -661,9 +661,15 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
 
     ui64 milliSeconds = TAppData::TimeProvider->Now().MilliSeconds();
 
-    THolder<TTabletLabeledCountersBase> aggr(new TTabletLabeledCountersBase);
-    THolder<TTabletLabeledCountersBase> aggrExtended(new TTabletLabeledCountersBase);
-    THolder<TTabletLabeledCountersBase> compactionAggr(new TTabletLabeledCountersBase);
+    auto aggr = std::make_unique<TTabletLabeledCountersBase>();
+    auto aggrExtended = std::make_unique<TTabletLabeledCountersBase>();
+    auto compactionAggr = std::make_unique<TTabletLabeledCountersBase>();
+
+    auto setCounters = [](auto& counters, const auto& state) {
+        for (size_t i = 0; i < counters->GetCounters().Size() && i < state.ValuesSize(); ++i) {
+            counters->GetCounters()[i] = state.GetValues(i);
+        }
+    };
 
     for (auto it = AggregatedStats.Stats.begin(); it != AggregatedStats.Stats.end(); ++it) {
         auto& partitionStats = it->second;
@@ -671,12 +677,6 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
         if (!partitionStats.HasCounters) {
             continue;
         }
-
-        auto setCounters = [&](auto& counters, auto& state) {
-            for (size_t i = 0; i < counters->GetCounters().Size() && i < state.ValuesSize(); ++i) {
-                counters->GetCounters()[i] = state.GetValues(i);
-            }
-        };
 
         setCounters(labeledCounters, partitionStats.Counters);
         aggr->AggregateWith(*labeledCounters);

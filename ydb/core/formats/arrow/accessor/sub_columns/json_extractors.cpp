@@ -14,7 +14,7 @@ TConclusionStatus TArrayExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<
     ui32 idx = 0;
     while (Iterator.HasNext()) {
         auto value = Iterator.Next();
-        const TStringBuf key = dataBuilder.AddKeyOwn(GetPrefix(), "[" + std::to_string(idx++) + "]");
+        const TStringBuf key = dataBuilder.AddKeyOwn(GetPrefix(), "[" + std::to_string(idx++) + "]", /*isArray=*/ true);
         auto conclusion = AddDataToBuilder(dataBuilder, iterators, key, value);
         if (conclusion.IsFail()) {
             return conclusion;

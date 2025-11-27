@@ -34,14 +34,12 @@ TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonP
 class TJsonPathAccessor {
     YDB_READONLY_DEF(std::shared_ptr<IChunkedArray>, ChunkedArrayAccessor);
     YDB_READONLY_DEF(TString, RemainingPath);
+    NYql::NJsonPath::TJsonPathPtr RemainingPathPtr;
 
 public:
-    using TValuesVisitor = std::function<void(std::optional<TStringBuf> value)>;
+    using TValuesVisitor = std::function<void(const std::optional<TStringBuf>& value)>;
 
-    TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath)
-        : ChunkedArrayAccessor(std::move(accessor))
-        , RemainingPath(std::move(remainingPath))
-    {}
+    TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath);
 
     void VisitValues(const TValuesVisitor& visitor) const;
 

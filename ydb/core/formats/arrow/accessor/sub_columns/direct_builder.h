@@ -86,8 +86,8 @@ public:
         ++CurrentRecordIndex;
     }
 
-    TStringBuf AddKeyOwn(const TStringBuf currentPrefix, std::string&& key);
-    TStringBuf AddKey(const TStringBuf currentPrefix, const TStringBuf key);
+    TStringBuf AddKeyOwn(const TStringBuf currentPrefix, std::string&& key, bool isArray = false);
+    TStringBuf AddKey(const TStringBuf currentPrefix, const TStringBuf key, bool isArray = false);
 
     void AddKVNull(const TStringBuf key) {
         auto itElements = Elements.find(key);

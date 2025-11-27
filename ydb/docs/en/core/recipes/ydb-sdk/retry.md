@@ -14,11 +14,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
 - C++
 
-  In the {{ ydb-short-name }} C++ SDK, correct error handling is implemented by several programming interfaces:
+  In the {{ ydb-short-name }} C++ SDK, retries with correct error handling is implemented by several programming interfaces:
 
-  {% cut "Synchronous retry attempts when working with Query Service" %}
+  {% cut "Synchronous retry attempts" %}
 
-  The `RetryQuerySync` method is used to execute queries with automatic retries in Query Service.
+  The `RetryQuerySync` method is used to execute queries with automatic retries.
   The method accepts a lambda function that receives a session object and returns the query result.
   {{ ydb-short-name }} C++ SDK automatically analyzes errors and performs retries according to their type.
 
@@ -66,7 +66,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
   {% endcut %}
 
-  {% cut "Asynchronous retry attempts when working with Query Service" %}
+  {% cut "Asynchronous retry attempts" %}
 
   The `RetryQuery` method is used for asynchronous query execution with automatic retries.
   The method returns `NThreading::TFuture`, which allows for asynchronous operations.

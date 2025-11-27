@@ -1918,12 +1918,12 @@ public:
                             }
                         } else if (alterColumnAction == "changeCompression") {
                             const auto settings = alterColumnList.Item(1).Cast<TExprList>();
-                            auto compression = alter_columns->mutable_compression();
                             for (const auto setting : settings) {
                                 const auto sKV = setting.Cast<TExprList>();
                                 const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
                                 const auto& settingVal = sKV.Item(1).Ref();
                                 if (key == "algorithm" && settingVal.IsCallable("String")) {
+                                    auto compression = alter_columns->mutable_compression();
                                     const auto algoVal = settingVal.Child(0)->Content();
                                     if (algoVal == "lz4") {
                                         compression->set_algorithm(::Ydb::Table::ColumnCompression_Algorithm::ColumnCompression_Algorithm_ALGORITHM_LZ4);
@@ -1937,6 +1937,7 @@ public:
                                         return SyncError();
                                     }
                                 } else if (key == "level" && (settingVal.IsCallable("Uint64") || settingVal.IsCallable("Int64"))) {
+                                    auto compression = alter_columns->mutable_compression();
                                     compression->set_compression_level(FromString<i64>(settingVal.Child(0)->Content()));
                                 } else {
                                     ctx.AddError(TIssue(ctx.GetPosition(sKV.Pos()), TStringBuilder()

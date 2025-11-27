@@ -48,9 +48,24 @@ public:
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
-        // TODO flown4qqqq
-        Y_UNUSED(ev);
-        Y_UNUSED(context);
+        TStepId step = TStepId(ev->Get()->StepId);
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvOperationPlan"
+                               << ", stepId: " << step
+                               << ", at schemeshard: " << ssId);
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxTruncateTable);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        txState->PlanStep = step;
+        context.SS->PersistTxPlanStep(db, OperationId, step);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
     }
 
@@ -182,10 +197,42 @@ public:
             return result;
         }
 
-        // TODO flown4qqqq (need persist the op)
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxTruncateTable, tablePath.Base()->PathId);
+
+        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+        TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
+        Y_ABORT_UNLESS(table->GetPartitions().size());
+        
+        for (auto& shard : table->GetPartitions()) {
+            auto shardIdx = shard.ShardIdx;
+            context.MemChanges.GrabShard(context.SS, shardIdx);
+            context.DbChanges.PersistShard(shardIdx);
+            
+            Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
+            txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::Propose);
+            
+            context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
+        }
+
+        tablePath.Base()->PathState = TPathElement::EPathState::EPathStateNoChanges;
+        tablePath.Base()->LastTxId = OperationId.GetTxId();
+
+        NIceDb::TNiceDb db(context.GetDB());
+        
+        context.SS->PersistTxState(db, OperationId);
+        context.SS->PersistPath(db, tablePath.Base()->PathId);
+        
+        for (const auto& shard : table->GetPartitions()) {
+            auto shardIdx = shard.ShardIdx;
+            context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, tablePath.Base()->PathId, OperationId.GetTxId(), ETabletType::DataShard);
+        }
+        
+        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
+        context.OnComplete.ActivateTx(OperationId);
 
         result->SetPathId(tablePath.Base()->PathId.LocalPathId);
 
+        SetState(NextState());
         return result;
     }
 

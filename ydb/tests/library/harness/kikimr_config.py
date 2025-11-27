@@ -190,7 +190,7 @@ class KikimrConfigGenerator(object):
             cms_config=None,
             explicit_statestorage_config=None,
             system_tablets=None,
-            protected_mode=False,
+            protected_mode=False,  # Authentication
             tiny_mode=False,
             module=None,
     ):

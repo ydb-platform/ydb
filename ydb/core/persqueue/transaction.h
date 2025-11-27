@@ -109,6 +109,8 @@ struct TDistributedTransaction {
 
     bool Pending = false;
 
+    TMaybe<NKikimrPQ::TError> Error;
+
     void SetExecuteSpan(NWilson::TSpan&& span);
     void EndExecuteSpan();
     NWilson::TSpan CreatePlanStepSpan(ui64 tabletId, ui64 step);

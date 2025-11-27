@@ -15,7 +15,7 @@ void DecommitGroup(TBlobDepotTestEnvironment& tenv, ui32 groupId) {
 
     auto *cmd = request.AddCommand()->MutableDecommitGroups();
     cmd->AddGroupIds(groupId);
-    cmd->SetHiveId(tenv.Env->Runtime->GetDomainsInfo()->GetHive());
+    cmd->SetDatabase(TStringBuilder() << '/' << tenv.Env->Runtime->GetDomainsInfo()->GetDomain()->Name);
     auto *prof = cmd->AddChannelProfiles();
     prof->SetStoragePoolName(blobDepotPool);
     prof->SetCount(2);

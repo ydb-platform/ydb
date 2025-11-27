@@ -480,28 +480,28 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
             break;
         case NUdf::TDataType<NUdf::TDate32>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Date32");
-            if (value.int32_value() >= NUdf::MAX_DATE32) {
+            if (value.int32_value() < NUdf::MIN_DATE32 || value.int32_value() > NUdf::MAX_DATE32) {
                 throw yexception() << "Invalid Date32 value";
             }
             res.SetInt32(value.int32_value());
             break;
         case NUdf::TDataType<NUdf::TDatetime64>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Datetime64");
-            if (value.int64_value() >= NUdf::MAX_DATETIME64) {
+            if (value.int64_value() < NUdf::MIN_DATETIME64 || value.int64_value() > NUdf::MAX_DATETIME64) {
                 throw yexception() << "Invalid Datetime64 value";
             }
             res.SetInt64(value.int64_value());
             break;
         case NUdf::TDataType<NUdf::TTimestamp64>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Timestamp64");
-            if (value.int64_value() >= NUdf::MAX_TIMESTAMP64) {
+            if (value.int64_value() < NUdf::MIN_TIMESTAMP64 || value.int64_value() > NUdf::MAX_TIMESTAMP64) {
                 throw yexception() << "Invalid Timestamp64 value";
             }
             res.SetInt64(value.int64_value());
             break;
         case NUdf::TDataType<NUdf::TInterval64>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval64");
-            if (std::abs(value.int64_value()) >= NUdf::MAX_INTERVAL64) {
+            if (std::abs(value.int64_value()) > NUdf::MAX_INTERVAL64) {
                 throw yexception() << "Invalid Interval64 value";
             }
             res.SetInt64(value.int64_value());
@@ -1137,19 +1137,19 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
         break;
 
     case NScheme::NTypeIds::Date32:
-        ok = cell.AsValue<i32>() < NUdf::MAX_DATE32;
+        ok = cell.AsValue<i32>() >= NUdf::MIN_DATE32 && cell.AsValue<i32>() <= NUdf::MAX_DATE32;
         break;
 
     case NScheme::NTypeIds::Datetime64:
-        ok = cell.AsValue<i64>() < NUdf::MAX_DATETIME64;
+        ok = cell.AsValue<i64>() >= NUdf::MIN_DATETIME64 && cell.AsValue<i64>() <= NUdf::MAX_DATETIME64;
         break;
 
     case NScheme::NTypeIds::Timestamp64:
-        ok = cell.AsValue<i64>() < NUdf::MAX_TIMESTAMP64;
+        ok = cell.AsValue<i64>() >= NUdf::MIN_TIMESTAMP64 && cell.AsValue<i64>() <= NUdf::MAX_TIMESTAMP64;
         break;
 
     case NScheme::NTypeIds::Interval64:
-        ok = std::abs(cell.AsValue<i64>()) < NUdf::MAX_INTERVAL64;
+        ok = std::abs(cell.AsValue<i64>()) <= NUdf::MAX_INTERVAL64;
         break;
 
     case NScheme::NTypeIds::Utf8:

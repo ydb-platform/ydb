@@ -15,7 +15,8 @@ using TLimitsMap = TMap<EPDiskState, ui32>;
 
 class TPDiskStatusComputer {
 public:
-    explicit TPDiskStatusComputer(const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits);
+    explicit TPDiskStatusComputer(const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits,
+                                  TInstant cmsFirstBootTimestamp, const TDuration& initialDeploymentGracePeriod);
 
     void AddState(EPDiskState state, bool isNodeLocked);
     EPDiskStatus Compute(EPDiskStatus current, TString& reason) const;
@@ -30,6 +31,8 @@ public:
     bool HasForcedStatus() const;
     void ResetForcedStatus();
 
+    bool IsInitialDeploymentGracePeriod() const;
+
 private:
     const ui32& DefaultStateLimit;
     const ui32& GoodStateLimit;
@@ -42,11 +45,17 @@ private:
     
     mutable bool HadBadStateRecently = false;
 
+    TInstant CMSFirstBootTimestamp;
+    const TDuration& InitialDeploymentGracePeriod;
+
 }; // TPDiskStatusComputer
 
 class TPDiskStatus: public TPDiskStatusComputer {
 public:
     explicit TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits);
+    explicit TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit,
+                          const ui32& goodStateLimit, const TLimitsMap& stateLimits,
+                          TInstant cmsFirstBootTimestamp, const TDuration& initialDeploymentGracePeriod);
 
     void AddState(EPDiskState state, bool isNodeLocked);
     bool IsChanged() const;
@@ -95,7 +104,9 @@ struct TPDiskInfo
     ui32 PrevStatusChangeAttempt = 0;
     EIgnoreReason IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;
 
-    explicit TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits);
+    explicit TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit,
+                        const ui32& goodStateLimit, const TLimitsMap& stateLimits,
+                        TInstant cmsFirstBootTimestamp, const TDuration& initialDeploymentGracePeriod);
 
     bool IsTouched() const { return Touched; }
     void Touch() { Touched = true; }

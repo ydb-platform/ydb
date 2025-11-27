@@ -1829,6 +1829,7 @@ public:
             INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
+            INSERT_TOPIC_SETTING(MetricsLevel)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -1931,13 +1932,13 @@ public:
         if (Params_.TopicSettings.IsSet()) {
             auto settings = Y();
 
-#define INSERT_TOPIC_SETTING(NAME)                                                                      \
-    if (const auto& NAME##Val = Params_.TopicSettings.NAME) {                                            \
-        if (NAME##Val.IsSet()) {                                                                        \
-            settings = L(settings, Q(Y(Q(Y_STRINGIZE(set##NAME)), NAME##Val.GetValueSet())));           \
-        } else {                                                                                        \
-            settings = L(settings, Q(Y(Q(Y_STRINGIZE(reset##NAME)), Y())));           \
-        }                                                                                               \
+#define INSERT_TOPIC_SETTING(NAME)                                                            \
+    if (const auto& NAME##Val = Params_.TopicSettings.NAME) {                                 \
+        if (NAME##Val.IsSet()) {                                                              \
+            settings = L(settings, Q(Y(Q(Y_STRINGIZE(set##NAME)), NAME##Val.GetValueSet()))); \
+        } else {                                                                              \
+            settings = L(settings, Q(Y(Q(Y_STRINGIZE(reset##NAME)), Q(Y()))));                \
+        }                                                                                     \
     }
 
             INSERT_TOPIC_SETTING(MaxPartitions)
@@ -1951,6 +1952,7 @@ public:
             INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
+            INSERT_TOPIC_SETTING(MetricsLevel)
 
 #undef INSERT_TOPIC_SETTING
 

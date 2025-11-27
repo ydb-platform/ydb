@@ -110,6 +110,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , VerboseMemoryLimitException(args.VerboseMemoryLimitException)
     , Query(args.Query)
     , CheckpointCoordinatorId(args.CheckpointCoordinator)
+    , EnableWatermarks(args.EnableWatermarks)
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -263,6 +264,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     if (UserToken) {
         request.SetUserToken(UserToken->SerializeAsString());
     }
+
+    request.SetEnableWatermarks(EnableWatermarks);
 
     return result;
 }
@@ -627,10 +630,18 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 }
 
 void TKqpPlanner::PrepareCheckpoints() {
-    if (!CheckpointCoordinatorId) {
+    const auto isStreamingQuery = UserRequestContext && UserRequestContext->IsStreamingQuery;
+
+    if (!isStreamingQuery) {
         return;
     }
-    TasksGraph.BuildCheckpointingAndWatermarksMode(true, false);
+
+    const auto enableCheckpoints = static_cast<bool>(CheckpointCoordinatorId);
+    TasksGraph.BuildCheckpointingAndWatermarksMode(enableCheckpoints, EnableWatermarks);
+
+    if (!enableCheckpoints) {
+        return;
+    }
 
     bool hasStreamingIngress = false;
     auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();

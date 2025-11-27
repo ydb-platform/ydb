@@ -273,6 +273,7 @@ private:
                 .ComputesByStages = &computesByStage,
                 .State = State_, // pass state to later inform when task is finished
                 .Database = msg.GetDatabase(),
+                .EnableWatermarks = msg.GetEnableWatermarks(),
                 .Query = query,
                 // TODO: block tracking mode is not set!
             };

@@ -1179,7 +1179,7 @@ private:
             if (importInfo->Kind == TImportInfo::EKind::S3) {
                 auto settings = importInfo->GetS3Settings();
                 if (settings.has_encryption_settings() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
-                return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
+                    return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
                 }
             }
         }

@@ -93,6 +93,7 @@ jobs:
         with:
           sparse-checkout: |
             .github/config/stable_branches.json
+            .github/actions/run_tests/
 
       - name: Set branches
         id: set-branches

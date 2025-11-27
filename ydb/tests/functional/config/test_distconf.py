@@ -47,7 +47,7 @@ class DistConfKiKiMRTest(object):
     use_config_store = True
     separate_node_configs = True
     nodes_count = 0
-    protected_mode = False
+    protected_mode = True
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,

@@ -469,7 +469,7 @@ private:
             item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
             Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
         } else {
-            item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetterFS(Self->SelfId(), importInfo, itemIdx));
+            item.SchemeGetter = ctx.Register(CreateSchemeGetterFS(Self->SelfId(), importInfo, itemIdx), TMailboxType::Simple, AppData()->IOPoolId);
             Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
         }
     }

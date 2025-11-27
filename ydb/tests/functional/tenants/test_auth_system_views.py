@@ -57,8 +57,8 @@ def ydb_cluster_configuration():
 
 
 @pytest.fixture(scope='module')
-def ydb_configurator(ydb_cluster_configuration):
-    config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
+def ydb_configurator(ydb_cluster_configuration_with_encryption_parametrized):
+    config_generator = KikimrConfigGenerator(**ydb_cluster_configuration_with_encryption_parametrized)
     config_generator.yaml_config['auth_config'] = {
         'domain_login_only': False,
     }

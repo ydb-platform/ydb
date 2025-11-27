@@ -190,7 +190,8 @@ class KikimrConfigGenerator(object):
             cms_config=None,
             explicit_statestorage_config=None,
             system_tablets=None,
-            protected_mode=False,
+            protected_mode=False,  # Authentication
+            enable_pool_encryption=False,
             tiny_mode=False,
             module=None,
     ):
@@ -222,6 +223,7 @@ class KikimrConfigGenerator(object):
         erasure = Erasure.NONE if erasure is None else erasure
         self.system_tablets = system_tablets
         self.protected_mode = protected_mode
+        self.enable_pool_encryption = enable_pool_encryption
         self.module = module
         self.__grpc_ssl_enable = grpc_ssl_enable or protected_mode
         self.__grpc_tls_data_path = None
@@ -684,6 +686,7 @@ class KikimrConfigGenerator(object):
     @property
     def domains_txt(self):
         app_config = config_pb2.TAppConfig()
+        assert not self.enable_pool_encryption, "pool encryption isn't addressed in domains.txt"
         Parse(read_binary(__name__, "resources/default_domains.txt"), app_config.DomainsConfig)
         return app_config.DomainsConfig
 
@@ -947,3 +950,8 @@ class KikimrConfigGenerator(object):
         self._add_state_storage_config()
         if not self.use_self_management and not self.explicit_hosts_and_host_configs:
             self._initialize_pdisks_info()
+
+        if self.enable_pool_encryption:
+            for domain in self.yaml_config['domains_config']['domain']:
+                for pool_type in domain['storage_pool_types']:
+                    pool_type['pool_config']['encryption_mode'] = 1

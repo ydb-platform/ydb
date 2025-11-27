@@ -167,3 +167,21 @@ def ydb_client_session(ydb_client, request):
 #     with Driver(DriverConfig(ydb_endpoint, database_path)) as driver:
 #         with SessionPool(driver) as pool:
 #             yield database_path, pool
+
+
+@pytest.fixture(scope='module', params=[True, False], ids=["encryption_enabled", "encryption_disabled"])
+def encryption_enabled(request):
+    """
+    Parametrized fixture that runs tests with both encryption enabled and disabled.
+    """
+    return request.param
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_configuration_with_encryption_parametrized(ydb_cluster_configuration, encryption_enabled):
+    """
+    Extended cluster configuration that includes encryption settings based on the parametrized fixture.
+    """
+    config = ydb_cluster_configuration.copy()
+    config['enable_pool_encryption'] = encryption_enabled
+    return config

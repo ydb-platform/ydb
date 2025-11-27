@@ -1,8 +1,8 @@
 #include "dq_pq_write_actor.h"
 #include "probes.h"
 
-#include "ydb/core/base/appdata_fwd.h"
-#include "ydb/core/base/feature_flags.h"
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>

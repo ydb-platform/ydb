@@ -1,7 +1,7 @@
 #include "topic_session.h"
 
-#include "ydb/core/base/appdata_fwd.h"
-#include "ydb/core/base/feature_flags.h"
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/metrics/sanitize_label.h>

@@ -26,8 +26,8 @@ public:
         ui32 RemainsComputeActors = 0;
         TVector<ui64> Tasks;
         bool operator < (const TNodeDesc& item) const {
-            return std::tuple(-(i32)Tasks.size(), RemainsMemory, RemainsComputeActors)
-                < std::tuple(-(i32)item.Tasks.size(), item.RemainsMemory, item.RemainsComputeActors);
+            return std::tuple((i32)Tasks.size(), -RemainsMemory, -RemainsComputeActors)
+                < std::tuple((i32)item.Tasks.size(), -item.RemainsMemory, -item.RemainsComputeActors);
         }
 
         std::optional<IKqpPlannerStrategy::TResult> BuildResult() {

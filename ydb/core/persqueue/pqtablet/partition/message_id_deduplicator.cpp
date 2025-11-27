@@ -170,6 +170,9 @@ void TPartition::AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request) {
         auto* writeWAL = request->Record.AddCmdWrite();
         writeWAL->SetKey(MakeDeduplicatorWALKey(Partition.OriginalPartitionId, expirationTime));
         writeWAL->SetValue(wal.SerializeAsString());
+        if (writeWAL->GetValue().size() < 1000) {
+            writeWAL->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+        }
     }
 
     auto* deleteExpired = request->Record.AddCmdDeleteRange();

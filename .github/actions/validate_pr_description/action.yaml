@@ -13,6 +13,12 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}
+<<<<<<< HEAD
+=======
+        PR_BODY: ${{ inputs.pr_body}}
+        SHOW_ADDITIONAL_INFO_IN_PR: ${{ vars.SHOW_ADDITIONAL_INFO_IN_PR }}
+        APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+>>>>>>> 757f6deb2fd (Add PR comment functionality for test runs)
       run: |
         python3 -m pip install PyGithub
         python3 ${{ github.action_path }}/validate_pr_description.py pr_body.txt

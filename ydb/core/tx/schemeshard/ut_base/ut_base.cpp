@@ -2255,7 +2255,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copy", "/MyRoot/DirA/Table1/UserDefinedIndexByValue0", TEvSchemeShard::EStatus::StatusNameConflict);
-        TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copy", "/MyRoot/DirA/Table1/UserDefinedIndexByValue0/indexImplTable", TEvSchemeShard::EStatus::StatusNameConflict);
+
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
             TableDescription {

@@ -3356,6 +3356,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         OffloadActor = {};
     }
 
+    MonitoringProjectId = Config.GetMonitoringProjectId();
     if (DetailedMetricsAreEnabled()) {
         SetupDetailedMetrics();
     } else {

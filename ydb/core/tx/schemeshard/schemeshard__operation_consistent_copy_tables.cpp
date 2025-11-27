@@ -8,6 +8,27 @@
 
 #include <util/generic/algorithm.h>
 
+static bool ShouldOmitAutomaticIndexProcessing(const NKikimrSchemeOp::TCopyTableConfig& descr) {
+    // Two scenarios require omitting automatic index impl table processing:
+    //
+    // 1. User explicitly requested via OmitIndexes flag
+    //    (e.g., export operations, user preference)
+    //
+    // 2. Incremental backup with CDC streams on index impl tables
+    //    Requires manual handling to pass CDC stream info (lines 258-285)
+    //    Detected by non-empty IndexImplTableCdcStreams map
+
+    if (descr.GetOmitIndexes()) {
+        return true;  // User explicitly wants to skip indexes
+    }
+
+    if (!descr.GetIndexImplTableCdcStreams().empty()) {
+        return true;  // Incremental backup - manual handling required
+    }
+
+    return false;  // Regular copy - let CreateCopyTable handle indexes automatically
+}
+
 static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, const NKikimrSchemeOp::TCopyTableConfig& descr) {
     using namespace NKikimr::NSchemeShard;
 
@@ -20,9 +41,10 @@ static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath
     operation->SetOmitFollowers(descr.GetOmitFollowers());
     operation->SetIsBackup(descr.GetIsBackup());
     operation->SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
-    // For consistent copy, we handle indexes separately to properly pass CDC info
-    // Tell CreateCopyTable to skip its automatic index processing
-    operation->SetOmitIndexes(true);
+    // For incremental backups with CDC streams on indexes, we handle index impl tables
+    // manually (lines 258-285) to pass CDC stream info. For regular copies and when
+    // user requests OmitIndexes, skip automatic index processing accordingly.
+    operation->SetOmitIndexes(ShouldOmitAutomaticIndexProcessing(descr));
     if (descr.HasCreateSrcCdcStream()) {
         auto* coOp = scheme.MutableCreateCdcStream();
         coOp->CopyFrom(descr.GetCreateSrcCdcStream());

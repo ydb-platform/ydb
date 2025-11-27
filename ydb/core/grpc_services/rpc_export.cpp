@@ -549,7 +549,7 @@ public:
                 if (!TTraits::HasDestination(settings)) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix specified for encrypted export");
                 }
-    
+
                 if (!ValidateEncryptionParameters()) {
                     return;
                 }

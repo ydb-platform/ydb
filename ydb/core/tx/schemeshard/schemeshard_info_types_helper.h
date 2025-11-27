@@ -3,6 +3,8 @@
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <variant>
 
+namespace NKikimr::NSchemeShard {
+
 template <typename TSettings>
 struct TItemSourcePathGetter;
 
@@ -38,4 +40,6 @@ DEFINE_ITEM_SOURCE_PATH_GETTER(Ydb::Import::ImportFromFsSettings, source_path)
         Settings = std::move(tmpSettings); \
         break; \
     }
+
+} // namespace NKikimr::NSchemeShard
 

@@ -232,7 +232,7 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
         url = f"{base_url}?{query_string}"
         url_ui = f"{base_url}?{query_string}&ui=true"
         
-        rows.append(f"| **{branch}** [![▶ {branch}](https://img.shields.io/badge/%E2%96%B6_{branch.replace('-', '_')}-4caf50?style=flat-square)]({url}) [![⚙️](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F-ff9800?style=flat-square)]({url_ui}) |")
+        rows.append(f"| [![▶ {branch}](https://img.shields.io/badge/%E2%96%B6_{branch.replace('-', '_')}-4caf50?style=flat-square)]({url}) [![⚙️](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F-ff9800?style=flat-square)]({url_ui}) |")
     
     # Generate URL for backporting multiple branches
     all_branches = ",".join(branches)

@@ -1525,13 +1525,19 @@ TRestoreResult TRestoreClient::RestoreTopic(
 
 TRestoreResult TRestoreClient::CheckSecretExistence(const TString& secretName) {
     LOG_D("Check existence of the secret " << secretName.Quote());
-
     const auto tmpUser = CreateGuidAsString();
-    const auto create = std::format("CREATE OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
-    const auto drop = std::format("DROP OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
+    TString createAccessQuery;
+    TString dropAccessQuery;
+    if (!secretName.StartsWith('/')) {
+        createAccessQuery = std::format("CREATE OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
+        dropAccessQuery = std::format("DROP OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
+    } else {
+        createAccessQuery = std::format("GRANT describe schema ON `{}` TO `{}`;", secretName.c_str(), tmpUser.c_str());
+        dropAccessQuery = std::format("REVOKE describe schema ON `{}` FROM `{}`;", secretName.c_str(), tmpUser.c_str());
+    }
 
     auto result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
-        return session.ExecuteQuery(create, NQuery::TTxControl::NoTx()).ExtractValueSync();
+        return session.ExecuteQuery(createAccessQuery, NQuery::TTxControl::NoTx()).ExtractValueSync();
     });
     if (!result.IsSuccess()) {
         return Result<TRestoreResult>(EStatus::PRECONDITION_FAILED, TStringBuilder()
@@ -1539,7 +1545,7 @@ TRestoreResult TRestoreClient::CheckSecretExistence(const TString& secretName) {
     }
 
     result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
-        return session.ExecuteQuery(drop, NQuery::TTxControl::NoTx()).ExtractValueSync();
+        return session.ExecuteQuery(dropAccessQuery, NQuery::TTxControl::NoTx()).ExtractValueSync();
     });
     if (!result.IsSuccess()) {
         return Result<TRestoreResult>(EStatus::INTERNAL_ERROR, TStringBuilder()
@@ -1555,7 +1561,10 @@ TRestoreResult TRestoreClient::RestoreReplication(
     const TString& dbPathRelativeToRestoreRoot,
     const TRestoreSettings& settings)
 {
-    LOG_D("Process " << fsPath.GetPath().Quote());
+    LOG_D("Process " << "fsPath=" << fsPath.GetPath().Quote() << ", dbRestoreRoot=" << dbRestoreRoot.Quote()
+        << ", dbPathRelativeToRestoreRoot=" << dbPathRelativeToRestoreRoot.Quote());
+    Cerr << "Process " << "fsPath=" << fsPath.GetPath().Quote() << ", dbRestoreRoot=" << dbRestoreRoot.Quote()
+        << ", dbPathRelativeToRestoreRoot=" << dbPathRelativeToRestoreRoot.Quote() << Endl;
 
     const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
     LOG_I("Restore async replication " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
@@ -1565,9 +1574,16 @@ TRestoreResult TRestoreClient::RestoreReplication(
     }
 
     auto query = ReadAsyncReplicationQuery(fsPath, Log.get());
-    if (const auto secretName = GetSecretName(query)) {
+    if (auto secretName = GetSecretName(query)) {
+        if (secretName.StartsWith('/')) {
+            secretName = RewriteAbsolutePath(secretName, GetDatabase(query), dbRestoreRoot);
+        }
         if (auto result = CheckSecretExistence(secretName); !result.IsSuccess()) {
             return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
+        }
+        NYql::TIssues issues;
+        if (!RewriteCreateQuery(query, "PASSWORD_SECRET_NAME = '{}'", secretName, issues)) { // change to path!!!!!!
+           return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
         }
     }
 

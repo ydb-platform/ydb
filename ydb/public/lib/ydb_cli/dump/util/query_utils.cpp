@@ -261,7 +261,11 @@ TString GetSecretName(const TString& query) {
     TString secretName;
     if (auto pwd = GetToken(query, R"(PASSWORD_SECRET_NAME = ')")) {
         secretName = std::move(pwd);
+    } else if (auto token = GetToken(query, R"(PASSWORD_SECRET_PATH = ')")) {
+        secretName = std::move(token);
     } else if (auto token = GetToken(query, R"(TOKEN_SECRET_NAME = ')")) {
+        secretName = std::move(token);
+    } else if (auto token = GetToken(query, R"(TOKEN_SECRET_PATH = ')")) {
         secretName = std::move(token);
     }
 

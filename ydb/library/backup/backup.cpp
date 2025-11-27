@@ -768,18 +768,25 @@ inline TString Interval(const TDuration& value) {
     return TStringBuilder() << "Interval('PT" << value.Seconds() << "S')";
 }
 
+TString GetSecretSettingName(TStringBuf secretName, const TString& secretSettingPrefix) {
+    return secretName.StartsWith('/') ? secretSettingPrefix + "_PATH" : secretSettingPrefix + "_NAME";
+}
+
 void AddConnectionOptions(const NReplication::TConnectionParams& connectionParams, TVector<TString>& options) {
     options.push_back(BuildOption("CONNECTION_STRING", Quote(BuildConnectionString(connectionParams))));
     switch (connectionParams.GetCredentials()) {
-        case NReplication::TConnectionParams::ECredentials::Static:
+        case NReplication::TConnectionParams::ECredentials::Static: {
             options.push_back(BuildOption("USER", Quote(connectionParams.GetStaticCredentials().User)));
-            options.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(connectionParams.GetStaticCredentials().PasswordSecretName)));
+            const auto& secretName = connectionParams.GetStaticCredentials().PasswordSecretName;
+            options.push_back(BuildOption(GetSecretSettingName(secretName, "PASSWORD_SECRET").c_str(), Quote(secretName)));
             break;
-        case NReplication::TConnectionParams::ECredentials::OAuth:
-            if (const auto& secret = connectionParams.GetOAuthCredentials().TokenSecretName; !secret.empty()) {
-                options.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(secret)));
+        }
+        case NReplication::TConnectionParams::ECredentials::OAuth: {
+            if (const auto& secretName = connectionParams.GetOAuthCredentials().TokenSecretName; !secretName.empty()) {
+                options.push_back(BuildOption(GetSecretSettingName(secretName, "TOKEN_SECRET").c_str(), Quote(secretName)));
             }
             break;
+        }
     }
 }
 

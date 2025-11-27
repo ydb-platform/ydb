@@ -669,7 +669,7 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 
 void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvProxyResponse");
-    
+
     AFL_ENSURE(IsSucess(ev))("e", ev->Get()->Response->DebugString());
 }
 
@@ -710,7 +710,7 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         AFL_ENSURE(res)("o", result.GetOffset());
 
         for (auto& attr : *proto.MutableMessageMeta()) {
-            if (attr.key() == NMessageConsts::MessageId) {
+            if (attr.key() == MESSAGE_KEY) {
                 messageGroupId = std::move(*attr.mutable_value());
             } else if (attr.key() == NMessageConsts::DelaySeconds) {
                 delaySeconds = std::stoul(attr.value());

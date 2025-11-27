@@ -2,6 +2,7 @@
 
 #include "stats.h"
 
+#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/common/container.h>
 
@@ -115,7 +116,7 @@ public:
             return res;
         }
 
-        NJson::TJsonValue GetValue() const;
+        NArrow::NAccessor::TBinaryJsonValueView GetValue() const;
 
         bool HasValue() const {
             AFL_VERIFY(IsValid());

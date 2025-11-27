@@ -116,14 +116,6 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
         SerializedGUCSettings = GUCSettings->SerializeToString();
     }
 
-    if (!Database) {
-        // a piece of magic for tests
-        if (const auto& domain = AppData()->DomainsInfo->Domain) {
-            Database = TStringBuilder() << '/' << domain->Name;
-            LOG_E("Database not set, use " << Database);
-        }
-    }
-
     if (LimitCPU(UserRequestContext)) {
         TasksGraph.GetMeta().SinglePartitionOptAllowed = false;
     }

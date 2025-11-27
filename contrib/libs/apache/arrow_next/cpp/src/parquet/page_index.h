@@ -18,10 +18,10 @@
 
 #pragma once
 
-#include "arrow/io/interfaces.h"
-#include "parquet/encryption/type_fwd.h"
-#include "parquet/type_fwd.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 #include <optional>
 #include <vector>

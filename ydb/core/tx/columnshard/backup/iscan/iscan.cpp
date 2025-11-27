@@ -96,18 +96,18 @@ public:
         TVector<TSerializedCellVec> Batch;
         bool IsLast = false;
         bool NeedResult = false;
-        
+
         void Clear() {
             Batch.clear();
             Position = 0;
             IsLast = false;
             NeedResult = true;
         }
-        
+
         TSerializedCellVec& GetRow() {
             return Batch[Position];
         }
-        
+
         bool HasMoreRows() const {
             return Position < Batch.size();
         }
@@ -170,23 +170,49 @@ public:
             return;
         }
         DrainQueue();
-        SendResult(false);
+        SendIntermediateResult();
         MarkAsLast();
     }
 
-    void SendResult(bool isFinal) {
-        if (isFinal) {
-            AFL_VERIFY(!CurrentBatch.HasMoreRows() && CurrentBatch.NeedResult);
-        }
-        
-        if (!CurrentBatch.HasMoreRows()  && (isFinal || !CurrentBatch.IsLast) && CurrentBatch.NeedResult) {
-            Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(isFinal));
-            if (isFinal) {
-                Exporter->Finish(NTable::EStatus::Done);
-                PassAway();
-            }
+    void SendIntermediateResult() {
+        if (!CurrentBatch.HasMoreRows() && !CurrentBatch.IsLast && CurrentBatch.NeedResult) {
+            Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(false));
             CurrentBatch.NeedResult = false;
         }
+    }
+    
+    void SendFinalResult() {
+        auto result = Exporter->Finish(NTable::EStatus::Done);
+        auto* scanProduct = static_cast<NDataShard::TExportScanProduct*>(result.Get());
+        switch (scanProduct->Outcome) {
+            case NDataShard::EExportOutcome::Success:
+                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
+                    ("component", "TUploaderActor")
+                    ("reason", "successfully finished")
+                    ("bytes_read", scanProduct->BytesRead)
+                    ("rows_read", scanProduct->RowsRead);
+                Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(true));
+                break;
+            case NDataShard::EExportOutcome::Error:
+                Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+                    ("component", "TUploaderActor")
+                    ("reason", "error")
+                    ("error", scanProduct->Error)
+                    ("bytes_read", scanProduct->BytesRead)
+                    ("rows_read", scanProduct->RowsRead);
+                break;
+            case NDataShard::EExportOutcome::Aborted:
+                Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+                    ("component", "TUploaderActor")
+                    ("reason", "aborted")
+                    ("error", scanProduct->Error)
+                    ("bytes_read", scanProduct->BytesRead)
+                    ("rows_read", scanProduct->RowsRead);
+                break;
+        }
+        PassAway();
     }
 
     void DrainQueue() {
@@ -201,12 +227,12 @@ public:
             if (!CurrentBatch.HasMoreRows()) {
                 auto batch = DataQueue.front();
                 DataQueue.pop();
-                SendResult(false);
+                SendIntermediateResult();
 
                 if (!batch.Data) {
                     CurrentBatch.Clear();
                     CurrentBatch.IsLast = batch.IsLast;
-                    SendResult(false);
+                    SendIntermediateResult();
                     continue;
                 }
 
@@ -215,19 +241,19 @@ public:
                     Fail(result.GetErrorMessage());
                     return;
                 }
-                
+
                 CurrentBatch.Clear();
                 CurrentBatch.IsLast = batch.IsLast;
                 CurrentBatch.Batch = result.DetachResult();
             }
-            
+
             FeedRowsToExporter();
             if (LastState == NTable::EScan::Sleep) {
                 return;
             }
         }
     }
-    
+
     void FeedRowsToExporter() {
         while (CurrentBatch.HasMoreRows()) {
             auto& row = CurrentBatch.GetRow();
@@ -248,8 +274,7 @@ public:
     void Handle(const TEvPrivate::TEvBackupExportState::TPtr& ev) {
         const auto& event = *ev.Get()->Get();
         if (event.State == NTable::EScan::Final) {
-            SendResult(true);
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("reason", "successfully finished");
+            SendFinalResult();
             return;
         }
         LastState = event.State;
@@ -285,7 +310,7 @@ private:
         }
         return columnTypes;
     }
-    
+
 
 
 private:

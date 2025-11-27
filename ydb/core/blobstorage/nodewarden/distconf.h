@@ -266,7 +266,7 @@ namespace NKikimr::NStorage {
         ui64 BindingCookie = RandomNumber<ui64>();
         TBindQueue BindQueue;
         TBindQueue RevBindQueue;
-        TBindQueue PrimaryPileBindQueue;
+        TBindQueue OtherPilesBindQueue;
         bool Scheduled = false;
 
         // incoming bindings
@@ -282,7 +282,7 @@ namespace NKikimr::NStorage {
         std::deque<TAutoPtr<IEventHandle>> PendingEvents;
         std::vector<ui32> NodeIdsForOutgoingBinding;
         std::vector<ui32> NodeIdsForIncomingBinding;
-        std::vector<ui32> NodeIdsForPrimaryPileOutgoingBinding;
+        std::vector<ui32> NodeIdsForOtherPilesOutgoingBinding;
         THashMap<ui32, TNodeIdentifier> AllNodeIds;
         THashSet<ui32> NodesFromSamePile;
         TNodeIdentifier SelfNode;
@@ -319,7 +319,6 @@ namespace NKikimr::NStorage {
         ui64 ScepterCounter = 1; // increased every time Scepter gets changed
         TString ErrorReason;
         std::optional<TString> CurrentSelfAssemblyUUID;
-        bool LocalPileQuorum = false;
         bool GlobalQuorum = false;
         bool QuorumValid = false;
 
@@ -419,7 +418,6 @@ namespace NKikimr::NStorage {
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
         void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig);
-        void UnbindNodesFromOtherPiles(const char *reason);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes

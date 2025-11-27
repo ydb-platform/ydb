@@ -7,16 +7,21 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
     auto setup = std::make_shared<TTopicSdkTestSetup>("TODO");
     setup->GetServer().EnableLogs({
             NKikimrServices::PQ_MLP_READER,
+            NKikimrServices::PQ_MLP_WRITER,
             NKikimrServices::PQ_MLP_COMMITTER,
             NKikimrServices::PQ_MLP_UNLOCKER,
             NKikimrServices::PQ_MLP_DEADLINER,
             NKikimrServices::PQ_MLP_CONSUMER,
             NKikimrServices::PQ_MLP_ENRICHER,
             NKikimrServices::PQ_MLP_DLQ_MOVER,
+        },
+        NActors::NLog::PRI_DEBUG
+    );
+    setup->GetServer().EnableLogs({
             NKikimrServices::PERSQUEUE,
             NKikimrServices::PERSQUEUE_READ_BALANCER,
         },
-        NActors::NLog::PRI_DEBUG
+        NActors::NLog::PRI_INFO
     );
     return setup;
 }
@@ -43,8 +48,9 @@ void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topi
     setup->GetServer().WaitInit(GetTopicPath(topicName));
 }
 
-void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName) {
+void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount) {
     return CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
+            .PartitioningSettings(partitionCount, partitionCount)
             .BeginAddSharedConsumer(consumerName)
                 .KeepMessagesOrder(false)
                 .BeginDeadLetterPolicy()
@@ -65,6 +71,15 @@ TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&
     runtime.DispatchEvents();
 
     return readerId;
+}
+
+TActorId CreateWriterActor(NActors::TTestActorRuntime& runtime, TWriterSettings&& settings) {
+    auto edgeId = runtime.AllocateEdgeActor();
+    auto actorId = runtime.Register(CreateWriter(edgeId, std::move(settings)));
+    runtime.EnableScheduleForActor(actorId);
+    runtime.DispatchEvents();
+
+    return actorId;
 }
 
 TActorId CreateCommitterActor(NActors::TTestActorRuntime& runtime, TCommitterSettings&& settings) {
@@ -109,6 +124,10 @@ THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtim
 
 THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return runtime.GrabEdgeEvent<TEvReadResponse>(timeout);
+}
+
+THolder<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+    return runtime.GrabEdgeEvent<TEvWriteResponse>(timeout);
 }
 
 THolder<TEvChangeResponse> GetChangeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {

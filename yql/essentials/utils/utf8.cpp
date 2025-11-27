@@ -13,7 +13,7 @@ unsigned char GetRange(unsigned char c) {
     // Referring to DFA of http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
     // With new mapping 1 -> 0x10, 7 -> 0x20, 9 -> 0x40, such that AND operation can test multiple types.
     // clang-format off
-    static const unsigned char type[] = {
+    static const unsigned char Type[] = {
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -26,7 +26,7 @@ unsigned char GetRange(unsigned char c) {
         10,3,3,3,3,3,3,3,3,3,3,3,3,4,3,3, 11,6,6,6,5,8,8,8,8,8,8,8,8,8,8,8,
     };
     // clang-format on
-    return type[c];
+    return Type[c];
 }
 
 struct TByteRange {

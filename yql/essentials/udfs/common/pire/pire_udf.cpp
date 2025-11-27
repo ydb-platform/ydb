@@ -70,14 +70,14 @@ public:
     };
 
     static const TStringRef& Name(bool surroundMode, bool multiMode) {
-        static auto match = TStringRef::Of("Match");
-        static auto grep = TStringRef::Of("Grep");
-        static auto multiMatch = TStringRef::Of("MultiMatch");
-        static auto multiGrep = TStringRef::Of("MultiGrep");
+        static auto Match = TStringRef::Of("Match");
+        static auto Grep = TStringRef::Of("Grep");
+        static auto MultiMatch = TStringRef::Of("MultiMatch");
+        static auto MultiGrep = TStringRef::Of("MultiGrep");
         if (surroundMode) {
-            return multiMode ? multiGrep : grep;
+            return multiMode ? MultiGrep : Grep;
         } else {
-            return multiMode ? multiMatch : match;
+            return multiMode ? MultiMatch : Match;
         }
     }
 
@@ -106,17 +106,17 @@ public:
                     if (!part.empty()) {
                         if (Fsm_) {
                             try {
-                                *Fsm_ = *Fsm_ | TFsm(TString(part), options);
+                                *Fsm_ = *Fsm_ | TFsm(part, options);
                             } catch (const yexception&) {
                                 UdfTerminate((TStringBuilder() << Pos_ << " Failed to glue up regexes, probably the finite state machine appeared to be too large").c_str());
                             }
                         } else {
-                            Fsm_.Reset(new TFsm(TString(part), options));
+                            Fsm_.Reset(new TFsm(part, options));
                         }
                     }
                 }
             } else {
-                Fsm_.Reset(new TFsm(TString(regex), options));
+                Fsm_.Reset(new TFsm(regex, options));
             }
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
@@ -190,8 +190,8 @@ public:
     };
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Capture");
-        return name;
+        static auto Name = TStringRef::Of("Capture");
+        return Name;
     }
 
     TPireCapture(const TUnboxedValuePod& runConfig, TSourcePosition pos)
@@ -200,7 +200,7 @@ public:
         std::string_view regex(runConfig.AsStringRef());
         TFsm::TOptions options;
         SetCommonOptions(regex, options);
-        Fsm_.Reset(new TSlowCapturingFsm(TString(regex), options));
+        Fsm_.Reset(new TSlowCapturingFsm(regex, options));
     }
 
 private:
@@ -245,8 +245,8 @@ public:
     };
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Replace");
-        return name;
+        static auto Name = TStringRef::Of("Replace");
+        return Name;
     }
 
     TPireReplace(const TUnboxedValuePod& runConfig, TSourcePosition pos)
@@ -255,7 +255,7 @@ public:
         std::string_view regex(runConfig.AsStringRef());
         TFsm::TOptions options;
         SetCommonOptions(regex, options);
-        Fsm_.Reset(new TSlowCapturingFsm(TString(regex), options));
+        Fsm_.Reset(new TSlowCapturingFsm(regex, options));
     }
 
 private:

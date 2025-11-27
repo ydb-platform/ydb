@@ -35,7 +35,8 @@ namespace NKikimr {
             void Bootstrap(const TActorContext &ctx) {
                 KeepState.Init(
                     std::make_shared<TActorNotify>(ctx.ActorSystem(), ctx.SelfID),
-                    std::make_shared<TActorSystemLoggerCtx>(ctx.ActorSystem()));
+                    std::make_shared<TActorSystemLoggerCtx>(ctx.ActorSystem()),
+                    ctx.SelfID);
                 PerformActions(ctx);
                 Become(&TThis::StateFunc);
             }
@@ -239,7 +240,10 @@ namespace NKikimr {
             // for tests/debug purposes only, remove almost all log
             void Handle(TEvBlobStorage::TEvVBaldSyncLog::TPtr &ev, const TActorContext &ctx) {
                 Y_UNUSED(ev);
-                KeepState.BaldLogEvent();
+                bool dropChunksExplicitly = ev->Get()->Record.HasDropChunksExplicitly()
+                        ? ev->Get()->Record.GetDropChunksExplicitly()
+                        : false;
+                KeepState.BaldLogEvent(dropChunksExplicitly);
                 PerformActions(ctx);
             }
 
@@ -296,7 +300,7 @@ namespace NKikimr {
                 : TActorBootstrapped<TSyncLogKeeperActor>()
                 , SlCtx(std::move(slCtx))
                 , KeepState(SlCtx, std::move(repaired), SlCtx->SyncLogMaxMemAmount, SlCtx->SyncLogMaxDiskAmount,
-                    SlCtx->SyncLogMaxEntryPointSize, SelfId())
+                    SlCtx->SyncLogMaxEntryPointSize)
             {}
         };
 

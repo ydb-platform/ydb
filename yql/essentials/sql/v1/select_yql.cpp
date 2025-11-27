@@ -179,7 +179,9 @@ public:
         if (!InitProjection(ctx, src) ||
             !InitSource(ctx, src) ||
             (Where && !Where->GetRef().Init(ctx, src)) ||
-            !InitOrderBy(ctx, src)) {
+            !InitOrderBy(ctx, src) ||
+            (Limit && !Limit->GetRef().Init(ctx, src)) ||
+            (Offset && !Offset->GetRef().Init(ctx, src))) {
             return false;
         }
 
@@ -374,13 +376,14 @@ private:
         return Y(BuildYqlResultItem("", Y("YqlStar")));
     }
 
-    TNodePtr BuildYqlResultItem(TString name, const TNodePtr& term) const {
+    TNodePtr BuildYqlResultItem(TString name, TNodePtr term) const {
         name = DisambiguatedResultItemName(std::move(name), term);
-        return Y("YqlResultItem", Q(name), Y("Void"), Y("lambda", Q(Y()), term));
+        return Y("YqlResultItem", Q(std::move(name)), Y("Void"), Y("lambda", Q(Y()), std::move(term)));
     }
 
     TString DisambiguatedResultItemName(TString name, const TNodePtr& term) const {
-        if (const auto* source = term->GetSourceName(); source && 1 < Source->Sources.size()) {
+        if (const auto* source = term->GetSourceName();
+            source && Source && 1 < Source->Sources.size()) {
             name.prepend(".").prepend(*source);
         }
 
@@ -388,7 +391,8 @@ private:
     }
 
     TMaybe<TNodePtr> BuildFromElement(TContext& ctx, const TYqlSource& source) const {
-        const auto build = [this](TNodePtr node, TString name = "") {
+        const auto build = [this](TNodePtr node, TString name) {
+            YQL_ENSURE(!name.empty(), "An empty source name is unsupported");
             return Q(Y(
                 std::move(node),
                 Q(std::move(name)),
@@ -396,7 +400,7 @@ private:
         };
 
         if (!source.Alias) {
-            return build(source.Node);
+            return build(source.Node, ctx.MakeName("_yql_source_"));
         }
 
         if (auto& columns = source.Alias->Columns) {
@@ -446,6 +450,11 @@ private:
 
     TNodePtr Node_;
 };
+
+bool IsYqlSource(const TNodePtr& node) {
+    return dynamic_cast<TYqlSelectNode*>(node.Get()) ||
+           dynamic_cast<TYqlValuesNode*>(node.Get());
+}
 
 class TYqlStatementNode final: public INode {
 public:
@@ -518,6 +527,105 @@ private:
     TNodePtr Node_;
 };
 
+class TYqlSubLinkNode final: public INode {
+public:
+    struct TScalar {
+    };
+
+    struct TExists {
+    };
+
+    struct TIn {
+        TNodePtr Expression;
+    };
+
+    using TVariant = std::variant<
+        TScalar,
+        TExists,
+        TIn>;
+
+    TYqlSubLinkNode(TNodePtr source, TVariant variant)
+        : INode(source->GetPos())
+        , Source_(Unbox(std::move(source)))
+        , Variant_(std::move(variant))
+    {
+        YQL_ENSURE(IsYqlSource(Source_));
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!Source_->Init(ctx, src) ||
+            !Init(ctx, src, Variant_)) {
+            return false;
+        }
+
+        Node_ = ToSubLink(Source_, Variant_);
+        return true;
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        return Node_->Translate(ctx);
+    }
+
+    TNodePtr DoClone() const override {
+        return new TYqlSubLinkNode(*this);
+    }
+
+    TNodePtr Source() const {
+        YQL_ENSURE(
+            std::holds_alternative<TScalar>(Variant_),
+            "Only a scalar subquery can be a box for a select");
+        return Source_;
+    }
+
+private:
+    bool Init(TContext& ctx, ISource* src, const TVariant& variant) {
+        return std::visit(
+            TOverloaded{
+                [&](const TScalar&) { return true; },
+                [&](const TExists&) { return true; },
+                [&](const TIn& x) { return Init(ctx, src, x); },
+            }, variant);
+    }
+
+    bool Init(TContext& ctx, ISource* src, const TIn& in) {
+        return in.Expression->Init(ctx, src);
+    }
+
+    TNodePtr ToSubLink(TNodePtr source, const TVariant& variant) {
+        source = Y("lambda", Q(Y()), std::move(source));
+        return std::visit(
+            TOverloaded{
+                [&](const TScalar& x) { return ToSubLink(std::move(source), x); },
+                [&](const TExists& x) { return ToSubLink(std::move(source), x); },
+                [&](const TIn& x) { return ToSubLink(std::move(source), x); },
+            }, variant);
+    }
+
+    TNodePtr ToSubLink(TNodePtr lambda, const TScalar&) {
+        return Y("YqlSubLink", Q("expr"), Y("Void"), Y("Void"), Y("Void"), std::move(lambda));
+    }
+
+    TNodePtr ToSubLink(TNodePtr lambda, const TExists&) {
+        return Y("YqlSubLink", Q("exists"), Y("Void"), Y("Void"), Y("Void"), std::move(lambda));
+    }
+
+    TNodePtr ToSubLink(TNodePtr lambda, const TIn& in) {
+        TNodePtr compare = Y("lambda", Q(Y("value")), Y("==", in.Expression, "value"));
+        return Y("YqlSubLink", Q("any"), Y("Void"), Y("Void"), std::move(compare), std::move(lambda));
+    }
+
+    static TNodePtr Unbox(TNodePtr node) {
+        if (const auto* sub = dynamic_cast<const TYqlSubLinkNode*>(node.Get())) {
+            node = sub->Source();
+        }
+        return node;
+    }
+
+    TNodePtr Source_;
+    TVariant Variant_;
+    TNodePtr Node_;
+};
+
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args) {
     return new TYqlTableRefNode(std::move(position), std::move(args));
 }
@@ -528,6 +636,30 @@ TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args) {
 
 TNodePtr BuildYqlSelect(TPosition position, TYqlSelectArgs&& args) {
     return new TYqlSelectNode(std::move(position), std::move(args));
+}
+
+TNodePtr WrapYqlSelectSubExpr(TNodePtr node) {
+    if (IsYqlSource(node)) {
+        node = BuildYqlScalarSubquery(std::move(node));
+    }
+    return node;
+}
+
+TNodePtr BuildYqlScalarSubquery(TNodePtr node) {
+    TYqlSubLinkNode::TScalar variant = {};
+    return new TYqlSubLinkNode(std::move(node), std::move(variant));
+}
+
+TNodePtr BuildYqlExistsSubquery(TNodePtr node) {
+    TYqlSubLinkNode::TExists variant = {};
+    return new TYqlSubLinkNode(std::move(node), std::move(variant));
+}
+
+TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression) {
+    TYqlSubLinkNode::TIn variant = {
+        .Expression = std::move(expression),
+    };
+    return new TYqlSubLinkNode(std::move(node), std::move(variant));
 }
 
 TNodePtr BuildYqlStatement(TNodePtr node) {

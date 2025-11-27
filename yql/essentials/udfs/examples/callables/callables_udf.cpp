@@ -16,8 +16,8 @@ namespace {
 class TFromString: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("FromString");
-        return name;
+        static auto Name = TStringRef::Of("FromString");
+        return Name;
     }
 
 private:
@@ -37,8 +37,8 @@ private:
 class TSum: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Sum");
-        return name;
+        static auto Name = TStringRef::Of("Sum");
+        return Name;
     }
 
 private:
@@ -63,8 +63,8 @@ private:
 class TMul: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Mul");
-        return name;
+        static auto Name = TStringRef::Of("Mul");
+        return Name;
     }
 
 private:
@@ -93,8 +93,8 @@ using TNamedA = TNamedArg<i32, A>;
 class TNamedArgUdf: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("NamedArgUdf");
-        return name;
+        static auto Name = TStringRef::Of("NamedArgUdf");
+        return Name;
     }
 
 private:
@@ -114,8 +114,8 @@ private:
 class TReturnNamedArgCallable: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("ReturnNamedArgCallable");
-        return name;
+        static auto Name = TStringRef::Of("ReturnNamedArgCallable");
+        return Name;
     }
 
     TUnboxedValue Run(

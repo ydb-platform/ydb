@@ -140,8 +140,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef::Of("Create");
-        return nameRef;
+        static auto Name = TStringRef::Of("Create");
+        return Name;
     }
 
 private:
@@ -187,8 +187,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef::Of("AddValue");
-        return nameRef;
+        static auto Name = TStringRef::Of("AddValue");
+        return Name;
     }
 
 private:
@@ -237,8 +237,8 @@ public:
 
 public:
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef::Of("Serialize");
-        return nameRef;
+        static auto Name = TStringRef::Of("Serialize");
+        return Name;
     }
 
 private:
@@ -284,8 +284,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef::Of("Deserialize");
-        return nameRef;
+        static auto Name = TStringRef::Of("Deserialize");
+        return Name;
     }
 
 private:
@@ -333,8 +333,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef::Of("Merge");
-        return nameRef;
+        static auto Name = TStringRef::Of("Merge");
+        return Name;
     }
 
 private:
@@ -382,8 +382,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto nameRef = TStringRef::Of("GetResult");
-        return nameRef;
+        static auto Name = TStringRef::Of("GetResult");
+        return Name;
     }
 
 private:

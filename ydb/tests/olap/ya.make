@@ -21,6 +21,7 @@ PY3TEST()
         test_upsert.py
     )
     FORK_SUBTESTS()
+    SPLIT_FACTOR(100)
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)

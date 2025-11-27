@@ -7,6 +7,7 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
@@ -76,7 +77,7 @@ public:
             return std::string_view(view.data(), view.size());
         }
 
-        NJson::TJsonValue GetValue() const;
+        NArrow::NAccessor::TBinaryJsonValueView GetValue() const;
 
         bool HasValue() const {
             return !CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));

@@ -10,7 +10,7 @@ namespace NSQLTranslationV1 {
 using namespace NSQLv1Generated;
 
 TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
-    static const TMap<TString, ESQLWriteColumnMode> str2Mode = {
+    static const TMap<TString, ESQLWriteColumnMode> Str2Mode = {
         {"InsertInto", ESQLWriteColumnMode::InsertInto},
         {"InsertOrAbortInto", ESQLWriteColumnMode::InsertOrAbortInto},
         {"InsertOrIgnoreInto", ESQLWriteColumnMode::InsertOrIgnoreInto},
@@ -179,8 +179,8 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
         SqlIntoModeStr_ += "WithTruncate";
         SqlIntoUserModeStr_ += " ... WITH TRUNCATE";
     }
-    const auto iterMode = str2Mode.find(SqlIntoModeStr_);
-    YQL_ENSURE(iterMode != str2Mode.end(), "Invalid sql write mode string: " << SqlIntoModeStr_);
+    const auto iterMode = Str2Mode.find(SqlIntoModeStr_);
+    YQL_ENSURE(iterMode != Str2Mode.end(), "Invalid sql write mode string: " << SqlIntoModeStr_);
     const auto SqlIntoMode = iterMode->second;
 
     TPosition pos(Ctx_.Pos());

@@ -37,6 +37,12 @@ TEST(TCollectionHelpersTest, EmplaceDefault)
     EXPECT_EQ(map[0].Moves(), 0);
 }
 
+TEST(TCollectionHelpersTest, GetOrDefaultReferenceMoveOnly)
+{
+    THashMap<int, TMoveCounter> map;
+    EXPECT_EQ(GetOrDefaultReference(map, 0).Moves(), 0);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

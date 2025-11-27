@@ -208,8 +208,8 @@ private:
     }
 
     TExprNode::TPtr CurNode_;
-    TExprNode::TListType::const_iterator CurIt_;
-    TExprNode::TListType::const_iterator EndIt_;
+    TExprNode::TChildrenType::const_iterator CurIt_;
+    TExprNode::TChildrenType::const_iterator EndIt_;
 };
 
 template <typename TItem>

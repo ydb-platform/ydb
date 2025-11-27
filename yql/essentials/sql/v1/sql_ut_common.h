@@ -272,14 +272,14 @@ Y_UNIT_TEST(QualifiedAsteriskBefore) {
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        static bool seenStar = false;
+        static bool SeenStar = false;
         if (word == "FlattenMembers") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table."));
         } else if (word == "SqlProjectItem") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("megahelpful_len")));
-            UNIT_ASSERT_VALUES_EQUAL(seenStar, true);
+            UNIT_ASSERT_VALUES_EQUAL(SeenStar, true);
         } else if (word == "SqlProjectStarItem") {
-            seenStar = true;
+            SeenStar = true;
         }
     };
     TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("SqlProjectItem"), 0}, {TString("SqlProjectStarItem"), 0}};
@@ -296,14 +296,14 @@ Y_UNIT_TEST(QualifiedAsteriskAfter) {
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        static bool seenStar = false;
+        static bool SeenStar = false;
         if (word == "FlattenMembers") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table."));
         } else if (word == "SqlProjectItem") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("megahelpful_len")));
-            UNIT_ASSERT_VALUES_EQUAL(seenStar, false);
+            UNIT_ASSERT_VALUES_EQUAL(SeenStar, false);
         } else if (word == "SqlProjectStarItem") {
-            seenStar = true;
+            SeenStar = true;
         }
     };
     TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("SqlProjectItem"), 0}, {TString("SqlProjectStarItem"), 0}};
@@ -2794,7 +2794,8 @@ Y_UNIT_TEST(JoinByUdf) {
                "from T1 as a\n"
                "join T2 as b\n"
                "on Yson::SerializeJsonEncodeUtf8(a.align)=b.align;";
-    UNIT_ASSERT(SqlToYql(req).IsOk());
+    auto res = SqlToYql(req);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
 
 Y_UNIT_TEST(EscapedIdentifierAsLambdaArg) {
@@ -4693,9 +4694,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 Y_UNIT_TEST(UdfSyntaxSugarMissingCall) {
     auto req = "SELECT Udf(DateTime::FromString, \"foo\" as RunConfig);";
     auto res = SqlToYql(req);
-    TString a1 = Err2Str(res);
-    TString a2("<main>:1:8: Error: Abstract Udf Node can't be used as a part of expression.\n");
-    UNIT_ASSERT_NO_DIFF(a1, a2);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:1:8: Error: Abstract Udf Node can't be used as a part of expression.");
 }
 
 Y_UNIT_TEST(UdfSyntaxSugarIsNotCallable) {
@@ -9827,7 +9826,7 @@ Y_UNIT_TEST(SingleArg) {
 } // Y_UNIT_TEST_SUITE(AggregationPhases)
 
 Y_UNIT_TEST_SUITE(Watermarks) {
-Y_UNIT_TEST(Insert) {
+Y_UNIT_TEST(InsertAs) {
     const auto stmt = R"sql(
 USE plato;
 
@@ -9839,7 +9838,7 @@ WITH(
     SCHEMA(
         ts Timestamp,
     ),
-    WATERMARK AS (ts)
+    WATERMARK AS (CAST(ts AS TImestamp))
 );
 )sql";
     const auto& res = SqlToYql(stmt);
@@ -9847,7 +9846,7 @@ WITH(
     UNIT_ASSERT(res.IsOk());
 }
 
-Y_UNIT_TEST(Select) {
+Y_UNIT_TEST(SelectAs) {
     const auto stmt = R"sql(
 USE plato;
 
@@ -9858,7 +9857,45 @@ WITH(
     SCHEMA(
         ts Timestamp,
     ),
-    WATERMARK AS (ts)
+    WATERMARK AS (CAST(ts AS TImestamp))
+);
+)sql";
+    const auto& res = SqlToYql(stmt);
+    Err2Str(res, EDebugOutput::ToCerr);
+    UNIT_ASSERT(res.IsOk());
+}
+Y_UNIT_TEST(InsertEquals) {
+    const auto stmt = R"sql(
+USE plato;
+
+INSERT INTO Output
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK = CAST(ts AS TImestamp)
+);
+)sql";
+    const auto& res = SqlToYql(stmt);
+    Err2Str(res, EDebugOutput::ToCerr);
+    UNIT_ASSERT(res.IsOk());
+}
+
+Y_UNIT_TEST(SelectEquals) {
+    const auto stmt = R"sql(
+USE plato;
+
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK = CAST(ts AS TImestamp)
 );
 )sql";
     const auto& res = SqlToYql(stmt);
@@ -10768,9 +10805,34 @@ Y_UNIT_TEST(LangVer) {
         "YqlSelect is not available before 2025.04");
 }
 
+Y_UNIT_TEST(AutoTopLevel) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        USE plato;
+        SELECT * FROM my_table VIEW my_view;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AutoSubquery) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        USE plato;
+        SELECT * FROM my_table
+        WHERE a IN (SELECT a FROM my_table VIEW my_view);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(Minimal) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10785,7 +10847,7 @@ Y_UNIT_TEST(Minimal) {
 
 Y_UNIT_TEST(Expr) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10806,7 +10868,7 @@ Y_UNIT_TEST(Expr) {
 
 Y_UNIT_TEST(ResultColumnLabel) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10821,7 +10883,7 @@ Y_UNIT_TEST(ResultColumnLabel) {
 
 Y_UNIT_TEST(Asterisk) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10840,7 +10902,7 @@ Y_UNIT_TEST(Asterisk) {
 
 Y_UNIT_TEST(AsteriskInvalidLeft) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10854,7 +10916,7 @@ Y_UNIT_TEST(AsteriskInvalidLeft) {
 
 Y_UNIT_TEST(AsteriskInvalidRight) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10868,7 +10930,7 @@ Y_UNIT_TEST(AsteriskInvalidRight) {
 
 Y_UNIT_TEST(FromAnonValues) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10887,7 +10949,7 @@ Y_UNIT_TEST(FromAnonValues) {
 
 Y_UNIT_TEST(FromValues) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10908,7 +10970,7 @@ Y_UNIT_TEST(FromValues) {
 
 Y_UNIT_TEST(FromTableWithImmediateCluster) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10927,7 +10989,7 @@ Y_UNIT_TEST(FromTableWithImmediateCluster) {
 
 Y_UNIT_TEST(Where) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10946,7 +11008,7 @@ Y_UNIT_TEST(Where) {
 
 Y_UNIT_TEST(FromSubquery) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10963,7 +11025,7 @@ Y_UNIT_TEST(FromSubquery) {
 
 Y_UNIT_TEST(Join2) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10975,7 +11037,7 @@ Y_UNIT_TEST(Join2) {
 
 Y_UNIT_TEST(AsteriskJoin) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10990,7 +11052,7 @@ Y_UNIT_TEST(AsteriskJoin) {
 
 Y_UNIT_TEST(QualifiedAsteriskJoin) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11005,7 +11067,7 @@ Y_UNIT_TEST(QualifiedAsteriskJoin) {
 
 Y_UNIT_TEST(Join2Alias) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11019,7 +11081,7 @@ Y_UNIT_TEST(Join2Alias) {
 
 Y_UNIT_TEST(Join3) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11034,7 +11096,7 @@ Y_UNIT_TEST(Join3) {
 
 Y_UNIT_TEST(Join3Mix) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11049,7 +11111,7 @@ Y_UNIT_TEST(Join3Mix) {
 
 Y_UNIT_TEST(OrderBy) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11062,13 +11124,72 @@ Y_UNIT_TEST(OrderBy) {
 
 Y_UNIT_TEST(LimitOffset) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
         SELECT 1 LIMIT 2 OFFSET 3;
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(CorrelatedProjection) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT (SELECT a) FROM (VALUES (1)) AS x(a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(InSubqueryProjection) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT (1 IN (SELECT 1))
+        FROM (VALUES (1)) AS x(a)
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(InSubqueryWhere) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a
+        FROM (VALUES (1, 10)) AS x(a, b)
+        WHERE b IN (
+            SELECT y.b / 10 FROM (VALUES (1, 100)) AS y(a, b));
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(ExistsSubqueryWhere) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a
+        FROM (VALUES (1, 10)) AS x(a, b)
+        WHERE EXISTS (
+            SELECT y.b / 10
+            FROM (VALUES (1, 100)) AS y(a, b)
+            WHERE x.a == y.a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {
+        {TString("YqlSelect"), 0},
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 4);
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)

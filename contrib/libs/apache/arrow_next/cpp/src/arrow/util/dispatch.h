@@ -21,8 +21,8 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/status.h"
-#include "arrow/util/cpu_info.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/cpu_info.h"
 
 namespace arrow20 {
 namespace internal {

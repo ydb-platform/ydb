@@ -91,6 +91,8 @@ enum ECumulativeCounters {
     COUNTER_GROUP_LAYOUT_SANITIZER_BSC_ERR = 47 [(CounterOpts) = {Name: "GroupLayoutSanitizerBscErr"}];
 
     COUNTER_CONFIGCMD_CHANGE_GROUP_SIZE_IN_UNITS_USEC = 48 [(CounterOpts) = {Name: "ChangeGroupSizeInUnits"}];
+
+    COUNTER_CONFIGCMD_RECONFIGURE_VIRTUAL_GROUP_USEC = 49 [(CounterOpts) = {Name: "ReconfigureVirtualGroup"}];
 }
 
 enum EPercentileCounters {

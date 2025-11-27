@@ -193,6 +193,7 @@ sudo parted ${DISK} mklabel gpt -s
 sudo parted -a optimal ${DISK} mkpart primary 0% 100%
 sudo parted ${DISK} name 1 ydb_disk_ssd_01
 sudo partx --u ${DISK}
+sleep 5
 sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
 
 DISK=/dev/vdc
@@ -200,6 +201,7 @@ sudo parted ${DISK} mklabel gpt -s
 sudo parted -a optimal ${DISK} mkpart primary 0% 100%
 sudo parted ${DISK} name 1 ydb_disk_ssd_02
 sudo partx --u ${DISK}
+sleep 5
 sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_02
 
 DISK=/dev/vdd
@@ -207,7 +209,24 @@ sudo parted ${DISK} mklabel gpt -s
 sudo parted -a optimal ${DISK} mkpart primary 0% 100%
 sudo parted ${DISK} name 1 ydb_disk_ssd_03
 sudo partx --u ${DISK}
+sleep 5
 sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_03
+```
+
+### Проверьте себя
+
+Для проверки корректной разметки дисков выполните команду на каждом сервере кластера:
+
+```bash
+ls -al /dev/disk/by-partlabel/
+```
+
+В выводе команды должны быть созданные и размеченные вами диски
+
+```bash
+lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_01 -> ../../vdb1
+lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_02 -> ../../vdc1
+lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_03 -> ../../vdd1
 ```
 
 ## Подготовьте конфигурационные файлы {#config}

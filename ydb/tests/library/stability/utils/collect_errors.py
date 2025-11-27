@@ -118,7 +118,7 @@ class ErrorsCollector:
                     slot = f"{core.get('slot', '')}@{h}"
                     core_hashes.setdefault(slot, [])
                     v2_info = (core.get('core_id', ''), core.get('core_hash', ''))
-                    if v2_info[0] is None and v2_info[1] is None:
+                    if v2_info[0] is None and v2_info[1] is None or v2_info[0] == 0 and v2_info[1] == 0:
                         v3_info = (core.get('core_uuid_v3', ''), core.get('core_hash_v3', ''))
                         core_hashes[slot].append(v3_info)
                     else:
@@ -202,7 +202,8 @@ class ErrorsCollector:
         #   1. The entire VERIFY failed block (full match).
         #   2. The indented lines following the VERIFY failed header (typically stack trace or error details).
         #   3. Lines starting with a digit and a dot (e.g., stack frame lines), possibly repeated.
-        verify_regex_params = r'(VERIFY failed \(.+\): .*\n(\s+.*\n\s+.*\n)(\d+\..*\n)*)'
+
+        verify_regex_params = r'(VERIFY failed \(.+\):\s*.*\n(\s+.*\n\s+.*\n)(\d+\..*\n)*)'
         verify_regex = re.compile(verify_regex_params)
 
         core_processes = {

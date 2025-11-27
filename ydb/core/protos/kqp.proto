@@ -650,6 +650,7 @@ message TEvStartKqpTasksRequest {
     optional double PoolMaxCpuShare = 12; // used for TCPULimits for ColumnShards
     optional NKikimrDataEvents.ELockMode LockMode = 19;
     optional string UserToken = 20;
+    optional bool EnableWatermarks = 22 [default = false];
 
     reserved 15;
     reserved 16;

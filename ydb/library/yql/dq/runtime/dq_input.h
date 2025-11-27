@@ -3,7 +3,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node.h>
 
-#include "dq_async_stats.h" 
+#include "dq_async_stats.h"
 
 namespace NYql::NDq {
 
@@ -25,7 +25,7 @@ public:
     virtual bool Empty() const = 0;
 
     [[nodiscard]]
-    virtual bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) = 0;
+    virtual bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) = 0;
 
     virtual bool IsFinished() const = 0;
 

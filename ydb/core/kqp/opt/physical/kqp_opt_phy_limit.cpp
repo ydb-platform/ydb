@@ -404,6 +404,24 @@ TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const
         return node;
     }
 
+    // Only apply to full table scans (no WHERE clause filtering)
+    // When there's a WHERE clause, the Ranges() will not be TCoVoid
+    auto readTableRanges = input.Cast<TKqpReadTableRanges>();
+    if (!TCoVoid::Match(readTableRanges.Ranges().Raw())) {
+        return node;
+    }
+
+    // If there's a FlatMap, check if it's filtering (WHERE on non-key columns)
+    // We allow FlatMaps that add computed columns (ORDER BY alias), but reject filtering FlatMaps
+    // Filtering FlatMaps use OptionalIf/ListIf, while projection FlatMaps use Just/SingleAsList
+    if (maybeFlatMap) {
+        auto flatMapBody = maybeFlatMap.Cast().Lambda().Body();
+        // Check if the FlatMap body is conditional (filtering)
+        if (flatMapBody.Maybe<TCoOptionalIf>() || flatMapBody.Maybe<TCoListIf>()) {
+            return node;
+        }
+    }
+
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, GetReadTablePath(input, true));
 
     // Only for datashard tables

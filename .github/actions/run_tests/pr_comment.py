@@ -120,7 +120,7 @@ def format_completion_message(build_preset, test_size, test_targets, summary_con
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("::error::Usage: pr_comment.py <start|complete> [summary_file]")
+        print("::error::Usage: pr_comment.py <start|complete>")
         sys.exit(1)
     
     command = sys.argv[1]
@@ -147,24 +147,24 @@ if __name__ == "__main__":
         message = format_start_message(build_preset, test_size, test_targets)
         create_or_update_comment(pr_number, message, workflow_run_url)
     else:  # complete
-        summary_file = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("GITHUB_STEP_SUMMARY")
-        if not summary_file:
-            raise ValueError("Summary file path must be provided as argument or GITHUB_STEP_SUMMARY must be set")
-        
         status = os.environ.get("TEST_STATUS")
         if not status:
             raise ValueError("TEST_STATUS environment variable is not set")
         
-        if not os.path.exists(summary_file):
-            raise FileNotFoundError(f"Summary file not found: {summary_file}")
+        # Read summary from summary_text.txt in workspace
+        workspace = os.environ.get("GITHUB_WORKSPACE", os.getcwd())
+        summary_text_path = os.path.join(workspace, "summary_text.txt")
         
-        with open(summary_file, 'r', encoding='utf-8') as f:
-            summary_content = f.read()
-        
-        if summary_content.strip():
-            print(f"::notice::Read {len(summary_content)} characters from summary file")
+        summary_content = ""
+        if os.path.exists(summary_text_path):
+            with open(summary_text_path, 'r', encoding='utf-8') as f:
+                summary_content = f.read()
+            if summary_content.strip():
+                print(f"::notice::Read {len(summary_content)} characters from {summary_text_path}")
+            else:
+                print(f"::warning::Summary file {summary_text_path} is empty")
         else:
-            print(f"::warning::Summary file is empty")
+            print(f"::warning::Summary file not found: {summary_text_path}")
         
         message = format_completion_message(
             build_preset, test_size, test_targets,

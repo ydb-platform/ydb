@@ -22,7 +22,6 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 
     // StateQuery
 
-    ui32 CountSeq = -1;
     struct TColumnDesc {
         explicit TColumnDesc(ui32 tag, ui32 seq)
         : Tag(tag), Seq(seq)

@@ -100,10 +100,6 @@ private:
         ui32 curId = Udaf2Factory.size();
         size_t paramCount = 2;
         auto [it, emplaced] = Udaf2Factory.try_emplace(udafName, curId, udafName, paramCount);
-        if (emplaced) {
-            it->second.Id = curId;
-        }
-
         return it->second.Id;
     }
 
@@ -148,10 +144,14 @@ public:
     void OnStreamResult(NYdb::TResultSet&& resultSet) override {
         NYdb::TResultSetParser result(std::move(resultSet));
         if (!result.TryNextRow()) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "unexpected query result");
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "unexpected query result: expected row");
+            return;
         }
         if (result.ColumnsCount() != ColumnCount) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "unexpected columns count");
+            Finish(Ydb::StatusIds::INTERNAL_ERROR,
+                TStringBuilder() << "unexpected query result: expected "
+                << ColumnCount << " columns, got " << result.ColumnsCount());
+            return;
         }
 
         TVector<NYdb::TValue> resultColumns;
@@ -241,7 +241,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     TSelectBuilder builder;
 
     // TODO: many statistics types
-    CountSeq = builder.AddBuiltinAggregation({}, "count");
+    builder.AddBuiltinAggregation({}, "count");
     if (!ColumnTags.empty()) {
         for (const auto& colTag : ColumnTags) {
             auto colIt = columnNames.find(colTag);
@@ -282,14 +282,19 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         auto* column = record.AddColumns();
         column->SetTag(col.Tag);
 
-        auto cmsData = NYdb::TValueParser(result.AggColumns.at(col.Seq)).GetOptionalBytes();
-        if (!cmsData) {
-            cmsData = std::unique_ptr<TCountMinSketch>(
-                TCountMinSketch::Create(CMS_WIDTH, CMS_DEPTH))->AsStringBuf();
-        }
         auto* stat = column->AddStatistics();
         stat->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
-        stat->SetData(cmsData->data(), cmsData->size());
+        NYdb::TValueParser val(result.AggColumns.at(col.Seq));
+        val.OpenOptional();
+        if (!val.IsNull()) {
+            const auto& bytes = val.GetBytes();
+            stat->SetData(bytes.data(), bytes.size());
+        } else {
+            auto defaultVal = std::unique_ptr<TCountMinSketch>(
+                TCountMinSketch::Create(CMS_WIDTH, CMS_DEPTH));
+            auto bytes = defaultVal->AsStringBuf();
+            stat->SetData(bytes.data(), bytes.size());
+        }
     }
 
     Send(Parent, response.release());

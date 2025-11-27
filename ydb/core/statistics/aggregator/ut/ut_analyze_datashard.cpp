@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         Analyze(runtime, saTabletId, {pathId});
 
-        ValidateCountMinAbsense(runtime, pathId);
+        ValidateCountMinAbsence(runtime, pathId);
     }
 }
 

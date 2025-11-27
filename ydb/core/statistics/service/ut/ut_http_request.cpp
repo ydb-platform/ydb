@@ -12,8 +12,8 @@ void AnalyzeTest(bool isServerless) {
     TTestEnv env(1, 1);
     auto& runtime = *env.GetServer().GetRuntime();
     const auto databaseInfo = isServerless
-        ? CreateServerlessDatabaseColumnTables(env, 1, 10)
-        : CreateDatabaseColumnTables(env, 1, 10);
+        ? PrepareServerlessDatabaseColumnTables(env, 1, 10)
+        : PrepareDatabaseColumnTables(env, 1, 10);
     const auto& tableInfo = databaseInfo.Tables[0];
     const auto sender = runtime.AllocateEdgeActor();
 
@@ -35,8 +35,8 @@ void ProbeTest(bool isServerless) {
     TTestEnv env(1, 1);
     auto& runtime = *env.GetServer().GetRuntime();
     const auto databaseInfo = isServerless
-        ? CreateServerlessDatabaseColumnTables(env, 1, 10)
-        : CreateDatabaseColumnTables(env, 1, 10);
+        ? PrepareServerlessDatabaseColumnTables(env, 1, 10)
+        : PrepareDatabaseColumnTables(env, 1, 10);
     const auto& tableInfo = databaseInfo.Tables[0];
     TString columnName = "Value";
     const auto sender = runtime.AllocateEdgeActor();
@@ -54,7 +54,8 @@ void ProbeTest(bool isServerless) {
     runtime.WaitFor("TEvSchemeShardStats 2", [&]{ return secondStatsToSA; });
 
     const auto operationId = TULIDGenerator().Next(TInstant::Now()).ToBinary();
-    auto analyzeRequest = MakeAnalyzeRequest({{tableInfo.PathId, {1, 2}}}, operationId);
+    auto analyzeRequest = MakeAnalyzeRequest(
+        {{tableInfo.PathId, {1, 2}}}, operationId, "/Root/Database");
     runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
     runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 
@@ -85,7 +86,7 @@ void ProbeBaseStatsTest(bool isServerless) {
     } else {
         CreateDatabase(env, "Database");
     }
-    CreateColumnStoreTable(env, "Database", "Table", 5);
+    PrepareColumnTable(env, "Database", "Table", 5);
     const TString path = "/Root/Database/Table";
     const TPathId pathId = ResolvePathId(runtime, path);
     const ui32 nodeIdx = 1;
@@ -127,7 +128,7 @@ Y_UNIT_TEST_SUITE(HttpRequest) {
     Y_UNIT_TEST(Status) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
 
         const auto sender = runtime.AllocateEdgeActor();

@@ -2838,6 +2838,8 @@ message TStatisticsConfig {
     // from many SchemeShards.
     optional uint32 BaseStatsPropagateIntervalSecondsDedicated = 3 [default = 5];
     optional uint32 BaseStatsPropagateIntervalSecondsServerless = 4 [default = 180];
+
+    optional bool EnableBackgroundColumnStatsCollection = 5 [default = false];
 };
 
 message TSystemTabletBackupConfig {

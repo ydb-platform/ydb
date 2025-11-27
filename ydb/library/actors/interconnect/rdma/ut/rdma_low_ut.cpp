@@ -59,7 +59,7 @@ TEST_P(TCqMode, ReadInOneProcessIpV6) {
 TEST_P(TCqMode, ReadInOneProcessWithQpInterruption) {
     TString addr = "127.0.0.1";
 
-    auto rdma = InitLocalRdmaStuff(addr, NInterconnect::NRdma::ECqMode::POLLING);
+    auto rdma = InitLocalRdmaStuff(addr, GetParam());
 
     THolder<IThreadPool> pool = CreateThreadPool(2, 2);
     const int intialAttempts = 50000;

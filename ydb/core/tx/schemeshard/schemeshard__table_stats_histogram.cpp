@@ -345,7 +345,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     bool trySplitByLoad = !(rec.GetTableStats().GetKeyAccessSample().GetBuckets().empty());
 
-    if ((!trySplitBySize) && (!trySplitByLoad)) {
+    if (!trySplitBySize && !trySplitByLoad) {
         return true;
     }
 
@@ -365,15 +365,14 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
             << ", key access buckets " << rec.GetTableStats().GetKeyAccessSample().GetBuckets().size()
     );
 
-    const auto tableInfoIt = Self->Tables.find(tableId);
+    const TTableInfo::TPtr tableInfo = Self->Tables.Value(tableId, nullptr);
 
-    if (tableInfoIt == Self->Tables.end()) {
+    if (!tableInfo) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxPartitionHistogram Unknown table " << tableId << " tablet " << datashardId);
         return true;
     }
 
-    const TTableInfo::TPtr tableInfo = tableInfoIt->second;
     const auto shardIt = Self->TabletIdToShardIdx.find(datashardId);
 
     if (shardIt == Self->TabletIdToShardIdx.end()) {

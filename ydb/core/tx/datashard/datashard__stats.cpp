@@ -356,10 +356,8 @@ public:
         // Also return back the CPU usage data
         auto* resourceMetrics = Self->Executor()->GetResourceMetrics();
 
-        if ((resourceMetrics != nullptr) && (resourceMetrics->CPU.IsValueReady())) {
-            Result->Record.MutableTabletMetrics()->SetCPU(
-                resourceMetrics->CPU.GetValue()
-            );
+        if (resourceMetrics != nullptr) {
+            resourceMetrics->Fill(*(Result->Record.MutableTabletMetrics()));
         }
 
         return true;

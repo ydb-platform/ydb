@@ -356,18 +356,13 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         //       when the EvPeriodicTableStats message arrives from a follower
         //       because this operation should consider the CPU load on each specific
         //       follower (and the leader).
-        const TTableIndexInfo* index = Self->Indexes.Value(pathElement->ParentPathId, nullptr).Get();
-        const TTableInfo* mainTableForIndex = (index ? Self->GetMainTableForIndex(pathId) : nullptr);
+        const TTableInfo* mainTableForIndex = (Self->Indexes.contains(pathElement->ParentPathId))
+            ? Self->GetMainTableForIndex(pathId)
+            : nullptr;
 
         TString splitReason;
 
-        if (!(table->CheckSplitByLoad(
-            Self->SplitSettings,
-            shardIdx,
-            newStats.GetCurrentRawCpuUsage(),
-            mainTableForIndex,
-            splitReason
-        ))) {
+        if (!(table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, splitReason))) {
             LOG_DEBUG_S(
                 ctx,
                 NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -564,13 +559,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             "Do not want to split tablet " << datashardId << " by load,"
             << " its table already has "<< table->GetPartitions().size() << " out of " << table->GetMaxPartitionsCount() << " partitions");
         return true;
-    } else if (table->CheckSplitByLoad(
-        Self->SplitSettings,
-        shardIdx,
-        newStats.GetCurrentRawCpuUsage(),
-        mainTableForIndex,
-        reason
-    )) {
+    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, reason)) {
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "Want to split tablet " << datashardId << " by load: " << reason);
         collectKeySample = true;

@@ -66,15 +66,6 @@
 
 {% endcut %}
 
-## Создание директорий для работы {#prepare-directory}
-
-```bash
-mkdir deployment
-cd deployment
-mkdir inventory
-mkdir files
-```
-
 ## Настройка проекта Ansible {#ansible-project-setup}
 
 ### Установка {{ ydb-short-name }} Ansible плейбуков
@@ -102,7 +93,16 @@ mkdir files
 
 {% endlist %}
 
-### Настройка Ansible
+### Создание директорий для работы {#prepare-directory}
+
+```bash
+mkdir deployment
+cd deployment
+mkdir inventory
+mkdir files
+```
+
+### Создание конфигурационного файла Ansible
 
 Создайте `ansible.cfg` с конфигурацией Ansible, подходящей для вашего окружения. Подробности см. в [справочнике по конфигурации Ansible](https://docs.ansible.com/ansible/latest/reference_appendices/config.html). Дальнейшее руководство предполагает, что поддиректория `./inventory` рабочей директории настроена для использования файлов инвентаризации.
 
@@ -126,6 +126,7 @@ private_role_vars = True
 timeout = 5
 verbosity = 1
 log_path = ./ydb.log
+vault_password_file = ./ansible_vault_password_file
 
 [ssh_connection]
 retries = 5
@@ -267,6 +268,14 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 ### Изменение пароля пользователя root {#change-password}
 
+Создайте файл `ansible_vault_password_file` с содержимым:
+
+```
+password
+```
+
+Этот файл содержит пароль, который Ansible будет использовать для автоматического шифрования и расшифровки конфиденциальных данных, например, файлов с паролями пользователей. Благодаря этому пароли не хранятся в открытом виде в репозитории. Подробнее о работе механизма Ansible Vault можно прочитать в [официальной документации](https://docs.ansible.com/ansible/latest/vault_guide/index.html).
+
 Далее необходимо установить пароль для начального пользователя, указанного в настройке `ydb_user` (по умолчанию `root`). Этот пользователь изначально будет иметь полные права доступа в кластере, но при необходимости это можно изменить позже. Создайте `inventory/99-inventory-vault.yaml` со следующим содержимым (замените `<password>` на фактический пароль):
 
 ```yaml
@@ -277,7 +286,7 @@ all:
         ydb_password: <password>
 ```
 
-Зашифруйте этот файл с помощью команды `ansible-vault encrypt inventory/99-inventory-vault.yaml`. Это потребует либо вручную ввести пароль шифрования (который может отличаться), либо настроить параметр Ansible `vault_password_file`. Подробнее о том, как это работает, см. в [документации Ansible Vault](https://docs.ansible.com/ansible/latest/vault_guide/index.html).
+Зашифруйте этот файл с помощью команды `ansible-vault encrypt inventory/99-inventory-vault.yaml`.
 
 ### Подготовка конфигурационного файла {{ ydb-short-name }} {#ydb-config-prepare}
 

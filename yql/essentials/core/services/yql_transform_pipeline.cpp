@@ -195,6 +195,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                 }
                             }
                             std::exception_ptr lineageError;
+                            typeCtx->CorrectLineage = true;
                             try {
                                 calculatedLineage = CalculateLineage(*input, *typeCtx, ctx, false);
                             } catch (const std::exception& e) {
@@ -217,7 +218,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                 }
                                 YQL_LOG(INFO) << "Lineage replay is the same";
                             }
-                            if (typeCtx->QContext && typeCtx->QContext.CanWrite() && typeCtx->CorrectLineage) {
+                            if (typeCtx->QContext && typeCtx->QContext.CanWrite() && *typeCtx->CorrectLineage) {
                                 typeCtx->QContext.GetWriter()->Put({LineageComponent, LineageResultLabel}, calculatedLineage).GetValueSync();
                                 YQL_LOG(INFO) << "Lineage is saved to QStorage";
                             }

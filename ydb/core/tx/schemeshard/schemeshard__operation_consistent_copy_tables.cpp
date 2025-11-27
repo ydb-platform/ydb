@@ -9,15 +9,6 @@
 #include <util/generic/algorithm.h>
 
 static bool ShouldOmitAutomaticIndexProcessing(const NKikimrSchemeOp::TCopyTableConfig& descr) {
-    // Two scenarios require omitting automatic index impl table processing:
-    //
-    // 1. User explicitly requested via OmitIndexes flag
-    //    (e.g., export operations, user preference)
-    //
-    // 2. Incremental backup with CDC streams on index impl tables
-    //    Requires manual handling to pass CDC stream info (lines 258-285)
-    //    Detected by non-empty IndexImplTableCdcStreams map
-
     if (descr.GetOmitIndexes()) {
         return true;  // User explicitly wants to skip indexes
     }
@@ -41,9 +32,6 @@ static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath
     operation->SetOmitFollowers(descr.GetOmitFollowers());
     operation->SetIsBackup(descr.GetIsBackup());
     operation->SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
-    // For incremental backups with CDC streams on indexes, we handle index impl tables
-    // manually (lines 258-285) to pass CDC stream info. For regular copies and when
-    // user requests OmitIndexes, skip automatic index processing accordingly.
     operation->SetOmitIndexes(ShouldOmitAutomaticIndexProcessing(descr));
     if (descr.HasCreateSrcCdcStream()) {
         auto* coOp = scheme.MutableCreateCdcStream();
@@ -191,7 +179,7 @@ bool CreateConsistentCopyTables(
         }
 
         // Log information about the table being copied
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "CreateConsistentCopyTables: Processing table"
             << ", srcPath: " << srcPath.PathString()
             << ", dstPath: " << dstPath.PathString()
@@ -203,14 +191,14 @@ bool CreateConsistentCopyTables(
         if (context.SS->Tables.contains(srcPath.Base()->PathId)) {
             TTableInfo::TPtr tableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
             const auto& tableDesc = tableInfo->TableDescription;
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateConsistentCopyTables: Table info"
                 << ", tableIndexesSize: " << tableDesc.TableIndexesSize()
                 << ", isBackup: " << tableInfo->IsBackup);
 
             for (size_t i = 0; i < static_cast<size_t>(tableDesc.TableIndexesSize()); ++i) {
                 const auto& indexDesc = tableDesc.GetTableIndexes(i);
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Table has index in description"
                     << ", indexName: " << indexDesc.GetName()
                     << ", indexType: " << NKikimrSchemeOp::EIndexType_Name(indexDesc.GetType()));
@@ -223,7 +211,7 @@ bool CreateConsistentCopyTables(
             const auto& pathId = child.second;
             TPath childPath = srcPath.Child(name);
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateConsistentCopyTables: Child found"
                 << ", name: " << name
                 << ", pathId: " << pathId
@@ -241,30 +229,30 @@ bool CreateConsistentCopyTables(
             TPath dstIndexPath = dstPath.Child(name);
 
             if (srcIndexPath.IsDeleted()) {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Skipping deleted child: " << name);
                 continue;
             }
 
             if (srcIndexPath.IsSequence()) {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Skipping sequence child: " << name);
                 continue;
             }
 
             if (descr.GetOmitIndexes()) {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Skipping due to OmitIndexes: " << name);
                 continue;
             }
 
             if (!srcIndexPath.IsTableIndex()) {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Skipping non-index child: " << name);
                 continue;
             }
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateConsistentCopyTables: Creating index copy operation for: " << name);
 
             Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
@@ -282,7 +270,7 @@ bool CreateConsistentCopyTables(
                 Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcImplTablePathId);
                 TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Creating index impl table copy"
                     << ", srcImplTable: " << srcImplTable.PathString()
                     << ", dstImplTable: " << dstImplTable.PathString());

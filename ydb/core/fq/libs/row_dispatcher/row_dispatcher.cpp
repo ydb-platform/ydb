@@ -5,8 +5,8 @@
 #include "leader_election.h"
 #include "probes.h"
 
-#include "ydb/core/base/appdata_fwd.h"
-#include "ydb/core/base/feature_flags.h"
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>

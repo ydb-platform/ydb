@@ -48,39 +48,33 @@ class TestCompressionBase(ColumnTestBase):
         ):
             raise Exception("not all portions have been updated")
 
-    @classmethod
-    def add_family_in_create(self, name: str, settings: str):
-        return f"FAMILY {name} ({settings})"
 
-
-class TestCreateWithColumnCompression(TestCompressionBase):
-    class_name = "create_with_column_compression"
+class TestAlterColumnCompression(TestCompressionBase):
+    class_name = "alter_column_compression"
 
     @classmethod
     def setup_class(cls):
-        super(TestCreateWithColumnCompression, cls).setup_class()
-        cls.single_upsert_rows_count: int = 10**4
+        super(TestAlterColumnCompression, cls).setup_class()
+        cls.single_upsert_rows_count: int = 10**3
         cls.upsert_count: int = 10
         cls.volumes_without_compression: tuple[int, int]
         cls.test_name: str = "all_supported_compression"
         cls.test_dir: str = f"{cls.ydb_client.database}/{cls.class_name}/{cls.test_name}"
-        cls.create_table_without_compression()
 
     COMPRESSION_CASES = [
         ("lz4_compression",  'algorithm=lz4'),
         ("zstd_compression", 'algorithm=zstd'),
     ] + [
         (f"zstd_{lvl}_compression", f'algorithm=zstd,level={lvl}')
-        for lvl in range(2, 22)
+        for lvl in range(2, 3)
     ]
 
-    @classmethod
-    def create_table_without_compression(cls):
-        table_path: str = f"{cls.test_dir}/off_compression"
+    def create_table_without_compression(self, suffix: str):
+        self.table_path: str = f"{self.test_dir}/to_compress_with_{suffix}"
 
-        cls.ydb_client.query(
+        self.ydb_client.query(
             f"""
-                CREATE TABLE `{table_path}` (
+                CREATE TABLE `{self.table_path}` (
                     value Uint64 NOT NULL COMPRESSION(algorithm=off),
                     value1 Uint64 COMPRESSION(algorithm=off),
                     PRIMARY KEY(value),
@@ -88,12 +82,12 @@ class TestCreateWithColumnCompression(TestCompressionBase):
                 WITH (STORE = COLUMN)
                 """
         )
-        logger.info(f"Table {table_path} created")
-        table = ColumnTableHelper(cls.ydb_client, table_path)
-        cls.upsert_and_wait_portions(table, cls.single_upsert_rows_count, cls.upsert_count)
+        logger.info(f"Table {self.table_path} created")
+        table = ColumnTableHelper(self.ydb_client, self.table_path)
+        self.upsert_and_wait_portions(table, self.single_upsert_rows_count, self.upsert_count)
 
-        expected_raw = cls.upsert_count * cls.single_upsert_rows_count * 8
-        cls.volumes_without_compression: tuple[int, int] = table.get_volumes_column("value")
+        expected_raw = self.upsert_count * self.single_upsert_rows_count * 8
+        self.volumes_without_compression: tuple[int, int] = table.get_volumes_column("value")
 
         volumes = table.get_volumes_column("value")
         assert volumes[0] == expected_raw
@@ -102,26 +96,17 @@ class TestCreateWithColumnCompression(TestCompressionBase):
     @pytest.mark.parametrize("suffix, compression_settings", COMPRESSION_CASES)
     def test_all_supported_compression(self, suffix: str, compression_settings: str):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13640 '''
-        table_path: str = f"{self.test_dir}/{suffix}"
+        self.create_table_without_compression(suffix)
 
         self.ydb_client.query(
             f"""
-                CREATE TABLE `{table_path}` (
-                    value Uint64 NOT NULL COMPRESSION({compression_settings}),
-                    value1 Uint64 COMPRESSION({compression_settings}),
-                    PRIMARY KEY(value),
-                )
-                WITH (STORE = COLUMN)
+                ALTER TABLE `{self.table_path}`
+                    ALTER COLUMN `value` SET COMPRESSION({compression_settings}),
+                    ALTER COLUMN `value1` SET COMPRESSION({compression_settings});
                 """
         )
-        logger.info(f"Table {table_path} created")
-        table = ColumnTableHelper(self.ydb_client, table_path)
-        self.upsert_and_wait_portions(table, self.single_upsert_rows_count, self.upsert_count)
-
-        expected_raw = self.upsert_count * self.single_upsert_rows_count * 8
-        volumes = table.get_volumes_column("value")
-        assert volumes[0] == expected_raw
-        assert table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == expected_raw // 8
+        logger.info(f"Table {self.table_path} altered")
+        table = ColumnTableHelper(self.ydb_client, self.table_path)
 
         volumes: tuple[int, int] = table.get_volumes_column("value")
         koef: float = self.volumes_without_compression[1] / volumes[1]

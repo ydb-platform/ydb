@@ -1922,7 +1922,6 @@ public:
                             for (const auto setting : settings) {
                                 const auto sKV = setting.Cast<TExprList>();
                                 const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
-                                //const auto& settingValNode = sKV.Item(1);
                                 const auto& settingVal = sKV.Item(1).Ref();
                                 if (key == "algorithm" && settingVal.IsCallable("String")) {
                                     const auto algoVal = settingVal.Child(0)->Content();

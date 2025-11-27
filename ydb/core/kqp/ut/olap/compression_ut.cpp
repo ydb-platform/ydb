@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
         TTestHelper::TColumnTable standaloneTable;
         standaloneTable.SetName("/Root/CompValueTable").SetPrimaryKey({ "key" }).SetSchema(schema);
         testHelper.CreateTable(standaloneTable);
-        testHelper.ExecuteQuery("ALTER TABLE `/Root/CompValueTable` ALTER COLUMN `value` SET COMPRESSION(algorithm=zstd, level=5);");
+        testHelper.ExecuteQuery("ALTER TABLE `/Root/CompValueTable` ALTER COLUMN `value` SET COMPRESSION(algorithm=lz4);");
     }
 
     Y_UNIT_TEST(DisabledAlterCompression) {

@@ -270,15 +270,15 @@ public:
         // If we can't finish wr prosessing (no more wr to allocate without waiting) it means there are some verbs infligh so we can process it
         // from cq thread.
         if (!NonBlockingPolling) {
-            bool cont = false;
-            do {
+            while (true) {
                 if (VerbsBuildingState.Lock.TryAcquire()) {
-                    cont &= ProcessWr(VerbsBuildingState.CurCtx, VerbsBuildingState.PreparedWr, true);
+                    ProcessWr(VerbsBuildingState.CurCtx, VerbsBuildingState.PreparedWr, true);
                     VerbsBuildingState.Lock.Release();
-                } else {
-                    cont = MaybeIdle.load();
+                    return {};
+                } else if (!MaybeIdle.load()) {
+                    return {};
                 }
-            } while (cont);
+            }
         }
         return {};
     }
@@ -364,7 +364,9 @@ public:
                     MaybeIdle.store(true);
                     if (VerbsBuildingState.Lock.TryAcquire()) {
                         idleAllowed = !ProcessWr(VerbsBuildingState.CurCtx, VerbsBuildingState.PreparedWr, false);
-                        MaybeIdle.store(idleAllowed);
+                        if (!idleAllowed) {
+                            MaybeIdle.store(false);
+                        }
                         VerbsBuildingState.Lock.Release();
                     }
                     if (idleAllowed) {

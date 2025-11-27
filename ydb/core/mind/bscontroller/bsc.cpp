@@ -1215,7 +1215,7 @@ void TBlobStorageController::TStaticGroupInfo::UpdateStatus(TMonotonic mono, TBl
 
 void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageController *controller) {
     LayoutCorrect = true;
-    if (!Info || Info->IsBridged()) {
+    if (!Info || Info->IsBridged() || !controller->SelfManagementEnabled) {
         return;
     }
 

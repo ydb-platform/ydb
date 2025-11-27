@@ -315,6 +315,10 @@ TStatus CreateRateLimiter(
     return result;
 }
 
+bool IsSchemaSecret(TStringBuf secretName) {
+    return secretName.StartsWith('/');
+}
+
 } // anonymous
 
 namespace NPrivate {
@@ -1525,10 +1529,11 @@ TRestoreResult TRestoreClient::RestoreTopic(
 
 TRestoreResult TRestoreClient::CheckSecretExistence(const TString& secretName) {
     LOG_D("Check existence of the secret " << secretName.Quote());
+
     const auto tmpUser = CreateGuidAsString();
     TString createAccessQuery;
     TString dropAccessQuery;
-    if (!secretName.StartsWith('/')) {
+    if (!IsSchemaSecret(secretName)) {
         createAccessQuery = std::format("CREATE OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
         dropAccessQuery = std::format("DROP OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
     } else {
@@ -1563,8 +1568,6 @@ TRestoreResult TRestoreClient::RestoreReplication(
 {
     LOG_D("Process " << "fsPath=" << fsPath.GetPath().Quote() << ", dbRestoreRoot=" << dbRestoreRoot.Quote()
         << ", dbPathRelativeToRestoreRoot=" << dbPathRelativeToRestoreRoot.Quote());
-    Cerr << "Process " << "fsPath=" << fsPath.GetPath().Quote() << ", dbRestoreRoot=" << dbRestoreRoot.Quote()
-        << ", dbPathRelativeToRestoreRoot=" << dbPathRelativeToRestoreRoot.Quote() << Endl;
 
     const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
     LOG_I("Restore async replication " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
@@ -1575,7 +1578,7 @@ TRestoreResult TRestoreClient::RestoreReplication(
 
     auto query = ReadAsyncReplicationQuery(fsPath, Log.get());
     if (auto secretName = GetSecretName(query)) {
-        if (secretName.StartsWith('/')) {
+        if (IsSchemaSecret(secretName)) {
             secretName = RewriteAbsolutePath(secretName, GetDatabase(query), dbRestoreRoot);
         }
         if (auto result = CheckSecretExistence(secretName); !result.IsSuccess()) {

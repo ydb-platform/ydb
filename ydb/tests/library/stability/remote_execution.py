@@ -3,7 +3,6 @@
 """
 
 import os
-import re
 import subprocess
 import logging
 import yatest.common
@@ -612,7 +611,7 @@ def fix_binaries_directory_permissions(hosts: List[str], target_dir: str = '/tmp
 
 
 def execute_ssh(host: str, cmd: str):
-    local = re.is_localhost(host)
+    local = is_localhost(host)
     if local:
         ssh_cmd = cmd
     else:

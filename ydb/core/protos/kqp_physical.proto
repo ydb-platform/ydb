@@ -310,6 +310,7 @@ message TKqpPhyVectorTopK {
     Ydb.Table.VectorIndexSettings Settings = 2;
     TKqpPhyValue TargetVector = 3;
     TKqpPhyValue Limit = 4;
+    repeated uint32 DistinctColumns = 5;
 }
 
 message TKqpPhyCnStreamLookup {

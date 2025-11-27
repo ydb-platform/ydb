@@ -1670,15 +1670,21 @@ private:
         *vectorTopK.MutableSettings() = kmeansDesc.GetSettings().Getsettings();
 
         // Column index
+        THashMap<TStringBuf, ui32> readColumnIndexes;
         ui32 columnIdx = 0;
         for (const auto& column: streamLookupProto.GetColumns()) {
-            if (column == settings.VectorTopColumn) {
-                break;
-            }
-            columnIdx++;
+            readColumnIndexes[column] = columnIdx++;
         }
-        YQL_ENSURE(columnIdx < streamLookup.Columns().Size());
-        vectorTopK.SetColumn(columnIdx);
+        YQL_ENSURE(readColumnIndexes.contains(settings.VectorTopColumn));
+        vectorTopK.SetColumn(readColumnIndexes.at(settings.VectorTopColumn));
+
+        // Unique columns - required when we read from the index posting table and overlap is enabled
+        if (settings.VectorTopUnique) {
+            for (const auto& keyColumn: mainTable->Metadata->KeyColumnNames) {
+                YQL_ENSURE(readColumnIndexes.contains(keyColumn));
+                vectorTopK.AddDistinctColumns(readColumnIndexes.at(keyColumn));
+            }
+        }
 
         // Limit - may be a parameter which will be linked later
         TExprBase expr(settings.VectorTopLimit);

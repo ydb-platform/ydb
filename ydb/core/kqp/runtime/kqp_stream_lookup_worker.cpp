@@ -576,6 +576,7 @@ public:
         if (!IsKeyAllowed(cellVec)) {
             ResultRowsBySeqNo[rowSeqNo].AddJoinKey(joinKeyId);
             ResultRowsBySeqNo[rowSeqNo].OnJoinKeyFinished(HolderFactory, joinKeyId);
+            FlushRowsIfNeeded(rowSeqNo);
         } else {
             auto [it, success] = PendingLeftRowsByKey.emplace(cellVec, TJoinKeyInfo(joinKeyId));
             if (success) {
@@ -765,6 +766,7 @@ public:
                 YQL_ENSURE(it != PendingLeftRowsByKey.end());
                 for(ui64 seqNo : it->second.ResultSeqNos) {
                     ResultRowsBySeqNo.at(seqNo).OnJoinKeyFinished(HolderFactory, it->second.JoinKeyId);
+                    FlushRowsIfNeeded(seqNo);
                 }
                 PendingLeftRowsByKey.erase(it);
             }
@@ -813,13 +815,9 @@ public:
     }
 
     bool HasPendingResults() final {
-        auto nextSeqNo = KeepRowsOrder() ? ResultRowsBySeqNo.find(CurrentResultSeqNo) : ResultRowsBySeqNo.begin();
+        OrderedFlushRows();
 
-        if (nextSeqNo != ResultRowsBySeqNo.end() && !nextSeqNo->second.Rows.empty()) {
-            return true;
-        }
-
-        return false;
+        return !FlushedResultRows.empty();
     }
 
     void AddResult(TShardReadResult result) final {
@@ -847,7 +845,7 @@ public:
             for(auto seqNo: leftRowIt->second.ResultSeqNos) {
                 auto& resultRows = ResultRowsBySeqNo.at(seqNo);
                 resultRows.TryBuildResultRow(HolderFactory, rightRow);
-                YQL_ENSURE(IsRowSeqNoValid(seqNo));
+                FlushRowsIfNeeded(seqNo);
             }
         }
 
@@ -862,6 +860,7 @@ public:
             if (leftRowIt->second.FinishReadId(record.GetReadId())) {
                 for(ui64 seqNo : leftRowIt->second.ResultSeqNos) {
                     ResultRowsBySeqNo.at(seqNo).OnJoinKeyFinished(HolderFactory, leftRowIt->second.JoinKeyId);
+                    FlushRowsIfNeeded(seqNo);
                 }
 
                 PendingLeftRowsByKey.erase(leftRowIt);
@@ -878,7 +877,8 @@ public:
             && UnprocessedKeys.empty()
             && ReadStateByReadId.empty()
             && ResultRowsBySeqNo.empty()
-            && PendingLeftRowsByKey.empty();
+            && PendingLeftRowsByKey.empty()
+            && FlushedResultRows.empty();
     }
 
     void ResetRowsProcessing(ui64 readId) final {
@@ -919,45 +919,38 @@ public:
         ReadStateByReadId.erase(readIt);
     }
 
+    void OrderedFlushRows() {
+        if (!KeepRowsOrder()) {
+            return;
+        }
+
+        for(ui64 currentSeqNo = CurrentResultSeqNo; currentSeqNo == CurrentResultSeqNo; ++currentSeqNo) {
+            auto it = ResultRowsBySeqNo.find(currentSeqNo);
+            if (it == ResultRowsBySeqNo.end()) {
+                break;
+            }
+
+            FlushRowsIfNeeded(currentSeqNo);
+        }
+    }
+
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
         TReadResultStats resultStats;
         batch.clear();
 
-        auto getNextResult = [&]() {
-            if (!KeepRowsOrder()) {
-                return ResultRowsBySeqNo.begin();
-            }
+        OrderedFlushRows();
 
-            return ResultRowsBySeqNo.find(CurrentResultSeqNo);
-        };
+        while (!resultStats.SizeLimitExceeded && !FlushedResultRows.empty()) {
+            TResultBatch::TResultRow& row = FlushedResultRows.front();
 
-        while (!resultStats.SizeLimitExceeded) {
-            auto resultIt = getNextResult();
-            if (resultIt == ResultRowsBySeqNo.end()) {
+            if (resultStats.ResultRowsCount && resultStats.ResultBytesCount + row.Stats.ResultBytesCount > (ui64)freeSpace) {
+                resultStats.SizeLimitExceeded = true;
                 break;
             }
 
-            auto& result = resultIt->second;
-
-            while(!result.Rows.empty()) {
-                TResultBatch::TResultRow& row = result.Rows.front();
-
-                if (resultStats.ResultRowsCount && resultStats.ResultBytesCount + row.Stats.ResultBytesCount > (ui64)freeSpace) {
-                    resultStats.SizeLimitExceeded = true;
-                    break;
-                }
-
-                batch.emplace_back(std::move(row.Data));
-                result.Rows.pop_front();
-                resultStats.Add(row.Stats);
-            }
-
-            if (result.Completed()) {
-                ResultRowsBySeqNo.erase(resultIt);
-                ++CurrentResultSeqNo;
-            } else {
-                break;
-            }
+            batch.emplace_back(std::move(row.Data));
+            FlushedResultRows.pop_front();
+            resultStats.Add(row.Stats);
         }
 
         return resultStats;
@@ -971,6 +964,7 @@ public:
         UnprocessedRows.clear();
         PendingLeftRowsByKey.clear();
         ResultRowsBySeqNo.clear();
+        FlushedResultRows.clear();
     }
 private:
     struct TJoinKeyInfo {
@@ -1074,6 +1068,11 @@ private:
             return Rows.empty() && FirstRow && LastRow && PendingJoinKeys.empty();
         }
 
+        void FlushRows(std::deque<TResultRow>& externalStorage) {
+            externalStorage.insert(externalStorage.end(), Rows.begin(), Rows.end());
+            Rows.clear();
+        }
+
         void TryBuildResultRow(const NMiniKQL::THolderFactory& HolderFactory, std::optional<TSizedUnboxedValue> row = {}) {
             if (RightRow.Data.HasValue() || ProcessedAllJoinKeys()) {
                 TReadResultStats rowStats;
@@ -1111,13 +1110,22 @@ private:
         return Settings.KeepRowsOrder;
     }
 
-    bool IsRowSeqNoValid(const ui64& seqNo) const {
-        if (!KeepRowsOrder()) {
-            return true;
+    void FlushRowsIfNeeded(const ui64& seqNo) {
+        if (KeepRowsOrder()) {
+            YQL_ENSURE(seqNo >= CurrentResultSeqNo);
+            if (seqNo != CurrentResultSeqNo) {
+                return;
+            }
         }
 
-        // we should check row seqNo only if we need to keep the order
-        return seqNo >= CurrentResultSeqNo;
+        auto it = ResultRowsBySeqNo.find(seqNo);
+        YQL_ENSURE(it != ResultRowsBySeqNo.end());
+        auto& result = it->second;
+        result.FlushRows(FlushedResultRows);
+        if (result.Completed()) {
+            ResultRowsBySeqNo.erase(it);
+            ++CurrentResultSeqNo;
+        }
     }
 
     void FillReadRequest(ui64 readId, THolder<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
@@ -1210,6 +1218,7 @@ private:
     std::unordered_map<ui64, TReadState> ReadStateByReadId;
     absl::flat_hash_map<TOwnedCellVec, TJoinKeyInfo, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PendingLeftRowsByKey;
     std::unordered_map<ui64, TResultBatch> ResultRowsBySeqNo;
+    std::deque<TResultBatch::TResultRow> FlushedResultRows;
     ui64 InputRowSeqNo = 0;
     ui64 InputRowSeqNoLast = 0;
     ui64 JoinKeySeqNo = 0;

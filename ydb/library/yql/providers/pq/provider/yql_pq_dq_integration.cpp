@@ -81,7 +81,6 @@ public:
                 ->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()
                 ->GetItemType()->Cast<TStructExprType>();
             const auto& clusterName = pqReadTopic.DataSource().Cluster().StringValue();
-            const auto format = pqReadTopic.Format().Ref().Content();
             const auto token = "cluster:default_" + clusterName;
 
             const auto& typeItems = pqReadTopic.Topic().RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
@@ -95,11 +94,17 @@ public:
                 });
             auto columnNames = ctx.NewList(pos, std::move(colNames));
 
+            auto settings = BuildTopicReadSettings(pqReadTopic, ctx, wrSettings);
+            if (!settings) {
+                return {};
+            }
+
             TString serializedWatermarkExpr;
             if (const auto maybeWatermark = pqReadTopic.Watermark()) {
                 const auto watermark = maybeWatermark.Cast();
+                const auto enableWatermarks = wrSettings.WatermarksMode.GetOrElse("") == "default";
 
-                if (wrSettings.WatermarksMode.GetOrElse("") != "default") {
+                if (!enableWatermarks) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), R"(Enable watermarks using "PRAGMA dq.WatermarksMode="default";")"));
                     return {};
                 }
@@ -116,32 +121,12 @@ public:
                 }
             }
 
-            bool skipJsonErrors = false;
-            if (auto settingsList = pqReadTopic.Settings().Maybe<TExprList>()) {
-                for (const TExprNode::TPtr& s : pqReadTopic.Settings().Raw()->Children()) {
-                    if (s->ChildrenSize() >= 2 && s->Child(0)->Content() == "skip.json.errors"sv) {
-                        if (!TryFromString<bool>(s->Child(1)->Content(), skipJsonErrors)) {
-                            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), R"("skip.json.errors" must be boolean type))"));
-                            return {};
-                        }
-                    }
-                }
-            }
-
-            if (skipJsonErrors) {
-                auto clusterConfiguration = GetClusterConfiguration(clusterName);
-                if (!UseSharedReading(clusterConfiguration, format) ) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), R"("skip.json.errors" is supported only in shared reading mode))"));
-                    return {};
-                }
-            }
-
             return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columnNames))
-                    .Settings(BuildTopicReadSettings(clusterName, wrSettings, pos, format, skipJsonErrors, ctx))
+                    .Settings(std::move(settings))
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
@@ -379,21 +364,20 @@ public:
         return Nothing();
     }
 
-    NNodes::TCoNameValueTupleList BuildTopicReadSettings(
-        const TString& cluster,
-        const IDqIntegration::TWrapReadSettings& wrSettings,
-        TPositionHandle pos,
-        std::string_view format,
-        bool skipJsonErrors,
-        TExprContext& ctx) const
-    {
+    TExprNode::TPtr BuildTopicReadSettings(
+        const TPqReadTopic& pqReadTopic,
+        TExprContext& ctx,
+        const IDqIntegration::TWrapReadSettings& wrSettings
+    ) const {
+        const auto pos = pqReadTopic.Pos();
+        const auto& cluster = pqReadTopic.DataSource().Cluster().StringValue();
+        const auto format = pqReadTopic.Format().Ref().Content();
+        const auto& settings = pqReadTopic.Settings();
+
         TVector<TCoNameValueTuple> props;
 
-        {
-            TMaybe<TString> consumer = State_->Configuration->Consumer.Get();
-            if (consumer) {
-                Add(props, ConsumerSetting, *consumer, pos, ctx);
-            }
+        if (auto consumer = State_->Configuration->Consumer.Get()) {
+            Add(props, ConsumerSetting, *consumer, pos, ctx);
         }
 
         auto clusterConfiguration = GetClusterConfiguration(cluster);
@@ -403,9 +387,6 @@ public:
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
         Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
-        if (skipJsonErrors) {
-            Add(props, SkipJsonErrors, ToString(skipJsonErrors), pos, ctx);
-        }
 
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);
@@ -415,11 +396,128 @@ public:
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
         }
 
+        TMaybe<TString> watermarksLateEventsPolicy;
+        TMaybe<ui64> watermarksGranularityMs;
+        TMaybe<ui64> watermarksIdleTimeoutMs;
+        for (const auto& setting : settings.Raw()->Children()) {
+            const auto settingName = setting->Child(0)->Content();
+            if ("skip.json.errors" == settingName) {
+                if (setting->ChildrenSize() != 2) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected `skip.json.errors` = value"));
+                    return {};
+                }
+                const auto settingValue = setting->Child(1);
+                if (!EnsureAtom(*settingValue, ctx)) {
+                    return {};
+                }
+                bool skipJsonErrors = true;
+                if (!TryFromString<bool>(settingValue->Content(), skipJsonErrors)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "`skip.json.errors` must be boolean type"));
+                    return {};
+                }
+                if (!skipJsonErrors) {
+                    continue;
+                }
+                if (!UseSharedReading(clusterConfiguration, format)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "`skip.json.errors` is supported only in shared reading mode"));
+                    return {};
+                }
+
+                Add(props, SkipJsonErrors, ToString(skipJsonErrors), pos, ctx);
+            } else if ("watermarkadjustlateevents" == settingName) {
+                if (setting->ChildrenSize() > 2) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected WATERMARK_ADJUST_LATE_EVENTS (= false|true)"));
+                    return {};
+                }
+                bool watermarkAdjustLateEvents = true;
+                if (setting->ChildrenSize() == 2) {
+                    const auto settingValue = setting->Child(1);
+                    if (!EnsureAtom(*settingValue, ctx)) {
+                        return {};
+                    }
+                    if (!TryFromString<bool>(settingValue->Content(), watermarkAdjustLateEvents)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "WATERMARK_ADJUST_LATE_EVENTS must be boolean type"));
+                        return {};
+                    }
+                }
+                if (!watermarkAdjustLateEvents) {
+                    continue;
+                }
+                if (!watermarksLateEventsPolicy.Empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                        TStringBuilder() << "Cannot adjust and " << *watermarksLateEventsPolicy << " late events at the same time"));
+                    return {};
+                }
+
+                watermarksLateEventsPolicy = "adjust";
+            } else if ("watermarkdroplateevents" == settingName) {
+                if (setting->ChildrenSize() > 2) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected WATERMARK_DROP_LATE_EVENTS (= false|true)"));
+                    return {};
+                }
+                bool watermarkDropLateEvents = true;
+                if (setting->ChildrenSize() == 2) {
+                    const auto settingValue = setting->Child(1);
+                    if (!EnsureAtom(*settingValue, ctx)) {
+                        return {};
+                    }
+                    if (!TryFromString<bool>(settingValue->Content(), watermarkDropLateEvents)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "WATERMARK_DROP_LATE_EVENTS must be boolean type"));
+                        return {};
+                    }
+                }
+                if (!watermarkDropLateEvents) {
+                    continue;
+                }
+                if (!watermarksLateEventsPolicy.Empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                        TStringBuilder() << "Cannot drop and " << *watermarksLateEventsPolicy << " late events at the same time"));
+                    return {};
+                }
+
+                watermarksLateEventsPolicy = "drop";
+            } else if ("watermarkgranularity" == settingName) {
+                if (setting->ChildrenSize() != 2) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected WATERMARK_GRANULARITY = value"));
+                    return {};
+                }
+                const auto settingValue = setting->Child(1);
+                if (!EnsureAtom(*settingValue, ctx)) {
+                    return {};
+                }
+                const auto out = NKikimr::NMiniKQL::ValueFromString(NUdf::EDataSlot::Interval, settingValue->Content());
+                if (!out) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                        TStringBuilder() << "Invalid value " << settingValue->Content() << " for WATERMARK_GRANULARITY"));
+                    return {};
+                }
+
+                watermarksGranularityMs = TDuration::MicroSeconds(out.Get<ui64>()).MilliSeconds();
+            } else if ("watermarkidletimeout" == settingName) {
+                if (setting->ChildrenSize() != 2) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected WATERMARK_IDLE_TIMEOUT = value"));
+                    return {};
+                }
+                const auto settingValue = setting->Child(1);
+                if (!EnsureAtom(*settingValue, ctx)) {
+                    return {};
+                }
+                const auto out = NKikimr::NMiniKQL::ValueFromString(NUdf::EDataSlot::Interval, settingValue->Content());
+                if (!out) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                        TStringBuilder() << "Invalid value " << settingValue->Content() << " for WATERMARK_IDLE_TIMEOUT"));
+                    return {};
+                }
+
+                watermarksIdleTimeoutMs = TDuration::MicroSeconds(out.Get<ui64>()).MilliSeconds();
+            }
+        }
+
         if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
             Add(props, WatermarksEnableSetting, ToString(true), pos, ctx);
 
-            const auto granularity = TDuration::MilliSeconds(wrSettings
-                .WatermarksGranularityMs
+            const auto granularity = TDuration::MilliSeconds(watermarksGranularityMs
+                .OrElse(wrSettings.WatermarksGranularityMs)
                 .GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs));
             Add(props, WatermarksGranularityUsSetting, ToString(granularity.MicroSeconds()), pos, ctx);
 
@@ -428,19 +526,23 @@ public:
                 .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
             Add(props, WatermarksLateArrivalDelayUsSetting, ToString(lateArrivalDelay.MicroSeconds()), pos, ctx);
 
+            const auto lateEventsPolicy = watermarksLateEventsPolicy
+                .GetOrElse("adjust");
+            Add(props, WatermarksLateEventsPolicySetting, lateEventsPolicy, pos, ctx);
         }
 
         if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(false)) {
             Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
-            const auto idleTimeout = TDuration::MilliSeconds(wrSettings
-                .WatermarksIdleTimeoutMs
+
+            const auto idleTimeout = TDuration::MilliSeconds(watermarksIdleTimeoutMs
+                .OrElse(wrSettings.WatermarksIdleTimeoutMs)
                 .GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs));
             Add(props, WatermarksIdleTimeoutUsSetting, ToString(idleTimeout.MicroSeconds()), pos, ctx);
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)
             .Add(props)
-            .Done();
+            .Done().Ptr();
     }
 
     NNodes::TCoNameValueTupleList BuildDqSourceWrapSettings(const TPqReadTopic& pqReadTopic, TPositionHandle pos, TExprContext& ctx) const {

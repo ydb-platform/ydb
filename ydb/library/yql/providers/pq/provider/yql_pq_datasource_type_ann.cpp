@@ -166,6 +166,7 @@ public:
         const auto columns = input->Child(TPqReadTopic::idx_Columns);
         const auto format = input->Child(TPqReadTopic::idx_Format);
         const auto compression = input->Child(TPqReadTopic::idx_Compression);
+        const auto settings = input->Child(TPqReadTopic::idx_Settings);
 
         if (!EnsureWorldType(*world, ctx)) {
             return TStatus::Error;
@@ -205,6 +206,20 @@ public:
 
         if (!NCommon::ValidateCompressionForInput(format->Content(), compression->Content(), ctx)) {
             return TStatus::Error;
+        }
+
+        if (!EnsureTuple(*settings, ctx)) {
+            return TStatus::Error;
+        }
+
+        for (const auto& setting : settings->Children()) {
+            if (!EnsureTupleMinSize(*setting, 1, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureAtom(setting->Head(), ctx)) {
+                return TStatus::Error;
+            }
         }
 
         if (TPqReadTopic::idx_Watermark < input->ChildrenSize()) {

@@ -222,5 +222,29 @@
         "Plan": {
             "uri": "file://test_sql_streaming.test_watermarks-watermarks-default.txt_/plan.json"
         }
+    },
+    "test_sql_streaming.test[watermarks-watermarks_adjust-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_adjust-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_adjust-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[watermarks-watermarks_as-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_as-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_as-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[watermarks-watermarks_drop-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_drop-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_drop-default.txt_/plan.json"
+        }
     }
 }

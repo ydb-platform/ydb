@@ -71,6 +71,22 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
                 DateFormat = readSettings->Child(i);
                 continue;
             }
+            if (readSettings->Child(i)->Head().IsAtom("watermarkadjustlateevents")) {
+                WatermarkAdjustLateEvents = readSettings->Child(i);
+                continue;
+            }
+            if (readSettings->Child(i)->Head().IsAtom("watermarkdroplateevents")) {
+                WatermarkDropLateEvents = readSettings->Child(i);
+                continue;
+            }
+            if (readSettings->Child(i)->Head().IsAtom("watermarkgranularity")) {
+                WatermarkGranularity = readSettings->Child(i);
+                continue;
+            }
+            if (readSettings->Child(i)->Head().IsAtom("watermarkidletimeout")) {
+                WatermarkIdleTimeout = readSettings->Child(i);
+                continue;
+            }
             if (readSettings->Child(i)->Head().IsAtom("watermark")) {
                 Watermark = readSettings->Child(i)->ChildPtr(1);
                 continue;

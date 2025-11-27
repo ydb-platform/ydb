@@ -115,6 +115,7 @@ PEERDIR(
     contrib/libs/xxhash
     library/cpp/cgiparam
     library/cpp/digest/old_crc
+    library/cpp/regex/pcre
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/backup/common

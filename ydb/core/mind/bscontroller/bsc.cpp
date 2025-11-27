@@ -1159,6 +1159,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMovePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateBridgeGroupInfo:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kReconfigureVirtualGroup:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

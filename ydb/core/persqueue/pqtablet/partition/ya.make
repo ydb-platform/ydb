@@ -28,6 +28,7 @@ SRCS(
 
 
 PEERDIR(
+    library/cpp/containers/absl_flat_hash
     ydb/core/backup/impl
     ydb/core/persqueue/events
     ydb/core/persqueue/common

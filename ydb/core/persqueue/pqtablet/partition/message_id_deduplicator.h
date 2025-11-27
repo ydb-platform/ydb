@@ -24,9 +24,9 @@ public:
     };
 
     TMessageIdDeduplicator(TIntrusivePtr<ITimeProvider> timeProvider = CreateDefaultTimeProvider(), TDuration deduplicationWindow = TDuration::Minutes(5));
-    ~TMessageIdDeduplicator();
+    ~TMessageIdDeduplicator() = default;
 
-    const TDuration& GetDeduplicationWindow() const;
+    TDuration GetDeduplicationWindow() const;
     TInstant GetExpirationTime() const;
 
     std::optional<ui64> AddMessage(const TString& deduplicationId, const ui64 offset);

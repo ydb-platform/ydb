@@ -10,10 +10,10 @@ namespace NKikimr::NPQ {
 
 namespace {
 
-static constexpr size_t BucketSize = TDuration::MilliSeconds(100).MilliSeconds();
+constexpr TDuration BucketSize = TDuration::MilliSeconds(100);
 
 TInstant trim(TInstant value) {
-    return TInstant::MilliSeconds(value.MilliSeconds() / BucketSize * BucketSize + BucketSize);
+    return TInstant::MilliSeconds(value.MilliSeconds() / BucketSize.MilliSeconds() * BucketSize.MilliSeconds() + BucketSize.MilliSeconds());
 }
 
 }
@@ -24,10 +24,7 @@ TMessageIdDeduplicator::TMessageIdDeduplicator(TIntrusivePtr<ITimeProvider> time
 {
 }
 
-TMessageIdDeduplicator::~TMessageIdDeduplicator() {
-}
-
-const TDuration& TMessageIdDeduplicator::GetDeduplicationWindow() const {
+TDuration TMessageIdDeduplicator::GetDeduplicationWindow() const {
     return DeduplicationWindow;
 }
 
@@ -65,7 +62,10 @@ size_t TMessageIdDeduplicator::Compact() {
         if (message.ExpirationTime > now) {
             break;
         }
-        Messages.erase(message.DeduplicationId);
+        auto it = Messages.find(message.DeduplicationId);
+        if (it != Messages.end() && it->second <= message.Offset) {
+            Messages.erase(it);
+        }
         Queue.pop_front();
         ++removed;
     }
@@ -101,6 +101,10 @@ bool TMessageIdDeduplicator::ApplyWAL(NKikimrPQ::TMessageDeduplicationIdWAL&& wa
 
     auto expirationTime = TInstant::MilliSeconds(wal.GetExpirationTimestampMilliseconds());
     for (auto& message : *wal.MutableMessage()) {
+        auto it = Messages.find(message.GetDeduplicationId());
+        if (it != Messages.end() && it->second >= message.GetOffset()) {
+            continue;
+        }
         Queue.emplace_back(message.GetDeduplicationId(), expirationTime, message.GetOffset());
         Messages[std::move(*message.MutableDeduplicationId())] = message.GetOffset();
     }
@@ -150,7 +154,7 @@ TString MakeDeduplicatorWALKey(ui32 partitionId, const TInstant& expirationTime)
     TKeyPrefix ikey(TKeyPrefix::EType::TypeDeduplicator, TPartitionId(partitionId));
     ikey.Append(WALSeparator);
 
-    auto bucket = Sprintf("%.16llX", expirationTime.MilliSeconds() / BucketSize);
+    auto bucket = Sprintf("%.16llX", expirationTime.MilliSeconds() / BucketSize.MilliSeconds());
     ikey.Append(bucket.data(), bucket.size());
 
     return ikey.ToString();

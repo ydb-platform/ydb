@@ -272,7 +272,7 @@ public:
         );
 
         const TDuration sampleValidity = TDuration::Seconds(
-            appData->DataShardConfig.GetKeyAccessSampleVaidityIntervalSeconds()
+            appData->DataShardConfig.GetKeyAccessSampleValidityIntervalSeconds()
         );
 
         bool returnKeyAccessSample = false;

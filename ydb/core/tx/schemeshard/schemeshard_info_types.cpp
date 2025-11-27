@@ -2074,7 +2074,8 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 
     // Check if we can try merging by load
     TDuration minUptime = TDuration::Seconds(splitSettings.MergeByLoadMinUptimeSec);
-    if (!canMerge && IsMergeByLoadEnabled(mainTableForIndex) && stats->StartTime && stats->StartTime + minUptime < now) {
+    bool canMergeByLoad = IsMergeByLoadEnabled(mainTableForIndex);
+    if (!canMerge && canMergeByLoad && stats->StartTime && stats->StartTime + minUptime < now) {
         reason = "merge by load";
         canMerge = true;
     }
@@ -2087,13 +2088,12 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
         return false;
     }
 
-    // Check that total load doesn't exceed the limits
-    float shardLoad = stats->GetCurrentRawCpuUsage() * 0.000001;
-    if (IsMergeByLoadEnabled(mainTableForIndex)) {
-        // Calculate shard load based on historical data
-        TDuration loadDuration = TDuration::Seconds(splitSettings.MergeByLoadMinLowLoadDurationSec);
-        shardLoad = 0.01 * stats->GetLatestMaxCpuUsagePercent(now - loadDuration);
+    // Calculate shard load based on historical data
+    const TDuration loadDuration = TDuration::Seconds(splitSettings.MergeByLoadMinLowLoadDurationSec);
+    const float shardLoad = 0.01 * stats->GetLatestMaxCpuUsagePercent(now - loadDuration);
 
+    // Check that total load doesn't exceed the limits
+    if (canMergeByLoad) {
         if (shardLoad + totalLoad > cpuUsageThreshold)
             return false;
 

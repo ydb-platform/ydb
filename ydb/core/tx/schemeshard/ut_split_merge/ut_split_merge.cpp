@@ -727,8 +727,8 @@ struct TLoadAndSplitSimulator {
         ui64 initialDatashardId,
         bool shouldSendReadRequests,
         ESendDuplicateTableStatsStrategy sendDuplicateTableStats,
-        const std::map<ui32, i32>& targetCpuLoadByFolowerIdPeriodic,
-        const std::map<ui32, i32>& targetCpuLoadByFolowerIdStats,
+        const std::map<ui32, i32>& targetCpuLoadByFollowerIdPeriodic,
+        const std::map<ui32, i32>& targetCpuLoadByFollowerIdStats,
         TTestActorRuntime& testRuntime
     ) : TableLocalPathId(tableLocalPathId)
         , TableOwnerId(tableOwnerId)
@@ -736,11 +736,11 @@ struct TLoadAndSplitSimulator {
         , SendDuplicateTableStats(sendDuplicateTableStats)
         , TestRuntime(&testRuntime)
     {
-        for (const auto& [followerId, targetCpuLoad] : targetCpuLoadByFolowerIdPeriodic) {
+        for (const auto& [followerId, targetCpuLoad] : targetCpuLoadByFollowerIdPeriodic) {
             MetricsPatchByFollowerIdPeriodic[followerId].SetCPU(CpuLoadMicroseconds(targetCpuLoad));
         }
 
-        for (const auto& [followerId, targetCpuLoad] : targetCpuLoadByFolowerIdStats) {
+        for (const auto& [followerId, targetCpuLoad] : targetCpuLoadByFollowerIdStats) {
             if (targetCpuLoad >= 0) {
                 MetricsPatchByFollowerIdStats[followerId].SetCPU(CpuLoadMicroseconds(targetCpuLoad));
             } else {
@@ -762,7 +762,7 @@ struct TLoadAndSplitSimulator {
             SenderActorId = TestRuntime->Register(new TDummyActor());
         }
 
-        for (const auto& [followerId, targetCpuLoad] : targetCpuLoadByFolowerIdPeriodic) {
+        for (const auto& [followerId, targetCpuLoad] : targetCpuLoadByFollowerIdPeriodic) {
             Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
                 << ", target CPU load (EvPeriodicTableStats) for followerId " << followerId
                 << " is " << targetCpuLoad
@@ -770,7 +770,7 @@ struct TLoadAndSplitSimulator {
                 << Endl;
         }
 
-        for (const auto& [followerId, targetCpuLoad] : targetCpuLoadByFolowerIdStats) {
+        for (const auto& [followerId, targetCpuLoad] : targetCpuLoadByFollowerIdStats) {
             if (targetCpuLoad >= 0) {
                 Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
                     << ", target CPU load (EvGetTableStatsResult) for followerId " << followerId
@@ -1192,13 +1192,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
      *
      * @param[in] runtime The test runtime
      * @param[in] tablePath The table to use for the test
-     * @param[in] targetCpuLoadByFolowerIdPeriodic The map from the follower ID (0 == leader)
-     *                                             to the corresponding induced CPU load (as percent)
-     *                                             (for EvPeriodicTableStats)
-     * @param[in] targetCpuLoadByFolowerIdStats The map from the follower ID (0 == leader)
-     *                                          to the corresponding induced CPU load (as percent)
-     *                                          (for EvGetTableStatsResult)
-     *                                          (any negative value == unset the CPU usage value)
+     * @param[in] targetCpuLoadByFollowerIdPeriodic The map from the follower ID (0 == leader)
+     *                                              to the corresponding induced CPU load (as percent)
+     *                                              (for EvPeriodicTableStats)
+     * @param[in] targetCpuLoadByFollowerIdStats The map from the follower ID (0 == leader)
+     *                                           to the corresponding induced CPU load (as percent)
+     *                                           (for EvGetTableStatsResult)
+     *                                           (any negative value == unset the CPU usage value)
      * @param[in] shouldSendReadRequests If true, send EvRead requests to all followers
      * @param[in] sendDuplicateTableStats Determines if/when to send duplicate EvGetTableStatsResult messages
      * @param[in] expectTableToBeSplitted If true, expect the table to be splitted
@@ -1206,8 +1206,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
     void SplitByLoad(
         TTestActorRuntime& runtime,
         const TString& tablePath,
-        const std::map<ui32, i32>& targetCpuLoadByFolowerIdPeriodic,
-        const std::map<ui32, i32>& targetCpuLoadByFolowerIdStats,
+        const std::map<ui32, i32>& targetCpuLoadByFollowerIdPeriodic,
+        const std::map<ui32, i32>& targetCpuLoadByFollowerIdStats,
         bool shouldSendReadRequests = false,
         ESendDuplicateTableStatsStrategy sendDuplicateTableStats = ESendDuplicateTableStatsStrategy::None,
         bool expectTableToBeSplitted = true
@@ -1225,8 +1225,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
             initialDatashardId,
             shouldSendReadRequests,
             sendDuplicateTableStats,
-            targetCpuLoadByFolowerIdPeriodic,
-            targetCpuLoadByFolowerIdStats,
+            targetCpuLoadByFollowerIdPeriodic,
+            targetCpuLoadByFollowerIdStats,
             runtime
         );
 
@@ -1632,7 +1632,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
     }
 
     /**
-     * Verify that a shard does not split, if the CPU load just to a high value,
+     * Verify that a shard does not split, if the CPU load jumps to a high value,
      * when the EvPeriodicTableStats message is generated, but drops to a low value,
      * when the EvGetTableStats message is processed and the EvGetTableStatsResult
      * response is generated. This is for the CPU load on the leader only.
@@ -1685,7 +1685,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
     }
 
     /**
-     * Verify that a shard does not split, if the CPU load just to a high value,
+     * Verify that a shard does not split, if the CPU load jumps to a high value,
      * when the EvPeriodicTableStats message is generated, but drops to a low value,
      * when the EvGetTableStats message is processed and the EvGetTableStatsResult
      * response is generated. This is for the CPU load on the leader only.
@@ -1753,7 +1753,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
 
     /**
      * Verify that a shard splits correctly, even if the CPU usage value
-     * is the EvGetTableStatsResult response is not populated.
+     * in the EvGetTableStatsResult response is not populated.
      */
     Y_UNIT_TEST(SplitWithoutCpuUsageInStatsResponse) {
         TTestBasicRuntime runtime;
@@ -1812,12 +1812,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
      * @param[in] tablePath The table to use for the test
      * @param[in] maxPartitionCount The expected number of partitions (after splitting)
      * @param[in] finalPartitionCount The expected number of partitions (after merging)
-     * @param[in] splitCpuLoadByFolowerId The map from the follower ID (0 == leader)
-     *                                    to the corresponding induced CPU load (as percent),
-     *                                    which will be used for splitting the table
-     * @param[in] mergeCpuLoadByFolowerId The map from the follower ID (0 == leader)
-     *                                    to the corresponding induced CPU load (as percent),
-     *                                    which will be used for merging the table
+     * @param[in] splitCpuLoadByFollowerId The map from the follower ID (0 == leader)
+     *                                     to the corresponding induced CPU load (as percent),
+     *                                     which will be used for splitting the table
+     * @param[in] mergeCpuLoadByFollowerId The map from the follower ID (0 == leader)
+     *                                     to the corresponding induced CPU load (as percent),
+     *                                     which will be used for merging the table
      * @param[in] shouldSendReadRequests If true, send EvRead requests to all followers
      * @param[in] expectTableToBeMerged If true, expect the table to be merged
      */
@@ -1826,8 +1826,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
         const TString& tablePath,
         ui32 maxPartitionCount,
         ui32 finalPartitionCount,
-        const std::map<ui32, i32>& splitCpuLoadByFolowerId,
-        const std::map<ui32, i32>& mergeCpuLoadByFolowerId,
+        const std::map<ui32, i32>& splitCpuLoadByFollowerId,
+        const std::map<ui32, i32>& mergeCpuLoadByFollowerId,
         bool shouldSendReadRequests,
         bool expectTableToBeMerged
     ) {
@@ -1846,8 +1846,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
             initialDatashardId,
             shouldSendReadRequests,
             ESendDuplicateTableStatsStrategy::None,
-            splitCpuLoadByFolowerId,
-            splitCpuLoadByFolowerId,
+            splitCpuLoadByFollowerId,
+            splitCpuLoadByFollowerId,
             runtime
         );
 
@@ -1883,8 +1883,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
             initialDatashardId,
             shouldSendReadRequests,
             ESendDuplicateTableStatsStrategy::None,
-            mergeCpuLoadByFolowerId,
-            mergeCpuLoadByFolowerId,
+            mergeCpuLoadByFollowerId,
+            mergeCpuLoadByFollowerId,
             runtime
         );
 

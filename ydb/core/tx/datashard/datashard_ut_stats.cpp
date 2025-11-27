@@ -949,7 +949,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         datashardConfig->SetKeyAccessSampleCollectionMinIntervalSeconds(collectionMinInterval);
         datashardConfig->SetKeyAccessSampleCollectionMaxIntervalSeconds(collectionMaxInterval);
-        datashardConfig->SetKeyAccessSampleVaidityIntervalSeconds(collectionValidInterval);
+        datashardConfig->SetKeyAccessSampleValidityIntervalSeconds(collectionValidInterval);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *(server->GetRuntime());

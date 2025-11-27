@@ -30,5 +30,5 @@ message TDataShardConfig {
     optional uint32 BackupTableStatsReportIntervalSeconds = 26 [default = 30];
     optional uint32 KeyAccessSampleCollectionMinIntervalSeconds = 27 [default = 5];
     optional uint32 KeyAccessSampleCollectionMaxIntervalSeconds = 28 [default = 60];
-    optional uint32 KeyAccessSampleVaidityIntervalSeconds = 29 [default = 30];
+    optional uint32 KeyAccessSampleValidityIntervalSeconds = 29 [default = 30];
 }

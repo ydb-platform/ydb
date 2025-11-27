@@ -17,6 +17,7 @@
 #define LOG_E(stream) LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
 
 #define LOGA_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, stream)
+#define LOGA_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, stream)
 
 namespace NYql::NDq {
 
@@ -286,6 +287,7 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
     bool spilled = false;
 
     {
+        LOG_E("TOutputDescriptor::FlowControlMutex, ChannelId=" << Info.ChannelId);
         std::lock_guard lock(FlowControlMutex);
         auto fillLevel = FillLevel;
 
@@ -311,13 +313,13 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
             FillLevel = fillLevel;
             NeedToNotifyOutput.store(true);
         }
-    }
 
-    (*OutputBufferChunks)++;
-    *OutputBufferBytes += data.Bytes;
+        (*OutputBufferChunks)++;
+        *OutputBufferBytes += data.Bytes;
 
-    if (!spilled) {
-        nodeState->PushDataChunk(std::move(data), self);
+        if (!spilled) {
+            nodeState->PushDataChunk(std::move(data), self);
+        }
     }
 }
 
@@ -333,6 +335,7 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
     }
 
     {
+        LOG_E("TOutputDescriptor::FlowControlMutex, ChannelId=" << Info.ChannelId);
         std::lock_guard lock(FlowControlMutex);
         if (bytes <= RemotePopBytes.load()) {
             return;
@@ -344,12 +347,13 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
             SpilledChunkBytes.pop();
             Y_ENSURE(TailBlobId < HeadBlobId);
 
+            PushBytes += bytes;
             TLoadingInfo info(++TailBlobId, bytes);
             info.Loaded = Storage->Get(info.BlobId, info.Buffer);
             if (LoadingQueue.empty() && info.Loaded) {
                 TDataChunk data;
                 BufferToData(data, std::move(info.Buffer));
-                PushDataChunk(std::move(data), nodeState, self);
+                nodeState->PushDataChunk(std::move(data), self);
                 SpilledBytes -= bytes;
             } else {
                 LoadingQueue.emplace(std::move(info));
@@ -461,6 +465,7 @@ void TOutputDescriptor::BindStorage(std::shared_ptr<TOutputDescriptor>& self, st
 }
 
 void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+    LOG_E("TOutputDescriptor::FlowControlMutex, ChannelId=" << Info.ChannelId);
     std::lock_guard lock(FlowControlMutex);
 
     while (!LoadingQueue.empty()) {
@@ -475,7 +480,7 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
 
         TDataChunk data;
         BufferToData(data, std::move(info.Buffer));
-        PushDataChunk(std::move(data), nodeState, self);
+        nodeState->PushDataChunk(std::move(data), self);
         SpilledBytes -= info.Bytes;
 
         LoadingQueue.pop();
@@ -698,6 +703,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
 
     if (descriptor->WaitQueueSize.load()) {
         // we are not allowed to reorder messages
+        LOG_E("TOutputDescriptor::WaitQueueMutex, ChannelId=" << descriptor->Info.ChannelId << ", NodeId=" << NodeId);
         std::lock_guard lock(descriptor->WaitQueueMutex);
         if (!descriptor->WaitQueue.empty()) {
 
@@ -707,7 +713,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
             WaiterMessages++;
             (*OutputBufferWaiterMessages)++;
 
-            LOG_E("NodeId=" << NodeId << ", ChannelId=" << descriptor->Info.ChannelId << ", TNodeState::Push* to WaitQueue, WaitQueue.size()=" << descriptor->WaitQueue.size());
+            LOG_D("NodeId=" << NodeId << ", ChannelId=" << descriptor->Info.ChannelId << ", TNodeState::Push* to WaitQueue, WaitQueue.size()=" << descriptor->WaitQueue.size());
 
             return;
         }
@@ -715,6 +721,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
 
     if (Reconcilation.load() == 0) {
         // in Reconcilation state we do not send new messages
+        LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
         std::lock_guard lock(Mutex);
         if (InflightBytes < MaxInflightBytes && Queue.size() < MaxInflightMessages) {
             if (descriptor->CheckGenMajor(GenMajor, "Inconsistent Send GenMajor")) {
@@ -724,7 +731,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
                 Queue.push_back(item);
                 SendMessage(item);
                 InflightBytes += bytes;
-                LOG_E("NodeId=" << NodeId << ", ChannelId=" << descriptor->Info.ChannelId << ", Fast Send");
+                LOG_D("NodeId=" << NodeId << ", ChannelId=" << descriptor->Info.ChannelId << ", Fast Send");
                 LOG_T("FAST SEND, Node=" << NodeActorId.NodeId() << "=>" << PeerActorId.NodeId() << ", SeqNo=" << item->SeqNo << ", ChannelId=" << descriptor->Info.ChannelId << ", Bytes=" << bytes << ", Rows=" << rows << ", InflightBytes=" << InflightBytes << ", MaxInflightBytes=" << MaxInflightBytes);
                 *OutputBufferInflightBytes += bytes;
                 (*OutputBufferInflightMessages)++;
@@ -736,6 +743,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     // auto bytes = data.Bytes;
     bool result = false;
 
+    LOG_E("TOutputDescriptor::WaitQueueMutex, ChannelId=" << descriptor->Info.ChannelId << ", NodeId=" << NodeId);
     std::lock_guard lock(descriptor->WaitQueueMutex);
     if (descriptor->WaitQueue.empty()) {
         descriptor->WaitTimestamp = data.Timestamp;
@@ -748,12 +756,13 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     (*OutputBufferWaiterMessages)++;
 
     if (result) {
+        LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
         std::lock_guard lock(Mutex);
         auto forceSendWaiters = Queue.empty();
         WaitersQueue.push(descriptor);
         WaitersQueueSize++;
         (*OutputBufferWaiterCount)++;
-        LOG_E("NodeId=" << NodeId << ", ChannelId=" << descriptor->Info.ChannelId << ", TNodeState::Push+ to WaitQueue, WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << ", WaitTimestamp=" << descriptor->WaitTimestamp);
+        LOG_D("NodeId=" << NodeId << ", ChannelId=" << descriptor->Info.ChannelId << ", TNodeState::Push+ to WaitQueue, WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << ", WaitTimestamp=" << descriptor->WaitTimestamp);
         if (forceSendWaiters) {
             ActorSystem->Send(NodeActorId, new TEvPrivate::TEvSendWaiters());
         }
@@ -797,6 +806,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
 }
 
 void TNodeState::FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor) {
+    LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
     std::lock_guard lock(Mutex);
 
     if (InputDescriptors.empty()) {
@@ -883,6 +893,7 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     {
         if (data.Finished) {
             LOG_D("FINISHED TInputDescriptor " << (descriptor->IsBinded ? "B" : "U") << ", ChannelId=" << descriptor->Info.ChannelId);
+            LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
             std::lock_guard lock(Mutex);
             FinishedChannels.insert(descriptor->Info.ChannelId);
         }
@@ -917,6 +928,7 @@ void TNodeState::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     switch (ev->Get()->SourceType) {
         case TEvDqCompute::TEvChannelDataV2::EventType: {
             auto seqNo = ev->Cookie;
+            LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
             std::lock_guard lock(Mutex);
             GenMinor++;
             for (auto item : Queue) {
@@ -938,6 +950,7 @@ void TNodeState::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 }
 
 void TNodeState::Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
+    LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
     std::lock_guard lock(Mutex);
     if (Reconcilation.load() == ev->Cookie && !Queue.empty()) {
         SendMessage(Queue.front());
@@ -946,6 +959,7 @@ void TNodeState::Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
 }
 
 void TNodeState::Connect(NActors::TActorId& sender, ui64 genMajor) {
+    LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
     std::lock_guard lock(Mutex);
     if (!Connected) {
         PeerActorId = sender;
@@ -1046,6 +1060,7 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 void TNodeState::SendFromWaiters(ui64 deltaBytes) {
     ui64 inflightBytes = 0;
     {
+        LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
         std::lock_guard lock(Mutex);
         inflightBytes = InflightBytes;
     }
@@ -1056,6 +1071,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
         std::shared_ptr<TOutputDescriptor> waiter;
 
         {
+            LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
             std::lock_guard lock(Mutex);
             if (Queue.size() >= MaxInflightMessages) {
                 break;
@@ -1074,14 +1090,14 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
                     auto channelId = WaitersQueue.top()->Info.ChannelId;
                     WaitersQueue.pop();
                     WaitersQueueSize--;
-                    LOG_E("NodeId=" << NodeId << ", ChannelId=" << channelId << ", WaitersQueue PopX, WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load());
+                    LOG_D("NodeId=" << NodeId << ", ChannelId=" << channelId << ", WaitersQueue PopX, WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load());
                     continue;
                 }
 
                 waiter = WaitersQueue.top();
                 WaitersQueue.pop();
                 WaitersQueueSize--;
-                LOG_E("NodeId=" << NodeId << ", ChannelId=" << waiter->Info.ChannelId << ", WaitersQueue Pop, WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << ", WaitTimestamp=" << waiter->WaitTimestamp);
+                LOG_D("NodeId=" << NodeId << ", ChannelId=" << waiter->Info.ChannelId << ", WaitersQueue Pop, WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << ", WaitTimestamp=" << waiter->WaitTimestamp);
                 break;
             }
         }
@@ -1100,6 +1116,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
             (*OutputBufferWaiterMessages)--;
 
             {
+                LOG_E("TOutputDescriptor::WaitQueueMutex, ChannelId=" << waiter->Info.ChannelId << ", NodeId=" << NodeId);
                 std::lock_guard lock(waiter->WaitQueueMutex);
                 Y_ENSURE(!waiter->WaitQueue.empty());
 
@@ -1110,16 +1127,17 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
                 item = std::make_shared<TOutputItem>(std::move(data), waiter);
                 waiter->WaitQueue.pop();
 
+                LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
                 std::lock_guard lock1(Mutex);
 
-                LOG_E("NodeId=" << NodeId << ", ChannelId=" << waiter->Info.ChannelId << ", TNodeState::Send from Waiters, WaitQueue.size()=" << waiter->WaitQueue.size() << ", WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << ", WaitTimestamp" << waiter->WaitTimestamp);
+                LOG_D("NodeId=" << NodeId << ", ChannelId=" << waiter->Info.ChannelId << ", TNodeState::Send from Waiters, WaitQueue.size()=" << waiter->WaitQueue.size() << ", WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << ", WaitTimestamp" << waiter->WaitTimestamp);
 
                 if (!waiter->WaitQueue.empty()) {
                     waiter->WaitTimestamp = waiter->WaitQueue.front().Timestamp;
                     WaitersQueue.push(waiter);
                     WaitersQueueSize++;
                     (*OutputBufferWaiterCount)++;
-                    LOG_E("NodeId=" << NodeId << ", ChannelId=" << waiter->Info.ChannelId << ", TNodeState::RePush to Waiters, WaitQueue.size()=" << waiter->WaitQueue.size() << ", WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << "WaitTimestamp" << waiter->WaitTimestamp);
+                    LOG_D("NodeId=" << NodeId << ", ChannelId=" << waiter->Info.ChannelId << ", TNodeState::RePush to Waiters, WaitQueue.size()=" << waiter->WaitQueue.size() << ", WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << "WaitTimestamp" << waiter->WaitTimestamp);
                 }
 
                 item->SeqNo = ++SeqNo;
@@ -1138,6 +1156,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
     }
 
     {
+        LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
         std::lock_guard lock(Mutex);
         InflightBytes -= deltaBytes;
         // LOG_D("DONE SEND, Node=" << NodeActorId.NodeId() << "=>" << PeerActorId.NodeId() << ", InflightBytes=" << inflightBytes);
@@ -1146,6 +1165,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
 
 void TNodeState::RestartSession() {
     {
+        LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
         std::lock_guard lock(Mutex);
         *OutputBufferInflightBytes -= InflightBytes;
         *OutputBufferInflightMessages -= Queue.size();
@@ -1173,13 +1193,14 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
     ui64 deltaBytes = 0;
 
     {
+        LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
         std::lock_guard lock(Mutex);
 
         auto status = record.GetStatus();
         auto seqNo = record.GetSeqNo();
 
         if (SeqNo < seqNo) {
-            LOG_E("SESSION RESTART (Large SeqNo), SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
+            LOG_D("SESSION RESTART (Large SeqNo), SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
             RestartSession();
             return;
         }
@@ -1202,14 +1223,14 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
         if (Queue.empty()) {
             if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
-                LOG_E("SESSION RESTART (Can't RESEND), SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
+                LOG_D("SESSION RESTART (Can't RESEND), SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
                 RestartSession();
                 return;
             }
         } else {
             auto& item = Queue.front();
             if (item->SeqNo != seqNo) {
-                LOG_E("SESSION RESTART (SeqNo desync), SeqNo=" << SeqNo << ", item.SeqNo=" << item->SeqNo << ", " << NodeActorId << " from peer " << ev->Sender);
+                LOG_D("SESSION RESTART (SeqNo desync), SeqNo=" << SeqNo << ", item.SeqNo=" << item->SeqNo << ", " << NodeActorId << " from peer " << ev->Sender);
                 RestartSession();
                 return;
             }
@@ -1281,15 +1302,20 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()));
 
-    std::lock_guard lock(Mutex);
+    std::shared_ptr<TOutputDescriptor> descriptor;
 
-    auto it = OutputDescriptors.find(info);
-    if (it == OutputDescriptors.end()) {
-        // LOG_D("UPDATE IGNORED (unknown) Info={" << info.ChannelId << ", " << info.OutputActorId << ", " << info.InputActorId << "}, " << NodeActorId << " from peer " << ev->Sender);
-        return;
+    {
+        LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
+        std::lock_guard lock(Mutex);
+
+        auto it = OutputDescriptors.find(info);
+        if (it == OutputDescriptors.end()) {
+            // LOG_D("UPDATE IGNORED (unknown) Info={" << info.ChannelId << ", " << info.OutputActorId << ", " << info.InputActorId << "}, " << NodeActorId << " from peer " << ev->Sender);
+            return;
+        }
+        descriptor = it->second;
     }
 
-    auto descriptor = it->second;
     if (!descriptor->IsTerminatedOrAborted() && descriptor->CheckGenMajor(GenMajor, "Inconsistent GenMajor in HandleUpdate")) {
         auto earlyFinished = record.GetEarlyFinished();
         auto popBytes = record.GetPopBytes();
@@ -1390,6 +1416,7 @@ void TNodeState::TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor
 }
 
 void TNodeState::CleanupUnbindedInputs() {
+    LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
     std::lock_guard lock(Mutex);
     auto now = TInstant::Now();
     while (!UnbindedInputs.empty()) {
@@ -1651,6 +1678,7 @@ IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelParams&
 }
 
 void TDqChannelService::CleanupUnbindedInputs() {
+    LOG_E("TNodeState::Mutex, NodeId=" << NodeId);
     std::lock_guard lock(Mutex);
     for (auto& [_, nodeState] : NodeStates) {
         nodeState->CleanupUnbindedInputs();
@@ -1732,11 +1760,12 @@ bool TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
 }
 
 void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
+    LOGA_E("TChannelServiceActor::Mutex");
     std::lock_guard lock(ChannelService->Mutex);
     TStringStream str;
     HTML(str) {
         PRE() {
-            str << "Channel Service NodeId: " << ChannelService->NodeId;
+            str << "Channel Service NodeId: " << ChannelService->NodeId << Endl;
 
             str << Endl << "Local Buffers:";
 
@@ -1762,6 +1791,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                 }
                 TABLEBODY() {
                     auto registry = ChannelService->LocalBufferRegistry;
+                    LOGA_E("LocalBufferRegistry::Mutex");
                     std::lock_guard lock(registry->Mutex);
                     for (auto& [info, weakBuffer] : registry->LocalBuffers) {
                         auto sharedBuffer = weakBuffer.lock();
@@ -1822,6 +1852,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                 }
                 TABLEBODY() {
                     for (auto& [nodeId, state] : ChannelService->NodeStates) {
+                        LOGA_E("TNodeState::Mutex, NodeId=" << state->NodeId);
                         std::lock_guard lock(state->Mutex);
                         TABLER() {
                             TABLED() {str << nodeId;}
@@ -1855,6 +1886,10 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH() {str << "PopBytes";}
                         TABLEH() {str << "InflightBytes";}
                         TABLEH() {str << "WaitQueueSize";}
+                        TABLEH() {str << "SpilledBytes";}
+                        TABLEH() {str << "LoadingQueueSize";}
+                        TABLEH() {str << "HeadBlobId";}
+                        TABLEH() {str << "TailBlobId";}
                         TABLEH() {str << "OutputActorId";}
                         TABLEH() {str << "InputActorId";}
                     }
@@ -1879,6 +1914,10 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << popBytes;}
                                 TABLED() {str << (pushBytes - popBytes);}
                                 TABLED() {str << descriptor->WaitQueueSize.load();}
+                                TABLED() {str << descriptor->SpilledBytes.load();}
+                                TABLED() {str << descriptor->LoadingQueue.size();}
+                                TABLED() {str << descriptor->HeadBlobId;}
+                                TABLED() {str << descriptor->TailBlobId;}
                                 TABLED() {
                                     HREF("/actors/kqp_node?ca=" + ToString(info.OutputActorId))  {
                                         str << info.OutputActorId;

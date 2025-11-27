@@ -113,6 +113,21 @@ jobs:
           
           echo "Final branches to use: $(cat $GITHUB_OUTPUT | grep branch_array | cut -d= -f2)"
 
+      - name: Post start comment to PR
+        if: inputs.pull_number != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pull_number }}
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          TEST_SIZE: ${{ inputs.test_size }}
+          TEST_TARGETS: ${{ inputs.test_targets }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 -m pip install PyGithub -q
+          python3 ./.github/actions/run_tests/pr_comment.py start
+
   run_tests:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
@@ -149,6 +164,7 @@ jobs:
           ref: ${{ matrix.branch }}
 
 <<<<<<< HEAD
+<<<<<<< HEAD
       - name: Setup ssh key for slice 
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -167,6 +183,8 @@ jobs:
           python3 ./.github/actions/run_tests/pr_comment.py start
 >>>>>>> c8cecab2b81 (Add PR comment functionality for test runs)
 
+=======
+>>>>>>> a0c2829e574 (Enhance GitHub Actions workflow to post start comments on PRs)
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:

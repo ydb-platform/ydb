@@ -1,7 +1,5 @@
 #pragma once
 
-#include "schemeshard_info_types.h"
-
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #if defined LOG_T || \
@@ -20,6 +18,8 @@
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::IMPORT, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, stream)
 
+namespace NKikimr::NSchemeShard {
+
 template <typename T>
 void AddIssue(T& response, const TString& message, NYql::TSeverityIds::ESeverityId severity = NYql::TSeverityIds::S_ERROR) {
     auto& issue = *response.AddIssues();
@@ -27,6 +27,10 @@ void AddIssue(T& response, const TString& message, NYql::TSeverityIds::ESeverity
     issue.set_message(message);
 }
 
-TString MakeIndexBuildUid(const NKikimr::NSchemeShard::TImportInfo& importInfo, ui32 itemIdx, i32 indexIdx);
+struct TImportInfo;
 
-TString MakeIndexBuildUid(const NKikimr::NSchemeShard::TImportInfo& importInfo, ui32 itemIdx);
+TString MakeIndexBuildUid(const TImportInfo& importInfo, ui32 itemIdx, i32 indexIdx);
+
+TString MakeIndexBuildUid(const TImportInfo& importInfo, ui32 itemIdx);
+
+} // NKikimr::NSchemeShard

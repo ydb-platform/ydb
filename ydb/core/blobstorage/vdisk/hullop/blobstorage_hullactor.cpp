@@ -331,11 +331,10 @@ namespace NKikimr {
                             << "requesting PreCompact for ActDeleteSsts");
                         ctx.Send(HullLogCtx->HugeKeeperId, new TEvHugePreCompact, 0, cookie);
                         PreCompactCallbacks.emplace(cookie, [this, ev](ui64 wId, const TActorContext& ctx) mutable {
-                            Y_ABORT_UNLESS(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateWaitPreCompact,
-                                HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                            Y_ABORT_UNLESS(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateWaitPreCompact);
                             RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateNoComp);
 
-                            Y_ABORT_UNLESS(wId, HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                            Y_ABORT_UNLESS(wId);
                             LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
                                 << "got PreCompactResult for ActDeleteSsts, wId# " << wId);
                             ApplyCompactionResult(ctx, {}, {}, wId);

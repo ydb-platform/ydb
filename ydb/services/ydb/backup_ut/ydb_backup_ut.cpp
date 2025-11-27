@@ -129,13 +129,19 @@ enum class ESecretType {
     SecretTypeScheme,
 };
 
+enum class EAuthType {
+    AuthTypeNone,
+    AuthTypeToken,
+    AuthTypePassword,
+};
+
 struct TTransferTestConfig {
     TString TablePath = "/Root/test_table";
     TString TopicPath = "/Root/test_topic";
     TString TransferPath = "/Root/test_transfer";
     bool FakeTopicPath = false;
-    ESecretType SecretType = ESecretType::SecretTypeNone;
-    bool UseUserLogin = false;
+    ESecretType SecretType = ESecretType::SecretTypeOld;
+    EAuthType AuthType = EAuthType::AuthTypeToken;
     ui64 BatchSizeBytes = 1024;
     TDuration FlushInterval = TDuration::Seconds(55);
     bool Replace = false;
@@ -144,6 +150,14 @@ struct TTransferTestConfig {
     bool LambdaInsideUsing = false;
     ui32 BackupRestoreAttemptsCount = 1;
 };
+
+void AssertAuthAndSecretTypes(const TTransferTestConfig& config) {
+    UNIT_ASSERT_C(
+        (config.AuthType == EAuthType::AuthTypeNone && config.SecretType == ESecretType::SecretTypeNone) ||
+            config.AuthType != EAuthType::AuthTypeNone && config.SecretType != ESecretType::SecretTypeNone,
+        "AuthType and SecretType should be consistent"
+    );
+}
 
 }
 
@@ -1545,19 +1559,15 @@ void TestTransferSettingsArePreserved(
     TFsPath pathToBackup,
     const TTransferTestConfig& config = {}
 ) {
-    UNIT_ASSERT_C(!(config.SecretType != ESecretType::SecretTypeNone && config.UseUserLogin), "secrets and useUserLogin options are mutually exclusive");
+    AssertAuthAndSecretTypes(config);
     UNIT_ASSERT_C(config.BackupRestoreAttemptsCount < 10, "backup-restore attempts number must be less than 10");
 
-    if (config.SecretType != ESecretType::SecretTypeNone || config.UseUserLogin) {
+    if (config.AuthType != EAuthType::AuthTypeNone) {
         if (config.SecretType == ESecretType::SecretTypeScheme) {
             ExecuteQuery(session, "CREATE SECRET `transfer_secret` WITH (value = 'root@builtin');", true);
         } else {
             ExecuteQuery(session, "CREATE OBJECT `transfer_secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
-            
         }
-    }
-
-    if (config.UseUserLogin) {
         ExecuteQuery(session, "CREATE USER `transferuser` PASSWORD 'root@builtin';", true);
     }
 
@@ -1598,10 +1608,10 @@ void TestTransferSettingsArePreserved(
             (config.UseConnectionString ? Sprintf("CONNECTION_STRING = 'grpc://%s/?database=/Root',", endpoint.c_str()).c_str() : ""),
             config.BatchSizeBytes,
             config.FlushInterval.Seconds(),
-            (config.SecretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'transfer_secret'" : ""),
-            (config.SecretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'transfer_secret'" : ""),
-            (config.UseUserLogin && config.SecretType != ESecretType::SecretTypeScheme ? ", USER = 'transferuser', PASSWORD_SECRET_NAME = 'transfer_secret'" : ""),
-            (config.UseUserLogin && config.SecretType == ESecretType::SecretTypeScheme ? ", USER = 'transferuser', PASSWORD_SECRET_PATH = 'transfer_secret'" : "")
+            (config.AuthType == EAuthType::AuthTypeToken && config.SecretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'transfer_secret'" : ""),
+            (config.AuthType == EAuthType::AuthTypeToken && config.SecretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'transfer_secret'" : ""),
+            (config.AuthType == EAuthType::AuthTypePassword && config.SecretType != ESecretType::SecretTypeScheme ? ", USER = 'transferuser', PASSWORD_SECRET_NAME = 'transfer_secret'" : ""),
+            (config.AuthType == EAuthType::AuthTypePassword && config.SecretType == ESecretType::SecretTypeScheme ? ", USER = 'transferuser', PASSWORD_SECRET_PATH = 'transfer_secret'" : "")
         ), NQuery::TTxControl::NoTx()
     ).ExtractValueSync();
 
@@ -1626,13 +1636,14 @@ void TestTransferSettingsArePreserved(
             UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
             UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
         }
-        if (config.SecretType == ESecretType::SecretTypeOld) {
-            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "transfer_secret");
-        } else if (config.SecretType == ESecretType::SecretTypeScheme) {
-            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "/Root/transfer_secret");
-        }
 
-        if (config.UseUserLogin) {
+        if (config.AuthType == EAuthType::AuthTypeToken) {
+            if (config.SecretType == ESecretType::SecretTypeOld) {
+                UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "transfer_secret");
+            } else if (config.SecretType == ESecretType::SecretTypeScheme) {
+                UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "/Root/transfer_secret");
+            }
+        } else if (config.AuthType == EAuthType::AuthTypePassword) {
             UNIT_ASSERT_VALUES_EQUAL(params.GetStaticCredentials().User, "transferuser");
             if (config.SecretType == ESecretType::SecretTypeOld) {
                 UNIT_ASSERT_VALUES_EQUAL(params.GetStaticCredentials().PasswordSecretName, "transfer_secret");
@@ -2666,17 +2677,16 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     void TestTransferBackupRestore(const TTransferTestConfig& config = {}) {
-        UNIT_ASSERT_C(!(config.SecretType != ESecretType::SecretTypeNone && config.UseUserLogin), "secrets and useUserLogin options are mutually exclusive");
-
+        AssertAuthAndSecretTypes(config);
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
-        if (config.SecretType == ESecretType::SecretTypeScheme || config.UseUserLogin) {
+        if (config.SecretType == ESecretType::SecretTypeScheme && config.AuthType != EAuthType::AuthTypeNone) {
             server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
         }
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
-        if (config.SecretType != ESecretType::SecretTypeNone || config.UseUserLogin) {
+        if (config.AuthType != EAuthType::AuthTypeNone) {
             driverConfig.SetAuthToken("root@builtin");
         }
 
@@ -2686,7 +2696,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TReplicationClient replicationClient(driver);
 
-        if (config.SecretType != ESecretType::SecretTypeNone || config.UseUserLogin) {
+        if (config.AuthType != EAuthType::AuthTypeNone) {
             TPermissions permissionsToken("root@builtin", {"ydb.generic.full"});
             TPermissions permissionsUser("transferuser", {"ydb.generic.full"});
             const auto result = schemeClient.ModifyPermissions("/Root",
@@ -3220,37 +3230,45 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
-        TestReplicationBackupRestore(false,  ESecretType::SecretTypeNone);
+        TestReplicationBackupRestore(false, ESecretType::SecretTypeNone);
     }
 
-    Y_UNIT_TEST(BackupRestoreTransfer_UseOldSecret) {
+    Y_UNIT_TEST(BackupRestoreTransfer_UseTokenWithOldSecret) {
         TestTransferBackupRestore(TTransferTestConfig {
             .SecretType = ESecretType::SecretTypeOld,
-            .UseUserLogin = false,
+            .AuthType = EAuthType::AuthTypeToken,
             .BackupRestoreAttemptsCount = 3,
         });
     }
 
-    Y_UNIT_TEST(BackupRestoreTransfer_UseSchemaSecret) {
+    Y_UNIT_TEST(BackupRestoreTransfer_UseTokenWithSchemaSecret) {
         TestTransferBackupRestore(TTransferTestConfig {
             .SecretType = ESecretType::SecretTypeScheme,
-            .UseUserLogin = false,
+            .AuthType = EAuthType::AuthTypeToken,
             .BackupRestoreAttemptsCount = 3,
         });
     }
 
-    Y_UNIT_TEST(BackupRestoreTransfer_UseUserPassword) {
+    Y_UNIT_TEST(BackupRestoreTransfer_UseUserPasswordWithOldSecret) {
         TestTransferBackupRestore(TTransferTestConfig {
-            .SecretType = ESecretType::SecretTypeNone,
-            .UseUserLogin = true,
+            .SecretType = ESecretType::SecretTypeOld,
+            .AuthType = EAuthType::AuthTypePassword,
             .BackupRestoreAttemptsCount = 3,
         });
     }
 
-    Y_UNIT_TEST(BackupRestoreTransfer_NoSecretNoUserPassword) {
+    Y_UNIT_TEST(BackupRestoreTransfer_UseUserPasswordWithSchemaSecret) {
+        TestTransferBackupRestore(TTransferTestConfig {
+            .SecretType = ESecretType::SecretTypeScheme,
+            .AuthType = EAuthType::AuthTypePassword,
+            .BackupRestoreAttemptsCount = 3,
+        });
+    }
+
+    Y_UNIT_TEST(BackupRestoreTransfer_NoTokenNoUserPassword) {
         TestTransferBackupRestore(TTransferTestConfig {
             .SecretType = ESecretType::SecretTypeNone,
-            .UseUserLogin = false,
+            .AuthType = EAuthType::AuthTypeNone,
             .BackupRestoreAttemptsCount = 3,
         });
     }

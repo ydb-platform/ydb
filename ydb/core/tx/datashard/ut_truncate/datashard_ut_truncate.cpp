@@ -34,15 +34,9 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
             "key = 2, value = 200\n" 
             "key = 3, value = 300\n");
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-        Cerr << "===================================================================================== BEGIN TRUNCATE" << Endl;
-        Cerr << "TableId = " << tableId << Endl;
 
         ui64 txId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
         WaitTxNotification(server, edgeSender, txId);
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-        Cerr << "===================================================================================== END TRUNCATE" << Endl;
 
         auto afterResult = ReadTable(server, shards, tableId);
         UNIT_ASSERT_VALUES_EQUAL(afterResult, "");

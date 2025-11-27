@@ -26,6 +26,7 @@ TTruncateUnit::~TTruncateUnit() {
 }
 
 bool TTruncateUnit::IsReadyToExecute(TOperation::TPtr) const {
+    // TODO: flown4qqqq
     return true;
 }
 

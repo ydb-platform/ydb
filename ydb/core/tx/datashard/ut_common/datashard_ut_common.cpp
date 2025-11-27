@@ -2881,7 +2881,7 @@ ui64 AsyncTruncateTable(
     auto* op = m->MutableTruncateTable();
     op->SetTableName(tableName);
 
-    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
+    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
 }
 
 }

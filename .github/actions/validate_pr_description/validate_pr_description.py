@@ -85,9 +85,19 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
     print("PR description is valid.")
     return True, "PR description is valid."
 
+def normalize_app_domain(app_domain: str) -> str:
+    """Normalize app domain - remove https:// prefix if present."""
+    domain = app_domain.strip()
+    if domain.startswith("https://"):
+        domain = domain[8:]
+    if domain.startswith("http://"):
+        domain = domain[7:]
+    return domain.rstrip('/')
+
 def generate_test_table(pr_number: int, base_ref: str, app_domain: str) -> str:
     """Generate test execution table with buttons for different build presets and test sizes."""
-    base_url = f"https://{app_domain}/workflow/trigger"
+    domain = normalize_app_domain(app_domain)
+    base_url = f"https://{domain}/workflow/trigger"
     owner = "ydb-platform"
     repo = "ydb"
     workflow_id = "run_tests.yml"
@@ -126,7 +136,7 @@ def generate_test_table(pr_number: int, base_ref: str, app_domain: str) -> str:
         rows.append("| " + " | ".join(cells) + " |")
     
     table = "<!-- test-execution-table -->\n"
-    table += "### Run tests\n\n"
+    table += "<h3>Run tests</h3>\n\n"
     table += "| Small & Medium | Large |\n"
     table += "|----------------|-------|\n"
     table += "\n".join(rows)
@@ -134,7 +144,8 @@ def generate_test_table(pr_number: int, base_ref: str, app_domain: str) -> str:
 
 def generate_backport_table(pr_number: int, app_domain: str) -> str:
     """Generate backport execution table with buttons for different branches."""
-    base_url = f"https://{app_domain}/workflow/trigger"
+    domain = normalize_app_domain(app_domain)
+    base_url = f"https://{domain}/workflow/trigger"
     owner = "ydb-platform"
     repo = "ydb"
     workflow_id = "cherry_pick_v2.yml"  # Workflow file name
@@ -174,7 +185,7 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
         url = f"{base_url}?{query_string}"
         url_ui = f"{base_url}?{query_string}&ui=true"
         
-        rows.append(f"| **{branch}** | [![▶ {branch}](https://img.shields.io/badge/%E2%96%B6_{branch.replace('-', '_')}-4caf50?style=flat-square)]({url}) [![⚙️](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F-ff9800?style=flat-square)]({url_ui}) |")
+        rows.append(f"| **{branch}** [![▶ {branch}](https://img.shields.io/badge/%E2%96%B6_{branch.replace('-', '_')}-4caf50?style=flat-square)]({url}) [![⚙️](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F-ff9800?style=flat-square)]({url_ui}) |")
     
     # Generate URL for backporting multiple branches
     all_branches = ",".join(branches)
@@ -192,9 +203,9 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
     url_multiple_ui = f"{base_url}?{query_string_multiple}&ui=true"
     
     table = "<!-- backport-table -->\n"
-    table += "### 🔄 Backport\n\n"
-    table += "| Branch | Actions |\n"
-    table += "|--------|----------|\n"
+    table += "<h3>🔄 Backport</h3>\n\n"
+    table += "| Actions |\n"
+    table += "|----------|\n"
     table += "\n".join(rows)
     table += "\n\n"
     table += f"[![⚙️ Backport multiple branches](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F_Backport_multiple_branches-2196F3?style=flat-square)]({url_multiple_ui})"
@@ -217,14 +228,34 @@ def ensure_tables_in_pr_body(pr_body: str, pr_number: int, base_ref: str, app_do
     if has_test_table and has_backport_table:
         return None  # Tables already exist
     
-    # Prepare tables to insert
-    tables_to_insert = []
+    # Generate tables to insert
+    test_table = None
+    backport_table = None
     if not has_test_table:
-        tables_to_insert.append(generate_test_table(pr_number, base_ref, app_domain))
+        test_table = generate_test_table(pr_number, base_ref, app_domain)
     if not has_backport_table:
-        tables_to_insert.append(generate_backport_table(pr_number, app_domain))
+        backport_table = generate_backport_table(pr_number, app_domain)
     
     legend = get_legend()
+    
+    # Combine tables side by side using HTML table
+    tables_html = ""
+    if test_table and backport_table:
+        # Both tables - place them side by side using HTML table
+        # GitHub markdown supports markdown tables inside HTML table cells
+        # Using HTML attributes instead of CSS styles for better compatibility
+        tables_html = '<table><tr>\n'
+        tables_html += '<td valign="top">'
+        tables_html += test_table
+        tables_html += '</td>\n'
+        tables_html += '<td valign="top">'
+        tables_html += backport_table
+        tables_html += '</td>\n'
+        tables_html += '</tr></table>'
+    elif test_table:
+        tables_html = test_table
+    elif backport_table:
+        tables_html = backport_table
     
     # Find insertion point after "Description for reviewers" section
     reviewers_section_marker = "### Description for reviewers"
@@ -232,9 +263,9 @@ def ensure_tables_in_pr_body(pr_body: str, pr_number: int, base_ref: str, app_do
     if reviewers_section_marker not in pr_body:
         # If section not found, add at the end
         if pr_body.strip():
-            return pr_body.rstrip() + "\n\n" + "\n\n".join(tables_to_insert) + legend
+            return pr_body.rstrip() + "\n\n" + tables_html + legend
         else:
-            return "\n\n".join(tables_to_insert) + legend
+            return tables_html + legend
     
     # Find the end of "Description for reviewers" section (before next ### heading)
     lines = pr_body.split('\n')
@@ -250,7 +281,7 @@ def ensure_tables_in_pr_body(pr_body: str, pr_number: int, base_ref: str, app_do
             break
     
     # Insert tables and legend after "Description for reviewers" section
-    new_lines = lines[:insertion_index] + [""] + tables_to_insert + [legend] + lines[insertion_index:]
+    new_lines = lines[:insertion_index] + [""] + [tables_html] + [legend] + lines[insertion_index:]
     return '\n'.join(new_lines)
 
 def update_pr_body(pr_number: int, new_body: str) -> None:

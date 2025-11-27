@@ -866,6 +866,9 @@ public:
         , StartTime(Clock::now())
         , LoadState(GetGlobalInterruptSource().get_token())
     {
+        ConnectionConfig.IsNetworkIntensive = true;
+        ConnectionConfig.UsePerChannelTcpConnection = true;
+        ConnectionConfig.UseAllNodes = true;
     }
 
     void ImportSync() {

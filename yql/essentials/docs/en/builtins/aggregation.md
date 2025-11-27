@@ -624,6 +624,8 @@ FROM my_table;
 
 #### Signature
 
+This functions are available since version [2025.04](../changelog/2025.04.md).
+
 ```yql
 RANDOM_SAMPLE(T?, limit:Uint64)->List<T>
 RANDOM_SAMPLE(T, limit:Uint64)->List<T>
@@ -632,6 +634,13 @@ RANDOM_VALUE(T?)->Optional<T>
 ```
 
 Selects up to `limit` random values. `RANDOM_VALUE` is equivalent to `RANDOM_SAMPLE` with `limit=1`, except it returns an element instead of a list. The probability of each input value appearing in the resulting list is exactly `limit/count(*)`.
+
+{% note info %}
+
+When applied to an empty table with no grouping keys, `RANDOM_SAMPLE` returns an empty list instead of NULL.
+
+{% endnote %}
+
 
 #### Examples
 

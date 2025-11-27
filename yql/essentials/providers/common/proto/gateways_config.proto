@@ -527,6 +527,7 @@ message TYqlCoreConfig {
     optional TActivationPercentage QPlayerActivation = 2;
     optional uint32 QPlayerRobotPercentage = 3 [default = 0];
     optional TActivationPercentage QPlayerFullCaptureActivation = 4;
+    optional bool AlwaysCommitQPlayer = 5;
 }
 
 /////////////////////////////// Sql Core ///////////////////////////////

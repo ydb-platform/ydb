@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         void RunTest(ui32 initialBlobs, ui32 unsyncedBlobs, std::vector<ENodeState> nodeStates) {
             Y_VERIFY(nodeStates.size() == NodeCount);
             const ui64 blobSize = 10;
-            const ui32 unsyncedBatchSize = 1;
+            const ui32 unsyncedBatchSize = 1000;
             Initialize();
 
             ui64 tabletId = 5000;
@@ -101,6 +101,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                 collectEverything(nullptr, nullptr);
             }
 
+            Ctest << "Send TEvBaldSyncLog" << Endl;
             const TIntrusivePtr<TBlobStorageGroupInfo> groupInfo = Env->GetGroupInfo(GroupId);
             UNIT_ASSERT(groupInfo);
             for (ui32 orderNumber = 0; orderNumber < groupInfo->Type.BlobSubgroupSize(); ++orderNumber) {
@@ -113,7 +114,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                 const TActorId edge = Env->Runtime->AllocateEdgeActor(actorId.NodeId());
                 Env->Runtime->WrapInActorContext(edge, [&]{
                     TActivationContext::Send(new IEventHandle(
-                            actorId, edge, new TEvBlobStorage::TEvVBaldSyncLog(vdiskId)));
+                            actorId, edge, new TEvBlobStorage::TEvVBaldSyncLog(vdiskId, true)));
                 });
                 Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVBaldSyncLogResult>(edge, false);
             }
@@ -213,8 +214,9 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             .ControllerNodeId = controllerNodeId,
             .PDiskChunkSize = 32_MB,
             .EnablePhantomFlagStorage = true,
+            .TinySyncLog = true,
         });
-        ctx.RunTest(1000, 10, nodeStates);
+        ctx.RunTest(1000, 1000, nodeStates);
     }
 
 

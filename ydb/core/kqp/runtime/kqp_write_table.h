@@ -70,26 +70,18 @@ class IDataBatchProjection : public TThrRefBase {
 public:
     virtual void AddRow(TConstArrayRef<TCell> row) = 0;
     virtual IDataBatchPtr Flush() = 0;
-    virtual bool IsEmpty() const = 0;
 };
 
 using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
 
 IDataBatchProjectionPtr CreateDataBatchProjection(
-    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-    const TConstArrayRef<ui32> inputWriteIndex,
-    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
-    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
-    const TConstArrayRef<ui32> outputWriteIndex,
-    const bool preferAdditionalInputColumns,
+    TConstArrayRef<ui32> indexes,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
 std::vector<ui32> GetIndexes(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-    const TConstArrayRef<ui32> inputWriteIndex,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
-    const TConstArrayRef<ui32> outputWriteIndex,
     const bool preferAdditionalInputColumns);
 
 bool IsEqual(
@@ -155,7 +147,6 @@ public:
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
-        std::vector<ui32>&& writeIndexes,
         const i64 priority) = 0;
     virtual void Write(
         const TWriteToken token,

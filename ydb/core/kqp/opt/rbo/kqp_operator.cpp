@@ -19,36 +19,22 @@ void DFS(int vertex, TVector<int> &sortedStages, THashSet<int> &visited, const T
     sortedStages.push_back(vertex);
 }
 
-TExprNode::TPtr AddRenames(TExprNode::TPtr input, TExprContext &ctx, TVector<TInfoUnit> renames) {
+TExprNode::TPtr AddRenames(TExprNode::TPtr input, TExprContext &ctx, TVector<std::pair<TString, TInfoUnit>> renames) {
     TVector<TExprBase> items;
     auto arg = Build<TCoArgument>(ctx, input->Pos()).Name("arg").Done().Ptr();
 
-    for (auto iu : renames) {
+    for (auto rename : renames) {
         // clang-format off
         auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
-            .Name().Build(iu.GetFullName())
+            .Name().Build(rename.second.GetFullName())
             .Value<TCoMember>()
                 .Struct(arg)
-                .Name().Build(iu.ColumnName)
+                .Name().Build(rename.first)
             .Build()
         .Done();
         // clang-format on
         items.push_back(tuple);
     }
-
-    /*
-    return Build<TCoFlatMap>(ctx, input->Pos())
-        .Input(input)
-        .Lambda<TCoLambda>()
-            .Args({arg})
-            .Body<TCoJust>()
-                .Input<TCoAsStruct>()
-                    .Add(items)
-                .Build()
-            .Build()
-        .Build()
-        .Done().Ptr();
-    */
 
     // clang-format off
     return Build<TCoMap>(ctx, input->Pos())
@@ -329,8 +315,8 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(int 
     auto arg = Build<TCoArgument>(ctx, node->Pos()).Name(inputName).Done().Ptr();
     auto output = arg;
 
-    if (IsSourceStage(fromStage)) {
-        output = AddRenames(arg, ctx, StageAttributes.at(fromStage));
+    if (IsSourceStage(fromStage) && !SourceStageRenames.at(fromStage).empty()) {
+        output = AddRenames(arg, ctx, SourceStageRenames.at(fromStage));
     }
 
     return std::make_pair(arg, output);
@@ -393,9 +379,10 @@ std::pair<TExprNode::TPtr, TVector<TExprNode::TPtr>> BuildSortKeySelector(TVecto
  * Base class Operator methods
  */
 
-void IOperator::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
+void IOperator::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
     Y_UNUSED(renameMap);
     Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
 }
 
 const TTypeAnnotationNode* IOperator::GetIUType(TInfoUnit iu) {
@@ -422,6 +409,7 @@ TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node->Pos(
     auto alias = opSource.Alias().StringValue();
     for (auto c : opSource.Columns()) {
         Columns.push_back(c.StringValue());
+        OutputIUs.push_back(TInfoUnit(alias, c.StringValue()));
     }
 
     Alias = alias;
@@ -430,12 +418,27 @@ TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node->Pos(
 }
 
 TVector<TInfoUnit> TOpRead::GetOutputIUs() {
-    TVector<TInfoUnit> res;
+    return OutputIUs;
+}
 
-    for (auto c : Columns) {
-        res.push_back(TInfoUnit(Alias, c));
+bool TOpRead::NeedsMap() {
+    for (size_t i=0; i<Columns.size(); i++) {
+        if (TInfoUnit("", Columns[i]) != OutputIUs[i]) {
+            return true;
+        }
     }
-    return res;
+    return false;
+}
+
+void TOpRead::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
+
+    for (auto &c : OutputIUs) {
+        if (renameMap.contains(c)) {
+            c = renameMap.at(c);
+        }
+    }
 }
 
 TString TOpRead::ToString(TExprContext& ctx) {
@@ -444,7 +447,7 @@ TString TOpRead::ToString(TExprContext& ctx) {
     res << "Read (" << TKqpTable(TableCallable).Path().StringValue() << "," << Alias << ", [";
 
     for (size_t i=0; i<Columns.size(); i++) {
-        res << Columns[i];
+        res << Columns[i] << ":" << OutputIUs[i].GetFullName();
         if (i != Columns.size()-1) {
             res << ", ";
         }
@@ -522,7 +525,7 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
     return result;
 }
 
-void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
+void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
     TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> newMapElements;
 
     for (auto &el : MapElements) {
@@ -536,7 +539,7 @@ void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunc
 
         if (std::holds_alternative<TInfoUnit>(el.second)) {
             auto from = std::get<TInfoUnit>(el.second);
-            if (renameMap.contains(from)) {
+            if (renameMap.contains(from) && !stopList.contains(from)) {
                 newBody = renameMap.at(from);
             }
         } else {
@@ -603,8 +606,9 @@ TVector<TInfoUnit> TOpProject::GetOutputIUs() {
     return res;
 }
 
-void TOpProject::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
+void TOpProject::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
     Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
 
     for (auto &p : ProjectList) {
         if (renameMap.contains(p)) {
@@ -637,7 +641,8 @@ TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, TExp
 
 TVector<TInfoUnit> TOpFilter::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
 
-void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
+void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+    Y_UNUSED(stopList);
     FilterLambda = RenameMembers(FilterLambda, renameMap, ctx);
 }
 
@@ -752,8 +757,9 @@ TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
     return res;
 }
 
-void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
+void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
     Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
 
     for (auto &k : JoinKeys) {
         if (renameMap.contains(k.first)) {
@@ -805,7 +811,8 @@ TOpLimit::TOpLimit(std::shared_ptr<IOperator> input, TPositionHandle pos, TExprN
 
 TVector<TInfoUnit> TOpLimit::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
 
-void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
+void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+    Y_UNUSED(stopList);
     LimitCond = RenameMembers(LimitCond, renameMap, ctx);
 }
 
@@ -831,13 +838,31 @@ TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
     return outputIU;
 }
 
+void TOpAggregate::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
+
+    for (auto & column : KeyColumns) {
+        if (renameMap.contains(column)) {
+            column = renameMap.at(column);
+        }
+    }
+
+    for (auto & trait : AggregationTraitsList) {
+        if (renameMap.contains(trait.OriginalColName)) {
+            trait.OriginalColName = renameMap.at(trait.OriginalColName);
+        }
+    }
+}
+
+
 TString TOpAggregate::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
 
     TStringBuilder strBuilder;
     strBuilder << "Aggregate (";
     for (ui32 i = 0; i < AggregationTraitsList.size(); ++i) {
-        strBuilder << AggregationTraitsList[i].AggFunction << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ")";
+        strBuilder << AggregationTraitsList[i].AggFunction << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ") ";
         if (i + 1 != AggregationTraitsList.size()) {
             strBuilder << ", ";
         }

@@ -54,6 +54,7 @@ public:
     const bool IsReadOnlyVDisk;
 
     TControlWrapper EnablePhantomFlagStorage;
+    TControlWrapper PhantomFlagStorageLimit;
 
     TSyncLogCtx(TIntrusivePtr<TVDiskContext> vctx,
             TIntrusivePtr<TLsnMngr> lsnMngr,
@@ -66,7 +67,8 @@ public:
             ui32 maxResponseSize,
             std::shared_ptr<TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep,
             bool isReadOnlyVDisk,
-            const TControlWrapper& enablePhantomFlagStorage)
+            const TControlWrapper& enablePhantomFlagStorage,
+            const TControlWrapper& phantomFlagStorageLimit)
         : VCtx(std::move(vctx))
         , LsnMngr(std::move(lsnMngr))
         , PDiskCtx(std::move(pdiskCtx))
@@ -82,6 +84,7 @@ public:
         , PhantomFlagStorageGroup(VCtx->VDiskCounters, "subsystem", "phantomflagstorage")
         , IsReadOnlyVDisk(isReadOnlyVDisk)
         , EnablePhantomFlagStorage(enablePhantomFlagStorage)
+        , PhantomFlagStorageLimit(phantomFlagStorageLimit)
     {}
 };
 

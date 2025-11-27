@@ -147,7 +147,6 @@ template <typename TDerived, typename TEvRequest>
 class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TExportConv {
     using TTraits = TExportTraits<TEvRequest>;
     static constexpr bool IsS3Export = std::is_same_v<TEvRequest, TEvExportToS3Request>;
-    static constexpr bool IsYtExport = std::is_same_v<TEvRequest, TEvExportToYtRequest>;
     static constexpr bool IsFsExport = std::is_same_v<TEvRequest, TEvExportToFsRequest>;
 
     struct TExportItemInfo {
@@ -544,16 +543,20 @@ public:
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix or common destination prefix specified for item \"" << item.source_path() << "\"");
                 }
             }
+        }
+        if constexpr (TTraits::HasEncryption) {
             if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
-                if (!commonDestSpecified) {
+                if (!TTraits::HasDestination(settings)) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix specified for encrypted export");
                 }
-
+    
                 if (!ValidateEncryptionParameters()) {
                     return;
                 }
             }
+        }
 
+        if constexpr (TTraits::HasCompression) {
             if (settings.compression()) {
                 StatusIds::StatusCode status;
                 TString error;
@@ -562,7 +565,7 @@ public:
                 }
             }
         }
-
+        
         if constexpr (IsFsExport) {
             if (!settings.base_path().StartsWith("/")) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 

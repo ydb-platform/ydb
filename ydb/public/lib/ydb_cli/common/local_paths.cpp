@@ -1,10 +1,12 @@
 #include "local_paths.h"
 
-#include <initializer_list>
-
 #include <util/folder/dirut.h>
 #include <util/folder/iterator.h>
 #include <util/generic/guid.h>
+#if defined(_win32_)
+#include <initializer_list>
+#endif
+
 #include <util/generic/maybe.h>
 #include <util/stream/file.h>
 #include <util/string/builder.h>
@@ -22,7 +24,9 @@ const TString YdbBinaryName = "ydb.exe";
 const TString YdbBinaryName = "ydb";
 #endif
 
-namespace {
+constexpr int DIR_MODE_PRIVATE = S_IRUSR | S_IWUSR | S_IXUSR; // rwx------
+constexpr int DIR_MODE_CACHE = S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH; // rwxr-xr-x
+constexpr int FILE_MODE_PRIVATE = S_IRUSR | S_IWUSR; // rw-------
 
 TFsPath GetHomePath() {
 #if defined(_win32_)
@@ -35,6 +39,8 @@ TFsPath GetHomePath() {
     return TFsPath(GetHomeDir()).Fix();
 }
 
+namespace {
+
 TMaybe<TFsPath> GetEnvPath(const char* envName) {
     if (auto value = TryGetEnv(envName)) {
         if (!value->empty()) {
@@ -45,21 +51,23 @@ TMaybe<TFsPath> GetEnvPath(const char* envName) {
 }
 
 void EnsureDir(const TFsPath& path, int mode) {
-    const bool needCreate = !path.Exists();
-    if (needCreate) {
+    if (path.Exists()) {
+        return;
+    }
+#if defined(_win32_)
+    Y_UNUSED(mode);
+    path.MkDirs();
+#else
+    if (mode > 0) {
+        path.MkDirs(mode);
+    } else {
         path.MkDirs();
     }
-#if !defined(_win32_)
-    if (needCreate && mode > 0) {
-        Chmod(path.GetPath().c_str(), mode);
-    }
-#else
-    Y_UNUSED(mode);
 #endif
 }
 
 void WriteStringAtomically(const TFsPath& path, const TString& data, int mode) {
-    EnsureDir(path.Parent(), S_IRUSR | S_IWUSR | S_IXUSR);
+    EnsureDir(path.Parent(), DIR_MODE_PRIVATE);
 
     TString tmpName = TStringBuilder() << '.' << path.GetName() << ".tmp-" << CreateGuidAsString();
     TFsPath tmpPath = path.Parent().Child(tmpName);
@@ -99,48 +107,7 @@ bool IsDirEmpty(const TFsPath& path) {
     return children.empty();
 }
 
-TFsPath GetLegacyRoot() {
-    return GetHomePath().Child("ydb");
-}
-
-TFsPath GetLegacyProfilesFile() {
-    return GetLegacyRoot().Child("config").Child("config.yaml");
-}
-
-TFsPath GetLegacyImportProgressDir() {
 #if defined(_win32_)
-    if (auto appData = GetEnvPath("APPDATA")) {
-        return appData->Child("ydb").Child("import_progress");
-    }
-    return GetHomePath().Child("AppData").Child("Roaming").Child("ydb").Child("import_progress");
-#else
-    TString base;
-    if (auto xdg = GetEnvPath("XDG_CONFIG_HOME")) {
-        base = xdg->GetPath();
-    } else {
-        base = TStringBuilder() << GetHomeDir() << "/.config";
-    }
-    return TFsPath(base).Child("ydb").Child("import_progress").Fix();
-#endif
-}
-
-TFsPath GetLegacyUpdateStateFile() {
-    return GetLegacyRoot().Child("bin").Child("config.json").Fix();
-}
-
-TFsPath ResolveUnixXdgDir(const char* overrideEnv, const char* xdgEnv, const TString& fallbackSuffix) {
-    if (auto overridePath = GetEnvPath(overrideEnv)) {
-        return *overridePath;
-    }
-    TString base;
-    if (auto xdgPath = GetEnvPath(xdgEnv)) {
-        base = xdgPath->GetPath();
-    } else {
-        base = TStringBuilder() << GetHomeDir() << fallbackSuffix;
-    }
-    return TFsPath(base).Child("ydb").Fix();
-}
-
 TFsPath ResolveWindowsDir(const char* overrideEnv, const char* envName, std::initializer_list<TString> fallbackSuffixes) {
     if (auto overridePath = GetEnvPath(overrideEnv)) {
         return *overridePath;
@@ -158,6 +125,20 @@ TFsPath ResolveWindowsDir(const char* overrideEnv, const char* envName, std::ini
     }
     return path.Fix();
 }
+#else
+TFsPath ResolveUnixXdgDir(const char* overrideEnv, const char* xdgEnv, const TString& fallbackSuffix) {
+    if (auto overridePath = GetEnvPath(overrideEnv)) {
+        return *overridePath;
+    }
+    TString base;
+    if (auto xdgPath = GetEnvPath(xdgEnv)) {
+        base = xdgPath->GetPath();
+    } else {
+        base = TStringBuilder() << GetHomeDir() << fallbackSuffix;
+    }
+    return TFsPath(base).Child("ydb").Fix();
+}
+#endif
 
 void CopyFileContents(const TFsPath& src, const TFsPath& dst, int mode) {
     TFileInput in(src);
@@ -166,9 +147,14 @@ void CopyFileContents(const TFsPath& src, const TFsPath& dst, int mode) {
 }
 
 void MoveFilePreservingContents(const TFsPath& src, const TFsPath& dst, int mode) {
-    EnsureDir(dst.Parent(), S_IRUSR | S_IWUSR | S_IXUSR);
+    EnsureDir(dst.Parent(), DIR_MODE_PRIVATE);
     try {
         src.RenameTo(dst);
+#if !defined(_win32_)
+        if (mode > 0) {
+            Chmod(dst.GetPath().c_str(), mode);
+        }
+#endif
         Cerr << "Migrated legacy file " << src.GetPath() << " to " << dst.GetPath() << Endl;
         return;
     } catch (...) {
@@ -180,34 +166,23 @@ void MoveFilePreservingContents(const TFsPath& src, const TFsPath& dst, int mode
     Cerr << "Migrated legacy file " << src.GetPath() << " to " << dst.GetPath() << Endl;
 }
 
-void MigrateProfiles(const TFsPath& target) {
-    if (target.Exists()) {
-        return;
-    }
-    TFsPath legacy = GetLegacyProfilesFile();
-    if (!legacy.Exists()) {
-        return;
-    }
-    MoveFilePreservingContents(legacy, target, S_IRUSR | S_IWUSR);
-}
-
 void MoveImportProgress(const TFsPath& targetDir) {
     if (targetDir.Exists() && !IsDirEmpty(targetDir)) {
         return;
     }
-    TFsPath legacyDir = GetLegacyImportProgressDir();
+    TFsPath legacyDir = GetHomePath().Child(".config").Child("ydb").Child("import_progress").Fix();
     if (!legacyDir.Exists()) {
-        EnsureDir(targetDir, S_IRUSR | S_IWUSR | S_IXUSR);
+        EnsureDir(targetDir, DIR_MODE_PRIVATE);
         return;
     }
-    EnsureDir(targetDir, S_IRUSR | S_IWUSR | S_IXUSR);
+    EnsureDir(targetDir, DIR_MODE_PRIVATE);
     TDirIterator it(legacyDir.GetPath());
     bool movedAny = false;
-    while (it.Next()) {
-        if (it->fts_info != FTS_F) {
+    while (FTSENT* entry = it.Next()) {
+        if (entry->fts_info != FTS_F) {
             continue;
         }
-        const TString name(it->fts_name);
+        const TString name(entry->fts_name);
         TFsPath src = legacyDir.Child(name);
         TFsPath dst = targetDir.Child(name);
 
@@ -220,7 +195,7 @@ void MoveImportProgress(const TFsPath& targetDir) {
             }
         }
 
-        CopyFileContents(src, dst, S_IRUSR | S_IWUSR);
+        CopyFileContents(src, dst, FILE_MODE_PRIVATE);
         src.DeleteIfExists();
         movedAny = true;
     }
@@ -233,17 +208,6 @@ void MoveImportProgress(const TFsPath& targetDir) {
     }
 }
 
-void MigrateUpdateState(const TFsPath& target) {
-    if (target.Exists()) {
-        return;
-    }
-    TFsPath legacy = GetLegacyUpdateStateFile();
-    if (!legacy.Exists()) {
-        return;
-    }
-    MoveFilePreservingContents(legacy, target, S_IRUSR | S_IWUSR);
-}
-
 }
 
 TFsPath GetConfigDir() {
@@ -252,7 +216,7 @@ TFsPath GetConfigDir() {
 #else
     TFsPath dir = ResolveUnixXdgDir("YDB_CONFIG_DIR", "XDG_CONFIG_HOME", "/.config");
 #endif
-    EnsureDir(dir, S_IRUSR | S_IWUSR | S_IXUSR);
+    EnsureDir(dir, DIR_MODE_PRIVATE);
     return dir;
 }
 
@@ -262,7 +226,7 @@ TFsPath GetStateDir() {
 #else
     TFsPath dir = ResolveUnixXdgDir("YDB_STATE_DIR", "XDG_STATE_HOME", "/.local/state");
 #endif
-    EnsureDir(dir, S_IRUSR | S_IWUSR | S_IXUSR);
+    EnsureDir(dir, DIR_MODE_PRIVATE);
     return dir;
 }
 
@@ -272,7 +236,7 @@ TFsPath GetCacheDir() {
 #else
     TFsPath dir = ResolveUnixXdgDir("YDB_CACHE_DIR", "XDG_CACHE_HOME", "/.cache");
 #endif
-    EnsureDir(dir, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+    EnsureDir(dir, DIR_MODE_CACHE);
     return dir;
 }
 
@@ -291,16 +255,21 @@ TFsPath GetCanonicalBinaryPath() {
 }
 
 TFsPath GetLegacyBinaryPath() {
-    return GetLegacyRoot().Child("bin").Child(YdbBinaryName).Fix();
+    return GetHomePath().Child("ydb").Child("bin").Child(YdbBinaryName).Fix();
 }
 
 TFsPath GetLegacyPathHelperScript() {
-    return GetLegacyRoot().Child("path.bash.inc").Fix();
+    return GetHomePath().Child("ydb").Child("path.bash.inc").Fix();
 }
 
 TFsPath GetProfilesFile() {
     TFsPath filePath = GetConfigDir().Child("profiles.yaml");
-    MigrateProfiles(filePath);
+    if (!filePath.Exists()) {
+        TFsPath legacy = GetHomePath().Child("ydb").Child("config").Child("config.yaml");
+        if (legacy.Exists()) {
+            MoveFilePreservingContents(legacy, filePath, FILE_MODE_PRIVATE);
+        }
+    }
     return filePath;
 }
 
@@ -312,16 +281,33 @@ TFsPath GetImportProgressDir() {
 
 TFsPath GetUpdateStateFile() {
     TFsPath dir = GetStateDir().Child("update");
-    EnsureDir(dir, S_IRUSR | S_IWUSR | S_IXUSR);
+    EnsureDir(dir, DIR_MODE_PRIVATE);
     TFsPath file = dir.Child("state.json");
-    MigrateUpdateState(file);
+    if (!file.Exists()) {
+        TFsPath legacy = GetHomePath().Child("ydb").Child("bin").Child("config.json").Fix();
+        if (legacy.Exists()) {
+            MoveFilePreservingContents(legacy, file, FILE_MODE_PRIVATE);
+        }
+    }
     return file;
 }
 
 TFsPath GetUpdateCacheDir() {
     TFsPath dir = GetCacheDir().Child("update");
-    EnsureDir(dir, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+    EnsureDir(dir, DIR_MODE_CACHE);
     return dir;
+}
+
+TFsPath GetHistoryFile() {
+    TFsPath stateDir = GetStateDir();
+    TFsPath target = stateDir.Child("interactive_history");
+    if (!target.Exists()) {
+        TFsPath legacy = GetHomePath().Child(".ydb_history");
+        if (legacy.Exists()) {
+            MoveFilePreservingContents(legacy, target, FILE_MODE_PRIVATE);
+        }
+    }
+    return target;
 }
 
 }

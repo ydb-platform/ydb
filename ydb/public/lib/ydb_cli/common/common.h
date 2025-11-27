@@ -15,14 +15,6 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-#if defined(_darwin_)
-    const TString HomeDir = GetHomeDir();
-#elif defined(_win32_)
-    const TString HomeDir = GetEnv("USERPROFILE");
-#else
-    const TString HomeDir = GetHomeDir();
-#endif
-
 // Print 'Try "--help" option for more info'
 class TMisuseException : public yexception {};
 

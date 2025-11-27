@@ -4,6 +4,7 @@
 #include "stat_visalization_error.h"
 
 #include <ydb/public/lib/ydb_cli/common/common.h>
+#include <ydb/public/lib/ydb_cli/common/local_paths.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/folder/path.h>
 #include <util/generic/fwd.h>
@@ -106,7 +107,7 @@ private:
         (void) multipleQueries;
         auto file = resultFile;
         if (file.StartsWith("~")) {
-            file = NYdb::NConsoleClient::HomeDir + file.substr(1);
+            file = NYdb::NConsoleClient::NLocalPaths::GetHomePath().GetPath() + file.substr(1);
         }
         TFsPath fsPath(file);
         if (fsPath.IsDirectory()) {

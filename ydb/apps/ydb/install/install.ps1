@@ -31,36 +31,6 @@ param (
     }
 }
 
-function Join-Path-Var {
-param (
-  [string]$base,
-  [string]$a
- )
-    if ([string]::IsNullOrEmpty($base)) {
-        return $a
-    }
-    if ($base.Split(";") -contains $a) {
-        return $base
-    }
-    if (-not $base.EndsWith(";")) {
-        $base += ";"
-    }
-    return $base + $a
-}
-
-function Add-To-Path {
-param (
-  [string]$dir
- )
-    $env:Path = Join-Path-Var $env:Path $dir
-    # [Environment]::GetEnvironmentVariable automatically expands things like %USERPROFILE%
-    # and we want to preserve them when setting PATH.
-    # https://stackoverflow.com/questions/31547104/how-to-get-the-value-of-the-path-environment-variable-without-expanding-tokens
-    $userPath = (Get-Item -path "HKCU:\Environment" ).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-    $userPath = Join-Path-Var $userPath $dir
-    [Environment]::SetEnvironmentVariable("Path", $userPath, [System.EnvironmentVariableTarget]::User)
-}
-
 function Parse-Bool {
 param(
   [string]$s
@@ -108,7 +78,10 @@ if (([Environment]::Is64BitOperatingSystem) -or ($env:PROCESSOR_ARCHITECTURE -eq
     throw "Installation failed. 386 machines are not supported yet."
 }
 
-$ydbInstallPath = Join-Path $home "ydb"
+$canonicalInstallDir = Join-Path $env:LOCALAPPDATA "Programs\ydb"
+$canonicalBinPath = Join-Path $canonicalInstallDir "ydb.exe"
+$legacyInstallDir = Join-Path $home "ydb\bin"
+$legacyBinaryPath = Join-Path $legacyInstallDir "ydb.exe"
 $ydbStorageUrl = $env:ydbStorageUrl
 if ([string]::IsNullOrEmpty($ydbStorageUrl)) {
     $ydbStorageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb"
@@ -132,16 +105,84 @@ if (-not $?) {
     throw "Installation failed. Please try again later or contact technical support."
 }
 
-$binPath = Join-Path $ydbInstallPath "bin"
-Create-If-Not-Exists $binPath
-$ydb = Join-Path $binPath "ydb.exe"
-Move-Item -Force $tempYdb $ydb
+Create-If-Not-Exists $canonicalInstallDir
+Move-Item -Force $tempYdb $canonicalBinPath
+Write-Host "ydb is installed to $canonicalBinPath"
 
-if (-not ($env:Path.Split(";") -contains $binPath)) {
-    $modify = Input-Yes-No "Add ydb installation dir to your PATH? [Y/n]"
+if (Test-Path $legacyBinaryPath) {
+    Remove-Item -Force $legacyBinaryPath
+    Write-Host "Removed legacy binary $legacyBinaryPath"
+}
+
+function Normalize-PathString {
+param (
+  [string]$path
+ )
+    if ([string]::IsNullOrWhiteSpace($path)) {
+        return ""
+    }
+    $expanded = [System.Environment]::ExpandEnvironmentVariables($path)
+    try {
+        $full = [System.IO.Path]::GetFullPath($expanded)
+    } catch {
+        $full = $expanded
+    }
+    $normalized = $full.Trim().TrimEnd('\','/')
+    $normalized = $normalized -replace '/', '\'
+    return $normalized.ToLowerInvariant()
+}
+
+function Update-UserPath {
+param (
+  [string]$canonicalDir,
+  [string]$legacyDir
+ )
+    $canonicalNorm = Normalize-PathString $canonicalDir
+    $legacyNorm = Normalize-PathString $legacyDir
+    $raw = (Get-Item -Path "HKCU:\Environment").GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+    $parts = @()
+    if (-not [string]::IsNullOrEmpty($raw)) {
+        $parts = $raw -split ';'
+    }
+    $newParts = @()
+    $replaced = $false
+    $hasCanonical = $false
+    foreach ($part in $parts) {
+        if ([string]::IsNullOrWhiteSpace($part)) {
+            continue
+        }
+        $normalized = Normalize-PathString $part
+        if ($normalized -eq $legacyNorm) {
+            $newParts += $canonicalDir
+            $replaced = $true
+            $hasCanonical = $true
+            continue
+        }
+        if ($normalized -eq $canonicalNorm) {
+            $hasCanonical = $true
+        }
+        $newParts += $part
+    }
+    if ($replaced) {
+        $joined = ($newParts -join ';').Trim(';')
+        [Environment]::SetEnvironmentVariable("Path", $joined, [System.EnvironmentVariableTarget]::User)
+        $env:Path = [Environment]::ExpandEnvironmentVariables($joined)
+        Write-Host "Replaced legacy PATH entry with $canonicalDir"
+        return
+    }
+    if ($hasCanonical) {
+        return
+    }
+    $modify = Input-Yes-No "Add $canonicalDir to your PATH? [Y/n]"
     if ($modify) {
-        Add-To-Path $binPath
+        $newParts = @($newParts + $canonicalDir) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        $joined = ($newParts -join ';').Trim(';')
+        [Environment]::SetEnvironmentVariable("Path", $joined, [System.EnvironmentVariableTarget]::User)
+        $env:Path = [Environment]::ExpandEnvironmentVariables($joined)
+        Write-Host "Added $canonicalDir to PATH"
     } else {
-        Write-Host "ydb is installed to ${ydb}"
+        Write-Host "You can add $canonicalDir to PATH later via System Settings."
     }
 }
+
+Update-UserPath -canonicalDir $canonicalInstallDir -legacyDir $legacyInstallDir

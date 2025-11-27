@@ -1,4 +1,5 @@
 #include "common.h"
+#include "local_paths.h"
 
 #include <util/folder/dirut.h>
 #include <util/folder/path.h>
@@ -61,7 +62,7 @@ void TProfileConfig::ReadFromFile() {
 
 TFsPath GetFsPath(TString& filePath) {
     if (filePath.StartsWith("~")) {
-        filePath = HomeDir + filePath.substr(1);
+        filePath = NLocalPaths::GetHomePath().GetPath() + filePath.substr(1);
     }
     TFsPath fsPath(filePath);
     if (!fsPath.Exists()) {

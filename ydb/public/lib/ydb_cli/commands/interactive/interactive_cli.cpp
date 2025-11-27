@@ -9,6 +9,7 @@
 
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/line_reader.h>
+#include <ydb/public/lib/ydb_cli/common/local_paths.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_table.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sql.h>
@@ -186,9 +187,8 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         << "  " << colors.BoldColor() << "Ctrl+D" << colors.OldColor() << ": exit interactive mode." << Endl
         << Endl;
 
-    TFsPath homeDirPath(HomeDir);
-    TString historyFilePath(homeDirPath / ".ydb_history");
-    std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath, config);
+    TFsPath historyFilePath = NLocalPaths::GetHistoryFile();
+    std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath.GetPath(), config);
 
     InteractiveCLIState interactiveCLIState;
 

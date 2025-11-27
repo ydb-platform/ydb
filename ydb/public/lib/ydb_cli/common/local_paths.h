@@ -15,11 +15,13 @@ TFsPath GetCacheDir();
 TFsPath GetCanonicalBinaryPath();
 TFsPath GetLegacyBinaryPath();
 TFsPath GetLegacyPathHelperScript();
+TFsPath GetHomePath();
 
 TFsPath GetProfilesFile();
 TFsPath GetImportProgressDir();
 TFsPath GetUpdateStateFile();
 TFsPath GetUpdateCacheDir();
+TFsPath GetHistoryFile();
 
 }
 

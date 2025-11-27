@@ -638,14 +638,12 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
     auto labeledCounters = std::make_unique<TPartitionLabeledCounters>("topic", 0, DatabasePath);
     ensureCounters(AggregatedCounters, labeledCounters);
 
-
     using TPartitionExtendedLabeledCounters = TProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>;
     auto extendedLabeledCounters = std::make_unique<TPartitionExtendedLabeledCounters>("topic", 0, DatabasePath);
     ensureCounters(AggregatedExtendedCounters, extendedLabeledCounters, {}, false);
 
     using TPartitionKeyCompactionCounters = TProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>;
     auto compactionCounters = std::make_unique<TPartitionKeyCompactionCounters>("topic", 0, DatabasePath);
-
     if (TabletConfig.GetEnableCompactification()) {
         ensureCounters(AggregatedCompactionCounters, compactionCounters);
     } else {
@@ -654,10 +652,9 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
 
     using TConsumerLabeledCounters = TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>;
     auto labeledConsumerCounters = std::make_unique<TConsumerLabeledCounters>("topic|x|consumer", 0, DatabasePath);
-
     for (auto& [consumer, info]: Consumers) {
-        info.Aggr.Reset(new TTabletLabeledCountersBase{});
         ensureCounters(info.AggregatedCounters, labeledConsumerCounters, {{"consumer", NPersQueue::ConvertOldConsumerName(consumer, ctx)}});
+        info.Aggr.Reset(new TTabletLabeledCountersBase{});
     }
 
     /*** apply counters ****/
@@ -671,82 +668,60 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
     for (auto it = AggregatedStats.Stats.begin(); it != AggregatedStats.Stats.end(); ++it) {
         auto& partitionStats = it->second;
 
-        if (!partitionStats.HasCounters)
+        if (!partitionStats.HasCounters) {
             continue;
-
-        for (ui32 i = 0; i < partitionStats.Counters.ValuesSize() && i < labeledCounters->GetCounters().Size(); ++i) {
-            labeledCounters->GetCounters()[i] = partitionStats.Counters.GetValues(i);
         }
+
+        auto setCounters = [&](auto& counters, auto& state) {
+            for (size_t i = 0; i < counters->GetCounters().Size() && i < state.ValuesSize(); ++i) {
+                counters->GetCounters()[i] = state.GetValues(i);
+            }
+        };
+
+        setCounters(labeledCounters, partitionStats.Counters);
         aggr->AggregateWith(*labeledCounters);
 
-        for (ui32 i = 0; i < partitionStats.Counters.GetExtendedCounters().ValuesSize()
-                         && i < extendedLabeledCounters->GetCounters().Size(); ++i
-        ) {
-            extendedLabeledCounters->GetCounters()[i] = partitionStats.Counters.GetExtendedCounters().GetValues(i);
-        }
+        setCounters(extendedLabeledCounters, partitionStats.Counters.GetExtendedCounters());
         aggrExtended->AggregateWith(*extendedLabeledCounters);
 
         if (TabletConfig.GetEnableCompactification()) {
-            for (ui32 i = 0; i < partitionStats.Counters.GetCompactionCounters().ValuesSize() && i < compactionCounters->GetCounters().Size(); ++i) {
-                compactionCounters->GetCounters()[i] = partitionStats.Counters.GetCompactionCounters().GetValues(i);
-            }
+            setCounters(compactionCounters, partitionStats.Counters.GetCompactionCounters());
             compactionAggr->AggregateWith(*compactionCounters);
         }
 
         for (const auto& consumerStats : partitionStats.Counters.GetConsumerAggregatedCounters()) {
             auto jt = Consumers.find(consumerStats.GetConsumer());
-            if (jt == Consumers.end())
+            if (jt == Consumers.end()) {
                 continue;
-            for (ui32 i = 0; i < consumerStats.ValuesSize() && i < labeledCounters->GetCounters().Size(); ++i) {
-                labeledConsumerCounters->GetCounters()[i] = consumerStats.GetValues(i);
             }
-            jt->second.Aggr->AggregateWith(*labeledConsumerCounters);
-        }
+            auto& consumerInfo = jt->second;
 
+            setCounters(labeledConsumerCounters, consumerStats);
+            consumerInfo.Aggr->AggregateWith(*labeledConsumerCounters);
+        }
     }
 
-    /*** show counters ***/
-    for (ui32 i = 0; aggr->HasCounters() && i < aggr->GetCounters().Size(); ++i) {
-        if (!AggregatedCounters[i])
-            continue;
-        const auto& type = aggr->GetCounterType(i);
-        auto val = aggr->GetCounters()[i].Get();
-        if (type == TLabeledCounterOptions::CT_TIMELAG) {
-            val = val <= milliSeconds ? milliSeconds - val : 0;
-        }
-        AggregatedCounters[i]->Set(val);
-    }
-    for (ui32 i = 0; aggrExtended->HasCounters() && i < aggrExtended->GetCounters().Size(); ++i) {
-        if (!AggregatedExtendedCounters[i])
-            continue;
-        const auto& type = aggrExtended->GetCounterType(i);
-        auto val = aggrExtended->GetCounters()[i].Get();
-        if (type == TLabeledCounterOptions::CT_TIMELAG) {
-            val = val <= milliSeconds ? milliSeconds - val : 0;
-        }
-        AggregatedExtendedCounters[i]->Set(val);
-    }
-
-
-    for (ui32 i = 0; i < compactionAggr->GetCounters().Size() && i < AggregatedCompactionCounters.size(); ++i) {
-        if (!AggregatedCompactionCounters[i]) {
-            continue;
-        }
-        auto val = compactionAggr->GetCounters()[i].Get();
-        AggregatedCompactionCounters[i]->Set(val);
-    }
-
-    for (auto& [consumer, info] : Consumers) {
-        for (ui32 i = 0; info.Aggr->HasCounters() && i < info.Aggr->GetCounters().Size(); ++i) {
-            if (!info.AggregatedCounters[i])
+    auto processAggregators = [milliSeconds = milliSeconds](auto& aggregator, auto& counters) {
+        for (ui32 i = 0; aggregator->HasCounters() && i < aggregator->GetCounters().Size(); ++i) {
+            if (!counters[i]) {
                 continue;
-            const auto& type = info.Aggr->GetCounterType(i);
-            auto val = info.Aggr->GetCounters()[i].Get();
+            }
+            const auto& type = aggregator->GetCounterType(i);
+            auto val = aggregator->GetCounters()[i].Get();
             if (type == TLabeledCounterOptions::CT_TIMELAG) {
                 val = val <= milliSeconds ? milliSeconds - val : 0;
             }
-            info.AggregatedCounters[i]->Set(val);
+            counters[i]->Set(val);
         }
+    };
+
+    /*** show counters ***/
+    processAggregators(aggr, AggregatedCounters);
+    processAggregators(aggrExtended, AggregatedExtendedCounters);
+    processAggregators(compactionAggr, AggregatedCompactionCounters);
+
+    for (auto& [consumer, info] : Consumers) {
+        processAggregators(info.Aggr, info.AggregatedCounters);
     }
 }
 

@@ -519,14 +519,15 @@ public:
             if (settings.items().empty()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
             }
-        }
-        if constexpr (IsS3Export) {
+        } else {
             const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
             const bool commonDestSpecified = TTraits::HasDestination(settings);
             if (!encryptedExportFeatureFlag) {
                 // Check that no new fields are specified
-                if (commonDestSpecified && !IsS3Export) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination prefix is not supported in current configuration");
+                if constexpr (IsS3Export) {
+                    if (commonDestSpecified) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination prefix is not supported in current configuration");
+                    }
                 }
                 if (!settings.source_path().empty()) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source path is not supported in current configuration");

@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
         }
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
         settings.DestinationPrefix("encrypted_export");
-        settings.SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::CHACHA_20_POLY_1305, "123");
+        settings.SymmetricEncryption(NExport::TEncryptionAlgorithm::CHACHA_20_POLY_1305, "123");
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
         UNIT_ASSERT_C(!res.Status().IsSuccess(), "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, res.Status().GetIssues().ToString());
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
         // Fix
         {
             NExport::TExportToS3Settings fixSettings = settings;
-            fixSettings.SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::CHACHA_20_POLY_1305, "Key is big enough to be 32 bytes");
+            fixSettings.SymmetricEncryption(NExport::TEncryptionAlgorithm::CHACHA_20_POLY_1305, "Key is big enough to be 32 bytes");
             auto res = YdbExportClient().ExportToS3(fixSettings).GetValueSync();
             WaitOpSuccess(res);
         }

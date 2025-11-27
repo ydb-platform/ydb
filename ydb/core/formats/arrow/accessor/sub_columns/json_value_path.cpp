@@ -171,6 +171,8 @@ TConclusionStatus TJsonPathAccessorTrie::Insert(TJsonPathBuf jsonPath, std::shar
         }
     }
 
+    AFL_VERIFY(!currentNode->accessor);
+
     currentNode->accessor = std::move(accessor);
 
     return TConclusionStatus::Success();

@@ -8,6 +8,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 

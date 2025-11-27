@@ -233,9 +233,9 @@ public:
         }
 
         NBsController::TGroupMapper::TGroupDefinition group;
-        TString error;
+        NBsController::TGroupMapperError error;
         if (!mapper.AllocateGroup(0, group, {}, {}, 1u, 0, false, {}, error)) {
-            Cerr << "Can't allocate group: " << error << Endl;
+            Cerr << "Can't allocate group: " << error.ErrorMessage << Endl;
             return EXIT_FAILURE;
         }
 

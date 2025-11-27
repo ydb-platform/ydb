@@ -111,6 +111,30 @@ public:
                 }
             }
             json["debugMessage"] = Response->Record.ShortDebugString();
+            
+            auto& statuses = Response->Record.GetResponse().GetStatus();
+            NJson::TJsonValue groupMapperErrors(NJson::EJsonValueType::JSON_ARRAY);
+            auto config = NProtobufJson::TProto2JsonConfig()
+                .SetFormatOutput(false)
+                .SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName);
+            
+            for (auto& status : statuses) {
+                if (status.FailParamSize() == 0) {
+                    continue;
+                }
+                for (auto& failParam : status.GetFailParam()) {
+                    if (failParam.HasGroupMapperError()) {
+                        NJson::TJsonValue groupMapperError;
+                        const auto& gme = failParam.GetGroupMapperError();
+                        NJson::TJsonValue gmeJson;
+                        NProtobufJson::Proto2Json(gme, gmeJson, config);
+                        groupMapperErrors.AppendValue(gmeJson);
+                    }
+                }
+            }
+
+            json["groupMapperErrors"] = std::move(groupMapperErrors);
+
             TBase::ReplyAndPassAway(GetHTTPOKJSON(json));
         } else {
             TBase::ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", Response.GetError()));

@@ -802,6 +802,25 @@ namespace NKikimr {
             }
         };
 
+        void FillGroupMapperError(NKikimrBlobStorage::TGroupMapperError& groupMapperErrorProto, const TGroupMapperError& error) {
+            auto fillStats = [](NKikimrBlobStorage::TGroupMapperError::TStats& statsProto, const TGroupMapperError::TStats& stats) {
+                auto* examplePdiskId = statsProto.MutableExamplePDiskId();
+                examplePdiskId->SetNodeId(stats.ExamplePDiskId.NodeId);
+                examplePdiskId->SetPDiskId(stats.ExamplePDiskId.PDiskId);
+
+                statsProto.SetAllSlotsAreOccupied(stats.AllSlotsAreOccupied);
+                statsProto.SetNotEnoughSpace(stats.NotEnoughSpace);
+                statsProto.SetNotAcceptingNewSlots(stats.NotAcceptingNewSlots);
+                statsProto.SetNotOperational(stats.NotOperational);
+                statsProto.SetDecommission(stats.Decommission);
+            };
+            fillStats(*groupMapperErrorProto.MutableTotalStats(), error.TotalStats);
+            for (const auto& domainStat : error.MatchingDomainsStats) {
+                auto* domainStatsProto = groupMapperErrorProto.AddMatchingDomainsStats();
+                fillStats(*domainStatsProto, domainStat);
+            }
+        }
+
         void TBlobStorageController::FitGroupsForUserConfig(TConfigState& state, ui32 availabilityDomainId,
                 const NKikimrBlobStorage::TConfigRequest& cmd, std::deque<ui64> expectedSlotSize,
                 NKikimrBlobStorage::TConfigResponse::TStatus& status) {
@@ -851,10 +870,16 @@ namespace NKikimr {
                         }
                     }
                 } catch (const TExFitGroupError& ex) {
-                    throw TExError() << "Group fit error"
+                    TExError err;
+                    err << "Group fit error"
                         << " BoxId# " << std::get<0>(storagePoolId)
                         << " StoragePoolId# " << std::get<1>(storagePoolId)
                         << " Error# " << ex.what();
+                    if (ex.GroupMapperError) {
+                        auto& failParam = err.FailParams.emplace_back();
+                        FillGroupMapperError(*failParam.MutableGroupMapperError(), *ex.GroupMapperError);
+                    }
+                    throw err;
                 }
                 if (storagePool.NumGroups < numActualGroups) {
                     throw TExError() << "Storage pool modification error"

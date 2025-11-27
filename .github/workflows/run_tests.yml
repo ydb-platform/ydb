@@ -75,6 +75,16 @@ jobs:
     outputs:
       branch_array: ${{ steps.set-branches.outputs.branch_array }}
     steps:
+<<<<<<< HEAD
+=======
+      - name: Checkout ${{ matrix.branch }}
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/config/stable_branches.json
+            .github/actions/run_tests/
+
+>>>>>>> 45cd1e1ac61 (Update GitHub Actions workflow to include sparse checkout for run_tests action)
       - name: Set branches
         id: set-branches
         env:

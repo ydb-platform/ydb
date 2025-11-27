@@ -38,7 +38,7 @@ public:
         if (!db.Precharge<Schema>())
             return false;
 
-        auto paramRow = db.Table<Schema::Param>().Key(1).Select<Schema::Param::TColumns>();
+        auto paramRow = db.Table<Schema::Param>().Key(Schema::Param::Key).Select<Schema::Param::TColumns>();
         auto permissionRowset = db.Table<Schema::Permission>().Range().Select<Schema::Permission::TColumns>();
         auto requestRowset = db.Table<Schema::Request>().Range().Select<Schema::Request::TColumns>();
         auto walleTaskRowset = db.Table<Schema::WalleTask>().Range().Select<Schema::WalleTask::TColumns>();
@@ -60,17 +60,23 @@ public:
 
         NKikimrCms::TCmsConfig config;
         if (paramRow.IsValid()) {
+            FirstBoot = false;
+
             state->NextPermissionId = paramRow.GetValueOrDefault<Schema::Param::NextPermissionID>(1);
             state->NextRequestId = paramRow.GetValueOrDefault<Schema::Param::NextRequestID>(1);
             state->NextNotificationId = paramRow.GetValueOrDefault<Schema::Param::NextNotificationID>(1);
+            state->FirstBootTimestamp = TInstant::MicroSeconds(paramRow.GetValueOrDefault<Schema::Param::FirstBootTimestamp>(0));
             config = paramRow.GetValueOrDefault<Schema::Param::Config>(NKikimrCms::TCmsConfig());
 
             LOG_DEBUG_S(ctx, NKikimrServices::CMS,
                         "Loaded config: " << config.ShortDebugString());
         } else {
+            FirstBoot = true;
+
             state->NextPermissionId = 1;
             state->NextRequestId = 1;
             state->NextNotificationId = 1;
+            state->FirstBootTimestamp = ctx.Now();
 
             LOG_DEBUG_S(ctx, NKikimrServices::CMS,
                         "Using default config");
@@ -257,7 +263,13 @@ public:
         Self->ScheduleLogCleanup(ctx);
         Self->ScheduleUpdateClusterInfo(ctx, true);
         Self->ProcessInitQueue(ctx);
+
+        if (FirstBoot) {
+            Self->Execute(Self->CreateTxStoreFirstBootTimestamp(), ctx);
+        }
     }
+private:
+    bool FirstBoot = false;
 };
 
 ITransaction *TCms::CreateTxLoadState() {

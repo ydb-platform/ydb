@@ -38,6 +38,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             return setup.DescribeConsumer(TString{TEST_TOPIC}, TString{TEST_CONSUMER});
         };
 
+        std::deque<TString> messagesTextQueue;
         auto write = [&](size_t seqNo) {
             TTopicClient client(setup.MakeDriver());
 
@@ -49,9 +50,11 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
             TString msgTxt = TStringBuilder() << "message_" << seqNo;
             TWriteMessage msg(msgTxt);
-            msg.CreateTimestamp(TInstant::Now() - TDuration::Seconds(10 - seqNo));
+            constexpr size_t maxSeqNo = 10;
+            Y_ASSERT(seqNo <= maxSeqNo);
+            msg.CreateTimestamp(TInstant::Now() - TDuration::Seconds(maxSeqNo - seqNo));
             UNIT_ASSERT(session->Write(std::move(msg)));
-
+            messagesTextQueue.push_back(msgTxt);
             session->Close(TDuration::Seconds(5));
         };
 
@@ -78,7 +81,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         Sleep(TDuration::Seconds(2));
         write(7);
         Sleep(TDuration::Seconds(2));
-        write(11);
+        write(10);
 
         Cerr << ">>>>> Check describe for topic which contains messages, but consumer hasn`t read\n";
         {
@@ -92,7 +95,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             auto& c = p.GetPartitionConsumerStats();
             UNIT_ASSERT_VALUES_EQUAL(true, c.has_value());
             UNIT_ASSERT_VALUES_EQUAL(0, c->GetCommittedOffset());
-            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7), c->GetMaxWriteTimeLag()); // 
+            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7), c->GetMaxWriteTimeLag()); //
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxReadTimeLag());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(4), c->GetMaxCommittedTimeLag());
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3)); // why not zero?
@@ -100,6 +103,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         }
 
         UNIT_ASSERT(setup.Commit(TString{TEST_TOPIC}, TEST_CONSUMER, 0, 1).IsSuccess());
+        messagesTextQueue.pop_front();
 
         Cerr << ">>>>> Check describe for topic whis contains messages, has commited offset but hasn`t read (restart tablet for example)\n";
         {
@@ -115,7 +119,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_VALUES_EQUAL(1, c->GetCommittedOffset());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7), c->GetMaxWriteTimeLag());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxReadTimeLag());
-            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(4), c->GetMaxCommittedTimeLag());
+            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(2), c->GetMaxCommittedTimeLag());
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3)); // why not zero?
             UNIT_ASSERT_VALUES_EQUAL(1, c->GetLastReadOffset());
         }
@@ -134,11 +138,18 @@ Y_UNIT_TEST_SUITE(WithSDK) {
                 if (e) {
                     Cerr << ">>>>> Event = " << e->index() << Endl << Flush;
                 }
-                if (e && std::holds_alternative<TReadSessionEvent::TDataReceivedEvent>(e.value())) {
-                    // we must recive only one date event with second message
-                    break;
-                } else if (e && std::holds_alternative<TReadSessionEvent::TStartPartitionSessionEvent>(e.value())) {
-                    std::get<TReadSessionEvent::TStartPartitionSessionEvent>(e.value()).Confirm();
+                if (e && std::holds_alternative<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(e.value())) {
+                    for (const auto& message : std::get<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(e.value()).GetMessages()) {
+                        UNIT_ASSERT(!messagesTextQueue.empty());
+                        UNIT_ASSERT_VALUES_EQUAL(message.GetData(), messagesTextQueue.front());
+                        messagesTextQueue.pop_front();
+                    }
+                    if (messagesTextQueue.empty()) {
+                        // we must receive data events for all messages except the first one
+                        break;
+                    }
+                } else if (e && std::holds_alternative<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(e.value())) {
+                    std::get<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(e.value()).Confirm();
                 }
                 UNIT_ASSERT_C(endTime > TInstant::Now(), "Unable wait");
             }
@@ -160,7 +171,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_VALUES_EQUAL(1, c->GetCommittedOffset());
             //UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7), c->GetMaxWriteTimeLag());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxReadTimeLag());
-            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(4), c->GetMaxCommittedTimeLag());
+            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(2), c->GetMaxCommittedTimeLag());
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3));
             UNIT_ASSERT_VALUES_EQUAL(3, c->GetLastReadOffset());
         }

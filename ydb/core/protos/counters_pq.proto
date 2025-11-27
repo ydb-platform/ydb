@@ -141,6 +141,8 @@ enum EPercentileCounters {
     COUNTER_LATENCY_PQ_SPLIT_MESSAGE_GROUP = 19                 [(CounterOpts) = {Name: "LatencySplitMessageGroup"}];
     COUNTER_LATENCY_PQ_PUBLISH_READ = 20                        [(CounterOpts) = {Name: "LatencyPublishRead"}];
     COUNTER_LATENCY_PQ_FORGET_READ = 21                         [(CounterOpts) = {Name: "LatencyForgetRead"}];
+
+    COUNTER_LATENCY_PQ_TXCALCPREDICATE = 22                     [(CounterOpts) = {Name: "LatencyTxCalcPredicate"}];
 }
 
 

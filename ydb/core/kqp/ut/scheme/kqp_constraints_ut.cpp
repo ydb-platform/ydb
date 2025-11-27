@@ -782,11 +782,14 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetUseRealThreads(false)
             .SetEnableAddColumsWithDefaults(true)
+            .SetDisableMissingDefaultColumnsInBulkUpsert(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); } );
         auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); } );
         auto querySession = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); } );
+
+        auto tableClient = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
@@ -860,7 +863,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         auto alterQuery = R"(
             ALTER TABLE `/Root/AddNonColumnDoesnotReturnInternalError`
-            ADD COLUMN Value3 Int32 NOT NULL DEFAULT 7;
+            ADD COLUMN Value3 Int32 DEFAULT 7;
         )";
 
         auto alterFuture = kikimr.RunInThreadPool([&] { return session.ExecuteQuery(alterQuery, TTxControl::NoTx()).GetValueSync(); });
@@ -924,8 +927,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         auto result = runtime.WaitFuture(alterFuture);
         fCompareTable(R"([
-            [1u;"Changed";"Updated";7];
-            [2u;"New";"text";7]
+            [1u;"Changed";"Updated";[7]];
+            [2u;"New";"text";[7]]
         ])");
     }
 

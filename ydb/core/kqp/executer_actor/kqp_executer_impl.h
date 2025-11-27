@@ -2175,10 +2175,7 @@ protected:
             if (!BatchOperationSettings.Empty() && !Stats->TableStats.empty()) {
                 auto [_, tableStats] = *Stats->TableStats.begin();
                 Counters->Counters->BatchOperationUpdateRows->Add(tableStats->GetWriteRows());
-                Counters->Counters->BatchOperationUpdateBytes->Add(tableStats->GetWriteBytes());
-
                 Counters->Counters->BatchOperationDeleteRows->Add(tableStats->GetEraseRows());
-                Counters->Counters->BatchOperationDeleteBytes->Add(tableStats->GetEraseBytes());
             }
 
             auto finishSize = Stats->EstimateFinishMem();

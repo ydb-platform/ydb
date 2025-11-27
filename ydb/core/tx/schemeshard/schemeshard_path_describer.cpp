@@ -1202,11 +1202,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             checks.NotUnderDeleting(NKikimrScheme::StatusPathDoesNotExist);
         }
 
-        if (!Params.GetOptions().GetShowPrivateTable()) {
-            // Allow accessing index impl tables when feature flag is enabled
-            if (!path.ShouldSkipCommonPathCheckForIndexImplTable()) {
-                checks.IsCommonSensePath();
-            }
+        const bool skipCommonSensePathCheck = Params.GetOptions().GetShowPrivateTable() || path.ShouldSkipCommonPathCheckForIndexImplTable();
+        if (!skipCommonSensePathCheck) {
+            checks.IsCommonSensePath();
         }
 
         if (!checks) {

@@ -300,6 +300,9 @@ struct TLevel {
     }
 
     bool NeedCompaction(const TSettings& settings) const {
+        if (!CheckCompactions) {
+            return false;
+        }
         if (Portions.size() < 2) {
             return false;
         }
@@ -316,8 +319,11 @@ struct TLevel {
     }
 
     void Remove(ui64 id) {
-        if (Compacting.erase(id)) {
+        if (auto it = Compacting.find(id); it != Compacting.end()) {
+            Counters.Portions->RemovePortion(it->second);
+            Compacting.erase(it);
             CheckCompactions = true;
+            return;
         }
 
         auto it = Portions.find(id);
@@ -523,9 +529,10 @@ private:
     void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         std::vector<TPortionInfo::TPtr> sortedRemove;
         for (const auto& p : remove) {
-            if (p->GetProduced() != NPortion::EVICTED) {
-                PortionsInfo->RemovePortion(p);
+            if (p->GetProduced() == NPortion::EVICTED) {
+                continue;
             }
+            PortionsInfo->RemovePortion(p);
             sortedRemove.push_back(p);
         }
         std::sort(sortedRemove.begin(), sortedRemove.end(), [](const auto& a, const auto& b) {
@@ -544,6 +551,9 @@ private:
 
         std::vector<TPortionInfo::TPtr> sortedAdd;
         for (const auto& p : add) {
+            if (p->GetProduced() == NPortion::EVICTED) {
+                continue;
+            }
             sortedAdd.push_back(p);
         }
         std::sort(sortedAdd.begin(), sortedAdd.end(), [](const auto& a, const auto& b) {
@@ -551,23 +561,16 @@ private:
         });
 
         for (const auto& p : sortedAdd) {
-            switch (p->GetProduced()) {
-                case NPortion::EVICTED:
-                    break;
-                default: {
-                    PortionsInfo->AddPortion(p);
-                    ui32 level = p->GetCompactionLevel();
-                    if (level >= MaxLevels) {
-                        level = MaxLevels - 1;
-                        p->MutableMeta().ResetCompactionLevel(level);
-                    }
-                    if (IsAccumulatorPortion(p)) {
-                        EnsureAccumulator(level).Add(p);
-                    } else {
-                        EnsureLevel(level).Add(p);
-                    }
-                    break;
-                }
+            PortionsInfo->AddPortion(p);
+            ui32 level = p->GetCompactionLevel();
+            if (level >= MaxLevels) {
+                level = MaxLevels - 1;
+                p->MutableMeta().ResetCompactionLevel(level);
+            }
+            if (IsAccumulatorPortion(p)) {
+                EnsureAccumulator(level).Add(p);
+            } else {
+                EnsureLevel(level).Add(p);
             }
         }
     }

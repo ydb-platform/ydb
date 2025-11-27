@@ -482,7 +482,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool DirectRowDependsOn = true;
     bool EnableLineage = false;
     bool EnableStandaloneLineage = false;
-    bool CorrectLineage = true;
+    TMaybe<bool> CorrectLineage;
     TMaybe<bool> CorrectStandaloneLineage;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;

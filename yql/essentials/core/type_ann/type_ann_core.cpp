@@ -14044,6 +14044,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["YqlResultItem"] = &PgResultItemWrapper;
         ExtFunctions["YqlValuesList"] = &PgValuesListWrapper;
         Functions["YqlColumnRef"] = &PgColumnRefWrapper;
+        Functions["YqlSubLink"] = &PgSubLinkWrapper;
         Functions["YqlStar"] = &PgStarWrapper;
         Functions["YqlWhere"] = &PgWhereWrapper;
         Functions["YqlSort"] = &PgSortWrapper;

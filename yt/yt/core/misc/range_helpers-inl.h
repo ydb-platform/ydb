@@ -116,6 +116,24 @@ TContainer StaticRangeTo(TValues... values)
     return NDetail::TRangeTo<TContainer>::template StaticRangeToContainer<TValues...>(std::forward<TValues>(values)...);
 }
 
+template <class... TValues>
+struct TStaticRange
+{
+public:
+    explicit TStaticRange(TValues... values)
+        : Tuple_(std::forward<TValues>(values)...)
+    { }
+
+    template <class TContainer>
+    operator TContainer() &&
+    {
+        return std::apply(&StaticRangeTo<TContainer, TValues...>, std::move(Tuple_));
+    }
+
+private:
+    std::tuple<TValues...> Tuple_;
+};
+
 template <std::ranges::range TRange, class TOperation, class TProjection>
 auto FoldRange(TRange&& range, TOperation operation, TProjection projection)
 {

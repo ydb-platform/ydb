@@ -2669,7 +2669,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_DEBUG_ABORT_UNLESS(Node_);
+        Y_DEBUG_ABORT_UNLESS(Node_, "Oh, no Node! Maybe you forgot to call Init");
         return Node_->Translate(ctx);
     }
 
@@ -3242,7 +3242,9 @@ const TUdfNode* TUdfNode::GetUdfNode() const {
 }
 
 TAstNode* TUdfNode::Translate(TContext& ctx) const {
-    ctx.Error(Pos_) << "Abstract Udf Node can't be used as a part of expression.";
+    ctx.Error(Pos_)
+        << "Abstract Udf Node can't be used as a part of expression. "
+        << "It should be applied immediately to its arguments";
     return nullptr;
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "context.h"
 #include "node.h"
 
 #include <yql/essentials/sql/settings/translation_settings.h>
@@ -8,10 +9,23 @@
 
 namespace NSQLTranslationV1 {
 
+std::unexpected<ESQLError> YqlSelectUnsupported(TContext& ctx, TStringBuf message);
+
 TNodeResult BuildYqlSelect(
     TContext& ctx,
     NSQLTranslation::ESqlMode mode,
     const NSQLv1Generated::TRule_select_stmt& rule);
+
+TNodeResult BuildYqlSelectSubExpr(
+    TContext& ctx,
+    NSQLTranslation::ESqlMode mode,
+    const NSQLv1Generated::TRule_select_subexpr& rule,
+    EColumnRefState state);
+
+TNodeResult BuildYqlExists(
+    TContext& ctx,
+    NSQLTranslation::ESqlMode mode,
+    const NSQLv1Generated::TRule_exists_expr& rule);
 
 TNodeResult BuildYqlSelect(
     TContext& ctx,

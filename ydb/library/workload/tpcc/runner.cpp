@@ -128,6 +128,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
 {
     ConnectionConfig.IsNetworkIntensive = true;
     ConnectionConfig.UsePerChannelTcpConnection = true;
+    ConnectionConfig.UseAllNodes = true;
 
     const size_t cpuCount = NumberOfMyCpus();
 

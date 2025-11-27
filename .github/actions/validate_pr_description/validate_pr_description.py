@@ -1,5 +1,6 @@
 import sys
 import re
+<<<<<<< HEAD
 from typing import Tuple
 
 issue_patterns = [
@@ -26,6 +27,19 @@ pull_request_template = """
 * Documentation (changelog entry is not required)
 * Not for changelog (changelog entry is not required)
 """
+=======
+import os
+import json
+import urllib.parse
+from typing import Tuple, Optional
+from github import Github, Auth as GithubAuth
+from pr_template import (
+    ISSUE_PATTERNS,
+    PULL_REQUEST_TEMPLATE,
+    NOT_FOR_CHANGELOG_CATEGORIES,
+    ALL_CATEGORIES
+)
+>>>>>>> 757f6deb2fd (Add PR comment functionality for test runs)
 
 def validate_pr_description(description, is_not_for_cl_valid=True) -> bool:
     try:
@@ -108,24 +122,291 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
     print("PR description is valid.")
     return True, "PR description is valid."
 
+<<<<<<< HEAD
 def validate_pr_description_from_file(file_path) -> Tuple[bool, str]:
     try:
         with open(file_path, 'r') as file:
             description = file.read()
         return check_pr_description(description)
+=======
+def generate_test_table(pr_number: int, base_ref: str, app_domain: str) -> str:
+    """Generate test execution table with buttons for different build presets and test sizes."""
+    base_url = f"https://{app_domain}/workflow/trigger"
+    owner = "ydb-platform"
+    repo = "ydb"
+    workflow_id = "run_tests.yml"
+    return_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
+    
+    build_presets = ["relwithdebinfo", "release-asan", "release-msan", "release-tsan"]
+    test_size_combinations = [
+        ("small,medium", "Small & Medium"),
+        ("large", "Large")
+    ]
+    
+    rows = []
+    for build_preset in build_presets:
+        cells = []
+        
+        for test_size, test_size_display in test_size_combinations:
+            params = {
+                "owner": owner,
+                "repo": repo,
+                "workflow_id": workflow_id,
+                "ref": base_ref,
+                "pull_number": f"pull/{pr_number}",
+                "build_preset": build_preset,
+                "test_size": test_size,
+                "test_targets": "ydb/",
+                "return_url": return_url
+            }
+            query_string = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()])
+            url = f"{base_url}?{query_string}"
+            url_ui = f"{base_url}?{query_string}&ui=true"
+            
+            button_label_encoded = build_preset.replace('-', '_')
+            buttons = f"[![▶ {build_preset}](https://img.shields.io/badge/%E2%96%B6_{button_label_encoded}-4caf50?style=flat-square)]({url}) [![⚙️](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F-ff9800?style=flat-square)]({url_ui})"
+            cells.append(buttons)
+        
+        rows.append("| " + " | ".join(cells) + " |")
+    
+    table = "<!-- test-execution-table -->\n"
+    table += "### Run tests\n\n"
+    table += "| Small & Medium | Large |\n"
+    table += "|----------------|-------|\n"
+    table += "\n".join(rows)
+    return table
+
+def generate_backport_table(pr_number: int, app_domain: str) -> str:
+    """Generate backport execution table with buttons for different branches."""
+    base_url = f"https://{app_domain}/workflow/trigger"
+    owner = "ydb-platform"
+    repo = "ydb"
+    workflow_id = "cherry_pick_v2.yml"  # Workflow file name
+    return_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
+    
+    # Load backport branches from config - no fallback, fail if not found
+    workspace = os.environ.get("GITHUB_WORKSPACE")
+    if not workspace:
+        raise ValueError("GITHUB_WORKSPACE environment variable is not set")
+    
+    backport_branches_path = os.path.join(workspace, ".github", "config", "backport_branches.json")
+    
+    if not os.path.exists(backport_branches_path):
+        raise FileNotFoundError(f"Backport branches config file not found: {backport_branches_path}")
+    
+    with open(backport_branches_path, 'r') as f:
+        branches = json.load(f)
+    
+    if not isinstance(branches, list) or len(branches) == 0:
+        raise ValueError(f"Invalid backport branches config: expected non-empty list, got {type(branches)}")
+    
+    print(f"::notice::Loaded {len(branches)} backport branches from {backport_branches_path}")
+    
+    rows = []
+    for branch in branches:
+        params = {
+            "owner": owner,
+            "repo": repo,
+            "workflow_id": workflow_id,
+            "ref": "main",
+            "commits": str(pr_number),
+            "target_branches": branch,
+            "allow_unmerged": "true",
+            "return_url": return_url
+        }
+        query_string = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()])
+        url = f"{base_url}?{query_string}"
+        url_ui = f"{base_url}?{query_string}&ui=true"
+        
+        rows.append(f"| **{branch}** | [![▶ {branch}](https://img.shields.io/badge/%E2%96%B6_{branch.replace('-', '_')}-4caf50?style=flat-square)]({url}) [![⚙️](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F-ff9800?style=flat-square)]({url_ui}) |")
+    
+    # Generate URL for backporting multiple branches
+    all_branches = ",".join(branches)
+    params_multiple = {
+        "owner": owner,
+        "repo": repo,
+        "workflow_id": workflow_id,
+        "ref": "main",
+        "commits": str(pr_number),
+        "target_branches": all_branches,
+        "allow_unmerged": "true",
+        "return_url": return_url
+    }
+    query_string_multiple = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params_multiple.items()])
+    url_multiple_ui = f"{base_url}?{query_string_multiple}&ui=true"
+    
+    table = "<!-- backport-table -->\n"
+    table += "### 🔄 Backport\n\n"
+    table += "| Branch | Actions |\n"
+    table += "|--------|----------|\n"
+    table += "\n".join(rows)
+    table += "\n\n"
+    table += f"[![⚙️ Backport multiple branches](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F_Backport_multiple_branches-2196F3?style=flat-square)]({url_multiple_ui})"
+    return table
+
+def get_legend() -> str:
+    """Get legend text for workflow buttons."""
+    return "\n**Legend:**\n\n" \
+           "* ▶ - immediately runs the workflow with default parameters\n" \
+           "* ⚙️ - opens UI to review and modify parameters before running\n"
+
+def ensure_tables_in_pr_body(pr_body: str, pr_number: int, base_ref: str, app_domain: str) -> Optional[str]:
+    """Check if test and backport tables exist in PR body, add them if missing."""
+    test_table_marker = "<!-- test-execution-table -->"
+    backport_table_marker = "<!-- backport-table -->"
+    
+    has_test_table = test_table_marker in pr_body
+    has_backport_table = backport_table_marker in pr_body
+    
+    if has_test_table and has_backport_table:
+        return None  # Tables already exist
+    
+    # Prepare tables to insert
+    tables_to_insert = []
+    if not has_test_table:
+        tables_to_insert.append(generate_test_table(pr_number, base_ref, app_domain))
+    if not has_backport_table:
+        tables_to_insert.append(generate_backport_table(pr_number, app_domain))
+    
+    legend = get_legend()
+    
+    # Find insertion point after "Description for reviewers" section
+    reviewers_section_marker = "### Description for reviewers"
+    
+    if reviewers_section_marker not in pr_body:
+        # If section not found, add at the end
+        if pr_body.strip():
+            return pr_body.rstrip() + "\n\n" + "\n\n".join(tables_to_insert) + legend
+        else:
+            return "\n\n".join(tables_to_insert) + legend
+    
+    # Find the end of "Description for reviewers" section (before next ### heading)
+    lines = pr_body.split('\n')
+    insertion_index = len(lines)  # Default to end
+    
+    for i, line in enumerate(lines):
+        if reviewers_section_marker in line:
+            # Look for the next ### heading after this section
+            for j in range(i + 1, len(lines)):
+                if lines[j].strip().startswith('###') and reviewers_section_marker not in lines[j]:
+                    insertion_index = j
+                    break
+            break
+    
+    # Insert tables and legend after "Description for reviewers" section
+    new_lines = lines[:insertion_index] + [""] + tables_to_insert + [legend] + lines[insertion_index:]
+    return '\n'.join(new_lines)
+
+def update_pr_body(pr_number: int, new_body: str) -> None:
+    """Update PR body via GitHub API. Raises exception on error."""
+    github_token = os.environ.get("GITHUB_TOKEN")
+    github_repo = os.environ.get("GITHUB_REPOSITORY")
+    
+    if not github_token:
+        raise ValueError("GITHUB_TOKEN environment variable is not set")
+    
+    if not github_repo:
+        raise ValueError("GITHUB_REPOSITORY environment variable is not set")
+    
+    gh = Github(auth=GithubAuth.Token(github_token))
+    repo = gh.get_repo(github_repo)
+    pr = repo.get_pull(pr_number)
+    pr.edit(body=new_body)
+    print(f"::notice::Updated PR #{pr_number} body with test and backport tables")
+
+def validate_pr_description_from_file(file_path=None, description=None) -> Tuple[bool, str]:
+    try:
+        if description is not None:
+            # Use provided description directly
+            desc = description
+        elif file_path:
+            with open(file_path, 'r') as file:
+                desc = file.read()
+        else:
+            # Read from stdin if available
+            if not sys.stdin.isatty():
+                desc = sys.stdin.read()
+            else:
+                desc = ""
+        return check_pr_description(desc)
+>>>>>>> 757f6deb2fd (Add PR comment functionality for test runs)
     except Exception as e:
         txt = f"Failed to validate PR description: {e}"
         print(f"::error::{txt}")
         return False, txt
 
+def validate_pr():
+    """Validate PR description."""
+    # Read PR body from stdin (passed from action.yaml)
+    if sys.stdin.isatty():
+        raise ValueError("PR body must be provided via stdin")
+    
+    pr_body = sys.stdin.read()
+    
+    # Get PR info from event - required, no fallback
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if not event_path:
+        raise ValueError("GITHUB_EVENT_PATH environment variable is not set")
+    
+    if not os.path.exists(event_path):
+        raise FileNotFoundError(f"Event file not found: {event_path}")
+    
+    with open(event_path, 'r') as f:
+        event = json.load(f)
+    
+    if "pull_request" not in event:
+        raise ValueError("Event does not contain pull_request data")
+    
+    pr_number = event["pull_request"]["number"]
+    base_ref = event["pull_request"]["base"]["ref"]
+    
+    # Use PR body from event if stdin is empty
+    if not pr_body:
+        pr_body = event["pull_request"].get("body") or ""
+    
+    # Validate PR description
+    is_valid, txt = validate_pr_description_from_file(
+        sys.argv[1] if len(sys.argv) > 1 else None,
+        description=pr_body
+    )
+    
+    return is_valid, txt, pr_body, pr_number, base_ref
+
+def add_tables_if_needed(pr_body: str, pr_number: int, base_ref: str):
+    """Add test and backport tables to PR body if enabled."""
+    show_additional_info = os.environ.get("SHOW_ADDITIONAL_INFO_IN_PR", "").upper() == "TRUE"
+    
+    if not show_additional_info:
+        return  # Tables should not be added
+    
+    app_domain = os.environ.get("APP_DOMAIN")
+    if not app_domain:
+        raise ValueError("APP_DOMAIN environment variable is not set (required when SHOW_ADDITIONAL_INFO_IN_PR=TRUE)")
+    
+    updated_body = ensure_tables_in_pr_body(pr_body, pr_number, base_ref, app_domain)
+    if updated_body:
+        update_pr_body(pr_number, updated_body)
+
 if __name__ == "__main__":
+<<<<<<< HEAD
     if len(sys.argv) != 2:
         print("Usage: validate_pr_description.py <path_to_pr_description_file>")
         sys.exit(1)
     
     file_path = sys.argv[1]
     is_valid, txt = validate_pr_description_from_file(file_path)
+=======
+    # Step 1: Validate PR description
+    is_valid, txt, pr_body, pr_number, base_ref = validate_pr()
+    
+    # Step 2: Add tables if validation passed and feature is enabled
+    if is_valid:
+        add_tables_if_needed(pr_body, pr_number, base_ref)
+    
+    # Step 3: Post validation status
+>>>>>>> 757f6deb2fd (Add PR comment functionality for test runs)
     from post_status_to_github import post
     post(is_valid, txt)
+    
     if not is_valid:
         sys.exit(1)

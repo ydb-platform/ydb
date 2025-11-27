@@ -197,5 +197,9 @@ jobs:
           TEST_STATUS: ${{ steps.run_tests.outcome }}
         run: |
           python3 -m pip install PyGithub -q
+<<<<<<< HEAD
           python3 ./.github/actions/run_tests/pr_comment.py complete "$GITHUB_STEP_SUMMARY"
 >>>>>>> 757f6deb2fd (Add PR comment functionality for test runs)
+=======
+          python3 ./.github/actions/run_tests/pr_comment.py complete
+>>>>>>> 329dfe4db8e (Refactor PR comment script to streamline summary handling)

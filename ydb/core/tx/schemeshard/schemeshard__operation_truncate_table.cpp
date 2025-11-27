@@ -33,16 +33,12 @@ public:
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-        const auto& evRecord = ev->Get()->Record;
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply TEvSchemaChanged"
+       LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     DebugHint()
+                     << " HandleReply TEvSchemaChanged"
                      << " at tablet: " << ssId);
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvSchemaChanged"
-                     << " triggered early"
-                     << ", message: " << evRecord.ShortDebugString());
-
+ 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
     }
@@ -82,7 +78,6 @@ public:
 
         txState->ClearShardsInProgress();
 
-        // Send TruncateTable scheme transaction to all datashards
         TString txBody;
         {
             auto seqNo = context.SS->StartRound(*txState);

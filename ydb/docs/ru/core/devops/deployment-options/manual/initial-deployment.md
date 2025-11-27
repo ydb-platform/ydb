@@ -213,7 +213,7 @@ sleep 5
 sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_03
 ```
 
-### Проверьте себя
+### Проверьте подготовку дисков
 
 Для проверки корректной разметки дисков выполните команду на каждом сервере кластера:
 
@@ -263,6 +263,11 @@ hosts:
     data_center: 'zone-d'
     rack: '3'
 domains_config:
+  default_users:
+  - name: "root"
+    password: ""
+  default_access:
+  - "+(F):root"
   domain:
   - name: Root
     storage_pool_types:
@@ -548,6 +553,8 @@ echo $?
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
       --config-dir /opt/ydb/cfg \
       --tenant /Root/testdb \
+      --grpc-cert /opt/ydb/certs/node.crt \
+      --grpc-key /opt/ydb/certs/node.key \
       --node-broker grpcs://<ydb-static-node1>:2135 \
       --node-broker grpcs://<ydb-static-node2>:2135 \
       --node-broker grpcs://<ydb-static-node3>:2135
@@ -584,6 +591,8 @@ echo $?
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
       --config-dir /opt/ydb/cfg \
       --tenant /Root/testdb \
+      --grpc-cert /opt/ydb/certs/node.crt \
+      --grpc-key /opt/ydb/certs/node.key \
       --node-broker grpcs://<ydb-static-node1>:2135 \
       --node-broker grpcs://<ydb-static-node2>:2135 \
       --node-broker grpcs://<ydb-static-node3>:2135

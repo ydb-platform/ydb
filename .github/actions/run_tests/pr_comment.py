@@ -34,7 +34,7 @@ def get_workflow_run_url():
     
     return f"{github_server}/{github_repo}/actions/runs/{run_id}"
 
-def create_or_update_comment(pr_number, message):
+def create_or_update_comment(pr_number, message, workflow_run_url):
     """Create or update PR comment with test run information."""
     github_token = os.environ.get("GITHUB_TOKEN")
     if not github_token:
@@ -44,24 +44,19 @@ def create_or_update_comment(pr_number, message):
     if not github_repo:
         raise ValueError("GITHUB_REPOSITORY environment variable is not set")
     
-    workflow_run_url = get_workflow_run_url()
-    
     gh = Github(auth=GithubAuth.Token(github_token))
     repo = gh.get_repo(github_repo)
     pr = repo.get_pull(pr_number)
     
-    # Use HTML comment with workflow run URL to identify our comments
-    header = f"<!-- test-run workflow_run_url={workflow_run_url} -->"
-    
-    # Find existing comment
+    # Find existing comment by workflow run URL
     comment = None
     for c in pr.get_issue_comments():
-        if header in c.body:
+        if workflow_run_url in c.body:
             comment = c
             break
     
-    body = [header, message]
-    full_body = "\n".join(body)
+    # Add workflow run link to message
+    full_body = f"{message}\n\n[View workflow run]({workflow_run_url})"
     
     if comment:
         print(f"::notice::Updating existing comment id={comment.id}")
@@ -73,7 +68,7 @@ def create_or_update_comment(pr_number, message):
 def format_start_message(build_preset, test_size, test_targets):
     """Format message for test run start."""
     parts = []
-    parts.append("## 🧪 Test Run Started")
+    parts.append("🧪 **Test Run Started**")
     parts.append("")
     
     info = []
@@ -95,13 +90,13 @@ def format_completion_message(build_preset, test_size, test_targets, summary_con
     
     # Status emoji
     if status == "success":
-        parts.append("## ✅ Test Run Completed Successfully")
+        parts.append("✅ **Test Run Completed Successfully**")
     elif status == "failure":
-        parts.append("## ❌ Test Run Failed")
+        parts.append("❌ **Test Run Failed**")
     elif status == "cancelled":
-        parts.append("## ⚠️ Test Run Cancelled")
+        parts.append("⚠️ **Test Run Cancelled**")
     else:
-        parts.append("## ⚠️ Test Run Completed")
+        parts.append("⚠️ **Test Run Completed**")
     
     parts.append("")
     
@@ -117,7 +112,7 @@ def format_completion_message(build_preset, test_size, test_targets, summary_con
     
     # Add summary content if available
     if summary_content and summary_content.strip():
-        parts.append("### Test Results")
+        parts.append("**Test Results:**")
         parts.append("")
         parts.append(summary_content.strip())
     
@@ -146,9 +141,11 @@ if __name__ == "__main__":
     
     test_targets = os.environ.get("TEST_TARGETS", "ydb/")
     
+    workflow_run_url = get_workflow_run_url()
+    
     if command == "start":
         message = format_start_message(build_preset, test_size, test_targets)
-        create_or_update_comment(pr_number, message)
+        create_or_update_comment(pr_number, message, workflow_run_url)
     else:  # complete
         summary_file = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("GITHUB_STEP_SUMMARY")
         if not summary_file:
@@ -173,5 +170,5 @@ if __name__ == "__main__":
             build_preset, test_size, test_targets,
             summary_content, status
         )
-        create_or_update_comment(pr_number, message)
+        create_or_update_comment(pr_number, message, workflow_run_url)
 

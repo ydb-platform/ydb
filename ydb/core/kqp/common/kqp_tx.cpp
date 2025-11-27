@@ -236,8 +236,9 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     }
 
     if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && hasEffects) {
-        // Don't need snapshot for WriteOnly transaction.
-        // Single INSERT also can be executed without snapshot.
+        // Avoid acquiring snapshot for WriteOnly transactions.
+        // If there are more than one INSERT, we have to acquiring snapshot,
+        // because INSERT has output (error or no error).
         return hasInsert ? readPhases > 1 : readPhases > 0;
     }
 

@@ -4,6 +4,9 @@
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/base/tablet_pipecache.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -236,6 +239,94 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         return;
         TReadOnly tester;
         tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    class TSnapshotTwoInsert : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            {
+                const TString insertQuery(Q1_(R"(
+                    INSERT INTO `/Root/KV` (Key, Value) VALUES (4u, "test");
+                    INSERT INTO `/Root/KV2` (Key, Value) VALUES (5u, "test");
+                )"));
+
+                std::vector<std::unique_ptr<IEventHandle>> writes;
+                size_t evWriteCounter = 0;
+
+                auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                    if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                        auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                        UNIT_ASSERT(evWrite->Record.OperationsSize() <= 1);
+                        if (evWrite->Record.OperationsSize() == 1) {
+                            UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() != 0);
+                            UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() != 0);
+                        }
+
+                        if (evWriteCounter++ == 1) {
+                            writes.emplace_back(ev.Release());
+                            return TTestActorRuntime::EEventAction::DROP;
+                        }
+                    }
+
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                };
+
+                auto saveObserver = runtime.SetObserverFunc(grab);
+                Y_DEFER {
+                    runtime.SetObserverFunc(saveObserver);
+                };
+
+                auto future = Kikimr->RunInThreadPool([&]{
+                    auto txc = NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW()).CommitTx();
+                    return session1.ExecuteQuery(insertQuery, txc).ExtractValueSync();
+                });
+
+                {
+                    TDispatchOptions opts;
+                    opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                        return evWriteCounter == 2;
+                    });
+                    runtime.DispatchEvents(opts);
+                    UNIT_ASSERT(evWriteCounter == 2);
+                    UNIT_ASSERT(writes.size() == 1);
+                }
+
+                {
+                    // Another request changes data
+                    auto insetResult = Kikimr->RunCall([&]{
+                        auto txc = NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx();
+                        return session2.ExecuteQuery(insertQuery, txc).ExtractValueSync();
+                    });
+
+                    UNIT_ASSERT_VALUES_EQUAL_C(insetResult.GetStatus(), EStatus::SUCCESS, insetResult.GetIssues().ToString());
+                }
+
+                UNIT_ASSERT(evWriteCounter == 6);
+                UNIT_ASSERT(writes.size() == 1);
+
+                for(auto& ev: writes) {
+                    runtime.Send(ev.release());
+                }
+
+                auto result = runtime.WaitFuture(future);
+                // Must be ABORTED, not PRECONDTION_FAILED
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TSnapshotTwoInsertOlap) {
+        TSnapshotTwoInsert tester;
+        tester.SetIsOlap(true);
+        tester.SetDisableSinks(false);
+        tester.SetUseRealThreads(false);
         tester.Execute();
     }
 }

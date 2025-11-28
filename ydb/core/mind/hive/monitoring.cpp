@@ -2988,11 +2988,17 @@ public:
             Error = "cannot provide force groups in async mode";
             return true;
         }
-        auto* tablet = Self->FindTablet(TabletId);
-        if (tablet == nullptr) {
-            Error = "no such tablet";
-            return true;
+        TVector<TLeaderTabletInfo*> tablets;
+        if (TabletId != 0) {
+            auto* tablet = Self->FindTablet(TabletId);
+            if (tablet != nullptr) {
+                tablets.push_back(tablet);
+            } else {
+                Error = "no such tablet";
+                return true;
+            }
         }
+        TVector<THolder<TEvHive::TEvReassignTablet>> operations;
         TActorId waitActorId;
         TReassignTabletWaitActor* waitActor = nullptr;
         if (Wait) {
@@ -3000,40 +3006,43 @@ public:
             waitActorId = ctx.RegisterWithSameMailbox(waitActor);
             Self->SubActors.emplace_back(waitActor);
         }
-        TVector<ui32> channels;
-        TVector<ui32> forcedGroupIds;
-        bool ok = true;
-        if (GroupId != 0) {
-            ok = false;
-            for (const auto& channel : tablet->TabletStorageInfo->Channels) {
-                if (TabletChannels.empty() || Find(TabletChannels, channel.Channel) != TabletChannels.end()) {
-                    const auto* latest = channel.LatestEntry();
-                    if (latest != nullptr && latest->GroupID == GroupId) {
-                        ok = true;
-                        channels.push_back(channel.Channel);
-                        if (!ForcedGroupIds.empty()) {
-                            auto itTabletChannel = Find(TabletChannels, channel.Channel);
-                            forcedGroupIds.push_back(ForcedGroupIds[std::distance(TabletChannels.begin(), itTabletChannel)]);
+        for (TLeaderTabletInfo* tablet : tablets) {
+            TVector<ui32> channels;
+            TVector<ui32> forcedGroupIds;
+            bool skip = false;
+            if (GroupId != 0) {
+                skip = true;
+                for (const auto& channel : tablet->TabletStorageInfo->Channels) {
+                    if (TabletChannels.empty() || Find(TabletChannels, channel.Channel) != TabletChannels.end()) {
+                        const auto* latest = channel.LatestEntry();
+                        if (latest != nullptr && latest->GroupID == GroupId) {
+                            skip = false;
+                            channels.push_back(channel.Channel);
+                            if (!ForcedGroupIds.empty()) {
+                                auto itTabletChannel = Find(TabletChannels, channel.Channel);
+                                forcedGroupIds.push_back(ForcedGroupIds[std::distance(TabletChannels.begin(), itTabletChannel)]);
+                            }
                         }
                     }
                 }
+            } else {
+                channels = TabletChannels;
+                forcedGroupIds = ForcedGroupIds;
             }
-        } else {
-            channels = TabletChannels;
-            forcedGroupIds = ForcedGroupIds;
+            if (skip) {
+                continue;
+            }
+            if (Wait) {
+                waitActor->AddTablet(tablet);
+            }
+            operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds, Async));
         }
-        if (!ok) {
-            Error = "no channels match filters";
-            return true;
-        }
-        if (Wait) {
-            waitActor->AddTablet(tablet);
-        }
-        auto operation = MakeHolder<TEvHive::TEvReassignTablet>(tablet->Id, channels, forcedGroupIds, Async);
         if (Wait) {
             waitActor->CheckCompletion();
         }
-        ctx.Send(Self->SelfId(), operation.Release());
+        for (auto& op : operations) {
+            ctx.Send(Self->SelfId(), op.Release());
+        }
         return true;
     }
 

@@ -19,6 +19,7 @@ SRCS(
     block_layout_converter_ut.cpp
     hash_table_ut.cpp
     packed_tuple_ut.cpp
+    deep_copy_ut.cpp
 )
 
 PEERDIR(

@@ -66,7 +66,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             name += "-";
         }
         name.pop_back();
-        Cerr << std::format("got block, size: {}, type: {}", columns[0].length(), name) << Endl;
+        // Cerr << std::format("got block, size: {}, type: {}", columns[0].length(), name) << Endl;
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
         return One{std::move(result)};
@@ -187,7 +187,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
   private:
     class TStreamValue : public TComputationValue<TStreamValue> {
         using TBase = TComputationValue<TStreamValue>;
-        using JoinType = NJoinPackedTuples::THybridHashJoin<TBlockPackedTupleSource, TestStorageSettings>;
+        using JoinType = NJoinPackedTuples::TInMemoryHashJoin<TBlockPackedTupleSource>;
 
       public:
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationNode*> streams,
@@ -197,9 +197,9 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             , Converters_(std::move(converters))
             , Join_(TSides<TBlockPackedTupleSource>{.Build = {ctx, streams, meta, Converters_, ESide::Build},
                                                     .Probe = {ctx, streams, meta, Converters_, ESide::Probe}},
-                    ctx.MakeLogger(), "BlockHashJoin",
+                    ctx, "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
-                                                              .Probe = Converters_.Probe->GetTupleLayout()}, ctx)
+                                                              .Probe = Converters_.Probe->GetTupleLayout()})
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
         {}

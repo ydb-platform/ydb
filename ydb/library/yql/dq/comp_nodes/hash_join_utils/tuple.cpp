@@ -1128,7 +1128,7 @@ void TTupleLayoutSIMD<TTraits>::Pack(
                 auto nextOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * (start + 1));
                 auto size = nextOffset - dataOffset;
-                Cerr << std::format("data offset: {}", dataOffset) << Endl;
+                // Cerr << std::format("data offset: {}", dataOffset) << Endl;
                 auto data = columns[col.OriginalIndex + 1] + dataOffset;
                 if (size >= col.DataSize) {
                     res[col.Offset] = 255;
@@ -1307,7 +1307,9 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
                 ui32 size = ReadUnaligned<ui8>(res + col.Offset);
 
                 if (size < 255) { // embedded str
-                    std::memcpy(data, res + col.Offset + 1, size);
+                    if (size != 0) {
+                        std::memcpy(data, res + col.Offset + 1, size);
+                    }
                 } else { // overflow buffer used
                     const auto prefixSize =
                         (col.DataSize - 1 - 2 * sizeof(ui32));
@@ -1661,9 +1663,14 @@ void TTupleLayout::Concat(
         ui32 dstCount,
         const ui8 *src, const ui8 *srcOverflow, ui32 srcCount, ui32 srcOverflowSize) const 
 {
+    if (srcCount == 0) {
+        return;
+    }
     ui32 dstOverflowOffset = dstOverflow.size();
-    dstOverflow.resize(dstOverflow.size() + srcOverflowSize);
-    std::memcpy(dstOverflow.data() + dstOverflowOffset, srcOverflow, srcOverflowSize);
+    if (srcOverflowSize > 0) {
+        dstOverflow.resize(dstOverflow.size() + srcOverflowSize);
+        std::memcpy(dstOverflow.data() + dstOverflowOffset, srcOverflow, srcOverflowSize);
+    }
 
     constexpr ui32 blockRows = 128;
     dst.resize((dstCount + srcCount) * TotalRowSize);

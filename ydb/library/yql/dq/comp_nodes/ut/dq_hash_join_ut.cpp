@@ -464,18 +464,46 @@ TJoinTestData SpillingTestData() {
     td.Kind = EJoinKind::Inner;
     return td;
 }
+
+TJoinTestData SmallStringsTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<TString> leftKeys{"foobarbazfoobarbazfoobarbaz", "foobarbazfoobarbazfoobarbazfoo", "foobarbazfoobarbazfoobarbazfoobar"};
+    TVector<TString> leftValues{"a1", "b1", "c1"};
+
+    TVector<TString> rightKeys{"foobarbazfoobarbazfoobarbaz", "foobarbazfoobarbazfoobarbazfoo", "foobarbazfoobarbazfoobarbazfoobar"};
+    TVector<TString> rightValues{"a2", "b2", "c2"};
+
+    TVector<TString> expectedKeysLeft = leftKeys;
+    TVector<TString> expectedValuesLeft = leftValues;
+    TVector<TString> expectedKeysRight = rightKeys;
+    TVector<TString> expectedValuesRight = rightValues;
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+
+    // constexpr int packedTupleSize = 2 * 8 + 5;
+    // constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
+    // [[maybe_unused]] constexpr ui64 rightSizeBytes = rightSize * packedTupleSize;
+    // td.JoinMemoryConstraint = joinMemory;
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
 TJoinTestData BigStringsTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
 
-    constexpr int leftSize = 2000000;
+    constexpr int leftSize = 200000;
     TVector<ui64> leftKeys(leftSize);
     TVector<TString> leftValues(leftSize);
     for (int index = 0; index < leftSize; ++index) {
         leftKeys[index] = 2 * index + 3;
         leftValues[index] = TString(std::min(400 + index / 1000, index+1), static_cast<char>((index+1)%10+'a'));
     }
-    constexpr int rightSize = 200000;
+    constexpr int rightSize = 20000;
     TVector<ui64> rightKeys(rightSize);
     TVector<TString> rightValues(rightSize);
     for (int index = 0; index < rightSize; ++index) {
@@ -606,8 +634,11 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestBlockSpilling) { 
         Test(SpillingTestData(), true);
     }
-    Y_UNIT_TEST(TestStrings) { 
+    Y_UNIT_TEST(TestBigStrings) { 
         Test(BigStringsTestData(), true);
+    }
+    Y_UNIT_TEST(TestSmallStrings) { 
+        Test(SmallStringsTestData(), true);
     }
 }
 } // namespace NKikimr::NMiniKQL

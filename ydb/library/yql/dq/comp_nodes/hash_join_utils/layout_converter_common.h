@@ -49,7 +49,7 @@ struct TPackResult {
         return allFieldEmpty;
     }
 
-    void ForEachTuple(std::invocable<TSingleTuple> auto fn) {
+    void ForEachTuple(std::invocable<TSingleTuple> auto fn) const {
         int tupleSize = std::ssize(PackedTuples) / NTuples;
         for (int index = 0; index < NTuples; ++index) {
             fn(TSingleTuple{.PackedData = &PackedTuples[index * tupleSize], .OverflowBegin = Overflow.data()});
@@ -57,6 +57,7 @@ struct TPackResult {
     }
 
     void AppendTuple(TSingleTuple tuple, const NPackedTuple::TTupleLayout* layout);
+    // void Append(TPackResult other, const NPackedTuple::TTupleLayout* layout);
 };
 
 using TPackedTuple = std::vector<ui8, TMKQLAllocator<ui8>>;

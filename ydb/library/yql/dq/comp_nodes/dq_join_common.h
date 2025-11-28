@@ -249,10 +249,10 @@ template <typename Source> class TInMemoryHashJoin {
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
 
-    TInMemoryHashJoin(TSides<Source> sources, NUdf::TLoggerPtr logger, TString componentName,
-                      TSides<const NPackedTuple::TTupleLayout*> layouts)
-        : Logger_(logger)
-        , LogComponent_(logger->RegisterComponent(componentName))
+    TInMemoryHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
+                    TSides<const NPackedTuple::TTupleLayout*> layouts)
+        : Logger_(ctx.MakeLogger())
+        , LogComponent_(Logger_->RegisterComponent(componentName))
         , Sources_(std::move(sources))
         , Layouts_(layouts)
         , Table_(Layouts_.Build)
@@ -268,7 +268,7 @@ template <typename Source> class TInMemoryHashJoin {
             FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Build.FetchRow();
             switch (AsStatus(var)) {
             case NYql::NUdf::EFetchStatus::Finish: {
-                Table_.BuildWith(Flatten(BuildChunks_));
+                Table_.BuildWith(Flatten(std::move(BuildChunks_)));
                 break;
             }
             case NYql::NUdf::EFetchStatus::Yield: {
@@ -319,8 +319,11 @@ template <typename Source> class TInMemoryHashJoin {
 
 template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
     struct Logger {
+        Logger(TComputationContext& ctx, TString name)
+        : Logger_(ctx.MakeLogger())
+        , LogComponent_(Logger_->RegisterComponent(name)) {}
         NUdf::TLoggerPtr Logger_;
-        NUdf::TLogComponentId LogComponent_;
+        NUdf::TLogComponentId LogComponent_ ;
 
         void LogDebug(TStringRef msg) const {
             Cerr << msg << Endl;
@@ -445,9 +448,9 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
         TSides<std::optional<Source>> Data_;
     };
 
-    THybridHashJoin(TSides<Source> sources, NUdf::TLoggerPtr logger, TString componentName,
-                    TSides<const NPackedTuple::TTupleLayout*> layouts, TComputationContext& ctx)
-        : Logger_(logger, logger->RegisterComponent(componentName))
+    THybridHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
+                    TSides<const NPackedTuple::TTupleLayout*> layouts)
+        : Logger_(ctx, componentName)
         , Layouts_(layouts)
         , Spiller_(ctx.SpillerFactory->CreateSpiller())
         , Sources_(std::move(sources))

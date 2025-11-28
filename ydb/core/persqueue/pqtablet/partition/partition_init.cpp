@@ -337,13 +337,6 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
            Partition()->BlobEncoder.NewHead.Offset = Partition()->BlobEncoder.Head.Offset = Partition()->BlobEncoder.EndOffset;
         }
 
-        if (meta.HasStartOffset()) {
-            GetContext().StartOffset = meta.GetStartOffset();
-        }
-        if (meta.HasEndOffset()) {
-            GetContext().EndOffset = meta.GetEndOffset();
-        }
-
         Partition()->SubDomainOutOfSpace = meta.GetSubDomainOutOfSpace();
         Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetEndWriteTimestamp());
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
@@ -507,17 +500,6 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 
             FillBlobsMetaData(ctx);
             FormHeadAndProceed();
-
-            if (GetContext().StartOffset && *GetContext().StartOffset != Partition()->GetStartOffset()) {
-                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->GetStartOffset());
-                Y_ABORT("meta is broken");
-                return PoisonPill(ctx);
-            }
-            if (GetContext().EndOffset && *GetContext().EndOffset != Partition()->GetEndOffset()) {
-                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->GetEndOffset());
-                Y_ABORT("meta is broken");
-                return PoisonPill(ctx);
-            }
 
             Done(ctx);
             break;

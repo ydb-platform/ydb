@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(Interconnect) {
         {
             auto s = GetRdmaQpStatus(cluster, 1, 2);
             auto tokens = SplitString(s, ",");
-            UNIT_ASSERT(tokens.size() == 2);
+            UNIT_ASSERT(tokens.size() > 2);
             UNIT_ASSERT(tokens[1] == "QPS_RTS");
         }
 

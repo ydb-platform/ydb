@@ -1,6 +1,5 @@
 import pytest
 
-from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, MixedClusterFixture, RollingUpgradeAndDowngradeFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -42,19 +41,13 @@ class InMemoryWorkload:
                 ALTER FAMILY default
                 SET CACHE_MODE "{cache_mode}";"""
 
-            modes_to_alter = [
-                (self.initially_in_memory_table, "regular" if idx % 2 == 0 else "in_memory"),
-                (self.initially_regular_table, "in_memory" if idx % 2 == 0 else "regular"),
-            ]
+        modes_to_alter = [
+            (self.initially_in_memory_table, "regular" if idx % 2 == 0 else "in_memory"),
+            (self.initially_regular_table, "in_memory" if idx % 2 == 0 else "regular"),
+        ]
+        with ydb.QuerySessionPool(self.driver) as session_pool:
             for table, mode in modes_to_alter:
-                query = get_query(table, mode)
-                try:
-                    with ydb.QuerySessionPool(self.driver) as session_pool:
-                        session_pool.execute_with_retries(query)
-                except (ydb.issues.ConnectionLost, ydb.issues.BadRequest, ydb.issues.InternalError, ydb.issues.BadSession):
-                    assert self.wait_for_connection(), "Failed to restore connection in alter_tables"
-                    with ydb.QuerySessionPool(self.driver) as session_pool:
-                        session_pool.execute_with_retries(query)
+                session_pool.execute_with_retries(get_query(table, mode))
 
     def write_data(self):
         rows = []
@@ -89,20 +82,9 @@ class InMemoryWorkload:
                 result_sets = session_pool.execute_with_retries(get_query(table))
                 assert len(result_sets) == 1
                 assert len(result_sets[0].rows) == 1
-                assert result_sets[0].rows[0]['key_sum'] == 1000 * self.rows_to_insert / 2
-                assert result_sets[0].rows[0]['value_int_sum'] == 1000 * self.rows_to_insert / 2 * 1000
+                assert result_sets[0].rows[0]['key_sum'] == (self.rows_to_insert - 1) * self.rows_to_insert / 2
+                assert result_sets[0].rows[0]['value_int_sum'] == (self.rows_to_insert - 1) * self.rows_to_insert / 2 * 1000
                 assert result_sets[0].rows[0]['value_str_sum'] == self.rows_to_insert * 2**13
-
-    def wait_for_connection(self, timeout_seconds=30):
-        def predicate():
-            try:
-                with ydb.QuerySessionPool(self.driver) as session_pool:
-                    session_pool.execute_with_retries("SELECT 1")
-                return True
-            except (ydb.issues.ConnectionLost, ydb.issues.BadRequest, ydb.issues.InternalError, ydb.issues.BadSession):
-                return False
-
-        return wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=1)
 
 
 class TestInMemoryMixedCluster(MixedClusterFixture):

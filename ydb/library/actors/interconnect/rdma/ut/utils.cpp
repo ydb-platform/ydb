@@ -49,7 +49,7 @@ std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntim
     return {std::move(actorSystem), ctx};
 }
 
-std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo) {
+std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo, NInterconnect::NRdma::ECqMode cqMode) {
     auto rdma = std::make_shared<TLocalRdmaStuff>();
 
     rdma->MemPool = NInterconnect::NRdma::CreateDummyMemPool();
@@ -63,7 +63,7 @@ std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo) {
     rdma->Qp1 = std::make_shared<TQueuePair>();
     rdma->Qp2 = std::make_shared<TQueuePair>();
 
-    rdma->CqActorId = rdma->ActorSystem->Register(CreateCqActor(1, 1));
+    rdma->CqActorId = rdma->ActorSystem->Register(CreateCqActor(1, 1, cqMode, nullptr));
     rdma->CqPtr = GetCqHandle(rdma->ActorSystem.get(), rdma->Ctx, rdma->CqActorId);
 
     {

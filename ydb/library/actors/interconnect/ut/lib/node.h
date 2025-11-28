@@ -30,7 +30,8 @@ public:
           ui32 numDynamicNodes = 0, ui32 numThreads = 1,
           TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, ui32 inflight = DefaultInflight(),
           ESocketSendOptimization sendOpt = ESocketSendOptimization::DISABLED,
-          bool withTls = false) {
+          bool withTls = false,
+          NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -85,7 +86,8 @@ public:
 
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(),
             TMailboxType::ReadAsFilled, 0));
-        setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(), TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1, 32),
+        setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
+            TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1, 32, rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");

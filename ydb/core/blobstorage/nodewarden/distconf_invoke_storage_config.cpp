@@ -523,6 +523,8 @@ namespace NKikimr::NStorage {
                     return error;
                 },
                 [&](NKikimrBlobStorage::TStorageConfig& proposedConfig) -> std::optional<TString> {
+                    const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
+                    Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
                     // config validation, which is basically done in Console
                     TString mainYaml;
                     if (auto err = DecomposeConfig(proposedConfig.GetConfigComposite(), &mainYaml, /*mainConfigVersion=*/ nullptr, /*mainConfigFetchYaml=*/ nullptr)) {

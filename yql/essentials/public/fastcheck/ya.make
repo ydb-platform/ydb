@@ -9,9 +9,12 @@ SRCS(
     settings.cpp
     translator.cpp
     format.cpp
+    utils.cpp
 )
 
 PEERDIR(
+    library/cpp/resource
+    library/cpp/json
     yql/essentials/ast
     yql/essentials/core/services/mounts
     yql/essentials/core/user_data
@@ -33,6 +36,10 @@ PEERDIR(
     yql/essentials/sql/settings
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/sql/v1
+)
+
+RESOURCE(
+    yql/essentials/data/language/udfs_basic.json udfs_basic.json
 )
 
 GENERATE_ENUM_SERIALIZATION(linter.h)

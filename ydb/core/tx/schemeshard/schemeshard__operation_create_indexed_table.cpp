@@ -40,7 +40,9 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     auto indexedTable = tx.GetCreateIndexedTable();
     const NKikimrSchemeOp::TTableDescription& baseTableDescription = indexedTable.GetTableDescription();
 
-    ui32 indexesCount = indexedTable.IndexDescriptionSize();
+    ui32 sequencesCount = indexedTable.SequenceDescriptionSize();
+    ui32 indexCount = indexedTable.IndexDescriptionSize();
+    ui32 totalIndexTables = 0;
     ui32 indexTableShards = 0;
     for (const auto& desc : indexedTable.GetIndexDescription()) {
         ui32 indexTableCount = 1;
@@ -52,6 +54,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
                 const bool prefixVectorIndex = desc.GetKeyColumnNames().size() > 1;
                 indexTableCount = (prefixVectorIndex ? 3 : 2);
+                sequencesCount += (prefixVectorIndex ? 1 : 0);
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
@@ -71,12 +74,12 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         } else {
             indexTableShards += indexTableCount;
         }
+        totalIndexTables += indexTableCount;
     }
 
-    ui32 sequencesCount = indexedTable.SequenceDescriptionSize();
     ui32 baseShards = TTableInfo::ShardsToCreate(baseTableDescription);
     ui32 shardsToCreate = baseShards + indexTableShards;
-    ui32 pathToCreate = 1 + indexesCount * 2 + sequencesCount;
+    ui32 pathToCreate = 1 + indexCount + totalIndexTables + sequencesCount;
 
     TPath workingDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     if (workingDir.IsEmpty()) {
@@ -122,10 +125,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     << " GetShardsInside: " << domainInfo->GetShardsInside()
                     << " MaxShards: " << domainInfo->GetSchemeLimits().MaxShards);
 
-    if (indexesCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
+    if (indexCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
         auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"
                                     << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
-                                    << ", intention to create new children: " << indexesCount;
+                                    << ", intention to create new children: " << indexCount;
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
     }
 

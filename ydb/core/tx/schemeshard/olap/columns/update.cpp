@@ -81,12 +81,19 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         ColumnFamilyId = columnSchema.GetColumnFamilyId();
     }
     if (columnSchema.HasSerializer()) {
-        NArrow::NSerialization::TSerializerContainer serializer;
-        if (!serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
-            errors.AddError("Cannot parse serializer info");
+        if (!AppData()->FeatureFlags.GetEnableOlapCompression()) {
+            errors.AddError("Compression is disabled for OLAP tables");
             return false;
         }
-        Serializer = serializer;
+        // Deserialize only non-empty serializers
+        if (columnSchema.GetSerializer().HasClassName()) {
+            NArrow::NSerialization::TSerializerContainer serializer;
+            if (!serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
+                errors.AddError("Cannot parse serializer info");
+                return false;
+            }
+            Serializer = serializer;
+        }
     }
     if (columnSchema.HasDictionaryEncoding()) {
         auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());

@@ -107,7 +107,7 @@ WITH (
 Где:
 *   `<solomon_data_source>` — идентификатор созданного внешнего источника данных.
 *   `<project_or_service>` — проект Solomon (для инсталляций внутри Я) или сервис Solomon (для облака).
-*   `<query>` — запрос на [языке запросов Solomon](https://monitoring.yandex-team.ru/docs/concepts/querying).
+*   `<query>` — запрос на языке запросов Solomon.
 *   `<labels>` — список имен меток, значения которых нужно получить в отдельных столбцах (опционально).
 *   `<from_time>`, `<to_time>` — границы временного интервала в формате [ISO 8601](https://ru.wikipedia.org/wiki/ISO_8601).
 *   `<downsampling_parameters>` — параметры прореживания данных (опционально).
@@ -134,15 +134,13 @@ WITH (
 
 | Параметр | Обязательный | Описание | Формат и пример |
 | :--- | :--- | :--- | :--- |
-| `selectors` | **Да** | [Селекторы](https://docs.yandex-team.ru/monium/metrics/concepts/glossary#selector) на [языке запросов Solomon](https://docs.yandex-team.ru/monium/metrics/concepts/querying) | `{cluster="rtmr-sas-test", service="metrics"}` |
-| `program` | **Да** | Запрос на [языке запросов Solomon](https://docs.yandex-team.ru/monium/metrics/concepts/querying) | `series_max({method="DescribeTable"})` |
+| `selectors` | **Да** | Селекторы на языке запросов Solomon | `{cluster="rtmr-sas-test", service="metrics"}` |
+| `program` | **Да** | Запрос на языке запросов Solomon | `series_max({method="DescribeTable"})` |
 | `labels` | Нет | Список меток для вывода в отдельные колонки. Можно использовать `as` для алиасов. | `"app, cluster, host as server"` |
 | `from` | **Да** | Начало искомого временного диапазона. | `"2025-03-12T14:00:00Z"` |
 | `to` | **Да** | Конец искомого временного диапазона. | `"2025-03-12T15:00:00Z"` |
 
 ### Параметры прореживания (Downsampling) {#downsampling}
-
-Подробное описание параметров прореживания можно почитать в [документации Solomon](https://docs.yandex-team.ru/monium/metrics/concepts/downsampling).
 
 | Параметр | Описание | Допустимые значения | По умолчанию |
 | :--- | :--- | :--- | :--- |

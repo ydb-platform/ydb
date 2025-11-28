@@ -950,6 +950,7 @@ struct TEvPQ {
         ui64 TxId;
 
         TMessageGroupsPtr ExplicitMessageGroups;
+        TMaybe<NKikimrPQ::TTransaction> SerializedTx;
 
         NWilson::TSpan Span;
     };
@@ -978,6 +979,7 @@ struct TEvPQ {
 
         ui64 Step;
         ui64 TxId;
+        TMaybe<NKikimrPQ::TTransaction> SerializedTx;
 
         NWilson::TSpan Span;
     };

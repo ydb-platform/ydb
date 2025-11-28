@@ -16,7 +16,8 @@ runs:
 <<<<<<< HEAD
 =======
         PR_BODY: ${{ inputs.pr_body}}
-        SHOW_ADDITIONAL_INFO_IN_PR: ${{ vars.SHOW_ADDITIONAL_INFO_IN_PR }}
+        SHOW_RUN_TESTS_IN_PR: ${{ vars.SHOW_RUN_TESTS_IN_PR }}
+        SHOW_BACKPORT_IN_PR: ${{ vars.SHOW_BACKPORT_IN_PR }}
         APP_DOMAIN: ${{ vars.APP_DOMAIN }}
 >>>>>>> 757f6deb2fd (Add PR comment functionality for test runs)
       run: |

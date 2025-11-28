@@ -9,6 +9,7 @@ if __name__ == '__main__':
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
     parser.add_argument('--duration', default=60, type=lambda x: int(x), help='A duration of workload in seconds.')
     parser.add_argument('--partitions-count', default=10, type=lambda x: int(x), help='Partitions count.')
+    parser.add_argument('--prefix', default=None, help='Topic/source name prefix')
     args = parser.parse_args()
-    with Workload(args.endpoint, args.database, args.duration, args.partitions_count) as workload:
+    with Workload(args.endpoint, args.database, args.duration, args.partitions_count, args.prefix) as workload:
         workload.loop()

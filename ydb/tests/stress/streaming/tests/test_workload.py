@@ -32,6 +32,7 @@ class TestYdbWorkload(StressFixture):
             "--endpoint",  f"localhost:{self.cluster.nodes[1].port}",
             "--database", self.database,
             "--duration", "60",
-            "--partitions-count", "10"
+            "--partitions-count", "10",
+            "--prefix", "streaming_stress"
         ]
         yatest.common.execute(cmd, wait=True)

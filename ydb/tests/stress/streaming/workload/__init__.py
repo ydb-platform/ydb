@@ -7,15 +7,16 @@ import random
 from collections import defaultdict
 
 class Workload():
-    def __init__(self, endpoint, database, duration, partitions_count):
+    def __init__(self, endpoint, database, duration, partitions_count, prefix):
         self.database = database
         self.endpoint = endpoint
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self.pool = ydb.QuerySessionPool(self.driver)
         self.duration = duration
-        self.input_topic = 'streaming_recipe/input_topic'
-        self.output_topic = 'streaming_recipe/output_topic'
-        self.query_name = 'my_queries/query_name'
+        self.prefix = prefix
+        self.input_topic = f'{prefix}/input_topic'
+        self.output_topic = f'{prefix}/output_topic'
+        self.query_name = f'{prefix}/query_name'
         self.consumer_name = 'consumer_name'
         self.partitions_count = partitions_count
         self.receive_message_timeout_sec = 1
@@ -31,7 +32,7 @@ class Workload():
     def create_external_data_source(self):
         self.pool.execute_with_retries(
             f"""
-                CREATE EXTERNAL DATA SOURCE source_name WITH (
+                CREATE EXTERNAL DATA SOURCE `{self.prefix}/source_name` WITH (
                     SOURCE_TYPE="Ydb",
                     LOCATION="{self.endpoint}",
                     DATABASE_NAME="{self.database}",
@@ -43,10 +44,10 @@ class Workload():
     def create_streaming_query(self):
         self.pool.execute_with_retries(
             f"""
-                CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                CREATE STREAMING QUERY `{self.prefix}/query_name` AS DO BEGIN
                 $input = (
                     SELECT * FROM
-                        source_name.`{self.input_topic}` WITH (
+                        `{self.prefix}/source_name`.`{self.input_topic}` WITH (
                             FORMAT = 'json_each_row',
                             SCHEMA (time Uint64 NOT NULL, level String NOT NULL)
                         )
@@ -64,18 +65,17 @@ class Workload():
                     FROM $number_errors
                 );
 
-                INSERT INTO source_name.`{self.output_topic}`
+                INSERT INTO `{self.prefix}/source_name`.`{self.output_topic}`
                 SELECT * FROM $json;
                 END DO;
             """
         )
 
     def check_status(self):
-        result_sets = self.pool.execute_with_retries("SELECT Status FROM `.sys/streaming_queries`")
+        result_sets = self.pool.execute_with_retries(f"SELECT Status FROM `.sys/streaming_queries` WHERE Path = '/Root/{self.prefix}/query_name'")
         status = result_sets[0].rows[0].Status
         if status != 'RUNNING':
             raise Exception(f"Unexpected query status: expected 'RUNNING', got '{status}'")
-
 
     def write_to_input_topic(self):
         finished_at = time.time() + self.duration
@@ -95,16 +95,17 @@ class Workload():
             writer.close()  
 
     def read_from_output_topic(self):
+        count = 0
         with self.driver.topic_client.reader(self.output_topic, self.consumer_name) as reader:
-            count = 0
             while True:
                 try:
                     mess = reader.receive_message(timeout=self.receive_message_timeout_sec)
                     count += 1
                 except TimeoutError:
                     break
-            if count < self.duration / 2:
-                raise Exception(f"Insufficient data in output topic: expected ~{self.duration} messages, got {count}")
+        expected = self.duration # Group by HOP 1s
+        if count < expected * 0.7:
+            raise Exception(f"Insufficient data in output topic: expected ~{expected} messages, got {count}")
 
     def loop(self):
         self.create_topics()

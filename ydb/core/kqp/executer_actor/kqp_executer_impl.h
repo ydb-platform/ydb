@@ -859,7 +859,7 @@ protected:
                             << ", selfNode: " << SelfId().NodeId());
                         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, 
                             MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, TStringBuilder() <<
-                        "All compute nodes are shutting down"));
+                        "Compute node is shutting down and is not available"));
                         break;
                     }
 

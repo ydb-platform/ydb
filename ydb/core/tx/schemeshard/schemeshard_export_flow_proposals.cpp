@@ -53,7 +53,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
 
     for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
         const auto& item = exportInfo.Items.at(itemIdx);
-        if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
+        if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable && item.SourcePathType != NKikimrSchemeOp::EPathTypeColumnTable) {
             continue;
         }
 
@@ -115,7 +115,7 @@ void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc
 }
 
 void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath) {
-    if (!sourcePath.IsResolved() || !exportItemPath.IsResolved()) {
+    if (!sourcePath.IsResolved() || (!sourcePath->IsColumnTable() && !exportItemPath.IsResolved())) {
         return;
     }
 
@@ -156,10 +156,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
     const TPath exportPath = TPath::Init(exportInfo.ExportPathId, ss);
     auto& task = *modifyScheme.MutableBackup();
-
     if (item.ParentIdx == Max<ui32>()) {
-        modifyScheme.SetWorkingDir(exportPath.PathString());
-        task.SetTableName(ToString(itemIdx));
+        const TPath sourcePath = TPath::Init(exportInfo.Items[itemIdx].SourcePathId, ss);
+        const TString& exportPathName = sourcePath->IsColumnTable() ? sourcePath.Parent().PathString() : exportPath.PathString();
+        modifyScheme.SetWorkingDir(exportPathName);
+        task.SetTableName(sourcePath->IsColumnTable() ? sourcePath->Name : ToString(itemIdx));
 
         FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
     } else {

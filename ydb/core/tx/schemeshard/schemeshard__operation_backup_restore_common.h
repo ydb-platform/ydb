@@ -35,10 +35,23 @@ public:
         : TxType(type)
         , OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages(DebugHint(),
+            { TEvColumnShard::TEvNotifyTxCompletionResult::EventType }
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+        auto ssId = context.SS->SelfTabletId();
+
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 DebugHint() << " HandleReply TEvProposeTransactionResult"
+                 << " at tabletId# " << ssId
+                 << " message# " << ev->Get()->Record.ShortDebugString());
+
+        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+    }
+
+    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -222,6 +235,59 @@ public:
             }
         }
     }
+    
+    static void CollectStats(TOperationId operationId, const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) {
+        const auto& evRecord = ev->Get()->Record;
+
+        Y_ABORT_UNLESS(context.SS->FindTx(operationId));
+        TTxState& txState = *context.SS->FindTx(operationId);
+
+        auto tabletId = TTabletId(evRecord.GetOrigin());
+        auto shardIdx = context.SS->MustGetShardIdx(tabletId);
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
+
+        if (!txState.SchemeChangeNotificationReceived.contains(shardIdx)) {
+            return;
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        if (!txState.ShardStatuses.contains(shardIdx)) {
+            auto& shardStatus = txState.ShardStatuses[shardIdx];
+            shardStatus.Success = true;
+            context.SS->PersistTxShardStatus(db, operationId, shardIdx, shardStatus);
+
+            const ui64 ru = TKind::RequestUnits(shardStatus.BytesProcessed, shardStatus.RowsProcessed);
+            Bill(operationId, txState.TargetPathId, shardIdx, ru, context);
+        }
+    }
+
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+        auto ssId = context.SS->SelfTabletId();
+        const auto& evRecord = ev->Get()->Record;
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
+                     << " at tablet# " << ssId
+                     << " message# " << evRecord.ShortDebugString());
+
+        bool allnotificationsReceived = NTableState::CollectSchemaChanged(OperationId, ev, context);
+        CollectStats(OperationId, ev, context);
+
+        if (!allnotificationsReceived) {
+            return false;
+        }
+
+        Y_ABORT_UNLESS(context.SS->FindTx(OperationId));
+        TTxState& txState = *context.SS->FindTx(OperationId);
+
+        if (!txState.ReadyForNotifications) {
+            return false;
+        }
+
+        TKind::Finish(OperationId, txState, context);
+        return true;
+    }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
@@ -266,6 +332,13 @@ public:
             if (shard.Operation < TTxState::ProposedWaitParts) {
                 shard.Operation = TTxState::ProposedWaitParts;
                 context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
+            }
+
+            // Subscribe
+            if (shard.TabletType == TTabletTypes::ColumnShard) {
+                auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+                TTabletId tablet = context.SS->ShardInfos.at(shard.Idx).TabletID;
+                context.OnComplete.BindMsgToPipe(OperationId, tablet, shard.Idx, event.release());
             }
             context.OnComplete.RouteByTablet(OperationId, context.SS->ShardInfos.at(shard.Idx).TabletID);
         }
@@ -546,6 +619,38 @@ public:
     }
 
     void PrepareChanges(TPathElement::TPtr path, TOperationContext& context) {
+        if (path->IsColumnTable()) {
+            PrepareColumnTableChanges(path, context);
+        } else {
+            PrepareTableChanges(path, context);
+        }
+    }
+
+    void PrepareColumnTableChanges(TPathElement::TPtr path, TOperationContext& context) {
+        Y_ABORT_UNLESS(context.SS->ColumnTables.contains(path->PathId));
+        auto table = context.SS->ColumnTables.at(path->PathId);
+
+        path->LastTxId = OperationId.GetTxId();
+        path->PathState = Lock;
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TxType, path->PathId);
+
+        txState.Shards.reserve(table->GetOwnedColumnShardsVerified().size());
+        for (const auto& shard : table->GetOwnedColumnShardsVerified()) {
+            TShardIdx shardIdx = TShardIdx::BuildFromProto(shard).DetachResult();
+            txState.Shards.emplace_back(shardIdx, ETabletType::ColumnShard, TTxState::ConfigureParts);
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistTxState(db, OperationId);
+
+        TKind::PersistTask(path->PathId, Transaction, context);
+
+        txState.State = TTxState::CreateParts;
+        context.OnComplete.ActivateTx(OperationId);
+    }
+
+    void PrepareTableChanges(TPathElement::TPtr path, TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(path->PathId));
         TTableInfo::TPtr& table = context.SS->Tables.at(path->PathId);
 
@@ -610,6 +715,9 @@ public:
 
         TPath path = TPath::Resolve(parentPath, context.SS).Dive(name);
         {
+            if (!path->IsTable() && !path->IsColumnTable()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot backup non-tables");
+            }
             TPath::TChecker checks = path.Check();
             checks
                 .NotEmpty()
@@ -617,7 +725,6 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsTable()
                 .NotAsyncReplicaTable()
                 .NotUnderOperation();
 

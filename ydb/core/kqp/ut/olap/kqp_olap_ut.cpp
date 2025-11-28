@@ -2894,10 +2894,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore", "olapTable_9", 9));
     }
 
-    void TestOlapUpsert(ui32 numShards) {
+    void TestOlapUpsert(ui32 numShards, bool allowOlapDataQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(allowOlapDataQuery);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();
@@ -2929,7 +2929,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 (1, 15, 'ccccccc', 23, 1);
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); // TODO: snapshot isolation?
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        if (allowOlapDataQuery) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains(
+                    "Data manipulation queries with column-oriented tables are supported only by API QueryService."),
+                result.GetIssues().ToString());
+        }
 
         {
             TString query = R"(
@@ -2941,19 +2949,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto it = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = FormatResultSetYson(it.GetResultSet(0));
-            Cout << result << Endl;
-            CompareYson(result, R"([[15;0];[15;1]])");
+            if (allowOlapDataQuery) {
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                TString result = FormatResultSetYson(it.GetResultSet(0));
+                Cout << result << Endl;
+                CompareYson(result, R"([[15;0];[15;1]])");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_C(
+                    result.GetIssues().ToString().contains(
+                        "Data manipulation queries with column-oriented tables are supported only by API QueryService."),
+                    result.GetIssues().ToString());
+                }
         }
     }
 
-    Y_UNIT_TEST(OlapUpsertImmediate) {
-        TestOlapUpsert(1);
+    Y_UNIT_TEST(OlapUpsertOneShard) {
+        TestOlapUpsert(1, true);
     }
 
-    Y_UNIT_TEST(OlapUpsert) {
-        TestOlapUpsert(2);
+    Y_UNIT_TEST(OlapUpsertTwoShards) {
+        TestOlapUpsert(2, true);
+    }
+
+    Y_UNIT_TEST(OlapUpsertDisabled) {
+        TestOlapUpsert(2, false);
     }
 
     Y_UNIT_TEST(OlapDeleteImmediate) {

@@ -130,7 +130,7 @@ bool TPhantomFlagStorageState::AddFlag(const TLogoBlobRec& blobRec) {
     return false;
 }
 
-void TPhantomFlagStorageState::UpdateSyncedMask(TSyncedMask newSyncedMask) {
+void TPhantomFlagStorageState::UpdateSyncedMask(const TSyncedMask& newSyncedMask) {
     SyncedMask = newSyncedMask;
 }
 

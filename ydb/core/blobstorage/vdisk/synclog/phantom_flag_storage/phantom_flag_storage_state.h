@@ -42,7 +42,7 @@ public:
     ui64 EstimateFlagsMemoryConsumption() const;
     ui64 EstimateThresholdsMemoryConsumption() const;
 
-    void UpdateSyncedMask(TSyncedMask newSyncedMask);
+    void UpdateSyncedMask(const TSyncedMask& newSyncedMask);
 
 private:
     // Adds DoNotKeep flags to storage and Keeps to Thresholds for specified neighbour

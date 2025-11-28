@@ -31,7 +31,7 @@ public:
 };
 
 constexpr static ui32 MaxExpectedDisksInGroup = 9;
-constexpr static ui32 MaxPossibleDisksInGroup = 64;
+constexpr static ui32 MaxPossibleDisksInGroup = 256;
 using TSyncedMask = std::bitset<MaxPossibleDisksInGroup>;
 
 ////////////////////////////////////////////////////////////////////////////

@@ -101,12 +101,22 @@
             ]
         },
         {
-            "Name": "TYtflowMap",
+            "Name": "TYtflowMapBase",
             "Base": "TYtflowOpBase",
-            "Match": {"Type": "Callable", "Name": "YtflowMap!"},
+            "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 4, "Name": "Lambda", "Type": "TCoLambda"}
             ]
+        },
+        {
+            "Name": "TYtflowMap",
+            "Base": "TYtflowMapBase",
+            "Match": {"Type": "Callable", "Name": "YtflowMap!"}
+        },
+        {
+            "Name": "TYtflowSourceMap",
+            "Base": "TYtflowMapBase",
+            "Match": {"Type": "Callable", "Name": "YtflowSourceMap!"}
         },
         {
             "Name": "TYtflowOutput",

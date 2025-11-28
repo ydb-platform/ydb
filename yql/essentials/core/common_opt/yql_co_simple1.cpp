@@ -3746,13 +3746,13 @@ TExprNode::TPtr ExpandSelectMembers(const TExprNode::TPtr& node, TExprContext& c
         else
             return prefixes.contains(memberName);
     };
+
     TExprNode::TListType members;
     UpdateStructMembers(ctx, node->HeadPtr(), ByPrefix ? "SelectMembers" : "FilterMembers", members, filterByPrefixFunc);
+
     auto res = ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
     res = KeepWorld(res, *node, ctx, *optCtx.Types);
-    if (members.empty()) {
-        res = KeepSideEffects(res, node->HeadPtr(), ctx);
-    }
+    res = KeepSideEffects(res, node->HeadPtr(), ctx);
 
     return res;
 }
@@ -7277,6 +7277,24 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                     .Seal()
                 .Seal()
                 .Build();
+        }
+
+        if (failureKind == "opt_cycle" || failureKind == "opt_inf") {
+            auto children = node->ChildrenList();
+            Y_ENSURE(children.size() >= 1 && children.size() <= 2);
+            if (children.size() < 2) {
+                children.push_back(ctx.NewAtom(node->Pos(),"0"));
+            } else {
+                ui64 cnt = FromString<ui64>(node->Tail().Content());
+                ++cnt;
+                if (failureKind == "opt_cycle") {
+                    cnt = cnt % 5;
+                }
+
+                children[1] = ctx.NewAtom(node->Pos(),cnt);
+            }
+
+            return ctx.ChangeChildren(*node, std::move(children));
         }
 
         throw yexception() << "Unknown failure kind: " << failureKind;

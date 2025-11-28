@@ -200,6 +200,16 @@ private:
                     return true;
                 }
 
+                if ((TCoScriptUdf::Match(node.Get()) && node->ChildrenSize() > 4) || (TCoUdf::Match(node.Get()) && node->ChildrenSize() == 8)) {
+                    for (const auto& setting: node->Child(TCoScriptUdf::Match(node.Get()) ? 4 : 7)->Children()) {
+                        YQL_ENSURE(setting->Head().IsAtom());
+                        if (setting->Head().Content() == "layers") {
+                            return true;
+                        }
+                    }
+                }
+
+
                 if (const auto& tableContent = TMaybeNode<TYtTableContent>(node)) {
                     if (!flow)
                         return true;

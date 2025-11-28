@@ -4008,37 +4008,74 @@ Y_UNIT_TEST(AllowGroupByWithParens) {
     UNIT_ASSERT(elementStat["Aggregate"] == 1);
 }
 
-Y_UNIT_TEST(CreateAsyncReplicationParseCorrect) {
-    auto req = R"(
-            USE plato;
-            CREATE ASYNC REPLICATION MyReplication
-            FOR table1 AS table2, table3 AS table4
-            WITH (
-                CONNECTION_STRING = "grpc://localhost:2135/?database=/MyDatabase",
-                ENDPOINT = "localhost:2135",
-                DATABASE = "/MyDatabase",
-                CA_CERT = "-----BEGIN CERTIFICATE-----"
-            );
-        )";
-    auto res = SqlToYql(req);
+Y_UNIT_TEST(CreateAsyncReplicationParseGeneralCorrect) {
+    const auto req = R"sql(
+        USE plato;
+        CREATE ASYNC REPLICATION MyReplication
+        FOR table1 AS table2, table3 AS table4
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/MyDatabase",
+            ENDPOINT = "localhost:2135",
+            DATABASE = "/MyDatabase",
+            CA_CERT = "-----BEGIN CERTIFICATE-----",
+            TOKEN_SECRET_NAME = "token_secret_name",
+            PASSWORD_SECRET_PATH = "password_secret_path",
+            INITIAL_TOKEN_SECRET_PATH = "initial_token_secret_path"
+        );
+    )sql";
+    const auto res = SqlToYql(req);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "MyReplication");
+            UNIT_ASSERT_STRING_CONTAINS(line, "create");
+            UNIT_ASSERT_STRING_CONTAINS(line, "table1");
+            UNIT_ASSERT_STRING_CONTAINS(line, "table2");
+            UNIT_ASSERT_STRING_CONTAINS(line, "table3");
+            UNIT_ASSERT_STRING_CONTAINS(line, "table4");
+            UNIT_ASSERT_STRING_CONTAINS(line, "connection_string");
+            UNIT_ASSERT_STRING_CONTAINS(line, "grpc://localhost:2135/?database=/MyDatabase");
+            UNIT_ASSERT_STRING_CONTAINS(line, "endpoint");
+            UNIT_ASSERT_STRING_CONTAINS(line, "localhost:2135");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database");
+            UNIT_ASSERT_STRING_CONTAINS(line, "/MyDatabase");
+            UNIT_ASSERT_STRING_CONTAINS(line, "ca_cert");
+            UNIT_ASSERT_STRING_CONTAINS(line, "-----BEGIN CERTIFICATE-----");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"token_secret_name");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"password_secret_path");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"initial_token_secret_path");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationParseSecretPathsCorrect) {
+    const auto req = R"sql(
+        USE plato; PRAGMA TablePathPrefix = "/PathPrefix";
+        CREATE ASYNC REPLICATION MyReplication
+        FOR table AS table
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/MyDatabase",
+            ENDPOINT = "localhost:2135",
+            DATABASE = "/MyDatabase",
+            TOKEN_SECRET_PATH = "/token_secret_path",
+            PASSWORD_SECRET_NAME = "password_secret_name",
+            INITIAL_TOKEN_SECRET_PATH = "initial_token_secret_path"
+        );
+    )sql";
+    const auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("create"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table1"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table2"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table3"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table4"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("connection_string"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("grpc://localhost:2135/?database=/MyDatabase"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("endpoint"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("localhost:2135"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("database"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/MyDatabase"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ca_cert"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("-----BEGIN CERTIFICATE-----"));
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"/token_secret_path");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"password_secret_name");
+            UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/initial_token_secret_path");
         }
     };
 
@@ -4049,25 +4086,54 @@ Y_UNIT_TEST(CreateAsyncReplicationParseCorrect) {
 }
 
 Y_UNIT_TEST(CreateAsyncReplicationUnsupportedSettings) {
-    auto reqTpl = R"(
-            USE plato;
-            CREATE ASYNC REPLICATION MyReplication
-            FOR table1 AS table2, table3 AS table4
-            WITH (
-                %s = "%s"
-            )
-        )";
-
-    auto settings = THashMap<TString, TString>{
+    const auto settings = THashMap<TString, TString>{
         {"STATE", "DONE"},
         {"FAILOVER_MODE", "FORCE"},
     };
 
     for (const auto& [k, v] : settings) {
-        auto req = Sprintf(reqTpl, k.c_str(), v.c_str());
-        auto res = SqlToYql(req);
+        const auto res = SqlToYql(std::format(
+            R"sql(
+                USE plato;
+                CREATE ASYNC REPLICATION MyReplication
+                FOR table1 AS table2, table3 AS table4
+                WITH (
+                    {} = "{}"
+                )
+            )sql",
+            k.c_str(),
+            v.c_str()));
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), Sprintf("<main>:6:%zu: Error: %s is not supported in CREATE\n", 20 + k.size(), k.c_str()));
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), std::format("<main>:6:{}: Error: {} is not supported in CREATE\n", 24 + k.size(), k.c_str()));
+    }
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationMutuallyExclusiveSettings) {
+    static const TVector<std::pair<TString, TString>> MutuallyExclusiveSettings = {
+        {"TOKEN_SECRET_NAME", "TOKEN_SECRET_PATH"},
+        {"PASSWORD_SECRET_NAME", "PASSWORD_SECRET_PATH"},
+        {"INITIAL_TOKEN_SECRET_NAME", "INITIAL_TOKEN_SECRET_PATH"},
+    };
+
+    for (const auto& [name, path] : MutuallyExclusiveSettings) {
+        const auto res = SqlToYql(std::format(
+            R"sql(
+                USE plato;
+                CREATE ASYNC REPLICATION MyReplication
+                FOR table1 AS table2, table3 AS table4
+                WITH (
+                    {} = "",
+                    {} = ""
+                )
+            )sql",
+            name.c_str(),
+            path.c_str()));
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(
+            Err2Str(res),
+            std::format(
+                "<main>:7:{}: Error: {} and {} are mutually exclusive\n",
+                24 + name.size(), name.c_str(), path.c_str()));
     }
 }
 
@@ -4086,26 +4152,80 @@ Y_UNIT_TEST(AsyncReplicationInvalidCommitInterval) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:35: Error: Literal of Interval type is expected for COMMIT_INTERVAL\n");
 }
 
-Y_UNIT_TEST(AlterAsyncReplicationParseCorrect) {
-    auto req = R"(
-            USE plato;
-            ALTER ASYNC REPLICATION MyReplication
-            SET (
-                STATE = "DONE",
-                FAILOVER_MODE = "FORCE"
-            );
-        )";
+Y_UNIT_TEST(AlterAsyncReplicationGeneralParsingCorrect) {
+    auto req = R"sql(
+        USE plato;
+        ALTER ASYNC REPLICATION MyReplication
+        SET (
+            STATE = "DONE",
+            FAILOVER_MODE = "FORCE"
+        );
+    )sql";
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alter"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("state"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("DONE"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("failover_mode"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("FORCE"));
+            UNIT_ASSERT_STRING_CONTAINS(line, "MyReplication");
+            UNIT_ASSERT_STRING_CONTAINS(line, "alter");
+            UNIT_ASSERT_STRING_CONTAINS(line, "state");
+            UNIT_ASSERT_STRING_CONTAINS(line, "DONE");
+            UNIT_ASSERT_STRING_CONTAINS(line, "failover_mode");
+            UNIT_ASSERT_STRING_CONTAINS(line, "FORCE");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationSecretsWithoutTablePathPrefixParsingCorrect) {
+    auto req = R"sql(
+        USE plato;
+        ALTER ASYNC REPLICATION MyReplication
+        SET (
+            TOKEN_SECRET_NAME = "foo_secret",
+            PASSWORD_SECRET_PATH = "bar_secret",
+            INITIAL_TOKEN_SECRET_PATH = "/baz_secret"
+        );
+    )sql";
+    auto res = SqlToYql(req);
+    UNIT_ASSERT(res.Root);
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"foo_secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"bar_secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"/baz_secret");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationSecretsWithTablePathPrefixParsingCorrect) {
+    auto req = R"sql(
+        USE plato; PRAGMA TablePathPrefix = "/PathPrefix";
+        ALTER ASYNC REPLICATION MyReplication
+            SET(
+                TOKEN_SECRET_NAME = "foo_secret",
+                PASSWORD_SECRET_PATH = "bar_secret",
+                INITIAL_TOKEN_SECRET_PATH = "/baz_secret"
+            );
+    )sql";
+    auto res = SqlToYql(req);
+    UNIT_ASSERT(res.Root);
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"foo_secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/bar_secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"/baz_secret");
         }
     };
 
@@ -4116,15 +4236,7 @@ Y_UNIT_TEST(AlterAsyncReplicationParseCorrect) {
 }
 
 Y_UNIT_TEST(AlterAsyncReplicationSettings) {
-    auto reqTpl = R"(
-            USE plato;
-            ALTER ASYNC REPLICATION MyReplication
-            SET (
-                %s = "%s"
-            )
-        )";
-
-    auto settings = THashMap<TString, TString>{
+    const auto settings = THashMap<TString, TString>{
         {"connection_string", "grpc://localhost:2135/?database=/MyDatabase"},
         {"endpoint", "localhost:2135"},
         {"database", "/MyDatabase"},
@@ -4133,12 +4245,21 @@ Y_UNIT_TEST(AlterAsyncReplicationSettings) {
         {"user", "user"},
         {"password", "bar"},
         {"password_secret_name", "bar_secret_name"},
+        {"initial_token_secret_path", "baz_secret_path"},
         {"ca_cert", "-----BEGIN CERTIFICATE-----"},
     };
 
     for (const auto& [k, v] : settings) {
-        auto req = Sprintf(reqTpl, k.c_str(), v.c_str());
-        auto res = SqlToYql(req);
+        const auto res = SqlToYql(std::format(
+            R"sql(
+                USE plato;
+                ALTER ASYNC REPLICATION MyReplication
+                SET (
+                    {} = "{}"
+                )
+            )sql",
+            k.c_str(),
+            v.c_str()));
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [&k, &v](const TString& word, const TString& line) {
@@ -4175,6 +4296,33 @@ Y_UNIT_TEST(AlterAsyncReplicationUnsupportedSettings) {
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:87: Error: COMMIT_INTERVAL is not supported in ALTER\n");
+    }
+    {
+        static const TVector<std::pair<TString, TString>> MutuallyExclusiveSettings = {
+            {"TOKEN_SECRET_NAME", "TOKEN_SECRET_PATH"},
+            {"PASSWORD_SECRET_NAME", "PASSWORD_SECRET_PATH"},
+            {"INITIAL_TOKEN_SECRET_NAME", "INITIAL_TOKEN_SECRET_PATH"},
+        };
+
+        for (const auto& [name, path] : MutuallyExclusiveSettings) {
+            const auto res = SqlToYql(std::format(
+                R"sql(
+                    USE plato;
+                    ALTER ASYNC REPLICATION MyReplication
+                    SET (
+                        {} = "",
+                        {} = ""
+                    )
+                )sql",
+                name.c_str(),
+                path.c_str()));
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(
+                Err2Str(res),
+                std::format(
+                    "<main>:6:{}: Error: {} and {} are mutually exclusive\n",
+                    28 + name.size(), name.c_str(), path.c_str()));
+        }
     }
 }
 
@@ -4694,9 +4842,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 Y_UNIT_TEST(UdfSyntaxSugarMissingCall) {
     auto req = "SELECT Udf(DateTime::FromString, \"foo\" as RunConfig);";
     auto res = SqlToYql(req);
-    TString a1 = Err2Str(res);
-    TString a2("<main>:1:8: Error: Abstract Udf Node can't be used as a part of expression.\n");
-    UNIT_ASSERT_NO_DIFF(a1, a2);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:1:8: Error: Abstract Udf Node can't be used as a part of expression.");
 }
 
 Y_UNIT_TEST(UdfSyntaxSugarIsNotCallable) {
@@ -7710,6 +7856,149 @@ Y_UNIT_TEST(CreateExternalDataSourceWithAuthNone) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(CreateEDSWithSecretFromName) {
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="my-bucket",
+            AUTH_METHOD="BASIC",
+            LOGIN="foo_login",
+            PASSWORD_SECRET_NAME="foo_secret"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"password_secret_name\" '\"foo_secret\"");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateEDSWithSecretFromPathWitoutTablePathPrefix) {
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="my-bucket",
+            AUTH_METHOD="BASIC",
+            LOGIN="foo_login",
+            PASSWORD_SECRET_PATH="foo_secret"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"password_secret_path\" '\"foo_secret\"");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateEDSWithSecretsFromNameAndPathForOneSecretType) {
+    // paths and names are mutually exclusive settings for one secret type, so fail is expected
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="my-bucket",
+            AUTH_METHOD="BASIC",
+            LOGIN="foo_login",
+            PASSWORD_SECRET_NAME="foo_secret",
+            PASSWORD_SECRET_PATH="baz_secret"
+        );
+    )sql");
+    UNIT_ASSERT_C(!res.Root, res.Issues.ToString());
+    UNIT_ASSERT_NO_DIFF(
+        Err2Str(res),
+        "<main>:9:34: Error: Usage secrets of different types is not allowed: "
+        "PASSWORD_SECRET_NAME and PASSWORD_SECRET_PATH are set\n");
+}
+
+Y_UNIT_TEST(CreateEDSWithSecretsFromNameAndPathForDifferentSecretTypes) {
+    // paths and names are mutually exclusive settings for different secret types (they can not be mixed), so fail is expected
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="my-bucket",
+            AUTH_METHOD="AWS",
+            AWS_ACCESS_KEY_ID_SECRET_PATH="/foo_secret",
+            AWS_SECRET_ACCESS_KEY_SECRET_NAME="bar_secret",
+            AWS_REGION="ru-central-1"
+        );
+    )sql");
+    UNIT_ASSERT_C(!res.Root, res.Issues.ToString());
+    UNIT_ASSERT_NO_DIFF(
+        Err2Str(res),
+        "<main>:9:24: Error: Usage secrets of different types is not allowed: "
+        "AWS_SECRET_ACCESS_KEY_SECRET_NAME and AWS_ACCESS_KEY_ID_SECRET_PATH are set\n");
+}
+
+Y_UNIT_TEST(CreateEDSWithSecretsFromNameWithTablePathPrefix) {
+    // pragma should not influence on the name setting
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato; PRAGMA TablePathPrefix='/PathPrefix';
+        CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="my-bucket",
+            AUTH_METHOD="BASIC",
+            LOGIN="foo_login",
+            PASSWORD_SECRET_NAME="foo_secret"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"password_secret_name\" '\"foo_secret\"");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateEDSWithTwoSecretsFromPathWithTablePathPrefix) {
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato; PRAGMA TablePathPrefix='/PathPrefix';
+        CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="my-bucket",
+            AUTH_METHOD="AWS",
+            AWS_ACCESS_KEY_ID_SECRET_PATH="/foo_secret",
+            AWS_SECRET_ACCESS_KEY_SECRET_PATH="bar_secret",
+            AWS_REGION="ru-central-1"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"/foo_secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/bar_secret");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
 Y_UNIT_TEST(CreateExternalDataSourceWithAuthServiceAccount) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
@@ -7876,7 +8165,7 @@ Y_UNIT_TEST(CreateExternalDataSourceIfNotExists) {
                     AUTH_METHOD="NONE"
                 );
             )sql");
-    UNIT_ASSERT(res.Root);
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
@@ -8013,7 +8302,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     AUTH_METHOD="SERVICE_ACCOUNT",
                     SERVICE_ACCOUNT_ID="s1"
                 );
-            )sql", "<main>:7:40: Error: SERVICE_ACCOUNT_SECRET_NAME requires key\n");
+            )sql", "<main>:7:40: Error: A value must be provided for either SERVICE_ACCOUNT_SECRET_NAME or SERVICE_ACCOUNT_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -8033,7 +8322,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     AUTH_METHOD="BASIC",
                     LOGIN="admin"
                 );
-            )sql", "<main>:7:27: Error: PASSWORD_SECRET_NAME requires key\n");
+            )sql", "<main>:7:27: Error: A value must be provided for either PASSWORD_SECRET_NAME or PASSWORD_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -8067,7 +8356,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     LOGIN="admin",
                     PASSWORD_SECRET_NAME="secret_name"
                 );
-            )sql", "<main>:9:42: Error: SERVICE_ACCOUNT_SECRET_NAME requires key\n");
+            )sql", "<main>:9:42: Error: A value must be provided for either SERVICE_ACCOUNT_SECRET_NAME or SERVICE_ACCOUNT_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -8091,7 +8380,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     SERVICE_ACCOUNT_SECRET_NAME="sa_secret_name",
                     LOGIN="admin"
                 );
-            )sql", "<main>:9:27: Error: PASSWORD_SECRET_NAME requires key\n");
+            )sql", "<main>:9:27: Error: A value must be provided for either PASSWORD_SECRET_NAME or PASSWORD_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -8102,7 +8391,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key_name",
                     AWS_REGION="ru-central-1"
                 );
-            )sql", "<main>:8:32: Error: AWS_ACCESS_KEY_ID_SECRET_NAME requires key\n");
+            )sql", "<main>:8:32: Error: A value must be provided for either AWS_ACCESS_KEY_ID_SECRET_NAME or AWS_ACCESS_KEY_ID_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -8113,7 +8402,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     AWS_ACCESS_KEY_ID_SECRET_NAME="secred_id_name",
                     AWS_REGION="ru-central-1"
                 );
-            )sql", "<main>:8:32: Error: AWS_SECRET_ACCESS_KEY_SECRET_NAME requires key\n");
+            )sql", "<main>:8:32: Error: A value must be provided for either AWS_SECRET_ACCESS_KEY_SECRET_NAME or AWS_SECRET_ACCESS_KEY_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -9700,6 +9989,140 @@ $__ydb_transfer_lambda = ($x) -> {
 
     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, programm.find(expected));
 }
+
+Y_UNIT_TEST(CreateWithSecretsWithoutTablePathPrefix) {
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        use plato;
+        SELECT * FROM Input;
+
+        $b = ($x) -> { return $x; };
+
+        CREATE TRANSFER `TransferName`
+            FROM `TopicName` TO `TableName`
+            USING ($x) -> {
+                return $b($x);
+            }
+            WITH (
+                TOKEN_SECRET_NAME = "foo_secret",
+                PASSWORD_SECRET_PATH = "bar_secret"
+            );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "settings") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"foo_secret"); // names remain unchanged
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"bar_secret"); // paths remain unchanged
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("settings"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["settings"]);
+}
+
+Y_UNIT_TEST(CreateWithSecretsWithTablePathPrefix) {
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        use plato;
+        PRAGMA TablePathPrefix = "/PathPrefix";
+        SELECT * FROM Input;
+
+        $b = ($x) -> { return $x; };
+
+        CREATE TRANSFER `TransferName`
+            FROM `TopicName` TO `TableName`
+            USING ($x) -> {
+                return $b($x);
+            }
+            WITH (
+                TOKEN_SECRET_NAME = "foo_secret",
+                PASSWORD_SECRET_PATH = "bar_secret",
+                INITIAL_TOKEN_SECRET_PATH = "/baz_secret"
+            );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "settings") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"foo_secret");           // names remain unchanged
+            UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/bar_secret"); // paths are adjusted if not absolute
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"/baz_secret");          // absolute paths remain unchanged
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("settings"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["settings"]);
+}
+
+Y_UNIT_TEST(CreateWithSecretsWithNameAndPath) {
+    // these are mutually exclusive settings
+    const auto requestTemplate = R"sql(
+        USE plato;
+        SELECT * FROM Input;
+
+        $b = ($x) -> { return $x; };
+
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> {
+            return $b($x);
+        }
+        WITH (
+            %s = "",
+            %s = ""
+        );
+    )sql";
+
+    static const TVector<std::pair<TString, TString>> MutuallyExclusiveSettings = {
+        {"TOKEN_SECRET_NAME", "TOKEN_SECRET_PATH"},
+        {"PASSWORD_SECRET_NAME", "PASSWORD_SECRET_PATH"},
+        {"INITIAL_TOKEN_SECRET_NAME", "INITIAL_TOKEN_SECRET_PATH"},
+    };
+
+    for (const auto& settings : MutuallyExclusiveSettings) {
+        auto req = Sprintf(requestTemplate, settings.first.c_str(), settings.second.c_str());
+        auto res = SqlToYql(req);
+        UNIT_ASSERT_C(!res.IsOk(), Err2Str(res));
+        UNIT_ASSERT_NO_DIFF(
+            Err2Str(res),
+            std::format(
+                "<main>:14:{}: Error: {} and {} are mutually exclusive\n",
+                16 + settings.first.size(), settings.first.c_str(), settings.second.c_str()));
+    }
+}
+
+Y_UNIT_TEST(AlterWithSecretsWithTablePathPrefix) {
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        use plato;
+        PRAGMA TablePathPrefix = "/PathPrefix";
+        ALTER TRANSFER `TransferName`
+            SET (
+                TOKEN_SECRET_NAME = "foo_secret",
+                PASSWORD_SECRET_PATH = "bar_secret",
+                INITIAL_TOKEN_SECRET_PATH = "/baz_secret"
+            );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "settings") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"foo_secret");           // names remain unchanged
+            UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/bar_secret"); // paths are adjusted if not absolute
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"/baz_secret");          // absolute paths remain unchanged
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("settings"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["settings"]);
+}
+
 } // Y_UNIT_TEST_SUITE(Transfer)
 
 Y_UNIT_TEST_SUITE(MatchRecognizeMeasuresAggregation) {
@@ -10807,9 +11230,34 @@ Y_UNIT_TEST(LangVer) {
         "YqlSelect is not available before 2025.04");
 }
 
+Y_UNIT_TEST(AutoTopLevel) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        USE plato;
+        SELECT * FROM my_table VIEW my_view;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AutoSubquery) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        USE plato;
+        SELECT * FROM my_table
+        WHERE a IN (SELECT a FROM my_table VIEW my_view);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(Minimal) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10824,7 +11272,7 @@ Y_UNIT_TEST(Minimal) {
 
 Y_UNIT_TEST(Expr) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10845,7 +11293,7 @@ Y_UNIT_TEST(Expr) {
 
 Y_UNIT_TEST(ResultColumnLabel) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10860,7 +11308,7 @@ Y_UNIT_TEST(ResultColumnLabel) {
 
 Y_UNIT_TEST(Asterisk) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10879,7 +11327,7 @@ Y_UNIT_TEST(Asterisk) {
 
 Y_UNIT_TEST(AsteriskInvalidLeft) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10893,7 +11341,7 @@ Y_UNIT_TEST(AsteriskInvalidLeft) {
 
 Y_UNIT_TEST(AsteriskInvalidRight) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10907,7 +11355,7 @@ Y_UNIT_TEST(AsteriskInvalidRight) {
 
 Y_UNIT_TEST(FromAnonValues) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10926,7 +11374,7 @@ Y_UNIT_TEST(FromAnonValues) {
 
 Y_UNIT_TEST(FromValues) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10947,7 +11395,7 @@ Y_UNIT_TEST(FromValues) {
 
 Y_UNIT_TEST(FromTableWithImmediateCluster) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10966,7 +11414,7 @@ Y_UNIT_TEST(FromTableWithImmediateCluster) {
 
 Y_UNIT_TEST(Where) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10985,7 +11433,7 @@ Y_UNIT_TEST(Where) {
 
 Y_UNIT_TEST(FromSubquery) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11002,7 +11450,7 @@ Y_UNIT_TEST(FromSubquery) {
 
 Y_UNIT_TEST(Join2) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11014,7 +11462,7 @@ Y_UNIT_TEST(Join2) {
 
 Y_UNIT_TEST(AsteriskJoin) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11029,7 +11477,7 @@ Y_UNIT_TEST(AsteriskJoin) {
 
 Y_UNIT_TEST(QualifiedAsteriskJoin) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11044,7 +11492,7 @@ Y_UNIT_TEST(QualifiedAsteriskJoin) {
 
 Y_UNIT_TEST(Join2Alias) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11058,7 +11506,7 @@ Y_UNIT_TEST(Join2Alias) {
 
 Y_UNIT_TEST(Join3) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11073,7 +11521,7 @@ Y_UNIT_TEST(Join3) {
 
 Y_UNIT_TEST(Join3Mix) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11088,7 +11536,7 @@ Y_UNIT_TEST(Join3Mix) {
 
 Y_UNIT_TEST(OrderBy) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11101,13 +11549,72 @@ Y_UNIT_TEST(OrderBy) {
 
 Y_UNIT_TEST(LimitOffset) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
         SELECT 1 LIMIT 2 OFFSET 3;
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(CorrelatedProjection) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT (SELECT a) FROM (VALUES (1)) AS x(a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(InSubqueryProjection) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT (1 IN (SELECT 1))
+        FROM (VALUES (1)) AS x(a)
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(InSubqueryWhere) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a
+        FROM (VALUES (1, 10)) AS x(a, b)
+        WHERE b IN (
+            SELECT y.b / 10 FROM (VALUES (1, 100)) AS y(a, b));
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(ExistsSubqueryWhere) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a
+        FROM (VALUES (1, 10)) AS x(a, b)
+        WHERE EXISTS (
+            SELECT y.b / 10
+            FROM (VALUES (1, 100)) AS y(a, b)
+            WHERE x.a == y.a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {
+        {TString("YqlSelect"), 0},
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 4);
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)

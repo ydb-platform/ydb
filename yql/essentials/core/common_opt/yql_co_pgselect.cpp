@@ -54,7 +54,7 @@ TNodeMap<ui32> GatherSubLinks(const TExprNode::TPtr& root) {
     TNodeMap<ui32> subLinks;
 
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("PgSubLink")) {
+        if (node->IsCallable({"PgSubLink", "YqlSubLink"})) {
             subLinks[node.Get()] = subLinks.size();
             return false;
         }
@@ -2089,7 +2089,7 @@ TExprNode::TPtr BuildProjectionLambda(
 
 void GatherAggregationsFromLambda(const TExprNode::TPtr& lambda, TAggs& aggs, TAggregationMap& aggId, bool testExpr) {
     VisitExpr(lambda->TailPtr(), [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("PgSubLink")) {
+        if (node->IsCallable({"PgSubLink", "YqlSubLink"})) {
             if (!node->Child(3)->IsCallable("Void")) {
                 YQL_ENSURE(node->Child(3)->IsLambda());
                 GatherAggregationsFromLambda(node->ChildPtr(3), aggs, aggId, true);

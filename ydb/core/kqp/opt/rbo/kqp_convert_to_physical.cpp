@@ -1157,12 +1157,14 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
             .Done().Ptr();
             // clang-format on
 
-            if (opSource->Props.OrderEnforcer.has_value()) {
-                currentStageBody = BuildSort(currentStageBody, *op->Props.OrderEnforcer, ctx, op->Pos);
-            }
-
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
+
+            // If we need to remap columns or perform a sort, we need to create a new stage
+            if (opSource->Props.OrderEnforcer.has_value()) {
+                Y_ENSURE(false, "Sorting over read operator not supported");
+            }
+
             YQL_CLOG(TRACE, CoreDq) << "Converted Read " << opStageId;
         } else if (op->Kind == EOperator::Filter) {
             if (!currentStageBody) {

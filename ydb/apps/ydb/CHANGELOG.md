@@ -1,6 +1,10 @@
+* Added the `--tx-mode` option to the `ydb sql` command.
+* Added `snapshot-ro` and `snapshot-rw` transaction modes to `ydb table query execute` and `ydb sql` commands.
 * Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output .tar.bz2 file.
 * Added a simple progress bar for non-interactive stderr.
 * Added a new `omit-indexes` property to the `--item` option of the `ydb tools copy` command, allowing tables to be copied without their indexes.
+* Fixed a bug where the `ydb tools restore` command could crash with an `mutex lock failure (Invalid argument)` error due to an internal race condition.
+* The `ydb workload vector` now supports the `import files` subcommand to populate the table from CSV or parquet files.
 
 ## 2.27.0 ##
 

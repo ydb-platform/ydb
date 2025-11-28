@@ -26,6 +26,14 @@ YDS_CONNECTION = "yds"
 COMPUTE_NODE_COUNT = 3
 
 
+class Param(object):
+    def __init__(
+        self,
+        rebalancing_timeout_sec=60
+    ):
+        self.rebalancing_timeout_sec = rebalancing_timeout_sec
+
+
 @pytest.fixture
 def kikimr(request):
     kikimr_conf = StreamingOverKikimrConfig(
@@ -35,7 +43,8 @@ def kikimr(request):
     kikimr.compute_plane.fq_config['row_dispatcher']['enabled'] = True
     kikimr.compute_plane.fq_config['row_dispatcher']['without_consumer'] = True
     kikimr.compute_plane.fq_config['row_dispatcher']['json_parser'] = {}
-
+    if hasattr(request, "param"):
+        kikimr.compute_plane.fq_config['row_dispatcher']['coordinator']['rebalancing_timeout_sec'] = request.param.rebalancing_timeout_sec
     kikimr.start_mvp_mock_server()
     kikimr.start()
     yield kikimr
@@ -1231,6 +1240,17 @@ class TestPqRowDispatcher(TestYdsBase):
                 break
             assert time.time() < deadline, f"Waiting sensor ParsingErrors value failed, current count {count}"
             time.sleep(1)
+
+        while True:
+            count = 0
+            for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+                value = kikimr.compute_plane.get_sensors(node_index, "yq").find_sensor(
+                    {"subsystem": "row_dispatcher", "topic": f"{self.input_topic}", "sensor": "JsonParsingErrors"})
+                count += value if value is not None else 0
+            if count > 0:
+                break
+            assert time.time() < deadline, f"Waiting sensor JsonParsingErrors value failed, current count {count}"
+            time.sleep(1)
         stop_yds_query(client, query_id)
 
     @yq_v1
@@ -1283,6 +1303,9 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
 
     @yq_v1
+    @pytest.mark.parametrize(
+        "kikimr", [Param(rebalancing_timeout_sec=5)], indirect=["kikimr"]
+    )
     def test_redistribute_partition_after_timeout(self, kikimr, client):
         partitions_count = 3
         self.init(client, "redistribute", partitions=partitions_count)

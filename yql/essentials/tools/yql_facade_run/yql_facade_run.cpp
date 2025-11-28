@@ -1,5 +1,6 @@
 #include "yql_facade_run.h"
 
+#include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -498,10 +499,14 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    if (GatewaysConfig && GatewaysConfig->HasSqlCore()) {
-        SqlFlags.insert(GatewaysConfig->GetSqlCore().GetTranslationFlags().begin(), GatewaysConfig->GetSqlCore().GetTranslationFlags().end());
+    {
+        TGatewaySQLFlags flags;
+        if (GatewaysConfig) {
+            flags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysConfig));
+        }
+        flags.ExtendWith(SQLFlagsFromQContext(QPlayerContext));
+        flags.CollectAllTo(SqlFlags);
     }
-    UpdateSqlFlagsFromQContext(QPlayerContext, SqlFlags, GatewaysPatch);
 
     if (!FsConfig) {
         FsConfig = MakeHolder<TFileStorageConfig>();

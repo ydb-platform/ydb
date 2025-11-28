@@ -21,7 +21,8 @@ public:
     enum Flags : ui64 {
         EMPTY = 0,
         USE_ZC = 1,
-        USE_TLS = 1 << 1
+        USE_TLS = 1 << 1,
+        RDMA_POLLING_CQ = 1 << 2,
     };
 
     using TCheckerFactory = std::function<IActor*(ui32)>;
@@ -75,7 +76,7 @@ public:
             Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig,
                 /*numDynamicNodes=*/0, /*numThreads=*/1, LoggerSettings, TNode::DefaultInflight(),
                 flags & USE_ZC ? ESocketSendOptimization::IC_MSG_ZEROCOPY : ESocketSendOptimization::DISABLED,
-                flags & USE_TLS, checkerFactory));
+                flags & USE_TLS, checkerFactory, flags & RDMA_POLLING_CQ ? NInterconnect::NRdma::ECqMode::POLLING : NInterconnect::NRdma::ECqMode::EVENT));
         }
     }
 

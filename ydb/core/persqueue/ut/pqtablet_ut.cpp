@@ -906,10 +906,10 @@ void TPQTabletFixture::CommitKafkaTransaction(NKafka::TProducerInstanceId produc
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
     SendPlanStep({.Step=100, .TxIds={txId}});
-    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
-    WaitPlanStepAccepted({.Step=100});
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
 }
 
 void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
@@ -1053,12 +1053,6 @@ void TPQTabletFixture::TestMultiplePQTablets(const TString& consumer1, const TSt
     SendPlanStep({.Step=100, .TxIds={txId_2}});
     SendPlanStep({.Step=200, .TxIds={txId_1}});
 
-    WaitPlanStepAck({.Step=100, .TxIds={txId_2}}); // TEvPlanStepAck for Coordinator
-    WaitPlanStepAccepted({.Step=100});
-
-    WaitPlanStepAck({.Step=200, .TxIds={txId_1}}); // TEvPlanStepAck for Coordinator
-    WaitPlanStepAccepted({.Step=200});
-
     WaitReadSet(*tablet, {.Step=100, .TxId=txId_2, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId_2, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
@@ -1068,8 +1062,14 @@ void TPQTabletFixture::TestMultiplePQTablets(const TString& consumer1, const TSt
     WaitProposeTransactionResponse({.TxId=txId_2,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
+    WaitPlanStepAck({.Step=100, .TxIds={txId_2}}); // TEvPlanStepAck for Coordinator
+    WaitPlanStepAccepted({.Step=100});
+
     WaitProposeTransactionResponse({.TxId=txId_1,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitPlanStepAck({.Step=200, .TxIds={txId_1}}); // TEvPlanStepAck for Coordinator
+    WaitPlanStepAccepted({.Step=200});
 }
 
 Y_UNIT_TEST_F(Multiple_PQTablets_1, TPQTabletFixture)
@@ -1119,12 +1119,6 @@ void TPQTabletFixture::TestParallelTransactions(const TString& consumer1, const 
     SendPlanStep({.Step=100, .TxIds={txId_2}});
     SendPlanStep({.Step=200, .TxIds={txId_1}});
 
-    WaitPlanStepAck({.Step=100, .TxIds={txId_2}}); // TEvPlanStepAck for Coordinator
-    WaitPlanStepAccepted({.Step=100});
-
-    WaitPlanStepAck({.Step=200, .TxIds={txId_1}}); // TEvPlanStepAck for Coordinator
-    WaitPlanStepAccepted({.Step=200});
-
     // The PQ tablet sends to the TEvTxCalcPredicate partition for both transactions
     WaitForPQCalcPredicate(calcPredicateResultCount, 2);
 
@@ -1136,8 +1130,14 @@ void TPQTabletFixture::TestParallelTransactions(const TString& consumer1, const 
     WaitProposeTransactionResponse({.TxId=txId_2,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
+    WaitPlanStepAck({.Step=100, .TxIds={txId_2}}); // TEvPlanStepAck for Coordinator
+    WaitPlanStepAccepted({.Step=100});
+
     WaitProposeTransactionResponse({.TxId=txId_1,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitPlanStepAck({.Step=200, .TxIds={txId_1}}); // TEvPlanStepAck for Coordinator
+    WaitPlanStepAccepted({.Step=200});
 }
 
 void TPQTabletFixture::StartPQCalcPredicateObserver(size_t& received)
@@ -1499,25 +1499,17 @@ Y_UNIT_TEST_F(PQTablet_Send_RS_With_Abort, TPQTabletFixture)
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
-    //
-    // TODO(abcdef): проверить, что в команде CmdWrite есть информация о транзакции
-    //
-
-    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
-    WaitPlanStepAccepted({.Step=100});
-
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_ABORT});
 
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
-
-    //
-    // TODO(abcdef): проверить, что удалена информация о транзакции
-    //
 }
 
 Y_UNIT_TEST_F(Partition_Send_Predicate_With_False, TPQTabletFixture)
@@ -1538,13 +1530,6 @@ Y_UNIT_TEST_F(Partition_Send_Predicate_With_False, TPQTabletFixture)
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
-    //
-    // TODO(abcdef): проверить, что в команде CmdWrite есть информация о транзакции
-    //
-
-    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
-    WaitPlanStepAccepted({.Step=100});
-
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_ABORT, .Producer=Ctx->TabletId});
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
@@ -1554,9 +1539,8 @@ Y_UNIT_TEST_F(Partition_Send_Predicate_With_False, TPQTabletFixture)
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 
-    //
-    // TODO(abcdef): проверить, что удалена информация о транзакции
-    //
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
 }
 
 Y_UNIT_TEST_F(DropTablet_And_Tx, TPQTabletFixture)
@@ -1595,12 +1579,13 @@ Y_UNIT_TEST_F(DropTablet_And_Tx, TPQTabletFixture)
 
     SendPlanStep({.Step=100, .TxIds={txId_1}});
 
-    WaitPlanStepAck({.Step=100, .TxIds={txId_1}}); // TEvPlanStepAck для координатора
     SendDropTablet({.TxId=67890});                 // TEvDropTable когда выполняется транзакция
-    WaitPlanStepAccepted({.Step=100});
 
     WaitProposeTransactionResponse({.TxId=txId_1,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId_1}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
 
     //
     // ответы на TEvDropTablet будут после транзакции
@@ -1899,8 +1884,8 @@ Y_UNIT_TEST_F(TEvReadSet_comes_before_TEvPlanStep, TPQTabletFixture)
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
-    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
-    WaitPlanStepAccepted({.Step=100});
+    //WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    //WaitPlanStepAccepted({.Step=100});
 }
 
 Y_UNIT_TEST_F(Cancel_Tx, TPQTabletFixture)
@@ -2038,6 +2023,10 @@ Y_UNIT_TEST_F(Read_TEvTxCommit_After_Restart, TPQTabletFixture)
     // the transaction is now in the WAIT_RS state in memory and PLANNED state in disk
 
     PQTabletRestart(*Ctx);
+    ResetPipe();
+
+    // Tablet PQ has not confirmed that she received TEvPlanStep. Therefore, the coordinator will send it again
+    SendPlanStep({.Step=100, .TxIds={txId}});
 
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
@@ -2084,6 +2073,10 @@ Y_UNIT_TEST_F(Config_TEvTxCommit_After_Restart, TPQTabletFixture)
     // the transaction is now in the WAIT_RS state in memory and PLANNED state in disk
 
     PQTabletRestart(*Ctx);
+    ResetPipe();
+
+    // Tablet PQ has not confirmed that she received TEvPlanStep. Therefore, the coordinator will send it again
+    SendPlanStep({.Step=100, .TxIds={txId}});
 
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
@@ -2131,6 +2124,10 @@ Y_UNIT_TEST_F(One_Tablet_For_All_Partitions, TPQTabletFixture)
     // the transaction is now in the WAIT_RS state in memory and PLANNED state in disk
 
     PQTabletRestart(*Ctx);
+    ResetPipe();
+
+    // Tablet PQ has not confirmed that she received TEvPlanStep. Therefore, the coordinator will send it again
+    SendPlanStep({.Step=100, .TxIds={txId}});
 
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
@@ -2174,6 +2171,10 @@ Y_UNIT_TEST_F(One_New_Partition_In_Another_Tablet, TPQTabletFixture)
     // the transaction is now in the WAIT_RS state in memory and PLANNED state in disk
 
     PQTabletRestart(*Ctx);
+    ResetPipe();
+
+    // Tablet PQ has not confirmed that she received TEvPlanStep. Therefore, the coordinator will send it again
+    SendPlanStep({.Step=100, .TxIds={txId}});
 
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
@@ -2222,6 +2223,10 @@ Y_UNIT_TEST_F(All_New_Partitions_In_Another_Tablet, TPQTabletFixture)
     // the transaction is now in the WAIT_RS state in memory and PLANNED state in disk
 
     PQTabletRestart(*Ctx);
+    ResetPipe();
+
+    // Tablet PQ has not confirmed that she received TEvPlanStep. Therefore, the coordinator will send it again
+    SendPlanStep({.Step=100, .TxIds={txId}});
 
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
@@ -2275,9 +2280,11 @@ Y_UNIT_TEST_F(Huge_ProposeTransacton, TPQTabletFixture)
     PQTabletRestart(*Ctx);
     ResetPipe();
 
+    // Tablet PQ has not confirmed that she received TEvPlanStep. Therefore, the coordinator will send it again
     SendPlanStep({.Step=100, .TxIds={txId_1, txId_2}});
-    WaitPlanStepAck({.Step=100, .TxIds={txId_1, txId_2}});
-    WaitPlanStepAccepted({.Step=100});
+
+    //WaitPlanStepAck({.Step=100, .TxIds={txId_1, txId_2}});
+    //WaitPlanStepAccepted({.Step=100});
 }
 
 Y_UNIT_TEST_F(After_Restarting_The_Tablet_Sends_A_TEvReadSet_For_Transactions_In_The_EXECUTED_State, TPQTabletFixture)
@@ -2807,7 +2814,6 @@ void TPQTabletFixture::TestSendingTEvReadSetViaApp(const TSendReadSetViaAppTestP
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
 
     SendPlanStep({.Step=100, .TxIds={txId}});
-    WaitPlanStepAccepted({.Step=100});
 
     for (auto* tablet : tablets) {
         WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=tablet->TabletID(), .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
@@ -2822,6 +2828,8 @@ void TPQTabletFixture::TestSendingTEvReadSetViaApp(const TSendReadSetViaAppTestP
 
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=params.ExpectedStatus});
+
+    WaitPlanStepAccepted({.Step=100});
 }
 
 Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c0c, TPQTabletFixture)
@@ -2938,9 +2946,6 @@ Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Commit, TPQTabletFixture)
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
-    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
-    WaitPlanStepAccepted({.Step=100});
-
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
 
     SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=true,});
@@ -2948,6 +2953,9 @@ Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Commit, TPQTabletFixture)
 
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
 }
 
 Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Abort, TPQTabletFixture)
@@ -2968,9 +2976,6 @@ Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Abort, TPQTabletFixture)
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
-    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
-    WaitPlanStepAccepted({.Step=100});
-
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
 
     SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=false,});
@@ -2978,6 +2983,9 @@ Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Abort, TPQTabletFixture)
 
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
 }
 
 Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Commit_After_Abort, TPQTabletFixture)
@@ -2998,16 +3006,17 @@ Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Commit_After_Abort, TPQTabletFixture
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
-    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
-    WaitPlanStepAccepted({.Step=100});
-
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_ABORT});
 
     SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=true,});
     WaitForAppSendRsResponse({.Status = true,});
+
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
 }
 
 
@@ -3029,16 +3038,17 @@ Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Abort_After_Commit, TPQTabletFixture
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
-    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
-    WaitPlanStepAccepted({.Step=100});
-
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
     SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=false,});
     WaitForAppSendRsResponse({.Status = true,});
+
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED}); // RS=commit + ручной abort -> abort
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
 }
 
 Y_UNIT_TEST_F(PQTablet_App_SendReadSet_Invalid_Tx, TPQTabletFixture)
@@ -3059,8 +3069,8 @@ Y_UNIT_TEST_F(PQTablet_App_SendReadSet_Invalid_Tx, TPQTabletFixture)
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
-    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
-    WaitPlanStepAccepted({.Step=100});
+    //WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    //WaitPlanStepAccepted({.Step=100});
 
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
 
@@ -3086,8 +3096,8 @@ Y_UNIT_TEST_F(PQTablet_App_SendReadSet_Invalid_Step, TPQTabletFixture)
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
-    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
-    WaitPlanStepAccepted({.Step=100});
+    //WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    //WaitPlanStepAccepted({.Step=100});
 
     WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_ABORT});

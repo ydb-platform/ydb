@@ -11,7 +11,6 @@
 #include <yt/yt/core/bus/bus.h>
 
 #include <yt/yt/core/rpc/message.h>
-#include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 #include <yt/yt/core/rpc/server_detail.h>
 
 #include <yt/yt/core/ypath/token.h>
@@ -20,6 +19,8 @@
 #include <yt/yt/core/yson/format.h>
 #include <yt/yt/core/yson/tokenizer.h>
 #include <yt/yt/core/yson/protobuf_helpers.h>
+
+#include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
 #include <yt/yt_proto/yt/core/ytree/proto/ypath.pb.h>
 

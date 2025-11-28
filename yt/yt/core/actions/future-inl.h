@@ -1310,16 +1310,13 @@ TFuture<void> TFutureBase<T>::AsVoid() &&
     return TFuture<void>(std::move(Impl_));
 }
 
+// NB: In contrast to AsVoid, one cannot add (a more efficent) &&-overload
+// here as future-to-cancelable conversion must involve toggling ref-counters.
+// See TCancelableStateBase.
 template <class T>
-TCancelable TFutureBase<T>::AsCancelable() const&
+TCancelable TFutureBase<T>::AsCancelable() const
 {
     return TCancelable(Impl_);
-}
-
-template <class T>
-TCancelable TFutureBase<T>::AsCancelable() &&
-{
-    return TCancelable(std::move(Impl_));
 }
 
 template <class T>

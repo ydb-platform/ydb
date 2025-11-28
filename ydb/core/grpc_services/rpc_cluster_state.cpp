@@ -13,6 +13,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/digest/old_crc/crc.h>
+#include <library/cpp/streams/bzip2/bzip2.h>
 
 #include <util/random/shuffle.h>
 
@@ -289,7 +290,7 @@ public:
 
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
         ui32 idx = ev.Get()->Cookie;
-        Counters[idx].push_back(std::make_pair(std::move(ev->Get()->Record.GetResponse()), TInstant::Now()));
+        Counters[idx].push_back(std::make_pair(Pack(std::move(ev->Get()->Record.GetResponse())), TInstant::Now()));
         NodeStateInfoReceived(idx);
     }
 
@@ -383,6 +384,15 @@ public:
         }
     }
 
+    TString Pack(const TString& data) {
+        TString dataPack;
+        TStringOutput output(dataPack);
+        TBZipCompress compress(&output);
+        compress.Write(data);
+        compress.Finish();
+        return dataPack;
+    }
+
     void AddBlock(Ydb::Monitoring::ClusterStateResult& result, const TString& name, const auto& obj) {
         google::protobuf::util::JsonPrintOptions jsonOpts;
         jsonOpts.add_whitespace = true;
@@ -390,7 +400,7 @@ public:
         google::protobuf::util::MessageToJsonString(obj, &data, jsonOpts);
         auto* block = result.Addblocks();
         block->Setname(name);
-        block->Setcontent(data);
+        block->Setcontent(Pack(data));
         block->Mutabletimestamp()->set_seconds(TInstant::Now().Seconds());
     }
 

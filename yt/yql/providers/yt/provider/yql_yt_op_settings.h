@@ -168,7 +168,7 @@ public:
 
     friend EYtSettingTypes operator&(EYtSettingTypes, const EYtSettingTypes&);
 
-    bool HasFlags(const EYtSettingTypes& other) {
+    bool HasFlags(const EYtSettingTypes& other) const {
         return *this & other;
     }
 

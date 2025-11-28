@@ -367,7 +367,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on statistics info")
             .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
     config.Opts->AddCharOption('s', "Collect statistics in basic mode").StoreTrue(&BasicStats);
-    config.Opts->AddLongOption("tx-mode", "Transaction mode (for generic & data queries) [serializable-rw, online-ro, stale-ro, notx (generic queries only)]")
+    config.Opts->AddLongOption("tx-mode", "Transaction mode (for generic & data queries) [serializable-rw, online-ro, stale-ro, snapshot-ro, snapshot-rw, no-tx (generic queries only)]")
         .RequiredArgument("[String]").DefaultValue("serializable-rw").StoreResult(&TxMode);
     config.Opts->AddLongOption('q', "query", "Text of query to execute").RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
@@ -450,6 +450,10 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
             txSettings = NTable::TTxSettings::OnlineRO();
         } else if (TxMode == "stale-ro") {
             txSettings = NTable::TTxSettings::StaleRO();
+        } else if (TxMode == "snapshot-ro") {
+            txSettings = NTable::TTxSettings::SnapshotRO();
+        } else if (TxMode == "snapshot-rw") {
+            txSettings = NTable::TTxSettings::SnapshotRW();
         } else {
             throw TMisuseException() << "Unknown transaction mode.";
         }
@@ -636,7 +640,11 @@ namespace {
                 txSettings = NQuery::TTxSettings::OnlineRO();
             } else if (TxMode == "stale-ro") {
                 txSettings = NQuery::TTxSettings::StaleRO();
-            } else if (TxMode != "notx") {
+            } else if (TxMode == "snapshot-ro") {
+                txSettings = NQuery::TTxSettings::SnapshotRO();
+            } else if (TxMode == "snapshot-rw") {
+                txSettings = NQuery::TTxSettings::SnapshotRW();
+            } else if (TxMode != "no-tx" && TxMode != "notx") {
                 throw TMisuseException() << "Unknown transaction mode.";
             }
         }
@@ -658,14 +666,14 @@ namespace {
             if (params) {
                 return client.StreamExecuteQuery(
                     query,
-                    (TxMode == "notx" ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx(txSettings).CommitTx()),
+                    ((TxMode == "no-tx" || TxMode == "notx") ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx(txSettings).CommitTx()),
                     *params,
                     settings
                 );
             } else {
                 return client.StreamExecuteQuery(
                     query,
-                    (TxMode == "notx" ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx(txSettings).CommitTx()),
+                    ((TxMode == "no-tx" || TxMode == "notx") ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx(txSettings).CommitTx()),
                     settings
                 );
             }

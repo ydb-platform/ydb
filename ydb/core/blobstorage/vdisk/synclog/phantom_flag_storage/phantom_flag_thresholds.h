@@ -27,6 +27,7 @@ public:
     void AddHardBarrier(ui32 orderNumber, ui64 tabletId, ui32 channel, ui32 generation, ui32 step);
     bool IsBehindThreshold(const TLogoBlobID& blob) const;
     TPhantomFlags Sift(const TPhantomFlags& flags);
+    ui64 EstimatedMemoryConsumption() const;
 
 private:
     using TGenStep = std::pair<ui32, ui32>;
@@ -38,6 +39,7 @@ private:
         void AddBlob(const TLogoBlobID& blob);
         void AddHardBarrier(ui64 tabletId, ui8 channel, TGenStep barrier);
         bool IsBehindThreshold(const TLogoBlobID& blob) const;
+        ui64 EstimatedMemoryConsumption() const;
 
     private:
         class TTabletThresholds {
@@ -46,6 +48,7 @@ private:
             void AddHardBarrier(ui8 channel, TGenStep barrier);
             bool IsBehindThreshold(const TLogoBlobID& blob) const;
             bool IsEmpty() const;
+            ui64 EstimatedMemoryConsumption() const;
     
         private:
             std::unordered_map<ui8, TGenStep> ChannelThresholds;

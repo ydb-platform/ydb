@@ -74,6 +74,7 @@
 /ydb/core/tx/tx_proxy/schemereq.cpp @ydb-platform/schemeshard
 
 /ydb/core/scheme @ydb-platform/datashard
+/ydb/core/statistics @ydb-platform/datashard
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard

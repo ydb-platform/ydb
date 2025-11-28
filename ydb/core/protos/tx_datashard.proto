@@ -855,6 +855,7 @@ message TEvGetTableStatsResult {
     repeated uint64 SysTablesPartOwners = 7;
     optional bool FullStatsReady = 8;
     optional uint64 TableOwnerId = 9;
+    optional uint32 FollowerId = 10;
 }
 
 message TEvPeriodicTableStats {

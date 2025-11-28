@@ -7,6 +7,7 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
+#include <util/generic/strbuf.h>
 #include <util/generic/ptr.h>
 
 namespace NYql {
@@ -25,5 +26,6 @@ IRetryPolicy<unsigned>::TPtr GetDefaultPolicy();
 ERetryErrorClass DefaultClassifyHttpCode(unsigned code);
 THttpURL AppendUrlPath(const THttpURL& url, const TString& part);
 TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders = {}, const TDuration& timeout = TDuration::Max(), size_t redirects = 10, const IRetryPolicy<unsigned>::TPtr& policy = nullptr);
+TFetchResultPtr FetchEx(const THttpURL& url, TStringBuf method = "GET"_sb, TStringBuf body = {}, const THttpHeaders& additionalHeaders = {}, const TDuration& timeout = TDuration::Max(), size_t redirects = 10, const IRetryPolicy<unsigned>::TPtr& policy = nullptr);
 
 } // namespace NYql

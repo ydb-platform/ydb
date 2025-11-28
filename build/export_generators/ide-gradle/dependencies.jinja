@@ -21,10 +21,12 @@
 {%-                     else -%}
 {#-                     Has handmade AP, put all APs as jars in one list #}
     {{ func }}(files(listOf(
-        {{ PatchRoots(output_root + "/" + annotation_processor.jar, false, "", true) }},
-{%-                         for annotation_processor_dep in annotation_processor.deps %}
+{%-                         if annotation_processor.deps|length -%}
+{%-                             for annotation_processor_dep in annotation_processor.deps %}
         {{ PatchRoots(output_root + "/" + annotation_processor_dep, false, "", true) }},
-{%-                         endfor %}
+{%-                             endfor -%}
+{%-                         endif %}
+        {{ PatchRoots(output_root + "/" + annotation_processor.jar, false, "", true) }},
     )))
 {%-                     endif %}
 {%-                 endfor %}
@@ -70,12 +72,12 @@
 {%-                 if (kapt_jar in file_jars) or (kapt_jar in test_file_jars) -%}
 {#-                     found KAPT jar in depends => use kapt as jar #}
     {{ func }}(files(listOf(
-        "$output_root/{{ kapt_jar }}",
 {%-                    if kapt.deps|length -%}
 {%-                        for kapt_dep in kapt.deps %}
         "$output_root/{{ kapt_dep }}",
 {%-                        endfor -%}
 {%-                    endif %}
+        "$output_root/{{ kapt_jar }}",
     )))
 {%-                 else -%}
 {#-                     no in depends jar => use KAPT as project() -#}

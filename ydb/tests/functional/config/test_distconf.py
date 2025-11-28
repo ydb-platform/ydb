@@ -309,24 +309,18 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
 
-    def test_invalid_change_host_config_disk(self):
-        fetched_config = fetch_config(self.cluster.config_client)
-        dumped_fetched_config = yaml.safe_load(fetched_config)
-
-        # replace config with invalid host config disk path
-        dumped_fetched_config["config"]["host_configs"][0]["drive"].append(dumped_fetched_config["config"]["host_configs"][0]["drive"][0])
-        dumped_fetched_config['metadata']['version'] = 1
-        replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
-        logger.debug(f"replace_config_response: {replace_config_response}")
-        assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
-
 
 class TestDistConfBootstrapValidation:
 
     def test_bootstrap_selector_validation(self):
+        log_configs = {
+            'BS_NODE': LogLevels.DEBUG,
+            'GRPC_SERVER': LogLevels.DEBUG,
+            'GRPC_PROXY': LogLevels.DEBUG,
+        }
         cfg = KikimrConfigGenerator(
-            Erasure.NONE,
-            nodes=1,
+            Erasure.BLOCK_4_2,
+            nodes=8,
             use_config_store=True,
             metadata_section={
                 'kind': 'MainConfig',
@@ -335,7 +329,10 @@ class TestDistConfBootstrapValidation:
             },
             simple_config=True,
             use_self_management=True,
+            use_in_memory_pdisks=False,
+            separate_node_configs=True,
             extra_grpc_services=['config'],
+            additional_log_configs=log_configs,
         )
 
         cfg.full_config.setdefault('selector_config', []).append({

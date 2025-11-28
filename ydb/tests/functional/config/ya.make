@@ -21,6 +21,9 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+DEPENDS(
+    ydb/apps/ydb
+)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 

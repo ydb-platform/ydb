@@ -39,7 +39,7 @@ std::shared_ptr<NBackground::ISessionLogic> TImportTask::DoBuildSession() const 
 }
 
 TString TImportTask::GetClassNameStatic() { 
-    return "CS::EXPORT"; 
+    return "CS::IMPORT"; 
 }
 
 TString TImportTask::GetClassName() const { 

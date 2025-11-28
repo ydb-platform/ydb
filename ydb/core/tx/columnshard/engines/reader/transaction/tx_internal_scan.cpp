@@ -55,7 +55,8 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         read.SetLock(
             request.GetLockId(), 
             NKikimrDataEvents::OPTIMISTIC, 
-            request.GetLockId().has_value() ? Self->GetOperationsManager().GetLockOptional(request.GetLockId().value()) : nullptr
+            request.GetLockId().has_value() ? Self->GetOperationsManager().GetLockOptional(request.GetLockId().value()) : nullptr,
+            request.GetReadOnlyConflicts()
         );
         read.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
         std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));

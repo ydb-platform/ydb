@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""
+Test script to validate PR description locally.
+
+Usage:
+    python3 test_validation.py <pr_number>
+    python3 test_validation.py <pr_number> --body-file <file_path>
+    python3 test_validation.py --body-file <file_path>
+
+Environment variables:
+
+Required for fetching PR from GitHub:
+    export GITHUB_TOKEN="your_github_token"
+
+Optional for table generation testing:
+    export SHOW_ADDITIONAL_INFO_IN_PR="TRUE"  # Enable table generation test
+    export APP_DOMAIN="your-app-domain.com"   # Required if SHOW_ADDITIONAL_INFO_IN_PR=TRUE
+
+Note: GITHUB_WORKSPACE is automatically set to repository root if not provided.
+"""
+import os
+import sys
+import json
+from pathlib import Path
+from validate_pr_description import (
+    validate_pr_description_from_file,
+    ensure_tables_in_pr_body,
+    update_pr_body
+)
+
+def find_repo_root():
+    """Find repository root by looking for .github or .git directory."""
+    current = Path(__file__).resolve().parent
+    while current != current.parent:
+        if (current / ".github").exists() or (current / ".git").exists():
+            return str(current)
+        current = current.parent
+    # Fallback to current working directory
+    return os.getcwd()
+
+def test_validation(pr_body: str, pr_number: int = None, base_ref: str = "main"):
+    """Test validation and table generation."""
+    print("=" * 60)
+    print("PR Body from GitHub")
+    print("=" * 60)
+    print(pr_body)
+    print("=" * 60)
+    print()
+    
+    print("=" * 60)
+    print("Testing PR description validation")
+    print("=" * 60)
+    
+    # Validate
+    is_valid, txt = validate_pr_description_from_file(description=pr_body)
+    print(f"\nValidation result: {'✅ PASSED' if is_valid else '❌ FAILED'}")
+    print(f"Message: {txt}\n")
+    
+    if not is_valid:
+        return False, pr_body
+    
+    # Test table generation if enabled
+    show_additional_info = os.environ.get("SHOW_ADDITIONAL_INFO_IN_PR", "").upper() == "TRUE"
+    result_body = pr_body
+    
+    if show_additional_info:
+        print("=" * 60)
+        print("Testing table generation")
+        print("=" * 60)
+        
+        app_domain = os.environ.get("APP_DOMAIN")
+        if not app_domain:
+            print("⚠️  APP_DOMAIN not set, skipping table generation test")
+            print("   Set APP_DOMAIN environment variable to test table generation")
+            return is_valid, pr_body
+        
+        if not pr_number:
+            print("⚠️  PR number not provided, skipping table generation test")
+            print("   Provide PR number to test table generation")
+            return is_valid, pr_body
+        
+        # Check current state
+        test_marker = "<!-- test-execution-table -->"
+        backport_marker = "<!-- backport-table -->"
+        has_test = test_marker in pr_body
+        has_backport = backport_marker in pr_body
+        
+        print(f"Current state:")
+        print(f"  Test table exists: {has_test}")
+        print(f"  Backport table exists: {has_backport}")
+        print()
+        
+        updated_body = ensure_tables_in_pr_body(pr_body, pr_number, base_ref, app_domain)
+        if updated_body:
+            result_body = updated_body
+            print("✅ Tables would be added to PR body")
+            print("\nGenerated tables preview:")
+            print("-" * 60)
+            # Extract just the tables part for preview
+            if test_marker in updated_body:
+                test_start = updated_body.find(test_marker)
+                test_end = updated_body.find("###", test_start + 1)
+                if test_end == -1:
+                    test_end = updated_body.find("**Legend:**", test_start + 1)
+                if test_end != -1:
+                    print(updated_body[test_start:test_end].strip())
+            if backport_marker in updated_body:
+                backport_start = updated_body.find(backport_marker)
+                backport_end = updated_body.find("**Legend:**", backport_start + 1)
+                if backport_end != -1:
+                    print(updated_body[backport_start:backport_end].strip())
+            print("-" * 60)
+        else:
+            if has_test and has_backport:
+                print("ℹ️  Both tables already exist in PR body")
+            else:
+                print("⚠️  Function returned None but tables don't exist - this is unexpected")
+    else:
+        print("ℹ️  SHOW_ADDITIONAL_INFO_IN_PR is not TRUE, skipping table generation test")
+        print("   Set SHOW_ADDITIONAL_INFO_IN_PR=TRUE to test table generation")
+    
+    return is_valid, result_body
+
+def main():
+    if len(sys.argv) < 2 and "--body-file" not in sys.argv:
+        print(__doc__)
+        sys.exit(1)
+    
+    # Set GITHUB_WORKSPACE for local testing if not already set
+    if not os.environ.get("GITHUB_WORKSPACE"):
+        repo_root = find_repo_root()
+        os.environ["GITHUB_WORKSPACE"] = repo_root
+        print(f"ℹ️  Set GITHUB_WORKSPACE={repo_root} for local testing")
+    
+    pr_number = None
+    pr_body = None
+    base_ref = "main"
+    
+    # Parse arguments
+    if "--body-file" in sys.argv:
+        idx = sys.argv.index("--body-file")
+        if idx + 1 >= len(sys.argv):
+            print("Error: --body-file requires a file path")
+            sys.exit(1)
+        with open(sys.argv[idx + 1], 'r') as f:
+            pr_body = f.read()
+        # Try to get PR number from remaining args
+        if len(sys.argv) > idx + 2:
+            try:
+                pr_number = int(sys.argv[idx + 2])
+            except ValueError:
+                pass
+    else:
+        try:
+            pr_number = int(sys.argv[1])
+        except (ValueError, IndexError):
+            print("Error: PR number must be an integer")
+            sys.exit(1)
+        
+        # Try to get PR body from GitHub API if PR number provided
+        github_token = os.environ.get("GITHUB_TOKEN")
+        if github_token:
+            try:
+                from github import Github, Auth as GithubAuth
+                gh = Github(auth=GithubAuth.Token(github_token))
+                repo = gh.get_repo("ydb-platform/ydb")
+                pr = repo.get_pull(pr_number)
+                pr_body = pr.body or ""
+                base_ref = pr.base.ref
+                print(f"📥 Fetched PR #{pr_number} from GitHub")
+            except Exception as e:
+                print(f"⚠️  Failed to fetch PR from GitHub: {e}")
+                print("   Provide PR body via --body-file option")
+                sys.exit(1)
+        else:
+            print("Error: GITHUB_TOKEN not set. Cannot fetch PR from GitHub.")
+            print("   Set GITHUB_TOKEN or use --body-file option")
+            sys.exit(1)
+    
+    if not pr_body:
+        print("Error: PR body is required")
+        sys.exit(1)
+    
+    success, result_body = test_validation(pr_body, pr_number, base_ref)
+    
+    print()
+    print("=" * 60)
+    print("Resulting PR Body")
+    print("=" * 60)
+    print(result_body)
+    print("=" * 60)
+    
+    sys.exit(0 if success else 1)
+
+if __name__ == "__main__":
+    main()
+

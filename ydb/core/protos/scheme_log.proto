@@ -39,6 +39,7 @@ message TAlterRecord {
     optional uint32 EraseCacheMinRows = 21;
     optional uint32 EraseCacheMaxBytes = 22;
     optional bool ColdBorrow = 23 [default = false];
+    optional bool NoBackup = 28;
 
     //_ Table: Attributes of storage (page collection)
 

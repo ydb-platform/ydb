@@ -155,6 +155,9 @@ public:
         , Schema(schema)
     {
         for (const auto& [tableId, table] : tables) {
+            if (table.NoBackup) {
+                continue;
+            }
             Tables.emplace(tableId, TTableFile(table.Name, {}));
         }
     }
@@ -382,9 +385,10 @@ public:
     using TKeys = TArrayRef<const TRawTypeValue>;
     using TOps = TArrayRef<const TUpdateOp>;
 
-    TChangelogSerializer(NJsonWriter::TBuf& writer, TScheme& schema)
+    TChangelogSerializer(NJsonWriter::TBuf& writer, TScheme& schema, const std::function<void()>& beginCommit)
         : Writer(writer)
         , Schema(schema)
+        , BeginCommit(beginCommit)
     {}
 
     bool NeedIn(ui32) noexcept
@@ -402,19 +406,27 @@ public:
         Y_TABLET_ERROR("Annex is unsupported");
     }
 
-    void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion)
-    {
+    void BeginChanges() {
         if (!HasChanges) {
             HasChanges = true;
             Writer.WriteKey("data_changes");
             Writer.BeginList();
         }
+    }
+
+    void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion)
+    {
+        const auto* table = Schema.GetTableInfo(tid);
+        if (table->NoBackup) {
+            return;
+        }
+
+        BeginCommit();
+        BeginChanges();
 
         Writer.BeginObject();
 
         Writer.WriteKey("table");
-
-        auto* table = Schema.GetTableInfo(tid);
         Writer.WriteString(table->Name);
 
         Writer.WriteKey("op");
@@ -494,6 +506,7 @@ private:
     NJsonWriter::TBuf& Writer;
     TScheme& Schema;
     bool HasChanges = false;
+    std::function<void()> BeginCommit;
 };
 
 class TChangelogWriter : public TActorBootstrapped<TChangelogWriter> {
@@ -590,15 +603,20 @@ public:
             }
         }
 
-        if (schemeUpdate.empty() && dataUpdate.empty()) {
-            return;
-        }
-
-        b.BeginObject();
-        b.WriteKey("step");
-        b.WriteULongLong(msg->Step);
+        // Commit could be not included in backup
+        bool hasCommit = false;
+        auto beginCommit = [&](){
+            if (!hasCommit) {
+                hasCommit = true;
+                b.BeginObject();
+                b.WriteKey("step");
+                b.WriteULongLong(msg->Step);
+            }
+        };
 
         if (schemeUpdate) {
+            beginCommit();
+
             TSchemeChanges changes;
             bool parseOk = ParseFromStringNoSizeLimit(changes, schemeUpdate);
             if (!parseOk) {
@@ -626,7 +644,7 @@ public:
         if (dataUpdate) {
             try {
                 dataUpdate = NPageCollection::TSlicer::Lz4()->Decode(dataUpdate);
-                TChangelogSerializer serializer(b, Schema);
+                TChangelogSerializer serializer(b, Schema, beginCommit);
                 NRedo::TPlayer<TChangelogSerializer> redoPlayer(serializer);
                 redoPlayer.Replay(dataUpdate);
                 serializer.Finalize();
@@ -635,8 +653,10 @@ public:
             }
         }
 
-        b.EndObject();
-        out << '\n';
+        if (hasCommit) {
+            b.EndObject();
+            out << '\n';
+        }
 
         if (Buffer.Size() >= 1_MB) {
             Flush();

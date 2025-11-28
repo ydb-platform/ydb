@@ -1,9 +1,4 @@
-# YDB Stability Test Framework
-
-## Overview
-
-The YDB Stability Test Framework is a comprehensive testing system designed to validate the stability and reliability of YDB clusters under various workloads. It provides parallel execution capabilities, detailed diagnostics, and automated reporting for long-running stress tests.
-
+# YDB Stability Tests
 
 ## Adding Custom Workloads
 

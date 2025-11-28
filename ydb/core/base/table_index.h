@@ -44,7 +44,7 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
 
 bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType);
 
-NKikimrSchemeOp::EIndexType GetIndexType(NKikimrSchemeOp::TIndexCreationConfig indexCreation);
+NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationConfig& indexCreation);
 TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType);
 
 std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys);

@@ -709,6 +709,7 @@ TConclusionStatus TPortionDataAccessor::DeserializeFromProto(const NKikimrColumn
         }
         Indexes->emplace_back(std::move(parse.DetachResult()));
     }
+    SliceBorderOffsets = DoCalcSliceBorderOffsets(*Records, *Indexes);
     return TConclusionStatus::Success();
 }
 

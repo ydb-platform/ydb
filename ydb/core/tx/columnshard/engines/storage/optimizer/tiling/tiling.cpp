@@ -176,8 +176,11 @@ struct TAccumulator {
     TInstant LastCompaction = {};
     bool TimeExceeded = false;
 
-    explicit TAccumulator(ui32 level)
+    const NLCBuckets::TLevelCounters& Counters;
+
+    TAccumulator(ui32 level, const NLCBuckets::TLevelCounters& counters)
         : Level(level)
+        , Counters(counters)
     {}
 
     bool Empty() const {
@@ -237,6 +240,7 @@ struct TAccumulator {
     }
 
     void Add(const TPortionInfo::TPtr& p) {
+        Counters.Portions->AddPortion(p);
         if (Portions.empty()) {
             LastCompaction = TInstant::Now();
         }
@@ -248,9 +252,15 @@ struct TAccumulator {
     }
 
     void Remove(ui64 id) {
-        Compacting.erase(id);
+        if (auto it = Compacting.find(id); it != Compacting.end()) {
+            Counters.Portions->RemovePortion(it->second);
+            Compacting.erase(it);
+            return;
+        }
+
         auto it = Portions.find(id);
         if (it != Portions.end()) {
+            Counters.Portions->RemovePortion(it->second);
             TotalBlobBytes -= it->second->GetTotalBlobBytes();
             Portions.erase(it);
         }
@@ -471,7 +481,7 @@ struct TLevel {
 
 class TOptimizerPlanner : public IOptimizerPlanner, private TSettings {
     using TBase = IOptimizerPlanner;
-    std::shared_ptr<NLCBuckets::TCounters> Counters;
+    std::shared_ptr<NLCBuckets::TTilingCounters> Counters;
     std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo;
 
 public:
@@ -479,7 +489,7 @@ public:
             const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const TSettings& settings = {})
         : TBase(pathId, settings.NodePortionsCountLimit)
         , TSettings(settings)
-        , Counters(std::make_shared<NLCBuckets::TCounters>())
+        , Counters(std::make_shared<NLCBuckets::TTilingCounters>())
         , PortionsInfo(std::make_shared<TSimplePortionsGroupInfo>())
         , StoragesManager(storagesManager)
         , PrimaryKeysSchema(primaryKeysSchema)
@@ -620,7 +630,7 @@ private:
     TAccumulator& EnsureAccumulator(ui32 level) {
         while (level >= Accumulator.size()) {
             ui32 next = Accumulator.size();
-            Accumulator.emplace_back(next);
+            Accumulator.emplace_back(next, Counters->GetAccumulatorCounters(next));
         }
         return Accumulator[level];
     }

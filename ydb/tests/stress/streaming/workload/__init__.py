@@ -24,8 +24,16 @@ class Workload():
     def create_topics(self):
         self.pool.execute_with_retries(
             f"""
-                CREATE TOPIC `{self.input_topic}` WITH (min_active_partitions = {self.partitions_count});
-                CREATE TOPIC `{self.output_topic}` (CONSUMER {self.consumer_name});
+                CREATE TOPIC `{self.input_topic}` WITH (min_active_partitions = {self.partitions_count}, retention_period = Interval('PT1H'));
+                CREATE TOPIC `{self.output_topic}` (CONSUMER {self.consumer_name}) WITH (retention_period = Interval('PT12H'));
+            """
+        )
+    
+    def drop_topics(self):
+        self.pool.execute_with_retries(
+            f"""
+                DROP TOPIC  `{self.input_topic}`;
+                DROP TOPIC  `{self.output_topic}`;
             """
         )
 
@@ -114,6 +122,7 @@ class Workload():
         self.check_status()
         self.write_to_input_topic()
         self.read_from_output_topic()
+        self.drop_topics();
 
     def __enter__(self):
         return self

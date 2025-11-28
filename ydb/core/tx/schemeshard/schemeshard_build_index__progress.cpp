@@ -57,6 +57,7 @@ protected:
     const TIndexBuildId BuildId;
 
     std::shared_ptr<NTxProxy::TUploadTypes> Types;
+    TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> InputRows;
     std::shared_ptr<NTxProxy::TUploadRows> UploadRows;
 
     TActorId Uploader;
@@ -72,23 +73,18 @@ public:
                    const TActorId& responseActorId,
                    TIndexBuildId buildId,
                    std::shared_ptr<NTxProxy::TUploadTypes> types,
-                   const TVector<std::pair<TSerializedCellVec, TSerializedCellVec>>& rows)
+                   TVector<std::pair<TSerializedCellVec, TSerializedCellVec>>&& rows)
         : DatabaseName(databaseName)
         , TargetTable(targetTable)
         , ScanSettings(scanSettings)
         , ResponseActorId(responseActorId)
         , BuildId(buildId)
         , Types(types)
+        , InputRows(std::move(rows))
     {
         LogPrefix = TStringBuilder()
             << "TUploadSampleK: BuildIndexId: " << BuildId
             << " ResponseActorId: " << ResponseActorId;
-        UploadRows = std::make_shared<NTxProxy::TUploadRows>();
-        UploadRows->reserve(rows.size());
-        for (const auto& row: rows) {
-            UploadBytes += NDataShard::CountRowCellBytes(row.first.GetCells(), row.second.GetCells());
-            UploadRows->emplace_back(TSerializedCellVec{row.first}, TSerializedCellVec::Serialize(row.second.GetCells()));
-        }
     }
 
     static constexpr auto ActorActivityType() {
@@ -110,6 +106,14 @@ public:
 
     void Bootstrap() {
         Become(&TThis::StateWork);
+
+        UploadRows = std::make_shared<NTxProxy::TUploadRows>();
+        UploadRows->reserve(InputRows.size());
+        for (const auto& row: InputRows) {
+            UploadBytes += NDataShard::CountRowCellBytes(row.first.GetCells(), row.second.GetCells());
+            UploadRows->emplace_back(TSerializedCellVec{row.first}, TSerializedCellVec::Serialize(row.second.GetCells()));
+        }
+        InputRows = {}; // release memory
 
         Upload(false);
     }
@@ -917,7 +921,7 @@ private:
         (*types)[2] = {NTableIndex::NKMeans::CentroidColumn, type};
 
         auto actor = new TUploadSampleK(CanonizePath(Self->RootPathElements), path.PathString(),
-            buildInfo.ScanSettings, Self->SelfId(), BuildId, types, uploadRows);
+            buildInfo.ScanSettings, Self->SelfId(), BuildId, types, std::move(uploadRows));
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
@@ -1007,7 +1011,7 @@ private:
 
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NFulltext::StatsTable);
         auto actor = new TUploadSampleK(CanonizePath(Self->RootPathElements), path.PathString(),
-            buildInfo.ScanSettings, Self->SelfId(), BuildId, types, uploadRows);
+            buildInfo.ScanSettings, Self->SelfId(), BuildId, types, std::move(uploadRows));
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
@@ -1049,7 +1053,7 @@ private:
 
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NFulltext::DictTable);
         auto actor = new TUploadSampleK(CanonizePath(Self->RootPathElements), path.PathString(),
-            buildInfo.ScanSettings, Self->SelfId(), BuildId, types, uploadRows);
+            buildInfo.ScanSettings, Self->SelfId(), BuildId, types, std::move(uploadRows));
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 

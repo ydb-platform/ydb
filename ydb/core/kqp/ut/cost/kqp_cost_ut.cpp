@@ -1101,6 +1101,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         size_t Writes = 0;
         size_t Reads = 0;
         size_t Deletes = 0;
+
+        size_t WriteBytes = 0;
+        size_t ReadBytes = 0;
+        size_t DeleteBytes = 0;
     };
 
     TTotalStats FromProto(const Ydb::TableStats::QueryStats& proto) {
@@ -1110,6 +1114,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 stats.Writes += proto.query_phases(phase).table_access(access).updates().rows();
                 stats.Reads += proto.query_phases(phase).table_access(access).reads().rows();
                 stats.Deletes += proto.query_phases(phase).table_access(access).deletes().rows();
+
+                stats.WriteBytes += proto.query_phases(phase).table_access(access).updates().bytes();
+                stats.ReadBytes += proto.query_phases(phase).table_access(access).reads().bytes();
+                stats.DeleteBytes += proto.query_phases(phase).table_access(access).deletes().bytes();
             }
         }
         return stats;
@@ -1119,6 +1127,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(lhs.Writes, rhs.Writes);
         UNIT_ASSERT_VALUES_EQUAL(lhs.Reads, rhs.Reads);
         UNIT_ASSERT_VALUES_EQUAL(lhs.Deletes, rhs.Deletes);
+
+        UNIT_ASSERT_VALUES_EQUAL(lhs.WriteBytes, rhs.WriteBytes);
+        UNIT_ASSERT_VALUES_EQUAL(lhs.ReadBytes, rhs.ReadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(lhs.DeleteBytes, rhs.DeleteBytes);
     }
     
 
@@ -1164,6 +1176,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 1,
                     .Reads = 0,
                     .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1197,6 +1213,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 1,
                     .Reads = 0,
                     .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1225,6 +1245,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 0,
                     .Reads = 1,
                     .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1259,6 +1283,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 1,
                     .Reads = 0,
                     .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1291,6 +1319,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 0,
                     .Reads = 0,
                     .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1320,6 +1352,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 1,
                     .Reads = 1,
                     .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1354,6 +1390,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 0,
                     .Reads = 0,
                     .Deletes = 1,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1388,6 +1428,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 0,
                     .Reads = 0,
                     .Deletes = 1,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
                 });
         }
     }
@@ -1443,6 +1487,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 1,
                     .Reads = 1,
                     .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1483,6 +1531,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 1,
                     .Reads = 1,
                     .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1518,6 +1570,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 0,
                     .Reads = 1,
                     .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1555,6 +1611,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 0,
                     .Reads = 1,
                     .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1592,6 +1652,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 0,
                     .Reads = 1,
                     .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1631,6 +1695,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = isSink ? 1 : 0, // EvWrite writes before next read
                     .Reads = 1,
                     .Deletes = 0,
+
+                    .WriteBytes = isSink ? 20 : 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1670,6 +1738,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = isSink ? 1 : 0, // EvWrite writes before next read
                     .Reads = 1,
                     .Deletes = 0,
+
+                    .WriteBytes = isSink ? 20 : 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1709,6 +1781,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = isSink ? 2 : 0, // EvWrite writes before next read
                     .Reads = 1,
                     .Deletes = 0,
+
+                    .WriteBytes = isSink ? 40 : 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
                 });
         }
 
@@ -1749,6 +1825,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = isSink ? 3 : 0, // EvWrite writes before next read
                     .Reads = isSink ? 1 : 0,
                     .Deletes = 0,
+
+                    .WriteBytes = isSink ? 60 : 0,
+                    .ReadBytes = isSink ? 8 : 0,
+                    .DeleteBytes = 0,
                 });
         }
     }

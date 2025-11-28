@@ -691,6 +691,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
         );
 
         YQL_ENSURE(
+            path.QLFilter().Maybe<TCoVoid>(),
+            "Unexpected QLFilter: " << path.QLFilter().Ref().Content()
+        );
+
+        YQL_ENSURE(
             path.Table().Maybe<TYtOutput>().Operation(),
             "Unexpected node: " << path.Table().Ref().Content()
         );

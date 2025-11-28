@@ -17,6 +17,7 @@
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
+#include <util/generic/set.h>
 
 #include <re2/re2.h>
 
@@ -258,12 +259,23 @@ TString GetDatabase(const TString& query) {
 }
 
 TMaybe<TSecretSetting> GetSecretSetting(const TString& query) {
-    static const TVector<TString> SECRET_SETTING_NAMES{
-        "PASSWORD_SECRET_NAME",
-        "PASSWORD_SECRET_PATH",
-        "TOKEN_SECRET_NAME",
-        "TOKEN_SECRET_PATH",
-    };
+    static const TVector<TString> SECRET_SETTING_NAMES = [] {
+        static const TSet<TString> settings = {
+            "TOKEN_SECRET",
+            "PASSWORD_SECRET",
+            "SERVICE_ACCOUNT_SECRET",
+            "AWS_ACCESS_KEY_ID_SECRET",
+            "AWS_SECRET_ACCESS_KEY_SECRET",
+        };
+        TVector<TString> result;
+        for (const auto& name : settings) {
+            result.push_back(name + "_NAME");
+            result.push_back(name + "_PATH");
+        }
+
+        return result;
+    }();
+
     for (const auto& settingName : SECRET_SETTING_NAMES) {
         auto secretSettingValue = GetToken(query, settingName + " = '");
         if (!secretSettingValue) {
@@ -276,25 +288,6 @@ TMaybe<TSecretSetting> GetSecretSetting(const TString& query) {
     }
 
     return {};
-}
-
-TString GetSecretName(const TString& query) {
-    TString secretName;
-    if (auto pwd = GetToken(query, R"(PASSWORD_SECRET_NAME = ')")) {
-        secretName = std::move(pwd);
-    } else if (auto token = GetToken(query, R"(PASSWORD_SECRET_PATH = ')")) {
-        secretName = std::move(token);
-    } else if (auto token = GetToken(query, R"(TOKEN_SECRET_NAME = ')")) {
-        secretName = std::move(token);
-    } else if (auto token = GetToken(query, R"(TOKEN_SECRET_PATH = ')")) {
-        secretName = std::move(token);
-    }
-
-    if (secretName.EndsWith("'")) {
-        secretName.resize(secretName.size() - 1);
-    }
-
-    return secretName;
 }
 
 bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::TIssues& issues) {

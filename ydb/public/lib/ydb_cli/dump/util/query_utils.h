@@ -32,7 +32,6 @@ bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::str
 
 TString GetBackupRoot(const TString& query);
 TString GetDatabase(const TString& query);
-TString GetSecretName(const TString& query);
 TMaybe<TSecretSetting> GetSecretSetting(const TString& query);
 
 } // NYdb::NDump

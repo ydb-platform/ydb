@@ -838,7 +838,7 @@ message TReassignedItem {
 
 message TGroupMapperError {
     message TStats {
-        NKikimrBlobStorage.TPDiskId ExamplePDiskId = 1;
+        string Domain = 1;
         uint32 AllSlotsAreOccupied = 2;
         uint32 NotEnoughSpace = 3;
         uint32 NotAcceptingNewSlots = 4;
@@ -847,6 +847,9 @@ message TGroupMapperError {
     }
     TStats TotalStats = 1;
     repeated TStats MatchingDomainsStats = 2;
+    uint32 MissingFailRealmsCount = 3;
+    uint32 FailRealmsWithMissingDomainsCount = 4;
+    uint32 DomainsWithMissingDisksCount = 5;
 }
 
 message TConfigResponse {

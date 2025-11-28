@@ -981,12 +981,52 @@ namespace NKikimr::NBsController {
             it->second.SpaceAvailable += increment;
         }
 
-        TGroupMapperError FormatPDisks(const TDiskManager& diskManager) const {
+        TGroupMapperError BuildGroupMappingError(const TGroup& group, const TDiskManager& diskManager) const {
+            ui32 failRealmsNeeded = Geom.GetNumFailRealms();
+            ui32 failDomainsPerRealmNeeded = Geom.GetNumFailDomainsPerFailRealm();
+            ui32 disksPerDomainNeeded = Geom.GetNumVDisksPerFailDomain();
+            
+            auto getLocation = [](int v, const TNodeLocation& location) {
+                constexpr TNodeLocation::TKeys::E Keys[] = {
+                    TNodeLocation::TKeys::BridgePileName,
+                    TNodeLocation::TKeys::DataCenter,
+                    TNodeLocation::TKeys::Module,
+                    TNodeLocation::TKeys::Rack,
+                    TNodeLocation::TKeys::Unit,
+                };
+
+                auto it = std::upper_bound(std::begin(Keys), std::end(Keys), v,
+                                        [](int v, TNodeLocation::TKeys::E e) {
+                                            return v < static_cast<int>(e);
+                                        });
+
+                TNodeLocation::TKeys::E k;
+
+                if (it == std::begin(Keys)) {
+                    k = Keys[0];
+                } else {
+                    k = *(--it);
+                }
+
+                return location.ToStringUpTo(k);
+            };
+
             TGroupMapperError err;
             TStringStream s;
             s << "no group options PDisks# ";
 
+            ui32 failRealmsSeen = 0;
+            ui32 failDomainsInCurrentRealmSeen = 0;
+            ui32 disksInCurrentDomainSeen = 0;
+
+            ui32 missingFailRealmsCount = 0;
+            ui32 failRealmsWithMissingDomainsCount = 0;
+            ui32 domainsWithMissingDisksCount = 0;
+
             if (!PDiskByPosition.empty()) {
+                failRealmsSeen = 1;
+                failDomainsInCurrentRealmSeen = 1;
+
                 TGroupMapperError::TStats& totalStats = err.TotalStats;
                 std::vector<TGroupMapperError::TStats>& matchingDomainsStats = err.MatchingDomainsStats;
                 TGroupMapperError::TStats domainStats;
@@ -995,25 +1035,48 @@ namespace NKikimr::NBsController {
 
                 s << "{[(";
                 TPDiskLayoutPosition prevPosition = PDiskByPosition.front().first;
-                domainStats.ExamplePDiskId = PDiskByPosition.front().second->PDiskId;
+                domainStats.Domain = getLocation(Geom.GetDomainLevelEnd(), PDiskByPosition.front().second->Location);
                 const char *space = "";
+
                 for (const auto& [position, pdisk] : PDiskByPosition) {
                     if (prevPosition != position) {
-                        s << (prevPosition.Domain != position.Domain ? ")" : "")
-                            << (prevPosition.Realm != position.Realm ? "]" : "")
+                        bool domainChanged = prevPosition.Domain != position.Domain;
+                        bool realmChanged = prevPosition.Realm != position.Realm;
+
+                        s << (domainChanged ? ")" : "")
+                            << (realmChanged ? "]" : "")
                             << (prevPosition.RealmGroup != position.RealmGroup ? "} {" : "")
-                            << (prevPosition.Realm != position.Realm ? "[" : "")
-                            << (prevPosition.Domain != position.Domain ? "(" : "");
+                            << (realmChanged ? "[" : "")
+                            << (domainChanged ? "(" : "");
                         space = "";
+
+                        if (realmChanged) {
+                            failRealmsSeen++;
+                            if (failDomainsInCurrentRealmSeen < failDomainsPerRealmNeeded) {
+                                failRealmsWithMissingDomainsCount++;
+                            }
+
+                            failDomainsInCurrentRealmSeen = 0;
+                        }
+
+                        if (domainChanged) {
+                            failDomainsInCurrentRealmSeen++;
+                            if (disksInCurrentDomainSeen < disksPerDomainNeeded) {
+                                domainsWithMissingDisksCount++;
+                            }
+                            disksInCurrentDomainSeen = 0;
+                        }
 
                         // Any position change is a domain change
                         if (!domainAlreadyOccupied) {
                             matchingDomainsStats.push_back(domainStats);
                             domainStats = TGroupMapperError::TStats();
-                            domainStats.ExamplePDiskId = pdisk->PDiskId;
+                            domainStats.Domain = getLocation(Geom.GetDomainLevelEnd(), pdisk->Location);
                         }
                         domainAlreadyOccupied = false;
                     }
+
+                    disksInCurrentDomainSeen++;
 
                     s << std::exchange(space, " ") << pdisk->PDiskId;
 
@@ -1074,11 +1137,28 @@ namespace NKikimr::NBsController {
                 if (!domainAlreadyOccupied) {
                     matchingDomainsStats.push_back(domainStats);
                 }
+
+                if (failRealmsSeen < failRealmsNeeded) {
+                    missingFailRealmsCount++;
+                }
+
+                if (failDomainsInCurrentRealmSeen < failDomainsPerRealmNeeded) {
+                    failRealmsWithMissingDomainsCount++;
+                }
+
+                if (disksInCurrentDomainSeen < disksPerDomainNeeded) {
+                    domainsWithMissingDisksCount++;
+                }
             } else {
                 s << "<empty>";
             }
 
             err.ErrorMessage = s.Str();
+            
+            err.MissingFailRealmsCount = missingFailRealmsCount;
+            err.FailRealmsWithMissingDomainsCount = failRealmsWithMissingDomainsCount;
+            err.DomainsWithMissingDisksCount = domainsWithMissingDisksCount;
+            
 
             return std::move(err);
         }
@@ -1163,7 +1243,7 @@ namespace NKikimr::NBsController {
                 allocator.Decompose(*result, groupDefinition);
                 return true;
             } else {
-                error = FormatPDisks(allocator);
+                error = BuildGroupMappingError(group, allocator);
                 return false;
             }
         }

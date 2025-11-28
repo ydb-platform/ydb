@@ -10,7 +10,7 @@ namespace NKikimr {
 
         struct TGroupMapperError {
             struct TStats {
-                TPDiskId ExamplePDiskId;
+                TString Domain;
                 ui32 AllSlotsAreOccupied = 0;
                 ui32 NotEnoughSpace = 0;
                 ui32 NotAcceptingNewSlots = 0;
@@ -21,6 +21,9 @@ namespace NKikimr {
             TString ErrorMessage;
             TStats TotalStats;
             std::vector<TStats> MatchingDomainsStats;
+            ui32 MissingFailRealmsCount = 0;
+            ui32 FailRealmsWithMissingDomainsCount = 0;
+            ui32 DomainsWithMissingDisksCount = 0;
         };
 
         class TPDiskSlotTracker {

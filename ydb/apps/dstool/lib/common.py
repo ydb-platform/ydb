@@ -18,6 +18,7 @@ from inspect import signature
 from operator import attrgetter, itemgetter
 from collections import defaultdict
 from itertools import cycle, islice
+from types import SimpleNamespace
 import ydb.core.protos.grpc_pb2_grpc as kikimr_grpc
 import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
@@ -26,6 +27,7 @@ import ydb.core.protos.cms_pb2 as kikimr_cms
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
 from ydb.apps.dstool.lib.arg_parser import print_error_with_usage
+import ydb.apps.dstool.lib.table as table
 import typing
 
 
@@ -1335,3 +1337,56 @@ def is_dynamic_group(groupId):
 
 def is_successful_bsc_response(response):
     return response.Success or 'transaction rollback' in response.ErrorDescription
+
+
+def dump_group_mapper_error(response: kikimr_bsconfig.TConfigResponse, args):
+    verbose = getattr(args, 'verbose', False)
+    err: kikimr_bsconfig.TGroupMapperError | None = None
+
+    if (len(response.Status) == 1) and verbose:
+        for fail_param in response.Status[0].FailParam:
+            if fail_param.HasField("GroupMapperError"):
+                err = fail_param.GroupMapperError
+    
+    if err is None:
+        return
+    
+    table_args = SimpleNamespace(sort_by=None, columns=None, format=args.format, no_header=None)
+    def table_generator(data: typing.Iterable[kikimr_bsconfig.TGroupMapperError.TStats], print_domain: bool = True):
+        all_columns = []
+        if print_domain:
+            all_columns += ['Domain']
+        all_columns += [
+            'All slots are occupied',
+            'Not enough space',
+            'Not accepting new slots',
+            'Not operational',
+            'Decommission',
+        ]
+        table_output = table.TableOutput(all_columns)
+        rows = []
+        for st in data:
+            row = {}
+            if print_domain:
+                row['Domain'] = f"{st.Domain}"
+            row['All slots are occupied'] = str(st.AllSlotsAreOccupied)
+            row['Not enough space'] = str(st.NotEnoughSpace)
+            row['Not accepting new slots'] = str(st.NotAcceptingNewSlots)
+            row['Not operational'] = str(st.NotOperational)
+            row['Decommission'] = str(st.Decommission)
+            rows.append(row)
+        
+        table_output.dump(rows, table_args)
+    
+    print("Total stats")
+    table_generator([err.TotalStats], print_domain=False)
+    if len(err.MatchingDomainsStats) > 0:
+        print("Matching domains")
+        table_generator(err.MatchingDomainsStats)
+    else:
+        print("No matching domains")
+    print(
+        f"Missing Fail Realms Count: {err.MissingFailRealmsCount}\n"
+        f"Fail Realms With Missing Domains Count: {err.FailRealmsWithMissingDomainsCount}\n"
+        f"Domains With Missing Disks Count: {err.DomainsWithMissingDisksCount}"
+    )

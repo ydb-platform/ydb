@@ -123,13 +123,13 @@ struct TAggQueryStat {
     TAggQueryStat(const TString& queryId, const ::NMonitoring::TDynamicCounterPtr& counters, const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
         : QueryId(queryId)
         , SubGroup(counters) {
-        for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
-            SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
-        }
         auto topicGroup = SubGroup;
         if (enableStreamingQueriesCounters) {
-            topicGroup = topicGroup->GetSubgroup("query_id", queryId);
-            topicGroup = topicGroup->GetSubgroup("read_group", SanitizeLabel(sourceParams.GetReadGroup()));
+            for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+                SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+            }
+            SubGroup = SubGroup->GetSubgroup("query_id", queryId);
+            topicGroup = SubGroup->GetSubgroup("read_group", SanitizeLabel(sourceParams.GetReadGroup()));
         }
         MaxQueuedBytesCounter = topicGroup->GetCounter("MaxQueuedBytes");
         AvgQueuedBytesCounter = topicGroup->GetCounter("AvgQueuedBytes");
@@ -432,7 +432,8 @@ public:
         const NYql::IPqGateway::TPtr& pqGateway,
         NYdb::TDriver driver,
         NActors::TMon* monitoring = nullptr,
-        NActors::TActorId nodesManagerId = {}
+        NActors::TActorId nodesManagerId = {},
+        bool enableStreamingQueriesCounters = false
     );
 
     void Bootstrap();
@@ -516,7 +517,8 @@ TRowDispatcher::TRowDispatcher(
     const NYql::IPqGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
-    NActors::TActorId nodesManagerId)
+    NActors::TActorId nodesManagerId,
+    bool enableStreamingQueriesCounters)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , CredentialsFactory(credentialsFactory)
@@ -532,6 +534,7 @@ TRowDispatcher::TRowDispatcher(
     , Driver(driver)
     , Monitoring(monitoring)
     , NodesManagerId(nodesManagerId)
+    , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
 {
     Y_ENSURE(!Tenant.empty());
 }
@@ -559,7 +562,6 @@ void TRowDispatcher::Bootstrap() {
             TlsActivationContext->ActorSystem(), SelfId());
     }
     NodesTracker.Init(SelfId());
-    EnableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
@@ -906,7 +908,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 Counters,
                 CountersRoot,
                 PqGateway,
-                MaxSessionBufferSizeBytes
+                MaxSessionBufferSizeBytes,
+                EnableStreamingQueriesCounters
                 );
             TSessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
             sessionInfo.Consumers[ev->Sender] = consumerInfo;
@@ -1313,7 +1316,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NYql::IPqGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
-    NActors::TActorId nodesManagerId)
+    NActors::TActorId nodesManagerId,
+    bool enableStreamingQueriesCounters)
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
@@ -1327,7 +1331,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         pqGateway,
         driver,
         monitoring,
-        nodesManagerId));
+        nodesManagerId,
+        enableStreamingQueriesCounters));
 }
 
 } // namespace NFq

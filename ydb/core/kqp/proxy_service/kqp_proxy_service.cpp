@@ -1802,7 +1802,9 @@ private:
             FederatedQuerySetup->PqGateway,
             *FederatedQuerySetup->Driver,
             AppData()->Mon,
-            Counters->GetKqpCounters());
+            Counters->GetKqpCounters(),
+            {},
+            AppData()->FeatureFlags.GetEnableStreamingQueriesCounters());
 
         RowDispatcherService = TActivationContext::Register(rowDispatcher.release());
         TActivationContext::ActorSystem()->RegisterLocalService(

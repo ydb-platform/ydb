@@ -320,7 +320,8 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
-        ui64 maxBufferSize);
+        ui64 maxBufferSize,
+        bool enableStreamingQueriesCounters);
 
     void Bootstrap();
     void PassAway() override;
@@ -405,7 +406,8 @@ TTopicSession::TTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
-    ui64 maxBufferSize)
+    ui64 maxBufferSize,
+    bool enableStreamingQueriesCounters)
     : ReadGroup(readGroup)
     , TopicPath(topicPath)
     , TopicPathPartition(TStringBuilder() << topicPath << "/" << partitionId)
@@ -423,11 +425,11 @@ TTopicSession::TTopicSession(
     , LogPrefix("TopicSession")
     , Counters(counters)
     , CountersRoot(countersRoot)
+    , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
 {}
 
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
-    EnableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
     Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId, EnableStreamingQueriesCounters);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
@@ -1038,8 +1040,9 @@ std::unique_ptr<IActor> NewTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
-    ui64 maxBufferSize) {
-    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
+    ui64 maxBufferSize,
+    bool enableStreamingQueriesCounters) {
+    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize, enableStreamingQueriesCounters));
 }
 
 } // namespace NFq

@@ -236,7 +236,8 @@ void Init(
             yqSharedResources->UserSpaceYdbDriver,
             appData->Mon,
             appData->Counters,
-            MakeNodesManagerId());
+            MakeNodesManagerId(),
+            true);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
     }
 

@@ -580,7 +580,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", true, operation.GetIsBulk(), "", "");
 
-    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId, record.GetLockNodeId(), lockMode, *mType, behaviour, writeTimeout, record.GetTxId(),
+    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId, lockMode, *mType, behaviour, writeTimeout, record.GetTxId(),
         isBulk, record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>()));
     WriteTasksQueue->Drain(false, ctx);
 }

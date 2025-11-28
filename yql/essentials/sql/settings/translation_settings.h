@@ -9,7 +9,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
-namespace google::protobuf {
+namespace google::protobuf { // NOLINT(readability-identifier-naming)
 class Arena;
 } // namespace google::protobuf
 

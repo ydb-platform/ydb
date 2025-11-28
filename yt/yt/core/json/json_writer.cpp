@@ -16,7 +16,8 @@ using namespace NYson;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TJsonWriter
-    : public IJsonWriter
+    : public TYsonConsumerBase
+    , public IJsonWriter
 {
 public:
     TJsonWriter(IOutputStream* output, bool isPretty);
@@ -42,7 +43,6 @@ public:
     void OnBeginAttributes() override;
 
     void OnEndAttributes() override;
-    void OnRaw(TStringBuf yson, EYsonType type) override;
 
     void StartNextValue() override;
 
@@ -309,11 +309,6 @@ void TJsonWriter::OnBeginAttributes()
 void TJsonWriter::OnEndAttributes()
 {
     THROW_ERROR_EXCEPTION("TJsonWriter does not support attributes");
-}
-
-void TJsonWriter::OnRaw(TStringBuf /*yson*/, NYT::NYson::EYsonType /*type*/)
-{
-    THROW_ERROR_EXCEPTION("TJsonWriter does not support OnRaw()");
 }
 
 ui64 TJsonWriter::GetWrittenByteCount() const

@@ -23,15 +23,15 @@
 #include <list>
 #include <memory>
 
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/util/cancel.h"
-#include "arrow/util/functional.h"
-#include "arrow/util/future.h"
-#include "arrow/util/iterator.h"
-#include "arrow/util/mutex.h"
-#include "arrow/util/thread_pool.h"
-#include "arrow/util/tracing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/cancel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/functional.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/iterator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/mutex.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/tracing.h"
 
 namespace arrow20 {
 

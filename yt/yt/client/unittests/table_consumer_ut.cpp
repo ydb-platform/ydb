@@ -58,7 +58,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TTableConsumer, EntityAsNull)
+TEST(TTableConsumerTest, EntityAsNull)
 {
     StrictMock<TMockValueConsumer> mock(New<TNameTable>(), true);
     EXPECT_CALL(mock, OnBeginRow());
@@ -75,7 +75,7 @@ TEST(TTableConsumer, EntityAsNull)
     consumer->OnEndMap();
 }
 
-TEST(TTableConsumer, TopLevelAttributes)
+TEST(TTableConsumerTest, TopLevelAttributes)
 {
     StrictMock<TMockValueConsumer> mock(New<TNameTable>(), true);
     EXPECT_CALL(mock, OnBeginRow());
@@ -89,7 +89,7 @@ TEST(TTableConsumer, TopLevelAttributes)
         EXPECT_THROW(consumer->OnBeginAttributes(), std::exception);
 }
 
-TEST(TTableConsumer, RowAttributes)
+TEST(TTableConsumerTest, RowAttributes)
 {
     StrictMock<TMockValueConsumer> mock(New<TNameTable>(), true);
 

@@ -633,7 +633,9 @@ public:
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSolomonVolume);
         tableDesc = modifyScheme->MutableAlterSolomonVolume();
         tableDesc->SetName(name);
-        tableDesc->SetPartitionCount(req->alter_partition_count());
+        if (req->alter_partition_count()) {
+            tableDesc->SetPartitionCount(req->alter_partition_count());
+        }
 
         if (GetProtoRequest()->has_storage_config()) {
             tableDesc->SetUpdateChannelsBinding(true);

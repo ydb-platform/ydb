@@ -1,0 +1,5 @@
+/* custom error:Graph cycle detected*/
+pragma warning("disable","4510");
+pragma config.flags("RepeatTransformLimit","1000");
+pragma config.flags("TransformCycleDetector","10");
+select Yql::FailMe(AsAtom('opt_cycle'))

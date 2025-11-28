@@ -727,7 +727,7 @@ TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& label) 
 class TReduceSource: public IRealSource {
 public:
     TReduceSource(TPosition pos,
-        ReduceMode mode,
+        EReduceMode mode,
         TSourcePtr source,
         TVector<TSortSpecificationPtr>&& orderBy,
         TVector<TNodePtr>&& keys,
@@ -836,7 +836,7 @@ public:
 
         TNodePtr processPartitions;
         switch (Mode_) {
-            case ReduceMode::ByAll: {
+            case EReduceMode::ByAll: {
                 auto columnPtr = Args_[0]->GetColumnName();
                 TNodePtr expr = BuildAtom(Pos_, "partitionStream");
                 if (!columnPtr || *columnPtr != "*") {
@@ -848,7 +848,7 @@ public:
                 processPartitions = Y("ToSequence", Y("Apply", Udf_, expr));
                 break;
             }
-            case ReduceMode::ByPartition: {
+            case EReduceMode::ByPartition: {
                 processPartitions = Y("SqlReduce", "partitionStream", extractKeyLambda, Udf_,
                     BuildLambda(Pos_, Y("row"), GroundWithExpr(ExprGround_, Args_[0])));
                 break;
@@ -864,7 +864,7 @@ public:
             sortKeySelector = BuildLambda(Pos_, Y("row"), Y("SqlExtractKey", "row", sortKeySelector));
         }
 
-        auto partitionByKey = Y(Mode_ == ReduceMode::ByAll ? "PartitionByKey" : "PartitionsByKeys", "core", extractKeyLambda,
+        auto partitionByKey = Y(Mode_ == EReduceMode::ByAll ? "PartitionByKey" : "PartitionsByKeys", "core", extractKeyLambda,
             sortDirection, sortKeySelector, BuildLambda(Pos_, Y("partitionStream"), processPartitions));
 
         auto block(Y(Y("let", "core", input)));
@@ -890,7 +890,7 @@ public:
                 CloneContainer(Keys_), CloneContainer(Args_), SafeClone(Udf_), SafeClone(Having_), Settings_);
     }
 private:
-    ReduceMode Mode_;
+    EReduceMode Mode_;
     TSourcePtr Source_;
     TVector<TSortSpecificationPtr> OrderBy_;
     TVector<TNodePtr> Keys_;
@@ -905,7 +905,7 @@ private:
 };
 
 TSourcePtr BuildReduce(TPosition pos,
-    ReduceMode mode,
+    EReduceMode mode,
     TSourcePtr source,
     TVector<TSortSpecificationPtr>&& orderBy,
     TVector<TNodePtr>&& keys,

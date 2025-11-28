@@ -361,7 +361,8 @@ void Serialize(const TJobTraceEvent& traceEvent, NYson::IYsonConsumer* consumer)
         .EndMap();
 }
 
-void Serialize(const TOperationEvent& operationEvent, NYson::IYsonConsumer* consumer) {
+void Serialize(const TOperationEvent& operationEvent, NYson::IYsonConsumer* consumer)
+{
     NYTree::BuildYsonFluently(consumer)
         .BeginMap()
             .Item("timestamp").Value(operationEvent.Timestamp)
@@ -369,6 +370,35 @@ void Serialize(const TOperationEvent& operationEvent, NYson::IYsonConsumer* cons
             .OptionalItem("incarnation", operationEvent.Incarnation)
             .OptionalItem("incarnation_switch_reason", operationEvent.IncarnationSwitchReason)
             .OptionalItem("incarnation_switch_info", operationEvent.IncarnationSwitchInfo)
+        .EndMap();
+}
+
+void Serialize(const TProcessTraceMeta& processTrace, NYson::IYsonConsumer* consumer)
+{
+    NYTree::BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("state").Value(processTrace.State)
+        .EndMap();
+}
+
+void Serialize(const TJobTraceMeta& jobTrace, NYson::IYsonConsumer* consumer)
+{
+    NYTree::BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("trace_id").Value(jobTrace.TraceId)
+            .Item("progress").Value(jobTrace.Progress)
+            .Item("health").Value(jobTrace.Health)
+            .DoIf(!jobTrace.ProcessTraceMetas.empty(), [&] (TFluentMap fluent) {
+                fluent.Item("process_trace_metas").Value(jobTrace.ProcessTraceMetas);
+            })
+        .EndMap();
+}
+
+void Serialize(const TCheckOperationPermissionResult& result, NYson::IYsonConsumer* consumer)
+{
+    NYTree::BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("action").Value(result.Action)
         .EndMap();
 }
 

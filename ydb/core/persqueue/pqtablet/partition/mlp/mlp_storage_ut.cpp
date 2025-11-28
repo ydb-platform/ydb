@@ -77,7 +77,7 @@ struct TUtils {
 
             utils.AssertEquals(*this);
         }
-    } 
+    }
 
     NKikimrPQ::TMLPStorageSnapshot CreateSnapshot() {
         // Clear batch
@@ -1410,7 +1410,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
             UNIT_ASSERT(message);
             UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 5);
         }
-        
+
         timeProvider->Tick(TDuration::Seconds(3));
         storage.MoveBaseDeadline();
         {
@@ -1636,11 +1636,11 @@ Y_UNIT_TEST(CompactStorage_WithDLQ) {
 
     {
         auto [message, _] = storage.GetMessage(3);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::DLQ);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::DLQ);
     }
     {
         auto [message, _] = storage.GetMessage(4);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Committed);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Committed);
     }
 
     auto result = storage.Compact();
@@ -1694,12 +1694,12 @@ Y_UNIT_TEST(ProccessDeadlines) {
 
     {
         auto [message, _] = storage.GetMessage(3);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Unprocessed);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Unprocessed);
         UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
     }
     {
         auto [message, _] = storage.GetMessage(4);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
     }
 
@@ -1733,17 +1733,17 @@ Y_UNIT_TEST(MoveBaseDeadline) {
 
     {
         auto [message, _] = storage.GetMessage(3);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 0);
     }
     {
         auto [message, _] = storage.GetMessage(4);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 0);
     }
     {
         auto [message, _] = storage.GetMessage(5);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 2);
     }
 }

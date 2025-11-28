@@ -1414,3 +1414,12 @@ message TMLPStorageWAL {
     optional uint64 FirstDLQSeqNo = 15;
 }
 
+message TMessageDeduplicationIdWAL {
+    optional uint64 ExpirationTimestampMilliseconds = 1;
+
+    message TMessage {
+        optional string DeduplicationId = 1;
+        optional uint64 Offset = 2;
+    }
+    repeated TMessage Message = 2;
+};

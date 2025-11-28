@@ -258,7 +258,7 @@ public:
         auto reads = worker->BuildRequests(Partitioning, ReadId);
 
         // lookup can't be overloaded
-        AFL_ENSURE(!worker->IsOverloaded());
+        AFL_ENSURE(!worker->IsOverloaded(std::numeric_limits<size_t>::max()));
 
         for (auto& [shardId, read] : reads) {
             ++state.ReadsInflight;

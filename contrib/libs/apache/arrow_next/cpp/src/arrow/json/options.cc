@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/json/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/options.h"
 
 namespace arrow20 {
 namespace json {

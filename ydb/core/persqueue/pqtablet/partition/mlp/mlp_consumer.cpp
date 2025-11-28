@@ -61,7 +61,9 @@ TString MakeWALKey(ui32 partitionId, const TString& consumerName, ui64 index) {
     TKeyPrefix ikey(TKeyPrefix::EType::TypeMLPConsumerData, TPartitionId(partitionId), TKeyPrefix::EMark::MarkMLPWAL);
     ikey.Append(consumerName.c_str(), consumerName.size());
     ikey.Append(WALSeparator);
-    ikey.Append(Sprintf("%.16X" PRIu32, index).data(), 16);
+
+    auto bucket = Sprintf("%.16llX", index);
+    ikey.Append(bucket.data(), bucket.size());
 
     return ikey.ToString();
 }
@@ -236,7 +238,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
             switch(walResult.GetStatus()) {
                 case NKikimrProto::OK:
                 case NKikimrProto::OVERRUN: {
-                    for (auto w : walResult.GetPair()) {
+                    for (auto& w : walResult.GetPair()) {
                         NKikimrPQ::TMLPStorageWAL wal;
                         if (!wal.ParseFromString(w.GetValue())) {
                             return Restart(TStringBuilder() << "Parse wal error");
@@ -669,7 +671,7 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 
 void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvProxyResponse");
-    
+
     AFL_ENSURE(IsSucess(ev))("e", ev->Get()->Response->DebugString());
 }
 
@@ -710,7 +712,7 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         AFL_ENSURE(res)("o", result.GetOffset());
 
         for (auto& attr : *proto.MutableMessageMeta()) {
-            if (attr.key() == NMessageConsts::MessageId) {
+            if (attr.key() == MESSAGE_KEY) {
                 messageGroupId = std::move(*attr.mutable_value());
             } else if (attr.key() == NMessageConsts::DelaySeconds) {
                 delaySeconds = std::stoul(attr.value());

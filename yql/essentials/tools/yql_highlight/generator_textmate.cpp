@@ -217,21 +217,21 @@ TString EscapeXML(TString string) {
 }
 
 void WriteXML(IOutputStream& out, const NJson::TJsonValue& json, TString indent = "") {
-    static constexpr TStringBuf extra = "    ";
+    static constexpr TStringBuf Extra = "    ";
 
     if (TString string; json.GetString(&string)) {
         out << indent << "<string>" << EscapeXML(string) << "</string>" << "\n";
     } else if (NJson::TJsonValue::TMapType dict; json.GetMap(&dict)) {
         out << indent << "<dict>" << '\n';
         for (const auto& [key, value] : dict) {
-            out << indent << extra << "<key>" << EscapeXML(key) << "</key>" << '\n';
-            WriteXML(out, value, indent + extra);
+            out << indent << Extra << "<key>" << EscapeXML(key) << "</key>" << '\n';
+            WriteXML(out, value, indent + Extra);
         }
         out << indent << "</dict>" << '\n';
     } else if (NJson::TJsonValue::TArray array; json.GetArray(&array)) {
         out << indent << "<array>" << '\n';
         for (const auto& value : array) {
-            WriteXML(out, value, indent + extra);
+            WriteXML(out, value, indent + Extra);
         }
         out << indent << "</array>" << '\n';
     } else {

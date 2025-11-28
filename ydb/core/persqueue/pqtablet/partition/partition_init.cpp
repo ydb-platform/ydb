@@ -1,4 +1,5 @@
 #include "autopartitioning_manager.h"
+#include "message_id_deduplicator.h"
 #include "offload_actor.h"
 #include "partition.h"
 #include "partition_compactification.h"
@@ -18,6 +19,7 @@ static const TString WRITE_QUOTA_ROOT_PATH = "write-quota";
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
 void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
+void RequestDeduplicatorRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
 
 //
@@ -36,6 +38,7 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
     Steps.push_back(MakeHolder<TInitEndWriteTimestampStep>(this));
+    Steps.push_back(MakeHolder<TInitMessageDeduplicatorStep>(this));
     Steps.push_back(MakeHolder<TInitFieldsStep>(this));
 
     CurrentStep = Steps.begin();
@@ -853,6 +856,73 @@ void TInitDataRangeStep::FormHeadAndProceed() {
 
 
 //
+// TInitMessageDeduplicatorStep
+//
+
+TInitMessageDeduplicatorStep::TInitMessageDeduplicatorStep(TInitializer* initializer)
+    : TBaseKVStep(initializer, "TInitMessageDeduplicatorStep", true) {
+}
+
+void TInitMessageDeduplicatorStep::Execute(const TActorContext &ctx) {
+    if (Partition()->Partition.IsSupportivePartition()) {
+        return Done(ctx);
+    }
+    auto firstKey = MakeDeduplicatorWALKey(Partition()->Partition.OriginalPartitionId, TInstant::Now() - Partition()->MessageIdDeduplicator.GetDeduplicationWindow());
+    RequestDeduplicatorRange(ctx, Partition()->TabletActorId, PartitionId(), firstKey);
+}
+
+void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
+    if (!ValidateResponse(*this, ev, ctx)) {
+        PoisonPill(ctx);
+        return;
+    }
+
+    auto& response = ev->Get()->Record;
+    PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
+
+    auto& range = response.GetReadRangeResult(0);
+
+    PQ_INIT_ENSURE(range.HasStatus());
+    switch(range.GetStatus()) {
+        case NKikimrProto::OK:
+        case NKikimrProto::OVERRUN:
+            for (auto& w : range.GetPair()) {
+                NKikimrPQ::TMessageDeduplicationIdWAL wal;
+                if (!wal.ParseFromString(w.GetValue())) {
+                    PQ_LOG_ERROR("tablet " << Partition()->TabletId << " Initializing of message id deduplicator failed: " << w.key());
+                    return PoisonPill(ctx);
+                }
+
+                if (wal.GetExpirationTimestampMilliseconds() < TInstant::Now().MilliSeconds()) {
+                    PQ_LOG_D("tablet " << Partition()->TabletId << " Initializing of message id deduplicator expired: " << w.key());
+                    continue;
+                }
+
+                if (!Partition()->MessageIdDeduplicator.ApplyWAL(std::move(wal))) {
+                    PQ_LOG_ERROR("tablet " << Partition()->TabletId << " Initializing of message id deduplicator failed: " << w.key() << " wal is corrupted");
+                    return PoisonPill(ctx);
+                }
+            }
+
+            if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
+                PQ_INIT_ENSURE(range.PairSize());
+                RequestDeduplicatorRange(ctx, Partition()->TabletActorId, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
+                return;
+            }
+
+            Done(ctx);
+            break;
+        case NKikimrProto::NODATA:
+            Done(ctx);
+            break;
+        default:
+            AFL_ENSURE("bad status")("s", range.GetStatus());
+    };
+}
+
+
+
+//
 // TInitDataStep
 //
 
@@ -1492,6 +1562,10 @@ void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPart
 
 void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key) {
     RequestRange(ctx, dst, partition, TKeyPrefix::TypeData, false, key);
+}
+
+void RequestDeduplicatorRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key) {
+    RequestRange(ctx, dst, partition, TKeyPrefix::TypeDeduplicator, true, key, key == "");
 }
 
 } // namespace NKikimr::NPQ

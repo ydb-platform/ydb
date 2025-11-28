@@ -375,6 +375,52 @@ struct TPartitionStats {
     // Tablet actor started at
     TInstant StartTime;
 
+    /**
+     * The CPU usage percentage statistics represented as a time series:
+     * the last time the CPU usage exceeded 30%, the last time the CPU usage
+     * exceeded 20% and so on.
+     *
+     * @warning This is a combined statistics, which includes both the leader
+     *          and all the followers for the given partition. The CPU usage is treated
+     *          as a maximum across all followers and the leader, not as a sum.
+     *          For example, the data bucket for the 30% contains the last time,
+     *          when the CPU usage exceeded 30% for any follower or the leader.
+     *
+     * @note This field is used to control the merge-by-load operations.
+     *       It is not used for the split-by-load operations or for any other purposes.
+     *
+     * @note Why does this work for the merge-by-load operation?
+     *
+     *       When the SchemeShard actor received the EvPeriodicTableStats message
+     *       from one of the followers (or the leader) for the given partition,
+     *       it updates this field and then figures out the maximum CPU load
+     *       percentage that was used by the given partition over a preconfigured
+     *       time interval into the past (1 hour by default). If this maximum
+     *       CPU usage percentage does not exceed a certain preconfigured threshold
+     *       (70% of the split-by-load threshold), then this partition becomes
+     *       the anchor for the merge-by-load operation.
+     *
+     *       Once the anchor is picked, the code tries to add to the given partition
+     *       as many partitions to the left and to the right of it as possible.
+     *       When adding a potential candidate to the merge set, the code takes
+     *       the maximum CPU usage percentage for the given potential candidate
+     *       over the same time interval into the past and adds it to the combined
+     *       CPU usage percentage. The code continues adding partitions
+     *       to the merge set as long as the combined CPU usage percentage for
+     *       all partitions in the merge set stays below the same preconfigured
+     *       threshold (70% of the split-by-load threshold).
+     *
+     *       Once all possible partitions have been added to the merge set
+     *       (and this set contains more than one partition), the entire set
+     *       is merged into a single partition.
+     *
+     *       Notice that both picking the anchor partition for the merge-by-load
+     *       operation and adding a partition to the merge set requires that
+     *       the observed CPU load for the given partition stays below a certain level
+     *       for all followers and the leader for the given partition.
+     *       Keeping the maximum CPU usage percentage across all followers
+     *       and the leader is sufficient to verify this requirement.
+     */
     TTopCpuUsage TopCpuUsage;
 
     void SetCurrentRawCpuUsage(ui64 rawCpuUsage, TInstant now) {
@@ -391,6 +437,12 @@ struct TPartitionStats {
     }
 
 private:
+    /**
+     * The last observed CPU usage for the given partition.
+     *
+     * @warning This value is updated only by the data received from the leader.
+     *          Unlike the TopCpuUsage field, it does not include any followers.
+     */
     ui64 CPU = 0;
 };
 
@@ -412,6 +464,20 @@ struct TTableAggregatedStats {
     }
 
     void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
+
+    /**
+     * Update the statistics data for the given shard and the given follower
+     * using the data from the EvPeriodicTableStats message.
+     *
+     * @param[in] followerId The follower ID
+     * @param[in] shardIdx The shard index
+     * @param[in] newStats The new statistics to use for updating
+     */
+    void UpdateShardStatsForFollower(
+        ui64 followerId,
+        const TShardIdx& shardIdx,
+        const TPartitionStats& newStats
+    );
 };
 
 struct TAggregatedStats : public TTableAggregatedStats {
@@ -742,6 +808,20 @@ public:
 
     void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
 
+    /**
+     * Update the statistics data for the given shard and the given follower
+     * using the data from the EvPeriodicTableStats message.
+     *
+     * @param[in] followerId The follower ID
+     * @param[in] shardIdx The shard index
+     * @param[in] newStats The new statistics to use for updating
+     */
+    void UpdateShardStatsForFollower(
+        ui64 followerId,
+        const TShardIdx& shardIdx,
+        const TPartitionStats& newStats
+    );
+
     void RegisterSplitMergeOp(TOperationId txId, const TTxState& txState);
 
     bool IsShardInSplitMergeOp(TShardIdx idx) const;
@@ -771,10 +851,24 @@ public:
                                  TShardIdx shardIdx, const TTabletId& tabletId, TVector<TShardIdx>& shardsToMerge,
                                  const TTableInfo* mainTableForIndex, TInstant now, TString& reason) const;
 
+    /**
+     * Check if the given partition should be split by load.
+     *
+     * @param[in] splitSettings The current split settings
+     * @param[in] shardIdx The shard index
+     * @param[in] currentCpuUsage The current CPU usage to use for checking the split conditions
+     * @param[in] mainTableForIndex The parent table (set only for index tables)
+     * @param[out] reason Receives the human readable explanation for the decision
+     *
+     * @return True if the given partition should be split by load
+     */
     bool CheckSplitByLoad(
-            const TSplitSettings& splitSettings, TShardIdx shardIdx,
-            ui64 dataSize, ui64 rowCount,
-            const TTableInfo* mainTableForIndex, TString& reason) const;
+        const TSplitSettings& splitSettings,
+        const TShardIdx& shardIdx,
+        ui64 currentCpuUsage,
+        const TTableInfo* mainTableForIndex,
+        TString& reason
+    ) const;
 
     bool IsSplitBySizeEnabled(const TForceShardSplitSettings& params) const {
         // Respect unspecified SizeToSplit when force shard splits are disabled
@@ -3830,6 +3924,26 @@ public:
         return BuildKind == EBuildKind::BuildColumns;
     }
 
+    bool IsPreparing() const {
+        return State == EState::AlterMainTable ||
+               State == EState::Locking ||
+               State == EState::GatheringStatistics ||
+               State == EState::Initiating;
+    }
+
+    bool IsTransferring() const {
+        return State == EState::Filling || 
+               State == EState::DropBuild || 
+               State == EState::CreateBuild || 
+               State == EState::LockBuild ||
+               State == EState::AlterSequence;
+    }
+
+    bool IsApplying() const {
+        return State == EState::Applying ||
+               State == EState::Unlocking;
+    }
+    
     bool IsDone() const {
         return State == EState::Done;
     }

@@ -5,6 +5,8 @@ SRCS(
     aggregator.cpp
     aggregator_impl.h
     aggregator_impl.cpp
+    analyze_actor.h
+    analyze_actor.cpp
     schema.h
     schema.cpp
     tx_ack_timeout.cpp

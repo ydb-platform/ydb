@@ -282,16 +282,10 @@ TConclusion<std::shared_ptr<TJsonPathAccessor>> TOthersData::GetPathAccessor(con
     return std::make_shared<TJsonPathAccessor>(builder.Finish(), accessor->GetRemainingPath());
 }
 
-NJson::TJsonValue TOthersData::TIterator::GetValue() const {
+NArrow::NAccessor::TBinaryJsonValueView TOthersData::TIterator::GetValue() const {
     AFL_VERIFY(IsValid());
     auto view = Values->GetView(CurrentIndex);
-    if (view.empty()) {
-        return NJson::TJsonValue(NJson::JSON_UNDEFINED);
-    }
-    auto data = NBinaryJson::SerializeToJson(TStringBuf(view.data(), view.size()));
-    NJson::TJsonValue res;
-    AFL_VERIFY(NJson::ReadJsonTree(data, &res));
-    return res;
+    return NArrow::NAccessor::TBinaryJsonValueView(TStringBuf(view.data(), view.size()));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

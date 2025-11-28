@@ -11,6 +11,7 @@
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
@@ -307,6 +308,41 @@ public:
         for (size_t i = 0; i < received.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(received[i], expectedMessages[i]);
         }
+    }
+
+    void TestReadTopicBasic(const TString& testSuffix) {
+        const TString sourceName = "sourceName" + testSuffix;
+        const TString topicName = "topicName" + testSuffix;
+        CreateTopic(topicName);
+
+        CreatePqSourceBasicAuth(sourceName, UseSchemaSecrets());
+
+        const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
+            SELECT key || "{id}", value FROM `{source}`.`{topic}`
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(
+                        key String NOT NULL,
+                        value String NOT NULL
+                    ))
+                LIMIT 1;
+            )",
+            "source"_a=sourceName,
+            "topic"_a=topicName,
+            "id"_a=testSuffix
+        ));
+
+        WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
+
+        CheckScriptResult(scriptExecutionOperation, 2, 1, [testSuffix](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1" + testSuffix);
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
+        });
+
+        const auto metadata = GetScriptExecutionOperation(scriptExecutionOperation).Metadata();
+        const auto& plan = metadata.ExecStats.GetPlan();
+        UNIT_ASSERT(plan);
+        UNIT_ASSERT_STRING_CONTAINS(*plan, "Mkql_TotalNodes");
     }
 
     // Table client SDK
@@ -1056,42 +1092,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         });
     }
 
-    Y_UNIT_TEST_F(ReadTopicBasic, TStreamingWithSchemaSecretsTestFixture) {
-        for (int i = 0; i < 2; ++i) {
-            const bool useSchemaSecrets = static_cast<bool>(i);
-            const TString sourceName = "sourceName" + ToString(i);
-            const TString topicName = "topicName" + ToString(i);
-            CreateTopic(topicName);
+    Y_UNIT_TEST_F(ReadTopicBasicNewSecrets, TStreamingWithSchemaSecretsTestFixture) {
+        TestReadTopicBasic("-with-new-secret");
+    }
 
-            CreatePqSourceBasicAuth(sourceName, useSchemaSecrets);
-
-            const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
-                SELECT key || "{id}", value FROM `{source}`.`{topic}`
-                    WITH (
-                        FORMAT="json_each_row",
-                        SCHEMA=(
-                            key String NOT NULL,
-                            value String NOT NULL
-                        ))
-                    LIMIT 1;
-                )",
-                "source"_a=sourceName,
-                "topic"_a=topicName,
-                "id"_a = i
-            ));
-
-            WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
-
-            CheckScriptResult(scriptExecutionOperation, 2, 1, [i](TResultSetParser& result) {
-                UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1" + ToString(i));
-                UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
-            });
-
-            const auto metadata = GetScriptExecutionOperation(scriptExecutionOperation).Metadata();
-            const auto& plan = metadata.ExecStats.GetPlan();
-            UNIT_ASSERT(plan);
-            UNIT_ASSERT_STRING_CONTAINS(*plan, "Mkql_TotalNodes");
-        }
+    Y_UNIT_TEST_F(ReadTopicBasicOldSecrets, TStreamingTestFixture) {
+        TestReadTopicBasic("-with-old-secret");
     }
 
     Y_UNIT_TEST_F(ReadTopicExplainBasic, TStreamingTestFixture) {
@@ -1418,6 +1424,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 .CheckpointId = checkpointId
             });
 
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata/streaming` TO `" BUILTIN_ACL_ROOT "`");
         WaitCheckpointUpdate(checkpointId);
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
@@ -1473,6 +1482,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})"
         });
         ReadTopicMessage(outputTopicName, "A");
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata/streaming` TO `" BUILTIN_ACL_ROOT "`");
         WaitCheckpointUpdate(checkpointId);
 
         const auto& result = ExecQuery(fmt::format(R"(
@@ -1531,6 +1543,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             .SaveState = true,
             .CheckpointId = checkpointId
         });
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata/streaming` TO `" BUILTIN_ACL_ROOT "`");
 
         auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
         WaitCheckpointUpdate(checkpointId);
@@ -2644,27 +2659,40 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         const auto testNoAccess = [&]() {
             ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/queries`", EStatus::SCHEME_ERROR, "Cannot find table");
+            ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/checkpoints/checkpoints_metadata`", EStatus::SCHEME_ERROR, "Cannot find table");
         };
         const auto testAccessAllowed = [&]() {
-            const auto& result = ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/queries`");
-            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            const auto& resultQueries = ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/queries`");
+            UNIT_ASSERT_VALUES_EQUAL(resultQueries.size(), 1);
 
-            CheckScriptResult(result[0], 1, 1, [](TResultSetParser& parser) {
+            CheckScriptResult(resultQueries[0], 1, 1, [](TResultSetParser& parser) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 1);
             });
+
+            const auto& resultCheckpoints = ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/checkpoints/checkpoints_metadata`");
+            UNIT_ASSERT_VALUES_EQUAL(resultCheckpoints.size(), 1);
         };
         const auto switchAccess = [&](bool allowed) {
             auto& runtime = GetRuntime();
             runtime.GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(!allowed);
 
-            auto ev = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(!allowed);
-            *ev->Record.MutableConfig() = appConfig;
-
             const auto edgeActor = runtime.AllocateEdgeActor();
-            runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, ev.release());
-            const auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+            appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(!allowed);
+
+            auto evProxy = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            *evProxy->Record.MutableConfig() = appConfig;
+
+            runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, evProxy.release());
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
             UNIT_ASSERT(response);
+
+            auto evStorage = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            *evStorage->Record.MutableConfig() = appConfig;
+
+            runtime.Send(NYql::NDq::MakeCheckpointStorageID(), edgeActor, evStorage.release());
+            response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+            UNIT_ASSERT(response);
+
             Sleep(TDuration::Seconds(1));
 
             ExecQuery(fmt::format(R"(
@@ -3346,6 +3374,62 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
             Sleep(TDuration::Seconds(1));
             CheckTable(*this, ydbTable, {{"message1", "value1"}});
+
+            Sleep(TDuration::Seconds(1));
+            CheckScriptExecutionsCount(1, 0);
+
+            ExecQuery(fmt::format(
+                "DROP STREAMING QUERY `{query_name}`",
+                "query_name"_a = queryName
+            ));
+            CheckScriptExecutionsCount(0, 0);
+        }
+    }
+
+    Y_UNIT_TEST_F(WritingInLocalYdbTablesWithProjection, TStreamingTestFixture) {
+        constexpr char pqSourceName[] = "pqSource";
+        CreatePqSource(pqSourceName);
+
+        for (const bool rowTables : {true, false}) {
+            const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
+            CreateTopic(inputTopicName);
+
+            const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
+            ExecQuery(fmt::format(R"(
+                CREATE TABLE `{table}` (
+                    Key String NOT NULL,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key)
+                ) {settings})",
+                "table"_a = ydbTable,
+                "settings"_a = rowTables ? "" : "WITH (STORE = COLUMN)"
+            ));
+
+            const auto queryName = TStringBuilder() << "streamingQuery" << rowTables;
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    UPSERT INTO `{ydb_table}`
+                    SELECT (Key || "x") AS Key, Value FROM `{pq_source}`.`{input_topic}` WITH (
+                        FORMAT = json_each_row,
+                        SCHEMA (
+                            Key String NOT NULL,
+                            Value String NOT NULL
+                        )
+                    ) LIMIT 1
+                END DO;)",
+                "query_name"_a = queryName,
+                "pq_source"_a = pqSourceName,
+                "input_topic"_a = inputTopicName,
+                "ydb_table"_a = ydbTable
+            ));
+
+            CheckScriptExecutionsCount(1, 1);
+            Sleep(TDuration::Seconds(1));
+
+            WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
+            Sleep(TDuration::Seconds(1));
+            CheckTable(*this, ydbTable, {{"message1x", "value1"}});
 
             Sleep(TDuration::Seconds(1));
             CheckScriptExecutionsCount(1, 0);

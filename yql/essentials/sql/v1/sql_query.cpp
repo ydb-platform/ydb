@@ -5,8 +5,9 @@
 #include "sql_into_tables.h"
 #include "sql_values.h"
 #include "node.h"
+#include "object_processing.h"
 #include "antlr_token.h"
-#include <yql/essentials/sql/v1/object_processing.h>
+#include "secret_settings.h"
 #include <yql/essentials/utils/yql_paths.h>
 #include <yql/essentials/public/udf/udf_log.h>
 #include <util/generic/scope.h>
@@ -48,51 +49,56 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
                                           const TRule_replication_settings_entry& in, TSqlExpression& ctx, bool create)
 {
     auto key = IdEx(in.GetRule_an_id1(), ctx);
-    auto value = ctx.Build(in.GetRule_expr3());
+    TNodePtr value = Unwrap(ctx.Build(in.GetRule_expr3()));
 
     if (!value) {
         ctx.Context().Error() << "Invalid replication setting: " << key.Name;
         return false;
     }
 
-    TSet<TString> configSettings = {
-        "connection_string",
-        "endpoint",
-        "database",
-        "token",
-        "token_secret_name",
-        "user",
-        "password",
-        "password_secret_name",
-        "service_account_id",
-        "initial_token",
-        "initial_token_secret_name",
-        "resource_id",
-        "ca_cert",
-    };
+    static const TSet<TString> ConfigSettings = [] {
+        TSet<TString> settings = {
+            "connection_string",
+            "endpoint",
+            "database",
+            "token",
+            "user",
+            "password",
+            "service_account_id",
+            "initial_token",
+            "resource_id",
+            "ca_cert",
+        };
+        for (const auto& names : REPLICATION_AND_TRANSFER_SECRETS_SETTINGS) {
+            settings.insert(names.Name);
+            settings.insert(names.Path);
+        }
 
-    TSet<TString> modeSettings = {
+        return settings;
+    }();
+
+    static const TSet<TString> ModeSettings = {
         "consistency_level",
         "commit_interval",
     };
 
-    TSet<TString> stateSettings = {
+    static const TSet<TString> StateSettings = {
         "state",
         "failover_mode",
     };
 
     const auto keyName = to_lower(key.Name);
-    if (!configSettings.count(keyName) && !modeSettings.count(keyName) && !stateSettings.count(keyName)) {
+    if (!ConfigSettings.contains(keyName) && !ModeSettings.contains(keyName) && !StateSettings.contains(keyName)) {
         ctx.Context().Error() << "Unknown replication setting: " << key.Name;
         return false;
     }
 
-    if (create && stateSettings.count(keyName)) {
+    if (create && StateSettings.contains(keyName)) {
         ctx.Context().Error() << key.Name << " is not supported in CREATE";
         return false;
     }
 
-    if (!create && modeSettings.count(keyName)) {
+    if (!create && ModeSettings.contains(keyName)) {
         ctx.Context().Error() << key.Name << " is not supported in ALTER";
         return false;
     }
@@ -117,7 +123,8 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
 }
 
 static bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
-                                     const TRule_replication_settings& in, TSqlExpression& ctx, bool create)
+                                     const TRule_replication_settings& in, TSqlExpression& ctx, bool create,
+                                     const TStringBuf& tablePathPrefix)
 {
     if (!AsyncReplicationSettingsEntry(out, in.GetRule_replication_settings_entry1(), ctx, create)) {
         return false;
@@ -127,6 +134,10 @@ static bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
         if (!AsyncReplicationSettingsEntry(out, block.GetRule_replication_settings_entry2(), ctx, create)) {
             return false;
         }
+    }
+
+    if (!VerifyAndAdjustSecretSettings(out, ctx.Context(), REPLICATION_AND_TRANSFER_SECRETS_SETTINGS, tablePathPrefix)) {
+        return false;
     }
 
     return true;
@@ -142,63 +153,69 @@ static bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out
 }
 
 static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
-                                        const TRule_alter_replication_action& in, TSqlExpression& ctx)
+                                        const TRule_alter_replication_action& in, TSqlExpression& ctx, const TStringBuf& tablePathPrefix)
 {
     // TODO(ilnaz): support other actions
-    return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, false);
+    return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, false,
+                                    tablePathPrefix);
 }
 
 static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
                                   const TRule_transfer_settings_entry& in, TSqlExpression& ctx, bool create)
 {
     auto key = IdEx(in.GetRule_an_id1(), ctx);
-    auto value = ctx.Build(in.GetRule_expr3());
+    TNodePtr value = Unwrap(ctx.Build(in.GetRule_expr3()));
 
     if (!value) {
         ctx.Context().Error() << "Invalid transfer setting: " << key.Name;
         return false;
     }
 
-    TSet<TString> configSettings = {
-        "connection_string",
-        "endpoint",
-        "database",
-        "token",
-        "token_secret_name",
-        "user",
-        "password",
-        "password_secret_name",
-        "service_account_id",
-        "initial_token",
-        "initial_token_secret_name",
-        "resource_id",
-        "ca_cert",
-        "flush_interval",
-        "batch_size_bytes",
-        "directory",
-    };
+    static const TSet<TString> ConfigSettings = [] {
+        TSet<TString> settings = {
+            "connection_string",
+            "endpoint",
+            "database",
+            "token",
+            "user",
+            "password",
+            "service_account_id",
+            "initial_token",
+            "resource_id",
+            "ca_cert",
+            "flush_interval",
+            "batch_size_bytes",
+            "directory",
+        };
+        for (const auto& names : REPLICATION_AND_TRANSFER_SECRETS_SETTINGS) {
+            settings.insert(names.Name);
+            settings.insert(names.Path);
+        }
 
-    TSet<TString> stateSettings = {
+        return settings;
+    }();
+
+    static const TSet<TString> StateSettings = {
         "state",
         "failover_mode",
     };
 
-    TSet<TString> crateOnlySettings = {
+    static const TSet<TString> CreateOnlySettings = {
         "consumer",
     };
 
     const auto keyName = to_lower(key.Name);
-    if (!configSettings.count(keyName) && !stateSettings.contains(keyName) && !crateOnlySettings.contains(keyName)) {
+    if (!ConfigSettings.count(keyName) && !StateSettings.contains(keyName) && !CreateOnlySettings.contains(keyName)) {
         ctx.Context().Error() << "Unknown transfer setting: " << key.Name;
         return false;
     }
 
-    if (create && stateSettings.count(keyName)) {
+    if (create && StateSettings.count(keyName)) {
         ctx.Context().Error() << key.Name << " is not supported in CREATE";
         return false;
     }
 
-    if (!create && crateOnlySettings.contains(keyName)) {
+    if (!create && CreateOnlySettings.contains(keyName)) {
         ctx.Context().Error() << key.Name << " is not supported in ALTER";
         return false;
     }
@@ -211,7 +228,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
 }
 
 static bool TransferSettings(std::map<TString, TNodePtr>& out,
-                             const TRule_transfer_settings& in, TSqlExpression& ctx, bool create)
+                             const TRule_transfer_settings& in, TSqlExpression& ctx, bool create, const TStringBuf& tablePathPrefix)
 {
     if (!TransferSettingsEntry(out, in.GetRule_transfer_settings_entry1(), ctx, create)) {
         return false;
@@ -221,6 +238,10 @@ static bool TransferSettings(std::map<TString, TNodePtr>& out,
         if (!TransferSettingsEntry(out, block.GetRule_transfer_settings_entry2(), ctx, create)) {
             return false;
         }
+    }
+
+    if (!VerifyAndAdjustSecretSettings(out, ctx.Context(), REPLICATION_AND_TRANSFER_SECRETS_SETTINGS, tablePathPrefix)) {
+        return false;
     }
 
     return true;
@@ -277,7 +298,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     blocks.emplace_back(std::move(*result));
                     break;
                 } else if (
-                    result.error() == EYqlSelectError::Unsupported &&
+                    result.error() == ESQLError::UnsupportedYqlSelect &&
                     Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force)
                 {
                     Error() << "Translation of the statement "
@@ -685,7 +706,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     blocks.emplace_back(std::move(*result));
                     break;
                 } else if (
-                    result.error() == EYqlSelectError::Unsupported &&
+                    result.error() == ESQLError::UnsupportedYqlSelect &&
                     Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force)
                 {
                     Error() << "Translation of the statement "
@@ -1064,8 +1085,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!ParseExternalDataSourceSettings(kv, node.GetRule_with_table_settings8())) {
                 return false;
             }
+            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
+            AdjustSecretPaths(kv, EDS_SECRETS_SETTINGS, prefixPath);
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "EXTERNAL_DATA_SOURCE", existingOk, replaceIfExists, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), BuildTablePath(prefixPath, objectId), "EXTERNAL_DATA_SOURCE", existingOk, replaceIfExists, std::move(kv), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore31: {
@@ -1144,7 +1167,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             std::map<TString, TNodePtr> settings;
             TSqlExpression expr(Ctx_, Mode_);
-            if (!AsyncReplicationSettings(settings, node.GetRule_replication_settings10(), expr, true)) {
+            if (!AsyncReplicationSettings(settings, node.GetRule_replication_settings10(), expr, true, prefixPath)) {
                 return false;
             }
 
@@ -1491,21 +1514,22 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     return false;
                 }
             }
+            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
 
             std::map<TString, TNodePtr> settings;
             TSqlExpression expr(Ctx_, Mode_);
-            if (!AsyncReplicationAlterAction(settings, node.GetRule_alter_replication_action5(), expr)) {
+            if (!AsyncReplicationAlterAction(settings, node.GetRule_alter_replication_action5(), expr, prefixPath)) {
                 return false;
             }
             for (auto& block : node.GetBlock6()) {
-                if (!AsyncReplicationAlterAction(settings, block.GetRule_alter_replication_action2(), expr)) {
+                if (!AsyncReplicationAlterAction(settings, block.GetRule_alter_replication_action2(), expr, prefixPath)) {
                     return false;
                 }
             }
 
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildAlterAsyncReplication(Ctx_.Pos(),
-                                                                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id),
+                                                                    BuildTablePath(prefixPath, id),
                                                                     std::move(settings), context));
             break;
         }
@@ -1919,11 +1943,12 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
+            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
 
             std::map<TString, TNodePtr> settings;
             TSqlExpression expr(Ctx_, Mode_);
-            if (node.GetBlock10().HasRule_transfer_settings3() && !TransferSettings(settings, node.GetBlock10().GetRule_transfer_settings3(), expr, true)) {
+            if (node.GetBlock10().HasRule_transfer_settings3() &&
+                !TransferSettings(settings, node.GetBlock10().GetRule_transfer_settings3(), expr, true, prefixPath)) {
                 return false;
             }
 
@@ -1954,10 +1979,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             std::optional<TString> transformLambda;
             TSqlExpression expr(Ctx_, Mode_);
 
+            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
+
             auto transferAlterAction = [&](std::optional<TString>& transformLambda, const TRule_alter_transfer_action& in)
             {
                 if (in.HasAlt_alter_transfer_action1()) {
-                    return TransferSettings(settings, in.GetAlt_alter_transfer_action1().GetRule_alter_transfer_set_setting1().GetRule_transfer_settings3(), expr, false);
+                    return TransferSettings(settings, in.GetAlt_alter_transfer_action1().GetRule_alter_transfer_set_setting1().GetRule_transfer_settings3(),
+                                            expr, false, prefixPath);
                 } else if (in.HasAlt_alter_transfer_action2()) {
                     TString lb;
                     if (!ParseTransferLambda(lb, in.GetAlt_alter_transfer_action2().GetRule_alter_transfer_set_using1().GetRule_lambda_or_parameter3())) {
@@ -2194,7 +2222,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     stmBeginPos,
                     node.GetRule_with_secret_settings4(),
                     secretParams,
-                    TSecretParameters::TOperationMode::Create)) {
+                    TSecretParameters::EOperationMode::Create)) {
                 return false;
             }
 
@@ -2233,7 +2261,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     stmBeginPos,
                     node.GetRule_with_secret_settings4(),
                     secretParams,
-                    TSecretParameters::TOperationMode::Alter)) {
+                    TSecretParameters::EOperationMode::Alter)) {
                 return false;
             }
 
@@ -3680,7 +3708,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
     }
 
     const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf" || normalizedPragma == "layer";
-    static const THashSet<TStringBuf> lexicalScopePragmas = {
+    static const THashSet<TStringBuf> LexicalScopePragmas = {
         "classicdivision",
         "strictjoinkeytypes",
         "disablestrictjoinkeytypes",
@@ -3692,7 +3720,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
         "simplepg",
         "disablesimplepg",
     };
-    const bool hasLexicalScope = withConfigure || lexicalScopePragmas.contains(normalizedPragma);
+    const bool hasLexicalScope = withConfigure || LexicalScopePragmas.contains(normalizedPragma);
     const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";
     const bool allowTopLevelPragmas = TopLevel_ || AllowTopLevelPragmas_;
     for (auto pragmaValue : pragmaValues) {
@@ -3923,7 +3951,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
 
                 TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
                 TSqlExpression sqlExpr(Ctx_, Mode_);
-                auto whereExpr = sqlExpr.Build(alt.GetRule_expr2());
+                auto whereExpr = Unwrap(sqlExpr.Build(alt.GetRule_expr2()));
                 if (!whereExpr) {
                     return nullptr;
                 }
@@ -3995,7 +4023,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
             if (alt.HasBlock3()) {
                 TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
                 TSqlExpression sqlExpr(Ctx_, Mode_);
-                auto whereExpr = sqlExpr.Build(alt.GetBlock3().GetRule_expr2());
+                auto whereExpr = Unwrap(sqlExpr.Build(alt.GetBlock3().GetRule_expr2()));
                 if (!whereExpr) {
                     return nullptr;
                 }
@@ -4045,7 +4073,7 @@ bool TSqlQuery::FillSetClause(const TRule_set_clause& node, TVector<TString>& ta
     targetList.push_back(ColumnNameAsSingleStr(*this, node.GetRule_set_target1().GetRule_column_name1()));
     TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
     TSqlExpression sqlExpr(Ctx_, Mode_);
-    if (!Expr(sqlExpr, values, node.GetRule_expr3())) {
+    if (!Unwrap(Expr(sqlExpr, values, node.GetRule_expr3()))) {
         return false;
     }
     return true;

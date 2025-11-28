@@ -11,7 +11,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct"};
+THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg"};
 
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
@@ -61,7 +61,9 @@ TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
     TVector<const TItemExprType*> newItemTypes;
     for (auto t : structItemTypes) {
         TString columnName = TString(t->GetName());
-        TString fullName = read->Alias != "" ? ( "_alias_" + read->Alias + "." + columnName ) : columnName;
+        auto it = std::find(read->Columns.begin(), read->Columns.end(), columnName);
+        auto columnIndex = std::distance(read->Columns.begin(), it);
+        auto fullName = read->OutputIUs[columnIndex].GetFullName();
         newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, t->GetItemType()));
     }
 
@@ -184,6 +186,10 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
             auto typeIt = std::find_if(typeItems.begin(), typeItems.end(), [&from](const TItemExprType* t){
                 return from.GetFullName() == t->GetName();
             });
+            if (typeIt==typeItems.end()) {
+                YQL_CLOG(TRACE, CoreDq) << "Did not find column: " 
+                << from.GetFullName() << " in " << *inputType << " while processing map " << map->ToString(ctx.ExprCtx);
+            }
             Y_ENSURE(typeIt!=typeItems.end());
 
             auto renameType = ctx.ExprCtx.MakeType<TItemExprType>(mapEl.first.GetFullName(), (*typeIt)->GetItemType());
@@ -231,12 +237,10 @@ TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
 TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    THashMap<TString, std::pair<TString, TString>> aggTraitsMap;
+    THashMap<TString, TString> aggTraitsMap;
     for (const auto& aggTraits : aggregate->AggregationTraitsList) {
-        const auto originalColName = TString(aggTraits.OriginalColName.GetFullName());
-        const auto resultColName = TString(aggTraits.ResultColName.GetFullName());
-        const auto funcName = TString(aggTraits.AggFunction);
-        aggTraitsMap[originalColName] = {resultColName, funcName};
+        const auto originalColName = aggTraits.OriginalColName.GetFullName();
+        aggTraitsMap[originalColName] = aggTraits.AggFunction;
     }
 
     THashSet<TString> keyColumns;
@@ -249,19 +253,19 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
         // The type of the column could be changed after aggregation.
         const auto itemName = itemType->GetName();
         if (auto it = aggTraitsMap.find(itemName); it != aggTraitsMap.end()) {
-            const auto& resultColName = it->second.first;
-            const auto& aggFunction = it->second.second;
+            const auto& colName = it->first;
+            const auto& aggFunction = it->second;
             Y_ENSURE(SupportedAggregationFunctions.count(aggFunction), "Unsupported aggregation function " + aggFunction);
+            TPositionHandle dummyPos;
 
             const TTypeAnnotationNode* aggFieldType = itemType->GetItemType();
             if (aggFunction == "count") {
                 aggFieldType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64);
             } else if (aggFunction == "sum") {
-                TPositionHandle dummyPos;
-                Y_ENSURE(GetSumResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx.ExprCtx),
+                            Y_ENSURE(GetSumResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx.ExprCtx),
                          "Unsupported type for sum aggregation function");
             }
-            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(resultColName, aggFieldType));
+            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(colName, aggFieldType));
         } else if (keyColumns.contains(itemName)) {
             newItemTypes.push_back(itemType);
         }

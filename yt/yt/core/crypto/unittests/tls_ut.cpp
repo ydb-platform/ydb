@@ -111,7 +111,7 @@ TEST_F(TTlsTest, SimplePingPong)
     ASSERT_EQ(secondSide->Read(outputBuffer).Get().ValueOrThrow(), 0u);
 }
 
-TEST(TTlsTestWithoutFixture, LoadCertificateChain)
+TEST(TTlsTestWithoutFixtureTest, LoadCertificateChain)
 {
     auto grpcLock = NRpc::NGrpc::TDispatcher::Get()->GetLibraryLock();
     auto context = New<TSslContext>();

@@ -141,7 +141,7 @@ template <class TMap, class TKey>
 const typename TMap::mapped_type& GetOrDefaultReference(
     const TMap& map,
     const TKey& key,
-    const typename TMap::mapped_type& defaultValue Y_LIFETIME_BOUND = {})
+    const typename TMap::mapped_type& defaultValue Y_LIFETIME_BOUND = typename TMap::mapped_type{})
     requires (!TIsDefaultMap<TMap>::Value);
 
 template <class TMap, class TKey, class TCtor>

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/tdigest.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/tdigest.h"
 
 #include <algorithm>
 #include <cmath>
@@ -25,8 +25,8 @@
 #include <tuple>
 #include <vector>
 
-#include "arrow/status.h"
-#include "arrow/util/math_constants.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/math_constants.h"
 
 namespace arrow20 {
 namespace internal {

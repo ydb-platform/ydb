@@ -12,7 +12,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TCompositeCompare, Simple)
+TEST(TCompositeCompareTest, Simple)
 {
     auto compare = [] (TStringBuf lhs, TStringBuf rhs) {
         return CompareYsonValues(TYsonStringBuf(lhs), TYsonStringBuf(rhs));
@@ -58,7 +58,7 @@ TEST(TCompositeCompare, Simple)
     EXPECT_EQ(1, compare("[1; 2; 3]", "[1; 2; #]"));
 }
 
-TEST(TCompositeCompare, CompositeFingerprint)
+TEST(TCompositeCompareTest, CompositeFingerprint)
 {
     auto getFarmHash = [] (TStringBuf value) {
         return CompositeFarmHash(TYsonStringBuf(value));
@@ -72,7 +72,7 @@ TEST(TCompositeCompare, CompositeFingerprint)
     EXPECT_EQ(getFarmHash("#"), GetFarmFingerprint(MakeUnversionedNullValue()));
 }
 
-TEST(TCompositeCompare, TruncateYsonValue)
+TEST(TCompositeCompareTest, TruncateYsonValue)
 {
     auto normalizeYson = [] (TStringBuf yson) {
         return yson.empty() ? TString(yson) : ConvertToYsonString(TYsonString(yson), EYsonFormat::Binary).ToString();

@@ -28,4 +28,7 @@ message TDataShardConfig {
     optional uint64 InMemoryStateMigrationTimeoutMs = 24 [default = 1000];
     optional uint32 StatsReportIntervalSeconds = 25 [default = 10];
     optional uint32 BackupTableStatsReportIntervalSeconds = 26 [default = 30];
+    optional uint32 KeyAccessSampleCollectionMinIntervalSeconds = 27 [default = 5];
+    optional uint32 KeyAccessSampleCollectionMaxIntervalSeconds = 28 [default = 60];
+    optional uint32 KeyAccessSampleValidityIntervalSeconds = 29 [default = 30];
 }

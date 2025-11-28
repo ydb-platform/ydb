@@ -71,6 +71,7 @@ public:
         , Acceptor_(std::move(acceptor))
         , Invoker_(std::move(invoker))
         , OwnPoller_(ownPoller)
+        , Address_(Listener_ ? Listener_->GetAddress() : TNetworkAddress::CreateIPv6Any(Config_->Port))
         , RequestPathMatcher_(std::move(requestPathMatcher))
     { }
 
@@ -82,13 +83,29 @@ public:
 
     const TNetworkAddress& GetAddress() const override
     {
-        return Listener_->GetAddress();
+        return Address_;
     }
 
     void Start() override
     {
         YT_VERIFY(!Started_);
         Started_ = true;
+
+        if (!Listener_) {
+            for (int i = 0;; ++i) {
+                try {
+                    Listener_ = CreateListener(Address_, Poller_, Acceptor_, Config_->MaxBacklogSize);
+                    break;
+                } catch (const std::exception& ex) {
+                    if (i + 1 == Config_->BindRetryCount) {
+                        throw;
+                    } else {
+                        YT_LOG_ERROR(ex, "HTTP server bind failed");
+                        Sleep(Config_->BindRetryBackoff);
+                    }
+                }
+            }
+        }
 
         YT_LOG_INFO("Server started");
 
@@ -120,12 +137,13 @@ public:
 
 private:
     const TServerConfigPtr Config_;
-    const IListenerPtr Listener_;
+    IListenerPtr Listener_;
     const IPollerPtr Poller_;
     const IPollerPtr Acceptor_;
     const IInvokerPtr Invoker_;
     const bool OwnPoller_ = false;
 
+    const TNetworkAddress Address_;
     IRequestPathMatcherPtr RequestPathMatcher_;
     bool Started_ = false;
     std::atomic<bool> Stopped_ = false;
@@ -137,6 +155,7 @@ private:
 
     void AsyncAcceptConnection()
     {
+        YT_VERIFY(Listener_);
         Listener_->Accept().Subscribe(
             BIND(&TServer::OnConnectionAccepted, MakeWeak(this))
                 .Via(Acceptor_->GetInvoker()));
@@ -402,26 +421,13 @@ IServerPtr CreateServer(
     IInvokerPtr invoker,
     bool ownPoller)
 {
-    auto address = TNetworkAddress::CreateIPv6Any(config->Port);
-    for (int i = 0;; ++i) {
-        try {
-            auto listener = CreateListener(address, poller, acceptor, config->MaxBacklogSize);
-            return CreateServer(
-                std::move(config),
-                std::move(listener),
-                std::move(poller),
-                std::move(acceptor),
-                std::move(invoker),
-                ownPoller);
-        } catch (const std::exception& ex) {
-            if (i + 1 == config->BindRetryCount) {
-                throw;
-            } else {
-                YT_LOG_ERROR(ex, "HTTP server bind failed");
-                Sleep(config->BindRetryBackoff);
-            }
-        }
-    }
+    return CreateServer(
+        std::move(config),
+        /*listener*/ nullptr,
+        std::move(poller),
+        std::move(acceptor),
+        std::move(invoker),
+        ownPoller);
 }
 
 } // namespace

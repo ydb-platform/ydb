@@ -228,8 +228,18 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
         
         rows.append(f"| [![▶ {branch}](https://img.shields.io/badge/%E2%96%B6_{branch.replace('-', '_')}-4caf50?style=flat-square)]({url}) [![⚙️](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F-ff9800?style=flat-square)]({url_ui}) |")
     
-    # Generate URL for backporting multiple branches
-    all_branches = ",".join(branches)
+    # Collect all unique branches from all entries (each entry may contain multiple branches separated by comma)
+    all_unique_branches = set()
+    for branch_entry in branches:
+        # Split by comma and strip whitespace
+        branch_list = [b.strip() for b in branch_entry.split(',')]
+        all_unique_branches.update(branch_list)
+    
+    # Sort for consistent output
+    all_unique_branches_sorted = sorted(all_unique_branches)
+    all_branches = ",".join(all_unique_branches_sorted)
+    
+    # Generate URL for backporting all unique branches
     params_multiple = {
         "owner": owner,
         "repo": repo,
@@ -249,7 +259,7 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
     table += "|----------|\n"
     table += "\n".join(rows)
     table += "\n\n"
-    table += f"[![⚙️ Backport multiple branches](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F_Backport_multiple_branches-2196F3?style=flat-square)]({url_multiple_ui})"
+    table += f"[![⚙️ Backport (custom)](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F_Backport_%28custom%29-2196F3?style=flat-square)]({url_multiple_ui})"
     return table
 
 def get_legend() -> str:

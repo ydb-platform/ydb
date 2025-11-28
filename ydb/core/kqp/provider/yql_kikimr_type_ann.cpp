@@ -1871,7 +1871,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateReplication(TKiCreateReplication node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "connection_string",
             "endpoint",
             "database",
@@ -1906,7 +1906,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterReplication(TKiAlterReplication node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "connection_string",
             "endpoint",
             "database",
@@ -1946,7 +1946,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateTransfer(TKiCreateTransfer node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "connection_string",
             "endpoint",
             "database",
@@ -1984,7 +1984,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterTransfer(TKiAlterTransfer node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "connection_string",
             "endpoint",
             "database",
@@ -2043,7 +2043,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             return TStatus::Error;
         }
 
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR"
         };
 
@@ -2087,7 +2087,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "password",
             "hash",
             "passwordEncrypted",
@@ -2127,7 +2127,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "password",
             "hash",
             "passwordEncrypted",
@@ -2457,7 +2457,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleCreateBackupCollection(TKiCreateBackupCollection node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "incremental_backup_enabled",
             "storage",
             "omit_indexes",
@@ -2477,7 +2477,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleAlterBackupCollection(TKiAlterBackupCollection node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {};
+        static const THashSet<TString> supportedSettings = {};
 
         if (!CheckBackupCollectionSettings(node.BackupCollectionSettings(), supportedSettings, ctx)) {
             return TStatus::Error;

@@ -268,26 +268,50 @@ def get_legend() -> str:
            "* ▶ - immediately runs the workflow with default parameters\n" \
            "* ⚙️ - opens UI to review and modify parameters before running\n"
 
-def ensure_tables_in_pr_body(pr_body: str, pr_number: int, base_ref: str, app_domain: str) -> Optional[str]:
-    """Check if test and backport tables exist in PR body, add them if missing."""
+def ensure_tables_in_pr_body(pr_body: str, pr_number: int, base_ref: str, app_domain: str, 
+                              show_test_table: bool = True, show_backport_table: bool = True) -> Optional[str]:
+    """Check if test and backport tables exist in PR body, add them if missing.
+    
+    Args:
+        pr_body: Current PR body
+        pr_number: PR number
+        base_ref: Base branch reference
+        app_domain: Application domain for workflow URLs
+        show_test_table: Whether to add test execution table
+        show_backport_table: Whether to add backport table
+    """
     test_table_marker = "<!-- test-execution-table -->"
     backport_table_marker = "<!-- backport-table -->"
     
     has_test_table = test_table_marker in pr_body
     has_backport_table = backport_table_marker in pr_body
     
-    if has_test_table and has_backport_table:
-        return None  # Tables already exist
+    # Check if all requested tables already exist
+    if show_test_table and show_backport_table:
+        if has_test_table and has_backport_table:
+            return None  # Both tables already exist
+    elif show_test_table:
+        if has_test_table:
+            return None  # Test table already exists
+    elif show_backport_table:
+        if has_backport_table:
+            return None  # Backport table already exists
+    else:
+        return None  # No tables requested
     
     # Generate tables to insert
     test_table = None
     backport_table = None
-    if not has_test_table:
+    if show_test_table and not has_test_table:
         test_table = generate_test_table(pr_number, base_ref, app_domain)
-    if not has_backport_table:
+    if show_backport_table and not has_backport_table:
         backport_table = generate_backport_table(pr_number, app_domain)
     
-    # Check if legend already exists
+    # If no tables to add, return None
+    if not test_table and not backport_table:
+        return None
+    
+    # Check if legend already exists (add if at least one table is present)
     legend = get_legend()
     has_legend = "**Legend:**" in pr_body
     
@@ -426,16 +450,19 @@ def validate_pr():
 
 def add_tables_if_needed(pr_body: str, pr_number: int, base_ref: str):
     """Add test and backport tables to PR body if enabled."""
-    show_additional_info = os.environ.get("SHOW_ADDITIONAL_INFO_IN_PR", "").upper() == "TRUE"
+    show_test_table = os.environ.get("SHOW_RUN_TESTS_IN_PR", "").upper() == "TRUE"
+    show_backport_table = os.environ.get("SHOW_BACKPORT_IN_PR", "").upper() == "TRUE"
     
-    if not show_additional_info:
-        return  # Tables should not be added
+    if not show_test_table and not show_backport_table:
+        return  # No tables should be added
     
     app_domain = os.environ.get("APP_DOMAIN")
     if not app_domain:
-        raise ValueError("APP_DOMAIN environment variable is not set (required when SHOW_ADDITIONAL_INFO_IN_PR=TRUE)")
+        raise ValueError("APP_DOMAIN environment variable is not set (required when SHOW_RUN_TESTS_IN_PR=TRUE or SHOW_BACKPORT_IN_PR=TRUE)")
     
-    updated_body = ensure_tables_in_pr_body(pr_body, pr_number, base_ref, app_domain)
+    updated_body = ensure_tables_in_pr_body(pr_body, pr_number, base_ref, app_domain, 
+                                            show_test_table=show_test_table, 
+                                            show_backport_table=show_backport_table)
     if updated_body:
         update_pr_body(pr_number, updated_body)
 

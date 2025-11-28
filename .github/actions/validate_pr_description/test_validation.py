@@ -13,8 +13,9 @@ Required for fetching PR from GitHub:
     export GITHUB_TOKEN="your_github_token"
 
 Optional for table generation testing:
-    export SHOW_ADDITIONAL_INFO_IN_PR="TRUE"  # Enable table generation test
-    export APP_DOMAIN="your-app-domain.com"   # Required if SHOW_ADDITIONAL_INFO_IN_PR=TRUE
+    export SHOW_RUN_TESTS_IN_PR="TRUE"        # Enable test execution table generation
+    export SHOW_BACKPORT_IN_PR="TRUE"         # Enable backport table generation
+    export APP_DOMAIN="your-app-domain.com"   # Required if either table flag is TRUE
 
 Note: GITHUB_WORKSPACE and GITHUB_REPOSITORY are automatically set if not provided.
       GITHUB_REPOSITORY is determined from git remote origin URL.
@@ -99,10 +100,11 @@ def test_validation(pr_body: str, pr_number: int = None, base_ref: str = "main")
         return False, pr_body
     
     # Test table generation if enabled
-    show_additional_info = os.environ.get("SHOW_ADDITIONAL_INFO_IN_PR", "").upper() == "TRUE"
+    show_test_table = os.environ.get("SHOW_RUN_TESTS_IN_PR", "").upper() == "TRUE"
+    show_backport_table = os.environ.get("SHOW_BACKPORT_IN_PR", "").upper() == "TRUE"
     result_body = pr_body
     
-    if show_additional_info:
+    if show_test_table or show_backport_table:
         print("=" * 60)
         print("Testing table generation")
         print("=" * 60)
@@ -127,9 +129,14 @@ def test_validation(pr_body: str, pr_number: int = None, base_ref: str = "main")
         print(f"Current state:")
         print(f"  Test table exists: {has_test}")
         print(f"  Backport table exists: {has_backport}")
+        print(f"Flags:")
+        print(f"  SHOW_RUN_TESTS_IN_PR: {show_test_table}")
+        print(f"  SHOW_BACKPORT_IN_PR: {show_backport_table}")
         print()
         
-        updated_body = ensure_tables_in_pr_body(pr_body, pr_number, base_ref, app_domain)
+        updated_body = ensure_tables_in_pr_body(pr_body, pr_number, base_ref, app_domain,
+                                                show_test_table=show_test_table,
+                                                show_backport_table=show_backport_table)
         if updated_body:
             result_body = updated_body
             print("✅ Tables would be added to PR body")
@@ -155,8 +162,8 @@ def test_validation(pr_body: str, pr_number: int = None, base_ref: str = "main")
             else:
                 print("⚠️  Function returned None but tables don't exist - this is unexpected")
     else:
-        print("ℹ️  SHOW_ADDITIONAL_INFO_IN_PR is not TRUE, skipping table generation test")
-        print("   Set SHOW_ADDITIONAL_INFO_IN_PR=TRUE to test table generation")
+        print("ℹ️  Neither SHOW_RUN_TESTS_IN_PR nor SHOW_BACKPORT_IN_PR is TRUE, skipping table generation test")
+        print("   Set SHOW_RUN_TESTS_IN_PR=TRUE and/or SHOW_BACKPORT_IN_PR=TRUE to test table generation")
     
     return is_valid, result_body
 

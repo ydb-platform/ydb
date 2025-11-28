@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/public/udf/udf_types.h>
@@ -15,6 +14,11 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 struct TPackResult;
+
+struct TSingleTuple {
+    const ui8* PackedData;
+    const ui8* OverflowBegin;
+};
 
 using TTupleData = std::vector<ui8, TMKQLAllocator<ui8>>;
 

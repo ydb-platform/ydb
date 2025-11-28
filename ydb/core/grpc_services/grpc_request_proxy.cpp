@@ -139,6 +139,11 @@ private:
         return true;
     }
 
+    template<typename TEvent>
+    void HandleBootstrapClusterEvent(TAutoPtr<TEventHandle<TEvent>>& event);
+    template<typename TEvent>
+    static constexpr bool IsBootstrapClusterEvent(TAutoPtr<TEventHandle<TEvent>>& event);
+
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         LogRequest(event);
@@ -184,9 +189,14 @@ private:
         bool skipResourceCheck = false;
         // do not check connect rights for the deprecated requests without database
         // remove this along with AllowYdbRequestsWithoutDatabase flag
-        bool skipCheckConnectRigths = false;
+        bool skipCheckConnectRights = false;
 
         if (state.State == NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
+            if (IsBootstrapClusterEvent(event)) {
+                // Allow handle bootstrap cluster event without database
+                HandleBootstrapClusterEvent(event);
+                return;
+            }
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
@@ -198,7 +208,7 @@ private:
                 } else {
                     databaseName = RootDatabase;
                     skipResourceCheck = true;
-                    skipCheckConnectRigths = true;
+                    skipCheckConnectRights = true;
                 }
             }
             if (databaseName.empty()) {
@@ -290,7 +300,7 @@ private:
                 database->SecurityObject,
                 event.Release(),
                 Counters,
-                skipCheckConnectRigths,
+                skipCheckConnectRights,
                 rootAttributes,
                 this));
             return;
@@ -455,6 +465,47 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
         return true;
     }
     return false;
+}
+
+template<typename TEvent>
+void TGRpcRequestProxyImpl::HandleBootstrapClusterEvent(TAutoPtr<TEventHandle<TEvent>>& event) {
+    IRequestProxyCtx* requestProxyCtx = event->Get();
+    if (requestProxyCtx->IsClientLost()) {
+        // Any status here
+        LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+            "Client was disconnected before processing request (grpc request proxy)");
+        requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+        requestProxyCtx->FinishSpan();
+        return;
+    }
+
+    TSchemeBoardEvents::TDescribeSchemeResult schemeData;
+    TIntrusivePtr<TSecurityObject> securityObject = nullptr; // Do not have security object, cluster is not initialized. Check rights via list administration_allowed_sids or bootstrap_allowed_sids
+    static const bool skipCheckConnectRights = true; // Do not check connect rights for bootstrap cluster
+    static const TVector<std::pair<TString, TString>> rootAttributes = {}; // Empty rootAttributes
+    Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
+        schemeData,
+        securityObject,
+        event.Release(),
+        Counters,
+        skipCheckConnectRights,
+        rootAttributes,
+        this));
+    return;
+}
+
+template<typename TEvent>
+constexpr bool TGRpcRequestProxyImpl::IsBootstrapClusterEvent(TAutoPtr<TEventHandle<TEvent>>& event) {
+    if constexpr (TEvent::EventType == TRpcServices::EvGrpcRuntimeRequest) {
+        switch (event->Get()->GetRuntimeEventType()) {
+        case NRuntimeEvents::EType::BOOTSTRAP_CLUSTER:
+            return true;
+        case NRuntimeEvents::EType::COMMON:
+            return false;
+        }
+    } else {
+        return false;
+    }
 }
 
 template<class TEvent>

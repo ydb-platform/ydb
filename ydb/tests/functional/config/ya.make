@@ -3,6 +3,7 @@ PY3TEST()
 TEST_SRCS(
     test_config_with_metadata.py
     test_generate_dynamic_config.py
+    test_distconf.py
 )
 
 SPLIT_FACTOR(10)
@@ -20,6 +21,9 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+DEPENDS(
+    ydb/apps/ydb
+)
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 DEPENDS(

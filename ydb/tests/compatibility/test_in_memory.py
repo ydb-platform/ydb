@@ -5,15 +5,14 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 class InMemoryWorkload:
-    def __init__(self, driver, endpoint):
-        self.driver = driver
-        self.endpoint = endpoint
+    def __init__(self, fixture):
+        self.fixture = fixture
         self.initially_in_memory_table = "/Root/initially_in_memory_table"
         self.initially_regular_table = "/Root/initially_regular_table"
         self.rows_to_insert = 1001
 
     def create_tables(self):
-        with ydb.QuerySessionPool(self.driver) as session_pool:
+        with ydb.QuerySessionPool(self.fixture.driver) as session_pool:
             session_pool.execute_with_retries(f"""
                 CREATE TABLE `{self.initially_in_memory_table}` (
                     key Uint64 NOT NULL,
@@ -45,7 +44,7 @@ class InMemoryWorkload:
             (self.initially_in_memory_table, "regular" if idx % 2 == 0 else "in_memory"),
             (self.initially_regular_table, "in_memory" if idx % 2 == 0 else "regular"),
         ]
-        with ydb.QuerySessionPool(self.driver) as session_pool:
+        with ydb.QuerySessionPool(self.fixture.driver) as session_pool:
             for table, mode in modes_to_alter:
                 session_pool.execute_with_retries(get_query(table, mode))
 
@@ -64,8 +63,8 @@ class InMemoryWorkload:
         column_types.add_column("value_int", ydb.PrimitiveType.Int64)
         column_types.add_column("value_str", ydb.PrimitiveType.String)
 
-        self.driver.table_client.bulk_upsert(self.initially_in_memory_table, rows, column_types)
-        self.driver.table_client.bulk_upsert(self.initially_regular_table, rows, column_types)
+        self.fixture.driver.table_client.bulk_upsert(self.initially_in_memory_table, rows, column_types)
+        self.fixture.driver.table_client.bulk_upsert(self.initially_regular_table, rows, column_types)
         return len(rows)
 
     def check_data(self):
@@ -77,7 +76,7 @@ class InMemoryWorkload:
                     SUM(LEN(value_str)) AS value_str_sum
                 FROM `{table_name}`;"""
 
-        with ydb.QuerySessionPool(self.driver) as session_pool:
+        with ydb.QuerySessionPool(self.fixture.driver) as session_pool:
             for table in [self.initially_in_memory_table, self.initially_regular_table]:
                 result_sets = session_pool.execute_with_retries(get_query(table))
                 assert len(result_sets) == 1
@@ -101,7 +100,7 @@ class TestInMemoryMixedCluster(MixedClusterFixture):
         )
 
     def test_in_memory_mixed_cluster(self):
-        workload = InMemoryWorkload(self.driver, self.endpoint)
+        workload = InMemoryWorkload(self)
         workload.create_tables()
         total_written = workload.write_data()
         assert total_written > 0
@@ -122,7 +121,7 @@ class TestInMemoryRestartToAnotherVersion(RestartToAnotherVersionFixture):
         )
 
     def test_in_memory_restart_to_version(self):
-        workload = InMemoryWorkload(self.driver, self.endpoint)
+        workload = InMemoryWorkload(self)
         workload.create_tables()
         total_written = workload.write_data()
         assert total_written > 0
@@ -148,7 +147,7 @@ class TestInMemoryRolling(RollingUpgradeAndDowngradeFixture):
         )
 
     def test_in_memory_rolling(self):
-        workload = InMemoryWorkload(self.driver, self.endpoint)
+        workload = InMemoryWorkload(self)
         workload.create_tables()
         total_written = workload.write_data()
         assert total_written > 0

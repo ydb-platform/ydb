@@ -355,6 +355,8 @@ message TBlobStorageConfig {
     optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
 
     optional NKikimrBlobStorage.TBscConfig BscSettings = 12;
+
+    optional uint64 BridgeSyncRateBytesPerSecond = 13 [default = 500000000]; // default 500 MB/s per node
  }
 
 message TSelfManagementConfig {
@@ -2138,6 +2140,7 @@ message TColumnShardConfig {
     optional uint64 BadPortionSizeLimit = 51 [default = 524288];
     optional uint64 BadPortionsLimit = 52;
     optional bool CombineChunksInResult = 54 [default = true];
+    optional bool EnableParallelCompaction = 56 [default = true];
 }
 
 message TSchemeShardConfig {

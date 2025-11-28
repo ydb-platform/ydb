@@ -1058,6 +1058,7 @@ public:
 
         if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE
                 && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO
+                && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_SCAN
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_AST_SCAN
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
@@ -1502,7 +1503,7 @@ public:
             }
         }
 
-        if (QueryState->GetResultSetFormatSettings().IsArrowFormat() && !AppData()->FeatureFlags.GetEnableArrowResultSetFormat()) {
+        if (QueryState->GetFormatsSettings().IsArrowFormat() && !AppData()->FeatureFlags.GetEnableArrowResultSetFormat()) {
             ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "Arrow result set format is not enabled. Please set EnableArrowResultSetFormat feature flag to true.");
             return true;
         }
@@ -1736,7 +1737,7 @@ public:
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
-            QueryState ? QueryState->GetResultSetFormatSettings() : TResultSetFormatSettings{},
+            QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
@@ -2110,6 +2111,30 @@ public:
         }
     }
 
+    void HandleCleanup(TEvKqpBuffer::TEvError::TPtr& ev) {
+        auto& msg = *ev->Get();
+
+        TString logMsg = TStringBuilder() << "got TEvKqpBuffer::TEvError in " << CurrentStateFuncName()
+            << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << " send to: " << ExecuterId << " from: " << ev->Sender;
+
+        if (CleanupCtx->TransactionsToBeAborted.empty()) {
+            LOG_E(logMsg <<  ": Ignored error. TransactionsToBeAborted is empty.");
+        }
+
+        AFL_ENSURE(ExecuterId); // ExecuterId can't be empty during cleanup if TransactionsToBeAborted is not empty.
+
+        const auto& txCtx = CleanupCtx->TransactionsToBeAborted.front();
+        AFL_ENSURE(txCtx);
+        if (txCtx->BufferActorId != ev->Sender) {
+            LOG_E(logMsg <<  ": Ignored error. Current BufferActorId is not sender.");
+            return;
+        } else {
+            LOG_W(logMsg);
+        }
+
+        Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
+    }
+
     void CollectSystemViewQueryStats(const TKqpQueryStats* stats, TDuration queryDuration,
         const TString& database, ui64 requestUnits)
     {
@@ -2356,7 +2381,7 @@ public:
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
                         auto ydbResult = QueryState->QueryData->GetYdbTxResult(
                             phyQuery.GetResultBindings(i), response->GetArena(),
-                            QueryState->GetResultSetFormatSettings(), {});
+                            QueryState->GetFormatsSettings(), {});
 
                         YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
@@ -2374,7 +2399,7 @@ public:
 
                 auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
                     phyQuery.GetResultBindings(i), response->GetArena(),
-                    QueryState->GetResultSetFormatSettings(), effectiveRowsLimit);
+                    QueryState->GetFormatsSettings(), effectiveRowsLimit);
                 response->AddYdbResults()->Swap(ydbResult);
             }
         }
@@ -2759,6 +2784,7 @@ public:
         if (QueryState) {
             QueryState->Orbit = std::move(ev->Get()->Orbit);
         }
+        ExecuterId = {};
 
         auto& response = ev->Get()->Record.GetResponse();
         if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -2771,6 +2797,8 @@ public:
                 // Terminate BufferActors without waiting
                 TerminateBufferActor(txCtx);
             }
+            CleanupCtx->TransactionsToBeAborted.clear();
+
             EndCleanup(CleanupCtx->Final);
             return;
         }
@@ -3015,7 +3043,7 @@ public:
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
                 hFunc(TEvKqp::TEvSplitResponse, HandleNoop);
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
-                hFunc(TEvKqpBuffer::TEvError, Handle);
+                hFunc(TEvKqpBuffer::TEvError, HandleCleanup);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);

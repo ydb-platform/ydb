@@ -18,6 +18,7 @@ private:
 
 public:
     virtual bool IsActive() const = 0;
+    virtual TString GetErrorMessage() const = 0;
     virtual TDuration GetTimeout() const = 0;
 
     TConclusionStatus OnDataChunk(const std::shared_ptr<arrow::Table>& data) {

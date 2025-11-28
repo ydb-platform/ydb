@@ -21,7 +21,8 @@ public:
 
     virtual void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) = 0;
     virtual void Push(TDqSerializedBatch&& batch, i64 space) = 0;
- 
+    virtual void Push(TInstant watermark) = 0;
+
     virtual void Finish() = 0;
 
     virtual bool IsPending() const { return false; };

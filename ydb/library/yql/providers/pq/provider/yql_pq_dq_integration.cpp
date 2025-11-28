@@ -265,6 +265,8 @@ public:
                         srcDesc.MutableWatermarks()->SetGranularityUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksLateArrivalDelayUsSetting) {
                         srcDesc.MutableWatermarks()->SetLateArrivalDelayUs(FromString<ui64>(Value(setting)));
+                    } else if (name == WatermarksIdleTimeoutUsSetting) {
+                        srcDesc.MutableWatermarks()->SetIdleTimeoutUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksIdlePartitionsSetting) {
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     } else if (name == SkipJsonErrors) {
@@ -457,10 +459,15 @@ public:
                 .WatermarksLateArrivalDelayMs
                 .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
             Add(props, WatermarksLateArrivalDelayUsSetting, ToString(lateArrivalDelay.MicroSeconds()), pos, ctx);
+
         }
 
         if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(false)) {
             Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
+            const auto idleTimeout = TDuration::MilliSeconds(wrSettings
+                .WatermarksIdleTimeoutMs
+                .GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs));
+            Add(props, WatermarksIdleTimeoutUsSetting, ToString(idleTimeout.MicroSeconds()), pos, ctx);
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)
@@ -476,7 +483,7 @@ public:
             .Done());
 
         TExprNode::TListType metadataFieldsList;
-        for (const auto& sysColumn : AllowedPqMetaSysColumns()) {
+        for (const auto& sysColumn : AllowedPqMetaSysColumns(State_->AllowTransparentSystemColumns)) {
             metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));
         }
 
@@ -531,10 +538,10 @@ private:
     TPqState* State_; // State owns dq integration, so back reference must be not smart.
 };
 
-}
+} // anonymous namespace
 
 THolder<IDqIntegration> CreatePqDqIntegration(const TPqState::TPtr& state) {
     return MakeHolder<TPqDqIntegration>(state);
 }
 
-}
+} // namespace NYql

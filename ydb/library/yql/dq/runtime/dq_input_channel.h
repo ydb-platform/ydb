@@ -24,6 +24,7 @@ public:
     virtual const TDqInputChannelStats& GetPushStats() const = 0;
 
     virtual void Push(TDqSerializedBatch&& data) = 0;
+    virtual void Push(TInstant watermark) = 0;
 
     virtual void Finish() = 0;
 };

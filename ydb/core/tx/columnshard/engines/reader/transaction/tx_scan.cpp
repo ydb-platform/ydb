@@ -68,9 +68,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
         TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
         read.TxId = txId;
-        if (request.HasLockTxId()) {
-            read.LockId = request.GetLockTxId();
-        }
+        read.SetLock(
+            request.HasLockTxId() ? std::make_optional(request.GetLockTxId()) : std::nullopt,
+            request.HasLockMode() ? std::make_optional(request.GetLockMode()) : std::nullopt,
+            Self->GetOperationsManager().GetLockOptional(request.GetLockTxId())
+        );
 
         {
             auto accConclusion =
@@ -105,7 +107,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 return request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
             }();
             auto constructor =
-                NReader::IScannerConstructor::TFactory::MakeHolder(read.TableMetadataAccessor->GetOverridenScanType(scanType), context);
+                NReader::IScannerConstructor::TFactory::MakeHolder(scanType, context);
             if (!constructor) {
                 return std::unique_ptr<IScannerConstructor>();
             }

@@ -136,10 +136,11 @@ protected:
                 node,
                 ctx,
                 input.Cast(),
-                false,              // analyticsHopping
+                false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                false,               // defaultWatermarksMode
-                true);              // syncActor
+                KqpCtx.Config->EnableWatermarks,
+                false
+            );
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());

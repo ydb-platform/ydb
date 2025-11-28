@@ -137,9 +137,9 @@ class TOperationsManager {
 
 public:
 
-    void StopWriting() {
+    void StopWriting(const TString& errorMessage) {
         for (auto&& i : Operations) {
-            i.second->StopWriting();
+            i.second->StopWriting(errorMessage);
         }
     }
 

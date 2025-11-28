@@ -227,7 +227,7 @@ def test_event_report(
                 "statistics": statistics
             })
 
-        allure_title = f"Test initialization for {workload_name}"
+        allure_title = f"Test initialization for {len(workload_names)} stress utils"
 
     elif event_kind == 'ClusterCheck':
         # ClusterCheck - проверка кластера
@@ -255,7 +255,7 @@ def test_event_report(
                 "statistics": stats
             })
 
-        allure_title = f"Cluster check results for {verification_phase} - {workload_name}"
+        allure_title = f"Cluster check results for {verification_phase} - {len(workload_names)} stress utils"
 
     else:
         raise ValueError(f"Unknown event_kind: {event_kind}")

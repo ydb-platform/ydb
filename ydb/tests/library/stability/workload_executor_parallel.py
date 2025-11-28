@@ -234,7 +234,7 @@ class ParallelWorkloadTestBase:
             # Collect node errors with details
             for node_error in node_errors:
                 if node_error.core_hashes:
-                    for core_id, core_hash in node_error.core_hashes:
+                    for core_id, core_hash, core_version in node_error.core_hashes:
                         node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
                 if node_error.was_oom:
                     node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
@@ -339,7 +339,7 @@ class ParallelWorkloadTestBase:
                     for success_info in successful_iterations:
                         error_details.append(f"  - Iteration {success_info['iteration']}: OK")
             error_details.append("\nRUN STATISTICS:")
-            error_details.append(f"  Successful runs: {result.get_successful_runs()}/{result.get_total_runs()}")
+            error_details.append(f"  Total runs: {result.get_total_runs()}")
             error_details.append(f"  Successful runs: {result.get_successful_runs()}")
             error_details.append(f"  Failed runs: {result.get_total_runs() - result.get_successful_runs()}")
             error_details.append(f"  Success rate: {(result.get_successful_runs() / result.get_total_runs()):.1%}")

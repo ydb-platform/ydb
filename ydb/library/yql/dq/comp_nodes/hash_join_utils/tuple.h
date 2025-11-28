@@ -9,6 +9,8 @@
 
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd.h>
 
+#include <string>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -216,6 +218,10 @@ struct TTupleLayout {
 
     bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
     bool KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
+
+    // Pretty prints a single packed tuple for debugging purposes.
+    // Fixed-size fields are printed as integers, variable-length fields as strings.
+    std::string Stringify(TSingleTuple tuple) const;
 };
 
 struct TTupleLayoutFallback : public TTupleLayout {

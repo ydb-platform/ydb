@@ -57,23 +57,19 @@ EExecutionStatus TTruncateUnit::Execute(
                << " tableId# " << tableId << " localTid# " << localTid << " TxId = " << op->GetTxId());
 
     // break locks
-    {
-        TDataShardLocksDb locksDb(DataShard, txc);
-        TSetupSysLocks guardLocks(op, DataShard, &locksDb);
-        const TTableId fullTableId(pathId.GetOwnerId(), tableId);
-        DataShard.SysLocksTable().BreakAllLocks(fullTableId);
-        DataShard.GetConflictsCache().GetTableCache(localTid).RemoveUncommittedWrites(op->GetTxId(), txc.DB);
-    }
+    TDataShardLocksDb locksDb(DataShard, txc);
+    TSetupSysLocks guardLocks(op, DataShard, &locksDb);
+    const TTableId fullTableId(pathId.GetOwnerId(), tableId);
+    DataShard.SysLocksTable().BreakAllLocks(fullTableId);
+    DataShard.GetConflictsCache().GetTableCache(localTid).RemoveUncommittedWrites(op->GetTxId(), txc.DB);
 
     txc.DB.Truncate(localTid);
     txc.DB.NoMoreReadsForTx();
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-    {
-        DataShard.SysLocksTable().ApplyLocks();
-        DataShard.SubscribeNewLocks(actorCtx);
-    }
+    DataShard.SysLocksTable().ApplyLocks();
+    DataShard.SubscribeNewLocks(actorCtx);
     
     LOG_DEBUG_S(actorCtx, NKikimrServices::TX_DATASHARD,
                "TTruncateUnit::Execute - Finished successfully. TableId = " << tableId

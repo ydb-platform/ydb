@@ -1,6 +1,8 @@
 RECURSE(
     ydb
     tool
-    lib
+)
+
+RECURSE_FOR_TESTS(
     tests
 )

@@ -3,14 +3,16 @@ PY3TEST()
     TAG(ya:manual)
 
     SIZE(LARGE)
-
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
     ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
     ENV(NEMESIS_BINARY="ydb/tests/tools/nemesis/driver/nemesis")
 
+    PY_SRCS(
+        all_workloads.py
+    )
     TEST_SRCS (
         test_workload_parallel.py
         test_per_workload.py
-        all_workloads.py
     )
 
     PEERDIR (

@@ -8,17 +8,7 @@ PY3_LIBRARY()
     )
 
     PEERDIR (
-        contrib/python/allure-pytest
-        contrib/python/allure-python-commons
-        contrib/python/matplotlib
-        contrib/python/pytest-timeout
-        ydb/public/sdk/python/enable_v3_new_behavior
-        ydb/tests/olap/lib
-        ydb/tests/olap/load/lib
-        ydb/tests/olap/scenario/helpers
         ydb/tests/library/stability/utils
-        library/python/testing/yatest_common
-        ydb/public/sdk/python
     )
 
 END()

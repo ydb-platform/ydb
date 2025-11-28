@@ -11835,7 +11835,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCopyTable(runtime, ++txId, "/MyRoot", "SystemColumnInCopyAllowed", "/MyRoot/SystemColumnAllowed");
     }
 
-    Y_UNIT_TEST_FLAG(CopyIndexImplTable, EnableAccessToIndexImplTables) {
+    Y_UNIT_TEST_FLAG(CopyTableAccessToPrivatePaths , EnableAccessToIndexImplTables) {
+        // Test copy behavior for all path types: table, index, indexImplTable, changefeed, streamImpl
+        // Only indexImplTable behavior changes based on EnableAccessToIndexImplTables flag.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAccessToIndexImplTables(EnableAccessToIndexImplTables));
         ui64 txId = 100;
@@ -11855,12 +11857,37 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )");
         env.TestWaitNotification(runtime, {101, 102});
 
+        // Create a CDC stream (changefeed) on the table
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/DirA", R"(
+            TableName: "Table1"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Copying main table should always succeed (regardless of flag)
+        TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copyTable", "/MyRoot/DirA/Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        // Copying index path should always fail with StatusNameConflict (it's not a table)
+        TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copyIndex", "/MyRoot/DirA/Table1/UserDefinedIndexByValue0", TEvSchemeShard::EStatus::StatusNameConflict);
+
+        // Copying indexImplTable - behavior depends on flag
         if (EnableAccessToIndexImplTables) {
-            TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copy", "/MyRoot/DirA/Table1/UserDefinedIndexByValue0/indexImplTable");
+            TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copyIndexImpl", "/MyRoot/DirA/Table1/UserDefinedIndexByValue0/indexImplTable");
             env.TestWaitNotification(runtime, txId);
         } else {
-            TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copy", "/MyRoot/DirA/Table1/UserDefinedIndexByValue0/indexImplTable", TEvSchemeShard::EStatus::StatusNameConflict);
+            TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copyIndexImpl", "/MyRoot/DirA/Table1/UserDefinedIndexByValue0/indexImplTable", TEvSchemeShard::EStatus::StatusNameConflict);
         }
+
+        // Copying changefeed path should always fail (it's not a table)
+        TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copyChangefeed", "/MyRoot/DirA/Table1/Stream", TEvSchemeShard::EStatus::StatusNameConflict);
+
+        // Copying streamImpl path should always fail (it's inside CDC stream path)
+        TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copyStreamImpl", "/MyRoot/DirA/Table1/Stream/streamImpl", TEvSchemeShard::EStatus::StatusNameConflict);
     }
 
     Y_UNIT_TEST_FLAG(BackupBackupCollection, WithIncremental) {

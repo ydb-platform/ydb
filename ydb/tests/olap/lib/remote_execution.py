@@ -122,7 +122,7 @@ class RemoteExecutor:
     @classmethod
     def execute_command(
         cls, host: str, cmd: Union[str, list], raise_on_error: bool = True,
-        timeout: Optional[float] = 10, raise_on_timeout: bool = True
+        timeout: Optional[float] = None, raise_on_timeout: bool = True
     ) -> ExecutionResult:
         """
         Выполняет команду на хосте через SSH или локально
@@ -361,7 +361,7 @@ class RemoteExecutor:
 # Удобные функции для прямого использования
 def execute_command(
     host: str, cmd: Union[str, list], raise_on_error: bool = True,
-    timeout: Optional[float] = 10, raise_on_timeout: bool = True
+    timeout: Optional[float] = None, raise_on_timeout: bool = True
 ) -> ExecutionResult:
     """
     Удобная функция для выполнения команды на хосте
@@ -418,9 +418,11 @@ def ensure_directory_with_permissions(host: str, path: str, raise_on_error: bool
     Создает директорию и устанавливает права 777
     """
     try:
-        # created_without_sudo = execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False, timeout=10).exit_code == 0
-        # if created_without_sudo:
-        #     return True
+        if execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False, timeout=10).exit_code == 0:
+            return True
+        created_without_sudo = execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False, timeout=10).exit_code == 0
+        if created_without_sudo:
+            return True
         created_with_sudo = execute_command(host, f"sudo mkdir -p {path} && sudo chmod 777 {path}", raise_on_error=raise_on_error, timeout=10).exit_code == 0
         return created_with_sudo
     except Exception as e:
@@ -480,7 +482,7 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
             with tempfile.NamedTemporaryFile(delete=False, prefix="deploy_") as tmp_file:
                 temp_path = tmp_file.name
             shutil.copy2(local_path, temp_path)
-            execute_command("localhost", f"sudo mv {temp_path} {remote_path}", timeout=30)
+            execute_command("localhost", f"sudo mv {temp_path} {remote_path}")
             return f"Local copy with sudo successful: {remote_path}"
     else:
         # Удаленное копирование через SCP + временный файл
@@ -503,8 +505,8 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
         yatest.common.execute(scp_cmd, wait=True, check_exit_code=True)
 
         # Перемещаем из /tmp в целевое место
-        if execute_command(host, f"mv {tmp_path} {remote_path}", raise_on_error=False, timeout=30).exit_code != 0:
-            execute_command(host, f"sudo mv {tmp_path} {remote_path}", raise_on_error=True, timeout=30)
+        if execute_command(host, f"mv {tmp_path} {remote_path}", raise_on_error=False).exit_code != 0:
+            execute_command(host, f"sudo mv {tmp_path} {remote_path}", raise_on_error=True)
         return f"SCP copy successful: {remote_path}"
 
 
@@ -535,8 +537,8 @@ def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: 
 
         # Делаем исполняемым
         if make_executable:
-            if execute_command(host, f"chmod +x {target_path}", raise_on_error=False, timeout=10).exit_code != 0:
-                execute_command(host, f"sudo chmod +x {target_path}", raise_on_error=True, timeout=10)
+            if execute_command(host, f"chmod +x {target_path}", raise_on_error=False).exit_code != 0:
+                execute_command(host, f"sudo chmod +x {target_path}", raise_on_error=True)
 
         return {
             'name': binary_name,
@@ -576,7 +578,7 @@ def deploy_binaries_to_hosts(
         host_results = {}
 
         # Создаем директорию на хосте один раз
-        ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
+        ensure_directory_with_permissions(host, target_dir, raise_on_error=True)
 
         # Копируем каждый бинарный файл
         for binary_file in binary_files:

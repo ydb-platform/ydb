@@ -443,9 +443,9 @@ def ensure_directory_with_permissions(host: str, path: str, raise_on_error: bool
         bool: True if directory was created/set, False on error
     """
     try:
-        # created_without_sudo = execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False, timeout=10).exit_code == 0
-        # if created_without_sudo:
-        #     return True
+        created_without_sudo = execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False, timeout=10).exit_code == 0
+        if created_without_sudo:
+            return True
         created_with_sudo = execute_command(host, f"sudo mkdir -p {path} && sudo chmod 777 {path}", raise_on_error=raise_on_error, timeout=10).exit_code == 0
         return created_with_sudo
     except Exception as e:

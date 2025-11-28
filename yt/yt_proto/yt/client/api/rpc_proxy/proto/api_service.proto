@@ -2637,6 +2637,28 @@ message TRspListJobTraces
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqCheckOperationPermission
+{
+    required string user = 1;
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 2;
+        string operation_alias = 3;
+    }
+    required int32 permission = 4;
+}
+
+message TCheckOperationPermissionResult
+{
+    required ESecurityAction action = 1;
+}
+
+message TRspCheckOperationPermission
+{
+    required TCheckOperationPermissionResult result = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqGetJob
 {
     oneof operation_id_or_alias {

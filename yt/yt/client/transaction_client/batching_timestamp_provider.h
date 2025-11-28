@@ -10,7 +10,7 @@ namespace NYT::NTransactionClient {
 
 ITimestampProviderPtr CreateBatchingTimestampProvider(
     ITimestampProviderPtr underlying,
-    TDuration batchPeriod);
+    const TRemoteTimestampProviderConfigPtr& config);
 
 ////////////////////////////////////////////////////////////////////////////////
 

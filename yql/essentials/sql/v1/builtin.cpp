@@ -1276,8 +1276,10 @@ public:
                     MakeAtomFromExpression(Pos_, ctx, Args_[i]->GetTupleElement(0)).Build(),
                     Args_[i]->GetTupleElement(1)));
             } else {
-                ctx.Error(Pos_) << OpName_ << " requires arguments to be tuples of size 2: prefix and struct";
-                return false;
+                auto tuple = Y("EnsureTupleSize", Args_[i], Q("2"));
+                Args_[i] = Q(Y(
+                    MakeAtomFromExpression(Pos_, ctx, Y("Nth", tuple, Q("0"))).Build(),
+                    Y("Nth", tuple, Q("1"))));
             }
         }
         return TCallNode::DoInit(ctx, src);

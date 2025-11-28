@@ -1077,7 +1077,7 @@ Y_UNIT_TEST(StringifyFixedSize) {
     col2[0] = 200;
     col3[0] = 300;
     col4[0] = 400;
-    
+
     col1[1] = 1000;
     col2[1] = 2000;
     col3[1] = 3000;
@@ -1197,7 +1197,7 @@ Y_UNIT_TEST(StringifyVarSize) {
     UNIT_ASSERT(str1.find("123") != std::string::npos);
     UNIT_ASSERT(str1.find("\"hello\"") != std::string::npos);
 
-    // Test Stringify for second tuple  
+    // Test Stringify for second tuple
     TSingleTuple tuple2{.PackedData = res.data() + tl->TotalRowSize, .OverflowBegin = overflow.data()};
     std::string str2 = tl->Stringify(tuple2);
     CTEST << "VarSize Tuple 2: " << str2 << Endl;

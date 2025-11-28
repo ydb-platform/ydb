@@ -13,6 +13,10 @@ TPhantomFlagStorageState::TPhantomFlagStorageState(TIntrusivePtr<TSyncLogCtx> sl
 {}
 
 void TPhantomFlagStorageState::StartBuilding() {
+    if (GType.BlobSubgroupSize() > MaxExpectedDisksInGroup) {
+        // PhantomFlagStorage doesn't work with weird group configurations to minimize memory consumption
+        return;
+    }
     Active = true;
     Building = true;
 }

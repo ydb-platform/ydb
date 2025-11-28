@@ -47,7 +47,7 @@ namespace NKikimr {
             , EnablePhantomFlagStorage(SlCtx->EnablePhantomFlagStorage)
             , PhantomFlagStorageLimit(SlCtx->PhantomFlagStorageLimit)
         {
-            Y_VERIFY_S(SlCtx->VCtx->Top->GetTotalVDisksNum() <= MaxExpectedDisksInGroup,
+            Y_VERIFY_S(SlCtx->VCtx->Top->GetTotalVDisksNum() <= MaxPossibleDisksInGroup,
                     "Bad erasure# " << TBlobStorageGroupType::ErasureSpeciesName(SlCtx->VCtx->Top->GType.GetErasure()));
             SyncedLsns.resize(SlCtx->VCtx->Top->GetTotalVDisksNum());
             ui32 selfOrderNum = SlCtx->VCtx->Top->GetOrderNumber(SlCtx->VCtx->ShortSelfVDisk);

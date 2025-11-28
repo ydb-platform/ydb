@@ -121,7 +121,7 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
     return result;
 }
 
-NKikimrSchemeOp::EIndexType GetIndexType(NKikimrSchemeOp::TIndexCreationConfig indexCreation) {
+NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationConfig& indexCreation) {
     // TODO: always provide EIndexTypeGlobal value instead of null
     // TODO: do not cast unknown index types to EIndexTypeGlobal (proto2 specific)
     return indexCreation.HasType()

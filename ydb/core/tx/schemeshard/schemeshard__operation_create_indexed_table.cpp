@@ -40,46 +40,21 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     auto indexedTable = tx.GetCreateIndexedTable();
     const NKikimrSchemeOp::TTableDescription& baseTableDescription = indexedTable.GetTableDescription();
 
-    ui32 sequencesCount = indexedTable.SequenceDescriptionSize();
     ui32 indexCount = indexedTable.IndexDescriptionSize();
     ui32 totalIndexTables = 0;
-    ui32 indexTableShards = 0;
-    for (const auto& desc : indexedTable.GetIndexDescription()) {
-        ui32 indexTableCount = 1;
-        switch (GetIndexType(desc)) {
-            case NKikimrSchemeOp::EIndexTypeGlobal:
-            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-                break;
-            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
-                const bool prefixVectorIndex = desc.GetKeyColumnNames().size() > 1;
-                indexTableCount = (prefixVectorIndex ? 3 : 2);
-                sequencesCount += (prefixVectorIndex ? 1 : 0);
-                break;
-            }
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
-                bool withRelevance = desc.GetFulltextIndexDescription().GetSettings()
-                    .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
-                indexTableCount = (withRelevance ? 4 : 1);
-                break;
-            }
-            default:
-                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(desc.GetType()));
-                break;
-        }
-        if (desc.IndexImplTableDescriptionsSize() == indexTableCount) {
-            for (const auto& indexTableDesc: desc.GetIndexImplTableDescriptions()) {
-                indexTableShards += TTableInfo::ShardsToCreate(indexTableDesc);
-            }
-        } else {
-            indexTableShards += indexTableCount;
-        }
+    ui32 totalSequences = indexedTable.SequenceDescriptionSize();
+    ui32 totalIndexShards = 0;
+    for (const auto& indexDesc : indexedTable.GetIndexDescription()) {
+        ui32 indexTableCount = 0, indexSequenceCount = 0, indexTableShards = 0;
+        TTableInfo::GetIndexObjectCount(indexDesc, indexTableCount, indexSequenceCount, indexTableShards);
         totalIndexTables += indexTableCount;
+        totalSequences += indexSequenceCount;
+        totalIndexShards += indexTableShards;
     }
 
     ui32 baseShards = TTableInfo::ShardsToCreate(baseTableDescription);
-    ui32 shardsToCreate = baseShards + indexTableShards;
-    ui32 pathToCreate = 1 + indexCount + totalIndexTables + sequencesCount;
+    ui32 shardsToCreate = baseShards + totalIndexShards;
+    ui32 pathToCreate = 1 + indexCount + totalIndexTables + totalSequences;
 
     TPath workingDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     if (workingDir.IsEmpty()) {
@@ -112,7 +87,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
     TSubDomainInfo::TPtr domainInfo = baseTablePath.DomainInfo();
 
-    if (sequencesCount > 0 && domainInfo->GetSequenceShards().empty()) {
+    if (totalSequences > 0 && domainInfo->GetSequenceShards().empty()) {
         ++shardsToCreate;
     }
 

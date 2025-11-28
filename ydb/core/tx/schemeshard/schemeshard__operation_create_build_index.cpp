@@ -40,7 +40,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     const auto& op = tx.GetInitiateIndexBuild();
     const auto& indexDesc = op.GetIndex();
 
-    ui32 indexTableCount = 1;
     switch (GetIndexType(indexDesc)) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -55,33 +54,29 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             if (!context.SS->EnableVectorIndex) {
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
             }
-            const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
-            indexTableCount = (prefixVectorIndex ? 3 : 2);
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
             if (!context.SS->EnableFulltextIndex) {
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
             }
-            bool withRelevance = indexDesc.GetFulltextIndexDescription().GetSettings()
-                .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
-            indexTableCount = (withRelevance ? 4 : 1);
             break;
         }
         default:
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
-    ui32 indexTableShards = 0;
-    if (indexDesc.IndexImplTableDescriptionsSize() == indexTableCount) {
-        for (const auto& indexTableDesc: indexDesc.GetIndexImplTableDescriptions()) {
-            indexTableShards += TTableInfo::ShardsToCreate(indexTableDesc);
-        }
-    } else {
-        indexTableShards = indexTableCount;
-    }
+    ui32 indexTableCount = 0, sequenceCount = 0, indexTableShards = 0;
+    TTableInfo::GetIndexObjectCount(indexDesc, indexTableCount, sequenceCount, indexTableShards);
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
+    auto tableInfo = context.SS->Tables.at(table.Base()->PathId);
+    auto domainInfo = table.DomainInfo();
+
+    if (sequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
+        ++indexTableShards;
+    }
+
     const auto index = table.Child(indexDesc.GetName());
     {
         const auto checks = index.Check();
@@ -101,7 +96,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         checks
             .IsValidLeafName(context.UserToken.Get())
-            .PathsLimit(1 + indexTableCount)
+            .PathsLimit(1 + indexTableCount + sequenceCount)
             .DirChildrenLimit();
 
         if (!tx.GetInternal()) {
@@ -113,9 +108,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
         }
     }
-
-    auto tableInfo = context.SS->Tables.at(table.Base()->PathId);
-    auto domainInfo = table.DomainInfo();
 
     const ui64 aliveIndices = context.SS->GetAliveChildren(table.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
     if (aliveIndices + 1 > domainInfo->GetSchemeLimits().MaxTableIndices) {

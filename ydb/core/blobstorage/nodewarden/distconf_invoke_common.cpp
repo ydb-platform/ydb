@@ -165,6 +165,9 @@ namespace NKikimr::NStorage {
                     case TQuery::kNotifyBridgeSuspended:
                         return NotifyBridgeSuspended(op.Command.GetNotifyBridgeSuspended());
 
+                    case TQuery::kDescendCommittedStorageConfig:
+                        return DescendCommittedStorageConfig(op.Command.GetDescendCommittedStorageConfig());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
                 }
@@ -185,8 +188,7 @@ namespace NKikimr::NStorage {
                     } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
                         throw TExError() << *r.ErrorReason;
                     } else if (r.ConfigToPropose) {
-                        StartProposition(&r.ConfigToPropose.value(), /*acceptLocalQuorum=*/ true,
-                            /*requireScepter=*/ false, /*mindPrev=*/ true,
+                        StartProposition(&r.ConfigToPropose.value(), /*mindPrev=*/ true,
                             r.PropositionBase ? &r.PropositionBase.value() : nullptr, r.AutomaticBootstrap);
                     } else {
                         Finish(TResult::OK, std::nullopt);
@@ -230,19 +232,26 @@ namespace NKikimr::NStorage {
         StartProposition(request->MutableConfig());
     }
 
+    void TInvokeRequestHandlerActor::DescendCommittedStorageConfig(const TQuery::TDescendCommittedStorageConfig& request) {
+        if (!Self->BridgeInfo) {
+            throw TExError() << "Not in bridge mode";
+        } else {
+            Self->ApplyCommittedStorageConfig(request.GetCommittedStorageConfig());
+            Finish(TResult::OK, std::nullopt);
+        }
+    }
+
     void TInvokeRequestHandlerActor::AdvanceGeneration() {
         RunCommonChecks();
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         StartProposition(&config);
     }
 
-    void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum,
-            bool requireScepter, bool mindPrev, const NKikimrBlobStorage::TStorageConfig *propositionBase,
-            bool fromBootstrap) {
-        if (!Self->HasConnectedNodeQuorum(*config, acceptLocalQuorum)) {
-            throw TExError() << "No quorum to start propose/commit configuration";
-        } else if (requireScepter && !Self->Scepter) {
-            throw TExError() << "No scepter";
+    void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
+            const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap) {
+        if (!Self->HasConnectedNodeQuorum(*config)) {
+            // we won't be able to have quorum for this configuration if we start proposing now
+            throw TExNoQuorum() << "No quorum to start propose/commit configuration";
         }
 
         if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query)) {

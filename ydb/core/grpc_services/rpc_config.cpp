@@ -24,7 +24,8 @@ using TEvFetchStorageConfigRequest =
         Ydb::Config::FetchConfigResponse>;
 using TEvBootstrapClusterRequest =
     TGrpcRequestOperationCall<Ydb::Config::BootstrapClusterRequest,
-        Ydb::Config::BootstrapClusterResponse>;
+        Ydb::Config::BootstrapClusterResponse,
+        NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -162,7 +163,7 @@ public:
             return;
         }
         self->Become(&TReplaceStorageConfigRequest::StateFunc);
-        self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false)); 
+        self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false));
     }
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
@@ -254,14 +255,14 @@ private:
             TargetDatabase = metadata.Database;
         }
         else {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata", 
+            Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata",
                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
             return;
         }
 
-        if (*TargetDatabase == ("/" + AppData()->DomainsInfo->Domain->Name) || 
+        if (*TargetDatabase == ("/" + AppData()->DomainsInfo->Domain->Name) ||
             *TargetDatabase == AppData()->DomainsInfo->Domain->Name) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Provided database is a domain database.", 
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Provided database is a domain database.",
                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
             return;
         }
@@ -289,14 +290,14 @@ private:
         };
         auto pipe = NTabletPipe::CreateClient(SelfId(), MakeConsoleID(), pipeConfig);
         ConsolePipe = RegisterWithSameMailbox(pipe);
-        
+
         auto PrepareAndSendRequest = [&](auto requestType) {
             using TRequestType = decltype(requestType);
             auto request = std::make_unique<TRequestType>();
             request->Record.SetUserToken(Request_->GetSerializedToken());
             request->Record.SetPeerName(Request_->GetPeerName());
             request->Record.SetIngressDatabase(*TargetDatabase);
-            
+
             auto& req = *request->Record.MutableRequest();
             req.set_config(*DatabaseConfig);
 
@@ -578,4 +579,3 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
 }
 
 } // namespace NKikimr::NGRpcService
-

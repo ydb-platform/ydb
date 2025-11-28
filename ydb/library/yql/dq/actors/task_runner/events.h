@@ -226,8 +226,6 @@ struct TEvTaskRunFinished
         ui64 mkqlMemoryLimit = 0,
         THolder<TMiniKqlProgramState>&& programState = nullptr,
         TMaybe<TInstant> watermarkInjectedToOutputs = Nothing(),
-        TVector<ui32>&& finishedInputsWithWatermarks = {},
-        TVector<ui32>&& finishedSourcesWithWatermarks = {},
         bool checkpointRequestedFromTaskRunner = false,
         TDuration computeTime = TDuration::Zero())
         : RunStatus(runStatus)
@@ -238,8 +236,6 @@ struct TEvTaskRunFinished
         , MkqlMemoryLimit(mkqlMemoryLimit)
         , ProgramState(std::move(programState))
         , WatermarkInjectedToOutputs(watermarkInjectedToOutputs)
-        , FinishedInputsWithWatermarks(finishedInputsWithWatermarks)
-        , FinishedSourcesWithWatermarks(finishedSourcesWithWatermarks)
         , CheckpointRequestedFromTaskRunner(checkpointRequestedFromTaskRunner)
         , ComputeTime(computeTime)
     { }
@@ -253,8 +249,6 @@ struct TEvTaskRunFinished
     ui64 MkqlMemoryLimit = 0;
     THolder<TMiniKqlProgramState> ProgramState;
     TMaybe<TInstant> WatermarkInjectedToOutputs = Nothing();
-    TVector<ui32> FinishedInputsWithWatermarks;
-    TVector<ui32> FinishedSourcesWithWatermarks;
     bool CheckpointRequestedFromTaskRunner = false;
     TDuration ComputeTime;
 };
@@ -348,13 +342,15 @@ struct TEvContinueRun
 struct TEvSourceDataAck
     : NActors::TEventLocal<TEvSourceDataAck, TTaskRunnerEvents::EvSourceDataAck>
 {
-    TEvSourceDataAck(ui64 index, i64 freeSpaceLeft)
+    TEvSourceDataAck(ui64 index, i64 freeSpaceLeft, bool finish = false)
         : Index(index)
         , FreeSpaceLeft(freeSpaceLeft)
+        , Finish(finish)
     { }
 
     const ui64 Index;
     const i64 FreeSpaceLeft;
+    const bool Finish;
 };
 
 //Sent by ComputeActor to TaskRunnerActor to request output data from a sink.

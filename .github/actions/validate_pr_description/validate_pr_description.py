@@ -58,18 +58,26 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
         return False, txt
 
     category = categories[0]
+    category_lower = category.lower()
 
-    if not any(category.lower() == valid_cat.lower() for valid_cat in ALL_CATEGORIES):
+    # Check if category matches any valid category using startswith for flexible matching
+    def category_matches(cat):
+        """Check if category matches a valid category (supports variants like 'Not for changelog' vs 'Not for changelog (...)')"""
+        base = cat.lower().split('(')[0].strip()
+        return category_lower.startswith(base) or base.startswith(category_lower)
+    
+    if not any(category_matches(cat) for cat in ALL_CATEGORIES):
         txt = f"Invalid Changelog category: {category}"
         print(f"::warning::{txt}")
         return False, txt
 
-    if not is_not_for_cl_valid and any(category.lower() == cat.lower() for cat in NOT_FOR_CHANGELOG_CATEGORIES):
+    is_not_for_changelog = any(category_matches(cat) for cat in NOT_FOR_CHANGELOG_CATEGORIES)
+    if not is_not_for_cl_valid and is_not_for_changelog:
         txt = f"Category is not for changelog: {category}"
         print(f"::notice::{txt}")
         return False, txt
 
-    if not any(category.lower() == cat.lower() for cat in NOT_FOR_CHANGELOG_CATEGORIES):
+    if not is_not_for_changelog:
         # After normalization, we can safely use \n
         entry_section = re.search(r"### Changelog entry[^\n]*\n+(.*?)(\n###|$)", description, re.DOTALL)
         if not entry_section or len(entry_section.group(1).strip()) < 20:

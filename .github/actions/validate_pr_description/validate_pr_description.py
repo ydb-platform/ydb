@@ -287,7 +287,9 @@ def ensure_tables_in_pr_body(pr_body: str, pr_number: int, base_ref: str, app_do
     if not has_backport_table:
         backport_table = generate_backport_table(pr_number, app_domain)
     
+    # Check if legend already exists
     legend = get_legend()
+    has_legend = "**Legend:**" in pr_body
     
     # Combine tables side by side using HTML table
     tables_html = ""
@@ -314,9 +316,15 @@ def ensure_tables_in_pr_body(pr_body: str, pr_number: int, base_ref: str, app_do
     if reviewers_section_marker not in pr_body:
         # If section not found, add at the end
         if pr_body.strip():
-            return pr_body.rstrip() + "\n\n" + tables_html + legend
+            result = pr_body.rstrip() + "\n\n" + tables_html
+            if not has_legend:
+                result += legend
+            return result
         else:
-            return tables_html + legend
+            result = tables_html
+            if not has_legend:
+                result += legend
+            return result
     
     # Find the end of "Description for reviewers" section (before next ### heading)
     lines = pr_body.split('\n')
@@ -332,7 +340,10 @@ def ensure_tables_in_pr_body(pr_body: str, pr_number: int, base_ref: str, app_do
             break
     
     # Insert tables and legend after "Description for reviewers" section
-    new_lines = lines[:insertion_index] + [""] + [tables_html] + [legend] + lines[insertion_index:]
+    new_lines = lines[:insertion_index] + [""] + [tables_html]
+    if not has_legend:
+        new_lines.append(legend)
+    new_lines.extend(lines[insertion_index:])
     return '\n'.join(new_lines)
 
 def update_pr_body(pr_number: int, new_body: str) -> None:

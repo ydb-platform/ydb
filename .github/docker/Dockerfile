@@ -48,4 +48,4 @@ EXPOSE ${YDB_KAFKA_PROXY_PORT:-9092}
 
 HEALTHCHECK --start-period=60s --interval=60s CMD sh /health_check
 
-CMD ["bash", "/initialize_local_ydb"]
+ENTRYPOINT ["bash", "/initialize_local_ydb"]

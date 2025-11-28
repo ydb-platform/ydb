@@ -411,7 +411,7 @@ private:
             return;
         }
         
-        LOG_I("Prepare to shutdown: do not acccept any messages from this time"
+        LOG_I("Prepare to shutdown: do not accept any messages from this time"
             << ", sender: " << ev->Sender
             << ", self: " << SelfId());
         ShutdownState_.Reset(ev->Get()->ShutdownState.Get());

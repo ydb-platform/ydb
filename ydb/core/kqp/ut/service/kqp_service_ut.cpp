@@ -684,16 +684,10 @@ struct TDictCase {
     Y_UNIT_TEST(ThreeNodesGradualShutdown) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableShuttingDownNodeState(true);
-        
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableShuttingDownNodeState(true);
-        
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetFeatureFlags(featureFlags)
-                                        .SetNodeCount(3)
-                                        .SetUseRealThreads(false));
-        kikimr.RunCall([&]() {CreateLargeTable(kikimr, 100, 2, 2, 10, 2);});
 
-        // Create ONE shared TKqpShutdownState for all nodes
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetNodeCount(3)
+                                            .SetUseRealThreads(false));
+        kikimr.RunCall([&]() {CreateLargeTable(kikimr, 100, 2, 2, 10, 2);});
 
         auto queries = std::vector<TString>({
             R"(
@@ -729,5 +723,5 @@ struct TDictCase {
 
 }
 
-} // namspace NKqp
+} // namespace NKqp
 } // namespace NKikimr

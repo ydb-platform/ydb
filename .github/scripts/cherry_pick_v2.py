@@ -14,9 +14,9 @@ import argparse
 import re
 import tempfile
 import shutil
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Any
 from dataclasses import dataclass, field
-from github import Github, GithubException, PullRequest, Auth
+from github import Github, GithubException, Auth
 import requests
 
 try:
@@ -40,13 +40,13 @@ class Source:
     title: str
     body_item: str
     author: Optional[str]
-    pull_requests: List[PullRequest]
+    pull_requests: List[Any]
 
 
 @dataclass
 class BackportResult:
     target_branch: str
-    pr: Optional[PullRequest] = None
+    pr: Optional[Any] = None
     conflict_files: List[ConflictInfo] = field(default_factory=list)
     cherry_pick_logs: List[str] = field(default_factory=list)
     
@@ -108,7 +108,7 @@ def create_commit_source(commit, repo, logger) -> Source:
     )
 
 
-def create_pr_source(pull: PullRequest, allow_unmerged: bool, logger) -> Source:
+def create_pr_source(pull: Any, allow_unmerged: bool, logger) -> Source:
     """Creates source from PR"""
     if not pull.merged:
         commit_shas = [c.sha for c in pull.get_commits()]
@@ -155,7 +155,7 @@ def detect_conflicts(repo_path: str, logger) -> List[ConflictInfo]:
     return conflict_files
 
 
-def get_linked_issues(repo, token: str, pull_requests: List[PullRequest], logger) -> str:
+def get_linked_issues(repo, token: str, pull_requests: List[Any], logger) -> str:
     """Gets linked issues for all PRs"""
     all_issues = []
     owner, repo_name = repo.full_name.split('/')
@@ -385,7 +385,7 @@ After resolving conflicts:
     return title, body
 
 
-def find_existing_backport_comment(pull: PullRequest, logger):
+def find_existing_backport_comment(pull: Any, logger):
     """Finds existing backport comment"""
     try:
         for comment in pull.get_issue_comments():
@@ -396,7 +396,7 @@ def find_existing_backport_comment(pull: PullRequest, logger):
     return None
 
 
-def update_comments(backport_comments: List[Tuple[PullRequest, object]], results: List, skipped_branches: List[Tuple[str, str]], target_branches: List[str], workflow_url: Optional[str], logger):
+def update_comments(backport_comments: List[Tuple[Any, object]], results: List, skipped_branches: List[Tuple[str, str]], target_branches: List[str], workflow_url: Optional[str], logger):
     """Updates comments with backport results"""
     if not backport_comments:
         return

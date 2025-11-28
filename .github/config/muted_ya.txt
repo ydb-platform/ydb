@@ -19,7 +19,6 @@ ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.TestReadLargeParquetFile
 ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
-ydb/core/kqp/ut/olap KqpOlapLocks.DeleteAbsentMultipleShards+Reboot
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
@@ -48,7 +47,6 @@ ydb/core/persqueue/ut/slow SlowTopicAutopartitioning.CDC_Write
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tablet_flat/ut TSharedPageCache.Compaction_BTreeIndex
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_ColumnTable
-ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_ColumnTable_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_RowTable_TopicAutoPartitioning
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many

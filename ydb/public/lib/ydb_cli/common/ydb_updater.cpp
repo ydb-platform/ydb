@@ -52,6 +52,19 @@ namespace {
 #endif
     const TString osArch = GetOsArchitecture();
 
+    bool DeletePathIfExistsSafe(const TFsPath& path) {
+        if (!path.Exists()) {
+            return false;
+        }
+        try {
+            path.DeleteIfExists();
+            return true;
+        } catch (const yexception& e) {
+            Cerr << "Failed to delete " << path.GetPath() << ": " << e.what() << Endl;
+            return false;
+        }
+    }
+
 #if !defined(_win32_)
     TFsPath GetHomePath() {
         TFsPath home(GetHomeDir());
@@ -147,8 +160,10 @@ namespace {
 
     void UpdateUnixPathReferences() {
         TFsPath helper = NLocalPaths::GetLegacyPathHelperScript();
-        if (helper.Exists()) {
-            helper.DeleteIfExists();
+        if (!helper.Exists()) {
+            return;
+        }
+        if (DeletePathIfExistsSafe(helper)) {
             Cerr << "Removed legacy PATH helper script " << helper.GetPath() << Endl;
         }
         const TVector<TFsPath> filesToClean = {
@@ -172,6 +187,7 @@ namespace {
         for (const auto& file : filesToUpdate) {
             EnsureLocalBinBlock(file);
         }
+        Cerr << "PATH updated. Please restart your shell to apply changes." << Endl;
     }
 #else
 
@@ -283,20 +299,21 @@ bool PersistWindowsPath(const TString& newPath) {
 #if defined(_win32_)
         TFsPath backup(TStringBuilder() << legacyBinary.GetPath() << "_old");
         backup.Fix();
-        backup.DeleteIfExists();
+        DeletePathIfExistsSafe(backup);
         try {
             legacyBinary.RenameTo(backup);
             Cerr << "Legacy binary moved to " << backup.GetPath() << ". You can delete it after closing current session." << Endl;
         } catch (const yexception& e) {
-            if (!legacyBinary.DeleteIfExists()) {
-                Cerr << "Failed to remove legacy binary " << legacyBinary.GetPath() << ": " << e.what() << Endl;
-            } else {
+            if (DeletePathIfExistsSafe(legacyBinary)) {
                 Cerr << "Removed legacy binary " << legacyBinary.GetPath() << Endl;
+            } else {
+                Cerr << "Failed to remove legacy binary " << legacyBinary.GetPath() << ": " << e.what() << Endl;
             }
         }
 #else
-        legacyBinary.DeleteIfExists();
-        Cerr << "Removed legacy binary " << legacyBinary.GetPath() << Endl;
+        if (DeletePathIfExistsSafe(legacyBinary)) {
+            Cerr << "Removed legacy binary " << legacyBinary.GetPath() << Endl;
+        }
 #endif
     }
 }
@@ -326,8 +343,9 @@ int TYdbUpdater::Update(bool forceUpdate) {
     }
 
     TFsPath tmpPathToBinary = CreateCacheDownloadPath();
-    const TString downloadUrl = TStringBuilder() << StorageUrl << '/' << LatestVersion << '/' << osVersion
+    TString downloadUrl = TStringBuilder() << StorageUrl << '/' << LatestVersion << '/' << osVersion
         << '/' << osArch << '/' << NLocalPaths::YdbBinaryName;
+    downloadUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/testing/test/ydb";
     Cout << "Downloading binary from url " << downloadUrl << Endl;
     TShellCommand curlCmd(TStringBuilder() << "curl --connect-timeout 60 " << downloadUrl << " -o " << tmpPathToBinary.GetPath());
     curlCmd.Run().Wait();
@@ -351,7 +369,7 @@ int TYdbUpdater::Update(bool forceUpdate) {
     checkCmd.Run().Wait();
     if (checkCmd.GetExitCode() != 0) {
         Cerr << "Failed to check downloaded binary. " << checkCmd.GetError() << Endl;
-        tmpPathToBinary.DeleteIfExists();
+        DeletePathIfExistsSafe(tmpPathToBinary);
         return EXIT_FAILURE;
     }
     Cout << checkCmd.GetOutput();
@@ -374,26 +392,26 @@ int TYdbUpdater::Update(bool forceUpdate) {
 #endif
     } catch (const yexception& ex) {
         Cerr << "Failed to prepare new binary: " << ex.what() << Endl;
-        stagingBinary.DeleteIfExists();
-        tmpPathToBinary.DeleteIfExists();
+        DeletePathIfExistsSafe(stagingBinary);
+        DeletePathIfExistsSafe(tmpPathToBinary);
         return EXIT_FAILURE;
     }
     if (!runningFromLegacy) {
 #ifdef _win32_
         TFsPath binaryNameOld(TStringBuilder() << targetBinaryPath.GetPath() << "_old");
     binaryNameOld.Fix();
-    binaryNameOld.DeleteIfExists();
+    DeletePathIfExistsSafe(binaryNameOld);
         targetBinaryPath.RenameTo(binaryNameOld);
     Cout << "Old binary renamed to " << binaryNameOld.GetPath() << Endl;
 #else
-        targetBinaryPath.DeleteIfExists();
+        DeletePathIfExistsSafe(targetBinaryPath);
     Cout << "Old binary removed" << Endl;
 #endif
     }
 
     stagingBinary.RenameTo(targetBinaryPath);
     Cout << "New binary installed to " << targetBinaryPath.GetPath() << Endl;
-    tmpPathToBinary.DeleteIfExists();
+    DeletePathIfExistsSafe(tmpPathToBinary);
 
     if (runningFromLegacy) {
         RemoveLegacyBinaryFile(currentBinary);

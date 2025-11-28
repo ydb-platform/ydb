@@ -423,7 +423,10 @@ private:
     std::counting_semaphore<> JobsSemaphore;
 }; // TJobInflightManager
 
-static const TFsPath pathToProgressFiles = NLocalPaths::GetImportProgressDir();
+TFsPath GetProgressFilesDir() {
+    static TFsPath dir = NLocalPaths::GetImportProgressDir();
+    return dir;
+}
 static const TString sourceModifiedKey = "source_modified_ts"; // Timestamp of source modification
 static const TString lastImportedLineKey = "last_imported_row"; // Last line that was imported with confirmation
 static const TString completedKey = "completed"; // File was successfully imported
@@ -447,7 +450,7 @@ public:
                 progressFileName += pathParts[i];
             }
         }
-        ProgressFilePath = TFsPath(pathToProgressFiles).Child(progressFileName);
+        ProgressFilePath = GetProgressFilesDir().Child(progressFileName);
         ProgressFilePath.Fix();
     }
 
@@ -873,7 +876,8 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
             existingProgressMessage << "(!) If you want to reset file import progress, remove progress file \""
                 << PreviouslyStartedProgressFile->GetProgressFilePath() << "\"" << Endl;
         } else {
-            existingProgressMessage << "(!) If you want to fully reset import progress, remove progress files from " << pathToProgressFiles.GetPath() << Endl;
+            existingProgressMessage << "(!) If you want to fully reset import progress, remove progress files from "
+                << GetProgressFilesDir().GetPath() << Endl;
         }
         Cerr << existingProgressMessage;
     }

@@ -1,7 +1,6 @@
 #include "local_paths.h"
 
 #include <util/folder/dirut.h>
-#include <util/folder/iterator.h>
 #include <util/generic/guid.h>
 #if defined(_win32_)
 #include <initializer_list>
@@ -107,6 +106,12 @@ bool IsDirEmpty(const TFsPath& path) {
     return children.empty();
 }
 
+void DeleteDirIfEmpty(const TFsPath& path) {
+    if (path.Exists() && IsDirEmpty(path)) {
+        path.DeleteIfExists();
+    }
+}
+
 #if defined(_win32_)
 TFsPath ResolveWindowsDir(const char* overrideEnv, const char* envName, std::initializer_list<TString> fallbackSuffixes) {
     if (auto overridePath = GetEnvPath(overrideEnv)) {
@@ -140,13 +145,7 @@ TFsPath ResolveUnixXdgDir(const char* overrideEnv, const char* xdgEnv, const TSt
 }
 #endif
 
-void CopyFileContents(const TFsPath& src, const TFsPath& dst, int mode) {
-    TFileInput in(src);
-    TString data = in.ReadAll();
-    WriteStringAtomically(dst, data, mode);
-}
-
-void MoveFilePreservingContents(const TFsPath& src, const TFsPath& dst, int mode) {
+void MoveFilePreservingContents(const TFsPath& src, const TFsPath& dst, int mode, bool logMove = true) {
     EnsureDir(dst.Parent(), DIR_MODE_PRIVATE);
     try {
         src.RenameTo(dst);
@@ -155,56 +154,52 @@ void MoveFilePreservingContents(const TFsPath& src, const TFsPath& dst, int mode
             Chmod(dst.GetPath().c_str(), mode);
         }
 #endif
-        Cerr << "Migrated legacy file " << src.GetPath() << " to " << dst.GetPath() << Endl;
+        if (logMove) {
+            Cerr << "Migrated legacy file " << src.GetPath() << " to " << dst.GetPath() << Endl;
+        }
         return;
     } catch (...) {
         // fall through to copy
     }
     TString data = ReadFileIfExists(src);
     WriteStringAtomically(dst, data, mode);
-    src.DeleteIfExists();
-    Cerr << "Migrated legacy file " << src.GetPath() << " to " << dst.GetPath() << Endl;
+    try {
+        src.DeleteIfExists();
+    } catch (const yexception& e) {
+        Cerr << "Failed to delete legacy file " << src.GetPath() << " after copy: " << e.what() << Endl;
+    }
+    if (logMove) {
+        Cerr << "Migrated legacy file " << src.GetPath() << " to " << dst.GetPath()
+            << " by copy (rename failed)" << Endl;
+    }
 }
 
 void MoveImportProgress(const TFsPath& targetDir) {
-    if (targetDir.Exists() && !IsDirEmpty(targetDir)) {
-        return;
-    }
     TFsPath legacyDir = GetHomePath().Child(".config").Child("ydb").Child("import_progress").Fix();
+    EnsureDir(targetDir, DIR_MODE_PRIVATE);
     if (!legacyDir.Exists()) {
-        EnsureDir(targetDir, DIR_MODE_PRIVATE);
         return;
     }
-    EnsureDir(targetDir, DIR_MODE_PRIVATE);
-    TDirIterator it(legacyDir.GetPath());
+    TVector<TFsPath> children;
+    legacyDir.List(children);
     bool movedAny = false;
-    while (FTSENT* entry = it.Next()) {
-        if (entry->fts_info != FTS_F) {
+    size_t movedCount = 0;
+    for (const auto& child : children) {
+        if (!child.IsFile()) {
             continue;
         }
-        const TString name(entry->fts_name);
-        TFsPath src = legacyDir.Child(name);
-        TFsPath dst = targetDir.Child(name);
-
-        if (dst.Exists()) {
-            TFileStat srcStat(src);
-            TFileStat dstStat(dst);
-            if (srcStat.MTime <= dstStat.MTime) {
-                src.DeleteIfExists();
-                continue;
-            }
-        }
-
-        CopyFileContents(src, dst, FILE_MODE_PRIVATE);
-        src.DeleteIfExists();
+        TFsPath dst = targetDir.Child(child.GetName());
+        TFsPath src = child;
+        MoveFilePreservingContents(src, dst, FILE_MODE_PRIVATE, false);
         movedAny = true;
+        ++movedCount;
     }
     if (IsDirEmpty(legacyDir)) {
         legacyDir.DeleteIfExists();
     }
     if (movedAny) {
-        Cerr << "Migrated legacy import progress files from " << legacyDir.GetPath()
-            << " to " << targetDir.GetPath() << Endl;
+        Cerr << "Migrated " << movedCount << " legacy import progress files from "
+            << legacyDir.GetPath() << " to " << targetDir.GetPath() << Endl;
     }
 }
 
@@ -265,9 +260,12 @@ TFsPath GetLegacyPathHelperScript() {
 TFsPath GetProfilesFile() {
     TFsPath filePath = GetConfigDir().Child("profiles.yaml");
     if (!filePath.Exists()) {
-        TFsPath legacy = GetHomePath().Child("ydb").Child("config").Child("config.yaml");
+        TFsPath legacyDir = GetHomePath().Child("ydb").Child("config");
+        TFsPath legacy = legacyDir.Child("config.yaml");
         if (legacy.Exists()) {
             MoveFilePreservingContents(legacy, filePath, FILE_MODE_PRIVATE);
+            DeleteDirIfEmpty(legacyDir);
+            DeleteDirIfEmpty(GetHomePath().Child("ydb"));
         }
     }
     return filePath;
@@ -275,7 +273,9 @@ TFsPath GetProfilesFile() {
 
 TFsPath GetImportProgressDir() {
     TFsPath dir = GetStateDir().Child("import_progress");
-    MoveImportProgress(dir);
+    if (!dir.Exists()) {
+        MoveImportProgress(dir);
+    }
     return dir;
 }
 
@@ -284,9 +284,12 @@ TFsPath GetUpdateStateFile() {
     EnsureDir(dir, DIR_MODE_PRIVATE);
     TFsPath file = dir.Child("state.json");
     if (!file.Exists()) {
-        TFsPath legacy = GetHomePath().Child("ydb").Child("bin").Child("config.json").Fix();
+        TFsPath legacyDir = GetHomePath().Child("ydb").Child("bin");
+        TFsPath legacy = legacyDir.Child("config.json").Fix();
         if (legacy.Exists()) {
             MoveFilePreservingContents(legacy, file, FILE_MODE_PRIVATE);
+            DeleteDirIfEmpty(legacyDir);
+            DeleteDirIfEmpty(GetHomePath().Child("ydb"));
         }
     }
     return file;

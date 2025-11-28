@@ -1,6 +1,6 @@
 # ALTER VIEW
 
-`ALTER VIEW` changes the definition of a [view](concepts/datamodel/view).
+`ALTER VIEW` changes the definition of a [view](../../../concepts/datamodel/view.md).
 
 {% note warning %}
 

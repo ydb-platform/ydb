@@ -110,7 +110,9 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
             print(f"::warning::{txt}")
             return False, txt
 
-        if category == "Bugfix":
+        # Check if category is Bugfix (case-insensitive)
+        is_bugfix = category_lower == "bugfix"
+        if is_bugfix:
             def check_issue_pattern(issue_pattern):
                 return re.search(issue_pattern, description)
 

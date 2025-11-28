@@ -258,7 +258,7 @@ TString GetDatabase(const TString& query) {
     return GetToken(query, R"(-- database: ")");
 }
 
-TMaybe<TSecretSetting> GetSecretSetting(const TString& query) {
+TVector<TSecretSetting> GetSecretSettings(const TString& query) {
     static const TVector<TString> SECRET_SETTING_NAMES = [] {
         static const TSet<TString> settings = {
             "TOKEN_SECRET",
@@ -276,6 +276,7 @@ TMaybe<TSecretSetting> GetSecretSetting(const TString& query) {
         return result;
     }();
 
+    TVector<TSecretSetting> result;
     for (const auto& settingName : SECRET_SETTING_NAMES) {
         auto secretSettingValue = GetToken(query, settingName + " = '");
         if (!secretSettingValue) {
@@ -284,10 +285,10 @@ TMaybe<TSecretSetting> GetSecretSetting(const TString& query) {
         if (secretSettingValue.EndsWith("'")) {
             secretSettingValue.resize(secretSettingValue.size() - 1);
         }
-        return TSecretSetting{.Name = settingName, .Value = secretSettingValue};
+        result.push_back(TSecretSetting{.Name = settingName, .Value = secretSettingValue});
     }
 
-    return {};
+    return result;
 }
 
 bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::TIssues& issues) {

@@ -1561,19 +1561,22 @@ TRestoreResult TRestoreClient::CheckSecretExistence(const TString& secretName) {
     return result;
 }
 
+// TODO(yurikiselev): Make better name !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 TRestoreResult TRestoreClient::ProcessSecretInQuery(TString& query, const TString& dbRestoreRoot, const TFsPath& fsPath) {
-    if (auto secretSetting = GetSecretSetting(query)) {
-        if (IsSchemaSecret(secretSetting->Value)) {
-            secretSetting->Value = RewriteAbsolutePath(secretSetting->Value, GetDatabase(query), dbRestoreRoot);
+    auto secretSettings = GetSecretSettings(query);
+    for (auto& secretSetting : secretSettings) {
+        if (IsSchemaSecret(secretSetting.Value)) {
+            secretSetting.Value = RewriteAbsolutePath(secretSetting.Value, GetDatabase(query), dbRestoreRoot);
         }
-        if (auto result = CheckSecretExistence(secretSetting->Value); !result.IsSuccess()) {
+        if (auto result = CheckSecretExistence(secretSetting.Value); !result.IsSuccess()) {
             return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
         }
         NYql::TIssues issues;
-        if (!RewriteCreateQuery(query, secretSetting->Name + " = '{}'", secretSetting->Value, issues)) {
+        if (!RewriteCreateQuery(query, secretSetting.Name + " = '{}'", secretSetting.Value, issues)) {
            return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
         }
     }
+
     return Result<TRestoreResult>();
 }
 

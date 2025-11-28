@@ -133,6 +133,7 @@ enum class EAuthType {
     AuthTypeNone,
     AuthTypeToken,
     AuthTypePassword,
+    AuthTypeAws,
 };
 
 struct TTransferTestConfig {
@@ -1696,17 +1697,24 @@ Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TSession
 
 void TestExternalDataSourceSettingsArePreserved(
     const char* path, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup,
-    TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings, ESecretType secretType
+    TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings, ESecretType secretType,
+    EAuthType authType
 ) {
     if (secretType == ESecretType::SecretTypeScheme) {
         ExecuteQuery(querySession, "CREATE SECRET `secret` WITH (value = 'secret');", true);
+        if (authType == EAuthType::AuthTypeAws) {
+            ExecuteQuery(querySession, "CREATE SECRET `secret2` WITH (value = 'secret');", true);
+        }
     } else if (secretType == ESecretType::SecretTypeOld) {
         ExecuteQuery(querySession, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'secret');", true);
+        if (authType == EAuthType::AuthTypeAws) {
+            ExecuteQuery(querySession, "CREATE OBJECT `secret2` (TYPE SECRET) WITH (value = 'secret');", true);
+        }
     }
 
-    ExecuteQuery(
-        querySession,
-        Sprintf(
+    TString query;
+    if (authType == EAuthType::AuthTypeToken || authType == EAuthType::AuthTypeNone) {
+        query = Sprintf(
             R"(
                 CREATE EXTERNAL DATA SOURCE `%s` WITH (
                     SOURCE_TYPE = "Ydb",
@@ -1721,8 +1729,28 @@ void TestExternalDataSourceSettingsArePreserved(
             (secretType == ESecretType::SecretTypeNone ? "NONE" : "TOKEN"),
             (secretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'secret'" : ""),
             (secretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'secret'" : "")
-        ), true
-    );
+        );
+    } else if (authType == EAuthType::AuthTypeAws) {
+        query = Sprintf(
+            R"(
+                CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION = "192.168.1.1:8123",
+                    AUTH_METHOD="AWS",
+                    AWS_REGION="ru-central-1",
+                    %s="secret",
+                    %s="secret2"
+                );
+            )",
+            path,
+            (secretType == ESecretType::SecretTypeScheme ? "AWS_ACCESS_KEY_ID_SECRET_PATH" : "AWS_ACCESS_KEY_ID_SECRET_NAME"),
+            (secretType == ESecretType::SecretTypeScheme ? "AWS_SECRET_ACCESS_KEY_SECRET_PATH" : "AWS_SECRET_ACCESS_KEY_SECRET_NAME")
+        );
+    } else {
+        UNIT_ASSERT_C(false, "Unsuppoted test setting");
+    }
+
+    ExecuteQuery(querySession, query, true);
     const auto originalDescription = DescribeExternalDataSource(tableSession, path);
 
     backup();
@@ -2781,7 +2809,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
-    void TestExternalDataSourceBackupRestore(ESecretType secretType) {
+    void TestExternalDataSourceBackupRestore(ESecretType secretType, EAuthType authType) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
@@ -2819,7 +2847,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup),
             NDump::TRestoreSettings{},
-            secretType
+            secretType,
+            authType
         );
     }
 
@@ -2975,9 +3004,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeExternalTable:
                 return TestExternalTableBackupRestore();
             case EPathTypeExternalDataSource: {
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeNone);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeNone, EAuthType::AuthTypeNone);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws);
                 return;
             }
             case EPathTypeResourcePool:
@@ -3114,19 +3144,19 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings,
-            ESecretType::SecretTypeNone
+            ESecretType::SecretTypeNone, EAuthType::AuthTypeNone
         );
 
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings,
-            ESecretType::SecretTypeOld
+            ESecretType::SecretTypeOld, EAuthType::AuthTypeToken
         );
 
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings,
-            ESecretType::SecretTypeScheme
+            ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken
         );
 
         cleanup();
@@ -3239,19 +3269,19 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
-            NDump::TRestoreSettings{}, ESecretType::SecretTypeNone
+            NDump::TRestoreSettings{},  ESecretType::SecretTypeNone, EAuthType::AuthTypeNone
         );
 
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
-            NDump::TRestoreSettings{}, ESecretType::SecretTypeOld
+            NDump::TRestoreSettings{}, ESecretType::SecretTypeOld, EAuthType::AuthTypeToken
         );
 
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
-            NDump::TRestoreSettings{}, ESecretType::SecretTypeScheme
+            NDump::TRestoreSettings{}, ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken
         );
 
         cleanup();

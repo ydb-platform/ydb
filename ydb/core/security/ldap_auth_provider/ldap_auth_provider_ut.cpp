@@ -1243,6 +1243,77 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
     Y_UNIT_TEST(LdapRequestWithEmptyBindPassword) {
         CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindPassword, "Could not login via LDAP");
     }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDelayUpdateSecurityState) {
+        const ESecurityConnectionType secureType {ESecurityConnectionType::LDAPS_SCHEME};
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+
+        TLdapKikimrServer server(InitLdapSettings, secureType);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), TCorrectLdapResponse::GetResponses(login), secureType == ESecurityConnectionType::LDAPS_SCHEME);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        NLogin::TLoginProvider provider;
+        provider.Audience = "/Root";
+        provider.RotateKeys();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        auto loginResponse = provider.LoginUser({.User = login, .Password = password, .ExternalAuth = "ldap"});
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        Sleep(TDuration::Seconds(1));
+        // Send update security state in 1 second after send TEvAuthorizeTicket
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT(ticketParserResult->Token != nullptr);
+        const TString ldapDomain = "@ldap";
+        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
+        const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
+        THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
+
+        THashSet<TString> expectedGroups = TCorrectLdapResponse::GetAllGroups(ldapDomain);
+        expectedGroups.insert("all-users@well-known");
+
+        UNIT_ASSERT_VALUES_EQUAL(fetchedGroups.size(), expectedGroups.size());
+        for (const auto& expectedGroup : expectedGroups) {
+            UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
+        }
+
+        ldapServer.Stop();
+    }
+
+    Y_UNIT_TEST(CanGetErrorIfAppropriateLoginProviderIsAbsent) {
+        const ESecurityConnectionType secureType {ESecurityConnectionType::LDAPS_SCHEME};
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+
+        TLdapKikimrServer server(InitLdapSettings, secureType);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), TCorrectLdapResponse::GetResponses(login), secureType == ESecurityConnectionType::LDAPS_SCHEME);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        NLogin::TLoginProvider provider;
+        provider.Audience = "/Root";
+        provider.RotateKeys();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        auto loginResponse = provider.LoginUser({.User = login, .Password = password, .ExternalAuth = "ldap"});
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        Sleep(TDuration::Seconds(1));
+        // Do no send update security state
+        // runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+        UNIT_ASSERT(!ticketParserResult->Error.empty());
+        UNIT_ASSERT(ticketParserResult->Token == nullptr);
+        UNIT_ASSERT_EQUAL_C(ticketParserResult->Error.Message, "Login state is not available", ticketParserResult->Error);
+        UNIT_ASSERT_EQUAL_C(ticketParserResult->Error.Retryable, false, ticketParserResult->Error.Retryable);
+        ldapServer.Stop();
+    }
 }
 
 Y_UNIT_TEST_SUITE(LdapAuthProviderTest_LdapsScheme) {

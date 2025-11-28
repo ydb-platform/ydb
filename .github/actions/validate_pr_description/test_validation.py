@@ -16,7 +16,8 @@ Optional for table generation testing:
     export SHOW_ADDITIONAL_INFO_IN_PR="TRUE"  # Enable table generation test
     export APP_DOMAIN="your-app-domain.com"   # Required if SHOW_ADDITIONAL_INFO_IN_PR=TRUE
 
-Note: GITHUB_WORKSPACE is automatically set to repository root if not provided.
+Note: GITHUB_WORKSPACE and GITHUB_REPOSITORY are automatically set if not provided.
+      GITHUB_REPOSITORY is determined from git remote origin URL.
 """
 import os
 import sys
@@ -37,6 +38,44 @@ def find_repo_root():
         current = current.parent
     # Fallback to current working directory
     return os.getcwd()
+
+def find_github_repository():
+    """Find GitHub repository from git remote."""
+    repo_root = find_repo_root()
+    git_dir = Path(repo_root) / ".git"
+    
+    if not git_dir.exists():
+        raise ValueError("Not a git repository. Cannot determine GITHUB_REPOSITORY.")
+    
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        url = result.stdout.strip()
+        
+        # Parse git URL (supports both https and ssh formats)
+        if "github.com" in url:
+            if url.startswith("https://"):
+                # https://github.com/owner/repo.git
+                parts = url.replace("https://github.com/", "").replace(".git", "").strip()
+                if "/" in parts:
+                    return parts
+            elif url.startswith("git@") or url.startswith("ssh://"):
+                # git@github.com:owner/repo.git or ssh://git@github.com/owner/repo.git
+                parts = url.split("github.com")[-1].replace(":", "/").replace(".git", "").strip("/")
+                if "/" in parts:
+                    return parts
+        
+        raise ValueError(f"Could not parse GitHub repository from remote URL: {url}")
+    except subprocess.CalledProcessError:
+        raise ValueError("Failed to get git remote URL. Cannot determine GITHUB_REPOSITORY.")
+    except Exception as e:
+        raise ValueError(f"Failed to determine GITHUB_REPOSITORY: {e}")
 
 def test_validation(pr_body: str, pr_number: int = None, base_ref: str = "main"):
     """Test validation and table generation."""
@@ -131,6 +170,17 @@ def main():
         repo_root = find_repo_root()
         os.environ["GITHUB_WORKSPACE"] = repo_root
         print(f"ℹ️  Set GITHUB_WORKSPACE={repo_root} for local testing")
+    
+    # Set GITHUB_REPOSITORY for local testing if not already set
+    if not os.environ.get("GITHUB_REPOSITORY"):
+        try:
+            github_repo = find_github_repository()
+            os.environ["GITHUB_REPOSITORY"] = github_repo
+            print(f"ℹ️  Set GITHUB_REPOSITORY={github_repo} for local testing")
+        except ValueError as e:
+            print(f"❌ Error: {e}")
+            print("   Set GITHUB_REPOSITORY environment variable manually")
+            sys.exit(1)
     
     pr_number = None
     pr_body = None

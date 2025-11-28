@@ -21,6 +21,9 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+DEPENDS(
+    ydb/apps/ydb
+)
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 DEPENDS(

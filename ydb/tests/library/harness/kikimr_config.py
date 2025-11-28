@@ -190,6 +190,10 @@ class KikimrConfigGenerator(object):
 
         self.use_log_files = use_log_files
         self.suppress_version_check = suppress_version_check
+        self.explicit_hosts_and_host_configs = explicit_hosts_and_host_configs
+        if use_self_management:
+            self.suppress_version_check = False
+            self.explicit_hosts_and_host_configs = True
         self._pdisk_store_path = pdisk_store_path
         self.static_pdisk_size = static_pdisk_size
         self.app_config = config_pb2.TAppConfig()
@@ -505,6 +509,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
 
         self.full_config = dict()
+        if self.explicit_hosts_and_host_configs:
+            self._add_host_config_and_hosts()
+            self.yaml_config.pop("nameservice_config")
         if self.use_self_management:
 
             if "security_config" in self.yaml_config["domains_config"]:
@@ -763,3 +770,58 @@ class KikimrConfigGenerator(object):
                         pdisk_user_kind,
                         datacenter_id - 1,
                     )
+
+    def _add_host_config_and_hosts(self):
+        self._initialize_pdisks_info()
+        host_configs = []
+        hosts = []
+        host_config_id_counter = itertools.count(1)
+
+        for node_id in self.__node_ids:
+            host_config_id = next(host_config_id_counter)
+            drive = []
+            for pdisk_info in self._pdisks_info:
+                if pdisk_info['node_id'] == node_id:
+                    drive.append(
+                        {
+                            "path": pdisk_info['pdisk_path'],
+                            "type": pdisk_info.get('pdisk_type', 'ROT').upper(),
+                        }
+                    )
+
+            host_configs.append(
+                {
+                    "host_config_id": host_config_id,
+                    "drive": drive,
+                }
+            )
+            hosts.append(
+                {
+                    "host": "localhost",
+                    "port": self.port_allocator.get_node_port_allocator(node_id).ic_port,
+                    "host_config_id": host_config_id,
+                }
+            )
+
+        self.yaml_config["host_configs"] = host_configs
+        self.yaml_config["hosts"] = hosts
+
+    def __build(self):
+        self.yaml_config["blob_storage_config"] = {}
+        if self.__bs_cache_file_path:
+            self.yaml_config["blob_storage_config"]["cache_file_path"] = \
+                self.__bs_cache_file_path
+        self.yaml_config["blob_storage_config"]["service_set"] = {}
+        self.yaml_config["blob_storage_config"]["service_set"]["availability_domains"] = 1
+        self.yaml_config["blob_storage_config"]["service_set"]["pdisks"] = []
+        self.yaml_config["blob_storage_config"]["service_set"]["vdisks"] = []
+        self.yaml_config["blob_storage_config"]["service_set"]["groups"] = [
+            {"group_id": 0, 'group_generation': 1, 'erasure_species': int(self.static_erasure)}]
+        self.yaml_config["blob_storage_config"]["service_set"]["groups"][0]["rings"] = []
+
+        for dc in self._dcs:
+            self.yaml_config["blob_storage_config"]["service_set"]["groups"][0]["rings"].append({"fail_domains": []})
+
+        self._add_state_storage_config()
+        if not self.use_self_management and not self.explicit_hosts_and_host_configs:
+            self._initialize_pdisks_info()

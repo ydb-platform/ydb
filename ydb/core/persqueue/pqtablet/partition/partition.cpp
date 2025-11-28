@@ -555,12 +555,6 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
     return haveChanges;
 }
 
-void TPartition::ScheduleKeyDelete(const TDataKey& key) {
-    if (key.BlobKeyToken->NeedDelete) {
-        DeletedKeys.emplace_back(key.BlobKeyToken->Key, std::weak_ptr<TBlobKeyToken>(key.BlobKeyToken));
-    }
-}
-
 bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
     if (GetStartOffset() == GetEndOffset() || CompactionBlobEncoder.DataKeysBody.size() <= 1) {
         return false;
@@ -594,10 +588,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             }
         }
 
-        ScheduleKeyDelete(firstKey);
-
-        CompactionBlobEncoder.BodySize -= firstKey.Size;
-        CompactionBlobEncoder.DataKeysBody.pop_front();
+        CompactionBlobEncoder.pop_front();
 
         if (!GapOffsets.empty() && nextKey.Key.GetOffset() == GapOffsets.front().second) {
             GapSize -= GapOffsets.front().second - GapOffsets.front().first;
@@ -2679,26 +2670,31 @@ bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
 {
     bool haveChanges = false;
 
-    while (!DeletedKeys.empty()) {
-        auto& k = DeletedKeys.front();
+    auto doDelete = [&](auto& deletedKeys) {
+        while (!deletedKeys.empty()) {
+            auto& k = deletedKeys.front();
 
-        if (auto lock = k.Lock.lock(); lock) {
-            // key is locked, wait for it to be unlocked
-            break;
+            if (auto lock = k.Lock.lock(); lock) {
+                // key is locked, wait for it to be unlocked
+                break;
+            }
+
+            haveChanges = true;
+
+            auto* cmd = PersistRequest->Record.AddCmdDeleteRange();
+            auto* range = cmd->MutableRange();
+
+            range->SetFrom(k.Key);
+            range->SetIncludeFrom(true);
+            range->SetTo(std::move(k.Key));
+            range->SetIncludeTo(true);
+
+            deletedKeys.pop_front();
         }
+    };
 
-        haveChanges = true;
-
-        auto* cmd = PersistRequest->Record.AddCmdDeleteRange();
-        auto* range = cmd->MutableRange();
-
-        range->SetFrom(k.Key);
-        range->SetIncludeFrom(true);
-        range->SetTo(std::move(k.Key));
-        range->SetIncludeTo(true);
-
-        DeletedKeys.pop_front();
-    }
+    doDelete(CompactionBlobEncoder.DeletedKeys);
+    doDelete(BlobEncoder.DeletedKeys);
 
     return haveChanges;
 }

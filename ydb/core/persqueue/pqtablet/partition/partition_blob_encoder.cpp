@@ -554,6 +554,15 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
     return res;
 }
 
+void TPartitionBlobEncoder::pop_front() {
+    auto& key = DataKeysBody.front();
+    if (key.BlobKeyToken->NeedDelete) {
+        DeletedKeys.emplace_back(key.BlobKeyToken->Key, std::weak_ptr<TBlobKeyToken>(key.BlobKeyToken));
+    }
+    BodySize -= key.Size;
+    DataKeysBody.pop_front();
+}
+
 //void TPartitionBlobEncoder::Dump() const
 //{
 //    auto dumpCompactedKeys = [this](const std::deque<std::pair<TKey, ui32>>& keys, const char* prefix) {

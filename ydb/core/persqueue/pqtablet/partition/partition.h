@@ -141,6 +141,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitMetaStep;
     friend TInitInfoRangeStep;
     friend TInitDataRangeStep;
+    friend TDeleteKeysStep;
     friend TInitMessageDeduplicatorStep;
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
@@ -800,13 +801,6 @@ private:
 
     TMessageQueue PendingRequests;
     TMessageQueue QuotaWaitingRequests;
-
-    struct TDeletedKey {
-        TString Key;
-        std::weak_ptr<TBlobKeyToken> Lock;
-    };
-    void ScheduleKeyDelete(const TDataKey& key);
-    std::deque<TDeletedKey> DeletedKeys;
 
     TPartitionBlobEncoder CompactionBlobEncoder; // Compaction zone
     TPartitionBlobEncoder BlobEncoder;           // FastWrite zone

@@ -36,6 +36,7 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitMetaStep>(this));
     Steps.push_back(MakeHolder<TInitInfoRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
+    Steps.push_back(MakeHolder<TDeleteKeysStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
     Steps.push_back(MakeHolder<TInitEndWriteTimestampStep>(this));
     Steps.push_back(MakeHolder<TInitMessageDeduplicatorStep>(this));
@@ -532,6 +533,41 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     };
 }
 
+//
+// TDeleteKeysStep
+//
+
+TDeleteKeysStep::TDeleteKeysStep(TInitializer* initializer)
+    : TBaseKVStep(initializer, "TDeleteKeysStep", true) {
+}
+
+void TDeleteKeysStep::Execute(const TActorContext &ctx) {
+    if (GetContext().DeletedKeys.empty()) {
+        Done(ctx);
+        return;
+    }
+
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    for (const auto& key : GetContext().DeletedKeys) {
+        auto* cmd = request->Record.AddCmdDeleteRange();
+        cmd->MutableRange()->SetFrom(key);
+        cmd->MutableRange()->SetIncludeFrom(true);
+        cmd->MutableRange()->SetTo(key);
+        cmd->MutableRange()->SetIncludeTo(true);
+    }
+
+    ctx.Send(Partition()->TabletActorId, request.release());
+}
+
+void TDeleteKeysStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
+    if (!ValidateResponse(*this, ev, ctx)) {
+        PoisonPill(ctx);
+        return;
+    }
+
+    Done(ctx);
+}
+
 THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& ranges,
                                       const TPartitionId& partitionId)
 {
@@ -669,7 +705,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const TActorContext&) {
             const auto k = TKey::FromString(pair.GetKey(), PartitionId());
             if (!actualKeys.contains(pair.GetKey())) {
                 PQ_LOG_D("unknown key " << pair.GetKey() << " will be deleted");
-                Partition()->DeletedKeys.emplace_back(k.ToString(), std::weak_ptr<TBlobKeyToken>());
+                GetContext().DeletedKeys.emplace_back(k.ToString());
                 continue;
             }
             if (dataKeysBody.empty()) { //no data - this is first pair of first range

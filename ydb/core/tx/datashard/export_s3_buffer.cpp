@@ -3,6 +3,8 @@
 #include "export_s3_buffer_raw.h"
 #include "type_serialization.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
@@ -212,5 +214,4 @@ NExportScan::IBuffer* CreateS3ExportBufferRaw(
 
 } // NDataShard
 } // NKikimr
-
 #endif // KIKIMR_DISABLE_S3_OPS

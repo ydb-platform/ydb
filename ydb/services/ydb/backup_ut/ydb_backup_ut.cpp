@@ -1695,15 +1695,32 @@ Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TSession
 }
 
 void TestExternalDataSourceSettingsArePreserved(
-    const char* path, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup, TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings = {}
+    const char* path, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup,
+    TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings, ESecretType secretType
 ) {
-    ExecuteQuery(querySession, Sprintf(R"(
+    if (secretType == ESecretType::SecretTypeScheme) {
+        ExecuteQuery(querySession, "CREATE SECRET `secret` WITH (value = 'secret');", true);
+    } else if (secretType == ESecretType::SecretTypeOld) {
+        ExecuteQuery(querySession, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'secret');", true);
+    }
+
+    ExecuteQuery(
+        querySession,
+        Sprintf(
+            R"(
                 CREATE EXTERNAL DATA SOURCE `%s` WITH (
-                    SOURCE_TYPE = "ObjectStorage",
+                    SOURCE_TYPE = "Ydb",
                     LOCATION = "192.168.1.1:8123",
-                    AUTH_METHOD = "NONE"
+                    DATABASE_NAME = "/Root/test/",
+                    AUTH_METHOD = "%s"
+                    %s -- TOKEN_SECRET_NAME is needed
+                    %s -- TOKEN_SECRET_PATH is needed
                 );
-            )", path
+            )",
+            path,
+            (secretType == ESecretType::SecretTypeNone ? "NONE" : "TOKEN"),
+            (secretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'secret'" : ""),
+            (secretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'secret'" : "")
         ), true
     );
     const auto originalDescription = DescribeExternalDataSource(tableSession, path);
@@ -2642,9 +2659,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestReplicationBackupRestore(const bool isOlap, ESecretType secretType) {
         TKikimrWithGrpcAndRootSchema server;
-        if (secretType == ESecretType::SecretTypeScheme) {
-            server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
-        }
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
@@ -2680,9 +2695,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         AssertAuthAndSecretTypes(config);
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
-        if (config.SecretType == ESecretType::SecretTypeScheme && config.AuthType != EAuthType::AuthTypeNone) {
-            server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
-        }
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(config.SecretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
@@ -2768,16 +2781,32 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
-    void TestExternalDataSourceBackupRestore() {
+    void TestExternalDataSourceBackupRestore(ESecretType secretType) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
+
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+        if (secretType != ESecretType::SecretTypeNone) {
+            driverConfig.SetAuthToken("root@builtin");
+        }
+        auto driver = TDriver(driverConfig);
         TTableClient tableClient(driver);
         auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
         NQuery::TQueryClient queryClient(driver);
         auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        TSchemeClient schemeClient(driver);
+        if (secretType != ESecretType::SecretTypeNone) {
+            TPermissions permissions("root@builtin", {"ydb.generic.full"});
+            const auto result = schemeClient.ModifyPermissions("/Root",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
@@ -2788,15 +2817,18 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             tableSession,
             querySession,
             CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup)
+            CreateRestoreLambda(driver, pathToBackup),
+            NDump::TRestoreSettings{},
+            secretType
         );
     }
 
-    Y_UNIT_TEST(RestoreExternalDataSourceWithoutSecret) {
+    Y_UNIT_TEST_TWIN(RestoreExternalDataSourceWithoutSecret, UseSchemeSecret) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(UseSchemeSecret);
 
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
@@ -2808,24 +2840,38 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        ExecuteQuery(querySession, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'secret');", true);
-        ExecuteQuery(querySession, R"(
-            CREATE EXTERNAL DATA SOURCE `/Root/externalDataSource` WITH (
-                SOURCE_TYPE = "PostgreSQL",
-                DATABASE_NAME = "db",
-                LOCATION = "192.168.1.1:8123",
-                AUTH_METHOD = "BASIC",
-                LOGIN = "user",
-                PASSWORD_SECRET_NAME = "secret"
-            );
-        )", true);
+        if (UseSchemeSecret) {
+            ExecuteQuery(querySession, "CREATE SECRET `secret` WITH (value = 'secret');", true);
+        } else {
+            ExecuteQuery(querySession, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'secret');", true);
+        }
+        ExecuteQuery(
+            querySession,
+            Sprintf(
+                R"(
+                    CREATE EXTERNAL DATA SOURCE `/Root/externalDataSource` WITH (
+                        SOURCE_TYPE = "PostgreSQL",
+                        DATABASE_NAME = "db",
+                        LOCATION = "192.168.1.1:8123",
+                        AUTH_METHOD = "BASIC",
+                        LOGIN = "user",
+                        %s = "secret"
+                    );
+                )",
+                UseSchemeSecret ? "PASSWORD_SECRET_PATH" : "PASSWORD_SECRET_NAME"),
+                true);
 
         NDump::TClient backupClient(driver);
         {
             const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-        ExecuteQuery(querySession, "DROP OBJECT `secret` (TYPE SECRET);", true);
+
+        if (UseSchemeSecret) {
+            ExecuteQuery(querySession, "DROP SECRET `secret`;", true);
+        } else {
+            ExecuteQuery(querySession, "DROP OBJECT `secret` (TYPE SECRET);", true);
+        }
         ExecuteQuery(querySession, "DROP EXTERNAL DATA SOURCE `/Root/externalDataSource`;", true);
         {
             const auto result = backupClient.Restore(pathToBackup, "/Root");
@@ -2928,8 +2974,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 return TestTransferBackupRestore();
             case EPathTypeExternalTable:
                 return TestExternalTableBackupRestore();
-            case EPathTypeExternalDataSource:
-                return TestExternalDataSourceBackupRestore();
+            case EPathTypeExternalDataSource: {
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeNone);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme);
+                return;
+            }
             case EPathTypeResourcePool:
                 break; // https://github.com/ydb-platform/ydb/issues/10440
             case EPathTypeKesus:
@@ -3063,7 +3113,20 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings,
+            ESecretType::SecretTypeNone
+        );
+
+        cleanup();
+        TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings,
+            ESecretType::SecretTypeOld
+        );
+
+        cleanup();
+        TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings,
+            ESecretType::SecretTypeScheme
         );
 
         cleanup();
@@ -3175,7 +3238,20 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
+            NDump::TRestoreSettings{}, ESecretType::SecretTypeNone
+        );
+
+        cleanup();
+        TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
+            NDump::TRestoreSettings{}, ESecretType::SecretTypeOld
+        );
+
+        cleanup();
+        TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
+            NDump::TRestoreSettings{}, ESecretType::SecretTypeScheme
         );
 
         cleanup();

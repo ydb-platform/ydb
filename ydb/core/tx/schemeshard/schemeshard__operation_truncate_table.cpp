@@ -158,7 +158,7 @@ public:
         const auto& op = Transaction.GetTruncateTable();
         const auto stringTablePath = NKikimr::JoinPath({Transaction.GetWorkingDir(), op.GetTableName()});
         TPath tablePath = TPath::Resolve(stringTablePath, context.SS);
-         {
+        {
             if (tablePath->IsColumnTable()) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "Column tables don`t support TRUNCATE TABLE");
                 return result;
@@ -176,14 +176,34 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotBackupTable()
-                .NotAsyncReplicaTable()
                 .NotUnderTheSameOperation(OperationId.GetTxId())
                 .NotUnderOperation();
-                // TODO flown4qqqq (need add check on cdc streams)
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
+            }
+
+            for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+                Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
+                TPath srcChildPath = tablePath.Child(childName);
+
+                if (srcChildPath.IsDeleted()) {
+                    continue;
+                }
+
+                if (srcChildPath->IsCdcStream()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "Cannot truncate table with CDC streams");
+                    return result;
+                }
+                
+                if (srcChildPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync)) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "Cannot truncate table with async indexes");
+                    return result;
+                }
+
             }
         }
 

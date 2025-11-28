@@ -348,7 +348,8 @@ public:
         , MaxNumberRows(CalculateMaxNumberRows())
         , LogPrefix("TJsonParser: ")
         , Counters(counters.CountersSubgroup)
-        , ParsingErrors(Counters->GetCounter("ParsingErrors", true))
+        , PartitionParsingErrors(Counters->GetCounter("ParsingErrors", true))
+        , ReadGroupParsingErrors(counters.ReadGroupSubgroup->GetCounter("JsonParsingErrors", true))
     {
         FillColumnsBuffers();
         Buffer.Reserve(Config.BatchSize, MaxNumberRows);
@@ -483,7 +484,8 @@ protected:
         }
 
         if (ParsingFailedRowCount) {
-            ParsingErrors->Add(ParsingFailedRowCount);
+            PartitionParsingErrors->Add(ParsingFailedRowCount);
+            ReadGroupParsingErrors->Add(ParsingFailedRowCount);
             OutputOffsets.resize(Buffer.Offsets.size() - ParsingFailedRowCount);
         }
         for (auto& column : Columns) {
@@ -720,7 +722,8 @@ private:
     TVector<NYql::NUdf::TUnboxedValue> ParsedValuesBuffer;
     TVector<std::span<NYql::NUdf::TUnboxedValue>> ParsedValues;
     NMonitoring::TDynamicCounterPtr Counters;
-    NMonitoring::TDynamicCounters::TCounterPtr ParsingErrors;
+    NMonitoring::TDynamicCounters::TCounterPtr PartitionParsingErrors;
+    NMonitoring::TDynamicCounters::TCounterPtr ReadGroupParsingErrors;
     ui64 ParsingFailedRowCount = 0;
     ui64 NonOptionalColumnsCount = 0;
 };

@@ -8,9 +8,8 @@
 
 // #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
-#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
-
 #define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 

@@ -11,7 +11,7 @@ You can create a YdbDataSource in following ways.
 1. **Without parameters**:
 
    The following code creates a data source with default settings:
-    
+
     ```c#
     await using var ydbDataSource = new YdbDataSource();
     ```
@@ -26,7 +26,7 @@ You can create a YdbDataSource in following ways.
     await using var ydbDataSource = new YdbDataSource(
         "Host=database-sample-grpc;Port=2135;Database=/root/database-sample");
     ```
-    
+
    The data source will use URL: `grpc://database-sample-grpc:2135/root/database-sample.` The supported settings are described on [the connection parameters page](./connection-parameters.md).
 
 3. **Using a YdbConnectionStringBuilder**:
@@ -42,7 +42,7 @@ You can create a YdbDataSource in following ways.
     
     await using var ydbDataSource = new YdbDataSource(ydbConnectionBuilder);
     ```
-   
+
    YdbConnectionStringBuilder also supports additional [options](connection-parameters.md#connection-builder-parameters) beyond the connection string, such as logging and advanced authentication.
 
 ## Connections
@@ -51,7 +51,7 @@ A connection to {{ ydb-short-name }} is established via `YdbConnection`. You obt
 
 1. **YdbDataSource.OpenConnectionAsync**:
 
-   Opens a connection to YDB using the parameters set on YdbDataSource (see the [YDB Data Source section](#data_source)).:
+   Opens a connection to YDB using the parameters set on YdbDataSource (see the [YDB Data Source section](#data_source)).
 
     ```c#
     await using var ydbConnection = await ydbDataSource.OpenConnectionAsync();
@@ -70,7 +70,7 @@ A connection to {{ ydb-short-name }} is established via `YdbConnection`. You obt
    Mode specifics:
     - Interactive transactions are not supported.
     - Commands (YdbCommand) created from this connection automatically retry single operations on transient errors.
-    - Attempting to use a transaction will throw an exception (see the [transactions section](#transaction)).
+    - Attempting to use a transaction will throw an exception (see the [transactions section](#transactions)).
 
    {% note warning %}
 
@@ -80,7 +80,7 @@ A connection to {{ ydb-short-name }} is established via `YdbConnection`. You obt
 
 3. **Not recommended**: CreateConnection/constructor:
 
-   Using `YdbDataSource.CreateConnection` and the `YdbConnection` constructor (legacy ADO.NET API) is not recommended. 
+   Using `YdbDataSource.CreateConnection` and the `YdbConnection` constructor (legacy ADO.NET API) is not recommended.
    If you still need it, open the connection manually:
 
     - With a connection string:
@@ -350,7 +350,7 @@ If you choose this approach, be certain you understand what you’re doing: you 
 
 {% note info %}
 
-This section is relevant if you do not use the provider’s built-in retries (see the [retries section](#ydb_retry_policy.md)).
+This section is relevant if you do not use the provider’s built-in retries (see the [retries section](#retry_policy)).
 
 {% endnote %}
 

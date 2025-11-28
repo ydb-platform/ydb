@@ -70,7 +70,7 @@ await new YdbCommand(ydbConnection)
 | **{{ ydb-short-name }} тип** | **.NET тип** | **Non-default .NET типы**               | **YdbDbType**     | **DbType**                                                   |
 |------------------------------|--------------|-----------------------------------------|-------------------|--------------------------------------------------------------|
 | Bool                         | bool         |                                         | Bool              | Boolean                                                      |
-| Int8                         | sbyte        |                                         | Int8              |  SByte                                                       |
+| Int8                         | sbyte        |                                         | Int8              | SByte                                                        |
 | Int16                        | short        | sbyte, byte                             | Int16             | Int16                                                        |
 | Int32                        | int          | sbyte, byte, short, ushort              | Int32             | Int32                                                        |
 | Int64                        | long         | sbyte, byte, short, ushort, int, uint   | Int64             | Int64                                                        |

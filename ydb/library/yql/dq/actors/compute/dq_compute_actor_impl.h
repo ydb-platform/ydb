@@ -884,6 +884,7 @@ protected:
         ui32 SrcStageId;
         IDqInputChannel::TPtr Channel;
         bool HasPeer = false;
+        NActors::TActorId PeerId;
         const NDqProto::EWatermarksMode WatermarksMode;
         const TDuration WatermarksIdleTimeout = TDuration::Max();
         std::optional<NDqProto::TCheckpoint> PendingCheckpoint;
@@ -1149,6 +1150,7 @@ protected:
                 } else {
                     Channels->SetInputChannelPeer(channelUpdate.GetId(), peer);
                 }
+                inputChannel->PeerId = peer;
                 inputChannel->HasPeer = true;
 
                 continue;
@@ -1169,6 +1171,7 @@ protected:
                         outputChannel->Channel->UpdateSettings({.IsLocalChannel = peer.NodeId() == this->SelfId().NodeId()});
                     }
                 }
+                outputChannel->PeerId = peer;
                 outputChannel->HasPeer = true;
 
                 continue;

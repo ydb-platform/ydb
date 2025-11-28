@@ -1,16 +1,25 @@
 import datetime
 import os
-import json
-from github import Github, Auth as GithubAuth
-from github.PullRequest import PullRequest
+from github import Github, GithubException, Auth as GithubAuth
 
 def post(is_valid, error_description):
     gh = Github(auth=GithubAuth.Token(os.environ["GITHUB_TOKEN"]))
-
-    with open(os.environ["GITHUB_EVENT_PATH"]) as fp:
-        event = json.load(fp)
-
-    pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
+    
+    pr_number = os.environ.get("PR_NUMBER")
+    if not pr_number:
+        print("::warning::PR_NUMBER is not set, skipping status update")
+        return
+    
+    try:
+        github_repo = os.environ.get("GITHUB_REPOSITORY")
+        if not github_repo:
+            print("::warning::GITHUB_REPOSITORY is not set, skipping status update")
+            return
+        repo = gh.get_repo(github_repo)
+        pr = repo.get_pull(int(pr_number))
+    except (ValueError, GithubException) as e:
+        print(f"::warning::Could not get PR #{pr_number}: {e}, skipping status update")
+        return
 
     header = f"<!-- status pr={pr.number}, validate PR description status -->"
 

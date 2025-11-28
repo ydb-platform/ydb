@@ -1,3 +1,4 @@
+import os
 import sys
 import re
 from typing import Tuple
@@ -17,6 +18,10 @@ def validate_pr_description(description, is_not_for_cl_valid=True) -> bool:
         return False
 
 def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, str]:
+    # Normalize line endings to Unix format (\n) to avoid issues with Windows (\r\n) or old Mac (\r)
+    # This ensures consistent behavior regardless of the source of the PR body
+    description = description.replace('\r\n', '\n').replace('\r', '\n')
+    
     if not description.strip():
         txt = "PR description is empty. Please fill it out."
         print(f"::warning::{txt}")
@@ -26,36 +31,55 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
         return is_not_for_cl_valid, "Changelog category and entry sections are not found."
 
     if PULL_REQUEST_TEMPLATE.strip() in description.strip():
-        return is_not_for_cl_valid, "Pull request template as is."
+        txt = "Pull request template as is."
+        print(f"::warning::{txt}")
+        return False, txt
 
     # Extract changelog category section
-    category_section = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", description, re.DOTALL)
+    # After normalization, we can safely use \n
+    # Use a more flexible pattern that handles comments and multiple newlines
+    category_section = re.search(r"### Changelog category[^\n]*\n+(.*?)(\n###|$)", description, re.DOTALL)
     if not category_section:
         txt = "Changelog category section not found."
         print(f"::warning::{txt}")
         return False, txt
 
-    categories = [line.strip('* ').strip() for line in category_section.group(1).splitlines() if line.strip()]
+    # Extract only lines that start with * (category items), ignore comments and empty lines
+    categories = [line.strip('* ').strip() for line in category_section.group(1).splitlines() if line.strip().startswith('*')]
 
+    if len(categories) == 0:
+        txt = "Changelog category section not found or no category selected."
+        print(f"::warning::{txt}")
+        return False, txt
+    
     if len(categories) != 1:
         txt = "Only one category can be selected at a time."
         print(f"::warning::{txt}")
         return False, txt
 
     category = categories[0]
+    category_lower = category.lower()
 
-    if not any(category.lower() == valid_cat.lower() for valid_cat in ALL_CATEGORIES):
+    # Check if category matches any valid category using startswith for flexible matching
+    def category_matches(cat):
+        """Check if category matches a valid category (supports variants like 'Not for changelog' vs 'Not for changelog (...)')"""
+        base = cat.lower().split('(')[0].strip()
+        return category_lower.startswith(base) or base.startswith(category_lower)
+    
+    if not any(category_matches(cat) for cat in ALL_CATEGORIES):
         txt = f"Invalid Changelog category: {category}"
         print(f"::warning::{txt}")
         return False, txt
 
-    if not is_not_for_cl_valid and any(category.lower() == cat.lower() for cat in NOT_FOR_CHANGELOG_CATEGORIES):
+    is_not_for_changelog = any(category_matches(cat) for cat in NOT_FOR_CHANGELOG_CATEGORIES)
+    if not is_not_for_cl_valid and is_not_for_changelog:
         txt = f"Category is not for changelog: {category}"
         print(f"::notice::{txt}")
         return False, txt
 
-    if not any(category.lower() == cat.lower() for cat in NOT_FOR_CHANGELOG_CATEGORIES):
-        entry_section = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", description, re.DOTALL)
+    if not is_not_for_changelog:
+        # After normalization, we can safely use \n
+        entry_section = re.search(r"### Changelog entry[^\n]*\n+(.*?)(\n###|$)", description, re.DOTALL)
         if not entry_section or len(entry_section.group(1).strip()) < 20:
             txt = "The changelog entry is less than 20 characters or missing."
             print(f"::warning::{txt}")
@@ -79,7 +103,14 @@ def validate_pr_description_from_file(file_path) -> Tuple[bool, str]:
             with open(file_path, 'r') as file:
                 description = file.read()
         else:
-            description = sys.stdin.read()
+            # Read from environment variable (preferred) or stdin (fallback)
+            description = os.environ.get('PR_BODY', '')
+            # Handle case when PR_BODY is the string "null" (from GitHub API)
+            if description == 'null' or description is None:
+                description = ''
+            if not description:
+                description = sys.stdin.read()
+        
         return check_pr_description(description)
     except Exception as e:
         txt = f"Failed to validate PR description: {e}"

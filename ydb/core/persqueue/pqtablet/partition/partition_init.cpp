@@ -511,16 +511,15 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             FillBlobsMetaData(ctx);
             FormHeadAndProceed();
 
-            if (GetContext().StartOffset && *GetContext().StartOffset != Partition()->GetStartOffset()) {
-                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->GetStartOffset());
-                Y_ABORT("meta is broken");
-                return PoisonPill(ctx);
-            }
-            if (GetContext().EndOffset && *GetContext().EndOffset != Partition()->GetEndOffset()) {
-                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->GetEndOffset());
-                Y_ABORT("meta is broken");
-                return PoisonPill(ctx);
-            }
+            AFL_ENSURE(!GetContext().StartOffset || *GetContext().StartOffset >= Partition()->GetStartOffset())
+                ("d", "StartOffset from meta and blobs are different")
+                ("l", *GetContext().StartOffset)
+                ("r", Partition()->GetStartOffset());
+
+            AFL_ENSURE(!GetContext().EndOffset || *GetContext().EndOffset == Partition()->GetEndOffset())
+                ("d", "EndOffset from meta and blobs are different")
+                ("l", *GetContext().EndOffset)
+                ("r", Partition()->GetEndOffset());
 
             Done(ctx);
             break;
@@ -670,7 +669,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const TActorContext&) {
             const auto k = TKey::FromString(pair.GetKey(), PartitionId());
             if (!actualKeys.contains(pair.GetKey())) {
                 PQ_LOG_D("unknown key " << pair.GetKey() << " will be deleted");
-                Partition()->DeletedKeys->emplace_back(k.ToString());
+                Partition()->DeletedKeys.emplace_back(k.ToString(), std::weak_ptr<TBlobKeyToken>());
                 continue;
             }
             if (dataKeysBody.empty()) { //no data - this is first pair of first range

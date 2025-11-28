@@ -801,7 +801,12 @@ private:
     TMessageQueue PendingRequests;
     TMessageQueue QuotaWaitingRequests;
 
-    std::shared_ptr<std::deque<TString>> DeletedKeys;
+    struct TDeletedKey {
+        TString Key;
+        std::weak_ptr<TBlobKeyToken> Lock;
+    };
+    void ScheduleKeyDelete(const TDataKey& key);
+    std::deque<TDeletedKey> DeletedKeys;
 
     TPartitionBlobEncoder CompactionBlobEncoder; // Compaction zone
     TPartitionBlobEncoder BlobEncoder;           // FastWrite zone

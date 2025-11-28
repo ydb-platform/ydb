@@ -551,7 +551,11 @@ void TPartition::BlobsForCompactionWereWrite()
     AFL_ENSURE(BlobEncoder.DataKeysBody.size() >= KeysForCompaction.size());
 
     for (size_t i = 0; i < KeysForCompaction.size(); ++i) {
-        BlobEncoder.BodySize -= BlobEncoder.DataKeysBody.front().Size;
+        auto& key = BlobEncoder.DataKeysBody.front();
+
+        ScheduleKeyDelete(key);
+
+        BlobEncoder.BodySize -= key.Size;
         BlobEncoder.DataKeysBody.pop_front();
 
         if (BlobEncoder.DataKeysBody.empty()) {

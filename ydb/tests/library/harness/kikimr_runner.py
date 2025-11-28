@@ -21,6 +21,7 @@ from . import kikimr_config
 from . import kikimr_node_interface
 from . import kikimr_cluster_interface
 
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
 from ydb.tests.library.clients.kikimr_config_client import config_client_factory
@@ -54,7 +55,7 @@ def ensure_path_exists(path):
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def __init__(self, node_id, config_path, port_allocator, cluster_name, configurator,
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
-                 binary_path=None, data_center=None):
+                 binary_path=None, data_center=None, use_config_store=False, seed_nodes_file=None):
 
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_id
@@ -64,6 +65,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__configurator = configurator
         self.__common_udfs_dir = udfs_dir
         self.__binary_path = binary_path
+        self.__use_config_store = use_config_store or self.__configurator.use_config_store
 
         self.__encryption_key = encryption_key
         self._tenant_affiliation = tenant_affiliation
@@ -78,6 +80,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         self.__role = role
         self.__node_broker_port = node_broker_port
+        self.__seed_nodes_file = seed_nodes_file
 
         self.__working_dir = ensure_path_exists(
             os.path.join(
@@ -177,6 +180,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             command.append("--config-dir=%s" % self.__config_path)
         else:
             command.append("--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"))
+
+        if self.__seed_nodes_file:
+            command.append("--seed-nodes=%s" % self.__seed_nodes_file)
 
         if self.__node_broker_port is not None:
             command.append("--node-broker=%s%s:%d" % (
@@ -446,9 +452,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             self.__run_node(node_id)
 
         if self.__configurator.use_self_management:
-            self.__cluster_bootstrap()
+            self._bootstrap_cluster(self_assembly_uuid="test-cluster")
 
         if self.__configurator.protected_mode:
+            time.sleep(5)
             self.root_token = self._get_token()
 
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
@@ -498,7 +505,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._nodes[node_id].start()
         return self._nodes[node_id]
 
-    def __register_node(self, configurator=None):
+    def __register_node(self, configurator=None, seed_nodes_file=None):
         configurator = configurator or self.__configurator
         node_index = next(self._node_index_allocator)
 
@@ -523,6 +530,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             tenant_affiliation=configurator.yq_tenant,
             binary_path=configurator.get_binary_path(node_index),
             data_center=data_center,
+            seed_nodes_file=seed_nodes_file,
         )
         return self._nodes[node_index]
 
@@ -610,15 +618,17 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node.stop()
             node.start()
 
-    def prepare_node(self, configurator=None):
+    def prepare_node(self, configurator=None, seed_nodes_file=None):
         try:
-            new_node_object = self.__register_node(configurator)
-            self.__write_node_config(new_node_object.node_id, configurator)
-            logger.info("Successfully registered new node object with ID: {}".format(new_node_object.node_id))
+            new_node_object = self.__register_node(configurator, seed_nodes_file)
+            # Skip writing protocol configuration files if seeding nodes from a file
+            skip_proto_write = seed_nodes_file is not None
+            self.__write_node_config(new_node_object.node_id, configurator, skip_proto_write)
+            logger.info("Successfully registered new node object with ID: %s" % str(new_node_object.node_id))
             return new_node_object
         except Exception as e:
-            logger.error("Failed to register new node: {}".format(e), exc_info=True)
-            raise RuntimeError("Failed to register new node: {}".format(e))
+            logger.error("Failed to register new node: %s" % str(e), exc_info=True)
+            raise RuntimeError("Failed to register new node: %s" % str(e))
 
     def start_node(self, node_id):
         if node_id not in self._nodes:
@@ -648,13 +658,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             return self.__config_base_path
         return self.__config_path
 
-    def __write_node_config(self, node_id, configurator=None):
+    def __write_node_config(self, node_id, configurator=None, config_dir_only=False):
         configurator = configurator or self.__configurator
         node_config_path = ensure_path_exists(
             os.path.join(self.__config_base_path, "node_{}".format(node_id))
         )
-        logger.info("Writing node config to {}".format(node_config_path))
-        logger.info("Config: {}".format(configurator.yaml_config))
+        if config_dir_only:
+            return
         configurator.write_proto_configs(node_config_path)
 
     def __write_configs(self):
@@ -766,29 +776,25 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         assert bs_controller_started
 
-    def __cluster_bootstrap(self):
-        timeout = 240
-        sleep = 5
-        retries, success = timeout / sleep, False
-        while retries > 0 and not success:
+    def _bootstrap_cluster(self, self_assembly_uuid="test-cluster", timeout=30, interval=2):
+        start_time = time.time()
+        last_exception = None
+        while time.time() - start_time < timeout:
             try:
-                self.__call_ydb_cli(
-                    [
-                        "admin",
-                        "cluster",
-                        "bootstrap",
-                        "--uuid", "test-cluster"
-                    ]
-                )
-                success = True
+                result = self.config_client.bootstrap_cluster(self_assembly_uuid=self_assembly_uuid)
+                if result.operation.status == StatusIds.SUCCESS:
+                    logger.info("Successfully bootstrapped cluster")
+                    return result
+                else:
+                    error_msg = "Bootstrap cluster failed with status: %s" % (result.operation.status, )
+                    for issue in result.operation.issues:
+                        error_msg += "\nIssue: %s" % (issue, )
+                    raise Exception(error_msg)
 
             except Exception as e:
-                logger.error("Failed to execute, %s", str(e))
-                retries -= 1
-                time.sleep(sleep)
-
-                if retries == 0:
-                    raise
+                last_exception = e
+                time.sleep(interval)
+        raise last_exception
 
     def _create_config_client(self):
         first_node = self.nodes[list(self.nodes.keys())[0]]

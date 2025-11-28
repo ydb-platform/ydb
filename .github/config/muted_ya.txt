@@ -151,7 +151,6 @@ ydb/tests/compatibility test_data_type.py.TestDataType.test_parametrized_data_ty
 ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[rolling_stable-25-2-1_to_stable-25-3-1]
 ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[rolling_stable-25-3-1_to_prestable-25-4]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-3-1_and_stable-25-2-1-row]
-ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-25-2-1_to_stable-25-3-1]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_topics[mixed_stable-25-3-1_and_stable-25-2-1]
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/multi_plane py3test.[test_retry.py] chunk

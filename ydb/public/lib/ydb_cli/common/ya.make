@@ -16,7 +16,6 @@ SRCS(
     parameter_stream.cpp
     parameters.cpp
     pg_dump_parser.cpp
-    plan2svg.cpp
     pretty_table.cpp
     print_operation.cpp
     print_utils.cpp
@@ -41,8 +40,9 @@ PEERDIR(
     contrib/libs/openssl
     library/cpp/getopt
     library/cpp/json/writer
-    library/cpp/yaml/as
+    library/cpp/regex/pcre
     library/cpp/string_utils/csv
+    library/cpp/yaml/as
     ydb/public/lib/json_value
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/lib/yson_value
@@ -57,6 +57,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/credentials
     ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange
     ydb/library/arrow_parquet
+    ydb/library/plan2svg
     ydb/public/lib/ydb_cli/common/ini_config
     ydb/public/lib/ydb_cli/common/yql_parser
 )

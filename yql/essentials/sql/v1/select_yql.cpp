@@ -1,0 +1,669 @@
+#include "select_yql.h"
+
+#include "context.h"
+
+#include <util/generic/overloaded.h>
+#include <util/generic/scope.h>
+
+namespace NSQLTranslationV1 {
+
+bool Init(TContext& ctx, ISource* src, const TVector<TNodePtr>& nodes) {
+    for (const TNodePtr& node : nodes) {
+        if (!node->Init(ctx, src)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+class TYqlTableRefNode final: public INode, private TYqlTableRefArgs {
+public:
+    TYqlTableRefNode(TPosition position, TYqlTableRefArgs&& args)
+        : INode(std::move(position))
+        , TYqlTableRefArgs(std::move(args))
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(src);
+
+        const TString ref = ctx.MakeName("yql_read");
+        TNodePtr read = Y("Read!", "world", BuildDataSource(), BuildKey(), Y("Void"), Q(Y()));
+
+        TBlocks& blocks = ctx.GetCurrentBlocks();
+        blocks.emplace_back(Y("let", ref, std::move(read)));
+        blocks.emplace_back(Y("let", "world", Y("Left!", ref)));
+        Node_ = Y("Right!", ref);
+
+        return true;
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        return Node_->Translate(ctx);
+    }
+
+    TNodePtr DoClone() const override {
+        return new TYqlTableRefNode(*this);
+    }
+
+private:
+    TNodePtr BuildDataSource() const {
+        return Y("DataSource", Q(Service), Q(Cluster));
+    }
+
+    TNodePtr BuildKey() const {
+        return Y("Key", Q(Y(Q("table"), Y("String", Q(Key)))));
+    }
+
+    TNodePtr Node_;
+};
+
+class TYqlValuesNode final: public INode, private TYqlValuesArgs {
+public:
+    TYqlValuesNode(TPosition position, TYqlValuesArgs&& args)
+        : INode(std::move(position))
+        , TYqlValuesArgs(std::move(args))
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        for (const auto& row : Rows) {
+            if (!::NSQLTranslationV1::Init(ctx, src, row)) {
+                return false;
+            }
+        }
+
+        if (TMaybe<size_t> width = Width(Rows, ctx)) {
+            Width_ = *width;
+        } else {
+            return false;
+        }
+
+        Values_ = BuildValueList(Rows);
+        if (!Values_) {
+            return false;
+        }
+
+        return true;
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        TNodePtr node =
+            Y("YqlSelect",
+              Q(Y(Q(Y(Q("set_items"),
+                      Q(Y(Y("YqlSetItem",
+                            Q(Y(Q(Y(Q("values"),
+                                    Q(BuildColumnList()),
+                                    Values_))))))))),
+                  Q(Y(Q("set_ops"), Q(Y(Q("push"))))))));
+        return node->Translate(ctx);
+    }
+
+    TNodePtr DoClone() const override {
+        return new TYqlValuesNode(*this);
+    }
+
+    bool SetColumns(TVector<TString> columns, TContext& ctx) {
+        if (columns.empty()) {
+            return true;
+        }
+
+        if (Width_ < columns.size()) {
+            ctx.Error() << "Derived column list size "
+                        << "exceeds column count in VALUES";
+            return false;
+        }
+
+        Columns_ = std::move(columns);
+        return true;
+    }
+
+private:
+    TNodePtr BuildColumnList() const {
+        TNodePtr columns = Y();
+        for (size_t i = 0; i < Width_; ++i) {
+            TString name;
+            if (!Columns_ || Columns_->size() <= i) {
+                name = TStringBuilder() << "column" << i;
+            } else {
+                name = Columns_->at(i);
+            }
+
+            columns->Add(Q(std::move(name)));
+        }
+        return columns;
+    }
+
+    TNodePtr BuildValueList(const TVector<TVector<TNodePtr>>& rows) const {
+        TNodePtr values = Y("YqlValuesList");
+        for (const auto& row : rows) {
+            TNodePtr value = Y();
+            for (const TNodePtr& column : row) {
+                value->Add(column);
+            }
+
+            values->Add(Q(std::move(value)));
+        }
+        return values;
+    }
+
+    TMaybe<size_t> Width(const TVector<TVector<TNodePtr>>& rows, TContext& ctx) const {
+        size_t width = std::numeric_limits<size_t>::max();
+        for (const auto& row : rows) {
+            if (width == std::numeric_limits<size_t>::max()) {
+                width = row.size();
+            } else if (width != row.size()) {
+                ctx.Error() << "VALUES lists must all be the same length. "
+                            << "Expected width is " << width << ", "
+                            << "but got " << row.size();
+                return Nothing();
+            }
+        }
+        return width;
+    }
+
+    TNodePtr Values_;
+    size_t Width_ = 0;
+    TMaybe<TVector<TString>> Columns_;
+};
+
+class TYqlSelectNode final: public INode, private TYqlSelectArgs {
+public:
+    TYqlSelectNode(TPosition position, TYqlSelectArgs&& args)
+        : INode(std::move(position))
+        , TYqlSelectArgs(std::move(args))
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!InitProjection(ctx, src) ||
+            !InitSource(ctx, src) ||
+            (Where && !Where->GetRef().Init(ctx, src)) ||
+            !InitOrderBy(ctx, src) ||
+            (Limit && !Limit->GetRef().Init(ctx, src)) ||
+            (Offset && !Offset->GetRef().Init(ctx, src))) {
+            return false;
+        }
+
+        TNodePtr item = Y();
+        {
+            TNodePtr items = BuildYqlResultItems(Projection);
+            if (!items) {
+                return false;
+            }
+
+            item->Add(Q(Y(Q("result"), Q(std::move(items)))));
+        }
+
+        if (Source) {
+            YQL_ENSURE(
+                !Source->Sources.empty(),
+                "Expected non-empty sources, got " << Source->Sources.size());
+            YQL_ENSURE(
+                Source->Sources.size() == Source->Constraints.size() + 1,
+                "Expected len(join_sources) == len(join_constraints) + 1, got "
+                    << Source->Sources.size() << " != " << Source->Constraints.size());
+
+            TNodePtr from = Y();
+            for (const auto& source : Source->Sources) {
+                if (auto element = BuildFromElement(ctx, source)) {
+                    from->Add(std::move(*element));
+                } else {
+                    return false;
+                }
+            }
+
+            TNodePtr joinOps = Y();
+            joinOps->Add(Q(Y(Q("push"))));
+            for (const auto& constraint : Source->Constraints) {
+                joinOps->Add(Q(Y(Q("push"))));
+                joinOps->Add(BuildJoinConstraint(constraint));
+            }
+
+            item->Add(Q(Y(Q("from"), Q(std::move(from)))));
+            item->Add(Q(Y(Q("join_ops"), Q(Y(Q(std::move(joinOps)))))));
+        }
+
+        if (Where) {
+            if (!Source) {
+                ctx.Error() << "Filtering is not allowed without FROM";
+                return false;
+            }
+
+            item->Add(Q(Y(Q("where"), Y("YqlWhere", Y("Void"), Y("lambda", Q(Y()), *Where)))));
+        }
+
+        if (OrderBy) {
+            item->Add(Q(Y(Q("sort"), Q(BuildSortSpecification(OrderBy->Keys)))));
+        }
+
+        TNodePtr body = Y();
+        {
+            body->Add(Q(Y(Q("set_items"), Q(Y(Y("YqlSetItem", Q(std::move(item))))))));
+            body->Add(Q(Y(Q("set_ops"), Q(Y(Q("push"))))));
+        }
+
+        if (Limit) {
+            body->Add(Q(Y(Q("limit"), *Limit)));
+        }
+
+        if (Offset) {
+            body->Add(Q(Y(Q("offset"), *Offset)));
+        }
+
+        Node_ = Y("YqlSelect", Q(std::move(body)));
+
+        return true;
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        return Node_->Translate(ctx);
+    }
+
+    TNodePtr DoClone() const override {
+        return new TYqlSelectNode(*this);
+    }
+
+    bool IsOrdered() const {
+        return OrderBy.Defined();
+    }
+
+private:
+    bool InitProjection(TContext& ctx, ISource* src) const {
+        return std::visit(
+            TOverloaded{
+                [&](const TVector<TNodePtr>& terms) {
+                    return InitTerms(ctx, src, terms);
+                },
+                [](const TPlainAsterisk&) {
+                    return true;
+                },
+            }, Projection);
+    }
+
+    bool InitTerms(TContext& ctx, ISource* src, const TVector<TNodePtr>& terms) const {
+        THashSet<TString> used = UsedLables(terms);
+
+        for (size_t i = 0; i < terms.size(); ++i) {
+            const TNodePtr& term = terms[i];
+
+            TString label = TermAlias(term, i, used);
+            used.emplace(label);
+
+            term->SetLabel(std::move(label));
+        }
+
+        return ::NSQLTranslationV1::Init(ctx, src, terms);
+    }
+
+    bool InitSource(TContext& ctx, ISource* src) const {
+        if (!Source) {
+            return true;
+        }
+
+        for (const auto& source : Source->Sources) {
+            if (!source.Node->Init(ctx, src)) {
+                return false;
+            }
+        }
+
+        for (const auto& constraint : Source->Constraints) {
+            if (!constraint.Condition->Init(ctx, src)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool InitOrderBy(TContext& ctx, ISource* src) const {
+        if (!OrderBy) {
+            return true;
+        }
+
+        for (const auto& key : OrderBy->Keys) {
+            if (!key->OrderExpr->Init(ctx, src)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    THashSet<TString> UsedLables(const TVector<TNodePtr>& terms) const {
+        THashSet<TString> used(terms.size());
+        for (const TNodePtr& term : terms) {
+            used.emplace(term->GetLabel());
+        }
+        return used;
+    }
+
+    TString TermAlias(const TNodePtr& term, size_t i, const THashSet<TString>& used) const {
+        const TString& label = term->GetLabel();
+        if (!label.empty()) {
+            return label;
+        }
+
+        if (const TString* column = term->GetColumnName()) {
+            return *column;
+        }
+
+        for (;; ++i) {
+            TString alias = TStringBuilder() << "column" << i;
+            if (!used.contains(alias)) {
+                return alias;
+            }
+        }
+    }
+
+    TNodePtr BuildYqlResultItems(const TProjection& projection) const {
+        return std::visit(
+            TOverloaded{
+                [&](const TVector<TNodePtr>& terms) { return BuildYqlResultItems(terms); },
+                [&](const TPlainAsterisk& terms) { return BuildYqlResultItems(terms); },
+            }, projection);
+    }
+
+    TNodePtr BuildYqlResultItems(const TVector<TNodePtr>& terms) const {
+        TNodePtr items = Y();
+        for (const TNodePtr& term : terms) {
+            items->Add(BuildYqlResultItem(term->GetLabel(), term));
+        }
+        return items;
+    }
+
+    TNodePtr BuildYqlResultItems(const TPlainAsterisk&) const {
+        return Y(BuildYqlResultItem("", Y("YqlStar")));
+    }
+
+    TNodePtr BuildYqlResultItem(TString name, TNodePtr term) const {
+        name = DisambiguatedResultItemName(std::move(name), term);
+        return Y("YqlResultItem", Q(std::move(name)), Y("Void"), Y("lambda", Q(Y()), std::move(term)));
+    }
+
+    TString DisambiguatedResultItemName(TString name, const TNodePtr& term) const {
+        if (const auto* source = term->GetSourceName();
+            source && Source && 1 < Source->Sources.size()) {
+            name.prepend(".").prepend(*source);
+        }
+
+        return name;
+    }
+
+    TMaybe<TNodePtr> BuildFromElement(TContext& ctx, const TYqlSource& source) const {
+        const auto build = [this](TNodePtr node, TString name) {
+            YQL_ENSURE(!name.empty(), "An empty source name is unsupported");
+            return Q(Y(
+                std::move(node),
+                Q(std::move(name)),
+                Q(Y(/* Columns are passed through SetColumns */))));
+        };
+
+        if (!source.Alias) {
+            return build(source.Node, ctx.MakeName("_yql_source_"));
+        }
+
+        if (auto& columns = source.Alias->Columns) {
+            if (auto* values = dynamic_cast<TYqlValuesNode*>(source.Node.Get())) {
+                if (!values->SetColumns(std::move(columns), ctx)) {
+                    return Nothing();
+                }
+            } else {
+                ctx.Error() << "Qualified by column names source alias "
+                            << "is viable only for VALUES statement";
+                return Nothing();
+            }
+        }
+
+        return build(source.Node, source.Alias->Name);
+    }
+
+    TNodePtr BuildJoinConstraint(const TYqlJoinConstraint& constraint) const {
+        return Q(Y(
+            Q(ToString(constraint.Kind)),
+            Y("YqlWhere", Y("Void"), Y("lambda", Q(Y()), constraint.Condition))));
+    }
+
+    TNodePtr BuildSortSpecification(const TVector<TSortSpecificationPtr>& keys) const {
+        TNodePtr specification = Y();
+        for (const TSortSpecificationPtr& key : keys) {
+            specification->Add(BuildSortSpecification(key));
+        }
+        return specification;
+    }
+
+    TNodePtr BuildSortSpecification(const TSortSpecificationPtr& key) const {
+        TString modifier = key->Ascending ? "asc" : "desc";
+        return Y("YqlSort", Y("Void"), Y("lambda", Q(Y()), key->OrderExpr), Q(modifier), Q("first"));
+    }
+
+    static TString ToString(EYqlJoinKind kind) {
+        switch (kind) {
+            case EYqlJoinKind::Inner:
+                return "inner";
+            case EYqlJoinKind::Left:
+                return "left";
+            case EYqlJoinKind::Right:
+                return "right";
+        }
+    }
+
+    TNodePtr Node_;
+};
+
+bool IsYqlSource(const TNodePtr& node) {
+    return dynamic_cast<TYqlSelectNode*>(node.Get()) ||
+           dynamic_cast<TYqlValuesNode*>(node.Get());
+}
+
+class TYqlStatementNode final: public INode {
+public:
+    explicit TYqlStatementNode(TNodePtr source)
+        : INode(source->GetPos())
+        , Source_(std::move(source))
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        TBlocks dependencies;
+        {
+            ctx.PushCurrentBlocks(&dependencies);
+            Y_DEFER {
+                ctx.PopCurrentBlocks();
+            };
+
+            if (!Source_->Init(ctx, src)) {
+                return false;
+            }
+        }
+
+        TNodePtr block = BuildList(GetPos(), std::move(dependencies));
+        {
+            block->Add(Y("let", "output", Source_));
+
+            if (!IsOrdered()) {
+                block->Add(Y("let", "output", Y("Unordered", "output")));
+            }
+
+            block->Add(Y("let", "result_sink",
+                         Y("DataSink", Q("result"))));
+
+            TNodePtr options = Y();
+            options->Add(Q(Y(Q("type"))));
+            options->Add(Q(Y(Q("autoref"))));
+
+            if (!IsOrdered()) {
+                options->Add(Q(Y(Q("unordered"))));
+            }
+
+            block->Add(Y("let", "world",
+                         Y("Write!", "world", "result_sink", Y("Key"), "output", Q(options))));
+
+            block->Add(Y("return", Y("Commit!", "world", "result_sink")));
+        }
+
+        Node_ = Y("block", Q(std::move(block)));
+
+        return true;
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        return Node_->Translate(ctx);
+    }
+
+    TNodePtr DoClone() const override {
+        return new TYqlStatementNode(*this);
+    }
+
+private:
+    bool IsOrdered() const {
+        if (const auto* select = dynamic_cast<const TYqlSelectNode*>(Source_.Get())) {
+            return select->IsOrdered();
+        }
+        return false;
+    }
+
+    TNodePtr Source_;
+    TNodePtr Node_;
+};
+
+class TYqlSubLinkNode final: public INode {
+public:
+    struct TScalar {
+    };
+
+    struct TExists {
+    };
+
+    struct TIn {
+        TNodePtr Expression;
+    };
+
+    using TVariant = std::variant<
+        TScalar,
+        TExists,
+        TIn>;
+
+    TYqlSubLinkNode(TNodePtr source, TVariant variant)
+        : INode(source->GetPos())
+        , Source_(Unbox(std::move(source)))
+        , Variant_(std::move(variant))
+    {
+        YQL_ENSURE(IsYqlSource(Source_));
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!Source_->Init(ctx, src) ||
+            !Init(ctx, src, Variant_)) {
+            return false;
+        }
+
+        Node_ = ToSubLink(Source_, Variant_);
+        return true;
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        return Node_->Translate(ctx);
+    }
+
+    TNodePtr DoClone() const override {
+        return new TYqlSubLinkNode(*this);
+    }
+
+    TNodePtr Source() const {
+        YQL_ENSURE(
+            std::holds_alternative<TScalar>(Variant_),
+            "Only a scalar subquery can be a box for a select");
+        return Source_;
+    }
+
+private:
+    bool Init(TContext& ctx, ISource* src, const TVariant& variant) {
+        return std::visit(
+            TOverloaded{
+                [&](const TScalar&) { return true; },
+                [&](const TExists&) { return true; },
+                [&](const TIn& x) { return Init(ctx, src, x); },
+            }, variant);
+    }
+
+    bool Init(TContext& ctx, ISource* src, const TIn& in) {
+        return in.Expression->Init(ctx, src);
+    }
+
+    TNodePtr ToSubLink(TNodePtr source, const TVariant& variant) {
+        source = Y("lambda", Q(Y()), std::move(source));
+        return std::visit(
+            TOverloaded{
+                [&](const TScalar& x) { return ToSubLink(std::move(source), x); },
+                [&](const TExists& x) { return ToSubLink(std::move(source), x); },
+                [&](const TIn& x) { return ToSubLink(std::move(source), x); },
+            }, variant);
+    }
+
+    TNodePtr ToSubLink(TNodePtr lambda, const TScalar&) {
+        return Y("YqlSubLink", Q("expr"), Y("Void"), Y("Void"), Y("Void"), std::move(lambda));
+    }
+
+    TNodePtr ToSubLink(TNodePtr lambda, const TExists&) {
+        return Y("YqlSubLink", Q("exists"), Y("Void"), Y("Void"), Y("Void"), std::move(lambda));
+    }
+
+    TNodePtr ToSubLink(TNodePtr lambda, const TIn& in) {
+        TNodePtr compare = Y("lambda", Q(Y("value")), Y("==", in.Expression, "value"));
+        return Y("YqlSubLink", Q("any"), Y("Void"), Y("Void"), std::move(compare), std::move(lambda));
+    }
+
+    static TNodePtr Unbox(TNodePtr node) {
+        if (const auto* sub = dynamic_cast<const TYqlSubLinkNode*>(node.Get())) {
+            node = sub->Source();
+        }
+        return node;
+    }
+
+    TNodePtr Source_;
+    TVariant Variant_;
+    TNodePtr Node_;
+};
+
+TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args) {
+    return new TYqlTableRefNode(std::move(position), std::move(args));
+}
+
+TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args) {
+    return new TYqlValuesNode(std::move(position), std::move(args));
+}
+
+TNodePtr BuildYqlSelect(TPosition position, TYqlSelectArgs&& args) {
+    return new TYqlSelectNode(std::move(position), std::move(args));
+}
+
+TNodePtr WrapYqlSelectSubExpr(TNodePtr node) {
+    if (IsYqlSource(node)) {
+        node = BuildYqlScalarSubquery(std::move(node));
+    }
+    return node;
+}
+
+TNodePtr BuildYqlScalarSubquery(TNodePtr node) {
+    TYqlSubLinkNode::TScalar variant = {};
+    return new TYqlSubLinkNode(std::move(node), std::move(variant));
+}
+
+TNodePtr BuildYqlExistsSubquery(TNodePtr node) {
+    TYqlSubLinkNode::TExists variant = {};
+    return new TYqlSubLinkNode(std::move(node), std::move(variant));
+}
+
+TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression) {
+    TYqlSubLinkNode::TIn variant = {
+        .Expression = std::move(expression),
+    };
+    return new TYqlSubLinkNode(std::move(node), std::move(variant));
+}
+
+TNodePtr BuildYqlStatement(TNodePtr node) {
+    return new TYqlStatementNode(std::move(node));
+}
+
+} // namespace NSQLTranslationV1

@@ -149,7 +149,11 @@ public:
         : TBase(request)
         , Span_(TWilsonGrpc::RequestActor, request->GetWilsonTraceId(),
                 "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END)
-    {}
+    {
+        if (Span_ && AppData()) {
+            Span_.Attribute("database", AppData()->TenantName);
+        }
+    }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::DEFERRABLE_RPC;

@@ -60,6 +60,7 @@ namespace NTabletFlatExecutor {
     class TOpsCompact: private ::NActors::IActorCallback, public IActorExceptionHandler, public NTable::IVersionScan {
         using TEvPut = TEvBlobStorage::TEvPut;
         using TEvPutResult = TEvBlobStorage::TEvPutResult;
+        using ELockMode = NTable::ELockMode;
         using TScheme = NTable::TRowScheme;
         using TPartWriter = NTable::TPartWriter;
         using TBundle = NWriter::TBundle;
@@ -158,6 +159,7 @@ namespace NTabletFlatExecutor {
                     << "}";
             }
 
+            Y_DEBUG_ABORT_UNLESS(!IsLocked);
             return Flush(false /* intermediate, sleep or feed */);
         }
 
@@ -190,6 +192,17 @@ namespace NTabletFlatExecutor {
                 DeltasOrder.emplace_back(txId);
             } else if (!res.first->second.IsFinalized()) {
                 res.first->second.Merge(row);
+            }
+
+            return Flush(false /* intermediate, sleep or feed */);
+        }
+
+        EScan Feed(ELockMode mode, ui64 txId) override
+        {
+            // We write the first (latest) lock we observe
+            if (!IsLocked) {
+                Writer->AddKeyLock(mode, txId);
+                IsLocked = true;
             }
 
             return Flush(false /* intermediate, sleep or feed */);
@@ -250,6 +263,8 @@ namespace NTabletFlatExecutor {
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " end key { written " << written << " row versions }";
             }
+
+            IsLocked = false;
 
             return Flush(false /* intermediate, sleep or feed */);
         }
@@ -342,18 +357,22 @@ namespace NTabletFlatExecutor {
 
             for (auto &result : Results) {
                 Y_ENSURE(result.PageCollections, "Compaction produced a part without page collections");
-                TVector<TIntrusivePtr<NTable::TLoader::TCache>> pageCollections;
+                TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> resultingPageCollections;
                 for (auto& pageCollection : result.PageCollections) {
-                    auto cache = MakeIntrusive<NTable::TLoader::TCache>(pageCollection.PageCollection);
+                    auto resultingPageCollection = MakeIntrusive<NTable::TLoader::TPageCollection>(pageCollection.PageCollection);
                     auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
                     auto gcList = SharedCachePages->GCList;
-                    auto addPage = [&saveCompactedPages, &pageCollection, &cache, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
+                    auto addPage = [&saveCompactedPages, &pageCollection, &resultingPageCollection, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
                         auto pageId = loadedPage.PageId;
                         auto pageSize = pageCollection.PageCollection->Page(pageId).Size;
                         auto sharedPage = MakeIntrusive<TPage>(pageId, pageSize, nullptr);
-                        sharedPage->Initialize(std::move(loadedPage.Data));
+                        sharedPage->ProvideBody(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
-                        cache->Fill(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList), sticky);
+                        if (sticky) {
+                            resultingPageCollection->AddStickyPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                        } else {
+                            resultingPageCollection->AddPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                        }
                     };
                     for (auto &page : pageCollection.StickyPages) {
                         addPage(page, true);
@@ -364,11 +383,11 @@ namespace NTabletFlatExecutor {
 
                     Send(MakeSharedPageCacheId(), saveCompactedPages.Release());
 
-                    pageCollections.push_back(std::move(cache));
+                    resultingPageCollections.push_back(std::move(resultingPageCollection));
                 }
 
                 NTable::TLoader loader(
-                    std::move(pageCollections),
+                    std::move(resultingPageCollections),
                     { },
                     std::move(result.Overlay));
 
@@ -615,6 +634,7 @@ namespace NTabletFlatExecutor {
 
         THashMap<ui64, TRow> Deltas;
         TSmallVec<ui64> DeltasOrder;
+        bool IsLocked = false;
     };
 }
 }

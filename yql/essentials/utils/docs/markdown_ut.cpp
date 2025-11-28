@@ -6,8 +6,8 @@ using namespace NYql::NDocs;
 
 Y_UNIT_TEST_SUITE(MarkdownParserTests) {
 
-    Y_UNIT_TEST(ParseMarkdown) {
-        TString markdown = R"(
+Y_UNIT_TEST(ParseMarkdown) {
+    TString markdown = R"(
 # Basic built-in functions
 
 Below are the general-purpose functions.
@@ -51,23 +51,57 @@ SELECT
 FROM my_table;
 ```
 )";
-        TMarkdownPage page = ParseMarkdownPage(markdown);
+    TMarkdownPage page = ParseMarkdownPage(markdown);
 
-        UNIT_ASSERT_VALUES_EQUAL(page.SectionsByAnchor.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(page.SectionsByAnchor.size(), 2);
 
-        const auto& coelcese = page.SectionsByAnchor["coalesce"];
-        UNIT_ASSERT_STRING_CONTAINS(coelcese.Header.Content, "COALESCE");
-        UNIT_ASSERT_VALUES_EQUAL(coelcese.Header.Anchor, "coalesce");
-        UNIT_ASSERT_STRING_CONTAINS(coelcese.Body, "Iterates");
-        UNIT_ASSERT_STRING_CONTAINS(coelcese.Body, "COALESCE");
-        UNIT_ASSERT_GE(Count(coelcese.Body, '\n'), 5);
+    const auto& coelcese = page.SectionsByAnchor["coalesce"];
+    UNIT_ASSERT_STRING_CONTAINS(coelcese.Header.Content, "COALESCE");
+    UNIT_ASSERT_VALUES_EQUAL(coelcese.Header.Anchor, "coalesce");
+    UNIT_ASSERT_STRING_CONTAINS(coelcese.Body, "Iterates");
+    UNIT_ASSERT_STRING_CONTAINS(coelcese.Body, "COALESCE");
+    UNIT_ASSERT_GE(Count(coelcese.Body, '\n'), 5);
 
-        const auto& random = page.SectionsByAnchor["random"];
-        UNIT_ASSERT_STRING_CONTAINS(random.Header.Content, "Random");
-        UNIT_ASSERT_VALUES_EQUAL(random.Header.Anchor, "random");
-        UNIT_ASSERT_STRING_CONTAINS(random.Body, "Generates");
-        UNIT_ASSERT_STRING_CONTAINS(random.Body, "Random");
-        UNIT_ASSERT_GE(Count(random.Body, '\n'), 5);
+    const auto& random = page.SectionsByAnchor["random"];
+    UNIT_ASSERT_STRING_CONTAINS(random.Header.Content, "Random");
+    UNIT_ASSERT_VALUES_EQUAL(random.Header.Anchor, "random");
+    UNIT_ASSERT_STRING_CONTAINS(random.Body, "Generates");
+    UNIT_ASSERT_STRING_CONTAINS(random.Body, "Random");
+    UNIT_ASSERT_GE(Count(random.Body, '\n'), 5);
+}
+
+Y_UNIT_TEST(NestedSections) {
+    TString markdown = R"(
+# Section 1 {#s1}
+Section 1 Text.
+## Subsection 1 {#s1s1}
+Subsection 1.1 Text.
+## Subsection 2 {#s1s2}
+Subsection 1.2 Text.
+# Section 2 {#s2}
+Section 2 Text.
+## Subsection 1 {#s2s1}
+Subsection 2.1 Text.
+## Subsection 2 {#s2s2}
+Subsection 2.2 Text.
+### Subsubsection 1 {#s2s2s1}
+Subsection 2.2.1 Text.
+# Section 3 {#s3}
+Section 3 Text.
+)";
+    TMarkdownPage page = ParseMarkdownPage(markdown);
+    {
+        const TMarkdownSection& section = page.SectionsByAnchor["s1s2"];
+        UNIT_ASSERT_STRING_CONTAINS(section.Body, "Subsection 1.2 Text.");
+        UNIT_ASSERT_C(!section.Body.Contains("Section 1 Text."), section.Body);
+        UNIT_ASSERT_C(!section.Body.Contains("Section 2 Text."), section.Body);
+        UNIT_ASSERT_C(!section.Body.Contains("Section 3 Text."), section.Body);
     }
+    {
+        const TMarkdownSection& section = page.SectionsByAnchor["s2s2s1"];
+        UNIT_ASSERT_STRING_CONTAINS(section.Body, "Subsection 2.2.1 Text.");
+        UNIT_ASSERT_C(!section.Body.Contains("Section 3 Text."), section.Body);
+    }
+}
 
 } // Y_UNIT_TEST_SUITE(MarkdownParserTests)

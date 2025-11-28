@@ -9,7 +9,7 @@ def post_install(self):
 boost_bimap = NixSourceProject(
     nixattr="boost_bimap",
     arcdir=boost.make_arcdir("bimap"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

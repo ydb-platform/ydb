@@ -5,7 +5,6 @@
 #include <util/thread/pool.h>
 
 #include <latch>
-#include <thread>
 
 namespace NYT::NThreading {
 namespace {
@@ -50,7 +49,56 @@ TEST(TReaderWriterSpinLockTest, WriterPriority)
     DoNotOptimizeAway(x);
 }
 
+TEST(TReaderWriterSpinLockDeathTest, ReaderReentrance)
+{
+    TReaderWriterSpinLock lock;
+
+    EXPECT_DEBUG_DEATH({
+        auto guard1 = ReaderGuard(lock);
+        auto guard2 = ReaderGuard(lock);
+    }, "two acquisitions in one thread");
+}
+
+TEST(TReaderWriterSpinLockDeathTest, MixedReentrance)
+{
+    NDetail::TCheckedReaderWriterSpinLock lock;
+
+    EXPECT_DEATH({
+        auto guard1 = ReaderGuard(lock);
+        auto guard2 = WriterGuard(lock);
+    }, "two acquisitions in one thread");
+}
+
+TEST(TReaderWriterSpinLockDeathTest, TryReaderReentrance)
+{
+    TReaderWriterSpinLock lock;
+
+    EXPECT_DEBUG_DEATH({
+        auto guard = ReaderGuard(lock);
+        lock.TryAcquireReader();
+    }, "two acquisitions in one thread");
+}
+
+TEST(TReaderWriterSpinLockDeathTest, TryWriterReentrance)
+{
+    TReaderWriterSpinLock lock;
+
+    EXPECT_DEBUG_DEATH({
+        auto guard = WriterGuard(lock);
+        lock.TryAcquireWriter();
+    }, "two acquisitions in one thread");
+}
+
+TEST(TReaderWriterSpinLockDeathTest, ReleaseUnacquiredLock)
+{
+    TReaderWriterSpinLock lock;
+
+    EXPECT_DEBUG_DEATH({
+        lock.ReleaseReader();
+    }, "has never been acquired");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NConcurrency
+} // namespace NYT::NThreading

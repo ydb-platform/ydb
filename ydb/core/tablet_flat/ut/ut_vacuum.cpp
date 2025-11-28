@@ -53,14 +53,12 @@ public:
                 txc.DB.Alter()
                     .SetRoom(tableId, RoomId2, FamilyId2Channel, {FamilyId2Channel}, FamilyId2Channel)
                     .AddFamily(tableId, FamilyId2, RoomId2)
-                    .SetFamily(tableId, FamilyId2, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain)
                     .AddColumn(tableId, "value_family_2", ValueFamily2ColumnId, NScheme::TString::TypeId, false)
                     .AddColumnToFamily(tableId, ValueFamily2ColumnId, FamilyId2);
 
                 txc.DB.Alter()
                     .SetRoom(tableId, RoomId3, FamilyId3Channel, {FamilyId3Channel}, FamilyId3Channel)
                     .AddFamily(tableId, FamilyId3, RoomId3)
-                    .SetFamily(tableId, FamilyId3, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain)
                     .AddColumn(tableId, "value_family_3", ValueFamily3ColumnId, NScheme::TString::TypeId, false)
                     .AddColumnToFamily(tableId, ValueFamily3ColumnId, FamilyId3);
             }
@@ -193,7 +191,7 @@ int BlobStorageValueCountInAllGroups(TMyEnvBase& env, const TString& value) {
 }
 
 Y_UNIT_TEST_SUITE(Vacuum) {
-    ui32 TestTabletFlags = ui32(NFake::TDummy::EFlg::Comp) | ui32(NFake::TDummy::EFlg::Clean);
+    ui32 TestTabletFlags = ui32(NFake::TDummy::EFlg::Comp) | ui32(NFake::TDummy::EFlg::Vac);
 
     Y_UNIT_TEST(StartVacuumNoTables) {
         TMyEnvBase env;

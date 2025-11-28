@@ -17,6 +17,7 @@ void TManager::RegisterGroup(const ui64 externalProcessId, const ui64 externalSc
         "external_group_id", externalGroupId)("size", ProcessIds.GetSize())("external_scope_id", externalScopeId);
     if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
         process->RegisterGroup(externalScopeId, externalGroupId);
+        UpdateWaitingProcesses(process);
     }
     RefreshSignals();
 }
@@ -31,12 +32,12 @@ void TManager::UnregisterGroup(const ui64 externalProcessId, const ui64 external
     RefreshSignals();
 }
 
-void TManager::UpdateAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume) {
+void TManager::AllocationUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId) {
     TProcessMemory& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
     bool updated = false;
     {
         auto g = BuildProcessOrderGuard(process);
-        updated = process.UpdateAllocation(externalScopeId, allocationId, volume);
+        updated = process.AllocationUpdated(externalScopeId, allocationId);
         if (!updated) {
             g.Release();
         }
@@ -53,23 +54,41 @@ void TManager::TryAllocateWaiting() {
     if (Processes.size()) {
         auto it = Processes.find(ProcessIds.GetMinInternalIdVerified());
         AFL_VERIFY(it != Processes.end());
-        AFL_VERIFY(it->second.IsPriorityProcess());
-        it->second.TryAllocateWaiting(0);
+        TProcessMemory& process = it->second;
+        AFL_VERIFY(process.IsPriorityProcess());
+        process.TryAllocateWaiting(0);
+        UpdateWaitingProcesses(&process);
     }
-    for (auto it = ProcessesOrdered.begin(); it != ProcessesOrdered.end();) {
-        if (it->second->TryAllocateWaiting(1)) {
-            TProcessMemory* process = it->second;
-            it = ProcessesOrdered.erase(it);
-            auto info = ProcessesOrdered.emplace(process->BuildUsageAddress(), process);
-            AFL_VERIFY(info.second);
-            auto itNew = info.first;
-            if (it == ProcessesOrdered.end() || itNew->first < it->first) {
-                it = itNew;
-            }
-        } else {
-            ++it;
+    for (auto waitingIt = WaitingProcesses.begin(); waitingIt != WaitingProcesses.end();) {
+        // Check root availability
+        if (!DefaultStage->IsAllocatable(1, 0)) {
+            break;
+        }
+        auto it = ProcessesOrdered.find(*waitingIt);
+        AFL_VERIFY(it != ProcessesOrdered.end());
+        TProcessMemory* process = it->second;
+        if (!process->TryAllocateWaiting(1)) {
+            ++waitingIt;
+            continue;
+        }
+
+        ProcessesOrdered.erase(it);
+        auto [_, emplaced] = ProcessesOrdered.emplace(process->BuildUsageAddress(), process);
+        AFL_VERIFY(emplaced);
+
+        waitingIt = WaitingProcesses.erase(waitingIt);
+
+        if (!process->HasWaitingAllocations()) {
+            continue;
+        }
+
+        auto [waitingItNew, emplacedWaiting] = WaitingProcesses.emplace(process->BuildUsageAddress());
+        AFL_VERIFY(emplacedWaiting);
+        if (waitingIt == WaitingProcesses.end() || *waitingItNew < *waitingIt) {
+            waitingIt = waitingItNew;
         }
     }
+
     RefreshSignals();
 }
 
@@ -94,9 +113,10 @@ void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 exter
     const std::shared_ptr<IAllocation>& allocation, const std::optional<ui32>& stageIdx) {
     if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
         process->RegisterAllocation(externalScopeId, externalGroupId, allocation, stageIdx);
+        UpdateWaitingProcesses(process);
     } else {
         LWPROBE(Allocated, "on_register", allocation->GetIdentifier(), "", std::numeric_limits<ui64>::max(), std::numeric_limits<ui64>::max(), 0, 0, TDuration::Zero(), false, false);
-        AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory()), allocation))(
+        AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation))(
                                                                "process", externalProcessId)("scope", externalScopeId)(
                                                                "ext_group", externalGroupId)("stage_idx", stageIdx);
     }
@@ -111,6 +131,7 @@ void TManager::RegisterProcess(const ui64 externalProcessId, const std::vector<s
             internalProcessId, TProcessMemory(externalProcessId, internalProcessId, OwnerActorId, Processes.empty(), stages, DefaultStage));
         AFL_VERIFY(info.second);
         ProcessesOrdered.emplace(info.first->second.BuildUsageAddress(), &info.first->second);
+        UpdateWaitingProcesses(&info.first->second);
     } else {
         ++Processes.find(*internalId)->second.MutableLinksCount();
     }
@@ -125,7 +146,9 @@ void TManager::UnregisterProcess(const ui64 externalProcessId) {
         return;
     }
     Y_UNUSED(ProcessIds.ExtractInternalIdVerified(externalProcessId));
-    AFL_VERIFY(ProcessesOrdered.erase(it->second.BuildUsageAddress()));
+    auto processUsageAddress = it->second.BuildUsageAddress();
+    AFL_VERIFY(ProcessesOrdered.erase(processUsageAddress));
+    WaitingProcesses.erase(processUsageAddress);
     it->second.Unregister();
     Processes.erase(it);
     const ui64 nextInternalProcessId = ProcessIds.GetMinInternalIdDef(internalProcessId);
@@ -163,6 +186,16 @@ void TManager::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& h
     if (isLimitIncreased) {
         TryAllocateWaiting();
     }
+}
+
+void TManager::UpdateWaitingProcesses(TProcessMemory* process) {
+    bool hasWaitingAllocations = process->HasWaitingAllocations();
+    const auto processUsageAddress = process->BuildUsageAddress();
+    if (hasWaitingAllocations) {
+        WaitingProcesses.insert(processUsageAddress);
+        return;
+    }
+    WaitingProcesses.erase(processUsageAddress);
 }
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

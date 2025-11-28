@@ -34,7 +34,7 @@ TEST(TRecursiveSpinLockTest, TwoThreads)
     TRecursiveSpinLock lock;
     TEvent e1, e2, e3, e4, e5, e6, e7;
 
-    std::thread t1([&] {
+    std::jthread t1([&] {
         e1.Wait();
         EXPECT_TRUE(lock.IsLocked());
         EXPECT_FALSE(lock.IsLockedByCurrentThread());
@@ -54,7 +54,7 @@ TEST(TRecursiveSpinLockTest, TwoThreads)
         lock.Release();
     });
 
-    std::thread t2([&] {
+    std::jthread t2([&] {
         EXPECT_FALSE(lock.IsLocked());
         EXPECT_TRUE(lock.TryAcquire());
         EXPECT_TRUE(lock.IsLockedByCurrentThread());
@@ -77,9 +77,6 @@ TEST(TRecursiveSpinLockTest, TwoThreads)
         lock.Release();
         lock.Release();
     });
-
-    t1.join();
-    t2.join();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

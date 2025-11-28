@@ -293,6 +293,9 @@ public:
             }
         }
 
+        Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead, /*comprehensive=*/ true);
+        Self->SerializeSyncers(nodeId, &Response->Record, groupIDsToRead);
+
         Self->ReadGroups(groupIDsToRead, false, Response.get(), nodeId);
         Y_ABORT_UNLESS(groupIDsToRead.empty());
 
@@ -398,8 +401,16 @@ public:
 
     void Complete(const TActorContext&) override {
         if (Response) {
-            Self->SendInReply(*Request, std::move(Response));
-            Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
+            if (const auto it = Self->PipeServerToNode.find(Request->Recipient); it != Self->PipeServerToNode.end()) {
+                const TNodeId nodeId = Request->Sender.NodeId();
+                Y_ABORT_UNLESS(it->second == nodeId);
+                auto *node = Self->FindNode(nodeId);
+                Y_ABORT_UNLESS(node);
+                Y_ABORT_UNLESS(!node->Registered);
+                node->Registered = true;
+                Self->SendInReply(*Request, std::move(Response));
+                Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
+            }
         }
         Self->ShredState.OnNodeReportTxComplete();
     }
@@ -486,6 +497,9 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
         }
         if (pdisk.InferPDiskSlotCountFromUnitSize) {
             pDisk->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
+        }
+        if (pdisk.InferPDiskSlotCountMax) {
+            pDisk->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
         }
     }
     pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
@@ -584,6 +598,7 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
         EraseKnownDrivesOnDisconnected(&node);
     }
     node.ConnectedServerId = serverId;
+    node.Registered = false;
     node.InterconnectSessionId = interconnectSessionId;
 
     for (auto it = PDisks.lower_bound(TPDiskId::MinForNode(nodeId)); it != PDisks.end() && it->first.NodeId == nodeId; ++it) {
@@ -592,6 +607,7 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
     }
 
     node.LastConnectTimestamp = TInstant::Now();
+    node.DisconnectedTimestampMono = TMonotonic::Max();
 
     ShredState.OnWardenConnected(nodeId);
 }
@@ -603,6 +619,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     }
     node.ConnectedServerId = {};
     node.InterconnectSessionId = {};
+    node.Registered = false;
 
     for (const TGroupId groupId : std::exchange(node.WaitingForGroups, {})) {
         if (TGroupInfo *group = FindGroup(groupId)) {
@@ -620,7 +637,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     const TVSlotId startingId(nodeId, Min<Schema::VSlot::PDiskID::Type>(), Min<Schema::VSlot::VSlotID::Type>());
     std::vector<TEvControllerUpdateSelfHealInfo::TVDiskStatusUpdate> updates;
     for (auto it = VSlots.lower_bound(startingId); it != VSlots.end() && it->first.NodeId == nodeId; ++it) {
-        if (const TGroupInfo *group = it->second->Group) {
+        if (it->second->Group) {
             if (it->second->IsReady) {
                 NotReadyVSlotIds.insert(it->second->VSlotId);
             }
@@ -658,6 +675,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
         GroupToNode.erase(std::make_tuple(groupId, nodeId));
     }
     node.LastDisconnectTimestamp = now;
+    node.DisconnectedTimestampMono = mono;
     Execute(new TTxUpdateNodeDisconnectTimestamp(nodeId, this));
 }
 
@@ -667,7 +685,7 @@ void TBlobStorageController::EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo)
 
 void TBlobStorageController::SendToWarden(TNodeId nodeId, std::unique_ptr<IEventBase> ev, ui64 cookie) {
     Y_ABORT_UNLESS(nodeId);
-    if (auto *node = FindNode(nodeId); node && node->ConnectedServerId) {
+    if (TNodeInfo* node = FindNode(nodeId); node && node->ConnectedServerId) {
         auto h = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), SelfId(), ev.release(), 0, cookie);
         if (node->InterconnectSessionId) {
             h->Rewrite(TEvInterconnect::EvForward, node->InterconnectSessionId);

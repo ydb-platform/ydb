@@ -10,9 +10,9 @@ namespace NYql {
 namespace NDecimal {
 
 #ifdef _win_
-#ifndef DONT_USE_NATIVE_INT128
-#define DONT_USE_NATIVE_INT128
-#endif
+    #ifndef DONT_USE_NATIVE_INT128
+        #define DONT_USE_NATIVE_INT128
+    #endif
 #endif
 
 #ifdef DONT_USE_NATIVE_INT128
@@ -23,13 +23,26 @@ using TInt128 = signed __int128;
 using TUint128 = unsigned __int128;
 #endif
 
-template<ui8 Scale> struct TDivider;
+template <ui8 Scale>
+struct TDivider;
 #if defined(__clang__) && defined(DONT_USE_NATIVE_INT128)
-template<> struct TDivider<0> { static inline constexpr TUint128 Value = 1U; };
-template<ui8 Scale> struct TDivider { static inline constexpr TInt128 Value = TDivider<Scale - 1U>::Value * 10U; };
+template <>
+struct TDivider<0> {
+    static inline constexpr TUint128 Value = 1U;
+};
+template <ui8 Scale>
+struct TDivider {
+    static inline constexpr TInt128 Value = TDivider<Scale - 1U>::Value * 10U;
+};
 #else
-template<> struct TDivider<0> { static constexpr TUint128 Value = 1U; };
-template<ui8 Scale> struct TDivider { static constexpr TUint128 Value = TDivider<Scale - 1U>::Value * 10U; };
+template <>
+struct TDivider<0> {
+    static constexpr TUint128 Value = 1U;
+};
+template <ui8 Scale>
+struct TDivider {
+    static constexpr TUint128 Value = TDivider<Scale - 1U>::Value * 10U;
+};
 #endif
 
 constexpr ui8 MaxPrecision = 35;
@@ -50,12 +63,12 @@ inline constexpr TInt128 Err() {
 
 TUint128 GetDivider(ui8 scale);
 
-template<ui8 Precision>
+template <ui8 Precision>
 inline constexpr TUint128 GetDivider() {
     return TDivider<Precision>::Value;
 }
 
-template<ui8 Precision, bool IncLow = false, bool DecHigh = false>
+template <ui8 Precision, bool IncLow = false, bool DecHigh = false>
 inline constexpr std::pair<TInt128, TInt128> GetBounds() {
     return std::make_pair(-GetDivider<Precision>() + (IncLow ? 1 : 0), +GetDivider<Precision>() - (DecHigh ? 1 : 0));
 }
@@ -67,7 +80,7 @@ bool IsInf(TInt128 v);
 bool IsNormal(TInt128 v);
 bool IsComparable(TInt128 v);
 
-template<ui8 Precision>
+template <ui8 Precision>
 inline bool IsNormal(TInt128 v) {
     const auto& b = GetBounds<Precision>();
     return v > b.first && v < b.second;
@@ -79,7 +92,7 @@ TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale = 0);
 // Accept string representation with exponent.
 TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale);
 
-template<typename TMkqlProto>
+template <typename TMkqlProto>
 inline TInt128 FromProto(const TMkqlProto& val) {
     ui64 half[2] = {val.GetLow128(), val.GetHi128()};
     TInt128 val128;
@@ -87,22 +100,22 @@ inline TInt128 FromProto(const TMkqlProto& val) {
     return val128;
 }
 
-template<typename TValue>
+template <typename TValue>
 inline constexpr TValue YtDecimalNan() {
     return std::numeric_limits<TValue>::max();
 }
 
-template<>
+template <>
 inline constexpr TInt128 YtDecimalNan<TInt128>() {
     return ~(TInt128(1) << 127);
 }
 
-template<typename TValue>
+template <typename TValue>
 inline constexpr TValue YtDecimalInf() {
     return YtDecimalNan<TValue>() - 1;
 }
 
-template<typename TValue>
+template <typename TValue>
 inline TInt128 FromYtDecimal(TValue val) {
     static_assert(std::is_same<TInt128, TValue>::value || std::is_signed<TValue>::value, "Expected signed value");
     if (YtDecimalNan<TValue>() == val) {
@@ -116,7 +129,7 @@ inline TInt128 FromYtDecimal(TValue val) {
     }
 }
 
-template<typename TValue>
+template <typename TValue>
 inline TValue ToYtDecimal(TInt128 val) {
     static_assert(std::is_same<TInt128, TValue>::value || std::is_signed<TValue>::value, "Expected signed value");
     if (IsNormal(val)) {
@@ -160,8 +173,11 @@ struct TDecimal {
 
     TDecimal() = default;
 
-    template<typename T>
-    TDecimal(T t): Value(t) { }
+    template <typename T>
+    TDecimal(T t)
+        : Value(t)
+    {
+    }
 
     explicit operator TInt128() const {
         return Value;
@@ -177,8 +193,8 @@ struct TDecimal {
             Value = Nan();
         } else {
             Value = a > 0
-                ? +Inf()
-                : -Inf();
+                        ? +Inf()
+                        : -Inf();
         }
         return *this;
     }
@@ -209,7 +225,7 @@ struct TDecimal {
     }
 };
 
-template<typename TRight>
+template <typename TRight>
 class TDecimalMultiplicator {
 protected:
     const TInt128 Bound_;
@@ -226,14 +242,15 @@ public:
     TInt128 Do(TInt128 left, TRight right) const {
         TInt128 mul = Mul(left, right);
 
-        if (mul > -Bound_ && mul < +Bound_)
+        if (mul > -Bound_ && mul < +Bound_) {
             return mul;
+        }
 
         return IsNan(mul) ? Nan() : (mul > 0 ? +Inf() : -Inf());
     }
 };
 
-template<>
+template <>
 class TDecimalMultiplicator<TInt128> {
 protected:
     const TInt128 Bound_;
@@ -245,21 +262,21 @@ public:
         ui8 scale)
         : Bound_(GetDivider(precision))
         , Divider_(GetDivider(scale))
-    { }
+    {
+    }
 
     TInt128 Do(TInt128 left, TInt128 right) const {
-        TInt128 mul = Divider_ > 1 ?
-            MulAndDivNormalDivider(left, right, Divider_):
-            Mul(left, right);
+        TInt128 mul = Divider_ > 1 ? MulAndDivNormalDivider(left, right, Divider_) : Mul(left, right);
 
-        if (mul > -Bound_ && mul < +Bound_)
+        if (mul > -Bound_ && mul < +Bound_) {
             return mul;
+        }
 
         return IsNan(mul) ? Nan() : (mul > 0 ? +Inf() : -Inf());
     }
 };
 
-template<typename TRight>
+template <typename TRight>
 class TDecimalDivisor {
 public:
     TDecimalDivisor(
@@ -275,7 +292,7 @@ public:
     }
 };
 
-template<>
+template <>
 class TDecimalDivisor<TInt128> {
 protected:
     const TInt128 Bound_;
@@ -287,7 +304,8 @@ public:
         ui8 scale)
         : Bound_(GetDivider(precision))
         , Divider_(GetDivider(scale))
-    { }
+    {
+    }
 
     TInt128 Do(TInt128 left, TInt128 right) const {
         TInt128 div = MulAndDivNormalMultiplier(left, Divider_, right);
@@ -299,7 +317,7 @@ public:
     }
 };
 
-template<typename TRight>
+template <typename TRight>
 class TDecimalRemainder {
 protected:
     const TInt128 Bound_;
@@ -311,22 +329,25 @@ public:
         ui8 scale)
         : Bound_(NYql::NDecimal::GetDivider(precision - scale))
         , Divider_(NYql::NDecimal::GetDivider(scale))
-    { }
+    {
+    }
 
     TInt128 Do(TInt128 left, TRight right) const {
         if constexpr (std::is_signed<TRight>::value) {
-            if (TInt128(right) >= +Bound_ || TInt128(right) <= -Bound_)
+            if (TInt128(right) >= +Bound_ || TInt128(right) <= -Bound_) {
                 return left;
+            }
         } else {
-            if (TInt128(right) >= Bound_)
+            if (TInt128(right) >= Bound_) {
                 return left;
+            }
         }
 
         return Mod(left, Mul(Divider_, right));
     }
 };
 
-template<>
+template <>
 class TDecimalRemainder<TInt128> {
 public:
     TDecimalRemainder(
@@ -342,5 +363,5 @@ public:
     }
 };
 
-}
-}
+} // namespace NDecimal
+} // namespace NYql

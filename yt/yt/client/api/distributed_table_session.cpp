@@ -121,18 +121,4 @@ void TDistributedWriteSession::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFuture<void> PingDistributedWriteSession(
-    const TSignedDistributedWriteSessionPtr& session,
-    const IClientPtr& client)
-{
-    auto concreteSession = ConvertTo<TDistributedWriteSession>(TYsonStringBuf(session.Underlying()->Payload()));
-
-    // NB(arkady-e1ppa): AutoAbort = false by default.
-    auto mainTransaction = client->AttachTransaction(concreteSession.MainTransactionId);
-
-    return mainTransaction->Ping();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT::NApi

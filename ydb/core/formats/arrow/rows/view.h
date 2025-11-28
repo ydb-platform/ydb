@@ -116,6 +116,7 @@ public:
     std::partial_ordering CompareNotNull(const TSimpleRow& item) const;
 
     std::partial_ordering operator<=>(const TSimpleRow& item) const;
+    bool operator==(const TSimpleRow& item) const;
 };
 
 }   // namespace NKikimr::NArrow

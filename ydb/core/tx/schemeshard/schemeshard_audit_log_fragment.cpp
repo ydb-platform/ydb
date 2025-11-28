@@ -239,6 +239,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER EXTERNAL DATA SOURCE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
         return "ALTER TABLE ADD COLUMN DEFAULT";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
+        return "ALTER TABLE ADD COLUMN CANCEL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
         return "CREATE VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterView:
@@ -274,6 +276,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
         return "BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         return "BACKUP INCREMENTAL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return "RESTORE";
@@ -287,6 +290,24 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP SYSTEM VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         return "CHANGE PATH STATE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        return "RESTORE INCREMENTAL FINALIZE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
+        return "SET CONSTRAINT";
+    // secret
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
+        return "CREATE SECRET";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSecret:
+        return "ALTER SECRET";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
+        return "DROP SECRET";
+    // streaming query
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery:
+        return "CREATE STREAMING QUERY";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery:
+        return "DROP STREAMING QUERY";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
+        return "ALTER STREAMING QUERY";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -587,6 +608,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
         result.emplace_back(tx.GetInitiateColumnBuild().GetTable());
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
+        result.emplace_back(tx.GetDropColumnBuild().GetSettings().GetTable());
+        break;
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateView().GetName()}));
@@ -638,6 +662,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
         break;
@@ -653,6 +680,30 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetChangePathState().GetPath()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        // For incremental restore finalization, we don't have a specific path in the message
+        // since it operates on paths determined at runtime
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSetColumnConstraintsInitiate().GetTableName()}));
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateSecret().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSecret:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterSecret().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery:
+        result.emplace_back(tx.GetCreateStreamingQuery().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery:
+        result.emplace_back(tx.GetDrop().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
+        result.emplace_back(tx.GetCreateStreamingQuery().GetName());
         break;
     }
 

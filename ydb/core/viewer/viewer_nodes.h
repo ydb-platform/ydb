@@ -41,6 +41,7 @@ enum class ENodeFields : ui8 {
     NetworkUtilization,
     ClockSkew,
     PingTime,
+    PileName,
     COUNT
 };
 
@@ -125,6 +126,7 @@ class TJsonNodes : public TViewerPipeClient {
     TString DomainPath;
     std::vector<TString> FilterStoragePools;
     std::vector<std::pair<ui64, ui64>> FilterStoragePoolsIds;
+    std::unordered_set<TNodeId> RestrictedNodeIds; // due to access rights
     std::unordered_set<TNodeId> FilterNodeIds;
     std::unordered_set<ui32> FilterGroupIds;
     std::optional<std::size_t> Offset;
@@ -258,6 +260,13 @@ class TJsonNodes : public TViewerPipeClient {
                 return NodeInfo.Location.GetRackId();
             }
             return SystemState.GetLocation().GetRack();
+        }
+
+        TString GetPileName() const {
+            if (NodeInfo.Location.GetBridgePileName()) {
+                return NodeInfo.Location.GetBridgePileName().value_or("");
+            }
+            return SystemState.GetLocation().GetBridgePileName();
         }
 
         void Cleanup() {
@@ -526,9 +535,12 @@ class TJsonNodes : public TViewerPipeClient {
                 PingTimeMaxUs = std::max(PingTimeMaxUs, peer.GetPingTimeUs());
             }
             if (!Peers.empty()) {
-                // NetworkUtilization /= Peers.size(); // alexvru suggests to use sum instead of average
+                NetworkUtilization = NetworkUtilization / Peers.size();
                 ClockSkewUs = ClockSkewUs / static_cast<i64>(Peers.size());
                 PingTimeUs = PingTimeUs / Peers.size();
+            }
+            if (SystemState.HasNetworkUtilization()) {
+                NetworkUtilization = SystemState.GetNetworkUtilization();
             }
             int percent5 = Peers.size() / 20;
             for (int i = 0; i < NKikimrWhiteboard::EFlag_ARRAYSIZE; ++i) {
@@ -671,6 +683,9 @@ class TJsonNodes : public TViewerPipeClient {
                 case ENodeFields::PingTime:
                     groupName = GetPingTimeForGroup();
                     break;
+                case ENodeFields::PileName:
+                    groupName = GetPileName();
+                    break;
                 default:
                     break;
             }
@@ -706,6 +721,8 @@ class TJsonNodes : public TViewerPipeClient {
                     return static_cast<int>(abs(ClockSkewUs) / 1000);
                 case ENodeFields::PingTime:
                     return PingTimeUs;
+                case ENodeFields::PileName:
+                    return GetPileName();
                 default:
                     return TString();
             }
@@ -761,7 +778,8 @@ class TJsonNodes : public TViewerPipeClient {
                                                     .set(+ENodeFields::NodeId)
                                                     .set(+ENodeFields::HostName)
                                                     .set(+ENodeFields::DC)
-                                                    .set(+ENodeFields::Rack);
+                                                    .set(+ENodeFields::Rack)
+                                                    .set(+ENodeFields::PileName);
     const TFieldsType FieldsSystemState = TFieldsType().set(+ENodeFields::SystemState)
                                                        .set(+ENodeFields::Database)
                                                        .set(+ENodeFields::NodeName)
@@ -899,6 +917,8 @@ class TJsonNodes : public TViewerPipeClient {
             result = ENodeFields::PingTime;
         } else if (field == "ClockSkew") {
             result = ENodeFields::ClockSkew;
+        } else if (field == "PileName") {
+            result = ENodeFields::PileName;
         }
         return result;
     }
@@ -1079,6 +1099,11 @@ public:
         if (TBase::NeedToRedirect()) {
             return;
         }
+        if (IsDatabaseRequest() && !Viewer->CheckAccessViewer(TBase::GetRequest())) {
+            auto nodes = GetDatabaseNodes();
+            RestrictedNodeIds = std::unordered_set<TNodeId>(nodes.begin(), nodes.end());
+            NeedFilter = true;
+        }
 
         NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         {
@@ -1104,9 +1129,6 @@ public:
                 FilterDatabase = false;
             }
         }
-        if (FilterPath && FieldsNeeded(FieldsTablets)) {
-            PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
-        }
         if (!FilterStoragePools.empty()) {
             StoragePoolsResponse = MakeCachedRequestBSControllerPools();
             GroupsResponse = MakeCachedRequestBSControllerGroups();
@@ -1116,9 +1138,13 @@ public:
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::VSlots;
         }
-
-        if (With != EWith::Everything) {
-            PDisksResponse = MakeCachedRequestBSControllerPDisks();
+        if (With != EWith::Everything || (!FilterDatabase && Type == EType::Storage)) {
+            if (!PDisksResponse) {
+                PDisksResponse = MakeCachedRequestBSControllerPDisks();
+            }
+        }
+        if (FilterPath && FieldsNeeded(FieldsTablets)) {
+            PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
         }
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();
@@ -1264,6 +1290,20 @@ public:
             InvalidateNodes();
             AddEvent("Type Filter Applied");
         }
+        if (!RestrictedNodeIds.empty() && FieldsAvailable.test(+ENodeFields::NodeId)) {
+            TNodeView nodeView;
+            for (TNode* node : NodeView) {
+                if (RestrictedNodeIds.count(node->GetNodeId()) > 0) {
+                    nodeView.push_back(node);
+                }
+            }
+            NodeView.swap(nodeView);
+            FoundNodes = TotalNodes = NodeView.size();
+            InvalidateNodes();
+            RestrictedNodeIds.clear();
+            AddEvent("Restricted Filter Applied");
+        }
+
         // storage/nodes pre-filter, affects TotalNodes count
         if (Type != EType::Any) {
             return;
@@ -1336,7 +1376,8 @@ public:
                     (!FieldsRequired.test(+ENodeFields::HostName) || FieldsAvailable.test(+ENodeFields::HostName)) &&
                     (!FieldsRequired.test(+ENodeFields::NodeName) || FieldsAvailable.test(+ENodeFields::NodeName));
                 if (allFieldsPresent) {
-                    TVector<TString> filterWords = SplitString(Filter, " ");
+                    TVector<TString> filterWords;
+                    StringSplitter(Filter).SplitBySet(", ").SkipEmpty().Collect(&filterWords);
                     TNodeView nodeView;
                     for (TNode* node : NodeView) {
                         for (const TString& word : filterWords) {
@@ -1372,7 +1413,7 @@ public:
                 InvalidateNodes();
                 AddEvent("Group Filter Applied");
             }
-            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty();
+            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty() || !RestrictedNodeIds.empty();
             FoundNodes = NodeView.size();
         }
     }
@@ -1406,6 +1447,7 @@ public:
                 case ENodeFields::DC:
                 case ENodeFields::Rack:
                 case ENodeFields::Uptime:
+                case ENodeFields::PileName:
                     GroupCollection();
                     SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.SortKey; });
                     NeedGroup = false;
@@ -1530,7 +1572,7 @@ public:
                     NeedSort = false;
                     break;
                 case ENodeFields::ClockSkew:
-                    SortCollection(NodeView, [](const TNode* node) { return node->ClockSkewUs; }, ReverseSort);
+                    SortCollection(NodeView, [](const TNode* node) { return abs(node->ClockSkewUs); }, ReverseSort);
                     NeedSort = false;
                     break;
                 case ENodeFields::Peers:
@@ -1539,6 +1581,10 @@ public:
                     break;
                 case ENodeFields::ReversePeers:
                     SortCollection(NodeView, [](const TNode* node) { return node->ReversePeers.size(); }, ReverseSort);
+                    NeedSort = false;
+                    break;
+                case ENodeFields::PileName:
+                    SortCollection(NodeView, [](const TNode* node) { return node->GetPileName(); }, ReverseSort);
                     NeedSort = false;
                     break;
                 case ENodeFields::NodeInfo:
@@ -2151,6 +2197,9 @@ public:
             request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kRealNumberOfCpusFieldNumber);
             if (FieldsRequired.test(+ENodeFields::MemoryDetailed)) {
                 request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
+            }
+            if (FieldsRequired.test(+ENodeFields::NetworkUtilization)) {
+                request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkUtilizationFieldNumber);
             }
         }
     }
@@ -3226,6 +3275,11 @@ public:
                 }
                 if ((FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) && (FieldsRequested & FieldsSystemState).any()) {
                     *jsonNode.MutableSystemState() = std::move(node->SystemState);
+                }
+                if (FieldsAvailable.test(+ENodeFields::PileName) && FieldsRequested.test(+ENodeFields::PileName)) {
+                    if (node->GetPileName()) {
+                        jsonNode.SetPileName(node->GetPileName());
+                    }
                 }
                 if (FieldsAvailable.test(+ENodeFields::PDisks) && FieldsRequested.test(+ENodeFields::PDisks)) {
                     std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {

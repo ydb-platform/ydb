@@ -49,7 +49,7 @@ namespace NKikimr {
 
         // immutable fields
         TBlobStorageGroupType GType;
-        bool AddHeader = false;
+        EBlobHeaderMode BlobHeaderMode;
 
         // clearable fields
         std::vector<TPart> Parts;
@@ -64,9 +64,9 @@ namespace NKikimr {
         NMatrix::TVectorType PartsToDelete;
 
     public:
-        TDataMerger(TBlobStorageGroupType gtype, bool addHeader)
+        TDataMerger(TBlobStorageGroupType gtype, EBlobHeaderMode blobHeaderMode)
             : GType(gtype)
-            , AddHeader(addHeader)
+            , BlobHeaderMode(blobHeaderMode)
             , Parts(GType.TotalPartCount())
             , PartsMask(0, GType.TotalPartCount())
             , PartsToDelete(0, GType.TotalPartCount())
@@ -117,7 +117,17 @@ namespace NKikimr {
 
                 if (memRec.GetType() == TBlobType::DiskBlob) {
                     const TDiskPart& location = extr.SwearOne();
-                    ui32 offset = AddHeader ? TDiskBlob::HeaderSize : 0;
+
+                    // calculate total data size of parts stored within this blob
+                    ui32 totalSize = 0;
+                    for (ui8 partIdx : parts) {
+                        totalSize += GType.PartSize(TLogoBlobID(fullId, partIdx + 1));
+                    }
+
+                    // calculate initial offset of first stored part
+                    ui32 offset = 0;
+                    TDiskBlob::DeriveBlobHeaderMode(totalSize, location.Size, &offset);
+
                     for (ui8 partIdx : parts) {
                         const ui32 partSize = GType.PartSize(TLogoBlobID(fullId, partIdx + 1));
                         Y_DEBUG_ABORT_UNLESS(partIdx < Parts.size());
@@ -183,7 +193,7 @@ namespace NKikimr {
                     if (producingHugeBlob) {
                         SavedHugeBlobs.push_back(part.HugeBlob);
                         if (!part.IsMetadataPart && part.NeedHugeSlot()) {
-                            part.HugePartSize = TDiskBlob::CalculateBlobSize(GType, fullId, partMask, AddHeader);
+                            part.HugePartSize = TDiskBlob::CalculateBlobSize(GType, fullId, partMask, BlobHeaderMode);
                             SlotsToAllocate.push_back(part.HugePartSize);
                         }
                     } else {
@@ -192,15 +202,10 @@ namespace NKikimr {
                         } else if (!part.SmallBlobPart.Empty()) {
                             CollectTask.Reads.emplace_back(part.SmallBlobPart, partIdx);
                         } else if (!part.HugeBlob.Empty()) { // dropping this huge part after compaction
-                            TDiskPart location;
-                            if (part.HugeBlob.Size == partSize) {
-                                location = part.HugeBlob;
-                            } else if (part.HugeBlob.Size == partSize + TDiskBlob::HeaderSize) {
-                                location = TDiskPart(part.HugeBlob.ChunkIdx, part.HugeBlob.Offset + TDiskBlob::HeaderSize,
-                                    part.HugeBlob.Size - TDiskBlob::HeaderSize);
-                            } else {
-                                Y_ABORT("incorrect huge blob size");
-                            }
+                            ui32 offset = 0;
+                            TDiskBlob::DeriveBlobHeaderMode(partSize, part.HugeBlob.Size, &offset);
+                            const TDiskPart location(part.HugeBlob.ChunkIdx, part.HugeBlob.Offset + offset,
+                                part.HugeBlob.Size - offset);
                             CollectTask.Reads.emplace_back(location, partIdx);
                             DeletedHugeBlobs.push_back(part.HugeBlob);
                         } else { // add metadata part to merger
@@ -228,7 +233,7 @@ namespace NKikimr {
         }
 
         ui32 GetInplacedBlobSize(const TLogoBlobID& fullId) const {
-            return Empty() || !SavedHugeBlobs.empty() ? 0 : TDiskBlob::CalculateBlobSize(GType, fullId, PartsMask, AddHeader);
+            return Empty() || !SavedHugeBlobs.empty() ? 0 : TDiskBlob::CalculateBlobSize(GType, fullId, PartsMask, BlobHeaderMode);
         }
 
         void FinishFromBlob() {
@@ -282,7 +287,7 @@ namespace NKikimr {
         TRope CreateDiskBlob(TRopeArena& arena) {
             Y_DEBUG_ABORT_UNLESS(Finished);
             Y_DEBUG_ABORT_UNLESS(!CollectTask.BlobMerger.Empty());
-            return CollectTask.BlobMerger.CreateDiskBlob(arena, AddHeader);
+            return CollectTask.BlobMerger.CreateDiskBlob(arena, BlobHeaderMode);
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

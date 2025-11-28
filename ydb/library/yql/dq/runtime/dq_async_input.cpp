@@ -53,12 +53,16 @@ public:
         }
     }
 
+    void Push(TInstant watermark) override {
+        PushWatermark(watermark);
+    }
+
     virtual void Push(TDqSerializedBatch&&, i64) override {
         YQL_ENSURE(!"Unimplemented");
     }
 
     bool IsPending() const override {
-        return Pending;
+        return Pending && !IsFinished();
     }
 };
 

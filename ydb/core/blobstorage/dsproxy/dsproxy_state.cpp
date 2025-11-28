@@ -1,7 +1,7 @@
 #include "dsproxy_impl.h"
 #include "dsproxy_monactor.h"
 
-#include <ydb/core/blobstorage/dsproxy/bridge/bridge.h>
+#include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
 
 namespace NKikimr {
 
@@ -32,6 +32,7 @@ namespace NKikimr {
         EstablishingSessionStartTime = TActivationContext::Now();
         ConfigureQueryTimeoutEv = nullptr;
         ClearTimeoutCounters();
+        EstablishingSessionsStateTs = TActivationContext::Monotonic();
         EstablishingSessionsTimeoutEv = new TEvEstablishingSessionTimeout();
         Become(&TThis::StateEstablishingSessions, ProxyEstablishSessionsTimeout, EstablishingSessionsTimeoutEv);
         SwitchToWorkWhenGoodToGo();
@@ -58,6 +59,7 @@ namespace NKikimr {
         ErrorDescription = "StateUnconfigured (DSPE9).";
         EstablishingSessionsTimeoutEv = nullptr;
         ClearTimeoutCounters();
+        UnconfiguredStateTs = TActivationContext::Monotonic();
         ConfigureQueryTimeoutEv = new TEvConfigureQueryTimeout();
         Become(&TThis::StateUnconfigured, ProxyConfigurationTimeout, ConfigureQueryTimeoutEv);
     }
@@ -120,10 +122,33 @@ namespace NKikimr {
 
         Send(MonActor, new TEvBlobStorage::TEvConfigureProxy(Info, nullptr));
         if (Info) {
-            Y_ABORT_UNLESS(!EncryptionMode || *EncryptionMode == Info->GetEncryptionMode());
-            Y_ABORT_UNLESS(!LifeCyclePhase || *LifeCyclePhase == Info->GetLifeCyclePhase());
-            Y_ABORT_UNLESS(!GroupKeyNonce || *GroupKeyNonce == Info->GetGroupKeyNonce());
-            Y_ABORT_UNLESS(!CypherKey || *CypherKey == *Info->GetCypherKey());
+            auto printOptional = [&](const auto& val) -> TString {
+                using T = std::decay_t<decltype(*val)>;
+                if (!val) {
+                    return "<nullopt>";
+                } else {
+                    if constexpr(std::is_same_v<T, ui64>) {
+                        return IntToString<10>(*val);
+                    }
+                    if constexpr(std::is_same_v<T, TBlobStorageGroupInfo::EEncryptionMode>) {
+                        return TBlobStorageGroupInfo::PrintEncryptionMode(*val);
+                    }
+                    if constexpr(std::is_same_v<T, TBlobStorageGroupInfo::ELifeCyclePhase>) {
+                        return TBlobStorageGroupInfo::PrintLifeCyclePhase(*val);
+                    }
+                    // we don't want to print CypherKey value!
+                    return "<value>";
+                }
+            };
+
+            Y_VERIFY_S(!EncryptionMode || *EncryptionMode == Info->GetEncryptionMode(),
+                    "EncryptionMode# " << printOptional(EncryptionMode) << " Info# " << Info->ToString());
+            Y_VERIFY_S(!LifeCyclePhase || *LifeCyclePhase == Info->GetLifeCyclePhase(),
+                    "LifeCyclePhase# " << printOptional(LifeCyclePhase) << " Info# " << Info->ToString());
+            Y_VERIFY_S(!GroupKeyNonce || *GroupKeyNonce == Info->GetGroupKeyNonce(),
+                    "GroupKeyNonce# " << printOptional(GroupKeyNonce) << " Info# " << Info->ToString());
+            Y_VERIFY_S(!CypherKey || *CypherKey == *Info->GetCypherKey(),
+                    "CypherKey# " << printOptional(CypherKey) << " Info# " << Info->ToString());
             EncryptionMode = Info->GetEncryptionMode();
             LifeCyclePhase = Info->GetLifeCyclePhase();
             GroupKeyNonce = Info->GetGroupKeyNonce();
@@ -172,6 +197,9 @@ namespace NKikimr {
             }
             SetStateEstablishingSessions();
         } else { // configuration has been reset, we have to request it via NodeWarden
+            UnconfiguredStateReason = prevInfo
+                    ? EUnconfiguredStateReason::GenerationChanged
+                    : EUnconfiguredStateReason::UnknownGroup;
             SetStateUnconfigured();
         }
     }
@@ -180,9 +208,15 @@ namespace NKikimr {
         if (ev && ev->Get() != ConfigureQueryTimeoutEv) {
             return;
         }
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-                << " Unconfigured Wakeup TIMEOUT Marker# DSP05");
-        ErrorDescription = "Configuration timeout occured (DSPE1).";
+
+        TString details = TStringBuilder() << " GroupId# " << GroupId
+                << " UnconfiguredStateTs# " << UnconfiguredStateTs
+                << " UnconfiguredStateReason# " << UnconfiguredStateReasonStr(UnconfiguredStateReason);
+
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
+                "Unconfigured Wakeup TIMEOUT Marker# DSP05 " << details);
+                
+        ErrorDescription = "Configuration timeout occured (DSPE1). " + details;
         EstablishingSessionsPutMuteChecker.Unmute();
         SetStateUnconfiguredTimeout();
     }
@@ -205,9 +239,12 @@ namespace NKikimr {
         if (ev && ev->Get() != EstablishingSessionsTimeoutEv) {
             return;
         }
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-                << " StateEstablishingSessions Wakeup TIMEOUT Marker# DSP12");
-        ErrorDescription = "Timeout while establishing sessions (DSPE4).";
+        TString details = TStringBuilder() << " GroupId# " << GroupId
+                << " EstablishingSessionsStateTs# " << EstablishingSessionsStateTs
+                << " NumUnconnectedDisks# " << NumUnconnectedDisks;
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
+                "StateEstablishingSessions Wakeup TIMEOUT Marker# DSP12 " << details);
+        ErrorDescription = "Timeout while establishing sessions (DSPE4). " + details;
         SetStateEstablishingSessionsTimeout();
     }
 
@@ -222,7 +259,7 @@ namespace NKikimr {
         auto *msg = ev->Get();
         Y_ABORT_UNLESS(Topology);
         Sessions->QueueConnectUpdate(Topology->GetOrderNumber(msg->VDiskId), msg->QueueId, msg->IsConnected,
-            msg->ExtraBlockChecksSupport, msg->CostModel, *Topology);
+            msg->ExtraBlockChecksSupport, msg->Checksumming, msg->CostModel, *Topology);
         MinHugeBlobInBytes = Sessions->GetMinHugeBlobInBytes();
         if (msg->IsConnected && (CurrentStateFunc() == &TThis::StateEstablishingSessions ||
                 CurrentStateFunc() == &TThis::StateEstablishingSessionsTimeout)) {
@@ -247,7 +284,7 @@ namespace NKikimr {
                 ErrorDescription = "Created as unconfigured in error state (DSPE11). It happens when the request was sent for an invalid groupID";
                 ExtraLogInfo = "The request was sent for an invalid groupID ";
             } else {
-                ErrorDescription = "Created as unconfigured in error state (DSPE7). It happens when group doesn't present in BSC";
+                ErrorDescription = "Created as unconfigured in error state (DSPE7). It happens when group isn't present in BSC";
             }
             Become(&TThis::StateEjected);
         } else {

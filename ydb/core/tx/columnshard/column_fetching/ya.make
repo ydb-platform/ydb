@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     cache_policy.cpp
+    manager.cpp
 )
 
 PEERDIR(

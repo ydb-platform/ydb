@@ -18,12 +18,12 @@ TProtobufValue::TProtobufValue(const TProtoInfo& info)
 }
 
 TProtobufValue::~TProtobufValue()
-{ }
+{
+}
 
 TUnboxedValue TProtobufValue::Run(
-        const IValueBuilder* valueBuilder,
-        const TUnboxedValuePod* args) const
-{
+    const IValueBuilder* valueBuilder,
+    const TUnboxedValuePod* args) const {
     auto blob = args[0].AsStringRef();
 
     try {
@@ -44,12 +44,12 @@ TProtobufSerialize::TProtobufSerialize(const TProtoInfo& info)
 }
 
 TProtobufSerialize::~TProtobufSerialize()
-{ }
+{
+}
 
 TUnboxedValue TProtobufSerialize::Run(
-        const IValueBuilder* valueBuilder,
-        const TUnboxedValuePod* args) const
-{
+    const IValueBuilder* valueBuilder,
+    const TUnboxedValuePod* args) const {
     try {
         TAutoPtr<Message> proto = MakeProto();
         FillProtoFromValue(args[0], *proto, Info_);
@@ -66,10 +66,10 @@ TUnboxedValue TProtobufSerialize::Run(
 namespace {
 
 static TUnboxedValuePod CreateEnumValue(
-        const IValueBuilder* valueBuilder,
-        const NProtoBuf::EnumValueDescriptor* desc,
-        const EEnumFormat format,
-        TFlags<EFieldFlag> fieldFlags)
+    const IValueBuilder* valueBuilder,
+    const NProtoBuf::EnumValueDescriptor* desc,
+    const EEnumFormat format,
+    TFlags<EFieldFlag> fieldFlags)
 {
     if (fieldFlags.HasFlags(EFieldFlag::EnumInt)) {
         return TUnboxedValuePod((i64)desc->number());
@@ -77,12 +77,12 @@ static TUnboxedValuePod CreateEnumValue(
         return valueBuilder->NewString(desc->name()).Release();
     }
     switch (format) {
-    case EEnumFormat::Number:
-        return TUnboxedValuePod((i32)desc->number());
-    case EEnumFormat::Name:
-        return valueBuilder->NewString(desc->name()).Release();
-    case EEnumFormat::FullName:
-        return valueBuilder->NewString(desc->full_name()).Release();
+        case EEnumFormat::Number:
+            return TUnboxedValuePod((i32)desc->number());
+        case EEnumFormat::Name:
+            return valueBuilder->NewString(desc->name()).Release();
+        case EEnumFormat::FullName:
+            return valueBuilder->NewString(desc->full_name()).Release();
     }
 
     Y_UNREACHABLE();
@@ -97,18 +97,18 @@ static TUnboxedValuePod CreateSingleField(
 {
     auto r = proto.GetReflection();
 
-#define FIELD_TO_VALUE(EProtoCppType, ProtoGet) \
-case FieldDescriptor::EProtoCppType: { \
-    return TUnboxedValuePod(r->ProtoGet(proto, fd)); \
-}
+#define FIELD_TO_VALUE(EProtoCppType, ProtoGet)          \
+    case FieldDescriptor::EProtoCppType: {               \
+        return TUnboxedValuePod(r->ProtoGet(proto, fd)); \
+    }
 
     switch (fd->cpp_type()) {
-        FIELD_TO_VALUE(CPPTYPE_INT32,  GetInt32);
-        FIELD_TO_VALUE(CPPTYPE_INT64,  GetInt64);
+        FIELD_TO_VALUE(CPPTYPE_INT32, GetInt32);
+        FIELD_TO_VALUE(CPPTYPE_INT64, GetInt64);
         FIELD_TO_VALUE(CPPTYPE_UINT32, GetUInt32);
         FIELD_TO_VALUE(CPPTYPE_UINT64, GetUInt64);
         FIELD_TO_VALUE(CPPTYPE_DOUBLE, GetDouble);
-        FIELD_TO_VALUE(CPPTYPE_BOOL,   GetBool);
+        FIELD_TO_VALUE(CPPTYPE_BOOL, GetBool);
 
         case FieldDescriptor::CPPTYPE_FLOAT: {
             const auto f = r->GetFloat(proto, fd);
@@ -136,24 +136,24 @@ case FieldDescriptor::EProtoCppType: { \
 }
 
 static TUnboxedValuePod CreateDefaultValue(
-        const IValueBuilder* valueBuilder,
-        const FieldDescriptor* fd,
-        const TProtoInfo& info,
-        TFlags<EFieldFlag> fieldFlags)
+    const IValueBuilder* valueBuilder,
+    const FieldDescriptor* fd,
+    const TProtoInfo& info,
+    TFlags<EFieldFlag> fieldFlags)
 {
 #define DEFAULT_TO_VALUE(EProtoCppType, ValueGet) \
-case FieldDescriptor::EProtoCppType: { \
-    return TUnboxedValuePod(fd->ValueGet()); \
-    break; \
-}
+    case FieldDescriptor::EProtoCppType: {        \
+        return TUnboxedValuePod(fd->ValueGet());  \
+        break;                                    \
+    }
 
     switch (fd->cpp_type()) {
-        DEFAULT_TO_VALUE(CPPTYPE_INT32,  default_value_int32);
-        DEFAULT_TO_VALUE(CPPTYPE_INT64,  default_value_int64);
+        DEFAULT_TO_VALUE(CPPTYPE_INT32, default_value_int32);
+        DEFAULT_TO_VALUE(CPPTYPE_INT64, default_value_int64);
         DEFAULT_TO_VALUE(CPPTYPE_UINT32, default_value_uint32);
         DEFAULT_TO_VALUE(CPPTYPE_UINT64, default_value_uint64);
         DEFAULT_TO_VALUE(CPPTYPE_DOUBLE, default_value_double);
-        DEFAULT_TO_VALUE(CPPTYPE_BOOL,   default_value_bool);
+        DEFAULT_TO_VALUE(CPPTYPE_BOOL, default_value_bool);
 
         case FieldDescriptor::CPPTYPE_FLOAT: {
             const auto f = fd->default_value_float();
@@ -166,37 +166,37 @@ case FieldDescriptor::EProtoCppType: { \
             return valueBuilder->NewString(fd->default_value_string()).Release();
         default:
             return TUnboxedValuePod();
-}
+    }
 #undef DEFAULT_TO_VALUE
 }
 
 static TUnboxedValuePod CreateRepeatedField(
-        const IValueBuilder* valueBuilder,
-        const Message& proto,
-        const FieldDescriptor* fd,
-        const TProtoInfo& info,
-        TFlags<EFieldFlag> fieldFlags)
+    const IValueBuilder* valueBuilder,
+    const Message& proto,
+    const FieldDescriptor* fd,
+    const TProtoInfo& info,
+    TFlags<EFieldFlag> fieldFlags)
 {
     auto r = proto.GetReflection();
 
-#define REPEATED_FIELD_TO_VALUE(EProtoCppType, ProtoGet) \
-case FieldDescriptor::EProtoCppType: { \
-    for (int i = 0; i < endI; ++i) { \
-        *items++ = TUnboxedValuePod(r->ProtoGet(proto, fd, i)); \
-    } \
-    break; \
-}
+#define REPEATED_FIELD_TO_VALUE(EProtoCppType, ProtoGet)            \
+    case FieldDescriptor::EProtoCppType: {                          \
+        for (int i = 0; i < endI; ++i) {                            \
+            *items++ = TUnboxedValuePod(r->ProtoGet(proto, fd, i)); \
+        }                                                           \
+        break;                                                      \
+    }
 
     const auto endI = r->FieldSize(proto, fd);
-    NUdf::TUnboxedValue *items = nullptr;
+    NUdf::TUnboxedValue* items = nullptr;
     auto list = valueBuilder->NewArray(endI, items);
     switch (fd->cpp_type()) {
-        REPEATED_FIELD_TO_VALUE(CPPTYPE_INT32,  GetRepeatedInt32);
-        REPEATED_FIELD_TO_VALUE(CPPTYPE_INT64,  GetRepeatedInt64);
+        REPEATED_FIELD_TO_VALUE(CPPTYPE_INT32, GetRepeatedInt32);
+        REPEATED_FIELD_TO_VALUE(CPPTYPE_INT64, GetRepeatedInt64);
         REPEATED_FIELD_TO_VALUE(CPPTYPE_UINT32, GetRepeatedUInt32);
         REPEATED_FIELD_TO_VALUE(CPPTYPE_UINT64, GetRepeatedUInt64);
         REPEATED_FIELD_TO_VALUE(CPPTYPE_DOUBLE, GetRepeatedDouble);
-        REPEATED_FIELD_TO_VALUE(CPPTYPE_BOOL,   GetRepeatedBool);
+        REPEATED_FIELD_TO_VALUE(CPPTYPE_BOOL, GetRepeatedBool);
 
         case FieldDescriptor::CPPTYPE_FLOAT:
             for (int i = 0; i < endI; ++i) {
@@ -249,22 +249,21 @@ static TUnboxedValuePod CreateMapField(
         const auto& protoDictElement = r->GetRepeatedMessage(proto, fd, i);
         dictBuilder->Add(
             TUnboxedValue(CreateSingleField(valueBuilder, protoDictElement, fd->message_type()->map_key(), info, noBinaryFlags)),
-            TUnboxedValue(CreateSingleField(valueBuilder, protoDictElement, fd->message_type()->map_value(), info, fieldFlags))
-        );
+            TUnboxedValue(CreateSingleField(valueBuilder, protoDictElement, fd->message_type()->map_value(), info, fieldFlags)));
     }
 
     return dictBuilder->Build().Release();
 }
 
-}
+} // namespace
 
 TUnboxedValue FillValueFromProto(
-        const Message& proto,
-        const IValueBuilder* valueBuilder,
-        const TProtoInfo& info)
+    const Message& proto,
+    const IValueBuilder* valueBuilder,
+    const TProtoInfo& info)
 {
-    const auto d  = proto.GetDescriptor();
-    const auto r  = proto.GetReflection();
+    const auto d = proto.GetDescriptor();
+    const auto r = proto.GetReflection();
     const auto mi = info.Messages.find(d->full_name());
 
     if (mi == info.Messages.end()) {
@@ -291,8 +290,8 @@ TUnboxedValue FillValueFromProto(
                 return CreateSingleField(valueBuilder, proto, fd, info, fInfo.Flags);
             } else if (fInfo.Flags.HasFlag(EFieldFlag::RecursiveOptionalUnwrapped)) {
                 throw yexception() << "The recursive field"
-                                    << " '" << fd->full_name() << "' "
-                                    << "was attempted to be parsed as a string, but actually it has no value. Consider using the BytesV2 parsing mode to allow for optional recursive messages.";
+                                   << " '" << fd->full_name() << "' "
+                                   << "was attempted to be parsed as a string, but actually it has no value. Consider using the BytesV2 parsing mode to allow for optional recursive messages.";
             } else if (fd->has_default_value() || AvoidOptionalScalars(info.SyntaxAware, fd)) {
                 return CreateDefaultValue(valueBuilder, fd, info, fInfo.Flags);
             } else {

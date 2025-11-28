@@ -291,19 +291,29 @@ public:
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
-                .NotDeleted()
-                .IsCommonSensePath();
+                .NotDeleted();
 
             if (checks) {
-                if (parent->IsTable()) {
+                if (parent.Parent()->IsTableIndex()) {
+                    // Only __ydb_id sequence can be present in the prefixed index
+                    if (name != NTableIndex::NKMeans::IdColumnSequence) {
+                        result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
+                        return result;
+                    }
+                    checks.IsInsideTableIndexPath()
+                        .IsUnderDeleting()
+                        .IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                } else if (parent->IsTable()) {
                     // allow immediately inside a normal table
                     if (parent.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                     }
+                    checks.IsCommonSensePath();
                 } else {
                     checks
                         .NotUnderDeleting()
-                        .IsLikeDirectory();
+                        .IsLikeDirectory()
+                        .IsCommonSensePath();
                 }
             }
 

@@ -14,7 +14,7 @@
 #include <ydb/library/actors/interconnect/interconnect_common.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 
 namespace NYql {
     class TServiceNode {

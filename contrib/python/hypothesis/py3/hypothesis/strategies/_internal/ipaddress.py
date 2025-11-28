@@ -9,7 +9,7 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_network
-from typing import Literal, Optional, Union
+from typing import Literal
 
 from hypothesis.errors import InvalidArgument
 from hypothesis.internal.validation import check_type
@@ -73,9 +73,9 @@ SPECIAL_IPv6_RANGES = (
 @defines_strategy(force_reusable_values=True)
 def ip_addresses(
     *,
-    v: Optional[Literal[4, 6]] = None,
-    network: Optional[Union[str, IPv4Network, IPv6Network]] = None,
-) -> SearchStrategy[Union[IPv4Address, IPv6Address]]:
+    v: Literal[4, 6] | None = None,
+    network: str | IPv4Network | IPv6Network | None = None,
+) -> SearchStrategy[IPv4Address | IPv6Address]:
     r"""Generate IP addresses - ``v=4`` for :class:`~python:ipaddress.IPv4Address`\ es,
     ``v=6`` for :class:`~python:ipaddress.IPv6Address`\ es, or leave unspecified
     to allow both versions.
@@ -115,4 +115,4 @@ def ip_addresses(
     if v not in (None, network.version):
         raise InvalidArgument(f"{v=} is incompatible with {network=}")
     addr_type = IPv4Address if network.version == 4 else IPv6Address
-    return integers(int(network[0]), int(network[-1])).map(addr_type)  # type: ignore
+    return integers(int(network[0]), int(network[-1])).map(addr_type)

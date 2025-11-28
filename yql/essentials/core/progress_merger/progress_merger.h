@@ -1,8 +1,9 @@
+#pragma once
+
 #include <yql/essentials/core/yql_execution.h>
 
 #include <util/generic/hash.h>
 #include <util/system/spinlock.h>
-
 
 namespace NYql::NProgressMerger {
 
@@ -18,8 +19,7 @@ public:
         const TOperationProgress& p,
         TInstant startedAt,
         TInstant finishedAt,
-        const TVector<TOperationProgress::TStage>& stages
-    );
+        const TVector<TOperationProgress::TStage>& stages);
 
     bool MergeWith(const TOperationProgress& p);
     void Abort();
@@ -46,4 +46,4 @@ struct ITaskProgressMerger {
     virtual void AbortAllUnfinishedNodes() = 0;
 };
 
-} // namespace NProgressMerger
+} // namespace NYql::NProgressMerger

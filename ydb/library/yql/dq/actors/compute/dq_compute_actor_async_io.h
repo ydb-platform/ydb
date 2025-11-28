@@ -55,6 +55,9 @@ enum class EResumeSource : ui32 {
     CADataSent,
     CAPendingOutput,
     CATaskRunnerCreated,
+    CAWatermarkInject,
+    CAWatermarkIdleness,
+    CAWakeupCallback,
 
     Last,
 };
@@ -274,6 +277,7 @@ public:
         const NKikimr::NMiniKQL::TStructType* PayloadType;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        const THashMap<TString, TString>& SecureParams;
         size_t MaxKeysInRequest;
     };
 

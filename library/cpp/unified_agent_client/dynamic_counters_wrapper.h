@@ -5,8 +5,8 @@
 namespace NUnifiedAgent {
     class TDynamicCountersWrapper: public TAtomicRefCount<TDynamicCountersWrapper> {
     public:
-        explicit TDynamicCountersWrapper(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
-            : Counters(counters)
+        explicit TDynamicCountersWrapper(TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+            : Counters_(std::move(counters))
         {
         }
 
@@ -37,16 +37,16 @@ namespace NUnifiedAgent {
         virtual ~TDynamicCountersWrapper() = default;
 
         const TIntrusivePtr<NMonitoring::TDynamicCounters>& Unwrap() const {
-            return Counters;
+            return Counters_;
         }
 
     protected:
         NMonitoring::TDeprecatedCounter& GetCounter(const TString& value, bool derivative) {
-            return *Counters->GetCounter(value, derivative);
+            return *Counters_->GetCounter(value, derivative);
         }
 
     private:
-        TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+        TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
     };
 
     class TUpdatableCounters: public TDynamicCountersWrapper {

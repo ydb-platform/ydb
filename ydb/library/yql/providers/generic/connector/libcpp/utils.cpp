@@ -110,4 +110,5 @@ namespace NYql::NConnector {
 
         return res->type();
     }
+
 } // namespace NYql::NConnector

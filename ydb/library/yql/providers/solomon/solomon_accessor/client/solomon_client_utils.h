@@ -2,6 +2,8 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <ydb/library/yql/providers/solomon/common/util.h>
+
 #include <map>
 #include <vector>
 
@@ -18,23 +20,13 @@ class TSolomonClientResponse {
 public:
     TSolomonClientResponse();
     explicit TSolomonClientResponse(const TString& error, EStatus status = STATUS_FATAL_ERROR);
-    explicit TSolomonClientResponse(T&& result);
+    explicit TSolomonClientResponse(T&& result, ui64 downloadedBytes);
 
 public:
     EStatus Status;
     TString Error;
     T Result;
-};
-
-struct TMetric {
-    std::map<TString, TString> Labels;
-    TString Type;
-};
-
-struct TTimeseries {
-    TMetric Metric;
-    std::vector<int64_t> Timestamps;
-    std::vector<double> Values;
+    ui64 DownloadedBytes = 0;
 };
 
 struct TGetLabelsResult {
@@ -48,6 +40,12 @@ struct TListMetricsResult {
     ui64 TotalCount;
 };
 using TListMetricsResponse = TSolomonClientResponse<TListMetricsResult>;
+
+struct TListMetricsLabelsResult {
+    std::vector<TLabelValues> Labels;
+    ui64 TotalCount;
+};
+using TListMetricsLabelsResponse = TSolomonClientResponse<TListMetricsLabelsResult>;
 
 struct TGetPointsCountResult {
     ui64 PointsCount;

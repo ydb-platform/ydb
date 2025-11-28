@@ -1,4 +1,5 @@
 #pragma once
+
 #include "node.h"
 #include "context.h"
 
@@ -7,100 +8,107 @@ namespace NSQLTranslationV1 {
 class TObjectOperatorContext {
 protected:
     TScopedStatePtr Scoped_;
+
 public:
     TString ServiceId;
     TDeferredAtom Cluster;
+
     TObjectOperatorContext(const TObjectOperatorContext& baseItem) = default;
+
     TObjectOperatorContext(TScopedStatePtr scoped);
 };
 
 class TObjectProcessorImpl: public TAstListNode, public TObjectOperatorContext {
-protected:
     using TBase = TAstListNode;
+
     TString ObjectId_;
     TString TypeId_;
 
-    virtual INode::TPtr BuildOptions() const = 0;
-    virtual INode::TPtr FillFeatures(INode::TPtr options) const = 0;
     INode::TPtr BuildKeys() const;
+
+protected:
+    virtual INode::TPtr BuildOptions() const = 0;
+
+    virtual INode::TPtr FillFeatures(INode::TPtr options) const = 0;
+
 public:
     TObjectProcessorImpl(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context);
 
     bool DoInit(TContext& ctx, ISource* src) override;
 
-    TPtr DoClone() const final {
-        return {};
-    }
+    TPtr DoClone() const final;
 };
 
-class TCreateObject: public TObjectProcessorImpl {
+class TObjectProcessorWithFeatures: public TObjectProcessorImpl {
+protected:
+    using TFeatureMap = std::map<TString, TDeferredAtom>;
+
 private:
     using TBase = TObjectProcessorImpl;
-    std::map<TString, TDeferredAtom> Features_;
-    std::set<TString> FeaturesToReset_;
+
+    TFeatureMap Features_;
+
 protected:
+    INode::TPtr FillFeatures(INode::TPtr options) const override;
+
+public:
+    bool DoInit(TContext& ctx, ISource* src) override;
+
+    TObjectProcessorWithFeatures(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
+                                 TFeatureMap&& features);
+};
+
+class TCreateObject final: public TObjectProcessorWithFeatures {
+    using TBase = TObjectProcessorWithFeatures;
+
     bool ExistingOk_ = false;
     bool ReplaceIfExists_ = false;
-protected:
-    virtual INode::TPtr BuildOptions() const override {
-        TString mode;
-        if (ExistingOk_) {
-            mode = "createObjectIfNotExists";
-        } else if (ReplaceIfExists_) {
-            mode = "createObjectOrReplace";
-        } else {
-            mode = "createObject";
-        }
 
-        return Y(Q(Y(Q("mode"), Q(mode))));
-    }
-    virtual INode::TPtr FillFeatures(INode::TPtr options) const override;
-    bool DoInit(TContext& ctx, ISource* src) override;
+protected:
+    INode::TPtr BuildOptions() const final;
+
 public:
-    TCreateObject(TPosition pos, const TString& objectId,
-        const TString& typeId, bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)
-        : TBase(pos, objectId, typeId, context)
-        , Features_(std::move(features))
-        , FeaturesToReset_(std::move(featuresToReset))
-        , ExistingOk_(existingOk)
-        , ReplaceIfExists_(replaceIfExists) {
-        }
+    TCreateObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
+                  TFeatureMap&& features, bool existingOk, bool replaceIfExists);
 };
 
-class TUpsertObject final: public TCreateObject {
-private:
-    using TBase = TCreateObject;
+class TUpsertObject final: public TObjectProcessorWithFeatures {
+    using TBase = TObjectProcessorWithFeatures;
+
 protected:
-    virtual INode::TPtr BuildOptions() const override {
-        return Y(Q(Y(Q("mode"), Q("upsertObject"))));
-    }
+    INode::TPtr BuildOptions() const final;
+
 public:
     using TBase::TBase;
 };
 
-class TAlterObject final: public TCreateObject {
-private:
-    using TBase = TCreateObject;
+class TAlterObject final: public TObjectProcessorWithFeatures {
+    using TBase = TObjectProcessorWithFeatures;
+
+    std::set<TString> FeaturesToReset_;
+    bool MissingOk_ = false;
+
 protected:
-    virtual INode::TPtr BuildOptions() const override {
-        return Y(Q(Y(Q("mode"), Q("alterObject"))));
-    }
+    INode::TPtr BuildOptions() const final;
+
+    INode::TPtr FillFeatures(INode::TPtr options) const final;
+
 public:
-    using TBase::TBase;
+    TAlterObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
+                 TFeatureMap&& features, std::set<TString>&& featuresToReset, bool missingOk);
 };
 
-class TDropObject final: public TCreateObject {
-private:
-    using TBase = TCreateObject;
-    bool MissingOk() const {
-        return ExistingOk_; // Because we were derived from TCreateObject
-    }
+class TDropObject final: public TObjectProcessorWithFeatures {
+    using TBase = TObjectProcessorWithFeatures;
+
+    bool MissingOk_ = false;
+
 protected:
-    virtual INode::TPtr BuildOptions() const override {
-        return Y(Q(Y(Q("mode"), Q(MissingOk() ? "dropObjectIfExists" : "dropObject"))));
-    }
+    INode::TPtr BuildOptions() const final;
+
 public:
-    using TBase::TBase;
+    TDropObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
+                TFeatureMap&& features, bool missingOk);
 };
 
-}
+} // namespace NSQLTranslationV1

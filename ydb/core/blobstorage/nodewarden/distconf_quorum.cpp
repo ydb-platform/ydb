@@ -2,6 +2,10 @@
 
 namespace NKikimr::NStorage {
 
+    std::optional<bool> HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
+            const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
+            const TNodeWardenConfig& nwConfig, bool allowUnformatted, IOutputStream *out, const char *name);
+
     // generate set of mandatory pile ids for quorum
     THashSet<TBridgePileId> GetMandatoryPileIds(const NKikimrBlobStorage::TStorageConfig& config,
             const THashSet<TBridgePileId>& pileIdQuorumOverride) {
@@ -12,7 +16,7 @@ namespace NKikimr::NStorage {
             const auto& clusterState = config.GetClusterState();
             for (size_t i = 0; i < clusterState.PerPileStateSize(); ++i) {
                 if (NBridge::PileStateTraits(clusterState.GetPerPileState(i)).RequiresConfigQuorum) {
-                    mandatoryPileIds.insert(TBridgePileId::FromValue(i));
+                    mandatoryPileIds.insert(TBridgePileId::FromPileIndex(i));
                 }
             }
         }
@@ -41,15 +45,17 @@ namespace NKikimr::NStorage {
     }
 
     static THashMap<TBridgePileId, THashMap<TString, std::tuple<ui32, ui32>>> PrepareStatusMap(
-            const NKikimrBlobStorage::TStorageConfig& config) {
+            const NKikimrBlobStorage::TStorageConfig& config, TBridgePileId singleBridgePileId) {
         THashMap<TBridgePileId, THashMap<TString, std::tuple<ui32, ui32>>> res;
 
-        if (config.HasClusterState()) {
+        if (singleBridgePileId) {
+            res.try_emplace(singleBridgePileId);
+        } else if (config.HasClusterState()) {
             const auto& cs = config.GetClusterState();
             for (size_t i = 0; i < cs.PerPileStateSize(); ++i) {
                 if (NBridge::PileStateTraits(cs.GetPerPileState(i)).RequiresConfigQuorum) {
                     // this pile is part of config quorum, we need it to be connected
-                    res.try_emplace(TBridgePileId::FromValue(i));
+                    res.try_emplace(TBridgePileId::FromPileIndex(i));
                 }
             }
         } else {
@@ -61,72 +67,40 @@ namespace NKikimr::NStorage {
     }
 
     bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TNodeIdentifier> successful,
-            const THashMap<TString, TBridgePileId>& bridgePileNameMap, std::optional<TBridgePileId> singleBridgePileId,
-            TStringStream *out) {
-        // prepare list of piles we want to examine
-        auto status = singleBridgePileId
-            ? THashMap<TBridgePileId, THashMap<TString, std::tuple<ui32, ui32>>>{{*singleBridgePileId, {}}}
-            : PrepareStatusMap(config);
-
-        // generate set of all nodes
-        THashMap<ui32, std::tuple<const NKikimrBlobStorage::TNodeIdentifier&, TBridgePileId, TNodeLocation>> nodeMap;
-        for (const NKikimrBlobStorage::TNodeIdentifier& node : config.GetAllNodes()) {
-            TNodeLocation location(node.GetLocation());
-            const auto& bridgePileId = ResolveBridgePileId(location, bridgePileNameMap);
-            if (!bridgePileId) {
-                return false;
-            } else if (const auto it = status.find(*bridgePileId); it != status.end()) {
-                auto& [ok, err] = it->second[location.GetDataCenterId()];
-                ++err;
-                nodeMap.try_emplace(node.GetNodeId(), node, *bridgePileId, std::move(location));
-            }
-        }
-
-        // process responses
-        THashSet<TNodeIdentifier> seen;
-        for (const TNodeIdentifier& node : successful) {
-            if (const auto it = nodeMap.find(node.NodeId()); it != nodeMap.end()) {
-                const auto& [identifier, bridgePileId, location] = it->second;
-                if (node == TNodeIdentifier(identifier) && seen.insert(node).second) {
-                    auto& [ok, err] = status[bridgePileId][location.GetDataCenterId()];
-                    Y_ABORT_UNLESS(err);
-                    ++ok;
-                    --err;
+            const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
+            const TNodeWardenConfig& nwConfig, TStringStream *out, bool allowConfigQuorum) {
+        if (allowConfigQuorum) {
+            // calculate pseudo-quorum for all drives in static groups in seen nodes
+            THashSet<TNodeIdentifier> successfulNodes(successful.begin(), successful.end());
+            std::vector<TSuccessfulDisk> successfulDisks;
+            EnumerateConfigDrives(config, 0, [&](const TNodeIdentifier& node, const NKikimrBlobStorage::THostConfigDrive& drive) {
+                if (successfulNodes.contains(node)) {
+                    successfulDisks.emplace_back(node, drive.GetPath(), std::nullopt /* don't care about guids here */);
                 }
+            });
+            if (auto q = HasStorageQuorum(config, successfulDisks, bridgePileNameMap, singleBridgePileId, nwConfig,
+                    true, out, "config")) {
+                return *q;
             }
         }
 
-        // calculate number of good and bad datacenters
-        for (const auto& [bridgePileId, pileStatus] : status) {
-            ui32 ok = 0;
-            ui32 err = 0;
-            for (const auto& [dataCenterId, value] : pileStatus) {
-                const auto [dcOk, dcErr] = value;
-                ++(dcOk > dcErr ? ok : err);
+        THashSet<TNodeIdentifier> nodes{successful.begin(), successful.end()};
+        std::vector<TSuccessfulDisk> disks;
+        EnumerateConfigDrives(config, 0, [&](const auto& node, const auto& drive) {
+            if (TNodeIdentifier nodeId(node); nodes.contains(nodeId)) {
+                disks.emplace_back(nodeId, drive.GetPath(), std::nullopt /*guid*/);
             }
-
-            // strict datacenter majority
-            if (ok <= err) {
-                if (out) {
-                    *out << " no-quorum";
-                    for (const auto& [_, value] : pileStatus) {
-                        const auto [dcOk, dcErr] = value;
-                        *out << ':' << dcOk << '/' << dcOk + dcErr;
-                    }
-                }
-                return false;
-            }
-        }
-
-        return true;
+        });
+        return HasConfigQuorum(config, disks, bridgePileNameMap, singleBridgePileId, nwConfig, false, out);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     bool HasDiskQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
-            const THashMap<TString, TBridgePileId>& bridgePileNameMap, IOutputStream *out, const char *name) {
+            const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
+            IOutputStream *out, const char *name) {
         // prepare list of piles we want to examine
-        auto status = PrepareStatusMap(config);
+        auto status = PrepareStatusMap(config, singleBridgePileId);
 
         // generate set of all required drives
         THashMap<ui32, std::tuple<const NKikimrBlobStorage::TNodeIdentifier&, TBridgePileId, TNodeLocation>> nodeMap;
@@ -186,12 +160,12 @@ namespace NKikimr::NStorage {
         return true;
     }
 
-    bool HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
-            const THashMap<TString, TBridgePileId>& /*bridgePileNameMap*/, const TNodeWardenConfig& nwConfig,
-            bool allowUnformatted, IOutputStream *out, const char *name) {
+    std::optional<bool> HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
+            const THashMap<TString, TBridgePileId>& /*bridgePileNameMap*/, TBridgePileId singleBridgePileId,
+            const TNodeWardenConfig& nwConfig, bool allowUnformatted, IOutputStream *out, const char *name) {
         auto makeError = [&](TString error) -> bool {
             STLOG(PRI_CRIT, BS_NODE, NWDC41, "configuration incorrect", (Error, error));
-            Y_DEBUG_ABORT("%s", error.c_str());
+            //Y_DEBUG_ABORT("%s", error.c_str());
             if (out) {
                 *out << ' ' << name << ':' << error;
             }
@@ -305,7 +279,9 @@ namespace NKikimr::NStorage {
                     return false;
                 }
                 for (size_t i = 0; i < ids.size(); ++i) {
-                    bridgedGroups[ids[i]] = NBridge::PileStateTraits(cs.GetPerPileState(i)).RequiresConfigQuorum;
+                    bridgedGroups[ids[i]] = singleBridgePileId
+                        ? TBridgePileId::FromPileIndex(i) == singleBridgePileId
+                        : NBridge::PileStateTraits(cs.GetPerPileState(i)).RequiresConfigQuorum;
                 }
             } else if (const auto& checker = info->GetQuorumChecker(); !checker.CheckQuorumForGroup(group.Confirmed)) {
                 badGroups.insert(groupId);
@@ -320,17 +296,18 @@ namespace NKikimr::NStorage {
             }
         }
 
-        return true; // all group meet their quorums
+        return groups.empty()
+            ? std::nullopt // we don't know about quorum -- no static groups defined
+            : std::make_optional(true); // all groups meet their quorums
     }
 
     bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
-            const THashMap<TString, TBridgePileId>& bridgePileNameMap, const TNodeWardenConfig& nwConfig, bool mindPrev,
-            TStringStream *out) {
-        return HasDiskQuorum(config, successful, bridgePileNameMap, out, "new") &&
-            HasStorageQuorum(config, successful, bridgePileNameMap, nwConfig, true, out, "new") &&
-            (!mindPrev || !config.HasPrevConfig() ||
-                HasDiskQuorum(config.GetPrevConfig(), successful, bridgePileNameMap, out, "prev") &&
-                HasStorageQuorum(config.GetPrevConfig(), successful, bridgePileNameMap, nwConfig, false, out, "prev"));
+            const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
+            const TNodeWardenConfig& nwConfig, bool mindPrev, TStringStream *out) {
+        return HasDiskQuorum(config, successful, bridgePileNameMap, singleBridgePileId, out, "new") &&
+            HasStorageQuorum(config, successful, bridgePileNameMap, singleBridgePileId, nwConfig, true, out, "new").value_or(true) &&
+            (!mindPrev || !config.HasPrevConfig() || HasStorageQuorum(config.GetPrevConfig(), successful,
+                bridgePileNameMap, singleBridgePileId, nwConfig, false, out, "prev").value_or(true));
     }
 
 } // NKikimr::NStorage

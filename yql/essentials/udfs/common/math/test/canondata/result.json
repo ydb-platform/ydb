@@ -31,5 +31,15 @@
         {
             "uri": "file://test.test_NearbyInt_/results.txt"
         }
+    ],
+    "test.test[SwapBytes]": [
+        {
+            "uri": "file://test.test_SwapBytes_/results.txt"
+        }
+    ],
+    "test.test[SwapBytes_2025_02]": [
+        {
+            "uri": "file://test.test_SwapBytes_2025_02_/extracted"
+        }
     ]
 }

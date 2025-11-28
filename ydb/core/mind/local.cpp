@@ -84,7 +84,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     const TActorId Owner;
     const ui64 HiveId;
     TVector<TSubDomainKey> ServicedDomains;
-    std::optional<TBridgePileId> BridgePileId;
+    TBridgePileId BridgePileId;
 
     TActorId HivePipeClient;
     bool Connected;
@@ -209,9 +209,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.empty()) {
             request->Record.SetName(nodeName);
         }
-        if (BridgePileId) {
-            request->Record.SetBridgePileId(BridgePileId->GetRawId());
-        }
+        BridgePileId.CopyToProto(&request->Record, &decltype(request->Record)::SetBridgePileId);
 
         NTabletPipe::SendData(ctx, HivePipeClient, request.Release());
 

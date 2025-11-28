@@ -52,7 +52,7 @@ void TDirectReadSessionActor::Bootstrap(const TActorContext& ctx) {
            ->GetNamedCounter("sensor", "DirectSessionsCreatedTotal", true));
     }
 
-    Request->GetStreamCtx()->Attach(ctx.SelfID);
+    Request->Attach(ctx.SelfID);
     if (!ReadFromStreamOrDie(ctx)) {
         return;
     }
@@ -67,7 +67,7 @@ void TDirectReadSessionActor::Handle(typename IContext::TEvNotifiedWhenDone::TPt
 }
 
 bool TDirectReadSessionActor::ReadFromStreamOrDie(const TActorContext& ctx) {
-    if (!Request->GetStreamCtx()->Read()) {
+    if (!Request->Read()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " grpc read failed at start");
         Die(ctx);
         return false;
@@ -90,7 +90,7 @@ void TDirectReadSessionActor::Handle(typename IContext::TEvReadFinished::TPtr& e
 
     switch (request.client_message_case()) {
         case TClientMessage::kInitRequest: {
-            ctx.Send(ctx.SelfID, new TEvPQProxy::TEvInitDirectRead(request, Request->GetStreamCtx()->GetPeerName()));
+            ctx.Send(ctx.SelfID, new TEvPQProxy::TEvInitDirectRead(request, Request->GetPeerName()));
             return;
         }
 
@@ -119,9 +119,10 @@ bool TDirectReadSessionActor::WriteToStreamOrDie(const TActorContext& ctx, TServ
     bool res = false;
 
     if (!finish) {
-        res = Request->GetStreamCtx()->Write(std::move(response));
+        res = Request->Write(std::move(response));
     } else {
-        res = Request->GetStreamCtx()->WriteAndFinish(std::move(response), grpc::Status::OK);
+        const Ydb::StatusIds::StatusCode status = response.status();
+        res = Request->WriteAndFinish(std::move(response), status);
     }
 
     if (!res) {
@@ -148,6 +149,11 @@ void TDirectReadSessionActor::Die(const TActorContext& ctx) {
 
     if (DirectSessionsActive) {
         --(*DirectSessionsActive);
+    }
+
+    if (Request) {
+        // Write to audit log if it is needed and we have not written yet.
+        Request->AuditLogRequestEnd(Ydb::StatusIds::SUCCESS);
     }
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " proxy is DEAD");
@@ -365,7 +371,8 @@ void TDirectReadSessionActor::CloseSession(PersQueue::ErrorCode::ErrorCode code,
         }
     } else {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " closed");
-        if (!Request->GetStreamCtx()->Finish(grpc::Status::OK)) {
+        const Ydb::StatusIds::StatusCode statusCode = ConvertPersQueueInternalCodeToStatus(code);
+        if (!Request->Finish(statusCode)) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc double finish failed");
         }
     }
@@ -386,7 +393,7 @@ void TDirectReadSessionActor::Handle(NGRpcService::TGRpcRequestProxy::TEvRefresh
         if (ev->Get()->Retryable) {
             TServerMessage serverMessage;
             serverMessage.set_status(Ydb::StatusIds::UNAVAILABLE);
-            Request->GetStreamCtx()->WriteAndFinish(std::move(serverMessage), grpc::Status::OK);
+            Request->WriteAndFinish(std::move(serverMessage), Ydb::StatusIds::UNAVAILABLE);
         } else {
             Request->RaiseIssues(ev->Get()->Issues);
             Request->ReplyUnauthenticated("refreshed token is invalid");

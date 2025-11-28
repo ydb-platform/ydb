@@ -1,0 +1,15 @@
+#pragma once
+
+#include <yt/cpp/mapreduce/http/context.h>
+
+#include <yt/yt/client/api/public.h>
+
+namespace NYT::NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+NYT::NApi::IClientPtr CreateApiClient(const TClientContext& context);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NDetail

@@ -33,11 +33,10 @@ TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
     }
 
     TVector<TString> UDFsPaths;
-    for (const auto& item: Options_.UserData) {
+    for (const auto& item : Options_.UserData) {
         if (
             item.Type == NUserData::EType::UDF &&
-            item.Disposition == NUserData::EDisposition::FILESYSTEM
-        ) {
+            item.Disposition == NUserData::EDisposition::FILESYSTEM) {
             UDFsPaths.push_back(item.Content);
         }
     }
@@ -47,7 +46,8 @@ TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
     }
 
     FuncRegistry_ = NKikimr::NMiniKQL::CreateFunctionRegistry(
-        &NYql::NBacktrace::KikimrBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, UDFsPaths)->Clone();
+                        &NYql::NBacktrace::KikimrBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, UDFsPaths)
+                        ->Clone();
 
     NKikimr::NMiniKQL::FillStaticModules(*FuncRegistry_);
 }
@@ -57,11 +57,9 @@ TProgramFactory::~TProgramFactory() {
 
 void TProgramFactory::AddUdfModule(
     const TStringBuf& moduleName,
-    NKikimr::NUdf::TUniquePtr<NKikimr::NUdf::IUdfModule>&& module
-) {
+    NKikimr::NUdf::TUniquePtr<NKikimr::NUdf::IUdfModule>&& module) {
     FuncRegistry_->AddModule(
-        TString::Join(PurecalcUdfModulePrefix, moduleName), moduleName, std::move(module)
-    );
+        TString::Join(PurecalcUdfModulePrefix, moduleName), moduleName, std::move(module));
 }
 
 void TProgramFactory::SetCountersProvider(NKikimr::NUdf::ICountersProvider* provider) {
@@ -73,8 +71,7 @@ IPullStreamWorkerFactoryPtr TProgramFactory::MakePullStreamWorkerFactory(
     const TOutputSpecBase& outputSpec,
     TString query,
     ETranslationMode mode,
-    ui16 syntaxVersion
-) {
+    ui16 syntaxVersion) {
     return std::make_shared<TPullStreamWorkerFactory>(TWorkerFactoryOptions(
         TIntrusivePtr<TProgramFactory>(this),
         inputSpec,
@@ -95,8 +92,8 @@ IPullStreamWorkerFactoryPtr TProgramFactory::MakePullStreamWorkerFactory(
         Options_.DeterministicTimeProviderSeed,
         Options_.UseSystemColumns,
         Options_.UseWorkerPool,
-        Options_.UseAntlr4
-    ));
+        Options_.UseAntlr4,
+        Options_.InternalSettings));
 }
 
 IPullListWorkerFactoryPtr TProgramFactory::MakePullListWorkerFactory(
@@ -104,8 +101,7 @@ IPullListWorkerFactoryPtr TProgramFactory::MakePullListWorkerFactory(
     const TOutputSpecBase& outputSpec,
     TString query,
     ETranslationMode mode,
-    ui16 syntaxVersion
-) {
+    ui16 syntaxVersion) {
     return std::make_shared<TPullListWorkerFactory>(TWorkerFactoryOptions(
         TIntrusivePtr<TProgramFactory>(this),
         inputSpec,
@@ -126,8 +122,8 @@ IPullListWorkerFactoryPtr TProgramFactory::MakePullListWorkerFactory(
         Options_.DeterministicTimeProviderSeed,
         Options_.UseSystemColumns,
         Options_.UseWorkerPool,
-        Options_.UseAntlr4
-    ));
+        Options_.UseAntlr4,
+        Options_.InternalSettings));
 }
 
 IPushStreamWorkerFactoryPtr TProgramFactory::MakePushStreamWorkerFactory(
@@ -135,8 +131,7 @@ IPushStreamWorkerFactoryPtr TProgramFactory::MakePushStreamWorkerFactory(
     const TOutputSpecBase& outputSpec,
     TString query,
     ETranslationMode mode,
-    ui16 syntaxVersion
-) {
+    ui16 syntaxVersion) {
     if (inputSpec.GetSchemas().size() > 1) {
         ythrow yexception() << "push stream mode doesn't support several inputs";
     }
@@ -161,6 +156,6 @@ IPushStreamWorkerFactoryPtr TProgramFactory::MakePushStreamWorkerFactory(
         Options_.DeterministicTimeProviderSeed,
         Options_.UseSystemColumns,
         Options_.UseWorkerPool,
-        Options_.UseAntlr4
-    ));
+        Options_.UseAntlr4,
+        Options_.InternalSettings));
 }

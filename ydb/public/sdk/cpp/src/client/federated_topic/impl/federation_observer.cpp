@@ -13,9 +13,9 @@ TFederatedDbObserverImpl::TFederatedDbObserverImpl(std::shared_ptr<TGRpcConnecti
     , PromiseToInitState(NThreading::NewPromise())
     , FederationDiscoveryRetryPolicy(settings.RetryPolicy_)
 {
-    RpcSettings.ClientTimeout = settings.ConnectionTimeout_;
     RpcSettings.EndpointPolicy = TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint;
     RpcSettings.UseAuth = true;
+    ConnectionTimeout = TDeadline::SafeDurationCast(settings.ConnectionTimeout_);
 }
 
 TFederatedDbObserverImpl::~TFederatedDbObserverImpl() {
@@ -82,6 +82,9 @@ void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
         }
     };
 
+    TRpcRequestSettings settings = RpcSettings;
+    settings.Deadline = TDeadline::AfterDuration(ConnectionTimeout);
+
     Connections_->RunDeferred<Ydb::FederationDiscovery::V1::FederationDiscoveryService,
                              Ydb::FederationDiscovery::ListFederationDatabasesRequest,
                              Ydb::FederationDiscovery::ListFederationDatabasesResponse>(
@@ -90,7 +93,7 @@ void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
         &Ydb::FederationDiscovery::V1::FederationDiscoveryService::Stub::AsyncListFederationDatabases,
         DbDriverState_,
         {},  // no polling unready operations, so no need in delay parameter
-        RpcSettings,
+        settings,
         FederationDiscoveryDelayContext);
 }
 
@@ -136,8 +139,6 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
                 << "OnFederationDiscovery fall back to single mode, database=" << DbDriverState_->Database);
             FederatedDbState->Status = TPlainStatus{};  // SUCCESS
             FederatedDbState->ControlPlaneEndpoint = DbDriverState_->DiscoveryEndpoint;
-            auto dbState = Connections_->GetDriverState(std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt);
-            FederatedDbState->ControlPlaneEndpoint = dbState->DiscoveryEndpoint;
             // FederatedDbState->SelfLocation = ???;
             auto db = std::make_shared<Ydb::FederationDiscovery::DatabaseInfo>();
             db->set_path(TStringType{DbDriverState_->Database});
@@ -145,7 +146,6 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
             db->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
             db->set_weight(100);
             FederatedDbState->DbInfos.emplace_back(std::move(db));
-
         } else {
             if (status.IsSuccess()) {
                 ScheduleFederationDiscoveryImpl(REDISCOVERY_DELAY);

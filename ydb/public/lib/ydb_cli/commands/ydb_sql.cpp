@@ -45,6 +45,8 @@ void TCommandSql::Config(TConfig& config) {
         .StoreTrue(&ExplainAnalyzeMode);
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
+    config.Opts->AddLongOption("tx-mode", "Transaction mode [serializable-rw, online-ro, stale-ro, snapshot-ro, snapshot-rw, no-tx]")
+        .RequiredArgument("[String]").DefaultValue("no-tx").StoreResult(&TxMode);
 
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     TStringStream description;
@@ -177,18 +179,43 @@ int TCommandSql::RunCommand(TConfig& config) {
 
     settings.Syntax(SyntaxType);
 
+    // Configure transaction control based on TxMode
+    auto getTxControl = [this]() -> NQuery::TTxControl {
+        if (TxMode == "no-tx" || TxMode == "notx") {
+            return NQuery::TTxControl::NoTx();
+        }
+        NQuery::TTxSettings txSettings;
+        if (TxMode == "serializable-rw") {
+            txSettings = NQuery::TTxSettings::SerializableRW();
+        } else if (TxMode == "online-ro") {
+            txSettings = NQuery::TTxSettings::OnlineRO();
+        } else if (TxMode == "stale-ro") {
+            txSettings = NQuery::TTxSettings::StaleRO();
+        } else if (TxMode == "snapshot-ro") {
+            txSettings = NQuery::TTxSettings::SnapshotRO();
+        } else if (TxMode == "snapshot-rw") {
+            txSettings = NQuery::TTxSettings::SnapshotRW();
+        } else {
+            throw TMisuseException() << "Unknown transaction mode.";
+        }
+        return NQuery::TTxControl::BeginTx(txSettings).CommitTx();
+    };
+
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
         THolder<TParamsBuilder> paramBuilder;
         while (!IsInterrupted() && GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             auto asyncResult = client.StreamExecuteQuery(
                     Query,
-                    NQuery::TTxControl::NoTx(),
+                    getTxControl(),
                     paramBuilder->Build(),
                     settings
                 );
 
-            auto result = asyncResult.GetValueSync();
+            if (!WaitInterruptible(asyncResult)) {
+                return EXIT_FAILURE;
+            }
+            auto result = asyncResult.GetValue();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
             int printResult = PrintResponse(result);
             if (printResult != EXIT_SUCCESS) {
@@ -199,11 +226,14 @@ int TCommandSql::RunCommand(TConfig& config) {
         // Execute query without parameters
         auto asyncResult = client.StreamExecuteQuery(
             Query,
-            NQuery::TTxControl::NoTx(),
+            getTxControl(),
             settings
         );
 
-        auto result = asyncResult.GetValueSync();
+        if (!WaitInterruptible(asyncResult)) {
+            return EXIT_FAILURE;
+        }
+        auto result = asyncResult.GetValue();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         return PrintResponse(result);
     }
@@ -222,7 +252,11 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
         TMaybe<NQuery::TExecStats> execStats;
 
         while (!IsInterrupted()) {
-            auto streamPart = result.ReadNext().ExtractValueSync();
+            auto asyncStreamPart = result.ReadNext();
+            if (!WaitInterruptible(asyncStreamPart)) {
+                return EXIT_FAILURE;
+            }
+            auto streamPart = asyncStreamPart.ExtractValue();
             if (ThrowOnErrorAndCheckEOS(streamPart)) {
                 break;
             }

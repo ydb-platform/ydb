@@ -31,8 +31,8 @@ namespace NKikimr {
         TBridgeInfo(TBridgeInfo&&) = default;
 
         const TPile *GetPile(TBridgePileId bridgePileId) const {
-            Y_ABORT_UNLESS(bridgePileId.GetRawId() < Piles.size());
-            return &Piles[bridgePileId.GetRawId()];
+            Y_ABORT_UNLESS(bridgePileId.GetPileIndex() < Piles.size());
+            return &Piles[bridgePileId.GetPileIndex()];
         }
 
         const TPile *GetPileForNode(ui32 nodeId) const {
@@ -43,7 +43,7 @@ namespace NKikimr {
         template<typename T>
         void ForEachPile(T&& callback) const {
             for (size_t i = 0; i < Piles.size(); ++i) {
-                callback(TBridgePileId::FromValue(i));
+                callback(TBridgePileId::FromPileIndex(i));
             }
         }
     };
@@ -58,15 +58,17 @@ namespace NKikimr {
             const bool AllowsConnection;
         };
 
-        static constexpr TPileStateTraits PileStateTraits(const NKikimrBridge::TClusterState::EPileState state) {
+        static constexpr TPileStateTraits PileStateTraits(NKikimrBridge::TClusterState::EPileState state) {
             switch (state) {                                               //  DQ     CQ     AC
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:       return {true,  true,  true };
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1: return {false, false, true };
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2: return {true,  true,  true };
                 case NKikimrBridge::TClusterState::DISCONNECTED:       return {false, false, false};
+                case NKikimrBridge::TClusterState::SUSPENDED:          return {false, true,  true };
 
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    Y_ABORT();
                     return {};
             }
         }

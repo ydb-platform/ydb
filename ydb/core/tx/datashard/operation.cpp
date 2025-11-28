@@ -65,7 +65,7 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
             LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
                         "Filled readset for " << *this << " from=" << rsKey.From
                         << " to=" << rsKey.To << "origin=" << rsKey.Origin);
-            InReadSets()[it->first].emplace_back(TRSData(readSet, rsKey.Origin));
+            InReadSets()[it->first].emplace_back(TRSData{ std::move(readSet), rsKey.Origin });
             if (it->second->IsComplete()) {
                 Y_ENSURE(InputDataRef().RemainReadSets > 0, "RemainReadSets counter underflow");
                 --InputDataRef().RemainReadSets;
@@ -321,6 +321,24 @@ bool TOperation::HasRuntimeConflicts() const noexcept
 void TOperation::SetFinishProposeTs() noexcept
 {
     SetFinishProposeTs(AppData()->MonotonicTimeProvider->Now());
+}
+
+std::optional<TString> TOperation::OnMigration(TDataShard&, const TActorContext&)
+{
+    // By default operations cannot be migrated
+    return std::nullopt;
+}
+
+bool TOperation::OnRestoreMigrated(TDataShard&, const TString&)
+{
+    // By default operations cannot be restored
+    return false;
+}
+
+bool TOperation::OnFinishMigration(TDataShard&, const NTable::TScheme&)
+{
+    // By default operations cannot finish migration
+    return false;
 }
 
 bool TOperation::OnStopping(TDataShard&, const TActorContext&)

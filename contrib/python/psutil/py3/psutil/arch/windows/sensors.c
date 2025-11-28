@@ -7,6 +7,8 @@
 #include <Python.h>
 #include <windows.h>
 
+#include "../../arch/all/init.h"
+
 
 // Added in https://github.com/giampaolo/psutil/commit/109f873 in 2017.
 // Moved in here in 2023.
@@ -15,7 +17,7 @@ psutil_sensors_battery(PyObject *self, PyObject *args) {
     SYSTEM_POWER_STATUS sps;
 
     if (GetSystemPowerStatus(&sps) == 0) {
-        PyErr_SetFromWindowsErr(0);
+        psutil_oserror();
         return NULL;
     }
     return Py_BuildValue(

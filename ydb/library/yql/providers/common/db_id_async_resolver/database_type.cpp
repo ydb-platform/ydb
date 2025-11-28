@@ -22,7 +22,8 @@ std::set<TString> GetAllExternalDataSourceTypes() {
         ToString(NYql::EDatabaseType::Redis),
         ToString(NYql::EDatabaseType::Prometheus),
         ToString(NYql::EDatabaseType::OpenSearch),
-        ToString(NYql::EDatabaseType::DataStreams)
+        ToString(NYql::EDatabaseType::DataStreams),
+        ToString(NYql::EDatabaseType::YdbTopics),
     };
     return allTypes;
 }

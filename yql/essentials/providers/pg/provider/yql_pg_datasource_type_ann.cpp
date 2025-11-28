@@ -10,7 +10,7 @@ namespace NYql {
 
 using namespace NNodes;
 
-class TPgDataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
+class TPgDataSourceTypeAnnotationTransformer: public TVisitorTransformerBase {
 public:
     TPgDataSourceTypeAnnotationTransformer(TPgState::TPtr state)
         : TVisitorTransformerBase(true)
@@ -31,7 +31,7 @@ public:
 
     template <typename TNode>
     TStatus HandleReadTableImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
-        ui32 expectedArgs) {
+                                ui32 expectedArgs) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, expectedArgs, ctx)) {
             return TStatus::Error;
@@ -91,7 +91,7 @@ public:
             return TStatus::Error;
         }
 
-        for (const auto& setting: settings->Children()) {
+        for (const auto& setting : settings->Children()) {
             if (!EnsureTupleMinSize(*setting, 1, ctx)) {
                 return TStatus::Error;
             }
@@ -107,17 +107,17 @@ public:
 
         auto tableName = input->Child(TNode::idx_Table)->Content();
         TVector<const TItemExprType*> items;
-        auto columnsPtr = NPg::GetStaticColumns().FindPtr(NPg::TTableInfoKey{ cluster, TString(tableName) });
+        auto columnsPtr = NPg::GetStaticColumns().FindPtr(NPg::TTableInfoKey{cluster, TString(tableName)});
         if (!columnsPtr) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TPgReadTable::idx_Table)->Pos()), TStringBuilder() << "Unsupported table: " << tableName));
             return TStatus::Error;
         }
 
-        for (const auto& c: *columnsPtr) {
+        for (const auto& c : *columnsPtr) {
             AddColumn(items, ctx, c.Name, c.UdtType);
         }
 
-        const auto relKind = NPg::LookupStaticTable(NPg::TTableInfoKey{ cluster, TString(tableName) }).Kind;
+        const auto relKind = NPg::LookupStaticTable(NPg::TTableInfoKey{cluster, TString(tableName)}).Kind;
         if (relKind == NPg::ERelKind::Relation) {
             AddSystemColumn(items, ctx, "tableoid", "oid");
             AddSystemColumn(items, ctx, "xmin", "xid");
@@ -144,8 +144,7 @@ public:
         if constexpr (std::is_same_v<TNode, TPgReadTable>) {
             resType = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
                 input->Child(TPgReadTable::idx_World)->GetTypeAnn(),
-                resType
-            });
+                resType});
         }
 
         input->SetTypeAnn(resType);
@@ -169,4 +168,4 @@ THolder<TVisitorTransformerBase> CreatePgDataSourceTypeAnnotationTransformer(TPg
     return MakeHolder<TPgDataSourceTypeAnnotationTransformer>(state);
 }
 
-}
+} // namespace NYql

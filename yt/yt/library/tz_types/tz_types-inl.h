@@ -18,7 +18,6 @@ public:
     {
         const auto timezones = NTi::GetTimezones();
         TzBuffer_.resize(timezones.size());
-        MaxPossibleTzSize_ = 0;
         for (int index = 0; index < std::ssize(timezones); ++index) {
             TzBuffer_[index] = std::string(timezones[index]);
             if (!timezones[index].empty()) {
@@ -70,7 +69,7 @@ public:
 private:
     THashMap<std::string_view, int> NameToTimezoneIndex_;
     std::vector<std::string> TzBuffer_;
-    int MaxPossibleTzSize_;
+    int MaxPossibleTzSize_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -123,11 +122,6 @@ TTZItem<T> ParseTzValue(std::string_view tzString)
     return TTZItem<T>({ParseTimestampFromTzString<T>(tzString), ParseTzNameFromTzString(tzString, sizeof(T))});
 }
 
-inline void ValidateTzName(std::string_view tzName)
-{
-    Singleton<TTzRegistry>()->ValidateTzName(tzName);
-}
-
 template <typename T>
 std::string_view MakeTzString(T timeValue, std::string_view tzName, char* buffer, size_t bufferSize)
 {
@@ -153,21 +147,6 @@ std::string MakeTzString(T timeValue, std::string_view tzName)
     buffer.resize(sizeof(T) + tzName.size());
     Y_UNUSED(MakeTzString<T>(timeValue, tzName, buffer.data(), buffer.size()));
     return buffer;
-}
-
-inline std::string_view GetTzName(int tzIndex)
-{
-    return Singleton<TTzRegistry>()->GetTzName(tzIndex);
-}
-
-inline int GetTzIndex(std::string_view tzName)
-{
-    return Singleton<TTzRegistry>()->GetTzIndex(tzName);
-}
-
-inline int GetMaxPossibleTzStringSize()
-{
-    return Singleton<TTzRegistry>()->GetMaxPossibleTzSize() + sizeof(i64);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

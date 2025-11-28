@@ -30,6 +30,7 @@ class TBlobStorageGroupMultiCollectRequest : public TBlobStorageGroupRequestActo
     const bool Hard;
     const bool Collect;
     const bool Decommission;
+    const bool IgnoreBlock;
 
     ui64 FlagRequestsInFlight;
     ui64 CollectRequestsInFlight;
@@ -104,6 +105,7 @@ public:
         , Hard(params.Common.Event->Hard)
         , Collect(params.Common.Event->Collect)
         , Decommission(params.Common.Event->Decommission)
+        , IgnoreBlock(params.Common.Event->IgnoreBlock)
         , FlagRequestsInFlight(0)
         , CollectRequestsInFlight(0)
     {
@@ -148,7 +150,7 @@ public:
         std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> ev(new TEvBlobStorage::TEvCollectGarbage(
             TabletId, RecordGeneration, PerGenerationCounter, Channel,
             isCollect, CollectGeneration, CollectStep, keepPart.release(), doNotKeepPart.release(), Deadline, false,
-            Hard));
+            Hard, IgnoreBlock));
         ev->Decommission = Decommission; // retain decommission flag
         DSP_LOG_DEBUG_S("BPMC3", "SendRequest idx# " << idx
             << " withCollect# " << withCollect
@@ -178,7 +180,8 @@ public:
             << " CollectGeneration# " << CollectGeneration
             << " CollectStep# " << CollectStep
             << " Collect# " << (Collect ? "true" : "false")
-            << " Hard# " << (Hard ? "true" : "false"));
+            << " Hard# " << (Hard ? "true" : "false")
+            << " IgnoreBlock# " << (IgnoreBlock ? "true" : "false"));
 
         for (const auto& item : Keep ? *Keep : TVector<TLogoBlobID>()) {
             DSP_LOG_INFO_S("BPMC5", "Keep# " << item);

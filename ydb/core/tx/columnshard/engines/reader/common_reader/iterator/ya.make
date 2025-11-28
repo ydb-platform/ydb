@@ -19,4 +19,6 @@ PEERDIR(
     ydb/core/util/evlog
 )
 
+GENERATE_ENUM_SERIALIZATION(source.h)
+
 END()

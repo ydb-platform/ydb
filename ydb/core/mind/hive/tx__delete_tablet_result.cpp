@@ -72,10 +72,12 @@ public:
         BLOG_D("THive::TTxDeleteTabletResult(" << TabletId << ")::Complete SideEffects " << SideEffects);
         if (Success) {
             --Self->DeleteTabletInProgress;
-            while (!Self->DeleteTabletQueue.empty() && Self->DeleteTabletInProgress < THive::MAX_DELETE_TABLET_IN_PROGRESS) {
+            while (!Self->DeleteTabletQueue.empty() && Self->DeleteTabletInProgress < Self->GetMaxDeleteTabletInProgress()) {
                 Self->BlockStorageForDelete(Self->DeleteTabletQueue.front(), SideEffects);
                 Self->DeleteTabletQueue.pop();
             }
+            Self->UpdateCounterDeleteTabletQueueSize();
+            Self->UpdateCounterTabletsDeleting();
         }
         SideEffects.Complete(ctx);
     }

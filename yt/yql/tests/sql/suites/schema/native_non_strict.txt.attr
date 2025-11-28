@@ -1,0 +1,14 @@
+{
+    "schema"=<"strict"=%false; "unique_keys"=%false>[
+        {"name"="key";"type"="string"};
+        {"name"="subkey";"type"="string"};
+        {"name"="value";"type"="string"};
+    ];
+    "_yql_row_spec" = {
+        "Type"=["StructType";[
+            ["key";["DataType";"String"]];
+            ["subkey";["DataType";"String"]];
+            ["value";["DataType";"String"]]
+        ]];
+    };
+}

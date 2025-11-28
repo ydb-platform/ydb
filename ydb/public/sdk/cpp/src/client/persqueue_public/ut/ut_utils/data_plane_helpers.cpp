@@ -114,7 +114,7 @@ namespace NKikimr::NPersQueueTests {
                 createPartitionStreamEvent->Confirm();
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
                 destroyPartitionStreamEvent->Confirm();
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
                 return {};
             }
         }

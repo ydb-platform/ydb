@@ -11,7 +11,6 @@
 #include <yt/yt/core/bus/bus.h>
 
 #include <yt/yt/core/rpc/message.h>
-#include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 #include <yt/yt/core/rpc/server_detail.h>
 
 #include <yt/yt/core/ypath/token.h>
@@ -20,6 +19,8 @@
 #include <yt/yt/core/yson/format.h>
 #include <yt/yt/core/yson/tokenizer.h>
 #include <yt/yt/core/yson/protobuf_helpers.h>
+
+#include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
 #include <yt/yt_proto/yt/core/ytree/proto/ypath.pb.h>
 
@@ -296,6 +297,21 @@ void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path)
 {
     auto* ypathExt = header->MutableExtension(NProto::TYPathHeaderExt::ypath_header_ext);
     ypathExt->set_target_path(TProtobufString(path));
+}
+
+bool MaybeRewriteRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path)
+{
+    auto* ypathExt = header->MutableExtension(NYTree::NProto::TYPathHeaderExt::ypath_header_ext);
+    if (path == ypathExt->target_path()) {
+        return false;
+    }
+
+    if (!ypathExt->has_original_target_path()) {
+        ypathExt->set_original_target_path(ypathExt->target_path());
+    }
+
+    ypathExt->set_target_path(TProtobufString(path));
+    return true;
 }
 
 bool IsRequestMutating(const NRpc::NProto::TRequestHeader& header)

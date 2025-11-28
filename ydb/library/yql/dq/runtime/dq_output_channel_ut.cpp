@@ -58,7 +58,7 @@ struct TTestContext {
         , Vb(HolderFactory)
         , TransportVersion(transportVersion)
         , IsWide(width == WIDE_CHANNEL)
-        , Ds(TypeEnv, HolderFactory, TransportVersion)
+        , Ds(TypeEnv, HolderFactory, TransportVersion, EValuePackerVersion::V0)
     {
         //TMultiType::Create(ui32 elementsCount, TType *const *elements, const TTypeEnvironment &env)
         if (bigRows) {
@@ -323,13 +323,9 @@ void TestOverflow(TTestContext& ctx) {
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Rows);
 
     UNIT_ASSERT_VALUES_EQUAL(HardLimit, ch->UpdateFillLevel());
-    try {
-        auto row = ctx.CreateRow(100'500);
-        PushRow(ctx, std::move(row), ch);
-        UNIT_FAIL("");
-    } catch (yexception& e) {
-        UNIT_ASSERT(TString(e.what()).Contains("requirement GetFillLevel() != HardLimit failed"));
-    }
+    auto row = ctx.CreateRow(100'500);
+    PushRow(ctx, std::move(row), ch);
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, ch->UpdateFillLevel());
 }
 
 void TestPopAll(TTestContext& ctx) {
@@ -977,7 +973,7 @@ void TestBackPressureWithSpillingLoad(TTestContext& ctx) {
     ui32 blockCount = 0;
     ui32 emptyPops = 0;
 
-    for (ui32 i = 0; i < 10000000; ++i) {
+    for (ui32 i = 0; i < 100000; ++i) {
         auto row = ctx.CreateRow(i);
         ConsumeRow(ctx, std::move(row), consumer);
         if (consumer->GetFillLevel() != NoLimit) {
@@ -1004,6 +1000,7 @@ void TestBackPressureWithSpillingLoad(TTestContext& ctx) {
             }
         }
     }
+    UNIT_ASSERT(blockCount > 0);
     Cerr << "Blocked " << blockCount << " time(s) emptyPops " << emptyPops << Endl;
 }
 

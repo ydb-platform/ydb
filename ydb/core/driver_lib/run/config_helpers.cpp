@@ -56,7 +56,7 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             NActors::TBasicExecutorPoolConfig basic;
             basic.PoolId = poolId;
             basic.PoolName = poolConfig.GetName();
-            basic.UseRingQueue = systemConfig.HasUseRingQueue() && systemConfig.GetUseRingQueue();
+            basic.UseRingQueue = systemConfig.GetUseRingQueue();
             if (poolConfig.HasMaxAvgPingDeviation() && counters) {
                 auto poolGroup = counters->GetSubgroup("execpool", basic.PoolName);
                 auto &poolInfo = cpuManager.PingInfoByPool[poolId];
@@ -140,10 +140,8 @@ NMemory::TResourceBrokerConfig CreateMemoryControllerResourceBrokerConfig(const 
             resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
         }
         for (const auto& queue : resourceBrokerConfig.GetQueues()) {
-            if (queue.GetName() == NLocalDb::KqpResourceManagerQueue) {
-                if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
-                    resourceBrokerSelfConfig.QueryExecutionLimitBytes = queue.GetLimit().GetMemory();
-                }
+            if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
+                resourceBrokerSelfConfig.QueueLimits[queue.GetName()] = queue.GetLimit().GetMemory();
             }
         }
     };

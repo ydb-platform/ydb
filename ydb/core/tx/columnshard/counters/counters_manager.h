@@ -17,7 +17,6 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
-#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 
 #include <library/cpp/time_provider/time_provider.h>
@@ -38,7 +37,6 @@ private:
     YDB_READONLY(TIndexationCounters, IndexationCounters, TIndexationCounters("Indexation"));
     YDB_READONLY(TIndexationCounters, CompactionCounters, TIndexationCounters("GeneralCompaction"));
     YDB_READONLY(TScanCounters, ScanCounters, TScanCounters("Scan"));
-    YDB_READONLY_DEF(TDuplicateFilteringCounters, DuplicateFilteringCounters);
     YDB_READONLY_DEF(std::shared_ptr<TRequestsTracerCounters>, RequestsTracingCounters);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>, SubscribeCounters);
 
@@ -79,6 +77,11 @@ public:
     void OnWriteOverloadShardWritesSize(const ui64 size) const {
         TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         CSCounters.OnWriteOverloadShardWritesSize(size);
+    }
+
+    void OnWriteOverloadRejectProbability(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadRejectProbability(size);
     }
 
     void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {

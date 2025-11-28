@@ -9,8 +9,8 @@ SIZE(MEDIUM)
 NO_CHECK_IMPORTS()
 
 DEPENDS(
-    yql/essentials/tools/astdiff
     ydb/library/yql/tools/dqrun
+    yql/essentials/tools/astdiff
     yql/essentials/udfs/test/test_import
 )
 
@@ -22,7 +22,7 @@ DATA(
     arcadia/ydb/library/yql/tests/sql
 )
 
-INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator_grpc/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 
 PEERDIR(
     library/python/testing/swag/lib

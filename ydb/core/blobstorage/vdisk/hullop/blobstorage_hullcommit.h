@@ -5,7 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
-#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 
 namespace NKikimr {
 
@@ -234,6 +234,8 @@ namespace NKikimr {
             LevelIndex->SerializeToProto(*pb.MutableLevelIndex());
             Metadata.RemovedHugeBlobs.SerializeToProto(*pb.MutableRemovedHugeBlobs());
             Metadata.AllocatedHugeBlobs.SerializeToProto(*pb.MutableAllocatedHugeBlobs());
+            pb.SetHullCompLevel0MaxSstsAtOnce(Ctx->HullCtx->HullCompLevel0MaxSstsAtOnce);
+            pb.SetHullCompSortedPartsNum(Ctx->HullCtx->HullCompSortedPartsNum);
             return THullDbSignatureRoutines::Serialize(pb);
         }
 

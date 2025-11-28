@@ -290,6 +290,11 @@ public:
         Y_ABORT("unimplemented for local rpc");
     }
 
+    TString GetRpcMethodName() const override {
+        // We have no grpc method, but the closest analog is protobuf name
+        return TRpc::TRequest::descriptor()->name();
+    }
+
 private:
     void Reply(NProtoBuf::Message *r, ui32) override {
         TResp* resp = dynamic_cast<TResp*>(r);
@@ -491,6 +496,14 @@ protected:
             return;
         }
         DoPushResponse(std::move(response), ctrl);
+    }
+
+    TString GetRpcMethodName() const override {
+        // We have no grpc method, but the closest analog is protobuf name
+        if (const NProtoBuf::Message* req = GetRequest()) {
+            return req->GetDescriptor()->name();
+        }
+        return {};
     }
 
 private:

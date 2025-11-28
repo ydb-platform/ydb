@@ -21,6 +21,7 @@ SRCS(
     cms_tx_remove_permissions.cpp
     cms_tx_remove_request.cpp
     cms_tx_remove_task.cpp
+    cms_tx_store_first_boot_timestamp.cpp
     cms_tx_store_permissions.cpp
     cms_tx_store_walle_task.cpp
     cms_tx_update_config.cpp
@@ -203,8 +204,10 @@ RESOURCE(
     ui/res/remove.png cms/ui/res/remove.png
     ui/validators.js cms/ui/validators.js
     ui/sentinel_state.js cms/ui/sentinel_state.js
+    ui/state_storage_state.js cms/ui/state_storage_state.js
     ui/nanotable.js cms/ui/nanotable.js
     ui/sentinel.css cms/ui/sentinel.css
+    ui/state_storage.css cms/ui/state_storage.css
 )
 
 PEERDIR(

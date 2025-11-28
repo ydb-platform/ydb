@@ -1,5 +1,5 @@
 #include "mkql_guess.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
@@ -11,6 +11,7 @@ namespace {
 template <bool IsOptional>
 class TGuessWrapper: public TMutableCodegeneratorPtrNode<TGuessWrapper<IsOptional>> {
     typedef TMutableCodegeneratorPtrNode<TGuessWrapper<IsOptional>> TBaseComputation;
+
 public:
     TGuessWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode, ui32 index)
         : TBaseComputation(mutables, kind)
@@ -55,10 +56,10 @@ public:
             block = good;
         }
 
-        const auto lshr = BinaryOperator::CreateLShr(var, ConstantInt::get(valueType, 122), "lshr",  block);
+        const auto lshr = BinaryOperator::CreateLShr(var, ConstantInt::get(valueType, 122), "lshr", block);
         const auto trunc = CastInst::Create(Instruction::Trunc, lshr, indexType, "trunc", block);
 
-        const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, trunc, ConstantInt::get(indexType , 0), "check", block);
+        const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, trunc, ConstantInt::get(indexType, 0), "check", block);
 
         const auto boxed = BasicBlock::Create(context, "boxed", ctx.Func);
         const auto embed = BasicBlock::Create(context, "embed", ctx.Func);
@@ -70,7 +71,7 @@ public:
 
         block = embed;
 
-        const auto dec = BinaryOperator::CreateSub(trunc, ConstantInt::get(indexType, 1), "dec",  block);
+        const auto dec = BinaryOperator::CreateSub(trunc, ConstantInt::get(indexType, 1), "dec", block);
         index->addIncoming(dec, block);
         BranchInst::Create(step, block);
 
@@ -103,7 +104,7 @@ public:
 
         const uint64_t init[] = {0xFFFFFFFFFFFFFFFFULL, 0x3FFFFFFFFFFFFFFULL};
         const auto mask = ConstantInt::get(valueType, APInt(128, 2, init));
-        const auto clean = BinaryOperator::CreateAnd(var, mask, "clean",  block);
+        const auto clean = BinaryOperator::CreateAnd(var, mask, "clean", block);
         new StoreInst(MakeOptional(context, clean, block), pointer, block);
         ValueAddRef(this->RepresentationKind_, pointer, ctx, block);
 
@@ -125,11 +126,11 @@ private:
         this->DependsOn(VarNode);
     }
 
-    IComputationNode *const VarNode;
+    IComputationNode* const VarNode;
     const ui32 Index;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapGuess(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arguments");
@@ -149,5 +150,5 @@ IComputationNode* WrapGuess(TCallable& callable, const TComputationNodeFactoryCo
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

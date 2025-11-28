@@ -237,7 +237,7 @@ void CmdPatch(const TString &originalKey, const TString &patchedKey, const TVect
         UNIT_ASSERT(result->Record.HasStatus());
         UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.PatchResultSize(), 1);
-        
+
         const auto &patchResult = result->Record.GetPatchResult(0);
         UNIT_ASSERT(patchResult.HasStatus());
         UNIT_ASSERT_EQUAL(patchResult.GetStatus(), NKikimrProto::OK);
@@ -647,9 +647,19 @@ void CmdSetExecutorFastLogPolicy(bool isAllowed, TTestContext &tc) {
 // NEW SINGLE COMMAND TEST FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+template <typename T>
+struct NotEq {
+    T Value;
+
+    bool Check(const T &value) const {
+        return Value != value;
+    }
+};
+
 struct TKeyValuePair {
     TString Key;
     TString Value;
+    std::variant<std::monostate, ui64, NotEq<ui64>> CreationUnixTime = std::monostate();
 };
 
 template <typename TRequestEvent>
@@ -698,7 +708,7 @@ void SendWrite(TTestContext &tc, const TDeque<TKeyValuePair> &pairs, ui64 locked
 {
     NKikimrKeyValue::ExecuteTransactionRequest et;
 
-    for (auto &[key, value] : pairs) {
+    for (auto &[key, value, creationUnixTime] : pairs) {
         NKikimrKeyValue::ExecuteTransactionRequest::Command *cmd = et.add_commands();
         NKikimrKeyValue::ExecuteTransactionRequest::Command::Write *write = cmd->mutable_write();
 
@@ -720,7 +730,7 @@ void ExecuteWrite(TTestContext &tc, const TDeque<TKeyValuePair> &pairs, ui64 loc
 {
     TDesiredPair<TEvKeyValue::TEvExecuteTransaction> dp;
 
-    for (auto &[key, value] : pairs) {
+    for (auto &[key, value, creationUnixTime] : pairs) {
         NKikimrKeyValue::ExecuteTransactionRequest::Command *cmd = dp.Request.add_commands();
         NKikimrKeyValue::ExecuteTransactionRequest::Command::Write *write = cmd->mutable_write();
 
@@ -990,6 +1000,12 @@ void ExecuteReadRange(TTestContext &tc,
                     << " msg# " << dp.Response.msg());
             UNIT_ASSERT_VALUES_EQUAL_C(pair.key(), expectedPairs[idx].Key, "msg# " << dp.Response.msg());
             UNIT_ASSERT_VALUES_EQUAL_C(pair.value(), expectedPairs[idx].Value, "msg# " << dp.Response.msg());
+
+            if (std::holds_alternative<ui64>(expectedPairs[idx].CreationUnixTime)) {
+                UNIT_ASSERT_VALUES_EQUAL_C(pair.creation_unix_time(), std::get<ui64>(expectedPairs[idx].CreationUnixTime), "msg# " << dp.Response.msg());
+            } else if (std::holds_alternative<NotEq<ui64>>(expectedPairs[idx].CreationUnixTime)) {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(pair.creation_unix_time(), std::get<NotEq<ui64>>(expectedPairs[idx].CreationUnixTime).Value, "msg# " << dp.Response.msg());
+            }
         }
     }
 }
@@ -2656,7 +2672,7 @@ Y_UNIT_TEST(TestVacuumOnEmptyTablet) {
         UNIT_ASSERT_EQUAL(response.status(), decltype(response)::STATUS_SUCCESS);
         UNIT_ASSERT_EQUAL(response.generation(), 1);
 
-        
+
         NKikimrKeyValue::VacuumResponse responseAlreadyCompleted = SendVacuumRequest(1, tc);
         UNIT_ASSERT_EQUAL(responseAlreadyCompleted.status(), decltype(responseAlreadyCompleted)::STATUS_ALREADY_COMPLETED);
         UNIT_ASSERT_EQUAL(responseAlreadyCompleted.generation(), 1);
@@ -2671,7 +2687,7 @@ Y_UNIT_TEST(TestVacuumOnEmptyTablet) {
 
         NKikimrKeyValue::VacuumResponse response3 = SendVacuumRequest(3, tc);
         UNIT_ASSERT_EQUAL(response3.status(), decltype(response3)::STATUS_ALREADY_COMPLETED);
-        UNIT_ASSERT_EQUAL(response3.generation(), 3);    
+        UNIT_ASSERT_EQUAL(response3.generation(), 3);
     });
 }
 
@@ -2816,6 +2832,60 @@ Y_UNIT_TEST(TestWriteAndRenameWithCreationUnixTime)
             NKikimrClient::TKeyValueRequest::REALTIME,
             {"value"}, {false}, {renameUnixTime},
             tc);
+}
+
+
+
+Y_UNIT_TEST(TestWriteAndRenameWithoutCreationUnixTimeNewApi)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &runtime){
+        runtime.UpdateCurrentTime(TInstant::Zero() + TDuration::Seconds(1000));
+    }, activeZone);
+
+    ExecuteWrite(tc, {{"key-1", "value"}}, 0, 1, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+
+    ExecuteReadRange(tc,
+        {"key-1"}, EBorderKind::Include,
+        "key-1", EBorderKind::Include,
+        {{"key-1", "value", NotEq<ui64>{0}}},
+        0, true, 65000);
+
+    ExecuteRename(tc, {{"key-1", "key-2"}}, 0);
+
+    ExecuteReadRange(tc,
+        {"key-2"}, EBorderKind::Include,
+        "key-2", EBorderKind::Include,
+        {{"key-2", "value", NotEq<ui64>{0}}},
+        0, true, 65000);
+}
+
+
+Y_UNIT_TEST(TestReadRequestInFlightLimit)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper readRequestInFlightLimit(5, 1, 4096);
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    readRequestInFlightLimit = 5;
+
+    ui64 creationUnixTime = (TInstant::Now() - TDuration::Seconds(1000)).Seconds();
+
+    CmdWrite("key-1", "value",
+        NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME,
+        creationUnixTime,
+        tc);
+    CmdRead({"key-1"},
+        NKikimrClient::TKeyValueRequest::REALTIME,
+        {"value"}, {false}, {creationUnixTime},
+        tc);
 }
 
 } // TKeyValueTest

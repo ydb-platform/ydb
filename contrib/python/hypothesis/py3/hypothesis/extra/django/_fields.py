@@ -10,14 +10,16 @@
 
 import re
 import string
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from decimal import Decimal
 from functools import lru_cache
-from typing import Any, Callable, Dict, Type, TypeVar, Union
+from typing import Any, TypeAlias, TypeVar, Union
 
 import django
 from django import forms as df
-from django.contrib.auth.forms import UsernameField
+from django.conf import settings
+from django.core.files.base import ContentFile
 from django.core.validators import (
     validate_ipv4_address,
     validate_ipv6_address,
@@ -31,7 +33,9 @@ from hypothesis.internal.validation import check_type
 from hypothesis.provisional import urls
 from hypothesis.strategies import emails
 
-AnyField = Union[dm.Field, df.Field]
+# Use old-style union to avoid hitting
+# https://github.com/sphinx-doc/sphinx/issues/11211
+AnyField: TypeAlias = Union[dm.Field, df.Field]  # noqa: UP007
 F = TypeVar("F", bound=AnyField)
 
 
@@ -68,9 +72,9 @@ def timezones():
 
 
 # Mapping of field types, to strategy objects or functions of (type) -> strategy
-_FieldLookUpType = Dict[
-    Type[AnyField],
-    Union[st.SearchStrategy, Callable[[Any], st.SearchStrategy]],
+_FieldLookUpType = dict[
+    type[AnyField],
+    st.SearchStrategy | Callable[[Any], st.SearchStrategy],
 ]
 _global_field_lookup: _FieldLookUpType = {
     dm.SmallIntegerField: integers_for_field(-32768, 32767),
@@ -95,6 +99,9 @@ _global_field_lookup: _FieldLookUpType = {
     df.NullBooleanField: st.one_of(st.none(), st.booleans()),
     df.URLField: urls(),
     df.UUIDField: st.uuids(),
+    df.FileField: st.builds(
+        ContentFile, st.binary(min_size=1), name=st.text(min_size=1, max_size=100)
+    ),
 }
 
 _ipv6_strings = st.one_of(
@@ -231,7 +238,6 @@ def _for_binary(field):
 @register_for(dm.TextField)
 @register_for(df.CharField)
 @register_for(df.RegexField)
-@register_for(UsernameField)
 def _for_text(field):
     # We can infer a vastly more precise strategy by considering the
     # validators as well as the field type.  This is a minimal proof of
@@ -260,6 +266,12 @@ def _for_text(field):
     if getattr(field, "blank", False) or not getattr(field, "required", True):
         return st.just("") | strategy
     return strategy
+
+
+if "django.contrib.auth" in settings.INSTALLED_APPS:
+    from django.contrib.auth.forms import UsernameField
+
+    register_for(UsernameField)(_for_text)
 
 
 @register_for(df.BooleanField)
@@ -319,7 +331,7 @@ def _for_model_multiple_choice(field):
 
 
 def register_field_strategy(
-    field_type: Type[AnyField], strategy: st.SearchStrategy
+    field_type: type[AnyField], strategy: st.SearchStrategy
 ) -> None:
     """Add an entry to the global field-to-strategy lookup used by
     :func:`~hypothesis.extra.django.from_field`.
@@ -341,7 +353,7 @@ def register_field_strategy(
     _global_field_lookup[field_type] = strategy
 
 
-def from_field(field: F) -> st.SearchStrategy[Union[F, None]]:
+def from_field(field: F) -> st.SearchStrategy[F | None]:
     """Return a strategy for values that fit the given field.
 
     This function is used by :func:`~hypothesis.extra.django.from_form` and

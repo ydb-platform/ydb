@@ -12,6 +12,8 @@
 #include <ydb/core/kqp/workload_service/common/helpers.h>
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>
 
+#include <ydb/core/mind/tenant_node_enumeration.h>
+
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
@@ -118,8 +120,13 @@ public:
         Send(ev->Sender, responseEvent.release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
-    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        NodeCount = ev->Get()->Nodes.size();
+    void Handle(TEvTenantNodeEnumerator::TEvLookupResult::TPtr& ev) {
+        if (!ev->Get()->Success) {
+            LOG_W("Failed to discover tenant nodes");
+            return;
+        }
+
+        NodeCount = ev->Get()->AssignedNodes.size();
         ScheduleNodeInfoRequest();
 
         LOG_T("Updated node info, noode count: " << NodeCount);
@@ -210,7 +217,7 @@ public:
         sFunc(TEvents::TEvPoison, HandlePoison);
         sFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleSetConfigSubscriptionResponse);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
-        hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+        hFunc(TEvTenantNodeEnumerator::TEvLookupResult, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
 
         hFunc(TEvSubscribeOnPoolChanges, Handle);
@@ -531,7 +538,7 @@ private:
     }
 
     void RunNodeInfoRequest() const {
-        Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(), IEventHandle::FlagTrackDelivery);
+        Register(CreateTenantNodeEnumerationLookup(SelfId(), AppData()->TenantName));
     }
 
 private:

@@ -8,9 +8,9 @@ namespace NMiniKQL {
 inline ui64 SaturationSub(ui64 x, ui64 y) {
     // simple code produces cmov (same result as commented one)
     return (x > y) ? x - y : 0;
-    //ui64 res = x - y;
-    //res &= -(res <= x);
-    //return res;
+    // ui64 res = x - y;
+    // res &= -(res <= x);
+    // return res;
 }
 
 inline ui8 LoadByteUnaligned(const ui8* bitmap, size_t bitmapOffset) {
@@ -24,7 +24,7 @@ inline ui8 LoadByteUnaligned(const ui8* bitmap, size_t bitmapOffset) {
     return (first >> bit) | ui8(second << (8 - bit));
 }
 
-template<typename T>
+template <typename T>
 inline T SelectArg(ui8 isFirst, T first, T second) {
     if constexpr (std::is_arithmetic_v<T> && !std::is_floating_point_v<T>) {
         // isFirst == 1 -> mask 0xFF..FF, isFirst == 0 -> mask 0x00..00
@@ -47,20 +47,20 @@ inline ui8 CompressByte(ui8 x, ui8 m) {
     x = x & m;    // Clear irrelevant bits.
     mk = ~m << 1; // We will count 0's to right.
     for (ui8 i = 0; i < 3; i++) {
-        mp = mk ^ (mk << 1);    // Parallel suffix.
+        mp = mk ^ (mk << 1); // Parallel suffix.
         mp = mp ^ (mp << 2);
         mp = mp ^ (mp << 4);
-        mv = mp & m;     // Bits to move.
+        mv = mp & m;                   // Bits to move.
         m = m ^ mv | (mv >> (1 << i)); // Compress m.
         t = x & mv;
-        x = x ^ t | (t >> (1 << i));   // Compress x.
+        x = x ^ t | (t >> (1 << i)); // Compress x.
         mk = mk & ~mp;
     }
     return x;
 }
 
 inline ui8 PopCountByte(ui8 value) {
-    static constexpr uint8_t bytePopCounts[] = {
+    static constexpr uint8_t BytePopCounts[] = {
         0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3,
         4, 4, 5, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4,
         4, 5, 4, 5, 5, 6, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4,
@@ -70,7 +70,7 @@ inline ui8 PopCountByte(ui8 value) {
         5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4,
         5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 3, 4, 4, 5, 4, 5, 5, 6,
         4, 5, 5, 6, 5, 6, 6, 7, 4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8};
-    return bytePopCounts[value];
+    return BytePopCounts[value];
 }
 
 inline size_t GetSparseBitmapPopCount(const ui8* src, size_t len) {
@@ -116,10 +116,10 @@ inline void OrSparseBitmaps(ui8* dst, const ui8* src1, const ui8* src2, size_t l
 }
 
 inline size_t CompressBitmap(const ui8* src, size_t srcOffset,
-    const ui8* bitmap, size_t bitmapOffset, ui8* dst, size_t dstOffset, size_t count)
+                             const ui8* bitmap, size_t bitmapOffset, ui8* dst, size_t dstOffset, size_t count)
 {
-    //  TODO: 1) aligned version (srcOffset % 8 == 0), (srcOffset % 8 == 0)
-    //        2) 64 bit processing (instead of 8)
+    // TODO: 1) aligned version (srcOffset % 8 == 0), (srcOffset % 8 == 0)
+    //       2) 64 bit processing (instead of 8)
     ui8* target = dst + (dstOffset >> 3);
     ui8 state = *target;
     ui8 stateBits = dstOffset & 7u;
@@ -154,8 +154,8 @@ inline size_t CompressBitmap(const ui8* src, size_t srcOffset,
     return dstOffset;
 }
 
-using NYql::NUdf::CompressAsSparseBitmap;
 using NYql::NUdf::CompressArray;
+using NYql::NUdf::CompressAsSparseBitmap;
 using NYql::NUdf::DecompressToSparseBitmap;
 
 } // namespace NMiniKQL

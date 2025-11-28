@@ -182,8 +182,17 @@ simdjson_inline document_stream::iterator& document_stream::iterator::operator++
   return *this;
 }
 
+simdjson_inline bool document_stream::iterator::at_end() const noexcept {
+  return finished;
+}
+
+
 simdjson_inline bool document_stream::iterator::operator!=(const document_stream::iterator &other) const noexcept {
   return finished != other.finished;
+}
+
+simdjson_inline bool document_stream::iterator::operator==(const document_stream::iterator &other) const noexcept {
+  return finished == other.finished;
 }
 
 simdjson_inline document_stream::iterator document_stream::begin() noexcept {
@@ -303,7 +312,10 @@ inline void document_stream::next_document() noexcept {
   // Always set depth=1 at the start of document
   doc.iter._depth = 1;
   // consume comma if comma separated is allowed
-  if (allow_comma_separated) { doc.iter.consume_character(','); }
+  if (allow_comma_separated) {
+    error_code ignored = doc.iter.consume_character(',');
+    static_cast<void>(ignored); // ignored on purpose
+  }
   // Resets the string buffer at the beginning, thus invalidating the strings.
   doc.iter._string_buf_loc = parser->string_buf.get();
   doc.iter._root = doc.iter.position();

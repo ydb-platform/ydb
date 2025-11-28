@@ -55,7 +55,7 @@ void TIssueManager::LeaveScope() {
             RawIssues_.top().first = new TIssue();
             (*RawIssues_.top().first)->SetCode(Max<ui32>(), ESeverity::TSeverityIds_ESeverityId_S_INFO);
         } else {
-           (*RawIssues_.top().first)->Severity = ESeverity::TSeverityIds_ESeverityId_S_INFO;
+            (*RawIssues_.top().first)->Severity = ESeverity::TSeverityIds_ESeverityId_S_INFO;
         }
     }
 
@@ -93,7 +93,7 @@ TIssuePtr TIssueManager::CheckUniqAndLimit(TIssuePtr issue) {
     }
     if (IssueLimit_ && UniqueIssues_[severity].size() == IssueLimit_) {
         OverflowIssues_[severity] = MakeIntrusive<TIssue>(TStringBuilder()
-            << "Too many " << SeverityToString(issue->GetSeverity()) << " issues");
+                                                          << "Too many " << SeverityToString(issue->GetSeverity()) << " issues");
         OverflowIssues_[severity]->Severity = severity;
         return {};
     }
@@ -125,7 +125,7 @@ void TIssueManager::RaiseIssue(const TIssue& issue) {
             (*RawIssues_.top().first)->SetCode(Max<ui32>(), ESeverity::TSeverityIds_ESeverityId_S_INFO);
         } else {
             (*RawIssues_.top().first)->Severity = ESeverity::TSeverityIds_ESeverityId_S_INFO;
-       }
+        }
     }
     RawIssues_.top().first->Get()->AddSubIssue(p);
 }
@@ -179,7 +179,7 @@ TIssues TIssueManager::GetIssues() {
 
 TIssues TIssueManager::GetCompletedIssues() const {
     TIssues res;
-    for (auto& p: OverflowIssues_) {
+    for (auto& p : OverflowIssues_) {
         if (p) {
             res.AddIssue(*p);
         }
@@ -189,7 +189,7 @@ TIssues TIssueManager::GetCompletedIssues() const {
 }
 
 void TIssueManager::AddIssues(const TIssues& issues) {
-    for (auto& issue: issues) {
+    for (auto& issue : issues) {
         if (auto p = CheckUniqAndLimit(issue)) {
             CompletedIssues_.AddIssue(*p);
         }
@@ -197,7 +197,7 @@ void TIssueManager::AddIssues(const TIssues& issues) {
 }
 
 void TIssueManager::AddIssues(const TPosition& pos, const TIssues& issues) {
-    for (auto& issue: issues) {
+    for (auto& issue : issues) {
         if (auto p = CheckUniqAndLimit(TIssue(pos, issue.GetMessage()))) {
             CompletedIssues_.AddIssue(*p);
         }
@@ -205,11 +205,11 @@ void TIssueManager::AddIssues(const TPosition& pos, const TIssues& issues) {
 }
 
 void TIssueManager::Reset(const TIssues& issues) {
-    for (auto& p: OverflowIssues_) {
+    for (auto& p : OverflowIssues_) {
         p.Drop();
     }
 
-    for (auto& s: UniqueIssues_) {
+    for (auto& s : UniqueIssues_) {
         s.clear();
     }
     CompletedIssues_.Clear();
@@ -224,7 +224,7 @@ void TIssueManager::Reset() {
     Reset(TIssues());
 }
 
-void TIssueManager::AddWarningRule(const TWarningRule &rule)
+void TIssueManager::AddWarningRule(const TWarningRule& rule)
 {
     WarningPolicy_.AddRule(rule);
 }

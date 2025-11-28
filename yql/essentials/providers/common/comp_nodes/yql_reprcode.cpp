@@ -10,8 +10,9 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-class TReprCodeWrapper : public TMutableComputationNode<TReprCodeWrapper> {
+class TReprCodeWrapper: public TMutableComputationNode<TReprCodeWrapper> {
     typedef TMutableComputationNode<TReprCodeWrapper> TBaseComputation;
+
 public:
     TReprCodeWrapper(TComputationMutables& mutables, IComputationNode* value, const TString& yson, ui32 exprCtxMutableIndex, NYql::TPosition pos)
         : TBaseComputation(mutables)
@@ -19,7 +20,8 @@ public:
         , Yson_(yson)
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
         , Pos_(pos)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto exprCtxPtr = GetExprContextPtr(ctx, ExprCtxMutableIndex_);
@@ -48,5 +50,5 @@ IComputationNode* WrapReprCode(TCallable& callable, const TComputationNodeFactor
     return new TReprCodeWrapper(ctx.Mutables, value, yson, exprCtxMutableIndex, pos);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

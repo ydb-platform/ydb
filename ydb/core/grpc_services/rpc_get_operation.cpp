@@ -1,27 +1,31 @@
 #include "service_operation.h"
 
 #include "operation_helpers.h"
+#include "rpc_backup_base.h"
 #include "rpc_export_base.h"
 #include "rpc_import_base.h"
 #include "rpc_operation_request_base.h"
-
-#include <ydb/core/grpc_services/base/base.h>
-#include <google/protobuf/text_format.h>
+#include "rpc_restore_base.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_backup.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
-#include <ydb/library/actors/core/hfunc.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <google/protobuf/text_format.h>
 
 #include <util/string/cast.h>
 
@@ -35,8 +39,11 @@ using namespace Ydb;
 using TEvGetOperationRequest = TGrpcRequestOperationCall<Ydb::Operations::GetOperationRequest,
     Ydb::Operations::GetOperationResponse>;
 
-class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvGetOperationRequest, true>,
-                         public TExportConv {
+class TGetOperationRPC
+    : public TRpcOperationRequestActor<TGetOperationRPC, TEvGetOperationRequest, true>
+    , public TExportConv
+    , public TBackupCollectionRestoreConv
+{
 
     TStringBuf GetLogPrefix() const override {
         switch (OperationId_.GetKind()) {
@@ -48,6 +55,10 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
             return "[GetIndexBuild]";
         case TOperationId::SCRIPT_EXECUTION:
             return "[GetScriptExecution]";
+        case TOperationId::INCREMENTAL_BACKUP:
+            return "[GetIncrementalBackup]";
+        case TOperationId::RESTORE:
+            return "[GetBackupCollectionRestore]";
         default:
             return "[Untagged]";
         }
@@ -61,6 +72,10 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
             return new NSchemeShard::TEvImport::TEvGetImportRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::BUILD_INDEX:
             return new NSchemeShard::TEvIndexBuilder::TEvGetRequest(GetDatabaseName(), RawOperationId_);
+        case TOperationId::INCREMENTAL_BACKUP:
+            return new NSchemeShard::TEvBackup::TEvGetIncrementalBackupRequest(GetDatabaseName(), RawOperationId_);
+        case TOperationId::RESTORE:
+            return new NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreRequest(GetDatabaseName(), RawOperationId_);
         default:
             Y_ABORT("unreachable");
         }
@@ -91,6 +106,8 @@ public:
             case TOperationId::EXPORT:
             case TOperationId::IMPORT:
             case TOperationId::BUILD_INDEX:
+            case TOperationId::INCREMENTAL_BACKUP:
+            case TOperationId::RESTORE:
                 if (!TryGetId(OperationId_, RawOperationId_)) {
                     return ReplyWithStatus(StatusIds::BAD_REQUEST);
                 }
@@ -119,6 +136,8 @@ public:
             HFunc(NSchemeShard::TEvImport::TEvGetImportResponse, Handle);
             HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
             HFunc(NKqp::TEvGetScriptExecutionOperationResponse, Handle);
+            HFunc(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse, Handle);
+            HFunc(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse, Handle);
 
         default:
             return StateBase(ev);
@@ -199,7 +218,7 @@ private:
     }
 
     void SendGetScriptExecutionOperation() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(GetDatabaseName(), OperationId_));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(GetDatabaseName(), OperationId_, GetUserSID(*Request)));
     }
 
     void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) {
@@ -256,6 +275,28 @@ private:
         if (ev->Get()->Metadata) {
             deferred->mutable_metadata()->Swap(ev->Get()->Metadata.Get());
         }
+        Reply(resp, ctx);
+    }
+
+    void Handle(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvBackup::TEvGetIncrementalBackupResponse"
+            << ": record# " << record.ShortDebugString());
+
+        TEvGetOperationRequest::TResponse resp;
+        *resp.mutable_operation() = TIncrementalBackupConv::ToOperation(record.GetIncrementalBackup());
+        Reply(resp, ctx);
+    }
+
+    void Handle(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvBackup::TEvGetBackupCollectionRestoreResponse"
+            << ": record# " << record.ShortDebugString());
+
+        TEvGetOperationRequest::TResponse resp;
+        *resp.mutable_operation() = TBackupCollectionRestoreConv::ToOperation(record.GetBackupCollectionRestore());
         Reply(resp, ctx);
     }
 

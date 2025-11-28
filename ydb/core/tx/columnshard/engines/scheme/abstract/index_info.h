@@ -65,7 +65,7 @@ public:
 
     static ui32 CalcDeletions(const std::shared_ptr<arrow::RecordBatch>& batch, const bool needExistsColumn);
 
-    std::shared_ptr<arrow::Schema> BuildSpecialFieldsSchema() const {
+    static std::shared_ptr<arrow::Schema> BuildSpecialFieldsSchema() {
         std::vector<std::shared_ptr<arrow::Field>> fields;
         AddSpecialFields(fields);
         return std::make_shared<arrow::Schema>(std::move(fields));

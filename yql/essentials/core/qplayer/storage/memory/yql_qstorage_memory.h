@@ -5,4 +5,4 @@ namespace NYql {
 
 IQStoragePtr MakeMemoryQStorage();
 
-};
+}; // namespace NYql

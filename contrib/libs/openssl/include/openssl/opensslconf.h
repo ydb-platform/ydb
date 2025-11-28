@@ -29,6 +29,8 @@
 #   include "opensslconf-wasm32.h"
 #elif defined(__wasm64__)
 #   include "opensslconf-wasm64.h"
+#elif defined(__FreeBSD__)
+#   include "opensslconf-freebsd.h"
 #else
 #   include "opensslconf-linux.h"
 #endif

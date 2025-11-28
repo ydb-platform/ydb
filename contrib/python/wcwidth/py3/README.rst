@@ -95,7 +95,7 @@ Briefly, return values of function ``wcwidth()`` are:
 Function ``wcswidth()`` simply returns the sum of all values for each character
 along a string, or ``-1`` when it occurs anywhere along a string.
 
-Full API Documentation at https://wcwidth.readthedocs.org
+Full API Documentation at https://wcwidth.readthedocs.io
 
 ==========
 Developing
@@ -105,9 +105,9 @@ Install wcwidth in editable mode::
 
    pip install -e .
 
-Execute unit tests using tox_::
+Execute unit tests using tox_ for all supported Python versions::
 
-   tox -e py27,py35,py36,py37,py38,py39,py310,py311,py312
+   tox -e py36,py37,py38,py39,py310,py311,py312,py313,py314
 
 Updating Unicode Version
 ------------------------
@@ -217,6 +217,13 @@ Other Languages
 History
 =======
 
+0.2.14 *2025-09-22*
+  * **Drop Support** for Python 2.7 and 3.5. `PR #117`_.
+  * **Update** tables to include Unicode Specifications 16.0.0 and 17.0.0.
+    `PR #146`_.
+  * **Bugfix** U+00AD SOFT HYPHEN should measure as 1, versions 0.2.9 through
+    0.2.13 measured as 0. `PR #149`_.
+
 0.2.13 *2024-01-06*
   * **Bugfix** zero-width support for Hangul Jamo (Korean)
 
@@ -259,7 +266,7 @@ History
     Environment variable ``UNICODE_VERSION``, such as ``13.0``, or ``6.3.0``.
     See the `jquast/ucs-detect`_ CLI utility for automatic detection.
   * **Enhancement**:
-    API Documentation is published to readthedocs.org.
+    API Documentation is published to readthedocs.io.
   * **Updated** tables for *all* Unicode Specifications with files
     published in a programmatically consumable format, versions 4.1.0
     through 13.0
@@ -337,6 +344,9 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`PR #97`: https://github.com/jquast/wcwidth/pull/97
 .. _`PR #98`: https://github.com/jquast/wcwidth/pull/98
 .. _`PR #100`: https://github.com/jquast/wcwidth/pull/100
+.. _`PR #117`: https://github.com/jquast/wcwidth/pull/117
+.. _`PR #146`: https://github.com/jquast/wcwidth/pull/146
+.. _`PR #149`: https://github.com/jquast/wcwidth/pull/149
 .. _`Issue #101`: https://github.com/jquast/wcwidth/issues/101
 .. _`jquast/blessed`: https://github.com/jquast/blessed
 .. _`selectel/pyte`: https://github.com/selectel/pyte

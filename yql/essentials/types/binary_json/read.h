@@ -17,7 +17,7 @@ class TContainerCursor;
  * @brief Reads values inside BinaryJson. `Read...` methods of this class are not intended for direct use.
  * Consider using `GetRootCursor` method to get more convenient interface over BinaryJson data
  */
-class TBinaryJsonReader : public TSimpleRefCount<TBinaryJsonReader> {
+class TBinaryJsonReader: public TSimpleRefCount<TBinaryJsonReader> {
 public:
     template <typename... Args>
     static TIntrusivePtr<TBinaryJsonReader> Make(Args&&... args) {
@@ -55,7 +55,7 @@ private:
     T ReadPOD(ui32 offset) const {
         static_assert(std::is_pod_v<T>, "Type must be POD");
         Y_ENSURE(offset + sizeof(T) <= Buffer_.size(),
-            TStringBuilder() << "Not enough space in buffer to read value (" << offset << " + " << sizeof(T) << " > " << Buffer_.size() << ")");
+                 TStringBuilder() << "Not enough space in buffer to read value (" << offset << " + " << sizeof(T) << " > " << Buffer_.size() << ")");
         return ReadUnaligned<T>(Buffer_.data() + offset);
     }
 
@@ -187,4 +187,4 @@ bool IsValidBinaryJson(TStringBuf buffer);
 
 TMaybe<TStringBuf> IsValidBinaryJsonWithError(TStringBuf buffer);
 
-}
+} // namespace NKikimr::NBinaryJson

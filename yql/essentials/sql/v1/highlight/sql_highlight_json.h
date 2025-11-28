@@ -6,6 +6,6 @@
 
 namespace NSQLHighlight {
 
-    NJson::TJsonValue ToJson(const THighlighting& highlighting);
+NJson::TJsonValue ToJson(const THighlighting& highlighting);
 
 } // namespace NSQLHighlight

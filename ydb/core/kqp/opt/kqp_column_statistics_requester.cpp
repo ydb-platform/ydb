@@ -81,6 +81,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
 
     // TODO: Add other statistics, not only COUNT_MIN_SKETCH.
     auto getStatisticsRequest = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
+    getStatisticsRequest->Database = Database;
     getStatisticsRequest->StatType = NKikimr::NStat::EStatType::COUNT_MIN_SKETCH;
 
     for (const auto& [table, columns]: ColumnsByTableName) {
@@ -276,10 +277,11 @@ TAutoPtr<IGraphTransformer> CreateKqpColumnStatisticsRequester(
     const TKikimrConfiguration::TPtr& config,
     TTypeAnnotationContext& typesCtx,
     TKikimrTablesData& tables,
-    TString cluster,
+    const TString& cluster,
+    const TString& database,
     TActorSystem* actorSystem
 ) {
-    return THolder<IGraphTransformer>(new TKqpColumnStatisticsRequester(config, typesCtx, tables, cluster, actorSystem));
+    return THolder<IGraphTransformer>(new TKqpColumnStatisticsRequester(config, typesCtx, tables, cluster, database, actorSystem));
 }
 
 } // end of NKikimr::NKqp

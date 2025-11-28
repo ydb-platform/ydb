@@ -29,7 +29,7 @@ void TIncrementalTopologicalOrdering<TVertexDescriptor>::AddEdge(const TVertexDe
 template <typename TVertexDescriptor>
 void TIncrementalTopologicalOrdering<TVertexDescriptor>::AddVertex(const TVertexDescriptor& from)
 {
-    if (OutgoingEdges_[from].emplace().second) {
+    if (OutgoingEdges_.try_emplace(from).second) {
         Rebuild();
     }
 }

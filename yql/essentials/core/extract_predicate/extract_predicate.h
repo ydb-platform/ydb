@@ -26,7 +26,7 @@ public:
     using TPtr = THolder<IPredicateRangeExtractor>;
 
     virtual bool Prepare(const TExprNode::TPtr& filterLambda, const TTypeAnnotationNode& rowType,
-        THashSet<TString>& possibleIndexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) = 0;
+                         THashSet<TString>& possibleIndexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) = 0;
 
     struct TBuildResult {
         TExprNode::TPtr ComputeNode;
@@ -56,7 +56,6 @@ public:
 
 IPredicateRangeExtractor::TPtr MakePredicateRangeExtractor(const TPredicateExtractorSettings& settings = {});
 
-
 TExprNode::TPtr BuildPointsList(const IPredicateRangeExtractor::TBuildResult&, TConstArrayRef<TString> keyColumns, NYql::TExprContext& expCtx);
 
-}
+} // namespace NYql

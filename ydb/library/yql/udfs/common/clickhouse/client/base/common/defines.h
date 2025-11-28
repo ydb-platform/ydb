@@ -46,45 +46,45 @@
 #endif
 
 /// Check for presence of address sanitizer
-#if !defined(ADDRESS_SANITIZER)
-#    if defined(ch_has_feature)
-#        if ch_has_feature(address_sanitizer)
-#            define ADDRESS_SANITIZER 1
-#        endif
-#    elif defined(__SANITIZE_ADDRESS__)
-#        define ADDRESS_SANITIZER 1
-#    endif
-#endif
+// #if !defined(ADDRESS_SANITIZER)
+// #    if defined(ch_has_feature)
+// #        if ch_has_feature(address_sanitizer)
+// #            define ADDRESS_SANITIZER 1
+// #        endif
+// #    elif defined(__SANITIZE_ADDRESS__)
+// #        define ADDRESS_SANITIZER 1
+// #    endif
+// #endif
 
-#if !defined(THREAD_SANITIZER)
-#    if defined(ch_has_feature)
-#        if ch_has_feature(thread_sanitizer)
-#            define THREAD_SANITIZER 1
-#        endif
-#    elif defined(__SANITIZE_THREAD__)
-#        define THREAD_SANITIZER 1
-#    endif
-#endif
+// #if !defined(THREAD_SANITIZER)
+// #    if defined(ch_has_feature)
+// #        if ch_has_feature(thread_sanitizer)
+// #            define THREAD_SANITIZER 1
+// #        endif
+// #    elif defined(__SANITIZE_THREAD__)
+// #        define THREAD_SANITIZER 1
+// #    endif
+// #endif
 
-#if !defined(MEMORY_SANITIZER)
-#    if defined(ch_has_feature)
-#        if ch_has_feature(memory_sanitizer)
-#            define MEMORY_SANITIZER 1
-#        endif
-#    elif defined(__MEMORY_SANITIZER__)
-#        define MEMORY_SANITIZER 1
-#    endif
-#endif
+// #if !defined(MEMORY_SANITIZER)
+// #    if defined(ch_has_feature)
+// #        if ch_has_feature(memory_sanitizer)
+// #            define MEMORY_SANITIZER 1
+// #        endif
+// #    elif defined(__MEMORY_SANITIZER__)
+// #        define MEMORY_SANITIZER 1
+// #    endif
+// #endif
 
-#if !defined(UNDEFINED_BEHAVIOR_SANITIZER)
-#    if defined(__has_feature)
-#        if __has_feature(undefined_behavior_sanitizer)
-#            define UNDEFINED_BEHAVIOR_SANITIZER 1
-#        endif
-#    elif defined(__UNDEFINED_BEHAVIOR_SANITIZER__)
-#        define UNDEFINED_BEHAVIOR_SANITIZER 1
-#    endif
-#endif
+// #if !defined(UNDEFINED_BEHAVIOR_SANITIZER)
+// #    if defined(__has_feature)
+// #        if __has_feature(undefined_behavior_sanitizer)
+// #            define UNDEFINED_BEHAVIOR_SANITIZER 1
+// #        endif
+// #    elif defined(__UNDEFINED_BEHAVIOR_SANITIZER__)
+// #        define UNDEFINED_BEHAVIOR_SANITIZER 1
+// #    endif
+// #endif
 
 #if defined(ADDRESS_SANITIZER)
 #    define BOOST_USE_ASAN 1

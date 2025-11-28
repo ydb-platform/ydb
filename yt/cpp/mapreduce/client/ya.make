@@ -10,6 +10,7 @@ SRCS(
     client.cpp
     file_reader.cpp
     file_writer.cpp
+    file_fragment_writer.cpp
     format_hints.cpp
     init.cpp
     lock.cpp
@@ -43,6 +44,7 @@ PEERDIR(
     yt/cpp/mapreduce/http_client
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/io
+    yt/cpp/mapreduce/rpc_client
 )
 
 PEERDIR(

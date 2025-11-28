@@ -34,4 +34,4 @@ NApi::IClientPtr CreateTestHedgingClient(
 }
 
 
-} // NYT::NClient::NHedging::NTest
+} // namespace NYT::NClient::NHedging::NRpc::NTest

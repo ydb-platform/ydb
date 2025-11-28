@@ -7,13 +7,15 @@ namespace NYql {
 TCodeLineException::TCodeLineException(ui32 code)
     : SourceLocation("", 0)
     , Code(code)
-{}
+{
+}
 
 TCodeLineException::TCodeLineException(const TSourceLocation& sl, const TCodeLineException& t)
     : yexception(t)
     , SourceLocation(sl)
     , Code(t.Code)
-{}
+{
+}
 
 const char* TCodeLineException::GetRawMessage() const {
     return yexception::what();
@@ -25,7 +27,7 @@ const char* TCodeLineException::what() const noexcept {
             Message = TStringBuilder{} << SourceLocation << TStringBuf(": ") << yexception::what();
         }
         return Message.c_str();
-    } catch(...) {
+    } catch (...) {
         return "Unexpected exception in TCodeLineException::what()";
     }
 }
@@ -34,4 +36,4 @@ TCodeLineException operator+(const TSourceLocation& sl, TCodeLineException&& t) 
     return TCodeLineException(sl, t);
 }
 
-} // namespace NFq
+} // namespace NYql

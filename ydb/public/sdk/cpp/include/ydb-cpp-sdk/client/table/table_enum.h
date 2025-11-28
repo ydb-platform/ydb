@@ -11,6 +11,12 @@ enum class EColumnFamilyCompression {
     LZ4,
 };
 
+//! Column family cache mode
+enum class EColumnFamilyCacheMode {
+    Regular,
+    InMemory,
+};
+
 //! State of build index operation
 enum class EBuildIndexState {
     Unspecified = 0,
@@ -29,6 +35,7 @@ enum class EIndexType {
     GlobalAsync,
     GlobalUnique,
     GlobalVectorKMeansTree,
+    GlobalFulltext,
 
     Unknown = std::numeric_limits<int>::max()
 };

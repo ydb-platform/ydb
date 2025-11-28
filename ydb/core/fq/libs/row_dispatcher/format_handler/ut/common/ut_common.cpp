@@ -9,11 +9,14 @@
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
 
 namespace NFq::NRowDispatcher::NTests {
 
 namespace {
+
+const NKikimr::NMiniKQL::IFunctionRegistry::TPtr FunctionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {});
 
 class TPurecalcCompileServiceMock : public NActors::TActor<TPurecalcCompileServiceMock> {
     using TBase = NActors::TActor<TPurecalcCompileServiceMock>;
@@ -26,7 +29,8 @@ public:
     {}
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle);
+        hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle)
+        IgnoreFunc(TEvRowDispatcher::TEvPurecalcCompileAbort)
     )
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
@@ -151,7 +155,7 @@ TBaseFixture::TBatch& TBaseFixture::TBatch::AddRow(TRow row) {
 //// TBaseFixture
 
 TBaseFixture::TBaseFixture()
-    : TTypeParser(__LOCATION__, {})
+    : TTypeParser(__LOCATION__, ::NFq::NRowDispatcher::NTests::FunctionRegistry.Get(), {})
     , MemoryInfo("TBaseFixture alloc")
     , HolderFactory(std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemoryInfo))
     , Runtime(1, true)
@@ -183,7 +187,6 @@ void TBaseFixture::TearDown(NUnitTest::TTestContext&) {
     with_lock(Alloc) {
         ProgramBuilder.reset();
         TypeEnv.reset();
-        FunctionRegistry.Reset();
         HolderFactory.reset();
     }
 
@@ -207,7 +210,7 @@ void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expect
     with_lock(Alloc) {
         // Parse messages
         const auto rowType = ProgramBuilder->NewMultiType(columnTypes);
-        const auto dataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(rowType);
+        const auto dataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(rowType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
 
         NKikimr::NMiniKQL::TUnboxedValueBatch parsedData(rowType);
         dataUnpacker->UnpackBatch(NYql::MakeChunkedBuffer(std::move(serializedBatch)), *HolderFactory, parsedData);
@@ -245,7 +248,7 @@ void CheckSuccess(const TStatus& status) {
 }
 
 void CheckError(const TStatus& status, TStatusCode expectedStatusCode, const TString& expectedMessage) {
-    UNIT_ASSERT_C(status.GetStatus() == expectedStatusCode, "Expected error status " << NYql::NDqProto::StatusIds_StatusCode_Name(expectedStatusCode) << ", but got: " << status.GetErrorMessage());
+    UNIT_ASSERT_C(status.GetStatus() == expectedStatusCode, "Expected error status " << NYql::NDqProto::StatusIds_StatusCode_Name(expectedStatusCode) << ", but got: " << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()) << " ("<< status.GetErrorMessage() << ")");
     UNIT_ASSERT_STRING_CONTAINS_C(status.GetErrorMessage(), expectedMessage, "Unexpected error message, Status: " << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()));
 }
 

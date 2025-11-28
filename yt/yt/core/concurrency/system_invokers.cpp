@@ -16,7 +16,7 @@ class TSystemInvokerThread
 {
 public:
     TSystemInvokerThread(
-        const TString& threadName,
+        std::string threadName,
         int shutdownPriority)
         : Queue_(New<TMpscInvokerQueue>(
             CallbackEventCount_,

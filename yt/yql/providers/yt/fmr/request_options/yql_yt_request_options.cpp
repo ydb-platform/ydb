@@ -5,6 +5,19 @@
 
 namespace NYql::NFmr {
 
+TYtTableRef::TYtTableRef()
+{
+}
+
+TYtTableRef::TYtTableRef(const NYT::TRichYPath& richPath, const TMaybe<TString>& filePath)
+    : RichPath(richPath), FilePath(filePath)
+{
+}
+
+TYtTableRef::TYtTableRef(const TString& cluster, const TString& path, const TMaybe<TString>& filePath): FilePath(filePath) {
+    RichPath = NYT::TRichYPath().Path(path).Cluster(cluster);
+}
+
 TString TYtTableRef::GetPath() const {
     return RichPath.Path_;
 }
@@ -18,9 +31,13 @@ TFmrTableId::TFmrTableId(const TString& id): Id(id)
 {
 }
 
-TFmrTableId::TFmrTableId(const NYT::TRichYPath& path) {
-    YQL_ENSURE(path.Cluster_.Defined(), "YtTableRef cluster should be set");
-    Id = *path.Cluster_+ "." + path.Path_;
+TFmrTableId::TFmrTableId(const NYT::TRichYPath& richPath) {
+    YQL_ENSURE(richPath.Cluster_.Defined(), "YtTableRef cluster should be set");
+    TString path = richPath.Path_;
+    if (path.StartsWith("//")) {
+        path = path.substr(2);
+    }
+    Id = *richPath.Cluster_+ "." + path;
 }
 
 TFmrTableId::TFmrTableId(const TString& cluster, const TString& path): Id(cluster + "." + path)
@@ -93,7 +110,9 @@ void TFmrTableInputRef::Save(IOutputStream* buffer) const {
     ::SaveMany(
         buffer,
         TableId,
-        TableRanges
+        TableRanges,
+        Columns,
+        SerializedColumnGroups
     );
 }
 
@@ -101,7 +120,9 @@ void TFmrTableInputRef::Load(IInputStream* buffer) {
     ::LoadMany(
         buffer,
         TableId,
-        TableRanges
+        TableRanges,
+        Columns,
+        SerializedColumnGroups
     );
 }
 
@@ -113,11 +134,25 @@ void TTaskTableInputRef::Load(IInputStream* buffer) {
     ::Load(buffer, Inputs);
 }
 
+TFmrTableOutputRef::TFmrTableOutputRef(const TString& tableId, const TMaybe<TString>& partId): TableId(tableId) {
+    if (partId) {
+        PartId = *partId;
+    }
+}
+
+// Helper constructor which initializes all fields except PartId.
+TFmrTableOutputRef::TFmrTableOutputRef(const TFmrTableRef& fmrTableRef)
+    : TableId(fmrTableRef.FmrTableId.Id)
+    , SerializedColumnGroups(fmrTableRef.SerializedColumnGroups)
+{
+}
+
 void TFmrTableOutputRef::Save(IOutputStream* buffer) const {
     ::SaveMany(
         buffer,
         TableId,
-        PartId
+        PartId,
+        SerializedColumnGroups
     );
 }
 
@@ -125,7 +160,8 @@ void TFmrTableOutputRef::Load(IInputStream* buffer) {
     ::LoadMany(
         buffer,
         TableId,
-        PartId
+        PartId,
+        SerializedColumnGroups
     );
 }
 

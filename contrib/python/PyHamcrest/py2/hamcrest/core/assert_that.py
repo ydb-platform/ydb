@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+import warnings
 from hamcrest.core.matcher import Matcher
 from hamcrest.core.string_description import StringDescription
 
@@ -42,6 +43,8 @@ def assert_that(arg1, arg2=None, arg3=''):
     if isinstance(arg2, Matcher):
         _assert_match(actual=arg1, matcher=arg2, reason=arg3)
     else:
+        if isinstance(arg1, Matcher):
+            warnings.warn("arg1 should be boolean, but was {}".format(type(arg1)))
         _assert_bool(assertion=arg1, reason=arg2)
 
 

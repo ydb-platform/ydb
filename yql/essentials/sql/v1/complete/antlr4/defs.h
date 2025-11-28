@@ -7,12 +7,12 @@
 
 namespace NSQLComplete {
 
-    using TTokenId = size_t;
-    using TRuleId = size_t;
+using TTokenId = size_t;
+using TRuleId = size_t;
 
-    constexpr TTokenId TOKEN_EOF = antlr4::Token::EOF;
+constexpr TTokenId TOKEN_EOF = antlr4::Token::EOF;
 
-    // std::vector is used to prevent copying a C3 output
-    using TParserCallStack = std::vector<TRuleId>;
+// std::vector is used to prevent copying a C3 output
+using TParserCallStack = std::vector<TRuleId>;
 
 } // namespace NSQLComplete

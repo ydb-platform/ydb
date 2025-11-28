@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(25.1.1)
+VERSION(25.3)
 
 LICENSE(MIT)
 
@@ -105,14 +105,11 @@ PY_SRCS(
     pip/_internal/operations/build/build_tracker.py
     pip/_internal/operations/build/metadata.py
     pip/_internal/operations/build/metadata_editable.py
-    pip/_internal/operations/build/metadata_legacy.py
     pip/_internal/operations/build/wheel.py
     pip/_internal/operations/build/wheel_editable.py
-    pip/_internal/operations/build/wheel_legacy.py
     pip/_internal/operations/check.py
     pip/_internal/operations/freeze.py
     pip/_internal/operations/install/__init__.py
-    pip/_internal/operations/install/editable_legacy.py
     pip/_internal/operations/install/wheel.py
     pip/_internal/operations/prepare.py
     pip/_internal/pyproject.py
@@ -156,7 +153,6 @@ PY_SRCS(
     pip/_internal/utils/misc.py
     pip/_internal/utils/packaging.py
     pip/_internal/utils/retry.py
-    pip/_internal/utils/setuptools_build.py
     pip/_internal/utils/subprocess.py
     pip/_internal/utils/temp_dir.py
     pip/_internal/utils/unpacking.py
@@ -194,17 +190,9 @@ PY_SRCS(
     pip/_vendor/dependency_groups/_toml_compat.py
     pip/_vendor/distlib/__init__.py
     pip/_vendor/distlib/compat.py
-    pip/_vendor/distlib/database.py
-    pip/_vendor/distlib/index.py
-    pip/_vendor/distlib/locators.py
-    pip/_vendor/distlib/manifest.py
-    pip/_vendor/distlib/markers.py
-    pip/_vendor/distlib/metadata.py
     pip/_vendor/distlib/resources.py
     pip/_vendor/distlib/scripts.py
     pip/_vendor/distlib/util.py
-    pip/_vendor/distlib/version.py
-    pip/_vendor/distlib/wheel.py
     pip/_vendor/distro/__init__.py
     pip/_vendor/distro/__main__.py
     pip/_vendor/distro/distro.py
@@ -388,7 +376,6 @@ PY_SRCS(
     pip/_vendor/truststore/_openssl.py
     pip/_vendor/truststore/_ssl_constants.py
     pip/_vendor/truststore/_windows.py
-    pip/_vendor/typing_extensions.py
     pip/_vendor/urllib3/__init__.py
     pip/_vendor/urllib3/_collections.py
     pip/_vendor/urllib3/_version.py
@@ -435,20 +422,42 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
+    pip/_vendor/README.rst
+    pip/_vendor/cachecontrol/LICENSE.txt
     pip/_vendor/cachecontrol/py.typed
+    pip/_vendor/certifi/LICENSE
     pip/_vendor/certifi/cacert.pem
     pip/_vendor/certifi/py.typed
+    pip/_vendor/dependency_groups/LICENSE.txt
     pip/_vendor/dependency_groups/py.typed
+    pip/_vendor/distlib/LICENSE.txt
+    pip/_vendor/distro/LICENSE
     pip/_vendor/distro/py.typed
+    pip/_vendor/idna/LICENSE.md
     pip/_vendor/idna/py.typed
+    pip/_vendor/msgpack/COPYING
+    pip/_vendor/packaging/LICENSE
+    pip/_vendor/packaging/LICENSE.APACHE
+    pip/_vendor/packaging/LICENSE.BSD
     pip/_vendor/packaging/py.typed
+    pip/_vendor/pkg_resources/LICENSE
+    pip/_vendor/platformdirs/LICENSE
     pip/_vendor/platformdirs/py.typed
+    pip/_vendor/pygments/LICENSE
+    pip/_vendor/pyproject_hooks/LICENSE
     pip/_vendor/pyproject_hooks/py.typed
+    pip/_vendor/requests/LICENSE
+    pip/_vendor/resolvelib/LICENSE
     pip/_vendor/resolvelib/py.typed
+    pip/_vendor/rich/LICENSE
     pip/_vendor/rich/py.typed
+    pip/_vendor/tomli/LICENSE
     pip/_vendor/tomli/py.typed
+    pip/_vendor/tomli_w/LICENSE
     pip/_vendor/tomli_w/py.typed
+    pip/_vendor/truststore/LICENSE
     pip/_vendor/truststore/py.typed
+    pip/_vendor/urllib3/LICENSE.txt
     pip/_vendor/vendor.txt
     pip/py.typed
 )

@@ -187,6 +187,7 @@ bool CanCacheQuery(const NKqpProto::TKqpPhyQuery& query) {
                 const auto& externalSourceType = source.GetExternalSource().GetType();
 
                 // S3 provider stores S3 paths to read in AST,
+                // S3 and solomon providers may use runtime listing,
                 // YT provider opens read session during compilation,
                 // so we can't cache such queries
                 if (externalSourceType == "S3Source" ||

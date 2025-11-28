@@ -21,6 +21,10 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .Default(0)
         .DontSerializeDefault();
 
+    registrar.ExternalBaseClassParameter("distributed_group_main_job_id", &TListJobsOptions::DistributedGroupMainJobId)
+        .Default()
+        .DontSerializeDefault();
+
     registrar.ExternalBaseClassParameter("job_competition_id", &TListJobsOptions::JobCompetitionId)
         .Default()
         .DontSerializeDefault();
@@ -66,6 +70,10 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .DontSerializeDefault();
 
     registrar.ExternalBaseClassParameter("operation_incarnation", &TThat::OperationIncarnation)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("monitoring_descriptor", &TThat::MonitoringDescriptor)
         .Default()
         .DontSerializeDefault();
 
@@ -206,7 +214,7 @@ void Deserialize(TOperation& operation, NYTree::IAttributeDictionaryPtr attribut
         attributes = attributes->Clone();
     }
 
-    auto setField = [&] (auto& field, const TString& name) {
+    auto setField = [&] (auto& field, const std::string& name) {
         using T = std::remove_reference_t<decltype(field)>;
         if constexpr (std::is_same_v<T, NYson::TYsonString>) {
             if (auto value = attributes->FindYson(name)) {
@@ -331,6 +339,8 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
             .OptionalItem("monitoring_descriptor", job.MonitoringDescriptor)
             .OptionalItem("is_stale", job.IsStale)
             .OptionalItem("job_cookie", job.JobCookie)
+            .OptionalItem("distributed_group_job_index", job.DistributedGroupJobIndex)
+            .OptionalItem("distributed_group_main_job_id", job.DistributedGroupMainJobId)
             .OptionalItem("archive_features", job.ArchiveFeatures)
             .OptionalItem("operation_incarnation", job.OperationIncarnation)
             .OptionalItem("allocation_id", job.AllocationId)
@@ -359,6 +369,25 @@ void Serialize(const TOperationEvent& operationEvent, NYson::IYsonConsumer* cons
             .OptionalItem("incarnation", operationEvent.Incarnation)
             .OptionalItem("incarnation_switch_reason", operationEvent.IncarnationSwitchReason)
             .OptionalItem("incarnation_switch_info", operationEvent.IncarnationSwitchInfo)
+        .EndMap();
+}
+
+void Serialize(const TProcessTraceMeta& processTrace, NYson::IYsonConsumer* consumer) {
+    NYTree::BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("state").Value(processTrace.State)
+        .EndMap();
+}
+
+void Serialize(const TJobTraceMeta& jobTrace, NYson::IYsonConsumer* consumer) {
+    NYTree::BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("trace_id").Value(jobTrace.TraceId)
+            .Item("progress").Value(jobTrace.Progress)
+            .Item("health").Value(jobTrace.Health)
+            .DoIf(!jobTrace.ProcessTraceMetas.empty(), [&] (TFluentMap fluent) {
+                fluent.Item("process_trace_metas").Value(jobTrace.ProcessTraceMetas);
+            })
         .EndMap();
 }
 
@@ -420,4 +449,3 @@ TGetJobStderrResponse TGetJobStderrResponse::MakeJobStderr(const TSharedRef& dat
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

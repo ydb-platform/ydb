@@ -163,7 +163,7 @@ FMT_ASM = [
 boost_context = NixSourceProject(
     nixattr="boost_context",
     arcdir=boost.make_arcdir("context"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     # fmt: off
     copy_sources=[
         "include/boost/",

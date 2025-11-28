@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
     class TSparsedDataTest {
     private:
         const TKikimrSettings Settings =
-            TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+            TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
         TKikimrRunner Kikimr;
         NKikimr::NYDBTest::TControllers::TGuard<NKikimr::NYDBTest::NColumnShard::TController> CSController;
         const TString StoreName;
@@ -120,6 +120,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             ui32 grCount = (MultiColumnRepCount + SKIP_GROUPS - 1) / SKIP_GROUPS;
             ui64 defCounts[FIELD_NAMES.size() * grCount];
             const ui32 count = GetCount();
+            AFL_VERIFY(count == countExpectation)("expect", countExpectation)("count", count);
             GetAllDefaultsCount(defCounts, SKIP_GROUPS);
             for (ui32 i = 0; i < FIELD_NAMES.size() * grCount; i++) {
                 if (firstCall) {
@@ -127,7 +128,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                 } else {
                     AFL_VERIFY(defCountStart[i] == defCounts[i]);
                 }
-                AFL_VERIFY(count == countExpectation)("expect", countExpectation)("count", count);
                 AFL_VERIFY(1.0 * defCounts[i] / count < 0.95)("def", defCounts[i])("count", count);
                 AFL_VERIFY(1.0 * defCounts[i] / count > 0.85)("def", defCounts[i])("count", count);
             }

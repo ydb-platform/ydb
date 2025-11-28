@@ -244,13 +244,32 @@ void TLocalTopicPartitionReaderActor::HandleOnWaitData(TEvPersQueue::TEvResponse
         gotOffset = std::max(gotOffset, result.GetOffset());
         auto proto = GetDeserializedData(result.GetData());
 
+        auto messageMeta = MakeIntrusive<NYdb::NTopic::TMessageMeta>();
+        for (auto& v : *proto.MutableMessageMeta()) {
+            messageMeta->Fields.emplace_back(std::move(*v.mutable_key()), std::move(*v.mutable_value()));
+        }
+
+        NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation information(
+            gotOffset,
+            result.GetSourceId(), // producerId
+            result.GetSeqNo(),
+            TInstant::MilliSeconds(result.GetCreateTimestampMS()),
+            TInstant::MilliSeconds(result.GetWriteTimestampMS()),
+            nullptr, // write session meta
+            messageMeta,
+            result.GetUncompressedSize(),
+            result.GetSourceId() // messageGroupId
+        );
+
+        TString data;
         if (proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1) {
             const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
-            TString decompressed = codecImpl->Decompress(proto.GetData());
-            messages.emplace_back(result.GetOffset(), decompressed);
+            data = codecImpl->Decompress(proto.GetData());
         } else {
-            messages.emplace_back(result.GetOffset(), proto.GetData());
+            data = std::move(*proto.MutableData());
         }
+
+        messages.emplace_back(std::move(information), std::move(data));
     }
     SentOffset = gotOffset + 1;
 

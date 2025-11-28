@@ -9,11 +9,11 @@ import "ydb/core/scheme/protos/type_info.proto";
 import "ydb/core/protos/kqp_physical.proto";
 import "ydb/core/protos/kqp_stats.proto";
 import "ydb/core/protos/data_events.proto";
+import "ydb/public/api/protos/ydb_formats.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
-import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/public/api/protos/ydb_query.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
@@ -72,6 +72,7 @@ message TTopicOperationsRequest {
     optional string Consumer = 1;
     repeated TopicOffsets Topics = 2;
     optional uint32 SupportivePartition = 3;
+    optional uint64 TabletId = 4;
 
     message TopicOffsets {
         // Topic path.
@@ -174,6 +175,9 @@ message TQueryRequest {
     optional string PoolId = 35;
     optional string DatabaseId = 36;
     optional TKafkaApiOperationsRequest KafkaApiOperations = 37;
+    optional Ydb.Query.SchemaInclusionMode SchemaInclusionMode = 38;
+    optional Ydb.ResultSet.Format ResultSetFormat = 39;
+    optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
 }
 
 message TKqpPathIdProto {
@@ -183,6 +187,10 @@ message TKqpPathIdProto {
 
 message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
+}
+
+message TFulltextIndexDescription {
+    optional Ydb.Table.FulltextIndexSettings Settings = 1;
 }
 
 message TIndexDescriptionProto {
@@ -196,6 +204,7 @@ message TIndexDescriptionProto {
     repeated string DataColumns = 8;
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 9;
+        TFulltextIndexDescription FulltextIndexDescription = 10;
     }
 };
 
@@ -355,6 +364,19 @@ message TEvCloseSessionResponse {
     optional TCloseSessionResponse Response = 3;
 }
 
+message TCompileCacheQueryInfo {
+    // optional uint32 NodeId = 1;
+    optional string QueryId = 2;
+    optional string Query = 3;
+    optional uint64 AccessCount = 4;
+    optional int64 CompiledQueryAt = 5;
+    optional string UserSID = 6;
+    optional int64 LastAccessedAt = 7;
+    optional string Warnings = 8;
+    optional google.protobuf.Duration CompilationDuration = 9;
+    optional string MetaInfo = 10;
+}
+
 message TSessionInfo {
     optional string SessionId = 1;
     /// optional ui32 NodeId = 2;
@@ -388,6 +410,24 @@ message TEvListSessionsRequest {
 message TEvListSessionsResponse {
     optional int64 NodeId = 1;
     repeated TSessionInfo Sessions = 2;
+    optional bool Finished = 3;
+    optional string ContinuationToken = 4;
+}
+
+message TEvListCompileCacheQueriesRequest {
+    optional string QueryIdStart = 1;
+    optional bool QueryIdStartInclusive = 2;
+    optional string QueryIdEnd = 3;
+    optional bool QueryIdEndInclusive = 4;
+    repeated uint32 Columns = 5;
+    optional int64 FreeSpace = 6;
+    optional int64 Limit = 7;
+    optional string TenantName = 8;
+}
+
+message TEvListCompileCacheQueriesResponse {
+    optional int64 NodeId = 1;
+    repeated TCompileCacheQueryInfo CacheCacheQueries = 2;
     optional bool Finished = 3;
     optional string ContinuationToken = 4;
 }
@@ -541,6 +581,7 @@ message TEvExecuterProgress {
     optional NActorsProto.TActorId ExecuterActorId = 1;
     optional string QueryPlan = 2;
     optional NKqpProto.TKqpStatsQuery QueryStats = 3;
+    optional string QueryAst = 4;
 };
 
 message TKqpProxyNodeResources {
@@ -612,19 +653,18 @@ message TEvStartKqpTasksRequest {
     optional string PoolId = 9;
     optional double MemoryPoolPercent = 10 [default = 100];
     optional string Database = 11;
-    optional string DatabaseId = 17;
+    optional string DatabaseId = 17; // used as unique id in case database was removed/added with the same name
     optional uint64 LockTxId = 13;
     optional uint32 LockNodeId = 14;
-
-    // TODO(scheduler): only for old scheduler.
-    optional double PoolMaxCpuShare = 12;
-    optional double QueryCpuShare = 16;
-    optional double ResourceWeight = 18;
-    // TODO(scheduler): end.
-
+    optional double PoolMaxCpuShare = 12; // used for TCPULimits for ColumnShards
     optional NKikimrDataEvents.ELockMode LockMode = 19;
-
     optional string UserToken = 20;
+    optional bool SupportShuttingDown = 21 [default = true];
+    optional bool EnableWatermarks = 22 [default = false];
+
+    reserved 15;
+    reserved 16;
+    reserved 18;
 }
 
 message TEvStartKqpTasksResponse {
@@ -642,12 +682,14 @@ message TEvStartKqpTasksResponse {
         QUERY_EXECUTION_UNITS_LIMIT_EXCEEDED = 4;
         // any other error
         INTERNAL_ERROR = 5;
+        NODE_SHUTTING_DOWN = 6;
     }
 
     message TNotStartedTask {
         optional uint64 TaskId = 1;
         optional ENotStartedTaskReason Reason = 2;
         optional string Message = 3;
+        optional uint64 RequestId = 4;
     }
 
     optional uint64 TxId = 1;
@@ -794,6 +836,7 @@ message TKqpTableSinkIndexSettings {
     repeated TKqpColumnMetadataProto Columns = 3;
     optional bool IsUniq = 4;
     repeated uint32 WriteIndexes = 5;
+    optional uint32 KeyPrefixSize = 6;
 }
 
 message TKqpTableSinkSettings {
@@ -825,6 +868,15 @@ message TKqpTableSinkSettings {
     repeated TKqpTableSinkIndexSettings Indexes = 19;
     repeated TKqpColumnMetadataProto LookupColumns = 20;
     optional bool IsIndexImplTable = 21;
+    optional string Database = 22;
+}
+
+message TReadVectorTopK {
+    // Top-K pushdown by vector distance between Column and TargetVector
+    optional uint32 Column = 1;
+    optional Ydb.Table.VectorIndexSettings Settings = 2;
+    optional string TargetVector = 3;
+    optional uint32 Limit = 4;
 }
 
 message TKqpStreamLookupSettings {
@@ -844,6 +896,9 @@ message TKqpStreamLookupSettings {
     optional NKikimrDataEvents.ELockMode LockMode = 14;
     optional bool AllowUseFollowers = 15;
     optional bool IsTableImmutable = 16;
+    optional EIsolationLevel IsolationLevel = 17 [default = ISOLATION_LEVEL_UNDEFINED];
+    optional string Database = 18;
+    optional TReadVectorTopK VectorTopK = 19;
 }
 
 message TKqpSequencerSettings {
@@ -893,6 +948,10 @@ message TScriptExecutionOperationMeta {
     optional google.protobuf.Duration LeaseDuration = 9;
     optional google.protobuf.Duration ProgressStatsPeriod = 10;
     optional TRlPath RlPath = 11;
+    optional bool SaveQueryPhysicalGraph = 12;
+    optional bool DisableDefaultTimeout = 13;
+    optional string CheckpointId = 14;
+    optional string StreamingQueryPath = 15;
 }
 
 // stored in column "retry_state" of .metadata/script_executions table
@@ -918,8 +977,60 @@ message TScriptExecutionRetryState {
     optional double RetryRate = 4;
 }
 
+// stored in column "physical_graph" of .metadata/script_executions table
+message TQueryPhysicalGraph {
+    message TTask {
+        optional uint64 TxId = 1;
+        optional NYql.NDqProto.TDqTask DqTask = 2;
+    }
+
+    optional TPreparedQuery PreparedQuery = 1;
+    repeated TTask Tasks = 2;
+    optional bool ZeroCheckpointSaved = 3;
+}
+
 /// KQP workload manager Events
 message TEvRefreshPoolState {
     optional string PoolId = 1;
     optional string Database = 2;
+}
+
+/// Streaming queries
+
+// stored in column "state" of .metadata/streaming/queries table
+message TStreamingQueryState {
+    message TSchemeInfo {
+        optional uint64 AlterVersion = 1;
+        optional uint64 OwnerSchemeshardId = 2;
+        optional uint64 LocalPathId = 3;
+    }
+
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_CREATING = 10;
+        STATUS_CREATED = 20;
+        STATUS_STARTING = 30;
+        STATUS_RUNNING = 40;
+        STATUS_STOPPING = 50;
+        STATUS_STOPPED = 60;
+        STATUS_DELETING = 70;
+    }
+
+    // Script executions info
+    optional EStatus Status = 1;
+    optional string CurrentExecutionId = 2;
+    repeated string PreviousExecutionIds = 3;
+    optional string CheckpointId = 11;
+
+    // Inflight streaming query operation info
+    optional string OperationName = 4;
+    optional string OperationActorId = 5;
+    optional google.protobuf.Timestamp OperationStartedAt = 6;
+
+    // Streaming query properties stored in schemeshard
+    optional TSchemeInfo SchemeInfo = 7;
+    optional string QueryText = 8;
+    optional bool Run = 9;
+    optional string ResourcePool = 10;
+    optional uint64 QueryTextRevision = 12;
 }

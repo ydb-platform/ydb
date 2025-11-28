@@ -127,7 +127,7 @@ public:
     }
 
     operator i32() const {
-        Y_ENSURE((Type() == NScheme::NTypeIds::Int32 
+        Y_ENSURE((Type() == NScheme::NTypeIds::Int32
                   || Type() == NScheme::NTypeIds::Date32)
                  && Size() == sizeof(i32), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data()));
@@ -388,6 +388,37 @@ struct TConvertValue<TColumnType, TIdWrapper<T, Tag>, TRawTypeValue> {
     TTypeValue Value;
     TConvertValue(const TRawTypeValue & value) : Value(value) {}
     operator TIdWrapper<T, Tag>() const { return TIdWrapper<T, Tag>::FromValue(static_cast<T>(Value)); }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TBridgePileId conversion
+
+template<typename TColumnType>
+struct TConvertValue<TColumnType, TRawTypeValue, TBridgePileId> {
+    static_assert(TColumnType::ColumnType == NScheme::NTypeIds::Uint32);
+
+    ui32 Storage;
+    TTypeValue Value;
+
+    TConvertValue(TBridgePileId value)
+        : Storage(value.GetLocalDb())
+        , Value(value ? TTypeValue(Storage) : TTypeValue())
+    {}
+
+    operator const TRawTypeValue&() const { return Value; }
+};
+
+template<typename TColumnType>
+struct TConvertValue<TColumnType, TBridgePileId, TRawTypeValue> {
+    TTypeValue Value;
+
+    TConvertValue(const TRawTypeValue& value)
+        : Value(value)
+    {}
+
+    operator TBridgePileId() const {
+        return Value.HaveValue() ? TBridgePileId::FromLocalDb(static_cast<ui32>(Value)) : TBridgePileId();
+    }
 };
 
 template <typename TColumnType, typename SourceType>
@@ -2123,7 +2154,7 @@ inline bool Schema::Precharger<Schema::AutoPrecharge>::Precharge(
         NTable::TRawVals minKey, NTable::TRawVals maxKey,
         NTable::TTagsRef columns, NTable::EDirection direction, ui64 maxRowCount, ui64 maxBytes)
 {
-    return database.Precharge(table, minKey, maxKey, columns, 0, maxRowCount, maxBytes, direction);
+    return database.Precharge(table, minKey, maxKey, columns, 0, maxRowCount, maxBytes, direction).Ready;
 }
 
 template <>

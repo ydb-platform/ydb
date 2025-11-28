@@ -7,9 +7,9 @@ STYLE_PYTHON()
 PY_SRCS(
     __init__.py
     constants.py
-    lockfile.py
-    package_manager.py
-    workspace.py
+    pnpm_lockfile.py
+    pnpm_package_manager.py
+    pnpm_workspace.py
     utils.py
 )
 

@@ -246,6 +246,10 @@ struct TReplicationReaderConfig
 
     std::optional<i64> BlockSetSubrequestThreshold;
 
+    //! Each pair corresponds to a number of peers and a timeout which signify that probing will be stopped
+    //! beforehand if this timeout is reached and this number of peers have responded.
+    std::vector<std::pair<int, TDuration>> PartialPeerProbingTimeouts;
+
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
     static void Register(TRegistrar registrar);
@@ -373,6 +377,9 @@ struct TReplicationWriterConfig
     //! Enable write protocol with probe put blocks.
     //! Acquiring resources for putting blocks before invoking PutBlocks.
     bool UseProbePutBlocks;
+
+    //! If |true| data node will preallocate disk space before writing.
+    bool PreallocateDiskSpace;
 
     int GetDirectUploadNodeCount();
 

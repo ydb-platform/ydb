@@ -9,7 +9,7 @@ def post_install(self):
 boost_iterator = NixSourceProject(
     nixattr="boost_iterator",
     arcdir=boost.make_arcdir("iterator"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

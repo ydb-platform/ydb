@@ -13,7 +13,7 @@ struct Node;
 namespace NYql {
 class TExprNode;
 struct TExprContext;
-}
+} // namespace NYql
 
 namespace NYql::NPg {
 
@@ -27,8 +27,7 @@ constexpr ui32 VarcharOid = 1043;
 constexpr ui32 TextOid = 25;
 
 // copied from pg_class.h
-enum class ERelPersistence : char
-{
+enum class ERelPersistence: char {
     Permanent = 'p',
     Unlogged = 'u',
     Temp = 't',
@@ -54,7 +53,7 @@ struct TOperDesc {
     ui32 ExtensionIndex = 0;
 };
 
-enum class EProcKind : char {
+enum class EProcKind: char {
     Function = 'f',
     Aggregate = 'a',
     Window = 'w'
@@ -93,7 +92,7 @@ constexpr ui32 C_CollationOid = 950;
 constexpr ui32 PosixCollationOid = 951;
 
 // Copied from pg_type_d.h, TYPTYPE_* constants
-enum class ETypType : char {
+enum class ETypType: char {
     Base = 'b',
     Composite = 'c',
     Domain = 'd',
@@ -150,11 +149,11 @@ enum class ECastMethod {
     Binary
 };
 
-enum class ECoercionCode : char {
-    Unknown = '?',      // not specified
-    Implicit = 'i',     // coercion in context of expression
-    Assignment = 'a',   // coercion in context of assignment
-    Explicit = 'e',     // explicit cast operation
+enum class ECoercionCode: char {
+    Unknown = '?',    // not specified
+    Implicit = 'i',   // coercion in context of expression
+    Assignment = 'a', // coercion in context of assignment
+    Explicit = 'e',   // explicit cast operation
 };
 
 struct TCastDesc {
@@ -166,7 +165,7 @@ struct TCastDesc {
     ui32 ExtensionIndex = 0;
 };
 
-enum class EAggKind : char {
+enum class EAggKind: char {
     Normal = 'n',
     OrderedSet = 'o',
     Hypothetical = 'h'
@@ -337,7 +336,7 @@ inline bool IsArrayType(const TTypeDesc& typeDesc) noexcept {
     return typeDesc.ArrayTypeId == typeDesc.TypeId;
 }
 
-enum class ERelKind : char {
+enum class ERelKind: char {
     Relation = 'r',
     View = 'v'
 };
@@ -371,7 +370,7 @@ constexpr ui32 NamespaceRelationOid = 2615;
 constexpr ui32 AuthMemRelationOid = 1261;
 constexpr ui32 RelationRelationOid = 1259;
 
-struct TTableInfo : public TTableInfoKey {
+struct TTableInfo: public TTableInfoKey {
     ERelKind Kind;
     ui32 Oid;
     ui32 ExtensionIndex = 0;
@@ -398,13 +397,13 @@ bool AreAllFunctionsAllowed();
 void AllowFunction(const TString& name);
 
 struct TExtensionDesc {
-    TString Name;               // postgis
-    TString InstallName;        // $libdir/postgis-3
-    TVector<TString> SqlPaths;  // paths to SQL files with DDL (CREATE TYPE/CREATE FUNCTION/etc), DML (INSERT/VALUES)
-    TString LibraryPath;        // file path
-    bool TypesOnly = false;     // Can't be loaded if true
-    TString LibraryMD5;         // optional
-    TString Version;            // version of extension
+    TString Name;              // postgis
+    TString InstallName;       // $libdir/postgis-3
+    TVector<TString> SqlPaths; // paths to SQL files with DDL (CREATE TYPE/CREATE FUNCTION/etc), DML (INSERT/VALUES)
+    TString LibraryPath;       // file path
+    bool TypesOnly = false;    // Can't be loaded if true
+    TString LibraryMD5;        // optional
+    TString Version;           // version of extension
 };
 
 class IExtensionSqlBuilder {
@@ -413,14 +412,14 @@ public:
 
     virtual void CreateProc(const TProcDesc& desc) = 0;
 
-    virtual void PrepareType(ui32 extensionIndex,const TString& name) = 0;
+    virtual void PrepareType(ui32 extensionIndex, const TString& name) = 0;
 
     virtual void UpdateType(const TTypeDesc& desc) = 0;
 
     virtual void CreateTable(const TTableInfo& table, const TVector<TColumnInfo>& columns) = 0;
 
     virtual void InsertValues(const TTableInfoKey& table, const TVector<TString>& columns,
-        const TVector<TMaybe<TString>>& data) = 0; // row based layout
+                              const TVector<TMaybe<TString>>& data) = 0; // row based layout
 
     virtual void CreateCast(const TCastDesc& desc) = 0;
 
@@ -467,7 +466,7 @@ void LoadSystemFunctions(ISystemFunctionsParser& parser);
 
 // either RegisterExtensions or ImportExtensions should be called at most once, see ClearExtensions as well
 void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnly,
-    IExtensionSqlParser& parser, IExtensionLoader* loader);
+                        IExtensionSqlParser& parser, IExtensionLoader* loader);
 // converts all library paths to basenames
 TString ExportExtensions(const TMaybe<TSet<ui32>>& filter = Nothing());
 void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader* loader);
@@ -478,7 +477,7 @@ const TExtensionDesc& LookupExtension(ui32 extensionIndex);
 ui32 LookupExtensionByName(const TString& name);
 ui32 LookupExtensionByInstallName(const TString& installName);
 
-}
+} // namespace NYql::NPg
 
 template <>
 inline void Out<NYql::NPg::ETypType>(IOutputStream& o, NYql::NPg::ETypType typType) {
@@ -492,7 +491,7 @@ inline void Out<NYql::NPg::ECoercionCode>(IOutputStream& o, NYql::NPg::ECoercion
 
 template <>
 struct THash<NYql::NPg::TTableInfoKey> {
-    size_t operator ()(const NYql::NPg::TTableInfoKey& val) const {
+    size_t operator()(const NYql::NPg::TTableInfoKey& val) const {
         return val.Hash();
     }
 };

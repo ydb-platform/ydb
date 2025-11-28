@@ -13,28 +13,26 @@ import os
 import re
 import subprocess
 import sys
+import sysconfig
 import types
 from collections import defaultdict
+from collections.abc import Iterable
+from enum import IntEnum
 from functools import lru_cache, reduce
 from os import sep
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Set, Tuple
+from typing import TypeAlias
 
 from hypothesis._settings import Phase, Verbosity
 from hypothesis.internal.compat import PYPY
 from hypothesis.internal.escalation import is_hypothesis_file
 
-if TYPE_CHECKING:
-    from typing import TypeAlias
-else:
-    TypeAlias = object
-
-Location: TypeAlias = Tuple[str, int]
-Branch: TypeAlias = Tuple[Optional[Location], Location]
-Trace: TypeAlias = Set[Branch]
+Location: TypeAlias = tuple[str, int]
+Branch: TypeAlias = tuple[Location | None, Location]
+Trace: TypeAlias = set[Branch]
 
 
-@lru_cache(maxsize=None)
+@functools.cache
 def should_trace_file(fname: str) -> bool:
     # fname.startswith("<") indicates runtime code-generation via compile,
     # e.g. compile("def ...", "<string>", "exec") in e.g. attrs methods.
@@ -46,35 +44,39 @@ def should_trace_file(fname: str) -> bool:
 # tool_id = 1 is designated for coverage, but we intentionally choose a
 # non-reserved tool id so we can co-exist with coverage tools.
 MONITORING_TOOL_ID = 3
-if sys.version_info[:2] >= (3, 12):
+if hasattr(sys, "monitoring"):
     MONITORING_EVENTS = {sys.monitoring.events.LINE: "trace_line"}
 
 
 class Tracer:
     """A super-simple branch coverage tracer."""
 
-    __slots__ = ("branches", "_previous_location")
+    __slots__ = (
+        "_previous_location",
+        "_should_trace",
+        "_tried_and_failed_to_trace",
+        "branches",
+    )
 
-    def __init__(self) -> None:
+    def __init__(self, *, should_trace: bool) -> None:
         self.branches: Trace = set()
-        self._previous_location: Optional[Location] = None
+        self._previous_location: Location | None = None
+        self._tried_and_failed_to_trace = False
+        self._should_trace = should_trace and self.can_trace()
 
     @staticmethod
     def can_trace() -> bool:
-        return (
-            (sys.version_info[:2] < (3, 12) and sys.gettrace() is None)
-            or (
-                sys.version_info[:2] >= (3, 12)
-                and sys.monitoring.get_tool(MONITORING_TOOL_ID) is None
-            )
-        ) and not PYPY
+        if PYPY:
+            return False
+        if hasattr(sys, "monitoring"):
+            return sys.monitoring.get_tool(MONITORING_TOOL_ID) is None
+        return sys.gettrace() is None
 
     def trace(self, frame, event, arg):
         try:
             if event == "call":
                 return self.trace
             elif event == "line":
-                # manual inlining of self.trace_line for performance.
                 fname = frame.f_code.co_filename
                 if should_trace_file(fname):
                     current_location = (fname, frame.f_lineno)
@@ -85,19 +87,33 @@ class Tracer:
 
     def trace_line(self, code: types.CodeType, line_number: int) -> None:
         fname = code.co_filename
-        if should_trace_file(fname):
-            current_location = (fname, line_number)
-            self.branches.add((self._previous_location, current_location))
-            self._previous_location = current_location
+        if not should_trace_file(fname):
+            # this function is only called on 3.12+, but we want to avoid an
+            # assertion to that effect for performance.
+            return sys.monitoring.DISABLE  # type: ignore
+
+        current_location = (fname, line_number)
+        self.branches.add((self._previous_location, current_location))
+        self._previous_location = current_location
 
     def __enter__(self):
-        assert self.can_trace()  # caller checks in core.py
+        self._tried_and_failed_to_trace = False
 
-        if sys.version_info[:2] < (3, 12):
+        if not self._should_trace:
+            return self
+
+        if not hasattr(sys, "monitoring"):
             sys.settrace(self.trace)
             return self
 
-        sys.monitoring.use_tool_id(MONITORING_TOOL_ID, "scrutineer")
+        try:
+            sys.monitoring.use_tool_id(MONITORING_TOOL_ID, "scrutineer")
+        except ValueError:
+            # another thread may have registered a tool for MONITORING_TOOL_ID
+            # since we checked in can_trace.
+            self._tried_and_failed_to_trace = True
+            return self
+
         for event, callback_name in MONITORING_EVENTS.items():
             sys.monitoring.set_events(MONITORING_TOOL_ID, event)
             callback = getattr(self, callback_name)
@@ -106,8 +122,14 @@ class Tracer:
         return self
 
     def __exit__(self, *args, **kwargs):
-        if sys.version_info[:2] < (3, 12):
+        if not self._should_trace:
+            return
+
+        if not hasattr(sys, "monitoring"):
             sys.settrace(None)
+            return
+
+        if self._tried_and_failed_to_trace:
             return
 
         sys.monitoring.free_tool_id(MONITORING_TOOL_ID)
@@ -127,25 +149,29 @@ UNHELPFUL_LOCATIONS = (
     "/re/__init__.py",  # refactored in Python 3.11
     "/warnings.py",
     # Quite rarely, the first AFNP line is in Pytest's internals.
-    "/_pytest/_io/saferepr.py",
-    "/_pytest/assertion/*.py",
-    "/_pytest/config/__init__.py",
-    "/_pytest/pytester.py",
+    "/_pytest/**",
     "/pluggy/_*.py",
+    # used by pytest for failure formatting in the terminal.
+    # seen: pygments/lexer.py, pygments/formatters/, pygments/filter.py.
+    "/pygments/*",
+    # used by pytest for failure formatting
+    "/difflib.py",
     "/reprlib.py",
     "/typing.py",
     "/conftest.py",
+    "/pprint.py",
 )
 
 
 def _glob_to_re(locs: Iterable[str]) -> str:
     """Translate a list of glob patterns to a combined regular expression.
-    Only the * wildcard is supported, and patterns including special
+    Only the * and ** wildcards are supported, and patterns including special
     characters will only work by chance."""
     # fnmatch.translate is not an option since its "*" consumes path sep
     return "|".join(
-        loc.replace("*", r"[^/]+")
-        .replace(".", re.escape("."))
+        loc.replace(".", re.escape("."))
+        .replace("**", r".+")
+        .replace("*", r"[^/]+")
         .replace("/", re.escape(sep))
         + r"\Z"  # right anchored
         for loc in locs
@@ -201,18 +227,52 @@ def get_explaining_locations(traces):
     }
 
 
-LIB_DIR = str(Path(sys.executable).parent / "lib")
+# see e.g. https://docs.python.org/3/library/sysconfig.html#posix-user
+# for examples of these path schemes
+STDLIB_DIRS = {
+    Path(sysconfig.get_path("platstdlib")).resolve(),
+    Path(sysconfig.get_path("stdlib")).resolve(),
+}
+SITE_PACKAGES_DIRS = {
+    Path(sysconfig.get_path("purelib")).resolve(),
+    Path(sysconfig.get_path("platlib")).resolve(),
+}
+
 EXPLANATION_STUB = (
     "Explanation:",
     "    These lines were always and only run by failing examples:",
 )
 
 
-def make_report(explanations, cap_lines_at=5):
+class ModuleLocation(IntEnum):
+    LOCAL = 0
+    SITE_PACKAGES = 1
+    STDLIB = 2
+
+    @classmethod
+    @lru_cache(1024)
+    def from_path(cls, path: str) -> "ModuleLocation":
+        path = Path(path).resolve()
+        # site-packages may be a subdir of stdlib or platlib, so it's important to
+        # check is_relative_to for this before the stdlib.
+        if any(path.is_relative_to(p) for p in SITE_PACKAGES_DIRS):
+            return cls.SITE_PACKAGES
+        if any(path.is_relative_to(p) for p in STDLIB_DIRS):
+            return cls.STDLIB
+        return cls.LOCAL
+
+
+# show local files first, then site-packages, then stdlib
+def _sort_key(path: str, lineno: int) -> tuple[int, str, int]:
+    return (ModuleLocation.from_path(path), path, lineno)
+
+
+def make_report(explanations, *, cap_lines_at=5):
     report = defaultdict(list)
     for origin, locations in explanations.items():
+        locations = list(locations)
+        locations.sort(key=lambda v: _sort_key(v[0], v[1]))
         report_lines = [f"        {fname}:{lineno}" for fname, lineno in locations]
-        report_lines.sort(key=lambda line: (line.startswith(LIB_DIR), line))
         if len(report_lines) > cap_lines_at + 1:
             msg = "        (and {} more with settings.verbosity >= verbose)"
             report_lines[cap_lines_at:] = [msg.format(len(report_lines[cap_lines_at:]))]
@@ -250,16 +310,7 @@ def _get_git_repo_root() -> Path:
         return Path(where)
 
 
-if sys.version_info[:2] <= (3, 8):
-
-    def is_relative_to(self, other):
-        return other == self or other in self.parents
-
-else:
-    is_relative_to = Path.is_relative_to
-
-
-def tractable_coverage_report(trace: Trace) -> Dict[str, List[int]]:
+def tractable_coverage_report(trace: Trace) -> dict[str, list[int]]:
     """Report a simple coverage map which is (probably most) of the user's code."""
     coverage: dict = {}
     t = dict(trace)
@@ -272,6 +323,6 @@ def tractable_coverage_report(trace: Trace) -> Dict[str, List[int]]:
         k: sorted(v)
         for k, v in coverage.items()
         if stdlib_fragment not in k
-        and is_relative_to(p := Path(k), _get_git_repo_root())
+        and (p := Path(k)).is_relative_to(_get_git_repo_root())
         and "site-packages" not in p.parts
     }

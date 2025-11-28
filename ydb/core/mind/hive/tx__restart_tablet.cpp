@@ -44,9 +44,13 @@ public:
                 }
                 tablet->InitiateStop(SideEffects, PreferredNodeId != 0);
             }
-            tablet->InitiateBoot(PreferredNodeId);
-            if (tablet->IsLeader()) {
-                tablet->AsLeader().InitiateFollowersBoot();
+            if (tablet->IsLeader() && tablet->AsLeader().ChannelProfileNewGroup.any()) {
+                tablet->AsLeader().InitiateAssignTabletGroups();
+            } else {
+                tablet->InitiateBoot(PreferredNodeId);
+                if (tablet->IsLeader()) {
+                    tablet->AsLeader().InitiateFollowersBoot();
+                }
             }
         }
         return true;

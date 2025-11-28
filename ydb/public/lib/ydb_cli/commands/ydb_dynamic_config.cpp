@@ -278,8 +278,8 @@ void TCommandConfigReplace::Parse(TConfig& config) {
     if (!IgnoreCheck) {
         NYamlConfig::GetMainMetadata(configStr);
         auto tree = NFyaml::TDocument::Parse(configStr);
-        const auto resolved = NYamlConfig::ResolveAll(tree);
-        Y_UNUSED(resolved); // we can't check it better without ydbd
+
+        NYamlConfig::ResolveUniqueDocs(tree, [](NYamlConfig::TDocumentConfig&&) {});
     }
 }
 

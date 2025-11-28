@@ -69,7 +69,7 @@ public:
         const bool subscribed = std::exchange(state.SubscribedOnTablet, true);
 
         const auto& keyColumnTypes = externalObjectsProvider.GetKeyColumnTypes();
-        auto ranges = state.GetScanRanges(keyColumnTypes);
+        auto ranges = state.GetScanRanges(keyColumnTypes, state.LastCursorProto && state.LastCursorProto->HasColumnShardSimple());
         auto ev = externalObjectsProvider.BuildEvKqpScan(ScanId, Generation, ranges, state.LastCursorProto);
 
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("tablet_id", TabletId)("generation", Generation)(

@@ -43,6 +43,7 @@ void TAddressResolverConfig::Register(TRegistrar registrar)
 
     registrar.Preprocessor([] (TThis* config) {
         config->RefreshTime = TDuration::Seconds(60);
+        config->ExpirationPeriod = TDuration::Seconds(60);
         config->ExpireAfterSuccessfulUpdateTime = TDuration::Seconds(120);
         config->ExpireAfterFailedUpdateTime = TDuration::Seconds(30);
     });

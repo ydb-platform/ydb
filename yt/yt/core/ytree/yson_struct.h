@@ -1,6 +1,7 @@
 #pragma once
 
 #include "node.h"
+#include "yson_schema_options.h"
 #include "yson_struct_public.h"
 
 #include <yt/yt/core/misc/error.h>
@@ -62,6 +63,11 @@ public:
 
     TYsonStructBase();
 
+    TYsonStructBase(const TYsonStructBase& that) = default;
+    TYsonStructBase(TYsonStructBase&& that) = default;
+    TYsonStructBase& operator=(const TYsonStructBase& that);
+    TYsonStructBase& operator=(TYsonStructBase&& that);
+
     virtual ~TYsonStructBase() = default;
 
     void Load(
@@ -92,7 +98,7 @@ public:
 
     void Postprocess(const std::function<NYPath::TYPath()>& pathGetter = {});
 
-    void SetDefaults();
+    void SetDefaults(bool dontSetLiteMembers = false);
 
     void Save(NYson::IYsonConsumer* consumer) const;
 
@@ -122,7 +128,7 @@ public:
 
     std::vector<std::string> GetAllParameterAliases(const std::string& key) const;
 
-    void WriteSchema(NYson::IYsonConsumer* consumer) const;
+    void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options = {}) const;
 
     // Always returns |true| for itself
     // else always returns |false| if one of the fields
@@ -287,7 +293,7 @@ public:
     static bool InitializationInProgress();
 
     template <class TStruct>
-    void InitializeStruct(TStruct* target);
+    void InitializeStruct(TStruct* target, const NYT::TSourceLocation& sourceLocation = {});
 
     void OnBaseCtorCalled();
 
@@ -382,7 +388,7 @@ public:
 
     void UnrecognizedStrategy(EUnrecognizedStrategy strategy);
 
-    template<class TBase>
+    template <class TBase>
     operator TYsonStructRegistrar<TBase>();
 
 private:

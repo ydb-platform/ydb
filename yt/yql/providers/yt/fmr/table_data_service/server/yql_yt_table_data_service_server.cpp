@@ -1,5 +1,6 @@
 #include "yql_yt_table_data_service_server.h"
 
+#include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/http/misc/parsed_request.h>
 #include <library/cpp/http/server/http.h>
 #include <library/cpp/http/server/response.h>
@@ -23,7 +24,9 @@ enum class ETableDataServiceRequestHandler {
     Put,
     Get,
     Delete,
-    DeleteGroups
+    DeleteGroups,
+    Clear,
+    Ping
 };
 
 class TReplier: public TRequestReplier {
@@ -65,6 +68,12 @@ private:
         } else if (queryPath == "get_data") {
             YQL_ENSURE(httpRequest.Method == "GET");
             return ETableDataServiceRequestHandler::Get;
+        } else if (queryPath == "clear") {
+            YQL_ENSURE(httpRequest.Method == "POST");
+            return ETableDataServiceRequestHandler::Clear;
+        } else if (queryPath == "ping") {
+            YQL_ENSURE(httpRequest.Method == "GET");
+            return ETableDataServiceRequestHandler::Ping;
         }
         return Nothing();
     }
@@ -75,11 +84,8 @@ public:
     TTableDataServiceServer(ILocalTableDataService::TPtr tableDataService, const TTableDataServiceServerSettings& settings)
         : TableDataService_(tableDataService),
         Host_(settings.Host),
-        Port_(settings.Port),
-        WorkerId_(settings.WorkerId),
-        WorkersNum_(settings.WorkersNum)
+        Port_(settings.Port)
     {
-        YQL_ENSURE(WorkerId_ >= 0 && WorkerId_ < WorkersNum_);
         THttpServer::TOptions opts;
         opts.AddBindAddress(Host_, Port_);
         HttpServer_ = MakeHolder<THttpServer>(this, opts.EnableKeepAlive(true).EnableCompression(true));
@@ -88,18 +94,22 @@ public:
         THandler getTableDataServiceHandler = std::bind(&TTableDataServiceServer::GetTableDataServiceHandler, this, std::placeholders::_1);
         THandler deleteTableDataServiceHandler = std::bind(&TTableDataServiceServer::DeleteTableDataServiceHandler, this, std::placeholders::_1);
         THandler deleteGroupsTableDataServiceHandler = std::bind(&TTableDataServiceServer::DeleteGroupsTableDataServiceHandler, this, std::placeholders::_1);
+        THandler clearTableDataServiceHandler = std::bind(&TTableDataServiceServer::ClearTableDataServiceHander, this, std::placeholders::_1);
+        THandler pingTableDataServiceHandler = std::bind(&TTableDataServiceServer::PingTableDataServiceHandler, this, std::placeholders::_1);
 
         Handlers_ = std::unordered_map<ETableDataServiceRequestHandler, THandler>{
             {ETableDataServiceRequestHandler::Put, putTableDataServiceHandler},
             {ETableDataServiceRequestHandler::Get, getTableDataServiceHandler},
             {ETableDataServiceRequestHandler::Delete, deleteTableDataServiceHandler},
-            {ETableDataServiceRequestHandler::DeleteGroups, deleteGroupsTableDataServiceHandler}
+            {ETableDataServiceRequestHandler::DeleteGroups, deleteGroupsTableDataServiceHandler},
+            {ETableDataServiceRequestHandler::Clear, clearTableDataServiceHandler},
+            {ETableDataServiceRequestHandler::Ping, pingTableDataServiceHandler}
         };
     }
 
     void Start() override {
         HttpServer_->Start();
-        Cerr << "Table data service server with id " << WorkerId_ << " is listnening on url " <<  "http://" + Host_ + ":" + ToString(Port_) << "\n";
+        Cerr << "Table data service server is listnening on url " <<  "http://" + Host_ + ":" + ToString(Port_) << "\n";
     }
 
     void Stop() override {
@@ -120,46 +130,49 @@ private:
     ILocalTableDataService::TPtr TableDataService_;
     const TString Host_;
     const ui16 Port_;
-    const ui64 WorkerId_;
-    const ui64 WorkersNum_;
 
-    TString GetTableDataServiceKey(THttpInput& input) {
+    struct TTableDataServiceKey {
+        TString Group;
+        TString ChunkId;
+    };
+
+    TTableDataServiceKey GetTableDataServiceKey(THttpInput& input) {
         TParsedHttpFull httpRequest(input.FirstLine());
-        TStringBuf url = httpRequest.Request;
-        std::vector<TString> splittedUrl;
-        TString delim = "?key=";
-        StringSplitter(url).SplitByString(delim).AddTo(&splittedUrl);
-        YQL_ENSURE(splittedUrl.size() == 2);
-        return splittedUrl[1];
+        TCgiParameters queryParams(httpRequest.Cgi);
+        YQL_ENSURE(queryParams.Has("group") && queryParams.Has("chunkId"));
+        return TTableDataServiceKey{.Group = queryParams.Get("group"), .ChunkId = queryParams.Get("chunkId")};
     }
 
     THttpResponse PutTableDataServiceHandler(THttpInput& input) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetLogContext(input));
         TString ysonTableContent = input.ReadAll();
         auto tableDataServiceKey = GetTableDataServiceKey(input);
-        TableDataService_->Put(tableDataServiceKey, ysonTableContent).GetValueSync();
-        YQL_CLOG(TRACE, FastMapReduce) << "Putting content in table data service with key " << tableDataServiceKey;
+        TString group = tableDataServiceKey.Group, chunkId = tableDataServiceKey.ChunkId;
+        TableDataService_->Put(group, chunkId, ysonTableContent).GetValueSync();
+        YQL_CLOG(TRACE, FastMapReduce) << "Putting key in table service with group " << group << " and chunkId " << chunkId;
         return THttpResponse(HTTP_OK);
     }
 
     THttpResponse GetTableDataServiceHandler(THttpInput& input) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetLogContext(input));
-        auto tableDataServiceId = GetTableDataServiceKey(input);
+        auto tableDataServiceKey = GetTableDataServiceKey(input);
+        TString group = tableDataServiceKey.Group, chunkId = tableDataServiceKey.ChunkId;
         TString ysonTableContent;
-        if (auto value = TableDataService_->Get(tableDataServiceId).GetValueSync()) {
+        if (auto value = TableDataService_->Get(group, chunkId).GetValueSync()) {
             ysonTableContent = *value;
         }
         THttpResponse httpResponse(HTTP_OK);
         httpResponse.SetContent(ysonTableContent);
-        YQL_CLOG(TRACE, FastMapReduce) << "Getting content in table data service with key " << tableDataServiceId;
+        YQL_CLOG(TRACE, FastMapReduce) << "Getting key in table service with group " << group << " and chunkId " << chunkId;
         return httpResponse;
     }
 
     THttpResponse DeleteTableDataServiceHandler(THttpInput& input) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetLogContext(input));
         auto tableDataServiceKey = GetTableDataServiceKey(input);
-        TableDataService_->Delete(tableDataServiceKey).GetValueSync();
-        YQL_CLOG(TRACE, FastMapReduce) << "Deleting content in table data service with key " << tableDataServiceKey;
+        TString group = tableDataServiceKey.Group, chunkId = tableDataServiceKey.ChunkId;
+        TableDataService_->Delete(group, chunkId).GetValueSync();
+        YQL_CLOG(TRACE, FastMapReduce) << "Deleting key in table service with group " << group << " and chunkId " << chunkId;
         return THttpResponse(HTTP_OK);
     }
 
@@ -171,6 +184,17 @@ private:
         auto deletionRequest = TTableDataServiceGroupDeletionRequestFromProto(protoGroupDeletionRequest);
         TableDataService_->RegisterDeletion(deletionRequest).GetValueSync();
         YQL_CLOG(TRACE, FastMapReduce) << "Deleting groups in table data service" << JoinRange(' ', deletionRequest.begin(), deletionRequest.end());        return THttpResponse(HTTP_OK);
+    }
+
+    THttpResponse ClearTableDataServiceHander(THttpInput& input) {
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetLogContext(input));
+        YQL_CLOG(TRACE, FastMapReduce) << "Clearing table data service";
+        TableDataService_->Clear().GetValueSync();
+        return THttpResponse(HTTP_OK);
+    }
+
+    THttpResponse PingTableDataServiceHandler(THttpInput& /*input*/) {
+        return THttpResponse(HTTP_OK);
     }
 };
 

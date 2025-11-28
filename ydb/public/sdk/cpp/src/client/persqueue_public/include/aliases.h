@@ -36,9 +36,6 @@ using NTopic::TSessionClosedHandler;
 // TODO reuse TPrintable
 
 // executor
-using NTopic::IExecutor;
-using NTopic::CreateThreadPoolExecutorAdapter;
-using NTopic::CreateThreadPoolExecutor;
 using NTopic::CreateSyncExecutor;
 
 // retry policy

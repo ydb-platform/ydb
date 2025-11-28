@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
+#include <library/cpp/time_provider/monotonic.h>
+
 #include <util/generic/string.h>
 
 #include <stop_token>
@@ -9,13 +11,32 @@
 namespace NYdb::NTPCC {
 
 struct TIndexBuildState {
+    NMonotonic::TMonotonic StartMonoTs;
     TOperation::TOperationId Id;
     TString Table;
     TString Name;
     double Progress = 0.0;
 
     TIndexBuildState(TOperation::TOperationId id, const TString& table, const TString& name)
-        : Id(id), Table(table), Name(name) {}
+        : StartMonoTs(NMonotonic::TMonotonic::Now())
+        , Id(id)
+        , Table(table)
+        , Name(name)
+    {}
+
+    double GetRemainingSeconds() const {
+        // We could try to estimate, but that's just initial state.
+        // Normally, when progress is 0, we still have regular tables loading
+        // and use their estimate
+        auto passed = NMonotonic::TMonotonic::Now() - StartMonoTs;
+        if (Progress == 0 || passed.Seconds() < 1) {
+            return 0;
+        }
+
+        double loadRate = Progress / passed.Seconds();
+        double percentLeft = 100 - Progress;
+        return percentLeft / loadRate;
+    }
 };
 
 struct TImportState {

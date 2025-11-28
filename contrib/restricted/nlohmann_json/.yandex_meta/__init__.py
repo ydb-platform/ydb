@@ -13,7 +13,7 @@ def post_install(self):
 
 nlohman_json = NixSourceProject(
     nixattr="nlohmann_json",
-    owners=["g:logbroker", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/restricted/nlohmann_json",
     copy_sources=[
         "include/",

@@ -9,43 +9,43 @@ namespace NMiniKQL {
 using namespace NDetail;
 
 namespace {
-    TNode* BuildCallableTypePayload(const TVector<TStringBuf>& argNames,
-        const TVector<ui64>& argFlags, TStringBuf payload, const TTypeEnvironment& env) {
-        TStructTypeBuilder itemTypeBuilder(env);
-        itemTypeBuilder.Add("Name", TDataType::Create(NUdf::TDataType<char*>::Id, env));
-        itemTypeBuilder.Add("Flags", TDataType::Create(NUdf::TDataType<ui64>::Id, env));
-        TType* itemType = itemTypeBuilder.Build();
+TNode* BuildCallableTypePayload(const TVector<TStringBuf>& argNames,
+                                const TVector<ui64>& argFlags, TStringBuf payload, const TTypeEnvironment& env) {
+    TStructTypeBuilder itemTypeBuilder(env);
+    itemTypeBuilder.Add("Name", TDataType::Create(NUdf::TDataType<char*>::Id, env));
+    itemTypeBuilder.Add("Flags", TDataType::Create(NUdf::TDataType<ui64>::Id, env));
+    TType* itemType = itemTypeBuilder.Build();
 
-        bool startedNames = false;
-        THashSet<TStringBuf> usedNames;
-        TListLiteralBuilder argsListBuilder(env, itemType);
-        for (ui32 i = 0; i < argNames.size(); ++i) {
-            TStructLiteralBuilder itemBuilder(env);
-            auto name = argNames[i];
-            auto flags = argFlags[i];
-            bool hasName = name.size() > 0;
-            if (startedNames) {
-                MKQL_ENSURE(hasName, "Named arguments already started");
-            } else {
-                startedNames = hasName;
-            }
-
-            if (hasName) {
-                MKQL_ENSURE(usedNames.insert(name).second, "Duplication of argument name: " << name);
-            }
-
-            itemBuilder.Add("Name", TRuntimeNode(BuildDataLiteral(name, NUdf::EDataSlot::String, env), true));
-            itemBuilder.Add("Flags", TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(flags), NUdf::EDataSlot::Uint64, env), true));
-            argsListBuilder.Add(TRuntimeNode(itemBuilder.Build(), true));
+    bool startedNames = false;
+    THashSet<TStringBuf> usedNames;
+    TListLiteralBuilder argsListBuilder(env, itemType);
+    for (ui32 i = 0; i < argNames.size(); ++i) {
+        TStructLiteralBuilder itemBuilder(env);
+        auto name = argNames[i];
+        auto flags = argFlags[i];
+        bool hasName = name.size() > 0;
+        if (startedNames) {
+            MKQL_ENSURE(hasName, "Named arguments already started");
+        } else {
+            startedNames = hasName;
         }
 
-        TRuntimeNode argsList = TRuntimeNode(argsListBuilder.Build(), true);
-        TStructLiteralBuilder payloadBuilder(env);
-        payloadBuilder.Add("Args", argsList);
-        payloadBuilder.Add("Payload", TRuntimeNode(BuildDataLiteral(payload, NUdf::EDataSlot::String, env), true));
-        return payloadBuilder.Build();
+        if (hasName) {
+            MKQL_ENSURE(usedNames.insert(name).second, "Duplication of argument name: " << name);
+        }
+
+        itemBuilder.Add("Name", TRuntimeNode(BuildDataLiteral(name, NUdf::EDataSlot::String, env), true));
+        itemBuilder.Add("Flags", TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(flags), NUdf::EDataSlot::Uint64, env), true));
+        argsListBuilder.Add(TRuntimeNode(itemBuilder.Build(), true));
     }
+
+    TRuntimeNode argsList = TRuntimeNode(argsListBuilder.Build(), true);
+    TStructLiteralBuilder payloadBuilder(env);
+    payloadBuilder.Add("Args", argsList);
+    payloadBuilder.Add("Payload", TRuntimeNode(BuildDataLiteral(payload, NUdf::EDataSlot::String, env), true));
+    return payloadBuilder.Build();
 }
+} // namespace
 
 TDataLiteral* BuildDataLiteral(const NUdf::TUnboxedValuePod& value, NUdf::TDataTypeId type, const TTypeEnvironment& env) {
     return TDataLiteral::Create(value, TDataType::Create(type, env), env);
@@ -60,7 +60,7 @@ TOptionalLiteral* BuildOptionalLiteral(TRuntimeNode value, const TTypeEnvironmen
     return TOptionalLiteral::Create(value, type, env);
 }
 
-TOptionalLiteral* BuildEmptyOptionalLiteral(TType *itemType, const TTypeEnvironment& env) {
+TOptionalLiteral* BuildEmptyOptionalLiteral(TType* itemType, const TTypeEnvironment& env) {
     auto type = TOptionalType::Create(itemType, env);
     return TOptionalLiteral::Create(type, env);
 }
@@ -75,8 +75,9 @@ TType* UnpackOptional(TRuntimeNode data, bool& isOptional) {
 
 TType* UnpackOptional(TType* type, bool& isOptional) {
     isOptional = type->IsOptional();
-    if (!isOptional)
+    if (!isOptional) {
         return type;
+    }
 
     auto optType = static_cast<TOptionalType*>(type);
     return optType->GetItemType();
@@ -98,7 +99,7 @@ TType* UnpackOptionalBlockItemType(TBlockType* type, const TTypeEnvironment& env
 TDataType* UnpackOptionalData(TType* type, bool& isOptional) {
     auto unpackedType = UnpackOptional(type, isOptional);
     MKQL_ENSURE(unpackedType->IsData(),
-        "Expected data or optional of data, actual: " << PrintNode(type, true));
+                "Expected data or optional of data, actual: " << PrintNode(type, true));
 
     return static_cast<TDataType*>(unpackedType);
 }
@@ -115,8 +116,10 @@ TBlockType::EShape GetResultShape(const TVector<TType*>& types) {
     return result;
 }
 
-TTupleLiteralBuilder::TTupleLiteralBuilder(const TTypeEnvironment& env) : Env_(env)
-{}
+TTupleLiteralBuilder::TTupleLiteralBuilder(const TTypeEnvironment& env)
+    : Env_(env)
+{
+}
 
 void TTupleLiteralBuilder::Reserve(ui32 size) {
     Types_.reserve(size);
@@ -154,8 +157,9 @@ TStructTypeBuilder& TStructTypeBuilder::Add(const TStringBuf& name, TType* type,
 }
 
 TStructType* TStructTypeBuilder::Build() {
-    if (Members_.empty())
+    if (Members_.empty()) {
         return Env_->GetEmptyStructLazy()->GetType();
+    }
 
     Sort(Members_.begin(), Members_.end());
     return TStructType::Create(Members_.size(), Members_.data(), *Env_);
@@ -163,7 +167,7 @@ TStructType* TStructTypeBuilder::Build() {
 
 void TStructTypeBuilder::FillIndexes() {
     ui32 index = 0;
-    for (const TStructMember& member: Members_) {
+    for (const TStructMember& member : Members_) {
         if (member.Index) {
             *(member.Index) = index++;
         }
@@ -193,8 +197,9 @@ TStructLiteralBuilder& TStructLiteralBuilder::Add(const TStringBuf& name, TRunti
 
 TStructLiteral* TStructLiteralBuilder::Build() {
     Y_DEBUG_ABORT_UNLESS(Members_.size() == Values_.size());
-    if (Members_.empty())
+    if (Members_.empty()) {
         return Env_->GetEmptyStructLazy();
+    }
 
     TVector<std::pair<TStringBuf, ui32>> sortedIndicies(Members_.size());
     for (ui32 i = 0, e = Members_.size(); i < e; ++i) {
@@ -202,9 +207,9 @@ TStructLiteral* TStructLiteralBuilder::Build() {
     }
 
     Sort(sortedIndicies.begin(), sortedIndicies.end(),
-        [](const std::pair<TStringBuf, ui32>& x, const std::pair<TStringBuf, ui32>& y) {
-            return x.first < y.first;
-    });
+         [](const std::pair<TStringBuf, ui32>& x, const std::pair<TStringBuf, ui32>& y) {
+             return x.first < y.first;
+         });
 
     TVector<TStructMember> sortedMembers(Members_.size());
     TVector<TRuntimeNode> sortedValues(Members_.size());
@@ -225,7 +230,8 @@ void TStructLiteralBuilder::Clear() {
 TListLiteralBuilder::TListLiteralBuilder(const TTypeEnvironment& env, TType* type)
     : Env_(&env)
     , Type_(type)
-{}
+{
+}
 
 TListLiteralBuilder& TListLiteralBuilder::Add(TRuntimeNode item) {
     Items_.push_back(item);
@@ -272,7 +278,8 @@ TCallableTypeBuilder::TCallableTypeBuilder(const TTypeEnvironment& env, const TS
     , ReturnType_(returnType)
     , OptionalArgsCount_(0)
     , HasPayload_(false)
-{}
+{
+}
 
 void TCallableTypeBuilder::Reserve(ui32 size) {
     Arguments_.reserve(size);
@@ -280,7 +287,7 @@ void TCallableTypeBuilder::Reserve(ui32 size) {
     ArgFlags_.reserve(size);
 }
 
-TCallableTypeBuilder& TCallableTypeBuilder::Add(TType *type) {
+TCallableTypeBuilder& TCallableTypeBuilder::Add(TType* type) {
     Arguments_.push_back(type);
     ArgNames_.emplace_back();
     ArgFlags_.emplace_back();
@@ -339,7 +346,8 @@ TCallableBuilder::TCallableBuilder(const TTypeEnvironment& env, const TStringBuf
     , DisableMerge_(disableMerge)
     , OptionalArgsCount_(0)
     , HasPayload_(false)
-{}
+{
+}
 
 void TCallableBuilder::Reserve(ui32 size) {
     Arguments_.reserve(size);
@@ -390,8 +398,9 @@ TCallable* TCallableBuilder::Build() {
 
     auto type = TCallableType::Create(ReturnType_, Name_.Str(), Arguments_.size(), Arguments_.data(), payload, *Env_);
     type->SetOptionalArgumentsCount(OptionalArgsCount_);
-    if (DisableMerge_)
+    if (DisableMerge_) {
         type->DisableMerge();
+    }
     return TCallable::Create(Inputs_.size(), Inputs_.data(), type, *Env_);
 }
 
@@ -404,5 +413,5 @@ void TCallableBuilder::Clear() {
     FuncPayload_ = TStringBuf();
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

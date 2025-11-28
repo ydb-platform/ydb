@@ -19,6 +19,7 @@ SRCS(
     kqp_sink_tx_ut.cpp
     kqp_snapshot_isolation_ut.cpp
     kqp_tx_ut.cpp
+    kqp_rollback.cpp
 )
 
 PEERDIR(

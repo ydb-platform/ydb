@@ -1006,7 +1006,7 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                     .Build()
                 .Build()
         );
-#ifdef YDB_SDK_USE_NEW_JWT
+#ifdef YDB_SDK_OSS
         server.Check.ExpectedErrorPart = "failed to load key";
 #else
         server.Check.ExpectedErrorPart = "failed to load private key";
@@ -1034,7 +1034,7 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                 .Build()
         );
 
-#ifdef YDB_SDK_USE_NEW_JWT
+#ifdef YDB_SDK_OSS
         server.Check.ExpectedErrorPart = "invalid key size";
 #else
         server.Check.ExpectedErrorPart = "failed to load private key";
@@ -1050,7 +1050,7 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                 .Build()
         );
 
-#ifdef YDB_SDK_USE_NEW_JWT
+#ifdef YDB_SDK_OSS
         server.Check.ExpectedErrorPart = "failed to load key";
 #else
         server.Check.ExpectedErrorPart = "failed to load private key";

@@ -4,7 +4,7 @@
 #include "partition_chooser_impl__partition_helper.h"
 #include "partition_chooser_impl__table_helper.h"
 
-#include <ydb/core/persqueue/pq_database.h>
+#include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>

@@ -106,6 +106,15 @@ public:
         EEM_ENC_V1 = 1 // Encryption at proxy level, no MAC, no CRC
     };
 
+    static TString PrintEncryptionMode(EEncryptionMode mode) {
+        switch (mode) {
+        case EEncryptionMode::EEM_NONE:
+            return "NONE";
+        case EEncryptionMode::EEM_ENC_V1:
+            return "ENC_V1";
+        }
+    }
+
     // INITIAL upon group creation in base and in memory
     // PROPOSE comes from the node warden when it proposes after getting INITIAL
     // INITIAL -> IN_TRANSITION in memory state from transaction start to transaction end
@@ -120,6 +129,27 @@ public:
         ELCP_KEY_ID_ERROR = 702,
         ELCP_KEY_NOT_LOADED = 703,
     };
+
+    static TString PrintLifeCyclePhase(ELifeCyclePhase phase) {
+        switch (phase) {
+        case ELifeCyclePhase::ELCP_INITIAL:
+            return "INITIAL";
+        case ELifeCyclePhase::ELCP_PROPOSE:
+            return "PROPOSE";
+        case ELifeCyclePhase::ELCP_IN_TRANSITION:
+            return "IN_TRANSITION";
+        case ELifeCyclePhase::ELCP_IN_USE:
+            return "IN_USE";
+        case ELifeCyclePhase::ELCP_KEY_CRC_ERROR:
+            return "KEY_CRC_ERROR";
+        case ELifeCyclePhase::ELCP_KEY_VERSION_ERROR:
+            return "KEY_VERSION_ERROR";
+        case ELifeCyclePhase::ELCP_KEY_ID_ERROR:
+            return "KEY_ID_ERROR";
+        case ELifeCyclePhase::ELCP_KEY_NOT_LOADED:
+            return "KEY_NOT_LOADED";
+        }
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // SUBSET HELPER CLASSES
@@ -337,6 +367,8 @@ public:
 
     const std::vector<TGroupId>& GetBridgeGroupIds() const { return BridgeGroupIds; }
     bool IsBridged() const { return !BridgeGroupIds.empty(); }
+    std::optional<TGroupId> GetBridgeProxyGroupId() const { return BridgeProxyGroupId; }
+    TBridgePileId GetBridgePileId() const { return BridgePileId; }
 
     // for testing purposes; numFailDomains = 0 automatically selects possible minimum for provided erasure; groupId=0
     // and groupGen=1 for constructed group
@@ -482,6 +514,8 @@ private:
     NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
     // bridge mode fields
     std::vector<TGroupId> BridgeGroupIds;
+    std::optional<TGroupId> BridgeProxyGroupId;
+    TBridgePileId BridgePileId;
 };
 
 // physical fail domain description

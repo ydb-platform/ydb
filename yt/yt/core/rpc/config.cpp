@@ -100,6 +100,14 @@ void TServiceConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TMethodTestingConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("random_delay", &TThis::RandomDelay)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TMethodConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("heavy", &TThis::Heavy)
@@ -132,6 +140,8 @@ void TMethodConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("pooled", &TThis::Pooled)
         .Optional();
+    registrar.Parameter("testing", &TThis::Testing)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -382,6 +392,8 @@ void TServiceMethod::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("method", &TThis::Method)
         .Default();
+    registrar.Parameter("max_window", &TThis::MaxWindow)
+        .Default(1'024);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

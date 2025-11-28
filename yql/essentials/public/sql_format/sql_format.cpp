@@ -18,4 +18,4 @@ bool SqlFormatSimple(const TString& query, TString& formattedQuery, TString& err
     return SqlFormatSimple(lexers, parsers, query, formattedQuery, error);
 }
 
-}
+} // namespace NSQLFormat

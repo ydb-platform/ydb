@@ -125,4 +125,3 @@ void QStorageTestLimitWriterBytesImpl(const NYql::IQStoragePtr& storage) {
     writer->Put({"comp", "label2"}, "value2").GetValueSync();
     UNIT_ASSERT_EXCEPTION(writer->Commit().GetValueSync(), yexception);
 }
-

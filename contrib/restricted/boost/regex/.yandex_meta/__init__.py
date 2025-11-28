@@ -25,14 +25,13 @@ def post_install(self):
 boost_regex = NixSourceProject(
     nixattr="boost_regex",
     arcdir=boost.make_arcdir("regex"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         # Copy evertthing except for boost/regex/v4
         "include/boost/*.hpp",
         "include/boost/regex.h",
         "include/boost/regex/*.hpp",
         "include/boost/regex/v5",
-        "include/boost/regex/config",
         "include/boost/regex/pending",
         "src/",
     ],
@@ -41,6 +40,7 @@ boost_regex = NixSourceProject(
         "BOOST_REGEX_H2",
         "BOOST_REGEX_H3",
         "boost/core/",
+        "boost/regex/config/borland.hpp",
         "boost/regex/v4/",
         "boost/static_assert.hpp",
     ],

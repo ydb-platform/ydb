@@ -40,6 +40,13 @@ public:
     }
 
     /**
+     * Returns the number of touches
+     */
+    ui32 GetFrequency() const noexcept {
+        return Frequency.load(std::memory_order_relaxed);
+    }
+
+    /**
      * Returns the number of currently active uses (no synchronization)
      */
     size_t UseCount() const noexcept {
@@ -96,6 +103,18 @@ public:
         }
 
         return false;
+    }
+
+    void IncrementFrequency() noexcept {
+        ui32 value = Frequency.load(std::memory_order_relaxed);
+        if (value < 3) { // S3FIFO frequency is capped to 3
+            Frequency.compare_exchange_weak(value, value + 1,
+                std::memory_order_acq_rel, std::memory_order_relaxed);
+        }
+    }
+
+    void SetFrequency(ui32 frequency) noexcept {
+        Frequency.store(frequency, std::memory_order_relaxed);
     }
 
     /**
@@ -240,6 +259,7 @@ private:
 
 private:
     TFlags Flags{ FlagsUninitialized };
+    std::atomic<ui32> Frequency;
     TSharedData Data[2];
     TSharedPageHandle* GCNext = nullptr;
 };
@@ -407,6 +427,12 @@ public:
         }
 
         return false;
+    }
+
+    void IncrementFrequency() noexcept {
+        Y_DEBUG_ABORT_UNLESS(Handle);
+        Y_DEBUG_ABORT_UNLESS(Used);
+        Handle->IncrementFrequency();
     }
 
     void Drop() {

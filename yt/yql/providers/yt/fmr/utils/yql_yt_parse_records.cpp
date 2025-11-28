@@ -19,6 +19,8 @@ void ParseRecords(
     std::shared_ptr<std::atomic<bool>> cancelFlag,
     const TMaybe<TMutex>& writeMutex
 ) {
+    YQL_ENSURE(reader);
+    YQL_ENSURE(writer);
     auto blockReader = MakeBlockReader(*reader, blockCount, blockSize);
     NCommon::TInputBuf inputBuf(*blockReader, nullptr);
     TVector<char> curYsonRow;

@@ -170,6 +170,9 @@ public:
         return InternalPathId.IsValid() && SchemeShardLocalPathId.IsValid();
     }
 
+    auto operator<=>(const TUnifiedPathId&) const = default;
+
+
     static TUnifiedPathId BuildValid(const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId);
 };
 

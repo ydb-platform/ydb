@@ -6,6 +6,6 @@
 
 namespace NSQLComplete {
 
-    ISimpleSchema::TPtr MakeStaticSimpleSchema(const NJson::TJsonMap& json);
+ISimpleSchema::TPtr MakeStaticSimpleSchema(const NJson::TJsonMap& json);
 
 } // namespace NSQLComplete

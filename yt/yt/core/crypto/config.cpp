@@ -44,7 +44,7 @@ TString TPemBlobConfig::LoadBlob(TCertificatePathResolver pathResolver) const
         auto filePath = pathResolver ? pathResolver(*FileName) : *FileName;
         return TFileInput(filePath).ReadAll();
     }
-    THROW_ERROR_EXCEPTION("Neither \"environment_variable\" nor \"file_name\" nor \"value\" is given");
+    THROW_ERROR_EXCEPTION("Cannot load environment variable %Qv", EnvironmentVariable);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -78,7 +78,7 @@ void TSslContextConfig::Register(TRegistrar registrar)
     registrar.Parameter("ssl_configuration_commands", &TThis::SslConfigurationCommands)
         .Optional();
     registrar.Parameter("insecure_skip_verify", &TThis::InsecureSkipVerify)
-        .Default(DefaultInsecureSkipVerify);
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,0 +1,9 @@
+$input = SELECT * FROM AS_TABLE([
+    <|k: 1, v: 1|>,
+    <|k: 1, v: 2|>,
+    <|k: 1, v: 3|>,
+    <|k: 1, v: 4|>,
+    <|k: 1, v: 5|>,
+]);
+
+SELECT * FROM $input ORDER BY (SELECT Avg(v) FROM $input WHERE v == 3), k, v;

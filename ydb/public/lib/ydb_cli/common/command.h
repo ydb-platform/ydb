@@ -37,6 +37,7 @@ public:
     bool Visible = true;
     bool Hidden = false;
     bool Dangerous = false;
+    bool Local = false;
     bool OnlyExplicitProfile = false;
     const TClientCommand* Parent;
     TClientCommandOptions Opts;
@@ -88,15 +89,8 @@ public:
             TArgSetting Max;
         };
 
-        enum EVerbosityLevel : ui32 {
-            NONE = 0,
-            WARN = 1,
-            INFO = 2,
-            DEBUG = 3,
-        };
-
-        static ELogPriority VerbosityLevelToELogPriority(EVerbosityLevel lvl);
-        static ELogPriority VerbosityLevelToELogPriorityChatty(EVerbosityLevel lvl);
+        static ELogPriority VerbosityLevelToELogPriority(ui32 lvl);
+        static ELogPriority VerbosityLevelToELogPriorityChatty(ui32 lvl);
 
         int ArgC;
         char** ArgV;
@@ -128,6 +122,7 @@ public:
         void InitClientCert();
 
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
+        bool UseAllNodes = false;
         bool EnableSsl = false;
         bool SkipDiscovery = false;
         bool IsNetworkIntensive = false;
@@ -135,7 +130,7 @@ public:
         TString Oauth2KeyFile;
         TString Oauth2KeyParams;
 
-        EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
+        ui32 VerbosityLevel = 0;
         size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
 
         bool JsonUi64AsText = false;
@@ -207,7 +202,7 @@ public:
         static size_t ParseHelpCommandVerbosilty(int argc, char** argv);
 
         bool IsVerbose() const {
-            return VerbosityLevel != EVerbosityLevel::NONE;
+            return VerbosityLevel > 0;
         }
 
         void SetFreeArgsMin(size_t value) {
@@ -279,22 +274,26 @@ public:
                 .SetDatabase(Database)
                 .SetCredentialsProviderFactory(GetSingletonCredentialsProviderFactory())
                 .SetUsePerChannelTcpConnection(UsePerChannelTcpConnection);
-        
+
+            if (UseAllNodes) {
+                driverConfig.SetBalancingPolicy(TBalancingPolicy::UseAllNodes());
+            }
+
             if (EnableSsl) {
                 driverConfig.UseSecureConnection(CaCerts);
             }
-        
+
             if (IsNetworkIntensive) {
                 size_t networkThreadNum = GetNetworkThreadNum();
                 driverConfig.SetNetworkThreadsNum(networkThreadNum);
             }
-        
+
             if (SkipDiscovery) {
                 driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
             }
-        
+
             driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
-        
+
             return driverConfig;
         }
 

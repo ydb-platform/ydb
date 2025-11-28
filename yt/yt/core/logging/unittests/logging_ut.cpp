@@ -3,6 +3,9 @@
 #include "yt/yt/core/misc/string_builder.h"
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/concurrency/async_semaphore.h>
+
+#include <yt/yt/core/logging/appendable_compressed_file.h>
 #include <yt/yt/core/logging/log.h>
 #include <yt/yt/core/logging/log_manager.h>
 #include <yt/yt/core/logging/log_writer.h>
@@ -12,11 +15,11 @@
 #include <yt/yt/core/logging/stream_log_writer.h>
 #include <yt/yt/core/logging/structured_log.h>
 #include <yt/yt/core/logging/random_access_gzip.h>
-#include <yt/yt/core/logging/compression.h>
-#include <yt/yt/core/logging/zstd_compression.h>
+#include <yt/yt/core/logging/log.h>
 #include <yt/yt/core/logging/config.h>
 #include <yt/yt/core/logging/formatter.h>
 #include <yt/yt/core/logging/system_log_event_provider.h>
+#include <yt/yt/core/logging/zstd_log_codec.h>
 
 #include <yt/yt/core/json/json_parser.h>
 
@@ -27,6 +30,10 @@
 
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/range_formatters.h>
+
+#include <yt/yt/library/coredumper/coredumper.h>
+
+#include <yt/yt/library/safe_assert/safe_assert.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
 
@@ -51,6 +58,7 @@ using namespace NYTree;
 using namespace NConcurrency;
 using namespace NYson;
 using namespace NJson;
+using namespace NCoreDump;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -176,6 +184,11 @@ class TLoggingTest
     , public ILogWriterHost
 {
 protected:
+    void SetUp() override
+    {
+        SetThreadMinLogLevel(ELogLevel::Minimum);
+    }
+
     IInvokerPtr GetCompressionInvoker() override
     {
         return GetCurrentInvoker();
@@ -923,6 +936,64 @@ TEST_F(TLoggingTest, StructuredLoggingDisableSystemFields)
     EXPECT_EQ(message->FindChild("category"), nullptr);
 }
 
+TEST_F(TLoggingTest, WithMinLevel)
+{
+    TTempFile debugFile(GenerateLogFileName());
+
+    Configure(Format(R"({
+        rules = [
+            {
+                min_level = trace;
+                writers = [ trace ];
+            };
+        ];
+        writers = {
+            trace = {
+                file_name = "%v";
+                type = file;
+            };
+        };
+    })", debugFile.Name()));
+
+    int readLoglinesCount = 0;
+
+    auto getNewLogLinesCount = [&] {
+        TLogManager::Get()->Synchronize();
+        int logLinesCount = std::ssize(ReadPlainTextEvents(debugFile.Name()));
+        YT_VERIFY(logLinesCount >= readLoglinesCount);
+        int newLogLinesCount = logLinesCount - readLoglinesCount;
+        readLoglinesCount = logLinesCount;
+        return newLogLinesCount;
+    };
+
+    {
+        auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Trace);
+
+        YT_LOG_TRACE("Message 1");
+        YT_LOG_DEBUG("Message 2");
+        YT_LOG_INFO("Message 3");
+        ASSERT_EQ(getNewLogLinesCount(), 3);
+    }
+
+    {
+        auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Debug);
+
+        YT_LOG_TRACE("Message 4");
+        YT_LOG_DEBUG("Message 5");
+        YT_LOG_INFO("Message 6");
+        ASSERT_EQ(getNewLogLinesCount(), 2);
+    }
+
+    {
+        auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Info);
+
+        YT_LOG_TRACE("Message 7");
+        YT_LOG_DEBUG("Message 8");
+        YT_LOG_INFO("Message 9");
+        ASSERT_EQ(getNewLogLinesCount(), 1);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TBuiltinRotationTest
@@ -1035,20 +1106,20 @@ protected:
         return {GenerateLogFileName() + ".zst"};
     }
 
-    TAppendableCompressedFilePtr CreateAppendableZstdFile(TFile rawFile, bool writeTruncateMessage)
+    IStreamLogOutputPtr CreateAppendableZstdFile(TFile rawFile, const TAppendableCompressedFileOptions& options)
     {
-        return New<TAppendableCompressedFile>(
+        return CreateAppendableCompressedFile(
             std::move(rawFile),
-            CreateZstdCompressionCodec(),
+            CreateZstdLogCodec(),
             GetCurrentInvoker(),
-            writeTruncateMessage);
+            options);
     }
 
-    void WriteTestFile(const TString& filename, i64 addBytes, bool writeTruncateMessage)
+    void WriteTestFile(const TString& filename, i64 addBytes, const TAppendableCompressedFileOptions& options)
     {
         {
             TFile rawFile(filename, OpenAlways|RdWr|CloseOnExec);
-            auto file = CreateAppendableZstdFile(rawFile, writeTruncateMessage);
+            auto file = CreateAppendableZstdFile(rawFile, options);
             *file << "foo\n";
             file->Flush();
             *file << "bar\n";
@@ -1058,7 +1129,7 @@ protected:
         }
         {
             TFile rawFile(filename, OpenAlways|RdWr|CloseOnExec);
-            auto file = CreateAppendableZstdFile(rawFile, writeTruncateMessage);
+            auto file = CreateAppendableZstdFile(rawFile, options);
             *file << "zog\n";
             file->Flush();
         }
@@ -1077,7 +1148,7 @@ protected:
 TEST_F(TAppendableZstdFileTest, Write)
 {
     auto logFile = GetLogFile();
-    WriteTestFile(logFile.Name(), 0, false);
+    WriteTestFile(logFile.Name(), 0, {.WriteTruncateMessage = false});
 
     TUnbufferedFileInput file(logFile.Name());
     TZstdDecompress decompress(&file);
@@ -1091,7 +1162,7 @@ TEST_F(TAppendableZstdFileTest, WriteMultipleFramesPerFlush)
 
     {
         TFile rawFile(logFile.Name(), OpenAlways|RdWr|CloseOnExec);
-        auto file = CreateAppendableZstdFile(rawFile, true);
+        auto file = CreateAppendableZstdFile(rawFile, {.WriteTruncateMessage = true});
         file->Write(data.data(), data.size());
         file->Finish();
     }
@@ -1107,7 +1178,7 @@ TEST_F(TAppendableZstdFileTest, WriteMultipleFramesPerFlush)
 TEST_F(TAppendableZstdFileTest, RepairSmall)
 {
     auto logFile = GetLogFile();
-    WriteTestFile(logFile.Name(), -1, false);
+    WriteTestFile(logFile.Name(), -1, {.WriteTruncateMessage = false});
 
     TUnbufferedFileInput file(logFile.Name());
     TZstdDecompress decompress(&file);
@@ -1117,13 +1188,13 @@ TEST_F(TAppendableZstdFileTest, RepairSmall)
 TEST_F(TAppendableZstdFileTest, RepairLarge)
 {
     auto logFile = GetLogFile();
-    WriteTestFile(logFile.Name(), 10_MB, true);
+    WriteTestFile(logFile.Name(), 10_MB, {.WriteTruncateMessage = true});
 
     TUnbufferedFileInput file(logFile.Name());
     TZstdDecompress decompress(&file);
 
     TStringBuilder expected;
-    expected.AppendFormat("foo\nbar\nTruncated %v bytes due to zstd repair.\nzog\n", 10_MB);
+    expected.AppendFormat("foo\nbar\n*** Truncated %v trailing bytes due to zstd repair\nzog\n", 10_MB);
     EXPECT_EQ(expected.Flush(), decompress.ReadAll());
 }
 
@@ -1208,6 +1279,67 @@ TEST_F(TLoggingTest, DISABLED_LogFatal)
 
     YT_LOG_INFO("Info message");
     YT_LOG_FATAL("FATAL");
+}
+
+TEST_F(TLoggingTest, LogFatalIsSafe)
+{
+    TTempFile logFile(GenerateLogFileName());
+
+    Configure(Format(R"({
+        rules = [
+            {
+                min_level = info;
+                writers = [ info ];
+            };
+        ];
+        writers = {
+            info = {
+                file_name = "%v";
+                type = file;
+            };
+        };
+    })", logFile.Name()));
+
+    YT_LOG_INFO("Info message");
+
+    struct TCoreDumper
+        : public ICoreDumper
+    {
+        bool SafeCoreDumped = false;
+
+        TCoreDump WriteCoreDump(const std::vector<TString>& /*notes*/, const TString& /*reason*/) override
+        {
+            SafeCoreDumped = true;
+            return TCoreDump{
+                .Path = "",
+                .WrittenEvent = VoidFuture,
+            };
+        }
+        const NYTree::IYPathServicePtr& CreateOrchidService() const override
+        {
+            YT_UNIMPLEMENTED();
+        }
+    };
+
+    auto coreDumper = New<TCoreDumper>();
+    auto guard = CreateSafeAssertionGuard(
+        coreDumper,
+        New<TAsyncSemaphore>(100),
+        /*coreNotes*/ {}
+    );
+
+    std::optional<TString> exceptionExpression;
+
+    try {
+        YT_LOG_FATAL("Fatal message");
+    } catch (const TAssertionFailedException& ex) {
+        exceptionExpression = ex.GetExpression();
+    }
+
+    ASSERT_TRUE(exceptionExpression.has_value());
+
+    EXPECT_THAT(*exceptionExpression, testing::HasSubstr("YT_LOG_FATAL(Fatal message)"));
+    EXPECT_TRUE(coreDumper->SafeCoreDumped);
 }
 
 // Windows does not support request tracing for now.
@@ -1323,7 +1455,7 @@ TEST_F(TLoggingTest, MessageLevelOverride)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TLoggingTagsTest
-    : public ::testing::TestWithParam<std::tuple<bool, bool, bool, TString>>
+    : public ::testing::TestWithParam<std::tuple<bool, bool, bool, bool, TString>>
 { };
 
 TEST_P(TLoggingTagsTest, All)
@@ -1331,7 +1463,8 @@ TEST_P(TLoggingTagsTest, All)
     auto hasMessageTag = std::get<0>(GetParam());
     auto hasLoggerTag = std::get<1>(GetParam());
     auto hasTraceContext = std::get<2>(GetParam());
-    auto expected = std::get<3>(GetParam());
+    auto hasThreadMessageTag = std::get<3>(GetParam());
+    auto expected = std::get<4>(GetParam());
 
     auto loggingContext = NLogging::GetLoggingContext();
     if (hasTraceContext) {
@@ -1342,6 +1475,10 @@ TEST_P(TLoggingTagsTest, All)
     if (hasLoggerTag) {
         logger = logger.WithTag("LoggerTag");
     }
+
+    auto threadLocalTagGuard = hasThreadMessageTag
+        ? std::optional(TFiberMessageTagGuard("ThreadLocalTag"))
+        : std::nullopt;
 
     if (hasMessageTag) {
         EXPECT_EQ(
@@ -1363,14 +1500,22 @@ TEST_P(TLoggingTagsTest, All)
 
 INSTANTIATE_TEST_SUITE_P(ValueParametrized, TLoggingTagsTest,
     ::testing::Values(
-        std::tuple(false, false, false, "Log message"),
-        std::tuple(false, false,  true, "Log message (TraceContextTag)"),
-        std::tuple(false,  true, false, "Log message (LoggerTag)"),
-        std::tuple(false,  true,  true, "Log message (LoggerTag, TraceContextTag)"),
-        std::tuple( true, false, false, "Log message (Value: 123)"),
-        std::tuple( true, false,  true, "Log message (Value: 123, TraceContextTag)"),
-        std::tuple( true,  true, false, "Log message (Value: 123, LoggerTag)"),
-        std::tuple( true,  true,  true, "Log message (Value: 123, LoggerTag, TraceContextTag)")));
+        std::tuple(false, false, false, false, "Log message"),
+        std::tuple(false, false, false,  true, "Log message (ThreadLocalTag)"),
+        std::tuple(false, false,  true, false, "Log message (TraceContextTag)"),
+        std::tuple(false, false,  true,  true, "Log message (TraceContextTag, ThreadLocalTag)"),
+        std::tuple(false,  true, false, false, "Log message (LoggerTag)"),
+        std::tuple(false,  true, false,  true, "Log message (LoggerTag, ThreadLocalTag)"),
+        std::tuple(false,  true,  true, false, "Log message (LoggerTag, TraceContextTag)"),
+        std::tuple(false,  true,  true,  true, "Log message (LoggerTag, TraceContextTag, ThreadLocalTag)"),
+        std::tuple( true, false, false, false, "Log message (Value: 123)"),
+        std::tuple( true, false, false,  true, "Log message (Value: 123, ThreadLocalTag)"),
+        std::tuple( true, false,  true, false, "Log message (Value: 123, TraceContextTag)"),
+        std::tuple( true, false,  true,  true, "Log message (Value: 123, TraceContextTag, ThreadLocalTag)"),
+        std::tuple( true,  true, false, false, "Log message (Value: 123, LoggerTag)"),
+        std::tuple( true,  true, false,  true, "Log message (Value: 123, LoggerTag, ThreadLocalTag)"),
+        std::tuple( true,  true,  true, false, "Log message (Value: 123, LoggerTag, TraceContextTag)"),
+        std::tuple( true,  true,  true,  true, "Log message (Value: 123, LoggerTag, TraceContextTag, ThreadLocalTag)")));
 
 ////////////////////////////////////////////////////////////////////////////////
 

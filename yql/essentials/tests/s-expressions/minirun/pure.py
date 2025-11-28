@@ -30,11 +30,11 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if langver is None:
         langver = DEFAULT_LANG_VER
 
-    xfail = is_xfail(config)
+    program_sql = os.path.join(DATA_PATH, suite, '%s.yqls' % case)
+    xfail = is_xfail(config, program_sql)
     if xfail and what != 'Results':
         pytest.skip('xfail is not supported in this mode')
 
-    program_sql = os.path.join(DATA_PATH, suite, '%s.yqls' % case)
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
 

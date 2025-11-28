@@ -29,6 +29,8 @@ items:
     href: balancing-prefer-local.md
   - name: Prefer the specific availability zone
     href: balancing-prefer-location.md
+  - name: Prefer a pile with a specific state
+    href: balancing-prefer-pile.md
 - name: Running repeat queries
   href: retry.md
 - name: Setting the session pool size
@@ -61,3 +63,5 @@ items:
     href: debug-prometheus.md
   - name: Enable tracing in Jaeger
     href: debug-jaeger.md
+  - name: Enable tracing in OpenTelemetry
+    href: debug-otel.md

@@ -8,7 +8,7 @@
 namespace NYql {
 namespace NUdf {
 
-class TYqlMemoryPool : public arrow::MemoryPool {
+class TYqlMemoryPool: public arrow::MemoryPool {
     arrow::Status Allocate(int64_t size, uint8_t** out) final {
         Y_ENSURE(size >= 0 && out);
         *out = (uint8_t*)UdfArrowAllocate(size);
@@ -58,5 +58,5 @@ arrow::MemoryPool* GetYqlMemoryPool() {
     return Singleton<TYqlMemoryPool>();
 }
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

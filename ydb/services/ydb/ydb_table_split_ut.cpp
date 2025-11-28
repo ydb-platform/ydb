@@ -144,16 +144,16 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         Cerr << "Table has " << shardsBefore << " shards" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(shardsBefore, 1);
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        server.Server_->GetRuntime()->GetAppData().DataShardConfig.SetStatsReportIntervalSeconds(0);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_INFO);
 
         // Set low CPU usage threshold for robustness
-        TAtomic unused;
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_FastSplitCpuPercentageThreshold", 5, unused);
-//        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_SplitByLoadEnabled", 1, unused);
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("DataShardControls.CpuUsageReportThreshlodPercent", 1, unused);
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("DataShardControls.CpuUsageReportIntervalSeconds", 3, unused);
+        auto& icb = *server.Server_->GetRuntime()->GetAppData().Icb;
+        TControlBoard::SetValue(5, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
+//        TControlBoard::SetValue(1, icb.SchemeShardControls.SplitByLoadEnabled);
+        TControlBoard::SetValue(1, icb.DataShardControls.CpuUsageReportThresholdPercent);
+        TControlBoard::SetValue(3, icb.DataShardControls.CpuUsageReportIntervalSeconds);
 
         TAtomic enough = 0;
         TAtomic finished = 0;
@@ -272,16 +272,16 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         SetAutoSplitByLoad(client, "/Root/Foo", true);
 
         // Set low CPU usage threshold for robustness
-        TAtomic unused;
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_FastSplitCpuPercentageThreshold", 5, unused);
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("DataShardControls.CpuUsageReportThreshlodPercent", 1, unused);
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("DataShardControls.CpuUsageReportIntervalSeconds", 3, unused);
+        auto& icb = *server.Server_->GetRuntime()->GetAppData().Icb;
+        TControlBoard::SetValue(5, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
+        TControlBoard::SetValue(1, icb.DataShardControls.CpuUsageReportThresholdPercent);
+        TControlBoard::SetValue(3, icb.DataShardControls.CpuUsageReportIntervalSeconds);
 
         size_t shardsBefore = oldClient.GetTablePartitions("/Root/Foo").size();
         Cerr << "Table has " << shardsBefore << " shards" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(shardsBefore, 1);
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        server.Server_->GetRuntime()->GetAppData().DataShardConfig.SetStatsReportIntervalSeconds(0);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_INFO);
 
@@ -369,16 +369,16 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         NKikimrConfig::TAppConfig appConfig;
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
+        auto& icb = *server.Server_->GetRuntime()->GetAppData().Icb;
         // Set min uptime before merge by load to 10h
-        TAtomic unused;
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_MergeByLoadMinUptimeSec", 4*3600, unused);
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_MergeByLoadMinLowLoadDurationSec", 10*3600, unused);
+        TControlBoard::SetValue(4*3600, icb.SchemeShardControls.MergeByLoadMinUptimeSec);
+        TControlBoard::SetValue(10*3600, icb.SchemeShardControls.MergeByLoadMinLowLoadDurationSec);
 
         Cerr << "Triggering split by load" << Endl;
         DoTestSplitByLoad(server, query);
 
         // Set split threshold very high and run some more load on new shards
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_FastSplitCpuPercentageThreshold", 110, unused);
+        TControlBoard::SetValue(110, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
 
         Cerr << "Loading new shards" << Endl;
         {
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         }
 
         // Set split threshold at 10% so that merge can be trigger after high load goes away
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_FastSplitCpuPercentageThreshold", 10, unused);
+        TControlBoard::SetValue(10, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
 
         // Stop all load an see how many partitions the table has
         NFlatTests::TFlatMsgBusClient oldClient(server.ServerSettings->Port);
@@ -427,7 +427,6 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
     Y_UNIT_TEST(RenameTablesAndSplit) {
         // KIKIMR-14636
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(2);
         NDataShard::gDbStatsDataSizeResolution = 10;
         NDataShard::gDbStatsRowCountResolution = 10;
 
@@ -437,8 +436,9 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableResourcePools(true);
+        appConfig.MutableDataShardConfig()->SetStatsReportIntervalSeconds(2);
 
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_NOTICE);
@@ -456,7 +456,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-            CREATE TABLE `/Root/Foo` (
+            CREATE TABLE `/Root/Dir/Foo` (
                 NameHash Uint32,
                 Name Utf8,
                 Version Uint32,
@@ -474,7 +474,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         { // prepare for split
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-            ALTER TABLE  `/Root/Foo`
+            ALTER TABLE  `/Root/Dir/Foo`
             SET (
                 AUTO_PARTITIONING_BY_SIZE = ENABLED,
                 AUTO_PARTITIONING_PARTITION_SIZE_MB = 1,
@@ -495,7 +495,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
             testTimeProvider->AddShift(TDuration::Minutes(2));
             Sleep(TDuration::Seconds(3));
 
-            auto result = session.DescribeTable("/Root/Foo", NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).ExtractValueSync();
+            auto result = session.DescribeTable("/Root/Dir/Foo", NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         } while (partitions == 2);
 
         { //rename
-            auto result = session.RenameTables({{"/Root/Foo", "/Root/Bar"}}).ExtractValueSync();
+            auto result = session.RenameTables({{"/Root/Dir/Foo", "/Root/Dir/Bar"}}).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -529,7 +529,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 }
                 rows.EndList();
 
-                auto result = client.BulkUpsert("/Root/Bar", rows.Build()).ExtractValueSync();
+                auto result = client.BulkUpsert("/Root/Dir/Bar", rows.Build()).ExtractValueSync();
 
                 if (!result.IsSuccess() && result.GetStatus() != NYdb::EStatus::OVERLOADED) {
                     TString err = result.GetIssues().ToString();
@@ -548,7 +548,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
             testTimeProvider->AddShift(TDuration::Minutes(1));
             Sleep(TDuration::Seconds(3));
 
-            auto result = session.DescribeTable("/Root/Bar", NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).ExtractValueSync();
+            auto result = session.DescribeTable("/Root/Dir/Bar", NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
@@ -560,7 +560,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         { // fail if shema has been broken
             TString readQuery =
-                    "SELECT * FROM `/Root/Bar`;";
+                    "SELECT * FROM `/Root/Dir/Bar`;";
 
             TExecDataQuerySettings querySettings;
             querySettings.KeepInQueryCache(true);
@@ -580,23 +580,19 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         }
 
         {
-            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root");
+            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root/Dir");
             asyncDescDir.Wait();
             const auto& val = asyncDescDir.GetValue();
             auto entry = val.GetEntry();
-            UNIT_ASSERT_EQUAL(entry.Name, "Root");
+            UNIT_ASSERT_EQUAL(entry.Name, "Dir");
             UNIT_ASSERT_EQUAL(entry.Type, NYdb::NScheme::ESchemeEntryType::Directory);
 
             auto children = val.GetChildren();
-            UNIT_ASSERT_EQUAL_C(children.size(), 2, children.size());
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 1);
             for (const auto& child: children) {
-                if (child.Name == ".metadata") {
-                    continue;
-                }
-
                 UNIT_ASSERT_EQUAL(child.Type, NYdb::NScheme::ESchemeEntryType::Table);
 
-                auto result = session.DropTable(TStringBuilder() << "Root" << "/" <<  child.Name).ExtractValueSync();
+                auto result = session.DropTable(TStringBuilder() << "Root/Dir" << "/" <<  child.Name).ExtractValueSync();
                 UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
                 UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetStatus());
             }

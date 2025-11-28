@@ -6,113 +6,113 @@ using namespace NKikimr;
 using namespace NUdf;
 
 namespace {
-    class TGetField: public TBoxedValue {
-    public:
-        typedef bool TTypeAwareMarker;
+class TGetField: public TBoxedValue {
+public:
+    typedef bool TTypeAwareMarker;
 
-    public:
-        static TStringRef Name() {
-            return TStringRef::Of("GetField");
+public:
+    static TStringRef Name() {
+        return TStringRef::Of("GetField");
+    }
+
+    TUnboxedValue Run(
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override {
+        if (!args[0]) {
+            return valueBuilder->NewEmptyList();
         }
 
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override {
-            if (!args[0]) {
-                return valueBuilder->NewEmptyList();
-            }
+        const TString json(args[0].AsStringRef());
+        const TString field(args[1].AsStringRef());
 
-            const TString json(args[0].AsStringRef());
-            const TString field(args[1].AsStringRef());
-
-            if (field.empty()) {
-                return valueBuilder->NewEmptyList();
-            }
-
-            NJson::TJsonParser parser;
-            parser.AddField(field, false);
-
-            TVector<TString> result;
-            parser.Parse(json, &result);
-
-            TUnboxedValue* items = nullptr;
-            const auto list = valueBuilder->NewArray(result.size(), items);
-            for (const TString& item : result) {
-                *items++ = valueBuilder->NewString(item);
-            }
-
-            return list;
+        if (field.empty()) {
+            return valueBuilder->NewEmptyList();
         }
 
-        static bool DeclareSignature(
-            const TStringRef& name,
-            TType* userType,
-            IFunctionTypeInfoBuilder& builder,
-            bool typesOnly) {
-            if (Name() == name) {
-                bool useString = true;
-                bool isOptional = true;
-                if (userType) {
-                    // support of an overload with Json/Json? input type
-                    auto typeHelper = builder.TypeInfoHelper();
-                    auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
-                    if (!userTypeInspector || userTypeInspector.GetElementsCount() < 1) {
-                        builder.SetError("Missing or invalid user type.");
-                        return true;
-                    }
+        NJson::TJsonParser parser;
+        parser.AddField(field, false);
 
-                    auto argsTypeTuple = userTypeInspector.GetElementType(0);
-                    auto argsTypeInspector = TTupleTypeInspector(*typeHelper, argsTypeTuple);
-                    if (!argsTypeInspector) {
-                        builder.SetError("Invalid user type - expected tuple.");
-                        return true;
-                    }
+        TVector<TString> result;
+        parser.Parse(json, &result);
 
-                    if (argsTypeInspector.GetElementsCount() != 2) {
-                        builder.SetError("Invalid user type - expected two arguments.");
-                        return true;
-                    }
+        TUnboxedValue* items = nullptr;
+        const auto list = valueBuilder->NewArray(result.size(), items);
+        for (const TString& item : result) {
+            *items++ = valueBuilder->NewString(item);
+        }
 
-                    auto inputType = argsTypeInspector.GetElementType(0);
-                    auto optInspector = TOptionalTypeInspector(*typeHelper, inputType);
-                    auto dataType = inputType;
-                    if (optInspector) {
-                        dataType = optInspector.GetItemType();
-                    } else {
-                        isOptional = false;
-                    }
+        return list;
+    }
 
-                    auto dataInspector = TDataTypeInspector(*typeHelper, dataType);
-                    if (dataInspector && dataInspector.GetTypeId() == TDataType<TJson>::Id) {
-                        useString = false;
-                        builder.UserType(userType);
-                    }
+    static bool DeclareSignature(
+        const TStringRef& name,
+        TType* userType,
+        IFunctionTypeInfoBuilder& builder,
+        bool typesOnly) {
+        if (Name() == name) {
+            bool useString = true;
+            bool isOptional = true;
+            if (userType) {
+                // support of an overload with Json/Json? input type
+                auto typeHelper = builder.TypeInfoHelper();
+                auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
+                if (!userTypeInspector || userTypeInspector.GetElementsCount() < 1) {
+                    builder.SetError("Missing or invalid user type.");
+                    return true;
                 }
 
-                auto retType = builder.List()->Item<char*>().Build();
-                if (useString) {
-                    builder.Args()->Add(builder.Optional()->Item<char*>().Build()).Add<char*>().Done().Returns(retType);
+                auto argsTypeTuple = userTypeInspector.GetElementType(0);
+                auto argsTypeInspector = TTupleTypeInspector(*typeHelper, argsTypeTuple);
+                if (!argsTypeInspector) {
+                    builder.SetError("Invalid user type - expected tuple.");
+                    return true;
+                }
+
+                if (argsTypeInspector.GetElementsCount() != 2) {
+                    builder.SetError("Invalid user type - expected two arguments.");
+                    return true;
+                }
+
+                auto inputType = argsTypeInspector.GetElementType(0);
+                auto optInspector = TOptionalTypeInspector(*typeHelper, inputType);
+                auto dataType = inputType;
+                if (optInspector) {
+                    dataType = optInspector.GetItemType();
                 } else {
-                    auto type = builder.SimpleType<TJson>();
-                    if (isOptional) {
-                        builder.Args()->Add(builder.Optional()->Item(type).Build()).Add<char*>().Done().Returns(retType);
-                    } else {
-                        builder.Args()->Add(type).Add<char*>().Done().Returns(retType);
-                    }
+                    isOptional = false;
                 }
 
-                if (!typesOnly) {
-                    builder.Implementation(new TGetField);
+                auto dataInspector = TDataTypeInspector(*typeHelper, dataType);
+                if (dataInspector && dataInspector.GetTypeId() == TDataType<TJson>::Id) {
+                    useString = false;
+                    builder.UserType(userType);
                 }
-
-                builder.IsStrict();
-                return true;
-            } else {
-                return false;
             }
+
+            auto retType = builder.List()->Item<char*>().Build();
+            if (useString) {
+                builder.Args()->Add(builder.Optional()->Item<char*>().Build()).Add<char*>().Done().Returns(retType);
+            } else {
+                auto type = builder.SimpleType<TJson>();
+                if (isOptional) {
+                    builder.Args()->Add(builder.Optional()->Item(type).Build()).Add<char*>().Done().Returns(retType);
+                } else {
+                    builder.Args()->Add(type).Add<char*>().Done().Returns(retType);
+                }
+            }
+
+            if (!typesOnly) {
+                builder.Implementation(new TGetField);
+            }
+
+            builder.IsStrict();
+            return true;
+        } else {
+            return false;
         }
-    };
-}
+    }
+};
+} // namespace
 
 SIMPLE_MODULE(TJsonModule,
               TGetField)

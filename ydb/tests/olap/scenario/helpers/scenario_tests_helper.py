@@ -63,7 +63,7 @@ class ScenarioTestHelper:
         )
         assert sth.get_table_rows_count(table_name) == 2
         sth.bulk_upsert(table_name, dg.DataGeneratorPerColumn(schema, 100), comment="100 sequetial ids")
-        sth.execute_scheme_query(DropTable(table_name))
+        sth.execute_scheme_query(DropTable(table_name), retries=2)
     """
 
     DEFAULT_RETRIABLE_ERRORS = {
@@ -333,7 +333,7 @@ class ScenarioTestHelper:
         n_retries=0,
         fail_on_error=True,
         return_error=False,
-        ignore_error=tuple(),
+        ignore_error: Set[str] = set(),
     ):
         if isinstance(expected_status, ydb.StatusCode):
             expected_status = {expected_status}
@@ -390,6 +390,10 @@ class ScenarioTestHelper:
             self._run_with_expected_status(
                 lambda: _upsert(),
                 expected_status,
+                {
+                    ydb.StatusCode.SCHEME_ERROR
+                },
+                3,
             )
 
     @staticmethod
@@ -484,7 +488,7 @@ class ScenarioTestHelper:
 
     @allure.step('Execute query')
     def execute_query(
-        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True, return_error=False, ignore_error=tuple()
+        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True, return_error=False, ignore_error: Set[str] = set()
     ):
         """Run a query on the tested database.
 
@@ -742,11 +746,11 @@ class ScenarioTestHelper:
         root_path = self.get_full_path(folder)
         for e in self.list_path(path, folder):
             if e.is_any_table():
-                self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)))
+                self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)), retries=2)
             elif e.is_column_store():
-                self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)))
+                self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)), retries=2)
             elif e.is_external_data_source():
-                self.execute_scheme_query(dh.DropExternalDataSource(os.path.join(folder, e.name)))
+                self.execute_scheme_query(dh.DropExternalDataSource(os.path.join(folder, e.name)), retries=2)
             elif e.is_directory():
                 self._run_with_expected_status(
                     lambda: YdbCluster.get_ydb_driver().scheme_client.remove_directory(os.path.join(root_path, e.name)),

@@ -1,27 +1,32 @@
+from typing import TypeVar, Union
+
 from hamcrest.core.base_matcher import BaseMatcher
+from hamcrest.core.description import Description
 from hamcrest.core.helpers.wrap_matcher import wrap_matcher
+from hamcrest.core.matcher import Matcher
 
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
+T = TypeVar("T")
 
-class AnyOf(BaseMatcher):
 
-    def __init__(self, *matchers):
+class AnyOf(BaseMatcher[T]):
+    def __init__(self, *matchers: Matcher[T]) -> None:
         self.matchers = matchers
 
-    def _matches(self, item):
+    def _matches(self, item: T) -> bool:
         for matcher in self.matchers:
             if matcher.matches(item):
                 return True
         return False
 
-    def describe_to(self, description):
-        description.append_list('(', ' or ', ')', self.matchers)
+    def describe_to(self, description: Description) -> None:
+        description.append_list("(", " or ", ")", self.matchers)
 
 
-def any_of(*items):
+def any_of(*items: Union[Matcher[T], T]) -> Matcher[T]:
     """Matches if any of the given matchers evaluate to ``True``.
 
     :param matcher1,...:  A comma-separated list of matchers.

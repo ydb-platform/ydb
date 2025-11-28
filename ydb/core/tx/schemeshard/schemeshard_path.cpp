@@ -3,6 +3,7 @@
 #include "schemeshard_system_names.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/sys_view/common/path.h>
 
@@ -910,6 +911,12 @@ const TPath::TChecker& TPath::TChecker::FailOnRestrictedCreateInTempZone(bool al
     }
 
     if (allowCreateInTemporaryDir) {
+        if (std::all_of(Path.Elements.begin(), Path.Elements.end(),
+                [](const auto& element) { return !element->IsTemporary(); })) {
+            return Fail(status, TStringBuilder() << "path is not temporary"
+                << " (" << BasicPathInfo(Path.Base()) << ")"
+            );
+        }
         return *this;
     }
 
@@ -1167,6 +1174,33 @@ const TPath::TChecker& TPath::TChecker::IsSysView(EStatus status) const {
     return Fail(status, TStringBuilder() << "path is not a system view"
         << " (" << BasicPathInfo(Path.Base()) << ")"
     );
+}
+
+const TPath::TChecker& TPath::TChecker::IsSecret(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsSecret()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a secret"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
+}
+
+const TPath::TChecker& TPath::TChecker::IsStreamingQuery(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsStreamingQuery()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a streaming query"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
@@ -1689,13 +1723,6 @@ bool TPath::IsInsideTableIndexPath(bool failOnUnresolved) const {
         return false;
     }
 
-    ++item;
-    for (; item != Elements.rend(); ++item) {
-        if (!(*item)->IsDirectory() && !(*item)->IsSubDomainRoot()) {
-            return false;
-        }
-    }
-
     return true;
 }
 
@@ -1837,7 +1864,22 @@ bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, TString& explai
     }
 
     if (AppData()->FeatureFlags.GetEnableSystemNamesProtection()) {
-        if (!CheckReservedName(leaf, AppData(), userToken, explain)) {
+        TPathCreationContext context;
+        context.IsSystemUser = NSchemeShard::IsSystemUser(userToken);
+        context.IsAdministrator = NKikimr::IsAdministrator(AppData(), userToken);
+
+        if (IsBackupServiceReservedName(leaf)) {
+            TPath parentPath = Parent();
+            while (parentPath.IsResolved() && !parentPath.Base()->IsRoot()) {
+                if (parentPath.Base()->IsBackupCollection()) {
+                    context.IsInsideBackupCollection = true;
+                    break;
+                }
+                parentPath = parentPath.Parent();
+            }
+        }
+
+        if (!CheckReservedName(leaf, context, explain)) {
             return false;
         }
     } else if (leaf == NSysView::SysPathName) {

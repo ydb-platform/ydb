@@ -17,6 +17,7 @@ using namespace NSkiff;
 const TString KeySwitchColumnName = "$key_switch";
 const TString OtherColumnsName = "$other_columns";
 const TString SparseColumnsName = "$sparse_columns";
+const TString RemainingRowBytesColumnName = "$remaining_row_bytes";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,6 +63,7 @@ static bool IsSkiffSpecialColumn(
     static const THashSet<std::string, THash<TStringBuf>, TEqualTo<>> specialColumns{
         KeySwitchColumnName,
         OtherColumnsName,
+        RemainingRowBytesColumnName,
         SparseColumnsName,
     };
     return specialColumns.contains(columnName) || columnName == rangeIndexColumnName || columnName == rowIndexColumnName;
@@ -155,6 +157,8 @@ static TSkiffTableDescription CreateTableDescription(
         } else if (childName == rangeIndexColumnName) {
             result.RangeIndexFieldIndex = i;
             result.RangeIndexMode = GetRowRangeIndexMode(child, childName);
+        } else if (childName == RemainingRowBytesColumnName) {
+            result.RemainingRowBytesFieldIndex = i;
         }
         result.DenseFieldDescriptionList.emplace_back(childName, child);
     }

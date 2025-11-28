@@ -1,0 +1,29 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:11:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject, At function: OrderedFlatMap, At lambda
+    	SELECT * FROM $input FLATTEN BY (ListFromRange(1, (SELECT 3)) AS x);
+	^
+        <tmp_path>/program.sql:<main>:11:15: Warning: At function: FlattenByColumns
+        	SELECT * FROM $input FLATTEN BY (ListFromRange(1, (SELECT 3)) AS x);
+	              ^
+            <tmp_path>/program.sql:<main>:11:1: Warning: Ambiguous FLATTEN BY statement, please choose FLATTEN LIST BY or FLATTEN OPTIONAL BY
+            	SELECT * FROM $input FLATTEN BY (ListFromRange(1, (SELECT 3)) AS x);
+	^
+    <tmp_path>/program.sql:<main>:13:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject, At function: OrderedFlatMap, At lambda
+    	SELECT * FROM $input FLATTEN BY (ListFromRange(1, (SELECT Avg(v) FROM $input)) AS x);
+	^
+        <tmp_path>/program.sql:<main>:13:15: Warning: At function: FlattenByColumns
+        	SELECT * FROM $input FLATTEN BY (ListFromRange(1, (SELECT Avg(v) FROM $input)) AS x);
+	              ^
+            <tmp_path>/program.sql:<main>:13:1: Warning: Ambiguous FLATTEN BY statement, please choose FLATTEN LIST BY or FLATTEN OPTIONAL BY
+            	SELECT * FROM $input FLATTEN BY (ListFromRange(1, (SELECT Avg(v) FROM $input)) AS x);
+	^
+    <tmp_path>/program.sql:<main>:15:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject, At function: OrderedFlatMap, At lambda
+    	SELECT * FROM $input FLATTEN BY (ListFromRange(1, (SELECT Avg(v) FROM $input WHERE v == 3)) AS x);
+	^
+        <tmp_path>/program.sql:<main>:15:15: Warning: At function: FlattenByColumns
+        	SELECT * FROM $input FLATTEN BY (ListFromRange(1, (SELECT Avg(v) FROM $input WHERE v == 3)) AS x);
+	              ^
+            <tmp_path>/program.sql:<main>:15:1: Warning: Ambiguous FLATTEN BY statement, please choose FLATTEN LIST BY or FLATTEN OPTIONAL BY
+            	SELECT * FROM $input FLATTEN BY (ListFromRange(1, (SELECT Avg(v) FROM $input WHERE v == 3)) AS x);
+	^

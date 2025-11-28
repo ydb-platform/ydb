@@ -1,0 +1,20 @@
+fmt () {
+        SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+        file=${1}
+        echo $file
+        ya tool clang-format --style=file:$SCRIPT_DIR/.clang-format -i $file
+}
+
+fmt-diff () {
+        echo "process git diff:"
+        ROOT=$(ya dump root)
+        git diff --cached --name-only
+        for FILE in $(git diff --cached --name-only);
+        do
+                if [[ "$FILE" == *.cpp || "$FILE" == *.h ]]; then
+                        fmt $ROOT/$FILE
+                        git add $ROOT/$FILE
+                        echo "Processing text file: $FILE"
+                fi
+        done
+}

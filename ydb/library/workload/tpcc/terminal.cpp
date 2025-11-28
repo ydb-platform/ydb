@@ -4,6 +4,8 @@
 #include "util.h"
 #include "constants.h"
 
+#include <library/cpp/threading/future/core/coroutine_traits.h>
+
 #include <array>
 
 //-----------------------------------------------------------------------------
@@ -87,19 +89,20 @@ TTerminal::TTerminal(size_t terminalID,
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)
     , Stats(stats)
-    , Task(Run())
 {
 }
 
 void TTerminal::Start() {
     if (!Started) {
-        TaskQueue.TaskReadyThreadSafe(Task.Handle, Context.TerminalID);
+        TaskFuture = Run();
         Started = true;
     }
 }
 
-TTerminalTask TTerminal::Run() {
+NThreading::TFuture<void> TTerminal::Run() {
     auto& Log = Context.Log; // to make LOG_* macros working
+
+    co_await TTaskReady(TaskQueue, Context.TerminalID);
 
     LOG_D("Terminal " << Context.TerminalID << " has started");
 
@@ -190,9 +193,16 @@ TTerminalTask TTerminal::Run() {
             LOG_E(ss.Str());
             RequestStop();
             co_return;
+        } catch (const std::exception& ex) {
+            TStringStream ss;
+            ss << "Terminal " << Context.TerminalID << " got exception while " << transaction.Name << " execution: "
+                << ex.what();
+            LOG_E(ss.Str());
+            RequestStop();
+            co_return;
         }
 
-        // only here if exception cought
+        // only here if exception caught
 
         TaskQueue.DecInflight();
     }
@@ -203,11 +213,11 @@ TTerminalTask TTerminal::Run() {
 }
 
 bool TTerminal::IsDone() const {
-    if (!Task.Handle) {
+    if (!Started) {
         return true;
     }
 
-    return Task.Handle.done();
+    return TaskFuture.HasValue() || TaskFuture.HasException();
 }
 
 } // namespace NYdb::NTPCC

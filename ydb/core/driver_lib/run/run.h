@@ -6,7 +6,7 @@
 #include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log_settings.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/util/should_continue.h>
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/core/base/appdata.h>
@@ -25,6 +25,20 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr {
+
+using TGRpcServers = TVector<std::pair<TString, TAutoPtr<NYdbGrpc::TGRpcServer>>>;
+using TGRpcServersFactory = std::function<TGRpcServers()>;
+
+struct TGRpcServersWrapper {
+    TGRpcServers Servers;
+    TGRpcServersFactory GrpcServersFactory;
+    TMutex Mutex;
+    std::atomic<bool> IsDisabled = false;
+
+    TGuard<TMutex> Guard() {
+        return TGuard<TMutex>(Mutex);
+    }
+};
 
 class TKikimrRunner : public virtual TThrRefBase, private IGlobalObjectStorage {
 protected:
@@ -45,6 +59,7 @@ protected:
     bool GracefulShutdownSupported = false;
     TDuration MinDelayBeforeShutdown;
     TDuration DrainTimeout;
+    TDuration CheckForStopInterval;
     THolder<NSQS::TAsyncHttpServer> SqsHttp;
 
     THolder<NYdb::TDriver> YdbDriver;
@@ -56,8 +71,6 @@ protected:
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
     TAutoPtr<TAppData> AppData;
 
-    TVector<std::pair<TString, TAutoPtr<NYdbGrpc::TGRpcServer>>> GRpcServers;
-
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
     std::shared_ptr<TLogBackend> LogBackend;
     TAutoPtr<TActorSystem> ActorSystem;
@@ -68,9 +81,22 @@ protected:
 
     TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});
 
+    std::shared_ptr<TGRpcServersWrapper> GRpcServersWrapper;
+    TActorId GRpcServersManager;
+
     virtual ~TKikimrRunner();
 
     virtual void InitializeRegistries(const TKikimrRunConfig& runConfig);
+
+    /**
+     * Initializes the XDS bootstrap configuration for the runner.
+     * This method should be called during the startup sequence, before any components
+     * that depend on XDS configuration are initialized. It reads the relevant settings
+     * from the provided runConfig and sets up the XDS bootstrap environment accordingly.
+     * This is necessary for enabling gRPC XDS features such as dynamic service discovery
+     * and load balancing.
+     */
+    void InitializeXdsBootstrapConfig(const TKikimrRunConfig& runConfig);
 
     void InitializeAllocator(const TKikimrRunConfig& runConfig);
 
@@ -85,6 +111,7 @@ protected:
     void InitializeMonitoringLogin(const TKikimrRunConfig& runConfig);
 
     void InitializeGRpc(const TKikimrRunConfig& runConfig);
+    TGRpcServers CreateGRpcServers(const TKikimrRunConfig& runConfig);
 
     void InitializeKqpController(const TKikimrRunConfig& runConfig);
 

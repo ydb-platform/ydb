@@ -154,12 +154,6 @@ DEFINE_ENUM(ETableSchemaMode,
     ((Strong)    (1))
 );
 
-// TODO(cherepashka): remove after corresponding compat in 25.1 will be removed.
-DEFINE_ENUM(ECompatOptimizeFor,
-    ((Lookup)  (0))
-    ((Scan)    (1))
-);
-
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i32,
     ((Lookup)  (0))
     ((Scan)    (1))
@@ -398,6 +392,8 @@ DECLARE_REFCOUNTED_STRUCT(TChunkWriterOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TVersionedRowDigestConfig)
 
+DECLARE_REFCOUNTED_STRUCT(TMinHashDigestConfig)
+
 DECLARE_REFCOUNTED_STRUCT(TSchemalessBufferedDynamicTableWriterConfig)
 
 DECLARE_REFCOUNTED_CLASS(TSchemafulPipe)
@@ -481,6 +477,10 @@ using TUnderlyingTimestampIntegerType = TUnderlyingTimestampIntegerTypeImpl<type
 YT_DEFINE_STRONG_TYPEDEF(TSignedDistributedWriteSessionPtr, NSignature::TSignaturePtr);
 YT_DEFINE_STRONG_TYPEDEF(TSignedWriteFragmentCookiePtr, NSignature::TSignaturePtr);
 YT_DEFINE_STRONG_TYPEDEF(TSignedWriteFragmentResultPtr, NSignature::TSignaturePtr);
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DEFINE_STRONG_TYPEDEF(TRowsDigest, ui64);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,0 +1,65 @@
+$input = (
+    SELECT
+        *
+    FROM
+        AS_TABLE([
+            <|k: 1, v: 1|>,
+            <|k: 2, v: 2|>,
+            <|k: 3, v: 3|>,
+            <|k: 4, v: 4|>,
+            <|k: 5, v: 5|>,
+        ])
+);
+
+SELECT
+    *
+FROM
+    $input
+ORDER BY
+    k
+LIMIT NULL OFFSET CAST(3 AS Uint64);
+
+SELECT
+    *
+FROM
+    $input
+ORDER BY
+    k
+LIMIT NULL OFFSET CAST(
+    (
+        SELECT
+            3
+    ) AS Uint64
+);
+
+SELECT
+    *
+FROM
+    $input
+ORDER BY
+    k
+LIMIT NULL OFFSET CAST(
+    (
+        SELECT
+            Avg(v)
+        FROM
+            $input
+    ) AS Uint64
+);
+
+SELECT
+    *
+FROM
+    $input
+ORDER BY
+    k
+LIMIT NULL OFFSET CAST(
+    (
+        SELECT
+            Avg(v)
+        FROM
+            $input
+        WHERE
+            v == 3
+    ) AS Uint64
+);

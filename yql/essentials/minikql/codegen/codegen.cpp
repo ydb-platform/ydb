@@ -17,37 +17,60 @@ Y_PRAGMA_DIAGNOSTIC_POP
 #include <util/system/platform.h>
 #include <util/datetime/base.h>
 
-typedef struct __emutls_control {
-    size_t size;  /* size of the object in bytes */
-    size_t align;  /* alignment of the object in bytes */
-    union {
-        uintptr_t index;  /* data[index-1] is the object address */
-        void* address;  /* object address, when in single thread env */
-    } object;
-    void* value;  /* null or non-zero initial value for the object */
-} __emutls_control;
-
 #if defined(_msan_enabled_)
-extern "C" void* __emutls_get_address(__emutls_control* control);
-#endif
 
-class TTlsManager {
-public:
-    void* Add(const TString& name, size_t size, size_t align) {
-        //Cerr << "name: " << name << ", size: " << size << ", align: " << align << "\n";
-        auto pair = Tls_.insert(std::make_pair(name, __emutls_control()));
-        if (pair.second) {
-            Zero(pair.first->second);
-            pair.first->second.size = size;
-            pair.first->second.align = align;
-        }
+extern __thread unsigned long long __msan_param_tls[];
+extern __thread unsigned int __msan_param_origin_tls[];
+extern __thread unsigned long long __msan_retval_tls[];
+extern __thread unsigned int __msan_retval_origin_tls;
+extern __thread unsigned long long __msan_va_arg_tls[];
+extern __thread unsigned int __msan_va_arg_origin_tls[];
+extern __thread unsigned long long __msan_va_arg_overflow_size_tls;
+extern __thread unsigned int __msan_origin_tls;
 
-        return &pair.first->second;
-    }
+namespace {
 
-private:
-    THashMap<TString, __emutls_control> Tls_;
+// See https://github.com/google/sanitizers/wiki/MemorySanitizerJIT
+// for information on making MSan, C++, and JIT compatible.
+enum class TMSanTLS {
+    Param = 1,         // __msan_param_tls
+    ParamOrigin,       // __msan_param_origin_tls
+    Retval,            // __msan_retval_tls
+    RetvalOrigin,      // __msan_retval_origin_tls
+    VaArg,             // __msan_va_arg_tls
+    VaArgOrigin,       // __msan_va_arg_origin_tls
+    VaArgOverflowSize, // __msan_va_arg_overflow_size_tls
+    Origin             // __msan_origin_tls
 };
+
+static void* GetTLSAddress(void* control) {
+    auto tlsIndex = static_cast<TMSanTLS>(reinterpret_cast<uintptr_t>(control));
+    switch (tlsIndex) {
+        case TMSanTLS::Param:
+            return reinterpret_cast<void*>(&__msan_param_tls);
+        case TMSanTLS::ParamOrigin:
+            return reinterpret_cast<void*>(&__msan_param_origin_tls);
+        case TMSanTLS::Retval:
+            return reinterpret_cast<void*>(&__msan_retval_tls);
+        case TMSanTLS::RetvalOrigin:
+            return reinterpret_cast<void*>(&__msan_retval_origin_tls);
+        case TMSanTLS::VaArg:
+            return reinterpret_cast<void*>(&__msan_va_arg_tls);
+        case TMSanTLS::VaArgOrigin:
+            return reinterpret_cast<void*>(&__msan_va_arg_origin_tls);
+        case TMSanTLS::VaArgOverflowSize:
+            return reinterpret_cast<void*>(&__msan_va_arg_overflow_size_tls);
+        case TMSanTLS::Origin:
+            return reinterpret_cast<void*>(&__msan_origin_tls);
+        default:
+            Y_ENSURE(false, "Unknown TLS variable");
+            return nullptr;
+    }
+}
+
+} // namespace
+
+#endif
 
 #if !defined(_win_) || defined(__clang__)
 extern "C" void __divti3();
@@ -63,59 +86,54 @@ extern "C" void __muloti4();
 extern "C" void __udivti3();
 extern "C" void __umodti3();
 #else
-#include <yql/essentials/public/decimal/yql_decimal.h>
-#define CRT_HAS_128BIT
-#define INT_LIB_H
-#define COMPILER_RT_ABI
+    #include <yql/essentials/public/decimal/yql_decimal.h>
+    #define CRT_HAS_128BIT
+    #define INT_LIB_H
+    #define COMPILER_RT_ABI
 typedef NYql::NDecimal::TInt128 ti_int;
 typedef NYql::NDecimal::TUint128 tu_int;
 
-typedef      int si_int;
+typedef int si_int;
 typedef unsigned su_int;
 
-typedef          long long di_int;
+typedef long long di_int;
 typedef unsigned long long du_int;
 
-typedef union
-{
+typedef union {
     tu_int all;
     struct
     {
         du_int low;
         du_int high;
-    }s;
+    } s;
 } utwords;
 
-typedef union
-{
+typedef union {
     ti_int all;
     struct
     {
         du_int low;
         di_int high;
-    }s;
+    } s;
 } twords;
 
-typedef union
-{
+typedef union {
     du_int all;
     struct
     {
         su_int low;
         su_int high;
-    }s;
+    } s;
 } udwords;
 
-typedef union
-{
+typedef union {
     su_int u;
     float f;
 } float_bits;
 
-typedef union
-{
+typedef union {
     udwords u;
-    double  f;
+    double f;
 } double_bits;
 
 int __builtin_ctzll(ui64 value) {
@@ -136,21 +154,21 @@ int __builtin_clzll(ui64 value) {
     }
 }
 
-#define __divti3 __divti3impl
-#define __udivmodti4 __udivmodti4impl
-#define __modti3 __modti3impl
-#define __clzti2 __clzti2impl
-#define __floattisf __floattisfimpl
-#define __floattidf __floattidfimpl
+    #define __divti3 __divti3impl
+    #define __udivmodti4 __udivmodti4impl
+    #define __modti3 __modti3impl
+    #define __clzti2 __clzti2impl
+    #define __floattisf __floattisfimpl
+    #define __floattidf __floattidfimpl
 
-#include <contrib/libs/cxxsupp/builtins/udivmodti4.c>
-#include <contrib/libs/cxxsupp/builtins/divti3.c>
-#include <contrib/libs/cxxsupp/builtins/modti3.c>
-#include <contrib/libs/cxxsupp/builtins/clzti2.c>
-#include <contrib/libs/cxxsupp/builtins/floattisf.c>
-#include <contrib/libs/cxxsupp/builtins/floattidf.c>
-#include <intrin.h>
-#include <xmmintrin.h>
+    #include <contrib/libs/cxxsupp/builtins/udivmodti4.c>
+    #include <contrib/libs/cxxsupp/builtins/divti3.c>
+    #include <contrib/libs/cxxsupp/builtins/modti3.c>
+    #include <contrib/libs/cxxsupp/builtins/clzti2.c>
+    #include <contrib/libs/cxxsupp/builtins/floattisf.c>
+    #include <contrib/libs/cxxsupp/builtins/floattidf.c>
+    #include <intrin.h>
+    #include <xmmintrin.h>
 
 // Return value in XMM0
 __m128 __vectorcall __divti3abi(ti_int* x, ti_int* y) {
@@ -189,55 +207,57 @@ namespace NCodegen {
 
 namespace {
 
-    void FatalErrorHandler(void* user_data, const char* reason, bool gen_crash_diag) {
-        Y_UNUSED(user_data);
-        Y_UNUSED(gen_crash_diag);
-        ythrow yexception() << "LLVM fatal error: " << reason;
-    }
+void FatalErrorHandler(void* user_data, const char* reason, bool gen_crash_diag) {
+    Y_UNUSED(user_data);
+    Y_UNUSED(gen_crash_diag);
+    ythrow yexception() << "LLVM fatal error: " << reason;
+}
 
 #if LLVM_VERSION_MAJOR < 16
-    void AddAddressSanitizerPasses(const llvm::PassManagerBuilder& builder, llvm::legacy::PassManagerBase& pm) {
-        Y_UNUSED(builder);
-        pm.add(llvm::createAddressSanitizerFunctionPass());
-        pm.add(llvm::createModuleAddressSanitizerLegacyPassPass());
-    }
+void AddAddressSanitizerPasses(const llvm::PassManagerBuilder& builder, llvm::legacy::PassManagerBase& pm) {
+    Y_UNUSED(builder);
+    pm.add(llvm::createAddressSanitizerFunctionPass());
+    pm.add(llvm::createModuleAddressSanitizerLegacyPassPass());
+}
 
-    void AddMemorySanitizerPass(const llvm::PassManagerBuilder& builder, llvm::legacy::PassManagerBase& pm) {
-        Y_UNUSED(builder);
-        pm.add(llvm::createMemorySanitizerLegacyPassPass());
-    }
+void AddMemorySanitizerPass(const llvm::PassManagerBuilder& builder, llvm::legacy::PassManagerBase& pm) {
+    Y_UNUSED(builder);
+    pm.add(llvm::createMemorySanitizerLegacyPassPass());
+}
 
-    void AddThreadSanitizerPass(const llvm::PassManagerBuilder& builder, llvm::legacy::PassManagerBase& pm) {
-        Y_UNUSED(builder);
-        pm.add(llvm::createThreadSanitizerLegacyPassPass());
-    }
+void AddThreadSanitizerPass(const llvm::PassManagerBuilder& builder, llvm::legacy::PassManagerBase& pm) {
+    Y_UNUSED(builder);
+    pm.add(llvm::createThreadSanitizerLegacyPassPass());
+}
 #endif
 
-    struct TCodegenInit {
-        TCodegenInit() {
-            llvm::InitializeNativeTarget();
-            llvm::InitializeNativeTargetAsmPrinter();
-            llvm::InitializeNativeTargetAsmParser();
-            llvm::InitializeNativeTargetDisassembler();
-            llvm::install_fatal_error_handler(&FatalErrorHandler, nullptr);
-        }
-    };
-
-    bool CompareFuncOffsets(const std::pair<ui64, llvm::Function*>& lhs,
-        const std::pair<ui64, llvm::Function*>& rhs) {
-        return lhs.first < rhs.first;
+struct TCodegenInit {
+    TCodegenInit() {
+        llvm::InitializeNativeTarget();
+        llvm::InitializeNativeTargetAsmPrinter();
+        llvm::InitializeNativeTargetAsmParser();
+        llvm::InitializeNativeTargetDisassembler();
+        llvm::install_fatal_error_handler(&FatalErrorHandler, nullptr);
     }
+};
+
+bool CompareFuncOffsets(const std::pair<ui64, llvm::Function*>& lhs,
+                        const std::pair<ui64, llvm::Function*>& rhs) {
+    return lhs.first < rhs.first;
 }
+} // namespace
 
 bool ICodegen::IsCodegenAvailable() {
     return true;
 }
 
-class TCodegen : public ICodegen, private llvm::JITEventListener {
+class TCodegen: public ICodegen, private llvm::JITEventListener {
 public:
     TCodegen(ETarget target, ESanitize sanitize)
-        : Target_(target), Sanitize_(sanitize)
-        , EffectiveTarget_(Target_), EffectiveSanitize_(Sanitize_)
+        : Target_(target)
+        , Sanitize_(sanitize)
+        , EffectiveTarget_(Target_)
+        , EffectiveSanitize_(Sanitize_)
     {
         Singleton<TCodegenInit>();
         Context_.setDiagnosticHandlerCallBack(&DiagnosticHandler, this);
@@ -263,23 +283,22 @@ public:
 #elif defined(_win_)
             EffectiveTarget_ = ETarget::Windows;
 #else
-#error Unsupported OS
+    #error Unsupported OS
 #endif
         }
 
-
         switch (EffectiveTarget_) {
-        case ETarget::Linux:
-            triple = "x86_64-unknown-linux-gnu";
-            break;
-        case ETarget::Darwin:
-            triple = "x86_64-apple-darwin";
-            break;
-        case ETarget::Windows:
-            triple = "x86_64-unknown-windows-msvc";
-            break;
-        default:
-            ythrow yexception() << "Failed to select target";
+            case ETarget::Linux:
+                triple = "x86_64-unknown-linux-gnu";
+                break;
+            case ETarget::Darwin:
+                triple = "x86_64-apple-darwin";
+                break;
+            case ETarget::Windows:
+                triple = "x86_64-unknown-windows-msvc";
+                break;
+            default:
+                ythrow yexception() << "Failed to select target";
         }
 
         Triple_ = llvm::Triple::normalize(triple);
@@ -304,8 +323,9 @@ public:
         }
 
         Engine_.reset(engineBuilder.create());
-        if (!Engine_)
+        if (!Engine_) {
             ythrow yexception() << "Failed to construct ExecutionEngine: " << what;
+        }
 
         Module_->setDataLayout(Engine_->getDataLayout().getStringRepresentation());
         Engine_->RegisterJITEventListener(this);
@@ -334,7 +354,6 @@ public:
     llvm::LLVMContext& GetContext() override {
         return Context_;
     }
-
 
     llvm::Module& GetModule() override {
         return *Module_;
@@ -378,7 +397,6 @@ public:
     }
 
     void Compile(const TStringBuf compileOpts, TCompileStats* compileStats) override {
-
         bool dumpTimers = compileOpts.Contains("time-passes");
         bool disableOpt = compileOpts.Contains("disable-opt");
 #ifndef NDEBUG
@@ -386,7 +404,15 @@ public:
 #endif
 
 #if defined(_msan_enabled_)
-        ReverseGlobalMapping_[(const void*)&__emutls_get_address] = "__emutls_get_address";
+        AddGlobalMapping("__emutls_get_address", reinterpret_cast<void*>(GetTLSAddress));
+        AddGlobalMapping("__emutls_v.__msan_param_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::Param)));
+        AddGlobalMapping("__emutls_v.__msan_param_origin_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::ParamOrigin)));
+        AddGlobalMapping("__emutls_v.__msan_retval_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::Retval)));
+        AddGlobalMapping("__emutls_v.__msan_retval_origin_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::RetvalOrigin)));
+        AddGlobalMapping("__emutls_v.__msan_va_arg_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::VaArg)));
+        AddGlobalMapping("__emutls_v.__msan_va_arg_origin_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::VaArgOrigin)));
+        AddGlobalMapping("__emutls_v.__msan_va_arg_overflow_size_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::VaArgOverflowSize)));
+        AddGlobalMapping("__emutls_v.__msan_origin_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::Origin)));
 #endif
 #if defined(_win_)
         AddGlobalMapping("__security_check_cookie", (const void*)&__security_check_cookie);
@@ -436,23 +462,23 @@ public:
 
         if (EffectiveSanitize_ == ESanitize::Asan) {
             passManagerBuilder.addExtension(llvm::PassManagerBuilder::EP_OptimizerLast,
-                           AddAddressSanitizerPasses);
+                                            AddAddressSanitizerPasses);
             passManagerBuilder.addExtension(llvm::PassManagerBuilder::EP_EnabledOnOptLevel0,
-                           AddAddressSanitizerPasses);
+                                            AddAddressSanitizerPasses);
         }
 
         if (EffectiveSanitize_ == ESanitize::Msan) {
             passManagerBuilder.addExtension(llvm::PassManagerBuilder::EP_OptimizerLast,
-                           AddMemorySanitizerPass);
+                                            AddMemorySanitizerPass);
             passManagerBuilder.addExtension(llvm::PassManagerBuilder::EP_EnabledOnOptLevel0,
-                           AddMemorySanitizerPass);
+                                            AddMemorySanitizerPass);
         }
 
         if (EffectiveSanitize_ == ESanitize::Tsan) {
             passManagerBuilder.addExtension(llvm::PassManagerBuilder::EP_OptimizerLast,
-                           AddThreadSanitizerPass);
+                                            AddThreadSanitizerPass);
             passManagerBuilder.addExtension(llvm::PassManagerBuilder::EP_EnabledOnOptLevel0,
-                           AddThreadSanitizerPass);
+                                            AddThreadSanitizerPass);
         }
 
         auto functionPassManager = std::make_unique<llvm::legacy::FunctionPassManager>(Module_);
@@ -535,8 +561,6 @@ public:
         }
 #endif
 
-        AllocateTls();
-
         auto finalizeStart = Now();
         Engine_->finalizeObject();
         if (compileStats) {
@@ -598,8 +622,7 @@ public:
             const auto& name = funcEntry.second->getName();
             auto funcName = TStringBuf(name.data(), name.size());
             auto codeSize = GetFunctionCodeSize(funcEntry.second);
-            *out << "function: " << funcName << ", addr: " << (void*)funcEntry.first << ", size: " <<
-                codeSize << "\n";
+            *out << "function: " << funcName << ", addr: " << (void*)funcEntry.first << ", size: " << codeSize << "\n";
 
             Disassemble(out, (const unsigned char*)funcEntry.first, codeSize);
         }
@@ -614,7 +637,7 @@ public:
             ythrow yexception() << "Cannot create disassembler";
         }
 
-        std::unique_ptr<void, void(*)(void*)> delDis(dis, LLVMDisasmDispose);
+        std::unique_ptr<void, void (*)(void*)> delDis(dis, LLVMDisasmDispose);
         LLVMSetDisasmOptions(dis, LLVMDisassembler_Option_AsmPrinterVariant);
         char outline[1024];
         size_t pos = 0;
@@ -692,17 +715,16 @@ public:
         Engine_->updateGlobalMapping(llvm::StringRef(name.data(), name.size()), (uint64_t)address);
     }
 
-    void notifyObjectLoaded(ObjectKey key, const llvm::object::ObjectFile &obj,
-                            const llvm::RuntimeDyld::LoadedObjectInfo &loi) override
-    {
+    void notifyObjectLoaded(ObjectKey key, const llvm::object::ObjectFile& obj,
+                            const llvm::RuntimeDyld::LoadedObjectInfo& loi) override {
         Y_UNUSED(key);
         TotalObjectSize += obj.getData().size();
 
         for (const auto& section : obj.sections()) {
-            //auto nameExp = section.getName();
-            //auto name = nameExp.get();
-            //auto nameStr = TStringBuf(name.data(), name.size());
-            //Cerr << nameStr << "\n";
+            // auto nameExp = section.getName();
+            // auto name = nameExp.get();
+            // auto nameStr = TStringBuf(name.data(), name.size());
+            // Cerr << nameStr << "\n";
             if (section.isText()) {
                 CodeSections_.emplace_back(section, loi.getSectionLoadAddress(section));
             }
@@ -710,44 +732,22 @@ public:
     }
 
 private:
-    void OnDiagnosticInfo(const llvm::DiagnosticInfo &info) {
+    void OnDiagnosticInfo(const llvm::DiagnosticInfo& info) {
         llvm::raw_string_ostream ostream(Diagnostic_);
         llvm::DiagnosticPrinterRawOStream printer(ostream);
         info.print(printer);
     }
 
-    static void DiagnosticHandler(const llvm::DiagnosticInfo &info, void* context) {
+    static void DiagnosticHandler(const llvm::DiagnosticInfo& info, void* context) {
         return static_cast<TCodegen*>(context)->OnDiagnosticInfo(info);
-    }
-
-    void AllocateTls() {
-        for (const auto& glob : Module_->globals()) {
-            auto nameRef = glob.getName();
-            if (glob.isThreadLocal()) {
-                llvm::Type* type = glob.getValueType();
-                const llvm::DataLayout& dataLayout = Module_->getDataLayout();
-                auto size = dataLayout.getTypeStoreSize(type);
-                auto align = glob.getAlignment();
-                if (!align) {
-                    // When LLVM IL declares a variable without alignment, use
-                    // the ABI default alignment for the type.
-                    align = dataLayout.getABITypeAlign(type).value();
-                }
-
-                TStringBuf name(nameRef.data(), nameRef.size());
-                TString fullName = TString("__emutls_v.") + name;
-                auto ctl = TlsManager_.Add(fullName, size, align);
-                Engine_->updateGlobalMapping(llvm::StringRef(fullName.data(), fullName.size()), (uint64_t)ctl);
-                ReverseGlobalMapping_[&ctl] = fullName;
-            }
-        }
     }
 
     struct TPatterns {
         TPatterns()
             : Imm_(re2::StringPiece("\\s*movabs\\s+[0-9a-z]+\\s*,\\s*(\\d+)\\s*"))
             , Jump_(re2::StringPiece("\\s*(?:j[a-z]+)\\s*(-?\\d+)\\s*"))
-        {}
+        {
+        }
 
         re2::RE2 Imm_;
         re2::RE2 Jump_;
@@ -777,7 +777,6 @@ private:
     TMaybe<THashSet<TString>> ExportedSymbols;
     THashMap<const void*, TString> ReverseGlobalMapping_;
     TMaybe<TPatterns> Patterns_;
-    TTlsManager TlsManager_;
     THashSet<TString> LoadedModules_;
 };
 
@@ -791,5 +790,5 @@ ICodegen::MakeShared(ETarget target, ESanitize sanitize) {
     return std::make_shared<TCodegen>(target, sanitize);
 }
 
-}
-}
+} // namespace NCodegen
+} // namespace NYql

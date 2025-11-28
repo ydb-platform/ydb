@@ -16,10 +16,11 @@ namespace NYql {
 namespace NResult {
 
 namespace {
-class TRestrictedYsonFormatter : public NYson::TYsonConsumerBase {
+class TRestrictedYsonFormatter: public NYson::TYsonConsumerBase {
 public:
     TRestrictedYsonFormatter(TYsonResultWriter& writer)
-        : Writer_(writer) {
+        : Writer_(writer)
+    {
     }
 
     void OnStringScalar(TStringBuf value) override {
@@ -199,47 +200,47 @@ TString DecodeRestrictedBinaryString(const TString& data) {
 
 void DecodeRestrictedYson(const NYT::TNode& node, NYson::TYsonConsumerBase& writer) {
     switch (node.GetType()) {
-    case NYT::TNode::String:
-        writer.OnStringScalar(node.AsString());
-        return;
+        case NYT::TNode::String:
+            writer.OnStringScalar(node.AsString());
+            return;
 
-    case NYT::TNode::Int64:
-        writer.OnInt64Scalar(node.AsInt64());
-        return;
+        case NYT::TNode::Int64:
+            writer.OnInt64Scalar(node.AsInt64());
+            return;
 
-    case NYT::TNode::Uint64:
-        writer.OnUint64Scalar(node.AsUint64());
-        return;
+        case NYT::TNode::Uint64:
+            writer.OnUint64Scalar(node.AsUint64());
+            return;
 
-    case NYT::TNode::Bool:
-        writer.OnBooleanScalar(node.AsBool());
-        return;
+        case NYT::TNode::Bool:
+            writer.OnBooleanScalar(node.AsBool());
+            return;
 
-    case NYT::TNode::Double:
-        writer.OnDoubleScalar(node.AsDouble());
-        return;
+        case NYT::TNode::Double:
+            writer.OnDoubleScalar(node.AsDouble());
+            return;
 
-    case NYT::TNode::Null:
-        writer.OnEntity();
-        return;
+        case NYT::TNode::Null:
+            writer.OnEntity();
+            return;
 
-    case NYT::TNode::List:
-        // just a list without attributes
-        writer.OnBeginList();
-        for (const auto& item : node.AsList()) {
-            writer.OnListItem();
-            DecodeRestrictedYson(item, writer);
-        }
+        case NYT::TNode::List:
+            // just a list without attributes
+            writer.OnBeginList();
+            for (const auto& item : node.AsList()) {
+                writer.OnListItem();
+                DecodeRestrictedYson(item, writer);
+            }
 
-        writer.OnEndList();
-        return;
+            writer.OnEndList();
+            return;
 
-    case NYT::TNode::Map:
-        // process below
-        break;
+        case NYT::TNode::Map:
+            // process below
+            break;
 
-    default:
-        YQL_ENSURE(false, "Unsupported node type: " << static_cast<int>(node.GetType()));
+        default:
+            YQL_ENSURE(false, "Unsupported node type: " << static_cast<int>(node.GetType()));
     }
 
     YQL_ENSURE(node.IsMap());
@@ -325,5 +326,5 @@ TString DecodeRestrictedYson(const TStringBuf& yson, NYson::EYsonFormat format) 
     return DecodeRestrictedYson(NYT::NodeFromYsonString(yson), format);
 }
 
-}
-}
+} // namespace NResult
+} // namespace NYql

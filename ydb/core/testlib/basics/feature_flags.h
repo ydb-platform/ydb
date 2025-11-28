@@ -18,7 +18,6 @@ public:
         }
 
     FEATURE_FLAG_SETTER(AllowYdbRequestsWithoutDatabase)
-    FEATURE_FLAG_SETTER(EnableSystemViews)
     FEATURE_FLAG_SETTER(EnablePersistentQueryStats)
     FEATURE_FLAG_SETTER(EnablePersistentPartitionStats)
     FEATURE_FLAG_SETTER(AllowUpdateChannelsBindingOfSolomonPartitions)
@@ -72,6 +71,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForCDC)
     FEATURE_FLAG_SETTER(EnableFollowerStats)
     FEATURE_FLAG_SETTER(EnableChecksumsExport)
+    FEATURE_FLAG_SETTER(EnableReplication)
     FEATURE_FLAG_SETTER(EnableTopicTransfer)
     FEATURE_FLAG_SETTER(EnableStrictUserManagement)
     FEATURE_FLAG_SETTER(EnableDatabaseAdmin)
@@ -81,6 +81,12 @@ public:
     FEATURE_FLAG_SETTER(EnableSharedMetadataAccessorCache)
     FEATURE_FLAG_SETTER(EnableSystemNamesProtection)
     FEATURE_FLAG_SETTER(EnableRealSystemViewPaths)
+    FEATURE_FLAG_SETTER(EnableDataShardWriteAlwaysVolatile)
+    FEATURE_FLAG_SETTER(EnableStreamingQueries)
+    FEATURE_FLAG_SETTER(EnableSecureScriptExecutions)
+    FEATURE_FLAG_SETTER(DisableMissingDefaultColumnsInBulkUpsert)
+    FEATURE_FLAG_SETTER(EnableTopicMessageLevelParallelism)
+    FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForReplication)
 
     #undef FEATURE_FLAG_SETTER
 };

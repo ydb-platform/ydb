@@ -43,6 +43,7 @@ public:
         NTransactionClient::EDurability durability,
         TDuration timeout,
         bool pingAncestors,
+        std::optional<std::string> pingerAddress,
         std::optional<TDuration> pingPeriod,
         std::optional<TStickyTransactionParameters> stickyParameters,
         i64 sequenceNumberSourceId,
@@ -241,9 +242,25 @@ public:
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options = {}) override;
 
+    TFuture<void> PingDistributedWriteSession(
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options = {}) override;
+
     TFuture<void> FinishDistributedWriteSession(
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options = {}) override;
+
+    TFuture<TDistributedWriteFileSessionWithCookies> StartDistributedWriteFileSession(
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteFileSessionStartOptions& options = {}) override;
+
+    TFuture<void> PingDistributedWriteFileSession(
+        const TSignedDistributedWriteFileSessionPtr& session,
+        const TDistributedWriteFileSessionPingOptions& options = {}) override;
+
+    TFuture<void> FinishDistributedWriteFileSession(
+        const TDistributedWriteFileSessionWithResults& sessionWithResults,
+        const TDistributedWriteFileSessionFinishOptions& options = {}) override;
 
     // Custom methods.
 
@@ -277,6 +294,7 @@ private:
     const NTransactionClient::EDurability Durability_;
     const TDuration Timeout_;
     const bool PingAncestors_;
+    const std::optional<std::string> PingerAddress_;
     const std::optional<TDuration> PingPeriod_;
     const std::optional<std::string> StickyProxyAddress_;
     const i64 SequenceNumberSourceId_;

@@ -13,6 +13,11 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 
+#define SRC_LOG_T(s) \
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SRC_LOG_D(s) \
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+
 namespace NYql::NDq::NInternal {
 
 namespace {
@@ -98,6 +103,7 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
 }
 
 void TDqPqReadActorBase::LoadState(const TSourceState& state) {
+    InitWatermarkTracker();
     TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
     ui64 ingressBytes = 0;
     for (const auto& data : state.Data) {
@@ -136,6 +142,35 @@ ui64 TDqPqReadActorBase::GetInputIndex() const {
 
 const NYql::NDq::TDqAsyncStats& TDqPqReadActorBase::GetIngressStats() const {
     return IngressStats;
+}
+
+void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDuration idleTimeout) {
+    const auto granularity = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs());
+    SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: " << granularity
+        << " late arrival delay: " << lateArrivalDelay
+        << " idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
+        << " idle timeout: " << idleTimeout
+        );
+
+    if (!SourceParams.GetWatermarks().GetEnabled()) {
+        return;
+    }
+
+    WatermarkTracker.ConstructInPlace(
+        granularity,
+        SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
+        lateArrivalDelay,
+        idleTimeout,
+        LogPrefix
+    );
+}
+
+void TDqPqReadActorBase::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime) {
+    Y_DEBUG_ABORT_UNLESS(WatermarkTracker);
+    if (const auto nextIdleCheckAt = WatermarkTracker->PrepareIdlenessCheck(systemTime)) {
+        SRC_LOG_T("Next idleness check scheduled at " << *nextIdleCheckAt);
+        SchedulePartitionIdlenessCheck(*nextIdleCheckAt);
+    }
 }
 
 } // namespace NYql::NDq::NInternal

@@ -10,7 +10,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-//TODO remove
+// TODO remove
 TStringBuf AdaptLegacyYqlType(const TStringBuf& type);
 
 bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value);
@@ -21,13 +21,18 @@ ui32 GetMonthLength(ui32 month, bool isLeap);
 
 bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf);
 
+enum class ERegexFlavor {
+    RE2,
+};
+TMaybe<TString> RegexMatchingValidStringValues(NUdf::EDataSlot type, ERegexFlavor flavor);
+
 NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef buf);
 NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRef buf);
 
 NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePod value);
 
-NUdf::TUnboxedValuePod ParseUuid(NUdf::TStringRef buf, bool shortForm=false);
-bool ParseUuid(NUdf::TStringRef buf, void* output, bool shortForm=false);
+NUdf::TUnboxedValuePod ParseUuid(NUdf::TStringRef buf, bool shortForm = false);
+bool ParseUuid(NUdf::TStringRef buf, void* output, bool shortForm = false);
 
 bool IsValidDecimal(NUdf::TStringRef buf);
 
@@ -41,11 +46,11 @@ bool SplitTimestamp(ui64 value, ui32& year, ui32& month, ui32& day, ui32& hour, 
 bool SplitInterval(i64 value, bool& sign, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec);
 
 bool SplitDate32(i32 date, i32& year, ui32& month, ui32& day,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek);
+                 ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek);
 bool SplitTzDate32(i32 date, i32& year, ui32& month, ui32& day,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
+                   ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
 bool SplitTzDatetime64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
+                       ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
 
 bool MakeTzDate32(i32 year, ui32 month, ui32 day, i32& value, ui16 tzId);
 bool MakeDatetime64(i32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, i64& value);

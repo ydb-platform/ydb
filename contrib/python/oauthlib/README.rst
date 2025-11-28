@@ -2,11 +2,11 @@ OAuthLib - Python Framework for OAuth1 & OAuth2
 ===============================================
 
 *A generic, spec-compliant, thorough implementation of the OAuth request-signing
-logic for Python 3.6+.*
+logic for Python 3.8+*
 
-.. image:: https://app.travis-ci.com/oauthlib/oauthlib.svg?branch=master
-  :target: https://app.travis-ci.com/oauthlib/oauthlib
-  :alt: Travis
+.. image:: https://github.com/oauthlib/oauthlib/actions/workflows/python-build.yml/badge.svg
+  :target: https://github.com/oauthlib/oauthlib/actions
+  :alt: GitHub Actions
 .. image:: https://coveralls.io/repos/oauthlib/oauthlib/badge.svg?branch=master
   :target: https://coveralls.io/r/oauthlib/oauthlib
   :alt: Coveralls
@@ -75,7 +75,9 @@ Which web frameworks are supported?
 
 The following packages provide OAuth support using OAuthLib.
 
-- For Django there is `django-oauth-toolkit`_, which includes `Django REST framework`_ support.
+- For Django there is:
+  - `django-oauth-toolkit`_, which includes `Django REST framework`_ support.
+  - `django-allauth`_, which includes `Django REST framework`_ as well as `Django Ninja`_ support.
 - For Flask there is `flask-oauthlib`_ and `Flask-Dance`_.
 - For Pyramid there is `pyramid-oauthlib`_.
 - For Bottle there is `bottle-oauthlib`_.
@@ -89,6 +91,8 @@ please open a Pull Request, updating the documentation.
 .. _`Flask-Dance`: https://github.com/singingwolfboy/flask-dance
 .. _`pyramid-oauthlib`: https://github.com/tilgovi/pyramid-oauthlib
 .. _`bottle-oauthlib`: https://github.com/thomsonreuters/bottle-oauthlib
+.. _`django-allauth`: https://allauth.org/
+.. _`Django Ninja`: https://django-ninja.dev/
 
 Using OAuthLib? Please get in touch!
 ------------------------------------
@@ -110,7 +114,7 @@ have the pleasure to run into each other, please send a docs pull request =)
 License
 -------
 
-OAuthLib is yours to use and abuse according to the terms of the BSD license.
+OAuthLib is yours to use and abuse according to the terms of the BSD-3-Clause license.
 Check the LICENSE file for full details.
 
 Credits

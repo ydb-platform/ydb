@@ -74,7 +74,7 @@ void TCommandTPCCInit::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
     config.Opts->AddLongOption(
         "log-level", TStringBuilder() << "Log level from 0 to 8, default is 6 (INFO)")
@@ -121,11 +121,11 @@ void TCommandTPCCImport::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
     // TODO: detect automatically
     config.Opts->AddLongOption(
-        "threads", TStringBuilder() << "Number of threads loading the data")
+        "threads", TStringBuilder() << "Number of threads loading the data (default: auto)")
             .RequiredArgument("INT").StoreResult(&RunConfig->LoadThreadCount).DefaultValue(RunConfig->LoadThreadCount);
 
     config.Opts->AddLongOption(
@@ -189,12 +189,12 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
     // TODO: default value should be auto
     config.Opts->AddLongOption(
-        "warmup", TStringBuilder() << "Warmup time. Example: 10s, 5m, 1h")
-            .RequiredArgument("DURATION").StoreResult(&RunConfig->WarmupDuration).DefaultValue(RunConfig->WarmupDuration);
+        "warmup", TStringBuilder() << "Warmup time (default: auto). Example: 10s, 5m, 1h")
+            .RequiredArgument("DURATION").StoreResult(&RunConfig->WarmupDuration);
 
     config.Opts->AddLongOption(
         't', "time", TStringBuilder() << "Execution time. Example: 10s, 5m, 1h")
@@ -202,12 +202,11 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     // TODO: default value should be auto
     config.Opts->AddLongOption(
-        'm', "max-sessions", TStringBuilder() << "Soft limit on number of DB sessions")
+        'm', "max-sessions", TStringBuilder() << "Soft limit on number of DB sessions (default: auto)")
             .RequiredArgument("INT").StoreResult(&RunConfig->MaxInflight).DefaultValue(RunConfig->MaxInflight);
 
-    // TODO: detect automatically
     config.Opts->AddLongOption(
-        "threads", TStringBuilder() << "Number of threads executing queries (by default autodected)")
+        "threads", TStringBuilder() << "Number of threads executing queries (default: auto)")
             .RequiredArgument("INT").StoreResult(&RunConfig->ThreadCount);
 
     config.Opts->AddLongOption(
@@ -295,7 +294,7 @@ void TCommandTPCCCheck::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
     config.Opts->AddLongOption(
         "just-imported", TStringBuilder() << "Turns on additional checks. "

@@ -8,6 +8,7 @@ PEERDIR(
     library/cpp/yt/error
     yt/cpp/mapreduce/client
     yt/cpp/mapreduce/common
+    yt/yql/providers/yt/fmr/utils
     yt/yql/providers/yt/fmr/yt_job_service/interface
     yql/essentials/utils
     yql/essentials/utils/log

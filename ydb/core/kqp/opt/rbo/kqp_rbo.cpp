@@ -1,79 +1,106 @@
 #include "kqp_rbo.h"
+#include "kqp_plan_conversion_utils.h"
+
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr {
 namespace NKqp {
 
-bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator>& input, 
-    TExprContext& ctx,
-    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
-    TTypeAnnotationContext& typeCtx, 
-    const TKikimrConfiguration::TPtr& config,
-    TPlanProps& props) {
+bool ISimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
-    auto output = SimpleTestAndApply(input, ctx, kqpCtx, typeCtx, config, props);
+    auto output = SimpleTestAndApply(input, ctx, props);
     if (input != output) {
         input = output;
         return true;
-    }
-    else {
+    } else {
         return false;
     }
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx) {
-    for (size_t idx=0; idx < Stages.size(); idx ++ ) {
-        YQL_CLOG(TRACE, CoreDq) << "Running ruleset: " << idx;
-        auto & stage = Stages[idx];
+TRuleBasedStage::TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules) : Rules(rules) {
+    for (auto & r : Rules) {
+        Props |= r->Props;
+    }
+}
 
-        bool fired = true;
+void ComputeRequiredProps(TOpRoot &root, ui32 props, TRBOContext &ctx) {
+    if (props & ERuleProperties::RequireParents) {
+        root.ComputeParents();
+    }
+    if (props & ERuleProperties::RequireTypes) {
+        if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
+            Y_ENSURE(false, "RBO type annotation failed");
+        }
+    }
+}
 
-        int nMatches = 0;
+/**
+ * Run a rule-based stage
+ *
+ * Currently we obtain an iterator to the operators, match the rules, and if at least one matched we
+ * apply it and start again.
+ *
+ * TODO: We should have a clear list of properties that are reqiuired by the rules of current stage and
+ * ensure they are computed/maintained properly
+ *
+ * TODO: Add sanity checks that can be tunred on in debug mode to immediately catch transformation problems
+ */
+void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
+    bool fired = true;
+    int nMatches = 0;
 
-        while (fired && nMatches < 1000) {
-            fired = false;
+    while (fired && nMatches < 1000) {
+        fired = false;
 
-            for (auto iter : root ) {
-                for (auto rule : stage.Rules) {
-                    auto op = iter.Current;
+        for (auto iter : root) {
+            for (auto rule : Rules) {
+                auto op = iter.Current;
 
-                    if (rule->TestAndApply(op, ctx, KqpCtx, TypeCtx, Config, root.PlanProps)) {
-                        YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
+                if (rule->TestAndApply(op, ctx, root.PlanProps)) {
+                    fired = true;
 
-                        if (iter.Parent) {
-                            iter.Parent->Children[iter.ChildIndex] = op;
-                        }
-                        else {
-                            root.Children[0] = op;
-                        }
+                    YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
 
-                        fired = true;
-
-                        if (stage.RequiresRebuild) {
-                            auto newRoot = std::static_pointer_cast<TOpRoot>(root.Rebuild(ctx));
-                            YQL_CLOG(TRACE, CoreDq) << "Rebuilt tree";
-                            root.Node = newRoot->Node;
-                            root.Children[0] = newRoot->Children[0];
-                        }
-
-
-                        nMatches ++;
-                        break;
+                    if (iter.Parent) {
+                        iter.Parent->Children[iter.ChildIndex] = op;
+                    } else {
+                        root.Children[0] = op;
                     }
-                }
 
-                if (fired) {
+                    ComputeRequiredProps(root, Props, ctx);
+
+                    nMatches++;
                     break;
                 }
             }
-        }
 
-        Y_ENSURE(nMatches < 100);
+            if (fired) {
+                break;
+            }
+        }
     }
+
+    Y_ENSURE(nMatches < 100);
+}
+
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) {
+    YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
+
+    auto context = TRBOContext(KqpCtx,ctx,TypeCtx, RBOTypeAnnTransformer, FuncRegistry);
+
+    for (size_t idx = 0; idx < Stages.size(); idx++) {
+        YQL_CLOG(TRACE, CoreDq) << "Running stage: " << idx;
+        auto stage = Stages[idx];
+        ComputeRequiredProps(root, stage->Props, context);
+        stage->RunStage(root, context);
+        YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
+    }
+
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-    return ConvertToPhysical(root, ctx, TypeCtx, TypeAnnTransformer, PeepholeTransformer, Config);
-}
+    ComputeRequiredProps(root, ERuleProperties::RequireParents | ERuleProperties::RequireTypes, context);
 
+    return ConvertToPhysical(root, context, TypeAnnTransformer, PeepholeTransformer);
 }
-}
+} // namespace NKqp
+} // namespace NKikimr

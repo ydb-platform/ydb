@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/sys_view/auth
     ydb/core/sys_view/common
+    ydb/core/sys_view/compile_cache
     ydb/core/sys_view/nodes
     ydb/core/sys_view/partition_stats
     ydb/core/sys_view/pg_tables
@@ -20,6 +21,7 @@ PEERDIR(
     ydb/core/sys_view/sessions
     ydb/core/sys_view/show_create
     ydb/core/sys_view/storage
+    ydb/core/sys_view/streaming_queries
     ydb/core/sys_view/tablets
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
@@ -42,6 +44,7 @@ RECURSE(
     resource_pools
     service
     storage
+    streaming_queries
     tablets
 )
 

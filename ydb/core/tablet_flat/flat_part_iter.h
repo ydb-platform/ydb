@@ -980,20 +980,23 @@ namespace NTable {
                     // We cannot cache when there are uncompacted deltas
                     stats.UncertainErase = true;
 
-                    ui64 txId = data->GetDeltaTxId(info);
-                    const auto* commitVersion = committedTransactions.Find(txId);
-                    if (commitVersion && *commitVersion <= rowVersion) {
-                        // Already committed and correct version
-                        return EReady::Data;
+                    if (data->GetRop() != ERowOp::Absent) {
+                        ui64 txId = data->GetDeltaTxId(info);
+                        const auto* commitVersion = committedTransactions.Find(txId);
+                        if (commitVersion && *commitVersion <= rowVersion) {
+                            // Already committed and correct version
+                            return EReady::Data;
+                        }
+                        if (commitVersion) {
+                            // Skipping a newer committed delta
+                            transactionObserver.OnSkipCommitted(*commitVersion, txId);
+                            stats.InvisibleRowSkips++;
+                        } else {
+                            // Skipping an uncommitted delta
+                            transactionObserver.OnSkipUncommitted(txId);
+                        }
                     }
-                    if (commitVersion) {
-                        // Skipping a newer committed delta
-                        transactionObserver.OnSkipCommitted(*commitVersion, txId);
-                        stats.InvisibleRowSkips++;
-                    } else {
-                        // Skipping an uncommitted delta
-                        transactionObserver.OnSkipUncommitted(txId);
-                    }
+
                     data = Main.GetRecord()->GetAltRecord(++SkipMainDeltas);
                     if (!data) {
                         // This was the last delta, nothing else for this key
@@ -1098,7 +1101,8 @@ namespace NTable {
         }
 
         std::optional<TRowVersion> SkipToCommitted(NTable::ITransactionMapSimplePtr committedTransactions,
-                NTable::ITransactionObserverSimplePtr transactionObserver)
+                NTable::ITransactionObserverSimplePtr transactionObserver,
+                ELockMode& lockMode, ui64& lockTxId)
         {
             Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Attempt to use an invalid iterator");
             Y_ENSURE(!SkipMainVersion, "Cannot use SkipToCommitted after positioning to history");
@@ -1107,20 +1111,31 @@ namespace NTable {
             const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
 
             while (data->IsDelta()) {
-                ui64 txId = data->GetDeltaTxId(info);
-                const auto* commitVersion = committedTransactions.Find(txId);
-                if (commitVersion) {
-                    // Found a committed delta
-                    return *commitVersion;
+                if (data->IsLocked() && lockMode == ELockMode::None) {
+                    std::tie(lockMode, lockTxId) = data->GetLockInfo(info);
                 }
-                // Skip an uncommitted delta
-                transactionObserver.OnSkipUncommitted(txId);
+
+                if (data->GetRop() != ERowOp::Absent) {
+                    ui64 txId = data->GetDeltaTxId(info);
+                    const auto* commitVersion = committedTransactions.Find(txId);
+                    if (commitVersion) {
+                        // Found a committed delta
+                        return *commitVersion;
+                    }
+                    // Skip an uncommitted delta
+                    transactionObserver.OnSkipUncommitted(txId);
+                }
+
                 data = Main.GetRecord()->GetAltRecord(++SkipMainDeltas);
                 if (!data) {
                     // This was the last delta, nothing else for this key
                     SkipMainDeltas = 0;
                     return { };
                 }
+            }
+
+            if (data->IsLocked() && lockMode == ELockMode::None) {
+                std::tie(lockMode, lockTxId) = data->GetLockInfo(info);
             }
 
             if (!SkipEraseVersion && data->IsErased()) {
@@ -1144,6 +1159,17 @@ namespace NTable {
             return data->IsDelta();
         }
 
+        bool IsDeltaLockOnly() const noexcept
+        {
+            Y_DEBUG_ABORT_UNLESS(!SkipMainVersion);
+            Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Cannot use unpositioned iterators");
+
+            const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
+            Y_DEBUG_ABORT_UNLESS(data->IsDelta());
+
+            return data->GetRop() == ERowOp::Absent;
+        }
+
         ui64 GetDeltaTxId() const noexcept
         {
             Y_DEBUG_ABORT_UNLESS(!SkipMainVersion, "Current record is not a delta record");
@@ -1156,6 +1182,23 @@ namespace NTable {
             return data->GetDeltaTxId(info);
         }
 
+        std::tuple<ELockMode, ui64> GetLockInfo() const noexcept
+        {
+            if (SkipMainVersion || SkipEraseVersion) {
+                return { ELockMode::None, 0 };
+            }
+
+            Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Cannot use unpositioned iterators");
+
+            const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
+            if (!data->IsLocked()) {
+                return { ELockMode::None, 0 };
+            }
+
+            const auto& info = Part->Scheme->Groups[0];
+            return data->GetLockInfo(info);
+        }
+
         void ApplyDelta(TRowState& row) const
         {
             Y_DEBUG_ABORT_UNLESS(!SkipMainVersion, "Current record is not a delta record");
@@ -1165,7 +1208,8 @@ namespace NTable {
             const auto* data = Main.GetRecord()->GetAltRecord(index);
             Y_DEBUG_ABORT_UNLESS(data->IsDelta(), "Current record is not a delta record");
 
-            if (row.Touch(data->GetRop())) {
+            ERowOp rop = data->GetRop();
+            if (rop != ERowOp::Absent && row.Touch(rop)) {
                 for (auto& pin : Pinout) {
                     if (!row.IsFinalized(pin.To)) {
                         Apply(row, pin, data, index);
@@ -1205,23 +1249,26 @@ namespace NTable {
             if (!SkipMainVersion) {
                 const auto& info = Part->Scheme->Groups[0];
                 while (data->IsDelta()) {
-                    ui64 txId = data->GetDeltaTxId(info);
-                    const auto* commitVersion = committedTransactions.Find(txId);
-                    // Apply committed deltas
-                    if (commitVersion) {
-                        transactionObserver.OnApplyCommitted(*commitVersion, txId);
-                        if (row.Touch(data->GetRop())) {
-                            for (auto& pin : Pinout) {
-                                if (!row.IsFinalized(pin.To)) {
-                                    Apply(row, pin, data, index);
+                    ERowOp rop = data->GetRop();
+                    if (rop != ERowOp::Absent) {
+                        ui64 txId = data->GetDeltaTxId(info);
+                        const auto* commitVersion = committedTransactions.Find(txId);
+                        // Apply committed deltas
+                        if (commitVersion) {
+                            transactionObserver.OnApplyCommitted(*commitVersion, txId);
+                            if (row.Touch(rop)) {
+                                for (auto& pin : Pinout) {
+                                    if (!row.IsFinalized(pin.To)) {
+                                        Apply(row, pin, data, index);
+                                    }
                                 }
                             }
+                            if (row.IsFinalized()) {
+                                return;
+                            }
+                        } else {
+                            transactionObserver.OnSkipUncommitted(txId);
                         }
-                        if (row.IsFinalized()) {
-                            return;
-                        }
-                    } else {
-                        transactionObserver.OnSkipUncommitted(txId);
                     }
                     // Skip deltas until the row is finalized
                     data = Main.GetRecord()->GetAltRecord(++index);
@@ -1698,10 +1745,22 @@ namespace NTable {
             return CurrentIt->IsDelta();
         }
 
+        bool IsDeltaLockOnly() const noexcept
+        {
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
+            return CurrentIt->IsDeltaLockOnly();
+        }
+
         ui64 GetDeltaTxId() const noexcept
         {
             Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->GetDeltaTxId();
+        }
+
+        std::tuple<ELockMode, ui64> GetLockInfo() const noexcept
+        {
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
+            return CurrentIt->GetLockInfo();
         }
 
         void ApplyDelta(TRowState& row) const

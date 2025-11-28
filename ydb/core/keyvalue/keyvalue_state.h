@@ -275,7 +275,6 @@ protected:
 
     TDeque<TAutoPtr<TIntermediate>> Queue;
     ui64 IntermediatesInFlight;
-    ui64 IntermediatesInFlightLimit;
     ui64 RoInlineIntermediatesInFlight;
     ui64 DeletesPerRequestLimit;
 
@@ -293,6 +292,9 @@ protected:
     bool RepeatGCTX = false;
 
     ui64 TotalTrashSize = 0;
+
+    TControlWrapper ReadRequestsInFlightLimit_Base;
+    TMemorizableControlWrapper ReadRequestsInFlightLimit;
 
 public:
     TKeyValueState();

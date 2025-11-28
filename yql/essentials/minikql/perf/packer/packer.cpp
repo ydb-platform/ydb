@@ -15,7 +15,6 @@ using namespace NKikimr::NUdf;
 static const size_t LIST_SIZE = 5000000ul;
 
 int main(int, char**) {
-
     auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
 
     TScopedAlloc alloc(__LOCATION__);
@@ -24,10 +23,8 @@ int main(int, char**) {
     THolderFactory holderFactory(alloc.Ref(), memInfo, functionRegistry.Get());
     TProgramBuilder pgmBuilder(env, *functionRegistry);
 
-    auto listType = pgmBuilder.NewListType(pgmBuilder.NewTupleType({
-        pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(EDataSlot::Uint64)),
-        pgmBuilder.NewDataType(EDataSlot::Uint64)
-    }));
+    auto listType = pgmBuilder.NewListType(pgmBuilder.NewTupleType({pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(EDataSlot::Uint64)),
+                                                                    pgmBuilder.NewDataType(EDataSlot::Uint64)}));
     TUnboxedValueVector listItems;
     for (ui64 i = 0; i < LIST_SIZE; ++i) {
         TUnboxedValueVector tupleItems;

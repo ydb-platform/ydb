@@ -229,7 +229,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         if (auto it = userTables.find(record.GetTableId().GetTableId()); it != userTables.end()) {
             const auto& tableInfo = *it->second;
             for (const auto& columnRecord : record.GetColumns()) {
-                if (auto* columnInfo = tableInfo.Columns.FindPtr(columnRecord.GetId())) {
+                if (tableInfo.Columns.FindPtr(columnRecord.GetId())) {
                     // TODO: column types don't change when bound by id, but we may want to check anyway
                 } else {
                     schemaChangedError = TStringBuilder() << "ReadTable cannot find column "

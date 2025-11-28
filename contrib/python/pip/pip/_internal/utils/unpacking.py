@@ -1,5 +1,7 @@
 """Utilities related archives."""
 
+from __future__ import annotations
+
 import logging
 import os
 import shutil
@@ -7,7 +9,7 @@ import stat
 import sys
 import tarfile
 import zipfile
-from typing import Iterable, List, Optional
+from collections.abc import Iterable
 from zipfile import ZipInfo
 
 from pip._internal.exceptions import InstallationError
@@ -47,7 +49,7 @@ def current_umask() -> int:
     return mask
 
 
-def split_leading_dir(path: str) -> List[str]:
+def split_leading_dir(path: str) -> list[str]:
     path = path.lstrip("/").lstrip("\\")
     if "/" in path and (
         ("\\" in path and path.find("/") < path.find("\\")) or "\\" not in path
@@ -131,7 +133,7 @@ def unzip_file(filename: str, location: str, flatten: bool = True) -> None:
                     "outside target directory ({})"
                 )
                 raise InstallationError(message.format(filename, fn, location))
-            if fn.endswith("/") or fn.endswith("\\"):
+            if fn.endswith(("/", "\\")):
                 # A directory
                 ensure_dir(fn)
             else:
@@ -246,6 +248,20 @@ def untar_file(filename: str, location: str) -> None:
         tar.close()
 
 
+def is_symlink_target_in_tar(tar: tarfile.TarFile, tarinfo: tarfile.TarInfo) -> bool:
+    """Check if the file pointed to by the symbolic link is in the tar archive"""
+    linkname = os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)
+
+    linkname = os.path.normpath(linkname)
+    linkname = linkname.replace("\\", "/")
+
+    try:
+        tar.getmember(linkname)
+        return True
+    except KeyError:
+        return False
+
+
 def _untar_without_filter(
     filename: str,
     location: str,
@@ -253,6 +269,9 @@ def _untar_without_filter(
     leading: bool,
 ) -> None:
     """Fallback for Python without tarfile.data_filter"""
+    # NOTE: This function can be removed once pip requires CPython ≥ 3.12.​
+    # PEP 706 added tarfile.data_filter, made tarfile extraction operations more secure.
+    # This feature is fully supported from CPython 3.12 onward.
     for member in tar.getmembers():
         fn = member.name
         if leading:
@@ -267,6 +286,14 @@ def _untar_without_filter(
         if member.isdir():
             ensure_dir(path)
         elif member.issym():
+            if not is_symlink_target_in_tar(tar, member):
+                message = (
+                    "The tar file ({}) has a file ({}) trying to install "
+                    "outside target directory ({})"
+                )
+                raise InstallationError(
+                    message.format(filename, member.name, member.linkname)
+                )
             try:
                 tar._extract_member(member, path)
             except Exception as exc:
@@ -307,7 +334,7 @@ def _untar_without_filter(
 def unpack_file(
     filename: str,
     location: str,
-    content_type: Optional[str] = None,
+    content_type: str | None = None,
 ) -> None:
     filename = os.path.realpath(filename)
     if (

@@ -9,7 +9,7 @@ def post_install(self):
 boost_mpl = NixSourceProject(
     nixattr="boost_mpl",
     arcdir=boost.make_arcdir("mpl"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/**",
     ],

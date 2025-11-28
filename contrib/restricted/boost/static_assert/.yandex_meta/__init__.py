@@ -9,7 +9,7 @@ def post_install(self):
 boost_static_assert = NixSourceProject(
     nixattr="boost_static_assert",
     arcdir=boost.make_arcdir("static_assert"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

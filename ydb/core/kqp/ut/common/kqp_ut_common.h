@@ -40,6 +40,14 @@ extern const TString EXPECTED_EIGHTSHARD_VALUE1;
 
 TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
 
+struct TTestLogSettings {
+    NLog::EPriority DefaultLogPriority = NLog::PRI_WARN;
+    std::unordered_map<NKikimrServices::EServiceKikimr, NLog::EPriority> LogPriorities;
+    bool Freeze = false;
+
+    TTestLogSettings& AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority);
+};
+
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
 private:
     void InitDefaultConfig() {
@@ -79,11 +87,17 @@ public:
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
     TMaybe<NFake::TStorage> Storage = Nothing();
+    bool InitFederatedQuerySetupFactory = false;
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
+    NKqp::IDescribeSchemaSecretsServiceFactory::TPtr DescribeSchemaSecretsServiceFactory = std::make_shared<NKqp::TDescribeSchemaSecretsServiceFactory>();
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
     NKikimrConfig::TImmediateControlsConfig Controls;
     TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
+    bool EnableStorageProxy = false;
+    bool UseLocalCheckpointsInStreamingQueries = false;
+    TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
+    std::optional<TTestLogSettings> LogSettings;
 
     TKikimrSettings() {
         InitDefaultConfig();
@@ -105,7 +119,9 @@ public:
     TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
     TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
+    TKikimrSettings& SetInitFederatedQuerySetupFactory(bool value) { InitFederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
+    TKikimrSettings& SetDescribeSchemaSecretsServiceFactory(NKqp::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
@@ -120,6 +136,10 @@ public:
         return *this;
     }
     TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
+    TKikimrSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; };
+    TKikimrSettings& SetUseLocalCheckpointsInStreamingQueries(bool value) { UseLocalCheckpointsInStreamingQueries = value; return *this; };
+    TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
+    TKikimrSettings& SetLogSettings(TTestLogSettings value) { LogSettings = value; return *this; };
 };
 
 class TKikimrRunner {
@@ -146,13 +166,28 @@ public:
     ~TKikimrRunner() {
         Server->GetRuntime()->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 
-        RunCall([&] { Driver->Stop(true); return false; });
+        // Now stop the driver after server has stopped accepting connections
+        RunCall([&] { Driver->Stop(true); Driver.Reset(); return false; });
+
         if (ThreadPoolStarted_) {
             ThreadPool.Stop();
         }
 
-        UNIT_ASSERT_C(WaitHttpGatewayFinalization(CountersRoot), "Failed to finalize http gateway before destruction");
+        // Shutdown gRPC servers first to stop accepting new connections
+        // This prevents memory leaks from connections being established during shutdown
+        Server->ShutdownGRpc();
 
+        // Wait a bit to ensure gRPC shutdown completes and all server threads finish
+        // The Shutdown() method already waits internally, but we add extra time
+        // to ensure all resources are fully cleaned up
+        Sleep(TDuration::MilliSeconds(100));
+
+        if (!WaitHttpGatewayFinalization(CountersRoot)) {
+            Cerr << "Failed to finalize http gateway before destruction" << Endl;
+        }
+
+        // Server.Reset() will call ShutdownGRpc() again in TServer destructor,
+        // but it's safe to call multiple times as Shutdown() is idempotent
         Server.Reset();
         Client.Reset();
     }
@@ -160,11 +195,14 @@ public:
     NYdb::TDriver* GetDriverMut() { return Driver.Get(); }
     const TString& GetEndpoint() const { return Endpoint; }
     const NYdb::TDriver& GetDriver() const { return *Driver; }
-    NYdb::NScheme::TSchemeClient GetSchemeClient() const { return NYdb::NScheme::TSchemeClient(*Driver); }
     Tests::TClient& GetTestClient() const { return *Client; }
     Tests::TServer& GetTestServer() const { return *Server; }
 
     NYdb::TDriverConfig GetDriverConfig() const { return DriverConfig; }
+
+    NYdb::NScheme::TSchemeClient GetSchemeClient(NYdb::TCommonClientSettings settings = NYdb::TCommonClientSettings()) const {
+        return NYdb::NScheme::TSchemeClient(*Driver, settings);
+    }
 
     NYdb::NTable::TTableClient GetTableClient(
         NYdb::NTable::TClientSettings settings = NYdb::NTable::TClientSettings()) const {
@@ -197,7 +235,7 @@ private:
     void Initialize(const TKikimrSettings& settings);
     void WaitForKqpProxyInit();
     void CreateSampleTables();
-    void SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
+    bool SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
 
 private:
     THolder<Tests::TServerSettings> ServerSettings;
@@ -239,6 +277,7 @@ enum class EIndexTypeSql {
     GlobalSync,
     GlobalAsync,
     GlobalVectorKMeansTree,
+    GlobalFulltext
 };
 
 inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
@@ -250,6 +289,7 @@ inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
     case EIndexTypeSql::GlobalAsync:
         return "GLOBAL ASYNC";
     case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+    case NKqp::EIndexTypeSql::GlobalFulltext:
         return "GLOBAL";
     }
 }
@@ -263,6 +303,8 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
         return NYdb::NTable::EIndexType::GlobalAsync;
     case EIndexTypeSql::GlobalVectorKMeansTree:
         return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
+    case EIndexTypeSql::GlobalFulltext:
+        Y_ABORT("Fulltext index isn't supported by sdk");
     }
 }
 

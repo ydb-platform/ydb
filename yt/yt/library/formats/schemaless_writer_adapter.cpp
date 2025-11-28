@@ -336,7 +336,7 @@ TFuture<void> TSchemalessFormatWriterBase::Flush()
     return MakeFuture(Error_);
 }
 
-std::optional<TMD5Hash> TSchemalessFormatWriterBase::GetDigest() const {
+std::optional<TRowsDigest> TSchemalessFormatWriterBase::GetDigest() const {
     return std::nullopt;
 }
 

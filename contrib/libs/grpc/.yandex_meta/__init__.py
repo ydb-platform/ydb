@@ -9,9 +9,12 @@ from devtools.yamaker.project import CMakeNinjaNixProject
 
 
 def post_build(self):
+    def _ignore_paths(p):
+        return 'impl/status.h' not in p
+
     # Change std::string to TString
-    re_sub_dir(self.dstdir, r"\bstd::string\b", "TString")
-    re_sub_dir(self.dstdir, r"\bstd::to_string\b", "::ToString")
+    re_sub_dir(self.dstdir, r"\bstd::string\b", "TString", test=_ignore_paths)
+    re_sub_dir(self.dstdir, r"\bstd::to_string\b", "::ToString", test=_ignore_paths)
     re_sub_dir(
         self.dstdir,
         "#include <string>",
@@ -19,6 +22,7 @@ def post_build(self):
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 """.strip(),
+        test=_ignore_paths,
     )
     # Change absl to y_absl
     re_sub_dir(self.dstdir, r"\babsl\b", "y_absl")
@@ -94,9 +98,17 @@ def post_install(self):
         if addincls and source_addincl in addincls:
             addincls.add(build_addincl)
 
-    xxhash = os.path.join(self.dstdir, "third_party/xxhash")
-    if os.path.exists(xxhash) and os.path.isdir(xxhash):
-        shutil.rmtree(xxhash, ignore_errors=True)
+    # unbundle third_party/utf_range manually merged into upb library
+    with self.yamakes["third_party/upb"] as upb:
+        # fmt: off
+        upb.SRCS = [
+            src
+            for src in upb.SRCS
+            if "utf8_range" not in src
+        ]
+        # fmt: on
+        upb.PEERDIR.add("contrib/restricted/google/utf8_range")
+        upb.ADDINCL.add("contrib/restricted/google/utf8_range")
 
     with self.yamakes["."] as m:
         # fmt: off
@@ -158,6 +170,7 @@ grpc = CMakeNinjaNixProject(
     },
     unbundle_from={
         "xxhash": "third_party/xxhash",
+        "utf8_validity": "third_party/upb/third_party/utf8_range",
     },
     copy_sources=[
         "include/**/*.h",

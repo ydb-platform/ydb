@@ -77,6 +77,27 @@ To ensure that {{ ydb-short-name }} can access block disks, add the user that wi
 sudo usermod -aG disk ydb
 ```
 
+## Configure File Descriptor Limits {#file-descriptors}
+
+For proper operation of {{ ydb-short-name }}, especially when using [spilling](../../../concepts/spilling.md) in multi-node clusters, it is recommended to increase the limit of simultaneously open file descriptors.
+
+To change the file descriptor limit, add the following lines to the `/etc/security/limits.conf` file:
+
+```bash
+ydb soft nofile 10000
+ydb hard nofile 10000
+```
+
+Where `ydb` is the username under which `ydbd` runs.
+
+After changing the file, you need to reboot the system or log in again to apply the new limits.
+
+{% note info %}
+
+For more information about spilling configuration and its relationship with file descriptors, see the [Spilling Configuration](../../../reference/configuration/table_service_config.md#file-system-requirements) section.
+
+{% endnote %}
+
 ## Install {{ ydb-short-name }} Software on Each Server {#install-binaries}
 
 1. Download and unpack an archive with the `ydbd` executable and the libraries required for {{ ydb-short-name }} to run:
@@ -421,9 +442,9 @@ You will see that the database was created successfully when the command returns
 
 The command example above uses the following parameters:
 
-* `/Root`: Name of the root domain, must match the `domains_config`.`domain`.`name` setting in the cluster configuration file.
+* `/Root`: Name of the root domain, automatically generated upon cluster initialization.
 * `testdb`: Name of the created database.
-* `ssd:1`:  Name of the storage pool and the number of storage groups allocated. The pool name usually means the type of data storage devices and must match the `storage_pool_types`.`kind` setting inside the `domains_config`.`domain` element of the configuration file.
+* `ssd:1`: Defines the storage pool for the database and the number of groups in it. The pool name (`ssd`) must correspond to the disk type specified in the cluster configuration (for example, in `default_disk_type`) and is case-insensitive. The number after the colon is the number of storage groups to be allocated.
 
 ## Run Dynamic Nodes {#start-dynnode}
 
@@ -554,7 +575,7 @@ In the command examples listed above, `<node.ydb.tech>` is the FQDN of the serve
 
    ```bash
    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
-      yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
+      yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64 NOT NULL, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
    ```
 
 {% endlist %}
@@ -594,7 +615,7 @@ The unprotected {{ ydb-short-name }} mode is primarily intended for test scenari
 When installing {{ ydb-short-name }} to run in the unprotected mode, follow the above procedure, with the following exceptions:
 
 1. When preparing for the installation, you do not need to generate TLS certificates and keys and copy the certificates and keys to the cluster nodes.
-1. In the configuration files, remove the `security_config` subsection under `domains_config`. Remove the `interconnect_config` and `grpc_config` sections entirely.
+1. In the configuration files, remove the `security_config`, `interconnect_config`, and `grpc_config` sections entirely.
 1. Use simplified commands to run static and dynamic cluster nodes: omit the options that specify file names for certificates and keys; use the `grpc` protocol instead of `grpcs` when specifying the connection points.
 1. Skip the step of obtaining an authentication token before cluster initialization and database creation because it's not needed in the unprotected mode.
 1. Cluster initialization command has the following format:

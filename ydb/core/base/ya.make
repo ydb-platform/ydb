@@ -16,6 +16,8 @@ SRCS(
     blobstorage.h
     blobstorage.cpp
     blobstorage_grouptype.cpp
+    boot_type.h
+    boot_type.cpp
     channel_profiles.h
     counters.cpp
     counters.h
@@ -28,6 +30,8 @@ SRCS(
     feature_flags.h
     feature_flags_service.cpp
     feature_flags_service.h
+    fulltext.cpp
+    fulltext.h
     group_stat.cpp
     group_stat.h
     hive.h
@@ -42,6 +46,7 @@ SRCS(
     logoblob.h
     memory_controller_iface.h
     nameservice.h
+    nodestate.h
     path.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
@@ -85,6 +90,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/snowball
     ydb/library/actors/core
     ydb/library/actors/helpers
     ydb/library/actors/interconnect
@@ -103,6 +109,7 @@ PEERDIR(
     ydb/core/audit/audit_config
     ydb/core/base/generated
     ydb/core/base/services
+    ydb/core/control/lib
     ydb/core/debug
     ydb/core/erasure
     ydb/core/graph/api
@@ -125,6 +132,7 @@ PEERDIR(
 )
 ENDIF()
 
+GENERATE_ENUM_SERIALIZATION(boot_type.h)
 GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
 
 END()

@@ -53,7 +53,7 @@ private:
     void RefreshWeights() {
         LevelsByWeight.clear();
         for (ui32 i = 0; i < Levels.size(); ++i) {
-            LevelsByWeight.emplace(Levels[i]->GetWeight(), Levels[i]);
+            LevelsByWeight.emplace(Levels[i]->GetWeight(IsHighPriority() || Levels[i]->IsHighPriority()), Levels[i]);
         }
     }
 
@@ -67,12 +67,12 @@ protected:
         return false;
     }
 
-    virtual void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
+    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         std::vector<std::vector<TPortionInfo::TPtr>> removePortionsByLevel;
         removePortionsByLevel.resize(Levels.size());
         std::vector<std::vector<TPortionInfo::TPtr>> addPortionsByLevels;
         addPortionsByLevels.resize(Levels.size());
-        for (auto&& [_, i] : remove) {
+        for (auto&& i : remove) {
             if (i->GetProduced() == NPortion::EProduced::EVICTED) {
                 continue;
             }
@@ -81,7 +81,7 @@ protected:
             removePortionsByLevel[i->GetCompactionLevel()].emplace_back(i);
         }
         std::vector<TPortionInfo::TPtr> problemPortions;
-        for (auto&& [_, i] : add) {
+        for (auto&& i : add) {
             if (i->GetProduced() == NPortion::EProduced::EVICTED) {
                 continue;
             }
@@ -106,7 +106,7 @@ protected:
         }
         RefreshWeights();
     }
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
+    virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override;
 
     virtual void DoActualize(const TInstant currentInstant) override {
@@ -156,7 +156,7 @@ public:
 
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo,
-        std::vector<std::shared_ptr<IPortionsLevel>>&& levels, std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const ui32 nodePortionsCountLimit);
+        std::vector<std::shared_ptr<IPortionsLevel>>&& levels, std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const std::optional<ui64>& nodePortionsCountLimit);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

@@ -222,6 +222,18 @@ static int test_mshot(struct io_uring *ring, struct data *d)
 			fprintf(stderr, "Got too many requests?\n");
 			return T_EXIT_FAIL;
 		}
+		/*
+		 * We're using unix sockets, and later kernels got support added
+		 * for msg_inq querying. On those kernels, we cannot rely on
+		 * the multishot terminating on a zero receive, as io_uring
+		 * will not do that retry as it KNOWS there's zero bytes
+		 * pending. Hence we need to actively quiet at that point. Inc
+		 * 'i' as well as we don't get the non-MORE CQE posted.
+		 */
+		if (i == NREQS) {
+			i++;
+			break;
+		}
 	} while (1);
 
 	if (i != NREQS + 1) {

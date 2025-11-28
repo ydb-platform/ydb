@@ -26,13 +26,12 @@ int Run(int argc, char* argv[]) {
     opts.AddLongOption('v', "verbose", "show lint issues").NoArgument();
     opts.AddLongOption("list-checks", "list all enabled checks and exit").NoArgument();
     opts.AddLongOption("checks", "comma-separated list of globs with optional '-' prefix").StoreResult(&checks);
-    opts.AddLongOption('C', "cluster", "cluster to service mapping").RequiredArgument("name@service")
-        .KVHandler([&](TString cluster, TString provider) {
-            if (cluster.empty() || provider.empty()) {
-                throw yexception() << "Incorrect service mapping, expected form cluster@provider, e.g. plato@yt";
-            }
-            clusterMapping[cluster] = provider;
-        }, '@');
+    opts.AddLongOption('C', "cluster", "cluster to service mapping").RequiredArgument("name@service").KVHandler([&](TString cluster, TString provider) {
+        if (cluster.empty() || provider.empty()) {
+            throw yexception() << "Incorrect service mapping, expected form cluster@provider, e.g. plato@yt";
+        }
+        clusterMapping[cluster] = provider;
+    }, '@');
 
     opts.AddLongOption('m', "mode", "query mode, allowed values: " + GetEnumAllNames<NYql::NFastCheck::EMode>()).StoreResult(&modeStr);
     opts.AddLongOption('s', "syntax", "query syntax, allowed values: " + GetEnumAllNames<NYql::NFastCheck::ESyntax>()).StoreResult(&syntaxStr);
@@ -40,12 +39,11 @@ int Run(int argc, char* argv[]) {
     opts.AddLongOption("cluster-system", "cluster system").StoreResult(&clusterSystem);
     opts.AddLongOption("ansi-lexer", "use ansi lexer").NoArgument();
     opts.AddLongOption("no-colors", "disable colors for output").NoArgument();
-    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER")
-        .Handler1T<TString>([&](const TString& str) {
-            if (!NYql::ParseLangVersion(str, langver)) {
-                throw yexception() << "Failed to parse language version: " << str;
-            }
-        });
+    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([&](const TString& str) {
+        if (!NYql::ParseLangVersion(str, langver)) {
+            throw yexception() << "Failed to parse language version: " << str;
+        }
+    });
 
     opts.SetFreeArgsNum(0);
     opts.AddHelpOption();
@@ -90,8 +88,8 @@ int Run(int argc, char* argv[]) {
     checkReq.Program = queryString;
     checkReq.Syntax = NYql::NFastCheck::ESyntax::YQL;
     checkReq.ClusterMapping = clusterMapping;
-    checkReq.Mode =  FromString<NYql::NFastCheck::EMode>(modeStr);
-    checkReq.Syntax =  FromString<NYql::NFastCheck::ESyntax>(syntaxStr);
+    checkReq.Mode = FromString<NYql::NFastCheck::EMode>(modeStr);
+    checkReq.Syntax = FromString<NYql::NFastCheck::ESyntax>(syntaxStr);
     checkReq.ClusterMode = FromString<NYql::NFastCheck::EClusterMode>(clusterModeStr);
     checkReq.ClusterSystem = clusterSystem;
     auto checkResp = NYql::NFastCheck::RunChecks(checkReq);

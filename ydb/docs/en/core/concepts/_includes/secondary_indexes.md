@@ -55,15 +55,6 @@ Online index creation consists of the following steps:
 
    The index is ready to use.
 
-{% note info %}
-
-The user account that is used to create a secondary index must have the following [permissions](../../yql/reference/syntax/grant.md#permissions-list):
-
-* `ydb.generic.read`
-* `ydb.generic.write`
-
-{% endnote %}
-
 Possible impact on user transactions:
 
 * There may be an increase in delays because transactions are now distributed (when creating a synchronous index).

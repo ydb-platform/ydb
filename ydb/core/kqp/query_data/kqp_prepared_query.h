@@ -116,6 +116,10 @@ public:
         return Proto->ShortDebugString();
     }
 
+    std::shared_ptr<const NKikimrKqp::TPreparedQuery> GetPreparedQuery() const {
+        return PreparedQuery;
+    }
+
     TIntrusiveConstPtr<TTableConstInfoMap> GetTableConstInfoById() const;
 
     TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPreparedQuery>& pq, const NKqpProto::TKqpPhyTx* proto,

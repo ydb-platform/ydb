@@ -42,7 +42,7 @@ TExprBase SelectFields(TExprBase node, Container fields, TExprContext& ctx, TPos
         .Done();
 }
 
-TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx) {
     auto maybeReturning = node.Maybe<TKqlReturningList>();
     if (!maybeReturning) {
         return node;
@@ -173,6 +173,7 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         return TExprBase(ctx.ChangeChild(*returning.Raw(), TKqlReturningList::idx_Update, inputExpr.Ptr()));
     };
 
+
     if (auto maybeList = returning.Update().Maybe<TExprList>()) {
         for (auto item : maybeList.Cast()) {
             if (auto upsert = item.Maybe<TKqlUpsertRows>()) {
@@ -204,7 +205,7 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
 
     TExprNode::TPtr result = returning.Update().Ptr();
-    auto status = TryConvertTo(result, *result->GetTypeAnn(), *returning.Raw()->GetTypeAnn(), ctx);
+    auto status = TryConvertTo(result, *result->GetTypeAnn(), *returning.Raw()->GetTypeAnn(), ctx, typeCtx);
     YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error, "wrong returning expr type");
 
     if (status.Level == IGraphTransformer::TStatus::Repeat) {
@@ -224,7 +225,7 @@ TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKq
         return node;
     }
 
-    if (upsert.Input().Maybe<TDqPrecompute>() || upsert.Input().Maybe<TDqPhyPrecompute>()) {
+    if (upsert.Input().Maybe<TDqPrecompute>() || upsert.Input().Maybe<TDqPhyPrecompute>() || upsert.Input().Maybe<TCoParameter>()) {
         return node;
     }
 
@@ -247,7 +248,7 @@ TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKq
         return node;
     }
 
-    if (del.Input().Maybe<TDqPrecompute>() || del.Input().Maybe<TDqPhyPrecompute>()) {
+    if (del.Input().Maybe<TDqPrecompute>() || del.Input().Maybe<TDqPhyPrecompute>() || del.Input().Maybe<TCoParameter>()) {
         return node;
     }
 

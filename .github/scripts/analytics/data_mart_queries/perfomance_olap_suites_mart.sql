@@ -53,10 +53,14 @@ $suites = SELECT
     Suite,
     RunId,
     MAX_BY(JSON_VALUE(Info, "$.cluster.version"), Success) AS Version,
+    MAX_BY(JSON_VALUE(Info, "$.ci_version"), Success) AS CiVersion,
+    MAX_BY(JSON_VALUE(Info, "$.test_tools_version"), Success) AS TestToolsVersion,
     MAX_BY(JSON_VALUE(Info, "$.report_url"), Success) AS Report,
     SUM_IF(MeanDuration, Success > 0 AND Test not in {"_Verification", "Sum"} AND JSON_VALUE(Stats, '$.import_time') IS NULL) / 1000. AS YdbSumMeans,
+    SUM_IF(MeanDuration * CAST(JSON_VALUE(Stats, '$.SuccessCount') AS int), Success > 0 AND Test not in {"_Verification", "Sum"} AND JSON_VALUE(Stats, '$.import_time') IS NULL) / 1000. AS QuasiGrossTime,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.time_with_compaction') AS Float)), Test not in {"_Verification", "Sum"}) AS SumImportWithCompactionTime,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.import_time') AS Float)), Test not in {"_Verification", "Sum"}) AS SumImportTime,
+    SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.CompilationAvg') AS Float)), Test not in {"_Verification", "Sum"}) AS SumCompilationTime,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.compacted_bytes') AS Float)), Test not in {"_Verification", "Sum"}) AS SumCompactedBytes,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.written_bytes') AS Float)), Test not in {"_Verification", "Sum"}) AS SumWrittenBytes,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.GrossTime') AS float)), Test = 'Sum') AS GrossTime,
@@ -65,6 +69,10 @@ $suites = SELECT
     AVG_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.import_speed') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) / 1. AS AvgImportSpeed,
     AVG_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.cpu_cores') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) / 1. AS AvgCpuCores,
     AVG_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.cpu_time') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) / 1. AS AvgCpuTime,
+    SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_30') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction30,
+    SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_40') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction40,
+    SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_50') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction50,
+    SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_100') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction100,
     Min(MIN_OF(Timestamp, CAST(RunId/1000 AS Timestamp))) AS Begin,
     Max(Timestamp) AS End,
 FROM `perfomance/olap/tests_results`
@@ -76,18 +84,25 @@ SELECT
     s.Suite AS Suite,
     CAST(s.RunId/1000 AS Timestamp) AS RunTs,
     s.Version AS Version,
+    s.CiVersion AS CiVersion,
+    s.TestToolsVersion AS TestToolsVersion,
     s.Report AS Report,
     s.YdbSumMeans AS YdbSumMeans,
     s.SumImportTime AS SumImportTime,
+    s.SumCompilationTime AS SumCompilationTime,
     s.SumImportWithCompactionTime AS SumImportWithCompactionTime,
     s.SumCompactedBytes AS SumCompactedBytes,
     s.SumWrittenBytes AS SumWrittenBytes,
-    s.GrossTime AS GrossTime,
+    IF(COALESCE(s.GrossTime) > 0, s.GrossTime, s.QuasiGrossTime) AS GrossTime,
     s.SuccessCount AS SuccessCount,
     s.FailCount AS FailCount,
     s.AvgImportSpeed AS AvgImportSpeed,
     s.AvgCpuCores AS AvgCpuCores,
     s.AvgCpuTime AS AvgCpuTime,
+    s.Satisfaction30 * IF(s.Satisfaction30 > 1., 1.e-6, 1.) AS Satisfaction30,
+    s.Satisfaction40 * IF(s.Satisfaction40 > 1., 1.e-6, 1.) AS Satisfaction40,
+    s.Satisfaction50 * IF(s.Satisfaction50 > 1., 1.e-6, 1.) AS Satisfaction50,
+    s.Satisfaction100 * IF(s.Satisfaction100 > 1., 1.e-6, 1.) AS Satisfaction100,
     s.Begin AS Begin,
     s.End AS End,
     d.DiffTests AS DiffTests,
@@ -95,6 +110,7 @@ SELECT
     CASE
         WHEN s.Db LIKE '%sas%' THEN 'sas'
         WHEN s.Db LIKE '%vla%' THEN 'vla'
+        WHEN s.Db LIKE '%etn0vb1kg3p016q1tp3t%' THEN 'cloud'
         ELSE 'other'
     END AS DbDc,
 
@@ -114,6 +130,7 @@ SELECT
         WHEN s.Db LIKE '%vla4-8154%' THEN 'vla_8154_'
         WHEN s.Db LIKE '%vla4-8161%' THEN 'vla_8161_'
         WHEN s.Db LIKE '%vla%' THEN 'vla_'
+        WHEN s.Db LIKE '%etn0vb1kg3p016q1tp3t%b1ggceeul2pkher8vhb6/etn0vb1kg3p016q1tp3t%' THEN 'cloud_slonnn_'
         ELSE 'new_db_'
     END || CASE
         WHEN s.Db LIKE '%load%' THEN 'column'
@@ -121,7 +138,9 @@ SELECT
         WHEN s.Db LIKE '%/row%' THEN 'row'
         ELSE 'other'
     END AS DbAlias,
-    SubString(CAST(s.Version AS String), 0U, FIND(CAST(s.Version AS String), '.')) As Branch
+    COALESCE(SubString(CAST(s.Version AS String), 0U, FIND(CAST(s.Version AS String), '.')), 'unknown') As Branch,
+    COALESCE(SubString(CAST(s.CiVersion AS String), 0U, FIND(CAST(s.CiVersion AS String), '.')), 'unknown') As CiBranch,
+    COALESCE(SubString(CAST(s.TestToolsVersion AS String), 0U, FIND(CAST(s.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch
 FROM $suites AS s
 LEFT JOIN $diff_tests AS d ON s.RunId = d.RunId AND s.Db = d.Db AND s.Suite = d.Suite
 LEFT JOIN $fail_tests AS f ON s.RunId = f.RunId AND s.Db = f.Db AND s.Suite = f.Suite

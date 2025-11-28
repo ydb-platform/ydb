@@ -103,7 +103,7 @@ int main(int argc, const char* argv[]) {
             stopPartitionSessionEvent->Confirm();
         } else if (auto* endPartitionSessionEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
             endPartitionSessionEvent->Confirm();
-        } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+        } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
             break;
         }
     }

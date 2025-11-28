@@ -1,7 +1,7 @@
 PROGRAM()
 
 PEERDIR(
-	library/cpp/getopt
+    library/cpp/getopt
 )
 
 SRCS(

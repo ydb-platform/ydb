@@ -25,7 +25,7 @@ namespace NTable {
 
         Tail = 1,
         Head = 17,
-        Edge = 28,
+        Edge = 29,
     };
 
     /* Ev | Desc                                                   | Gone
@@ -91,6 +91,8 @@ namespace NTable {
        27   Parts with versioned rows and historic indexes
      ---------------------------------------------------------------------
        28   Parts with uncommitted delta rows
+     ---------------------------------------------------------------------
+       29   Parts with persistent row locks
      */
 
 }

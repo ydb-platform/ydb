@@ -7,7 +7,7 @@
 #include <util/generic/yexception.h>
 #include <util/generic/maybe.h>
 #ifndef LLVM_BC
-#include <util/datetime/base.h>
+    #include <util/datetime/base.h>
 #else
 using TInstant = ui64;
 #endif
@@ -20,10 +20,11 @@ using TInstant = ui64;
 namespace NYql {
 namespace NCommon {
 
-class TTimeoutException : public yexception {
+class TTimeoutException: public yexception {
 };
 
-struct IBlockReader {
+class IBlockReader {
+public:
     virtual ~IBlockReader() = default;
     virtual void SetDeadline(TInstant deadline) = 0;
 
@@ -32,7 +33,8 @@ struct IBlockReader {
     virtual bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) = 0;
 };
 
-struct IBlockWriter {
+class IBlockWriter {
+public:
     virtual ~IBlockWriter() = default;
 
     virtual void SetRecordBoundaryCallback(std::function<void()> callback) = 0;
@@ -51,14 +53,15 @@ extern "C" void InputBufReadManySlowThunk(TInputBuf& in, char* buffer, size_t co
 extern "C" void InputBufSkipManySlowThunk(TInputBuf& in, size_t count);
 
 class TInputBuf {
-friend char InputBufReadSlowThunk(TInputBuf& in);
-friend void InputBufReadManySlowThunk(TInputBuf& in, char* buffer, size_t count);
-friend void InputBufSkipManySlowThunk(TInputBuf& in, size_t count);
+    friend char InputBufReadSlowThunk(TInputBuf& in);
+    friend void InputBufReadManySlowThunk(TInputBuf& in, char* buffer, size_t count);
+    friend void InputBufSkipManySlowThunk(TInputBuf& in, size_t count);
 
 public:
     TInputBuf(NKikimr::NMiniKQL::TSamplingStatTimer* readTimer)
         : ReadTimer_(readTimer)
-    {}
+    {
+    }
 
     TInputBuf(IBlockReader& source, NKikimr::NMiniKQL::TSamplingStatTimer* readTimer)
         : TInputBuf(readTimer)
@@ -198,7 +201,7 @@ extern "C" void OutputBufFlushThunk(TOutputBuf& out);
 extern "C" void OutputBufWriteManySlowThunk(TOutputBuf& out, const char* buffer, size_t count);
 
 class TOutputBuf {
-friend void OutputBufWriteManySlowThunk(TOutputBuf& out, const char* buffer, size_t count);
+    friend void OutputBufWriteManySlowThunk(TOutputBuf& out, const char* buffer, size_t count);
 
 public:
     TOutputBuf(IBlockWriter& target, NKikimr::NMiniKQL::TStatTimer* writeTimer);
@@ -285,11 +288,18 @@ private:
 #define CHECK_EXPECTED(read, expected) \
     YQL_ENSURE(read == expected, "Expected char: " << TString(1, expected).Quote() << ", but read: " << TString(1, read).Quote());
 
-#define EXPECTED(buf, expected) \
-    { char read = buf.Read(); CHECK_EXPECTED(read, expected); }
+#define EXPECTED(buf, expected)         \
+    {                                   \
+        char read = buf.Read();         \
+        CHECK_EXPECTED(read, expected); \
+    }
 
 #define EXPECTED_COPY(buf, expected, yson) \
-    { char read = buf.Read(); CHECK_EXPECTED(read, expected); yson.push_back(read); }
+    {                                      \
+        char read = buf.Read();            \
+        CHECK_EXPECTED(read, expected);    \
+        yson.push_back(read);              \
+    }
 
 #define CHECK_STRING_LENGTH(length) \
     YQL_ENSURE(length >= 0 && length < (1 << 30), "Bad string length: " << length);
@@ -297,5 +307,5 @@ private:
 #define CHECK_STRING_LENGTH_UNSIGNED(length) \
     YQL_ENSURE(length < (1 << 30), "Bad string length: " << length);
 
-} // NCommon
-} // NYql
+} // namespace NCommon
+} // namespace NYql

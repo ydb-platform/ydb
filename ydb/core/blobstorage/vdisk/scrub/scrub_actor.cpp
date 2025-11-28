@@ -152,6 +152,8 @@ namespace NKikimr {
 
         ReleaseSnapshot();
 
+        CheckIntegrity();
+
         if (const ui64 cookie = GenerateRestoreCorruptedBlobQuery()) {
             while (LastReceivedRestoreCookie < cookie) {
                 ProcessUnexpectedEvent(WaitForEvent());
@@ -235,6 +237,17 @@ namespace NKikimr {
 
     TIntrusivePtr<IContiguousChunk> TScrubCoroImpl::AllocateRopeArenaChunk() {
         return TRopeAlignedBuffer::Allocate(1 << 20); // 1 MB
+    }
+
+    void TScrubCoroImpl::EnqueueCheckIntegrity(const TLogoBlobID& blobId, bool isHuge) {
+        CheckIntegrityPending.emplace_back(blobId, isHuge);
+    }
+
+    void TScrubCoroImpl::CheckIntegrity() {
+        for (const auto& [blobId, isHuge] : CheckIntegrityPending) {
+            CheckIntegrity(blobId, isHuge);
+        }
+        CheckIntegrityPending.clear();
     }
 
     void TScrubCoroImpl::CheckIntegrity(const TLogoBlobID& blobId, bool isHuge) {

@@ -9,7 +9,7 @@ namespace NUdf {
 
 namespace {
 
-class TNullLogger : public ILogger {
+class TNullLogger: public ILogger {
 public:
     TLogComponentId RegisterComponent(const TStringRef& component) final {
         Y_UNUSED(component);
@@ -38,38 +38,39 @@ public:
     }
 };
 
-class TSynchronizedLogger : public ILogger {
+class TSynchronizedLogger: public ILogger {
 public:
     TSynchronizedLogger(const TLoggerPtr& inner)
         : Inner_(inner)
-    {}
+    {
+    }
 
     TLogComponentId RegisterComponent(const TStringRef& component) final {
-        with_lock(Mutex_) {
+        with_lock (Mutex_) {
             return Inner_->RegisterComponent(component);
         }
     }
 
     void SetDefaultLevel(ELogLevel level) final {
-        with_lock(Mutex_) {
+        with_lock (Mutex_) {
             Inner_->SetDefaultLevel(level);
         }
     }
 
     void SetComponentLevel(TLogComponentId component, ELogLevel level) final {
-        with_lock(Mutex_) {
+        with_lock (Mutex_) {
             Inner_->SetComponentLevel(component, level);
         }
     }
 
     bool IsActive(TLogComponentId component, ELogLevel level) const final {
-        with_lock(Mutex_) {
+        with_lock (Mutex_) {
             return Inner_->IsActive(component, level);
         }
     }
 
     void Log(TLogComponentId component, ELogLevel level, const TStringRef& message) final {
-        with_lock(Mutex_) {
+        with_lock (Mutex_) {
             Inner_->Log(component, level, message);
         }
     }
@@ -139,12 +140,13 @@ private:
     THashMap<TLogComponentId, ELogLevel> CompLevels_;
 };
 
-class TLogProvider : public ILogProvider {
+class TLogProvider: public ILogProvider {
 public:
     TLogProvider(TLogProviderFunc func, TMaybe<ELogLevel> filter)
         : Func_(func)
         , Filter_(filter)
-    {}
+    {
+    }
 
     TLoggerPtr MakeLogger() const final {
         return new TLogger(Func_, Filter_);
@@ -155,7 +157,7 @@ private:
     const TMaybe<ELogLevel> Filter_;
 };
 
-}
+} // namespace
 
 TLoggerPtr MakeNullLogger() {
     return new TNullLogger();
@@ -166,7 +168,8 @@ TLoggerPtr MakeSynchronizedLogger(const TLoggerPtr& inner) {
 }
 
 #define SWITCH_ENUM_TYPE_TO_STR(name, val) \
-    case val: return TStringBuf(#name);
+    case val:                              \
+        return TStringBuf(#name);
 
 TStringBuf LevelToString(ELogLevel level) {
     switch (static_cast<ui32>(level)) {
@@ -177,7 +180,8 @@ TStringBuf LevelToString(ELogLevel level) {
 }
 
 #define PARSE_ENUM_TYPE_FROM_STR(name, val) \
-    if (#name == str) return static_cast<ELogLevel>(val);
+    if (#name == str)                       \
+        return static_cast<ELogLevel>(val);
 
 TMaybe<ELogLevel> TryLevelFromString(TStringBuf str) {
     UDF_LOG_LEVEL(PARSE_ENUM_TYPE_FROM_STR)
@@ -189,13 +193,12 @@ TMaybe<ELogLevel> TryLevelFromString(TStringBuf str) {
 
 TString LogLevelAvailables() {
     return JoinSeq(", ",
-        {UDF_LOG_LEVEL(ENUM_STR_JOIN)}
-    );
+                   {UDF_LOG_LEVEL(ENUM_STR_JOIN)});
 }
 
 TUniquePtr<ILogProvider> MakeLogProvider(TLogProviderFunc func, TMaybe<ELogLevel> filter) {
     return new TLogProvider(func, filter);
 }
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NUdf
+} // namespace NYql

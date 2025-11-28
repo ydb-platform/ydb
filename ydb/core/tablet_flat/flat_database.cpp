@@ -274,17 +274,17 @@ void TDatabase::CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TR
     Require(table)->Precharge(minKey, maxKey, tags, &env, flg, items, bytes, direction, snapshot, stats);
 }
 
-bool TDatabase::Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
+TPrechargeResult TDatabase::Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
                     TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
                     EDirection direction, TRowVersion snapshot)
 {
     CheckPrechargeAllowed(table, minKey, maxKey);
 
     TSelectStats stats;
-    auto ready = Require(table)->Precharge(minKey, maxKey, tags, Env, flg, items, bytes, direction, snapshot, stats);
+    auto result = Require(table)->Precharge(minKey, maxKey, tags, Env, flg, items, bytes, direction, snapshot, stats);
     Change->Stats.ChargeSieved += stats.Sieved;
     Change->Stats.ChargeWeeded += stats.Weeded;
-    return ready == EReady::Data;
+    return result;
 }
 
 void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, TRowVersion rowVersion)
@@ -365,6 +365,20 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
 
     Redo->EvUpdateTx(table, rop, key, ModifiedOps, txId);
     RequireForUpdate(table)->UpdateTx(rop, key, ModifiedOps, Annex->Current(), txId);
+}
+
+void TDatabase::LockRowTx(ui32 table, ELockMode mode, TRawVals key, ui64 txId)
+{
+    Y_ENSURE(mode != ELockMode::None);
+
+    for (size_t index = 0; index < key.size(); ++index) {
+        if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
+            Y_TABLET_ERROR("Key index " << index << " validation failure: " << error);
+        }
+    }
+
+    Redo->EvLockRowTx(table, mode, key, txId);
+    RequireForUpdate(table)->LockRowTx(mode, key, txId);
 }
 
 void TDatabase::RemoveTx(ui32 table, ui64 txId)

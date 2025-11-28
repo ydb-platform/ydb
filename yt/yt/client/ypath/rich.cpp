@@ -25,10 +25,7 @@ using namespace NSecurityClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRichYPath::TRichYPath()
-{ }
-
-TRichYPath::TRichYPath(const TRichYPath& other)
+TRichYPath::TRichYPath(const TRichYPath& other) noexcept
     : Path_(other.Path_)
     , Attributes_(other.Attributes_ ? other.Attributes_->Clone() : nullptr)
 { }
@@ -39,30 +36,34 @@ TRichYPath::TRichYPath(const char* path)
     *this = Normalize();
 }
 
-TRichYPath::TRichYPath(const TYPath& path)
-    : Path_(path)
+TRichYPath::TRichYPath(TYPath path)
+    : Path_(std::move(path))
 {
     *this = Normalize();
 }
 
-TRichYPath::TRichYPath(TRichYPath&& other)
-    : Path_(std::move(other.Path_))
-    , Attributes_(std::move(other.Attributes_))
-{ }
-
-TRichYPath::TRichYPath(const TYPath& path, const IAttributeDictionary& attributes)
-    : Path_(path)
+TRichYPath::TRichYPath(TYPath path, const IAttributeDictionary& attributes)
+    : Path_(std::move(path))
     , Attributes_(attributes.Clone())
 { }
+
+TRichYPath& TRichYPath::operator=(const TRichYPath& other) noexcept
+{
+    if (this != &other) {
+        Path_ = other.Path_;
+        Attributes_ = other.Attributes_ ? other.Attributes_->Clone() : nullptr;
+    }
+    return *this;
+}
 
 const TYPath& TRichYPath::GetPath() const
 {
     return Path_;
 }
 
-void TRichYPath::SetPath(const TYPath& path)
+void TRichYPath::SetPath(TYPath path)
 {
-    Path_ = path;
+    Path_ = std::move(path);
 }
 
 const IAttributeDictionary& TRichYPath::Attributes() const
@@ -76,15 +77,6 @@ IAttributeDictionary& TRichYPath::Attributes()
         Attributes_ = CreateEphemeralAttributes();
     }
     return *Attributes_;
-}
-
-TRichYPath& TRichYPath::operator = (const TRichYPath& other)
-{
-    if (this != &other) {
-        Path_ = other.Path_;
-        Attributes_ = other.Attributes_ ? other.Attributes_->Clone() : nullptr;
-    }
-    return *this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -149,9 +141,37 @@ TYsonString FindAttributeYson(const TRichYPath& path, const std::string& key)
     });
 }
 
+//! Collect all ranges.
+//! Either from `ranges` key or from top-level `{upper,lower}_limit` keys
+std::optional<std::vector<IMapNodePtr>> CollectRawRangeNodes(const TRichYPath& path)
+{
+    // TODO(max42): YT-14242. Top-level "lower_limit" and "upper_limit" are processed for compatibility.
+    // But we should deprecate this one day.
+    auto optionalRangeNodes = FindAttribute<std::vector<IMapNodePtr>>(path, "ranges");
+    auto optionalLowerLimitNode = FindAttribute<IMapNodePtr>(path, "lower_limit");
+    auto optionalUpperLimitNode = FindAttribute<IMapNodePtr>(path, "upper_limit");
+
+    if (optionalLowerLimitNode || optionalUpperLimitNode) {
+        if (optionalRangeNodes) {
+            THROW_ERROR_EXCEPTION("YPath cannot be annotated with both multiple (\"ranges\" attribute) "
+                "and single (\"lower_limit\" or \"upper_limit\" attributes) ranges");
+        }
+        THashMap<TString, IMapNodePtr> rangeNode;
+        if (optionalLowerLimitNode) {
+            rangeNode["lower_limit"] = optionalLowerLimitNode;
+        }
+        if (optionalUpperLimitNode) {
+            rangeNode["upper_limit"] = optionalUpperLimitNode;
+        }
+        return std::vector<IMapNodePtr>({ConvertToNode(rangeNode)->AsMap()});
+    }
+
+    return optionalRangeNodes;
+}
+
 } // namespace
 
-TRichYPath TRichYPath::Parse(const TString& str)
+TRichYPath TRichYPath::Parse(TStringBuf str)
 {
     return ParseRichYPathImpl(str);
 }
@@ -455,26 +475,7 @@ std::vector<NChunkClient::TReadRange> TRichYPath::GetNewRanges(
     const NTableClient::TComparator& comparator,
     const NTableClient::TKeyColumnTypes& conversionTypeHints) const
 {
-    // TODO(max42): YT-14242. Top-level "lower_limit" and "upper_limit" are processed for compatibility.
-    // But we should deprecate this one day.
-    auto optionalRangeNodes = FindAttribute<std::vector<IMapNodePtr>>(*this, "ranges");
-    auto optionalLowerLimitNode = FindAttribute<IMapNodePtr>(*this, "lower_limit");
-    auto optionalUpperLimitNode = FindAttribute<IMapNodePtr>(*this, "upper_limit");
-
-    if (optionalLowerLimitNode || optionalUpperLimitNode) {
-        if (optionalRangeNodes) {
-            THROW_ERROR_EXCEPTION("YPath cannot be annotated with both multiple (\"ranges\" attribute) "
-                "and single (\"lower_limit\" or \"upper_limit\" attributes) ranges");
-        }
-        THashMap<TString, IMapNodePtr> rangeNode;
-        if (optionalLowerLimitNode) {
-            rangeNode["lower_limit"] = optionalLowerLimitNode;
-        }
-        if (optionalUpperLimitNode) {
-            rangeNode["upper_limit"] = optionalUpperLimitNode;
-        }
-        optionalRangeNodes = {ConvertToNode(rangeNode)->AsMap()};
-    }
+    auto optionalRangeNodes = CollectRawRangeNodes(*this);
 
     if (!optionalRangeNodes) {
         return {TReadRange()};
@@ -496,6 +497,33 @@ std::vector<NChunkClient::TReadRange> TRichYPath::GetNewRanges(
     }
 
     return readRanges;
+}
+
+bool TRichYPath::HasRowIndexInRanges() const
+{
+    auto optionalRangeNodes = CollectRawRangeNodes(*this);
+    if (!optionalRangeNodes) {
+        return false;
+    }
+
+    for (const auto& rangeNode : *optionalRangeNodes) {
+        auto hasRowIndex = [] (const INodePtr& limitNode) {
+            if (!limitNode) {
+                return false;
+            }
+
+            return static_cast<bool>(limitNode->AsMap()->FindChild("row_index"));
+        };
+
+        if (hasRowIndex(rangeNode->FindChild("lower_limit")) ||
+            hasRowIndex(rangeNode->FindChild("upper_limit")) ||
+            hasRowIndex(rangeNode->FindChild("exact")))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void TRichYPath::SetRanges(const std::vector<NChunkClient::TReadRange>& ranges)
@@ -693,6 +721,11 @@ TVersionedWriteOptions TRichYPath::GetVersionedWriteOptions() const
 std::optional<TString> TRichYPath::GetAccessMethod() const
 {
     return FindAttribute<TString>(*this, "access_method");
+}
+
+std::optional<TString> TRichYPath::GetInputQuery() const
+{
+    return FindAttribute<TString>(*this, "input_query");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

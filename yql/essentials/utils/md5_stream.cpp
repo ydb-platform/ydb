@@ -8,7 +8,7 @@ TMd5OutputStream::TMd5OutputStream(IOutputStream& delegatee)
 }
 
 TString TMd5OutputStream::Finalize() {
-    char buf[33] = { 0 };
+    char buf[33] = {0};
     return TString(Accumulator_.End(buf));
 }
 
@@ -17,4 +17,4 @@ void TMd5OutputStream::DoWrite(const void* buf, size_t len) {
     Accumulator_.Update(buf, len);
 }
 
-}
+} // namespace NYql

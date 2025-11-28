@@ -1,5 +1,8 @@
 RECURSE(
     cdc
+    common
+    ctas
+    kafka
     kv
     log
     mixedpy
@@ -8,8 +11,14 @@ RECURSE(
     oltp_workload
     reconfig_state_storage_workload
     s3_backups
-    simple_queue
+    scheme_board
     show_create/view
+    show_create/table
+    simple_queue
     statistics_workload
+    testshard_workload
+    topic
+    topic_kafka
     transfer
+    viewer
 )

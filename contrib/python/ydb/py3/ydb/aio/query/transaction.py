@@ -181,8 +181,8 @@ class QueryTxContext(BaseQueryTxContext):
         )
 
         self._prev_stream = AsyncResponseContextIterator(
-            stream_it,
-            lambda resp: base.wrap_execute_query_response(
+            it=stream_it,
+            wrapper=lambda resp: base.wrap_execute_query_response(
                 rpc_state=None,
                 response_pb=resp,
                 session_state=self._session_state,

@@ -16,6 +16,7 @@
   - assert.h
   - bits/endian.h
   - bits/fenv.h
+  - bits/stdio_lim.h
   - bits/types.h
   - bits/wordsize.h
   - byteswap.h

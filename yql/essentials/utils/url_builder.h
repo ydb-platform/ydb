@@ -10,6 +10,7 @@ class TUrlBuilder {
         TString Name;
         TString Value;
     };
+
 public:
     explicit TUrlBuilder(const TString& uri);
 
@@ -18,9 +19,10 @@ public:
     TUrlBuilder& AddPathComponent(const TString& value);
 
     TString Build() const;
+
 private:
     std::vector<TParam> Params_;
     TString MainUri_;
 };
 
-} // NYql
+} // namespace NYql

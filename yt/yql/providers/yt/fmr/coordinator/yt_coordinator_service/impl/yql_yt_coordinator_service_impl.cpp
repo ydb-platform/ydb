@@ -31,7 +31,9 @@ public:
             auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
             TVector<NYT::TRichYPath> richPaths;
             for (auto& ytTable: ytTables ) {
-                richPaths.emplace_back(ytTable.RichPath);
+                auto richPath = ytTable.RichPath;
+                NormalizeRichPath(richPath);
+                richPaths.emplace_back(richPath);
             }
             try {
                 NYT::TMultiTablePartitions partitions = transaction->GetTablePartitions(richPaths, getTablePartitionsOptions);

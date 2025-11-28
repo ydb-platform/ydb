@@ -40,10 +40,10 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << 
-            "columns_size:" << ColumnPortionsSize << 
-            ";total_size:" << TotalPortionsSize << 
-            ";count:" << PortionsCount << 
+        return TStringBuilder() <<
+            "columns_size:" << ColumnPortionsSize <<
+            ";total_size:" << TotalPortionsSize <<
+            ";count:" << PortionsCount <<
             ";metadata_portions_size:" << MetadataMemoryPortionsSize <<
             ";records_count:" << RecordsCount <<
             ";";
@@ -226,6 +226,8 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataUsageBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr BadPortionsCount;
+
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
@@ -239,10 +241,14 @@ public:
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> BlobGuards;
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> PortionRecordCountGuards;
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> PortionSizeGuards;
+        TValueGuard BadPortionsCount;
+
     public:
         TPortionsInfoGuard(const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrBlobs,
             const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrPortionSize,
-            const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrRecordsCount)
+            const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrRecordsCount,
+            NMonitoring::TDynamicCounters::TCounterPtr badPortionsCount) :
+            BadPortionsCount(badPortionsCount)
         {
             for (auto&& i : distrBlobs) {
                 BlobGuards.emplace_back(i->BuildGuard());
@@ -256,15 +262,15 @@ public:
         }
 
 
-        void OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const;
-        void OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const;
+        void OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
+        void OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
 
     };
 
     void OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const;
 
     TPortionsInfoGuard BuildPortionBlobsGuard() const {
-        return TPortionsInfoGuard(BlobSizeDistribution, PortionSizeDistribution, PortionRecordsDistribution);
+        return TPortionsInfoGuard(BlobSizeDistribution, PortionSizeDistribution, PortionRecordsDistribution, BadPortionsCount);
     }
 
     TGranuleDataCounters RegisterGranuleDataCounters() const {

@@ -75,9 +75,9 @@ void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui3
             selection->SelectedReplicas[idx] = ringGroup.Rings[idx].SelectReplica(hash);
         }
     } else { // NToSelect < total, first - select rings with walker, then select concrete node
-        TStateStorageRingWalker walker(hash, total);
-        for (ui32 idx : xrange(ringGroup.NToSelect))
-            selection->SelectedReplicas[idx] = ringGroup.Rings[walker.Next()].SelectReplica(hash);
+        for (ui32 idx = 0; ui32 ringIdx : TStateStorageRingWalker::Select(hash, total, ringGroup.NToSelect)) {
+            selection->SelectedReplicas[idx++] = ringGroup.Rings[ringIdx].SelectReplica(hash);
+        }
     }
 }
 
@@ -230,7 +230,7 @@ void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, u
 }
 
 bool TStateStorageInfo::TRingGroup::SameConfiguration(const TStateStorageInfo::TRingGroup& rg) {
-    return NToSelect == rg.NToSelect && Rings == rg.Rings && State == rg.State;
+    return NToSelect == rg.NToSelect && Rings == rg.Rings;
 }
 
 bool operator==(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs) {
@@ -356,13 +356,13 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefi
     memset(name + offset, 0, TActorId::MaxServiceIDLength - offset);
     for (size_t i = 0; i < config.RingGroupsSize(); i++) {
         auto& ringGroup = config.GetRingGroups(i);
-        info->RingGroups.push_back({GetRingGroupState(ringGroup), ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), {}});
+        info->RingGroups.push_back({GetRingGroupState(ringGroup), ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId), {}});
         CopyStateStorageRingInfo(ringGroup, info->RingGroups.back(), name, offset, ringGroup.GetRingGroupActorIdOffset());
         memset(name + offset, 0, TActorId::MaxServiceIDLength - offset);
     }
     if (config.HasRing()) {
         auto& ring = config.GetRing();
-        info->RingGroups.push_back({ERingGroupState::PRIMARY, false, ring.GetNToSelect(), {}});
+        info->RingGroups.push_back({ERingGroupState::PRIMARY, false, ring.GetNToSelect(), {}, {}});
         CopyStateStorageRingInfo(ring, info->RingGroups.back(), name, offset, ring.GetRingGroupActorIdOffset());
     }
     return info;

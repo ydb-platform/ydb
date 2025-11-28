@@ -218,7 +218,6 @@ public:
         GetSettings().SetNodeCount(staticNodes);
         GetSettings().SetDynamicNodeCount(dynamicNodes);
         GetSettings().SetEnableAlterDatabaseCreateHiveFirst(enableAlterDatabaseCreateHiveFirst);
-        GetSettings().SetEnableSystemViews(false);
 
         for (ui32 poolNum = 1; poolNum <= poolsCount; ++poolNum) {
             GetSettings().AddStoragePoolType("storage-pool-number-" + ToString(poolNum));

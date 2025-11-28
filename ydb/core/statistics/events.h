@@ -75,8 +75,8 @@ struct TEvStatistics {
         EvAnalyzeStatus,
         EvAnalyzeStatusResponse,
 
-        EvAnalyzeTable,
-        EvAnalyzeTableResponse,
+        EvAnalyzeShard,
+        EvAnalyzeShardResponse,
 
         EvStatisticsRequest,
         EvStatisticsResponse,
@@ -116,6 +116,7 @@ struct TEvStatistics {
     {};
 
     struct TEvGetStatistics : public TEventLocal<TEvGetStatistics, EvGetStatistics> {
+        TString Database;
         EStatType StatType;
         std::vector<TRequest> StatRequests;
     };
@@ -190,6 +191,16 @@ struct TEvStatistics {
         TEvSaveStatisticsQueryResponse,
         EvSaveStatisticsQueryResponse>
     {
+        TEvSaveStatisticsQueryResponse(
+                Ydb::StatusIds::StatusCode status,
+                NYql::TIssues issues,
+                TPathId pathId)
+            : Status(status)
+            , Issues(std::move(issues))
+            , PathId(std::move(pathId))
+            , Success(Status == Ydb::StatusIds::SUCCESS)
+        {}
+
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
         TPathId PathId;
@@ -239,17 +250,17 @@ struct TEvStatistics {
         EvAnalyzeStatusResponse>
     {};
 
-    struct TEvAnalyzeTable : public TEventPB<
-        TEvAnalyzeTable,
-        NKikimrStat::TEvAnalyzeTable,
-        EvAnalyzeTable>
+    struct TEvAnalyzeShard : public TEventPB<
+        TEvAnalyzeShard,
+        NKikimrStat::TEvAnalyzeShard,
+        EvAnalyzeShard>
     {};
 
-    struct TEvAnalyzeTableResponse : public TEventPB<
-        TEvAnalyzeTableResponse,
-        NKikimrStat::TEvAnalyzeTableResponse,
-        EvAnalyzeTableResponse>
-    {};    
+    struct TEvAnalyzeShardResponse : public TEventPB<
+        TEvAnalyzeShardResponse,
+        NKikimrStat::TEvAnalyzeShardResponse,
+        EvAnalyzeShardResponse>
+    {};
 
     struct TEvStatisticsRequest : public TEventPB<
         TEvStatisticsRequest,
@@ -262,6 +273,19 @@ struct TEvStatistics {
         NKikimrStat::TEvStatisticsResponse,
         EvStatisticsResponse>
     {};
+
+    struct TEvFinishTraversal : public TEventLocal<
+        TEvFinishTraversal, EvFinishTraversal>
+    {
+        enum class EStatus {
+            Success,
+            InternalError,
+            TableNotFound,
+        };
+        EStatus Status;
+
+        explicit TEvFinishTraversal(EStatus status) : Status(status) {}
+    };
 };
 
 } // NStat

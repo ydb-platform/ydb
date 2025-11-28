@@ -117,7 +117,7 @@ struct TDataRow {
 
     static std::shared_ptr<arrow::Schema> MakeArrowSchema() {
         std::vector<std::shared_ptr<arrow::Field>> fields = {
-            arrow::field("bool", arrow::boolean()),
+            arrow::field("bool", arrow::uint8()),
             arrow::field("i8", arrow::int8()),
             arrow::field("i16", arrow::int16()),
             arrow::field("i32", arrow::int32()),
@@ -540,6 +540,13 @@ std::shared_ptr<arrow::RecordBatch> AddSnapColumn(const std::shared_ptr<arrow::R
     return *result;
 }
 
+NArrow::NMerger::TCursor MakeSingleUi64CellTableCursor(const TString& columnName, ui64 value) {
+    std::shared_ptr<arrow::Table> table =
+        arrow::Table::Make(arrow::schema({ arrow::field(columnName, arrow::uint64()) }), { NArrow::MakeUI64Array(value, 1) });
+
+    return NArrow::NMerger::TCursor{table, 0, {columnName}};
+}
+
 THashMap<ui64, ui32> CountValues(const std::shared_ptr<arrow::UInt64Array>& array) {
     THashMap<ui64, ui32> out;
     for (int i = 0; i < array->length(); ++i) {
@@ -595,7 +602,7 @@ bool CheckSorted(const std::shared_ptr<arrow::RecordBatch>& batch, bool desc = f
     return true;
 }
 
-}
+}   // namespace
 
 Y_UNIT_TEST_SUITE(ArrowTest) {
     Y_UNIT_TEST(BatchBuilder) {
@@ -690,9 +697,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
-            const std::vector<std::string> vColumns = {batch->schema()->field(0)->name()};
-            auto merger =
-                std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), false, vColumns, std::nullopt);
+            const std::vector<std::string> vColumns = { batch->schema()->field(0)->name() };
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                batch->schema(), batch->schema(), false, vColumns, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -718,8 +725,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
-            const std::vector<std::string> vColumns = {batch->schema()->field(0)->name()};
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), true, vColumns, std::nullopt);
+            const std::vector<std::string> vColumns = { batch->schema()->field(0)->name() };
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                batch->schema(), batch->schema(), true, vColumns, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Reversed(0));
             }
@@ -744,9 +752,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
-            const std::vector<std::string> vColumns = {"snap"};
-            auto merger =
-                std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batches[0]->schema(), false, vColumns, std::nullopt);
+            const std::vector<std::string> vColumns = { "snap" };
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                batch->schema(), batches[0]->schema(), false, vColumns, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -775,17 +783,15 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         batches.push_back(AddSnapColumn(batch->Slice(400, 400), 2));
         batches.push_back(AddSnapColumn(batch->Slice(600, 400), 3));
 
-        std::shared_ptr<arrow::RecordBatch> maxVersion =
-            arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
-        maxVersion = AddSnapColumn(maxVersion, 1);
-        NArrow::NMerger::TCursor maxVersionCursor(arrow::Table::FromRecordBatches({ maxVersion }).ValueOrDie(), 0, { "snap" });
+        NArrow::NMerger::TCursor maxVersionCursor{MakeSingleUi64CellTableCursor("snap", 1)};
+        NArrow::NMerger::TCursor uncommittedVersionCursor{MakeSingleUi64CellTableCursor("snap", 100)};
 
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
             const std::vector<std::string> vColumns = { "snap" };
-            auto merger =
-                std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batches[0]->schema(), false, vColumns, maxVersionCursor);
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                batch->schema(), batches[0]->schema(), false, vColumns, maxVersionCursor, uncommittedVersionCursor);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -817,7 +823,8 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> maxVersion =
             arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
         maxVersion = AddSnapColumn(maxVersion, 1);
-        NArrow::NMerger::TCursor maxVersionCursor(arrow::Table::FromRecordBatches({ maxVersion }).ValueOrDie(), 0, { "snap" });
+        NArrow::NMerger::TCursor maxVersionCursor{MakeSingleUi64CellTableCursor("snap", 1)};
+        NArrow::NMerger::TCursor uncommittedVersionCursor{MakeSingleUi64CellTableCursor("snap", 1000)};
 
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
         batches.push_back(AddSnapColumn(batchesByKey[0], 1));
@@ -830,8 +837,8 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
             const std::vector<std::string> vColumns = { "snap" };
-            auto merger =
-                std::make_shared<NArrow::NMerger::TMergePartialStream>(sortingSchema, batches[0]->schema(), false, vColumns, maxVersionCursor);
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                sortingSchema, batches[0]->schema(), false, vColumns, maxVersionCursor, uncommittedVersionCursor);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -856,4 +863,4 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
     }
 }
 
-}
+}   // namespace NKikimr

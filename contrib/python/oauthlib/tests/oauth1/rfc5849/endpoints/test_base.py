@@ -304,7 +304,7 @@ class ClientValidator(RequestValidator):
         def validate_timestamp_and_nonce(self, client_key, timestamp, nonce,
                 request, request_token=None, access_token=None):
             resource_owner_key = request_token if request_token else access_token
-            return not (client_key, nonce, timestamp, resource_owner_key) in self.nonces
+            return (client_key, nonce, timestamp, resource_owner_key) not in self.nonces
 
         def validate_client_key(self, client_key):
             return client_key in self.clients

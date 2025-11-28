@@ -31,7 +31,7 @@ public:
 
     TFuture<TRunResult> Run(const TExprNode::TPtr& node, TExprContext& ctx, TRunOptions&& options) override;
 
-    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const override;
+    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) override;
 
     TFuture<TCalcResult> Calc(const TExprNode::TListType& nodes, TExprContext& ctx, TCalcOptions&& options) override;
 
@@ -71,9 +71,13 @@ public:
 
     void AddCluster(const TYtClusterConfig& config) override;
 
-    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override;
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) const override;
 
     TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override;
+
+    NThreading::TFuture<TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&& options) override;
+
+    NThreading::TFuture<TDumpResult> Dump(TDumpOptions&& options) override;
 
 protected:
     IYtGateway::TPtr Slave_;

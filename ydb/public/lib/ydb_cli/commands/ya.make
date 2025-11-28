@@ -31,11 +31,14 @@ SRCS(
     ydb_service_topic.cpp
     ydb_service_table.cpp
     ydb_sql.cpp
+    ydb_state.cpp
+    ydb_state.h
     ydb_storage_config.cpp
     ydb_tools_infer.cpp
     ydb_tools.cpp
     ydb_workload.cpp
     ydb_workload_import.cpp
+    ydb_workload_testshard.cpp
     ydb_workload_tpcc.cpp
     ydb_yql.cpp
 )

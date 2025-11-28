@@ -53,7 +53,7 @@ public:
     TClientCommandOption& AddLongOption(const TString& name, const TString& help = "");
     TClientCommandOption& AddLongOption(char c, const TString& name, const TString& help = "");
     TClientCommandOption& AddCharOption(char c, const TString& help = "");
-    TAuthMethodOption& AddAuthMethodOption(const TString& name, const TString& help);
+    TAuthMethodOption& AddAuthMethodOption(const TString& name, const TString& help, bool mainAuthOption = true);
     void AddAnonymousAuthMethodOption();
 
     const NLastGetopt::TOpts& GetOpts() const {
@@ -88,7 +88,7 @@ public:
 
 private:
     TClientCommandOption& AddClientOption(NLastGetopt::TOpt& opt);
-    TAuthMethodOption& AddAuthMethodClientOption(NLastGetopt::TOpt& opt);
+    TAuthMethodOption& AddAuthMethodClientOption(NLastGetopt::TOpt& opt, bool mainAuthOption);
 
 private:
     NLastGetopt::TOpts Opts;
@@ -225,6 +225,8 @@ public:
 
     TClientCommandOption& DefaultValue(const TString& defaultValue);
 
+    TClientCommandOption& ManualDefaultValueDescription(const TString& description);
+
     template <class TValue>
     TClientCommandOption& DefaultValue(const TValue& defaultValue) {
         return DefaultValue(ToString(defaultValue));
@@ -238,10 +240,15 @@ public:
         return *Opt;
     }
 
+    bool IsMainAuthOption() const {
+        return MainAuthOption;
+    }
+
 protected:
     TClientCommandOption& SetHandler();
     bool HandlerImpl(TString value, bool isFileName, const TString& humanReadableFileName, EOptionValueSource valueSource);
     void RebuildHelpMessage();
+    bool NeedPrintDefinitionsPriority() const;
 
     // Try parse from profile.
     // if parsedValue is not null, set it with parsed value, if actual
@@ -267,19 +274,22 @@ protected:
     TString* FilePath = nullptr;
     std::vector<TEnvInfo> EnvInfo;
     TString DefaultOptionValue;
+    TString ManualDefaultOptionValueDescription;
     TString ProfileParamName;
     bool ProfileParamIsFileName = false;
     bool CanParseFromProfile = false;
     TString ConnectionParamName;
     TString Documentation;
     bool HandlerIsSet = false;
+    // --password-file is an Auth option, but is not considered a main auth option
+    bool MainAuthOption = false;
 };
 
 class TAuthMethodOption : public TClientCommandOption {
 public:
     using TProfileParser = std::function<bool(const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly)>;
 public:
-    TAuthMethodOption(NLastGetopt::TOpt& opt, TClientCommandOptions* clientOptions);
+    TAuthMethodOption(NLastGetopt::TOpt& opt, TClientCommandOptions* clientOptions, bool mainAuthOption);
 
     // Auth method name that is used to parse from profile
     TAuthMethodOption& AuthMethod(const TString& methodName);

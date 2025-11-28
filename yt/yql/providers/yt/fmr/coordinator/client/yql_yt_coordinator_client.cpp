@@ -76,8 +76,9 @@ public:
         TStringStream outputStream;
 
         auto sendHeartbeatRequestFunc = [&]() {
-            httpClient.DoPost(sendHearbeatRequestUrl, protoSendHeartbeatRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
+            auto statusCode = httpClient.DoPost(sendHearbeatRequestUrl, protoSendHeartbeatRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
             TString serializedResponse = outputStream.ReadAll();
+            HandleHttpError(statusCode, serializedResponse);
             NProto::THeartbeatResponse protoHeartbeatResponse;
             YQL_ENSURE(protoHeartbeatResponse.ParseFromString(serializedResponse));
             return NThreading::MakeFuture(HeartbeatResponseFromProto(protoHeartbeatResponse));
@@ -114,6 +115,70 @@ public:
         return *DoWithRetry<NThreading::TFuture<void>, yexception>(clearSessionFunc, RetryPolicy_, true, OnFail_);
     };
 
+    NThreading::TFuture<TDropTablesResponse> DropTables(const TDropTablesRequest& request) override {
+        NProto::TDropTablesRequest protoRequest = DropTablesRequestToProto(request);
+        TString dropTablesUrl = "/drop_tables";
+        auto httpClient = TKeepAliveHttpClient(Host_, Port_);
+        TStringStream outputStream;
+
+        auto dropTablesFunc = [&]() {
+            httpClient.DoPost(dropTablesUrl, protoRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
+            TString serializedResponse = outputStream.ReadAll();
+            NProto::TDropTablesResponse protoResponse;
+            YQL_ENSURE(protoResponse.ParseFromString(serializedResponse));
+            return NThreading::MakeFuture(DropTablesResponseFromProto(protoResponse));
+        };
+
+        return *DoWithRetry<NThreading::TFuture<TDropTablesResponse>, yexception>(dropTablesFunc, RetryPolicy_, true, OnFail_);
+    }
+
+    NThreading::TFuture<TOpenSessionResponse> OpenSession(const TOpenSessionRequest& request) override {
+        NProto::TOpenSessionRequest protoRequest = OpenSessionRequestToProto(request);
+        TString url = "/open_session";
+        auto httpClient = TKeepAliveHttpClient(Host_, Port_);
+        TStringStream outputStream;
+
+        auto func = [&]() {
+            httpClient.DoPost(url, protoRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
+            TString serializedResponse = outputStream.ReadAll();
+            NProto::TOpenSessionResponse protoResponse;
+            YQL_ENSURE(protoResponse.ParseFromString(serializedResponse));
+            return NThreading::MakeFuture(OpenSessionResponseFromProto(protoResponse));
+        };
+        return *DoWithRetry<NThreading::TFuture<TOpenSessionResponse>, yexception>(func, RetryPolicy_, true, OnFail_);
+    }
+
+    NThreading::TFuture<TPingSessionResponse> PingSession(const TPingSessionRequest& request) override {
+        NProto::TPingSessionRequest protoRequest = PingSessionRequestToProto(request);
+        TString url = "/ping_session";
+        auto httpClient = TKeepAliveHttpClient(Host_, Port_);
+        TStringStream outputStream;
+
+        auto func = [&]() {
+            httpClient.DoPost(url, protoRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
+            TString serializedResponse = outputStream.ReadAll();
+            NProto::TPingSessionResponse protoResponse;
+            YQL_ENSURE(protoResponse.ParseFromString(serializedResponse));
+            return NThreading::MakeFuture(PingSessionResponseFromProto(protoResponse));
+        };
+        return *DoWithRetry<NThreading::TFuture<TPingSessionResponse>, yexception>(func, RetryPolicy_, true, OnFail_);
+    }
+
+    NThreading::TFuture<TListSessionsResponse> ListSessions(const TListSessionsRequest& request) override {
+        NProto::TListSessionsRequest protoRequest = ListSessionsRequestToProto(request);
+        TString url = "/list_sessions";
+        auto httpClient = TKeepAliveHttpClient(Host_, Port_);
+        TStringStream outputStream;
+
+        auto func = [&]() {
+            httpClient.DoGet(url, &outputStream, GetHeadersWithLogContext(Headers_, false));
+            TString serializedResponse = outputStream.ReadAll();
+            NProto::TListSessionsResponse protoResponse;
+            YQL_ENSURE(protoResponse.ParseFromString(serializedResponse));
+            return NThreading::MakeFuture(ListSessionsResponseFromProto(protoResponse));
+        };
+        return *DoWithRetry<NThreading::TFuture<TListSessionsResponse>, yexception>(func, RetryPolicy_, true, OnFail_);
+    }
 
 private:
     TString Host_;
@@ -132,6 +197,14 @@ private:
     std::function<void(const yexception&)> OnFail_ = [](const yexception& exc) {
         YQL_CLOG(DEBUG, FastMapReduce) << "Got exception, retrying: " << exc.what();
     };
+
+    void HandleHttpError(TKeepAliveHttpClient::THttpCode statusCode, TString serializedResponse) {
+        if (statusCode = HTTP_OK) return;
+        NProto::TErrorResponse protoErrorResponse;
+        YQL_ENSURE(protoErrorResponse.ParseFromString(serializedResponse));
+        ythrow yexception() << protoErrorResponse.GetErrorMessage();
+    }
+
 };
 
 } // namespace

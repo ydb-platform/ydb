@@ -1,14 +1,8 @@
 # Вставка и модификация данных с помощью REPLACE
 
-{% note warning %}
+{% include [column-and-row-tables-in-read-only-tx](../../yql/reference/_includes/limitation-column-row-in-read-only-tx-warn.md) %}
 
-{% include [not_allow_for_olap](../../_includes/not_allow_for_olap_text.md) %}
-
-{% include [not_allow_for_olap](../../_includes/ways_add_data_to_olap.md) %}
-
-{% endnote %}
-
-Добавьте данные в строковые таблицы с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
+Добавьте новые данные в таблицы с одновременным обновлением уже существующих данных с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 

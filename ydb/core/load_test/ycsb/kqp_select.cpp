@@ -329,6 +329,7 @@ private:
     void DescribePath(const TActorContext& ctx) {
         TString path = Target.GetWorkingDir() + "/" + Target.GetTableName();
         auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
+        request->Record.SetDatabaseName(Target.GetWorkingDir());
         request->Record.MutableDescribePath()->SetPath(path);
         ctx.Send(MakeTxProxyID(), request.release());
     }

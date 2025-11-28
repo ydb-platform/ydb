@@ -1,32 +1,44 @@
 #include "s3_backup_test_base.h"
 #include <ydb/core/backup/common/metadata.h>
 
-#include <fmt/format.h>
+#include <contrib/libs/fmt/include/fmt/format.h>
+#include <ydb/library/testlib/helpers.h>
 
 using namespace NYdb;
-using namespace fmt::literals;
 
 class TListObjectsInS3ExportTestFixture : public TS3BackupTestFixture {
     void SetUp(NUnitTest::TTestContext& /* context */) override {
-        auto res = YdbQueryClient().ExecuteQuery(R"sql(
+        using namespace fmt::literals;
+        const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
+        auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
             CREATE TABLE `/Root/Table0` (
                 key Uint32 NOT NULL,
                 value String,
                 PRIMARY KEY (key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
             );
 
             CREATE TABLE `/Root/dir1/Table1` (
                 key Uint32 NOT NULL,
                 value String,
                 PRIMARY KEY (key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
             );
 
             CREATE TABLE `/Root/dir1/dir2/Table2` (
                 key Uint32 NOT NULL,
                 value String,
                 PRIMARY KEY (key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
             );
-        )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+        )sql", "store"_a = isOlap ? "COLUMN" : "ROW",
+        "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
         // Empty dir
@@ -39,7 +51,10 @@ class TListObjectsInS3ExportTestFixture : public TS3BackupTestFixture {
 };
 
 Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
-    Y_UNIT_TEST(ExportWithSchemaMapping) {
+    Y_UNIT_TEST_TWIN(ExportWithSchemaMapping, IsOlap) {
+        if (IsOlap) {
+            return; // TODO: fix me issue@26498
+        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix//");
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
@@ -53,7 +68,10 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
         }, "Prefix");
     }
 
-    Y_UNIT_TEST(ExportWithoutSchemaMapping) {
+    Y_UNIT_TEST_TWIN(ExportWithoutSchemaMapping, IsOlap) {
+        if (IsOlap) {
+            return; // TODO: fix me issue@26498
+        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "");
             exportSettings
@@ -76,7 +94,10 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
         }, "Prefix/d1");
     }
 
-    Y_UNIT_TEST(ExportWithEncryption) {
+    Y_UNIT_TEST_TWIN(ExportWithEncryption, IsOlap) {
+        if (IsOlap) {
+            return; // TODO: fix me issue@26498
+        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix");
             exportSettings
@@ -99,7 +120,10 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
         }, listSettings);
     }
 
-    Y_UNIT_TEST(ExportWithWrongEncryptionKey) {
+    Y_UNIT_TEST_TWIN(ExportWithWrongEncryptionKey, IsOlap) {
+        if (IsOlap) {
+            return; // TODO: fix me issue@26498
+        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix");
             exportSettings
@@ -119,7 +143,7 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
         UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, "Status: " << res.GetStatus() << ". Issues: " << res.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(PagingParameters) {
+    Y_UNIT_TEST_TWIN(PagingParameters, IsOlap) {
         NBackup::TSchemaMapping schemaMapping;
         constexpr size_t ItemsCount = 12000;
         constexpr size_t ItemsPerFolder = ItemsCount / 5;
@@ -181,7 +205,10 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
         }
     }
 
-    Y_UNIT_TEST(ParametersValidation) {
+    Y_UNIT_TEST_TWIN(ParametersValidation, IsOlap) {
+        if (IsOlap) {
+            return; // TODO: fix me issue@26498
+        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix//");
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();

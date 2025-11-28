@@ -88,9 +88,17 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
     return false;
 }
 
-bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
+bool IsGoodTypeForUnaryArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
     const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
-    return (NUdf::EDataTypeFeatures::NumericType & features)
+    return ((NUdf::EDataTypeFeatures::NumericType) & features)
+        || (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
+            NUdf::EDataTypeFeatures::DateType |
+            NUdf::EDataTypeFeatures::TimeIntervalType) & features) && !(NUdf::EDataTypeFeatures::TzDateType & features));
+}
+
+bool IsGoodTypeForBinaryArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
+    const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
+    return ((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TimeIntervalType) & features)
         || (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
             NUdf::EDataTypeFeatures::DateType |
             NUdf::EDataTypeFeatures::TimeIntervalType) & features) && !(NUdf::EDataTypeFeatures::TzDateType & features));
@@ -127,7 +135,6 @@ bool CanPushdownStringUdf(const TExprNode& udf, bool pushdownSubstring) {
     return substringMatchUdfs.contains(name);
 }
 
-[[maybe_unused]]
 bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode*, bool pushdownSubstring) {
     if (!expr.Ref().IsCallable({"Apply", "Coalesce", "NamedApply", "IfPresent", "Visit"})) {
         return false;
@@ -175,6 +182,10 @@ bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, const TExprNode* lambda
     return allowOlapApply;
 }
 
+bool CanBePushedAsBlockKernel(const TExprBase &node) {
+    return !node.Maybe<TCoSize>();
+}
+
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TPushdownOptions& options) {
     if (options.AllowOlapApply) {
         if (node.Maybe<TCoJust>() || node.Maybe<TCoCoalesce>()) {
@@ -203,15 +214,22 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
     }
 
     if (const auto op = node.Maybe<TCoUnaryArithmetic>()) {
-        return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg, options) && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply);
+        if (!options.AllowOlapApply && !CanBePushedAsBlockKernel(node)) {
+            return false;
+        }
+
+        return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg, options) &&
+               IsGoodTypeForUnaryArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply);
     } else if (const auto op = node.Maybe<TCoBinaryArithmetic>()) {
         // FIXME: CS should be able to handle bin arithmetic op with the same column.
         if (!options.AllowOlapApply && CheckSameColumn(op.Cast().Left(), op.Cast().Right())) {
             return false;
         }
 
-        return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg, options) && CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg, options)
-            && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply) && !op.Cast().Maybe<TCoAggrAdd>();
+        return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg, options) &&
+               CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg, options) &&
+               IsGoodTypeForBinaryArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply) &&
+               !op.Cast().Maybe<TCoAggrAdd>();
     }
 
     if (options.AllowOlapApply) {
@@ -295,6 +313,7 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
     if (!IsGoodTypesForPushdownCompare(*compare.Left().Ref().GetTypeAnn(), *compare.Right().Ref().GetTypeAnn(), options)) {
         return false;
     }
+
 
     const auto leftList = GetComparisonNodes(compare.Left());
     const auto rightList = GetComparisonNodes(compare.Right());
@@ -448,7 +467,7 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
             CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, {true, options.PushdownSubstring});    
         }
         if (!predicateTree.CanBePushedApply) {
-            predicateTree.CanBePushedApply =  AbstractTreeCanBePushed(predicate, lambdaArg, options.PushdownSubstring);
+            predicateTree.CanBePushedApply = AbstractTreeCanBePushed(predicate, lambdaArg, options.PushdownSubstring);
         }
     }
 }

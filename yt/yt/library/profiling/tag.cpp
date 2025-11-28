@@ -187,6 +187,18 @@ TDynamicTagPtr TTagSet::AddDynamicTag(int index)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TTagIdSet::TTagIdSet(const TProjectionSet& projections, const TTagIdList& tagIds)
+    : TProjectionSet(projections)
+    , TagIds_(tagIds)
+{ }
+
+void TTagIdSet::SetTagId(TTagIndex tagIndex, TTagId tagId)
+{
+    TagIds_[tagIndex] = tagId;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NProfiling
 
 size_t THash<NYT::NProfiling::TTagIndexList>::operator()(const NYT::NProfiling::TTagIndexList& list) const

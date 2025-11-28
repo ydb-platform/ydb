@@ -44,6 +44,7 @@ void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
 
     DatabasePath = CanonizePath(ClientAuthData.Database);
 
+    RequestState = ENavigateRequestState::DESCRIBING_DATABASE;
     SendDescribeRequest(ctx);
 }
 
@@ -59,8 +60,8 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
 
 void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NActors::TActorContext& /*ctx*/) {
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-        .Database = ev->Get()->Database,
         .Ticket = "Login " + ev->Get()->LoginResult.token(),
+        .Database = CanonizePath(ev->Get()->Database),
         .PeerName = TStringBuilder() << Address,
     }));
 }
@@ -90,7 +91,7 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TStri
 
         auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient, errorCode);
         auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, UserToken, DatabasePath, DatabaseId, FolderId, CloudId, ServiceAccountId, Coordinator,
-                                                                ResourcePath, IsServerless, errorMessage);
+                                                                ResourcePath, IsServerless, errorMessage, ResourseDatabasePath);
         Send(Context->ConnectionId, authResult);
     }
 
@@ -168,8 +169,8 @@ void TKafkaSaslAuthActor::SendApiKeyRequest() {
         ticket = ClientAuthData.Password;
     }
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-        .Database = DatabasePath,
         .Ticket = ticket,
+        .Database = DatabasePath,
         .PeerName = TStringBuilder() << Address,
         .Entries = entries
     }));
@@ -182,7 +183,20 @@ void TKafkaSaslAuthActor::SendDescribeRequest(const TActorContext& ctx) {
     entry.Operation = NKikimr::NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.SyncVersion = false;
     schemeCacheRequest->ResultSet.emplace_back(entry);
-    schemeCacheRequest->DatabaseName = CanonizePath(DatabasePath);
+    schemeCacheRequest->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
+    ctx.Send(NKikimr::MakeSchemeCacheID(), MakeHolder<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
+}
+
+void TKafkaSaslAuthActor::GetPathByPathId(const TPathId& pathId, const TActorContext& ctx) {
+    auto schemeCacheRequest = std::make_unique<NKikimr::NSchemeCache::TSchemeCacheNavigate>();
+    NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.TableId.PathId = pathId;
+    entry.RequestType = NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+    entry.Operation = NKikimr::NSchemeCache::TSchemeCacheNavigate::OpPath;
+    entry.SyncVersion = false;
+    entry.RedirectRequired = false;
+    schemeCacheRequest->ResultSet.emplace_back(entry);
+    schemeCacheRequest->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
     ctx.Send(NKikimr::MakeSchemeCacheID(), MakeHolder<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
 }
 
@@ -203,25 +217,32 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
         }
         return;
     }
-    Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
-    IsServerless = navigate->ResultSet.front().DomainInfo->IsServerless();
+    if (RequestState == ENavigateRequestState::DESCRIBING_DATABASE) {
+        Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
+        IsServerless = navigate->ResultSet.front().DomainInfo->IsServerless();
 
-    for (const auto& attr : navigate->ResultSet.front().Attributes) {
-        if (attr.first == "folder_id") FolderId = attr.second;
-        else if (attr.first == "cloud_id") CloudId = attr.second;
-        else if (attr.first == "database_id") DatabaseId = attr.second;
-        else if (attr.first == "service_account_id") ServiceAccountId = attr.second;
-        else if (attr.first == "serverless_rt_coordination_node_path") Coordinator = attr.second;
-        else if (attr.first == "serverless_rt_base_resource_ru") ResourcePath = attr.second;
-        else if (attr.first == "kafka_api") KafkaApiFlag = attr.second;
-    }
+        for (const auto& attr : navigate->ResultSet.front().Attributes) {
+            if (attr.first == "folder_id") FolderId = attr.second;
+            else if (attr.first == "cloud_id") CloudId = attr.second;
+            else if (attr.first == "database_id") DatabaseId = attr.second;
+            else if (attr.first == "service_account_id") ServiceAccountId = attr.second;
+            else if (attr.first == "serverless_rt_coordination_node_path") Coordinator = attr.second;
+            else if (attr.first == "serverless_rt_topic_resource_ru") ResourcePath = attr.second;
+            else if (attr.first == "kafka_api") KafkaApiFlag = attr.second;
+        }
 
-    if (ClientAuthData.UserName.empty()) {
-        // ApiKey IAM authentification
-        SendApiKeyRequest();
-    } else {
-        // Login/Password authentification
-        SendLoginRequest(ClientAuthData, ctx);
+        RequestState = ENavigateRequestState::RESOLVING_DOMAIN_KEY;
+        GetPathByPathId(navigate->ResultSet.front().DomainInfo->GetResourcesDomainKey(), ctx);
+
+    } else if (RequestState == ENavigateRequestState::RESOLVING_DOMAIN_KEY) {
+        ResourseDatabasePath = NKikimr::JoinPath(navigate->ResultSet.front().Path);
+        if (ClientAuthData.UserName.empty()) {
+            // ApiKey IAM authentification
+            SendApiKeyRequest();
+        } else {
+            // Login/Password authentification
+            SendLoginRequest(ClientAuthData, ctx);
+        }
     }
 }
 

@@ -13,10 +13,10 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
         GROUPS("GroupedMemoryManagerRequest"), \
         TYPES(ui64, ui64, ui64, ui64, ui64), \
         NAMES("managerId", "externalProcessId", "externalScopeId", "allocationId", "load")) \
-    PROBE(UpdateTask, \
+    PROBE(TaskUpdated, \
         GROUPS("GroupedMemoryManagerRequest"), \
-        TYPES(ui64, ui64, ui64, ui64, ui64, ui64), \
-        NAMES("managerId", "externalProcessId", "externalScopeId", "allocationId", "volume", "load")) \
+        TYPES(ui64, ui64, ui64, ui64, ui64), \
+        NAMES("managerId", "externalProcessId", "externalScopeId", "allocationId", "load")) \
     PROBE(FinishGroup, \
         GROUPS("GroupedMemoryManagerRequest"), \
         TYPES(ui64, ui64, ui64, ui64, ui64), \

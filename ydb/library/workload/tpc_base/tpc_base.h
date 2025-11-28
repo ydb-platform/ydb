@@ -8,12 +8,11 @@ namespace NYdbWorkload {
 class TTpcBaseWorkloadParams: public TWorkloadBaseParams {
 public:
     enum class EFloatMode {
-        FLOAT /* "float" */,
+        DOUBLE /* "double" */,
         DECIMAL /* "decimal" */,
-        DECIMAL_YDB /* "decimal_ydb" */
     };
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
-    YDB_READONLY(EFloatMode, FloatMode, EFloatMode::FLOAT);
+    YDB_READONLY(EFloatMode, FloatMode, EFloatMode::DOUBLE);
     YDB_READONLY(EQuerySyntax, Syntax, EQuerySyntax::YQL);
     YDB_READONLY(double, Scale, 1);
     YDB_READONLY_DEF(TSet<TString>, Tables);
@@ -28,11 +27,17 @@ public:
     TQueryInfoList GetInitialData() override final;
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override final;
 
+protected:
+    virtual std::pair<TString, TString> GetTableAndColumnForDetectFloatMode() const = 0;
+    TTpcBaseWorkloadParams::EFloatMode FloatMode;
+
 private:
     const TTpcBaseWorkloadParams& Params;
     void PatchQuery(TString& query) const;
     void FilterHeader(IOutputStream& result, TStringBuf header, const TString& query) const;
     TString GetHeader(const TString& query) const;
+    TTpcBaseWorkloadParams::EFloatMode DetectFloatMode() const;
+    TString GetExpectedResult(const TString& name, const TString& resourcePrefix) const;
 };
 
 template<class T>

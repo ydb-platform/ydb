@@ -49,6 +49,8 @@ from ..query.base import TxEvent
 if typing.TYPE_CHECKING:
     from ..query.transaction import BaseQueryTxContext
 
+from .._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT
+
 logger = logging.getLogger(__name__)
 
 
@@ -432,7 +434,7 @@ class WriterAsyncIOReconnector:
             raise self._stop_reason.exception()
 
     async def _connection_loop(self):
-        retry_settings = RetrySettings()  # todo
+        retry_settings = RetrySettings(retry_cancelled=True)  # todo
 
         while True:
             attempt = 0  # todo calc and reset
@@ -483,15 +485,16 @@ class WriterAsyncIOReconnector:
             except issues.Error as err:
                 err_info = check_retriable_error(err, retry_settings, attempt)
                 if not err_info.is_retriable or self._tx is not None:  # no retries in tx writer
+                    logger.debug("writer reconnector %s stop connection loop due to %s", self._id, err)
                     self._stop(err)
                     return
 
-                await asyncio.sleep(err_info.sleep_timeout_seconds)
                 logger.debug(
                     "writer reconnector %s retry in %s seconds",
                     self._id,
                     err_info.sleep_timeout_seconds,
                 )
+                await asyncio.sleep(err_info.sleep_timeout_seconds)
 
             except (asyncio.CancelledError, Exception) as err:
                 self._stop(err)
@@ -799,7 +802,11 @@ class WriterAsyncIOStream:
         logger.debug("writer stream %s send init request", self._id)
         stream.write(StreamWriteMessage.FromClient(init_message))
 
-        resp = await stream.receive()
+        try:
+            resp = await stream.receive(timeout=DEFAULT_INITIAL_RESPONSE_TIMEOUT)
+        except asyncio.TimeoutError:
+            raise TopicWriterError("Timeout waiting for init response")
+
         self._ensure_ok(resp)
         if not isinstance(resp, StreamWriteMessage.InitResponse):
             raise TopicWriterError("Unexpected answer for init request: %s" % resp)

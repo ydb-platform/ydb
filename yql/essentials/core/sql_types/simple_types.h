@@ -12,4 +12,4 @@ std::optional<std::string_view> LookupSimpleTypeBySqlAlias(const std::string_vie
 
 void EnumerateSimpleTypes(const std::function<void(std::string_view name, std::string_view kind)>& callback, bool flexibleTypesEnabled);
 
-}
+} // namespace NYql

@@ -32,11 +32,22 @@ TTopicMessage::TTopicMessage(const TDataEvent::TCompressedMessage& msg)
 {
 }
 
+TTopicMessage::TTopicMessage(TDataEvent::TMessageInformation&& msg, TString&& data)
+    : TDataEvent::TMessageInformation(std::move(msg))
+    , Codec(ECodec::RAW)
+    , Data(std::move(data))
+{
+}
+
 TTopicMessage::TTopicMessage(ui64 offset, const TString& data)
     : TDataEvent::TMessageInformation(offset, "", 0, TInstant::Zero(), TInstant::Zero(), nullptr, nullptr, 0, "")
     , Codec(ECodec::RAW)
     , Data(data)
 {
+}
+
+NYdb::NTopic::TMessageMeta::TPtr TTopicMessage::GetMessageMeta() const {
+    return MessageMeta;
 }
 
 ECodec TTopicMessage::GetCodec() const {
@@ -63,6 +74,10 @@ TInstant TTopicMessage::GetCreateTime() const {
     return CreateTime;
 }
 
+TInstant TTopicMessage::GetWriteTime() const {
+    return WriteTime;
+}
+
 TString TTopicMessage::GetMessageGroupId() const {
     return TString(MessageGroupId);
 }
@@ -78,6 +93,7 @@ void TTopicMessage::Out(IOutputStream& out) const {
         << " Offset: " << Offset
         << " SeqNo: " << SeqNo
         << " CreateTime: " << CreateTime
+        << " WriteTime: " << WriteTime
         << " MessageGroupId: " << MessageGroupId
         << " ProducerId: " << ProducerId
     << " }";

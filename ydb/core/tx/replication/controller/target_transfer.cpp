@@ -18,7 +18,8 @@ void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig&
         GetConfig()->GetSrcPath(),
         GetConfig()->GetDstPath(),
         t.GetTransformLambda(),
-        cfg.GetTransferSpecific().GetRunAsUser());
+        cfg.GetTransferSpecific().GetRunAsUser(),
+        t.GetDirectoryPath());
 }
 
 void TTargetTransfer::Progress(const TActorContext& ctx) {
@@ -56,10 +57,11 @@ TString TTargetTransfer::GetStreamPath() const {
     return CanonizePath(GetSrcPath());
 }
 
-TTargetTransfer::TTransferConfig::TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda, const TString& runAsUser)
+TTargetTransfer::TTransferConfig::TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda, const TString& runAsUser, const TString& directoryPath)
     : TConfigBase(ETargetKind::Transfer, srcPath, dstPath)
     , TransformLambda(transformLambda)
     , RunAsUser(runAsUser)
+    , DirectoryPath(directoryPath)
 {
 }
 
@@ -69,6 +71,10 @@ const TString& TTargetTransfer::TTransferConfig::GetTransformLambda() const {
 
 const TString& TTargetTransfer::TTransferConfig::GetRunAsUser() const {
     return RunAsUser;
+}
+
+const TString& TTargetTransfer::TTransferConfig::GetDirectoryPath() const {
+    return DirectoryPath;
 }
 
 }

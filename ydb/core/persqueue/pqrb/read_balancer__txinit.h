@@ -33,7 +33,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 return false;
 
             while (!dataRowset.EndOfSet()) { //found out topic info
-                Y_ABORT_UNLESS(!Self->Inited);
+                AFL_ENSURE(!Self->Inited)("tablet_id", Self->TabletID());
                 Self->PathId  = dataRowset.GetValue<Schema::Data::PathId>();
                 Self->Topic   = dataRowset.GetValue<Schema::Data::Topic>();
                 Self->Path    = dataRowset.GetValue<Schema::Data::Path>();
@@ -50,7 +50,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 TString config = dataRowset.GetValueOrDefault<Schema::Data::Config>("");
                 if (!config.empty()) {
                     bool res = Self->TabletConfig.ParseFromString(config);
-                    Y_ABORT_UNLESS(res);
+                    AFL_ENSURE(res)("tablet_id", Self->TabletID())("path", Self->Path)("topic", Self->Topic);
 
                     Migrate(Self->TabletConfig);
                     Self->Consumers.clear();

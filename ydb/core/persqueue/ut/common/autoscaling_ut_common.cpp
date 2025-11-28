@@ -92,7 +92,7 @@ TWriteMessage Msg(const TString& data, ui64 seqNo) {
     return msg;
 }
 
-TTopicSdkTestSetup CreateSetup() {
+TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority) {
     NKikimrConfig::TFeatureFlags ff;
     ff.SetEnableTopicSplitMerge(true);
     ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
@@ -105,10 +105,12 @@ TTopicSdkTestSetup CreateSetup() {
 
     auto setup = TTopicSdkTestSetup("TopicSplitMerge", settings, false);
 
-    setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-    setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
-    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, NActors::NLog::PRI_TRACE);
-    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_TRACE);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_READ_PROXY, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_MIRRORER, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_MIRROR_DESCRIBER, priority);
 
     setup.GetRuntime().GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     setup.GetRuntime().GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
@@ -118,7 +120,7 @@ TTopicSdkTestSetup CreateSetup() {
     return setup;
 }
 
-std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition, TString topic, bool useCodec) {
+std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition, TString topic, bool useCodec) {
     auto writeSettings = TWriteSessionSettings()
                     .Path(topic)
                     .ProducerId(producer);

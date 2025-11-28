@@ -10,16 +10,13 @@
 
 namespace NYql {
 
-TMaybe<double> TYtProviderContext::ColumnNumUniqueValues(const TDynBitMap& relMap,  const NDq::TJoinColumn& joinColumn) const {
-    auto entry = ColumnIndex_.find(joinColumn.AttributeName);
+TMaybe<double> TYtProviderContext::ColumnNumUniqueValues(const TDynBitMap& relMap, const NDq::TJoinColumn& joinColumn) const {
+    const auto entry = ColumnIndex_.find(joinColumn.AttributeName);
     if (entry == ColumnIndex_.end()) {
         return Nothing();
     }
-    for (const auto& relColEntry : entry->second) {
-        int relIndex = relColEntry.first;
-        int colIndex = relColEntry.second;
-        if (relMap[relIndex] && RelInfo_[relIndex].Label == joinColumn.RelName &&
-            RelInfo_[relIndex].ColumnInfo[colIndex].EstimatedUniqueCount) {
+    for (const auto& [relIndex, colIndex] : entry->second) {
+        if (relMap[relIndex] && RelInfo_[relIndex].Label == joinColumn.RelName) {
             return RelInfo_[relIndex].ColumnInfo[colIndex].EstimatedUniqueCount;
         }
     }
@@ -71,13 +68,15 @@ TString TYtProviderContext::DebugStatistic(const TVector<NDq::TJoinColumn>& colu
 TMaybe<double> TYtProviderContext::FindMaxUniqueVals(const TYtProviderStatistic& specific, const TVector<NDq::TJoinColumn>& columns) const {
     TMaybe<double> result;
     for (const auto& joinColumn : columns) {
-        auto val = ColumnNumUniqueValues(specific.RelBitmap, joinColumn);
+        const auto val = ColumnNumUniqueValues(specific.RelBitmap, joinColumn);
         if (val && (!result || *val > *result)) {
             result = val;
         }
     }
     return result;
 }
+
+namespace {
 
 double ComputeCardinality(TMaybe<double> maxUniques, double leftCardinality, double rightCardinality) {
     if (!maxUniques) {
@@ -91,9 +90,12 @@ double ComputeCardinality(TMaybe<double> maxUniques, double leftCardinality, dou
     return result;
 }
 
-TYtProviderContext::TYtProviderContext(TJoinAlgoLimits limits, TVector<TYtProviderRelInfo> relInfo)
+} // namespace
+
+TYtProviderContext::TYtProviderContext(TJoinAlgoLimits limits, TVector<TYtProviderRelInfo> relInfo, ui32 version)
     : Limits_(limits)
-    , RelInfo_(std::move(relInfo)) {
+    , RelInfo_(std::move(relInfo))
+    , Version_(version) {
     for (int relIndex = 0; relIndex < std::ssize(RelInfo_); ++relIndex) {
         const auto& rel = RelInfo_[relIndex];
         for (int colIndex = 0; colIndex < std::ssize(rel.ColumnInfo); ++colIndex) {
@@ -158,31 +160,31 @@ TOptimizerStatistics TYtProviderContext::ComputeJoinStats(
 
     TMaybe<double> maxUniques;
     auto leftMaxUniques = FindMaxUniqueVals(*leftSpecific, leftJoinKeys);
-    if (leftMaxUniques && (!maxUniques || *maxUniques < *leftMaxUniques)) {
-        maxUniques = *leftMaxUniques;
-    }
     auto rightMaxUniques = FindMaxUniqueVals(*rightSpecific, rightJoinKeys);
-    if (rightMaxUniques && (!maxUniques || *maxUniques < *rightMaxUniques)) {
-        maxUniques = *rightMaxUniques;
+    if (!leftMaxUniques) {
+        maxUniques = rightMaxUniques;
+    } else if (!rightMaxUniques) {
+        maxUniques = leftMaxUniques;
+    } else {
+        maxUniques = Max(*leftMaxUniques, *rightMaxUniques);
     }
 
     auto resultSpecific = std::make_unique<TYtProviderStatistic>();
-
     resultSpecific->RelBitmap = leftSpecific->RelBitmap | rightSpecific->RelBitmap;
     resultSpecific->JoinAlgo = joinAlgo;
 
     double outputCardinality = ComputeCardinality(maxUniques, leftStats.Nrows, rightStats.Nrows);
-    double leftCardinalityFactor = leftStats.Nrows != 0.0 ? outputCardinality / leftStats.Nrows : 0.0;
-    double rightCardinalityFactor = rightStats.Nrows != 0.0 ? outputCardinality / rightStats.Nrows : 0.0;
 
-    double outputByteSize = leftCardinalityFactor * leftStats.ByteSize + rightCardinalityFactor * rightStats.ByteSize;
+    double leftRowSize = leftStats.Nrows != 0.0 ? leftStats.ByteSize / leftStats.Nrows : 0.0;
+    double rightRowSize = rightStats.Nrows != 0.0 ? rightStats.ByteSize / rightStats.Nrows : 0.0;
+    double outputByteSize = outputCardinality * (leftRowSize + rightRowSize);
 
-    auto leftReadBytes = leftStats.ByteSize;
+    double leftReadBytes = leftStats.ByteSize;
     double rightReadBytes = rightStats.ByteSize;
 
     if (joinAlgo == EJoinAlgoType::LookupJoin) {
-        auto leftJoinUniques = FindMaxUniqueVals(*leftSpecific, TVector<NDq::TJoinColumn>{leftJoinKeys[0]});
-        auto rightJoinUniques = FindMaxUniqueVals(*rightSpecific, TVector<NDq::TJoinColumn>{rightJoinKeys[0]});
+        auto leftJoinUniques = ColumnNumUniqueValues(leftSpecific->RelBitmap, leftJoinKeys[0]);
+        auto rightJoinUniques = ColumnNumUniqueValues(rightSpecific->RelBitmap, rightJoinKeys[0]);
         if (leftJoinUniques && rightJoinUniques && *rightJoinUniques < *leftJoinUniques) {
             leftReadBytes *= *rightJoinUniques / *leftJoinUniques;
         }
@@ -195,10 +197,14 @@ TOptimizerStatistics TYtProviderContext::ComputeJoinStats(
         leftReadBytes = 0;
     }
 
-    double outputCost =
-        leftStats.Cost + rightStats.Cost +
-        leftReadBytes + rightReadBytes +
-        outputByteSize;
+    double outputCost = leftStats.Cost + rightStats.Cost;
+    if (Version_ >= 1) {
+        // Don't add outputByteSize to outputCost because outputByteSize will be accounted as *ReadBytes in subsequent joins.
+        // The output size of the final join can be ignored since it remains constant regardless of the join order.
+        outputCost += leftReadBytes + rightReadBytes;
+    } else {
+        outputCost += leftReadBytes + rightReadBytes + outputByteSize;
+    }
 
     TOptimizerStatistics result(
         EStatisticsType::ManyManyJoin,

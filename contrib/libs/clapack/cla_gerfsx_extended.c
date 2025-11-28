@@ -74,7 +74,7 @@ static real c_b31 = 1.f;
     extern /* Subroutine */ int cgetrs_(char *, integer *, integer *, complex 
 	    *, integer *, integer *, complex *, integer *, integer *);
     real normdx;
-    extern /* Character */ VOID chla_transtype__(char *, ftnlen, integer *);
+    extern /* Character */ VOID chla_transtype_(char *, ftnlen, integer *);
     real hugeval;
     integer x_state__, z_state__;
 
@@ -385,7 +385,7 @@ static real c_b31 = 1.f;
     if (*info != 0) {
 	return 0;
     }
-    chla_transtype__(ch__1, (ftnlen)1, trans_type__);
+    chla_transtype_(ch__1, (ftnlen)1, trans_type__);
     *(unsigned char *)trans = *(unsigned char *)&ch__1[0];
     eps = slamch_("Epsilon");
     hugeval = slamch_("Overflow");

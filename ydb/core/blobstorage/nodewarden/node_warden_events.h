@@ -22,15 +22,8 @@ namespace NKikimr::NStorage {
     {
         TEvNodeConfigReversePush() = default;
 
-        TEvNodeConfigReversePush(ui32 rootNodeId, const NKikimrBlobStorage::TStorageConfig *committedConfig,
-                bool recurseConfigUpdate) {
+        TEvNodeConfigReversePush(ui32 rootNodeId) {
             Record.SetRootNodeId(rootNodeId);
-            if (committedConfig) {
-                Record.MutableCommittedStorageConfig()->CopyFrom(*committedConfig);
-            }
-            if (recurseConfigUpdate) {
-                Record.SetRecurseConfigUpdate(recurseConfigUpdate);
-            }
         }
 
         static std::unique_ptr<TEvNodeConfigReversePush> MakeRejected() {
@@ -166,33 +159,37 @@ namespace NKikimr::NStorage {
         {}
     };
 
-    struct TEvNodeWardenManageSyncers
-        : TEventLocal<TEvNodeWardenManageSyncers, TEvBlobStorage::EvNodeWardenManageSyncers>
+    struct TEvNodeWardenUpdateConfigFromPeer
+        : TEventLocal<TEvNodeWardenUpdateConfigFromPeer, TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer>
     {
-        struct TSyncer {
-            ui32 NodeId;
-            TGroupId GroupId;
-            TBridgePileId TargetBridgePileId;
-        };
-        std::vector<TSyncer> RunSyncers;
+        NKikimrBlobStorage::TStorageConfig Config;
+        std::optional<NKikimrBlobStorage::TStorageConfig> CommittedConfig;
 
-        TEvNodeWardenManageSyncers(std::vector<TSyncer>&& runSyncers)
-            : RunSyncers(std::move(runSyncers))
+        TEvNodeWardenUpdateConfigFromPeer(NKikimrBlobStorage::TStorageConfig config,
+                std::optional<NKikimrBlobStorage::TStorageConfig> committedConfig)
+            : Config(std::move(config))
+            , CommittedConfig(std::move(committedConfig))
         {}
     };
 
-    struct TEvNodeWardenManageSyncersResult
-        : TEventLocal<TEvNodeWardenManageSyncersResult, TEvBlobStorage::EvNodeWardenManageSyncersResult>
+    struct TEvNodeWardenNotifySyncerFinished
+        : TEventLocal<TEvNodeWardenNotifySyncerFinished, TEvBlobStorage::EvNodeWardenNotifySyncerFinished>
     {
-        struct TSyncer {
-            TGroupId GroupId;
-            TBridgePileId TargetBridgePileId;
-        };
-        std::vector<TSyncer> WorkingSyncers;
+        const TGroupId BridgeProxyGroupId;
+        const ui32 BridgeProxyGroupGeneration;
+        const TGroupId SourceGroupId;
+        const TGroupId TargetGroupId;
+        std::optional<TString> ErrorReason;
 
-        TEvNodeWardenManageSyncersResult(std::vector<TSyncer>&& workingSyncers)
-            : WorkingSyncers(std::move(workingSyncers))
+        TEvNodeWardenNotifySyncerFinished(TGroupId bridgeProxyGroupId, ui32 bridgeProxyGroupGeneration,
+                TGroupId sourceGroupId, TGroupId targetGroupId, std::optional<TString> errorReason)
+            : BridgeProxyGroupId(bridgeProxyGroupId)
+            , BridgeProxyGroupGeneration(bridgeProxyGroupGeneration)
+            , SourceGroupId(sourceGroupId)
+            , TargetGroupId(targetGroupId)
+            , ErrorReason(errorReason)
         {}
+
     };
 
 } // NKikimr::NStorage

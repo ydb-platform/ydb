@@ -12,7 +12,7 @@ def post_install(self):
 boost_date_time = NixSourceProject(
     nixattr="boost_date_time",
     arcdir=boost.make_arcdir("date_time"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

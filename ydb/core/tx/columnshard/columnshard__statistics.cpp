@@ -12,13 +12,13 @@
 
 namespace NKikimr::NColumnShard {
 
-void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const TActorContext&) {
+void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeShard::TPtr& ev, const TActorContext&) {
     auto& requestRecord = ev->Get()->Record;
     // TODO Start a potentially long analysis process.
     // ...
 
     // Return the response when the analysis is completed
-    auto response = std::make_unique<NStat::TEvStatistics::TEvAnalyzeTableResponse>();
+    auto response = std::make_unique<NStat::TEvStatistics::TEvAnalyzeShardResponse>();
     auto& responseRecord = response->Record;
     responseRecord.SetOperationId(requestRecord.GetOperationId());
     responseRecord.MutablePathId()->CopyFrom(requestRecord.GetTable().GetPathId());
@@ -205,7 +205,7 @@ public:
                     }
                     AFL_VERIFY(indexMeta->GetColumnIds().size() == 1);
                     indexIdToColumnId.emplace(indexMeta->GetIndexId(), columnId);
-                    if (!indexMeta->IsInplaceData()) {
+                    if (!indexMeta->IsInplaceData(portionInfo->GetPortionInfo().GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId))) {
                         portionInfo->FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
                     } else {
                         const std::vector<TString> data = portionInfo->GetIndexInplaceDataOptional(indexMeta->GetIndexId());
@@ -314,7 +314,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         StoragesManager, resultAccumulator, 1000, columnTagsRequested, versionedIndex, DataAccessorsManager.GetObjectPtrVerified());
 
     for (const auto& [_, portionInfo] : spg->GetPortions()) {
-        if (!portionInfo->IsVisible(GetMaxReadVersion(), true)) {
+        if (!portionInfo->IsVisible(GetMaxReadVersion())) {
             continue;
         }
         portionsPack.AddTask(portionInfo);

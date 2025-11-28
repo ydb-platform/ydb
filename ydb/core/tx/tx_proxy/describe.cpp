@@ -7,7 +7,8 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/path.h>
+#include <ydb/core/sys_view/common/resolver.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
@@ -35,8 +36,6 @@ class TDescribeReq : public TActor<TDescribeReq> {
     TAutoPtr<const NACLib::TUserToken> UserToken;
 
     TString TextPath;
-
-    THolder<NSysView::ISystemViewResolver> SystemViewResolver;
 
     void Die(const TActorContext &ctx) override {
         --*TxProxyMon->NavigateReqInFly;
@@ -241,7 +240,6 @@ public:
         : TActor(&TThis::StateWaitInit)
         , Services(services)
         , TxProxyMon(txProxyMon)
-        , SystemViewResolver(NSysView::CreateSystemViewResolver())
     {
         ++*TxProxyMon->NavigateReqInFly;
     }
@@ -449,8 +447,7 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
 
     TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews() &&
-        ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) {
+    if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) {
         const auto& pathDescription = ev->Get()->GetRecord().GetPathDescription();
         const auto& self = pathDescription.GetSelf();
 
@@ -496,7 +493,9 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
             auto* record = ev->Get()->MutableRecord();
             auto& descr = *record->MutablePathDescription();
 
-            if (auto schema = SystemViewResolver->GetSystemViewSchema(descr.GetSysViewDescription().GetType())) {
+            if (auto schema = NSysView::GetSystemViewResolver()
+                .GetSystemViewSchema(descr.GetSysViewDescription().GetType()))
+            {
                 FillSystemViewDescr(descr, std::move(*schema));
             } else {
                 ReportError(NKikimrScheme::StatusPathDoesNotExist, "Unknown system view type", ctx);

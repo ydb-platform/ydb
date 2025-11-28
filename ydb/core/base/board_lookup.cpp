@@ -76,7 +76,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
         TString ToString() {
             TStringStream str;
-            str << "{ WaitForReplicasToSuccess: " << WaitForReplicasToSuccess 
+            str << "{ WaitForReplicasToSuccess: " << WaitForReplicasToSuccess
                 << " Replicas: [" << JoinSeq(",", Replicas) << "] }";
             return str.Str();
         }
@@ -120,7 +120,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         if (ClusterStateGeneration < msgGeneration || (ClusterStateGeneration == msgGeneration && ClusterStateGuid != msgGuid)) {
             BLOG_D("LookupReplica TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" Info->ClusterStateGuid=" << ClusterStateGuid << " msgGuid=" << msgGuid);
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
             NotAvailable();
             return false;
@@ -170,7 +170,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     bool AllStatsHasAndHasNoInfo() {
         for (auto groupIdx : xrange(ReplicaGroups.size())) {
-            if (Stats[groupIdx].HasInfo + Stats[groupIdx].NoInfo != ReplicaGroups[groupIdx].WaitForReplicasToSuccess)
+            if (Stats[groupIdx].HasInfo + Stats[groupIdx].NoInfo < ReplicaGroups[groupIdx].WaitForReplicasToSuccess)
                 return false;
         }
         return true;
@@ -184,12 +184,12 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         return true;
     }
 
-    bool AllStatsNotAvailable() {
+    bool AnyGroupStatsNotAvailable() {
         for (auto groupIdx : xrange(ReplicaGroups.size())) {
-            if (Stats[groupIdx].NotAvailable <= (ReplicaGroups[groupIdx].Replicas.size() - ReplicaGroups[groupIdx].WaitForReplicasToSuccess))
-                return false;
+            if (Stats[groupIdx].NotAvailable > (ReplicaGroups[groupIdx].Replicas.size() - ReplicaGroups[groupIdx].WaitForReplicasToSuccess))
+                return true;
         }
-        return true;
+        return false;
     }
 
     void CheckCompletion() {
@@ -212,12 +212,12 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
                     return NotAvailable();
                 }
             } else {
-                if (AllStatsNotAvailable()) {
+                if (AnyGroupStatsNotAvailable()) {
                     return NotAvailable();
                 }
             }
         } else {
-            if (AllStatsNotAvailable()) {
+            if (AnyGroupStatsNotAvailable()) {
                 return NotAvailable();
             }
         }
@@ -343,7 +343,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         }
 
         auto &replica = ReplicaGroups[groupIdx].Replicas[idx];
-        BLOG_D("Handle TEvReplicaBoardInfo: groupIdx: " << groupIdx << " idx: " << idx << " reconnectNumber: " 
+        BLOG_D("Handle TEvReplicaBoardInfo: groupIdx: " << groupIdx << " idx: " << idx << " reconnectNumber: "
             << reconnectNumber << " replica.ReconnectNumber: " << replica.ReconnectNumber);
         if (reconnectNumber != replica.ReconnectNumber) {
             return;

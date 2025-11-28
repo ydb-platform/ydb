@@ -6,8 +6,6 @@ namespace NYql::NFmr {
 using IFmrServer = IRunnable;
 
 struct TTableDataServiceServerSettings {
-    ui64 WorkerId;
-    ui64 WorkersNum;
     TString Host = "localhost";
     ui16 Port = 7000;
 };

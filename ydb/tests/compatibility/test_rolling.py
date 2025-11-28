@@ -15,8 +15,6 @@ class TestRolling(RollingUpgradeAndDowngradeFixture):
         if min(self.versions) < (25, 1):
             pytest.skip("Only available since 25-1, because of enable_column_store flag")
 
-        output_path = yatest.common.test_output_path()
-        self.output_f = open(os.path.join(output_path, "out.log"), "w")
         yield from self.setup_cluster(
             extra_feature_flags={
                 "enable_column_store": True,
@@ -94,8 +92,8 @@ class TestRolling(RollingUpgradeAndDowngradeFixture):
                 store_type,
             ]
         )
-        yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-        run = yatest.common.execute(run_command, wait=False, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(init_command, wait=True)
+        run = yatest.common.execute(run_command, wait=False)
 
         for _ in self.roll():
             time.sleep(5)

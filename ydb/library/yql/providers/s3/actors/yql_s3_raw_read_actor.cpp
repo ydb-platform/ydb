@@ -1,5 +1,3 @@
-#include <ydb/library/yql/providers/s3/events/events.h>
-
 #include "yql_s3_actors_util.h"
 #include "yql_s3_raw_read_actor.h"
 #include "yql_s3_source_queue.h"
@@ -7,10 +5,11 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
-
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
+#include <ydb/library/yql/providers/s3/events/events.h>
+
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -29,11 +28,13 @@
 
 namespace NYql::NDq {
 
+namespace {
+
 ui64 SubtractSaturating(ui64 lhs, ui64 rhs) {
     return (lhs > rhs) ? lhs - rhs : 0;
 }
 
-class TS3ReadActor : public NActors::TActorBootstrapped<TS3ReadActor>, public IDqComputeActorAsyncInput {
+class TS3ReadActor : public NActors::TActorBootstrapped<TS3ReadActor>, public IDqComputeActorAsyncInput, public TSourceErrorHandler {
 public:
     TS3ReadActor(
         ui64 inputIndex,
@@ -61,10 +62,10 @@ public:
         ui64 fileQueueBatchObjectCountLimit,
         ui64 fileQueueConsumersCountDelta,
         bool allowLocalFiles)
-        : ReadActorFactoryCfg(readActorFactoryCfg)
+        : TSourceErrorHandler(inputIndex)
+        , ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
-        , InputIndex(inputIndex)
         , TxId(txId)
         , ComputeActorId(computeActorId)
         , RetryPolicy(retryPolicy)
@@ -237,7 +238,7 @@ private:
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         , catch (const std::exception& e) {
             TIssues issues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}};
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
+            OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
     )
 
@@ -284,7 +285,7 @@ private:
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
         LOG_E("TS3ReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
         issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, result->Get()->Record.GetFatalCode()));
+        OnFatalError(std::move(issues), result->Get()->Record.GetFatalCode());
     }
 
     void HandleAck(TEvS3Provider::TEvAck::TPtr& ev) {
@@ -389,7 +390,7 @@ private:
                 message = errorText;
             }
             message = TStringBuilder{} << "Error while reading file " << path << ", details: " << message << ", request id: [" << requestId << "]";
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, BuildIssues(httpCode, errorCode, message), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            OnFatalError(BuildIssues(httpCode, errorCode, message), NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
         }
     }
 
@@ -400,7 +401,7 @@ private:
         const auto path = result->Get()->Path;
         LOG_W("TS3ReadActor", "Error while reading file " << path << ", details: ID: " << id << ", TEvReadError: " << result->Get()->Error.ToOneLineString() << ", request id: [" << requestId << "]");
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << path << " with request id [" << requestId << "]", TIssues{result->Get()->Error});
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
     }
     
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
@@ -421,7 +422,7 @@ private:
         LOG_T("TS3ReadActor", "Handle undelivered FileQueue ");
         if (FileQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
             TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
+            OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
     }
 
@@ -445,13 +446,16 @@ private:
         TActorBootstrapped<TS3ReadActor>::PassAway();
     }
 
+    void SendError(std::unique_ptr<IDqComputeActorAsyncInput::TEvAsyncInputError> ev) final {
+        Send(ComputeActorId, ev.release());
+    }
+
 private:
     const TS3ReadActorFactoryConfig ReadActorFactoryCfg;
     const IHTTPGateway::TPtr Gateway;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     NKikimr::NMiniKQL::TPlainContainerCache ContainerCache;
 
-    const ui64 InputIndex;
     TDqAsyncStats IngressStats;
     const TTxId TxId;
     const NActors::TActorId ComputeActorId;
@@ -500,6 +504,8 @@ private:
     TRetryEventsQueue FileQueueEvents;
     TDeque<TVector<NS3::FileQueue::TObjectPath>> PathBatchQueue;
 };
+
+} // anonymous namespace
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawReadActor(
     ui64 inputIndex,

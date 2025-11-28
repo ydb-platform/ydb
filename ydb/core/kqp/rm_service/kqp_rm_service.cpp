@@ -171,12 +171,12 @@ public:
         SetConfigValues(config);
     }
 
-    void Bootstrap(NKikimrConfig::TTableServiceConfig::TResourceManager& config, TActorSystem* actorSystem, TActorId selfId) {
-        if (!Counters) {
-            Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters);
-        }
+    void Registered(NKikimrConfig::TTableServiceConfig::TResourceManager& config, TActorSystem* actorSystem, TActorId selfId) {
         ActorSystem = actorSystem;
         SelfId = selfId;
+        if (!Counters) {
+            Counters = MakeIntrusive<TKqpCounters>(AppData(ActorSystem)->Counters);
+        }
         UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes(),
             config.GetKqpPatternCacheCompiledCapacityBytes(),
             config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
@@ -582,20 +582,30 @@ public:
     TKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         TIntrusivePtr<TKqpCounters> counters, const TActorId& resourceBrokerId,
         std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources, ui32 nodeId)
-        : Config(config)
+        : NodeId(nodeId)
+        , Config(config)
         , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
     {
         ResourceManager = std::make_shared<TKqpResourceManager>(config, counters);
+    }
+
+    // Is called right after service registration
+    // and before any usual actor can try to get ResourceManager
+    void Registered(TActorSystem* sys, const TActorId& owner) override {
+        TActorBootstrapped::Registered(sys, owner);
+
+        ResourceManager->Registered(Config, sys, SelfId());
+
         with_lock (ResourceManagers.Lock) {
-            ResourceManagers.ByNodeId[nodeId] = ResourceManager;
-            ResourceManagers.Default = ResourceManager;
+            if (ResourceManagers.Default.expired()) { // There can be several managers in tests
+                ResourceManagers.Default = ResourceManager;
+            }
+            ResourceManagers.ByNodeId[NodeId] = ResourceManager;
         }
     }
 
     void Bootstrap() {
-        ResourceManager->Bootstrap(Config, TlsActivationContext->ActorSystem(), SelfId());
-
         LOG_D("Start KqpResourceManagerActor at " << SelfId() << " with ResourceBroker at " << ResourceBrokerId);
 
         // Subscribe for tenant changes
@@ -935,6 +945,7 @@ private:
     }
 
 private:
+    const ui32 NodeId;
     NKikimrConfig::TTableServiceConfig::TResourceManager Config;
 
     const TActorId ResourceBrokerId;
@@ -984,7 +995,7 @@ std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _no
 
 std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> _nodeId) {
     ui32 nodeId = _nodeId ? *_nodeId : TActivationContext::ActorSystem()->NodeId;
-    auto rm = NRm::ResourceManagers.Default.lock();
+    std::shared_ptr<NRm::TKqpResourceManager> rm = NRm::ResourceManagers.Default.lock();
     if (Y_LIKELY(rm && rm->GetNodeId() == nodeId)) {
         return rm;
     }

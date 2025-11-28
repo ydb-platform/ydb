@@ -262,7 +262,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        absl/base/internal/nullability_deprecated.h [1:1]
         absl/base/no_destructor.h [1:1]
         absl/base/nullability.h [1:1]
         absl/base/prefetch.h [1:1]
@@ -624,6 +623,11 @@ BELONGS ya.make
         absl/container/internal/raw_hash_set_resize_impl.h [1:1]
         absl/debugging/internal/addresses.h [1:1]
         absl/hash/internal/weakly_mixed_integer.h [1:1]
+        absl/log/log_entry.cc [1:1]
+        absl/profiling/hashtable.cc [1:1]
+        absl/profiling/hashtable.h [1:1]
+        absl/profiling/internal/profile_builder.cc [1:1]
+        absl/profiling/internal/profile_builder.h [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d34864d3c7c7a5ffae3d414344aa54a8
 BELONGS ya.make
@@ -647,8 +651,6 @@ BELONGS ya.make
         absl/flags/internal/sequence_lock.h [2:2]
         absl/flags/reflection.cc [2:2]
         absl/flags/reflection.h [2:2]
-        absl/hash/internal/low_level_hash.cc [1:1]
-        absl/hash/internal/low_level_hash.h [1:1]
         absl/log/internal/proto.cc [1:1]
         absl/log/internal/proto.h [1:1]
         absl/numeric/bits.h [1:1]

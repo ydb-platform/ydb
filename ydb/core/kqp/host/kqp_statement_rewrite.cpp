@@ -20,6 +20,21 @@ namespace {
         NYql::TExprNode::TPtr MoveTable = nullptr;
     };
 
+    bool IsOlap(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
+        if (!tableSettings) {
+            return false;
+        }
+        for (const auto& field : tableSettings.Cast()) {
+            if (field.Name().Value() == "storeType") {
+                YQL_ENSURE(field.Value().Maybe<NYql::NNodes::TCoAtom>());
+                if (to_lower(field.Value().Cast<NYql::NNodes::TCoAtom>().StringValue()) == "column") {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     bool IsCreateTableAs(
             NYql::TExprNode::TPtr root,
             NYql::TExprContext& exprCtx) {
@@ -54,9 +69,6 @@ namespace {
             return false;
         }
 
-        auto tableNameNode = key.Ptr()->Child(0)->Child(1)->Child(0);
-        const TString tableName(tableNameNode->Content());
-
         auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
         if (!maybeList) {
             return false;
@@ -76,6 +88,29 @@ namespace {
             return false;
         }
         return true;
+    }
+
+    bool IsOlapCreateTableAs(
+            NYql::TExprNode::TPtr root,
+            NYql::TExprContext& exprCtx) {
+        NYql::NNodes::TExprBase expr(root);
+        auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
+        YQL_ENSURE(maybeWrite);
+        auto write = maybeWrite.Cast();
+
+        YQL_ENSURE(write.DataSink().FreeArgs().Count() > 1
+            && write.DataSink().Category() == "kikimr"
+            && write.DataSink().FreeArgs().Get(1).Cast<NYql::NNodes::TCoAtom>() == "db");
+
+        auto writeArgs = write.FreeArgs();
+        YQL_ENSURE(writeArgs.Count() > 4);
+
+        auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
+        YQL_ENSURE(maybeList);
+        auto settings = NYql::NCommon::ParseWriteTableSettings(maybeList.Cast(), exprCtx);
+        YQL_ENSURE(settings.Mode);
+
+        return IsOlap(settings.TableSettings);
     }
 
     TPrepareRewriteInfo PrepareCreateTableAs(
@@ -124,7 +159,7 @@ namespace {
             .AddExpressionEvaluation(funcRegistry)
             .AddPreTypeAnnotation()
             .AddIOAnnotation()
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
+            .AddTypeAnnotationTransformer(NOpt::CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
             .Build(false);
 
         return TPrepareRewriteInfo{
@@ -227,14 +262,14 @@ namespace {
         }
 
         const TString tmpTableName = TStringBuilder()
-            << tableName
-            << "_cas_"
-            << TAppData::RandomProvider->GenRand();
+                << tableName
+                << "_"
+                << TAppData::RandomProvider->GenUuid4().AsUuidString();
 
         const TString createTableName = (TStringBuilder()
-                << CanonizePath(AppData()->TenantName)
+                << CanonizePath(sessionCtx->GetDatabase())
                 << "/.tmp/sessions/"
-                << sessionCtx->GetSessionId()
+                << sessionCtx->GetTempTablesState()->TempDirName
                 << CanonizePath(tmpTableName));
 
         create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
@@ -245,6 +280,8 @@ namespace {
         }
         settingsNodes.push_back(
             exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "temporary")}));
+        settingsNodes.push_back(
+            exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "ctas")}));
         create = exprCtx.ReplaceNode(std::move(create), *create->Child(4), exprCtx.NewList(pos, std::move(settingsNodes)));
         create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, tmpTableName));
 
@@ -355,17 +392,22 @@ bool NeedToSplit(
 
 bool CheckRewrite(
         const NYql::TExprNode::TPtr& root,
+        const bool enableDataShardCreateTableAs,
         NYql::TExprContext& exprCtx) {
     ui64 actionsCount = 0;
     ui64 createTableAsCount = 0;
+    ui64 notOlapCreateTableAsCount = 0;
     VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
         if (NYql::NNodes::TCoWrite::Match(node.Get())) {
             if (IsCreateTableAs(node, exprCtx)) {
+                if (!IsOlapCreateTableAs(node, exprCtx) && !enableDataShardCreateTableAs) {
+                    ++notOlapCreateTableAsCount;
+                }
                 ++createTableAsCount;
             }
             ++actionsCount;
         }
-        return actionsCount <= 1 && createTableAsCount <= 1;
+        return actionsCount <= 1 && createTableAsCount <= 1 && notOlapCreateTableAsCount <= 1;
     });
 
     if (createTableAsCount == 0) {
@@ -382,6 +424,11 @@ bool CheckRewrite(
         exprCtx.AddError(NYql::TIssue(
             exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
             "CTAS statement can't be used with other statements without per-statement mode."));
+        return false;
+    } else if (notOlapCreateTableAsCount > 0) {
+        exprCtx.AddError(NYql::TIssue(
+            exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
+            "CTAS statement is disabled for row-oriented tables."));
         return false;
     }
     return true;

@@ -49,6 +49,7 @@ TYqlRunTool::TYqlRunTool()
     GetRunOptions().UseRepeatableRandomAndTimeProviders = true;
     GetRunOptions().ResultsFormat = NYson::EYsonFormat::Pretty;
     GetRunOptions().CustomTests = true;
+    GetRunOptions().EnableLineage = true;
 
     GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
         opts.AddLongOption('t', "table", "Table mapping").RequiredArgument("table@file")

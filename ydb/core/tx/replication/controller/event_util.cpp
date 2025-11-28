@@ -65,6 +65,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
             writerSettings.SetTransformLambda(p->GetTransformLambda());
             writerSettings.MutableBatching()->CopyFrom(batchingSettings);
             writerSettings.SetRunAsUser(p->GetRunAsUser());
+            writerSettings.SetDirectoryPath(p->GetDirectoryPath());
             break;
         }
     }

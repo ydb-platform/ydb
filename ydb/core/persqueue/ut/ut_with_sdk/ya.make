@@ -6,7 +6,7 @@ ADDINCL(
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -29,9 +29,12 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     autoscaling_ut.cpp
+    describe_ut.cpp
     balancing_ut.cpp
     commitoffset_ut.cpp
+    mirrorer_autoscaling_ut.cpp
     mirrorer_ut.cpp
+    topic_timestamp_ut.cpp
     topic_ut.cpp
 )
 

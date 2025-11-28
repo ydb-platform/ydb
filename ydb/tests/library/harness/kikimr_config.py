@@ -21,6 +21,10 @@ from .kikimr_port_allocator import KikimrPortManagerPortAllocator
 from .param_constants import kikimr_driver_path, ydb_cli_path
 from .util import LogLevels
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
 if PDISK_SIZE_STR.endswith("GB"):
     PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024 * 1024
@@ -123,8 +127,10 @@ class KikimrConfigGenerator(object):
             domain_name='Root',
             suppress_version_check=True,
             static_pdisk_size=PDISK_SIZE,
+            static_pdisk_config=None,
             dynamic_pdisk_size=PDISK_SIZE,
             dynamic_pdisks=[],
+            dynamic_pdisks_config=None,
             dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0)],
             state_storage_rings=None,
             n_to_select=None,
@@ -134,6 +140,7 @@ class KikimrConfigGenerator(object):
             enable_pqcd=True,
             enable_metering=False,
             enable_audit_log=False,
+            audit_log_config=None,
             grpc_tls_data_path=None,
             fq_config_path=None,
             public_http_config_path=None,
@@ -148,8 +155,10 @@ class KikimrConfigGenerator(object):
             enable_alter_database_create_hive_first=False,
             overrided_actor_system_config=None,
             default_users=None,  # dict[user]=password
-            extra_feature_flags=None,  # list[str]
-            extra_grpc_services=None,  # list[str]
+            extra_feature_flags=None,     # list[str]
+            disabled_feature_flags=None,  # list[str]
+            extra_grpc_services=None,     # list[str]
+            disabled_grpc_services=None,  # list[str]
             hive_config=None,
             datashard_config=None,
             enforce_user_token_requirement=False,
@@ -165,6 +174,7 @@ class KikimrConfigGenerator(object):
             enable_resource_pools=None,
             scan_grouped_memory_limiter_config=None,
             comp_grouped_memory_limiter_config=None,
+            deduplication_grouped_memory_limiter_config=None,
             query_service_config=None,
             domain_login_only=None,
             use_self_management=False,
@@ -177,13 +187,23 @@ class KikimrConfigGenerator(object):
             memory_controller_config=None,
             verbose_memory_limit_exception=False,
             enable_static_auth=False,
-            cms_config=None
+            cms_config=None,
+            explicit_statestorage_config=None,
+            system_tablets=None,
+            protected_mode=False,
+            tiny_mode=False,
+            module=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
+        if disabled_feature_flags is None:
+            disabled_feature_flags = []
         if extra_grpc_services is None:
             extra_grpc_services = []
+        if disabled_grpc_services is None:
+            disabled_grpc_services = []
 
+        self.explicit_statestorage_config = explicit_statestorage_config
         self.cms_config = cms_config
         self.use_log_files = use_log_files
         self.use_self_management = use_self_management
@@ -196,10 +216,14 @@ class KikimrConfigGenerator(object):
             self.explicit_hosts_and_host_configs = True
         self._pdisk_store_path = pdisk_store_path
         self.static_pdisk_size = static_pdisk_size
+        self.static_pdisk_config = static_pdisk_config
         self.app_config = config_pb2.TAppConfig()
         self.port_allocator = KikimrPortManagerPortAllocator() if port_allocator is None else port_allocator
         erasure = Erasure.NONE if erasure is None else erasure
-        self.__grpc_ssl_enable = grpc_ssl_enable
+        self.system_tablets = system_tablets
+        self.protected_mode = protected_mode
+        self.module = module
+        self.__grpc_ssl_enable = grpc_ssl_enable or protected_mode
         self.__grpc_tls_data_path = None
         self.__grpc_tls_ca = None
         self.__grpc_tls_key = None
@@ -240,6 +264,7 @@ class KikimrConfigGenerator(object):
 
         self.dynamic_pdisk_size = dynamic_pdisk_size
         self.dynamic_storage_pools = dynamic_storage_pools
+        self.dynamic_pdisks_config = dynamic_pdisks_config
 
         self.__dynamic_pdisks = dynamic_pdisks
 
@@ -256,6 +281,8 @@ class KikimrConfigGenerator(object):
         self.node_kind = node_kind
         self.yq_tenant = yq_tenant
         self.dc_mapping = dc_mapping
+
+        self.tiny_mode = tiny_mode
 
         self.__bs_cache_file_path = bs_cache_file_path
 
@@ -284,6 +311,11 @@ class KikimrConfigGenerator(object):
         if os.getenv('YDB_KQP_ENABLE_IMMEDIATE_EFFECTS', 'false').lower() == 'true':
             self.yaml_config["table_service_config"]["enable_kqp_immediate_effects"] = True
 
+        # disable kqp pattern cache on darwin platform to avoid using llvm versions of computational
+        # nodes. These compute nodes are not properly tested and maintained on darwin platform.
+        if sys.platform == "darwin":
+            self.yaml_config["table_service_config"]["resource_manager"]["kqp_pattern_cache_compiled_capacity_bytes"] = 0
+
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
@@ -306,6 +338,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]["enable_resource_pools"] = enable_resource_pools
         for extra_feature_flag in extra_feature_flags:
             self.yaml_config["feature_flags"][extra_feature_flag] = True
+        for disabled_feature_flag in disabled_feature_flags:
+            self.yaml_config["feature_flags"][disabled_feature_flag] = False
         if enable_alter_database_create_hive_first:
             self.yaml_config["feature_flags"]["enable_alter_database_create_hive_first"] = enable_alter_database_create_hive_first
         self.yaml_config['pqconfig']['enabled'] = enable_pq
@@ -325,7 +359,10 @@ class KikimrConfigGenerator(object):
             for service_type in pq_client_service_types:
                 self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
 
-        self.yaml_config['grpc_config']['services'].extend(extra_grpc_services)
+        self.yaml_config['grpc_config']['services'] = [
+            item for item in (self.yaml_config['grpc_config']['services'] + extra_grpc_services)
+            if item not in disabled_grpc_services
+        ]
 
         # NOTE(shmel1k@): change to 'true' after migration to YDS scheme
         self.yaml_config['sqs_config']['enable_sqs'] = enable_sqs
@@ -341,7 +378,7 @@ class KikimrConfigGenerator(object):
             self.__set_enable_metering()
 
         if enable_audit_log:
-            self.__set_enable_audit_log()
+            self.__set_audit_log(audit_log_config)
 
         self.naming_config = config_pb2.TAppConfig()
         dc_it = itertools.cycle(self._dcs)
@@ -408,9 +445,10 @@ class KikimrConfigGenerator(object):
             self.yaml_config["scan_grouped_memory_limiter_config"] = scan_grouped_memory_limiter_config
         if comp_grouped_memory_limiter_config:
             self.yaml_config["comp_grouped_memory_limiter_config"] = comp_grouped_memory_limiter_config
+        if deduplication_grouped_memory_limiter_config:
+            self.yaml_config["deduplication_grouped_memory_limiter_config"] = deduplication_grouped_memory_limiter_config
 
         self.__build()
-
         if self.grpc_ssl_enable:
             self.yaml_config["grpc_config"]["ca"] = self.grpc_tls_ca_path
             self.yaml_config["grpc_config"]["cert"] = self.grpc_tls_cert_path
@@ -433,11 +471,51 @@ class KikimrConfigGenerator(object):
         if os.getenv("YDB_ALLOW_ORIGIN") is not None:
             self.yaml_config["monitoring_config"] = {"allow_origin": str(os.getenv("YDB_ALLOW_ORIGIN"))}
 
-        if enforce_user_token_requirement:
+        if enforce_user_token_requirement or protected_mode:
             security_config_root["security_config"]["enforce_user_token_requirement"] = True
 
         if default_user_sid:
             security_config_root["security_config"]["default_user_sids"] = [default_user_sid]
+
+        # protected mode is described in the YDB documentation for cluster deployment: it uses both certificate and token authentication.
+        # see https://ydb.tech/docs/en/devops/deployment-options/manual/initial-deployment?version=main
+        if protected_mode:
+            security_config = security_config_root.setdefault("security_config", {})
+            if "default_users" in security_config:
+                del security_config["default_users"]
+
+            base_sids = ["root", "root@builtin", "ADMINS", "DATABASE-ADMINS", "clusteradmins@cert"]
+            security_config["monitoring_allowed_sids"] = base_sids
+            security_config["viewer_allowed_sids"] = base_sids
+            security_config["bootstrap_allowed_sids"] = base_sids
+            security_config["administration_allowed_sids"] = base_sids
+
+            self.yaml_config["interconnect_config"] = {
+                "start_tcp": True,
+                "encryption_mode": "OPTIONAL",
+                "path_to_certificate_file": self.grpc_tls_cert_path,
+                "path_to_private_key_file": self.grpc_tls_key_path,
+                "path_to_ca_file": self.grpc_tls_ca_path,
+            }
+
+            self.yaml_config['grpc_config']['services_enabled'] = ['legacy']
+            if 'services' in self.yaml_config['grpc_config']:
+                del self.yaml_config['grpc_config']['services']
+
+            self.yaml_config['client_certificate_authorization'] = {
+                "request_client_certificate": True,
+                "client_certificate_definitions": [
+                    {
+                        "member_groups": ["clusteradmins@cert"],
+                        "subject_terms": [
+                            {
+                                "short_name": "O",
+                                "values": ["YDB"]
+                            }
+                        ]
+                    }
+                ]
+            }
 
         if memory_controller_config:
             self.yaml_config["memory_controller_config"] = memory_controller_config
@@ -452,7 +530,6 @@ class KikimrConfigGenerator(object):
 
         if pg_compatible_expirement:
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
-            self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
             self.yaml_config['feature_flags']['enable_pg_syntax'] = True
@@ -495,7 +572,7 @@ class KikimrConfigGenerator(object):
 
         if kafka_api_port is not None:
             kafka_proxy_config = dict()
-            kafka_proxy_config["enable_kafka_proxy"] = True
+            kafka_proxy_config['enable_kafka_proxy'] = True
             kafka_proxy_config["listening_port"] = kafka_api_port
 
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
@@ -508,13 +585,19 @@ class KikimrConfigGenerator(object):
             self._add_host_config_and_hosts()
             self.yaml_config.pop("nameservice_config")
         if self.use_self_management:
-            self.yaml_config["domains_config"].pop("security_config")
+
+            if "security_config" in self.yaml_config["domains_config"]:
+                self.yaml_config["security_config"] = self.yaml_config["domains_config"].pop("security_config")
+
+            if "services" in self.yaml_config["grpc_config"] and "config" not in self.yaml_config["grpc_config"]["services"]:
+                self.yaml_config["grpc_config"]["services"].append("config")
+
             self.yaml_config["default_disk_type"] = "ROT"
             self.yaml_config["fail_domain_type"] = "rack"
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
 
-            for name in ['blob_storage_config', 'domains_config', 'system_tablets', 'grpc_config',
-                         'channel_profile_config', 'interconnect_config']:
+            for name in ['blob_storage_config', 'domains_config', 'system_tablets',
+                         'channel_profile_config']:
                 del self.yaml_config[name]
         if self.simple_config:
             self.yaml_config.pop("feature_flags")
@@ -525,6 +608,18 @@ class KikimrConfigGenerator(object):
             self.yaml_config.pop("sqs_config")
             self.yaml_config.pop("table_service_config")
             self.yaml_config.pop("kqpconfig")
+
+        if self.explicit_statestorage_config:
+            if "domains_config" not in self.yaml_config:
+                self.yaml_config["domains_config"] = dict()
+            if "state_storage" in self.yaml_config["domains_config"]:
+                del self.yaml_config["domains_config"]["state_storage"]
+            self.yaml_config["domains_config"]["explicit_state_storage_config"] = self.explicit_statestorage_config["explicit_state_storage_config"]
+            self.yaml_config["domains_config"]["explicit_state_storage_board_config"] = self.explicit_statestorage_config["explicit_state_storage_board_config"]
+            self.yaml_config["domains_config"]["explicit_scheme_board_config"] = self.explicit_statestorage_config["explicit_scheme_board_config"]
+
+        if self.system_tablets:
+            self.yaml_config["system_tablets"] = self.system_tablets
 
         if metadata_section:
             self.full_config["metadata"] = metadata_section
@@ -602,15 +697,23 @@ class KikimrConfigGenerator(object):
             metering_file.write('')
         self.yaml_config['metering_config'] = {'metering_file_path': metering_file_path}
 
-    def __set_enable_audit_log(self):
-        audit_file_path = os.path.join(self.__working_dir, 'audit.txt')
-        with open(audit_file_path, "w") as audit_file:
-            audit_file.write('')
-        self.yaml_config['audit_config'] = dict(
-            file_backend=dict(
-                file_path=audit_file_path,
-            )
-        )
+    def __set_audit_log(self, audit_log_config):
+        if audit_log_config is None:
+            cfg = dict(file_backend=dict())
+        else:
+            cfg = audit_log_config.copy()
+        file_backend_cfg = cfg.get('file_backend')
+
+        # Generate path for audit file
+        if file_backend_cfg is not None:
+            file_path = file_backend_cfg.get('file_path')
+            if file_path is None:
+                audit_file = tempfile.NamedTemporaryFile('w', prefix="audit_log.", suffix=".txt",
+                                                         dir=self.__working_dir)
+                file_backend_cfg['file_path'] = audit_file.name
+                with audit_file:
+                    audit_file.write('')
+        self.yaml_config['audit_config'] = cfg
 
     @property
     def metering_file_path(self):
@@ -718,12 +821,19 @@ class KikimrConfigGenerator(object):
         for ring in self.state_storage_rings:
             self.yaml_config["domains_config"]["state_storage"][0]["ring"]["ring"].append({"node" : ring if isinstance(ring, list) else [ring], "use_ring_specific_node_selection" : True})
 
-    def _add_pdisk_to_static_group(self, pdisk_id, path, node_id, pdisk_category, ring):
+    def _add_pdisk_to_static_group(self, pdisk_id, path, node_id, pdisk_category, ring, pdisk_config=None):
         domain_id = len(
             self.yaml_config['blob_storage_config']["service_set"]["groups"][0]["rings"][ring]["fail_domains"])
-        self.yaml_config['blob_storage_config']["service_set"]["pdisks"].append(
-            {"node_id": node_id, "pdisk_id": pdisk_id, "path": path, "pdisk_guid": pdisk_id,
-             "pdisk_category": pdisk_category})
+        pdisk_entry = {
+            "node_id": node_id,
+            "pdisk_id": pdisk_id,
+            "path": path,
+            "pdisk_guid": pdisk_id,
+            "pdisk_category": pdisk_category
+        }
+        if pdisk_config:
+            pdisk_entry["pdisk_config"] = pdisk_config
+        self.yaml_config['blob_storage_config']["service_set"]["pdisks"].append(pdisk_entry)
         self.yaml_config['blob_storage_config']["service_set"]["vdisks"].append(
             {
                 "vdisk_id": {"group_id": 0, "group_generation": 1, "ring": ring, "domain": domain_id, "vdisk": 0},
@@ -746,6 +856,9 @@ class KikimrConfigGenerator(object):
                     'disk_size', self.dynamic_pdisk_size)
                 pdisk_user_kind = 0 if pdisk_id <= 1 else self.__dynamic_pdisks[pdisk_id - 2].get('user_kind', 0)
 
+                # Get pdisk config based on whether it's static or dynamic
+                pdisk_config = self.static_pdisk_config if pdisk_id <= 1 else self.dynamic_pdisks_config
+
                 if self.__use_in_memory_pdisks:
                     pdisk_size_gb = disk_size / (1024 * 1024 * 1024)
                     pdisk_path = "SectorMap:%d:%d" % (pdisk_id, pdisk_size_gb)
@@ -756,8 +869,17 @@ class KikimrConfigGenerator(object):
                                                            dir=self._pdisk_store_path)
                     pdisk_path = tmp_file.name
 
-                self._pdisks_info.append({'pdisk_path': pdisk_path, 'node_id': node_id, 'disk_size': disk_size,
-                                          'pdisk_user_kind': pdisk_user_kind})
+                pdisk_info = {
+                    'pdisk_path': pdisk_path,
+                    'node_id': node_id,
+                    'disk_size': disk_size,
+                    'pdisk_user_kind': pdisk_user_kind,
+                    'pdisk_id': pdisk_id
+                }
+                if pdisk_config:
+                    pdisk_info['pdisk_config'] = pdisk_config
+
+                self._pdisks_info.append(pdisk_info)
                 if not self.use_self_management and pdisk_id == 1 and node_id <= self.static_erasure.min_fail_domains * self._rings_count:
                     self._add_pdisk_to_static_group(
                         pdisk_id,
@@ -765,6 +887,7 @@ class KikimrConfigGenerator(object):
                         node_id,
                         pdisk_user_kind,
                         datacenter_id - 1,
+                        pdisk_config=pdisk_config,
                     )
 
     def _add_host_config_and_hosts(self):
@@ -797,7 +920,7 @@ class KikimrConfigGenerator(object):
                 "host_config_id": host_config_id,
             }
             if self.bridge_config:
-                host_dict["location"] = {"bridge_pile_name": self.bridge_config.get("piles", [])[node_id % len(self.bridge_config.get("piles", []))].get("name")}
+                host_dict["location"] = {"bridge_pile_name": self.bridge_config.get("piles", [])[(node_id - 1) % len(self.bridge_config.get("piles", []))].get("name")}
             elif self.static_erasure == Erasure.MIRROR_3_DC:
                 host_dict["location"] = {"data_center": "zone-%d" % (node_id % 3)}
             hosts.append(host_dict)

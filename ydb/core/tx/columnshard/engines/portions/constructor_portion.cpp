@@ -15,26 +15,30 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
     AFL_VERIFY(!Constructed);
     Constructed = true;
     std::shared_ptr<TPortionInfo> result;
+    const bool enableGranularMemoryProfile = IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY);
+    TMemoryProfileGuard mGuard0("portion_construct/general", !enableGranularMemoryProfile);
     {
-        TMemoryProfileGuard mGuard0("portion_construct/meta::" + ::ToString(GetType()));
+        TMemoryProfileGuard mGuard0("portion_construct/meta::" + ::ToString(GetType()), enableGranularMemoryProfile);
         auto meta = MetaConstructor.Build();
-        TMemoryProfileGuard mGuard("portion_construct/main::" + ::ToString(GetType()));
+        TMemoryProfileGuard mGuard("portion_construct/main::" + ::ToString(GetType()), enableGranularMemoryProfile);
         result = BuildPortionImpl(std::move(meta));
     }
     {
-        TMemoryProfileGuard mGuard1("portion_construct/others::" + ::ToString(GetType()));
+        TMemoryProfileGuard mGuard1("portion_construct/others::" + ::ToString(GetType()), enableGranularMemoryProfile);
         AFL_VERIFY(PathId);
         result->PathId = PathId;
         result->PortionId = GetPortionIdVerified();
 
         if (RemoveSnapshot) {
             AFL_VERIFY(RemoveSnapshot->Valid());
-            result->RemoveSnapshot = *RemoveSnapshot;
+            result->SetRemoveSnapshot(*RemoveSnapshot);
         }
+
         AFL_VERIFY(SchemaVersion && *SchemaVersion);
         result->SchemaVersion = *SchemaVersion;
         result->ShardingVersion = ShardingVersion;
     }
+
     static TAtomicCounter countValues = 0;
     static TAtomicCounter sumValues = 0;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", result->GetMemorySize())("data_size", result->GetDataSize())(
@@ -60,7 +64,10 @@ std::shared_ptr<TPortionInfo> TWrittenPortionInfoConstructor::BuildPortionImpl(T
 }
 
 std::shared_ptr<TPortionInfo> TCompactedPortionInfoConstructor::BuildPortionImpl(TPortionMeta&& meta) {
-    return std::make_shared<TCompactedPortionInfo>(std::move(meta));
+    auto result = std::make_shared<TCompactedPortionInfo>(std::move(meta));
+    AFL_VERIFY(AppearanceSnapshot);
+    result->AppearanceSnapshot = *AppearanceSnapshot;
+    return result;
 }
 
 }   // namespace NKikimr::NOlap

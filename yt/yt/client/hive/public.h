@@ -35,6 +35,7 @@ YT_DEFINE_ERROR_ENUM(
     ((MailboxNotCreatedYet)    (2200))
     ((ParticipantUnregistered) (2201))
     ((TimeEntryNotFound)       (2202))
+    ((UnknownCell)             (2203))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

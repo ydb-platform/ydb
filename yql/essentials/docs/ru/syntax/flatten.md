@@ -77,6 +77,8 @@ SELECT value, id FROM as_table($sample) FLATTEN BY (value);
 * `FLATTEN OPTIONAL BY`
 
    Чтобы фильтровать `NULL`-значения без размножения, необходимо уточнить операцию до `FLATTEN OPTIONAL BY`.
+   
+   Начиная с YQL [2025.03](../changelog/2025.03.md), данное выражение также принимает любой не-Optional тип (в частности, применение на типе `NullType` вернёт `EmptyList`, Postgres-типы будут отфильтрованы по не-`NULL`, а другие типы данных будут отображены как есть).
 
 #### Примеры
 

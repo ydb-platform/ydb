@@ -18,7 +18,8 @@ private:
 protected:
     TSetBase(THash hash, TEquals equals)
         : Set_(1, hash, equals)
-    {}
+    {
+    }
 
     void Init(const TUnboxedValuePod& value, ui32 maxSize) {
         MaxSize_ = maxSize ? maxSize : std::numeric_limits<ui32>::max();
@@ -89,8 +90,7 @@ public:
 
 template <EDataSlot Slot>
 class TSetData
-    : public TSetBase<TUnboxedValueHash<Slot>, TUnboxedValueEquals<Slot>>
-{
+    : public TSetBase<TUnboxedValueHash<Slot>, TUnboxedValueEquals<Slot>> {
 public:
     using TBase = TSetBase<TUnboxedValueHash<Slot>, TUnboxedValueEquals<Slot>>;
 
@@ -130,27 +130,26 @@ struct TGenericEquals {
 };
 
 class TSetGeneric
-    : public TSetBase<TGenericHash, TGenericEquals>
-{
+    : public TSetBase<TGenericHash, TGenericEquals> {
 public:
     using TBase = TSetBase<TGenericHash, TGenericEquals>;
 
     TSetGeneric(const TUnboxedValuePod& value, ui32 maxSize,
-        IHash::TPtr hash, IEquate::TPtr equate)
+                IHash::TPtr hash, IEquate::TPtr equate)
         : TBase(TGenericHash{hash}, TGenericEquals{equate})
     {
         TBase::Init(value, maxSize);
     }
 
     TSetGeneric(const TSetGeneric& left, const TSetGeneric& right,
-        IHash::TPtr hash, IEquate::TPtr equate)
+                IHash::TPtr hash, IEquate::TPtr equate)
         : TBase(TGenericHash{hash}, TGenericEquals{equate})
     {
         TBase::Merge(left, right);
     }
 
     TSetGeneric(const TUnboxedValuePod& serialized,
-        IHash::TPtr hash, IEquate::TPtr equate)
+                IHash::TPtr hash, IEquate::TPtr equate)
         : TBase(TGenericHash{hash}, TGenericEquals{equate})
     {
         TBase::Deserialize(serialized);
@@ -158,14 +157,13 @@ public:
 };
 
 extern const char SetResourceNameGeneric[] = "Set.SetResource.Generic";
-class TSetResource:
-    public TBoxedResource<TSetGeneric, SetResourceNameGeneric>
-{
+class TSetResource: public TBoxedResource<TSetGeneric, SetResourceNameGeneric> {
 public:
     template <typename... Args>
     inline TSetResource(Args&&... args)
         : TBoxedResource(std::forward<Args>(args)...)
-    {}
+    {
+    }
 };
 
 template <EDataSlot Slot>
@@ -181,7 +179,6 @@ TSetResource* GetSetResource(const TUnboxedValuePod& arg) {
     TSetResource::Validate(arg);
     return static_cast<TSetResource*>(arg.AsBoxed().Get());
 }
-
 
 template <EDataSlot Slot>
 class TSetCreateData: public TBoxedValue {
@@ -201,7 +198,8 @@ public:
     TSetCreate(IHash::TPtr hash, IEquate::TPtr equate)
         : Hash_(hash)
         , Equate_(equate)
-    {}
+    {
+    }
 
 private:
     IHash::TPtr Hash_;
@@ -279,7 +277,8 @@ public:
     TSetDeserialize(IHash::TPtr hash, IEquate::TPtr equate)
         : Hash_(hash)
         , Equate_(equate)
-    {}
+    {
+    }
 
 private:
     IHash::TPtr Hash_;
@@ -308,7 +307,8 @@ public:
     TSetMerge(IHash::TPtr hash, IEquate::TPtr equate)
         : Hash_(hash)
         , Equate_(equate)
-    {}
+    {
+    }
 
 private:
     IHash::TPtr Hash_;
@@ -330,26 +330,24 @@ private:
     }
 };
 
-
-#define MAKE_RESOURCE(slot, ...)                                            \
-extern const char SetResourceName##slot[] = "Set.SetResource."#slot;        \
-template <>                                                                 \
-class TSetResourceData<EDataSlot::slot>:                                    \
-    public TBoxedResource<TSetData<EDataSlot::slot>, SetResourceName##slot> \
-{                                                                           \
-public:                                                                     \
-    template <typename... Args>                                             \
-    inline TSetResourceData(Args&&... args)                                 \
-        : TBoxedResource(std::forward<Args>(args)...)                       \
-    {}                                                                      \
-};
+#define MAKE_RESOURCE(slot, ...)                                                                                       \
+    extern const char SetResourceName##slot[] = "Set.SetResource." #slot;                                              \
+    template <>                                                                                                        \
+    class TSetResourceData<EDataSlot::slot>: public TBoxedResource<TSetData<EDataSlot::slot>, SetResourceName##slot> { \
+    public:                                                                                                            \
+        template <typename... Args>                                                                                    \
+        inline TSetResourceData(Args&&... args)                                                                        \
+            : TBoxedResource(std::forward<Args>(args)...)                                                              \
+        {                                                                                                              \
+        }                                                                                                              \
+    };
 
 UDF_TYPE_ID_MAP(MAKE_RESOURCE)
 
-#define MAKE_IMPL(operation, slot)                          \
-case EDataSlot::slot:                                       \
-    builder.Implementation(new operation<EDataSlot::slot>); \
-    break;
+#define MAKE_IMPL(operation, slot)                              \
+    case EDataSlot::slot:                                       \
+        builder.Implementation(new operation<EDataSlot::slot>); \
+        break;
 
 #define MAKE_CREATE(slot, ...) MAKE_IMPL(TSetCreateData, slot)
 #define MAKE_ADD_VALUE(slot, ...) MAKE_IMPL(TSetAddValueData, slot)
@@ -359,11 +357,10 @@ case EDataSlot::slot:                                       \
 #define MAKE_MERGE(slot, ...) MAKE_IMPL(TSetMergeData, slot)
 #define MAKE_GET_RESULT(slot, ...) MAKE_IMPL(TSetGetResultData, slot)
 
-#define MAKE_TYPE(slot, ...)                           \
-case EDataSlot::slot:                                  \
-    setType = builder.Resource(SetResourceName##slot); \
-    break;
-
+#define MAKE_TYPE(slot, ...)                               \
+    case EDataSlot::slot:                                  \
+        setType = builder.Resource(SetResourceName##slot); \
+        break;
 
 static const auto CreateName = TStringRef::Of("Create");
 static const auto AddValueName = TStringRef::Of("AddValue");
@@ -397,8 +394,7 @@ public:
         TType* userType,
         const TStringRef& typeConfig,
         ui32 flags,
-        IFunctionTypeInfoBuilder& builder) const final
-    {
+        IFunctionTypeInfoBuilder& builder) const final {
         Y_UNUSED(typeConfig);
 
         try {
@@ -449,7 +445,7 @@ public:
                 setType = builder.Resource(SetResourceNameGeneric);
             } else {
                 switch (*slot) {
-                UDF_TYPE_ID_MAP(MAKE_TYPE)
+                    UDF_TYPE_ID_MAP(MAKE_TYPE)
                 }
             }
 
@@ -463,7 +459,7 @@ public:
                         builder.Implementation(new TSetCreate(hash, equate));
                     } else {
                         switch (*slot) {
-                        UDF_TYPE_ID_MAP(MAKE_CREATE)
+                            UDF_TYPE_ID_MAP(MAKE_CREATE)
                         }
                     }
                 }
@@ -479,7 +475,7 @@ public:
                         builder.Implementation(new TSetAddValue);
                     } else {
                         switch (*slot) {
-                        UDF_TYPE_ID_MAP(MAKE_ADD_VALUE)
+                            UDF_TYPE_ID_MAP(MAKE_ADD_VALUE)
                         }
                     }
                 }
@@ -495,7 +491,7 @@ public:
                         builder.Implementation(new TSetWasChanged);
                     } else {
                         switch (*slot) {
-                        UDF_TYPE_ID_MAP(MAKE_WAS_CHANGED)
+                            UDF_TYPE_ID_MAP(MAKE_WAS_CHANGED)
                         }
                     }
                 }
@@ -511,7 +507,7 @@ public:
                         builder.Implementation(new TSetMerge(hash, equate));
                     } else {
                         switch (*slot) {
-                        UDF_TYPE_ID_MAP(MAKE_MERGE)
+                            UDF_TYPE_ID_MAP(MAKE_MERGE)
                         }
                     }
                 }
@@ -527,7 +523,7 @@ public:
                         builder.Implementation(new TSetSerialize);
                     } else {
                         switch (*slot) {
-                        UDF_TYPE_ID_MAP(MAKE_SERIALIZE)
+                            UDF_TYPE_ID_MAP(MAKE_SERIALIZE)
                         }
                     }
                 }
@@ -541,7 +537,7 @@ public:
                         builder.Implementation(new TSetDeserialize(hash, equate));
                     } else {
                         switch (*slot) {
-                        UDF_TYPE_ID_MAP(MAKE_DESERIALIZE)
+                            UDF_TYPE_ID_MAP(MAKE_DESERIALIZE)
                         }
                     }
                 }
@@ -559,7 +555,7 @@ public:
                         builder.Implementation(new TSetGetResult);
                     } else {
                         switch (*slot) {
-                        UDF_TYPE_ID_MAP(MAKE_GET_RESULT)
+                            UDF_TYPE_ID_MAP(MAKE_GET_RESULT)
                         }
                     }
                 }

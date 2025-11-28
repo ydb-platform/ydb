@@ -1,3 +1,4 @@
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -46,6 +47,31 @@ namespace {
             }),
             MakeHolder<TBlockEvents<TEvDataShard::TEvLocalKMeansResponse>>(runtime, [&](const auto& ev) {
                 return MakeCpuMeteringDeterministic(ev);
+            })
+        );
+    }
+
+    auto ZeroMeteringCpuTimeUs(TTestBasicRuntime& runtime) {
+        return std::make_tuple(
+            MakeHolder<TBlockEvents<TEvDataShard::TEvSampleKResponse>>(runtime, [&](const auto& ev) {
+                ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
+                return false;
+            }),
+            MakeHolder<TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse>>(runtime, [&](const auto& ev) {
+                ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
+                return false;
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse>>(runtime, [&](const auto& ev) {
+                ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
+                return false;
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse>>(runtime, [&](const auto& ev) {
+                ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
+                return false;
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvLocalKMeansResponse>>(runtime, [&](const auto& ev) {
+                ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
+                return false;
             })
         );
     }
@@ -287,9 +313,6 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
             {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
 
@@ -367,12 +390,118 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
     }
 
+    Y_UNIT_TEST(Metering_Documentation_Formula) {
+        for (ui32 levels : xrange(1, 10)) {
+            for (ui64 dataSizeMB : {1500, 500, 100, 0}) {
+                const ui64 rowCount = 500'000;
+
+                TMeteringStats stats;
+                stats.SetReadRows(5 * levels * rowCount);
+                stats.SetReadBytes(5 * levels * dataSizeMB * 1_MB);
+                stats.SetUploadRows(levels * rowCount);
+                stats.SetUploadBytes(levels * dataSizeMB * 1_MB);
+
+                TString explain;
+                const ui64 result = TRUCalculator::Calculate(stats, explain);
+
+                // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+                // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
+                UNIT_ASSERT_VALUES_EQUAL_C(result, levels * Max<ui64>(dataSizeMB * 1152, dataSizeMB * 640 + rowCount * 0.5), explain);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(Metering_Documentation_Formula_Build, smallRows) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        auto zeroMeteringCpuTimeUs = ZeroMeteringCpuTimeUs(runtime);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write data directly into shards
+        const ui32 levels = 3;
+        const ui32 tableRows = 1500;
+        const ui32 tableRowDimension = smallRows ? 500 : 5000;
+        const ui64 tableRowBytes = 4 + (tableRowDimension + 1); // key:Uint32 (4 bytes), embedding:String (vector_dimension + 1 bytes)
+        const ui64 tableBytes = tableRows * tableRowBytes;
+        for (ui32 rowId = 0; rowId < tableRows; rowId += 100) { // batching
+            WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, rowId, rowId + 100, {}, tableRowDimension);
+        }
+
+        // Build vector index with max_shards_in_flight(1) to guarantee deterministic metering data
+        ui64 buildIndexTx = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+            });
+            auto settings = request->Record.MutableSettings();
+            settings->set_max_shards_in_flight(1);
+            settings->MutableScanSettings()->SetMaxBatchRows(1); // the worst case with small buffer size
+            auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
+            kmeansSettings->Mutablevector_settings()->Setlevels(levels);
+            kmeansSettings->Mutablevector_settings()->mutable_settings()->set_vector_dimension(tableRowDimension);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        {
+            ui64 dataSizeMB = (tableBytes + 1_MB - 1) / 1_MB;
+            ui32 rowCount = tableRows; // alias
+            ui64 formulaRequestUnitsApproximation = levels * Max<ui64>(dataSizeMB * 1152, dataSizeMB * 640 + rowCount * 0.5);
+
+            ui64 actualRequestUnits = smallRows ? 3415 : 18552; // TODO: cut from html
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: " << actualRequestUnits << " ");
+
+            Cerr
+                << "dataSizeMB = " << dataSizeMB
+                << " rowCount = " << rowCount
+                << " expectedRequestUnits = " << formulaRequestUnitsApproximation
+                << " actualRequestUnits = " << actualRequestUnits
+                << Endl;
+            
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
+            // or ensure manually that the difference is not really big
+            UNIT_ASSERT_LE(actualRequestUnits, formulaRequestUnitsApproximation);
+            if (smallRows) {
+                // here `formulaRequestUnitsApproximation` may be even a bit less than `actualRequestUnits`
+                // because we do not count `__ydb_parent` and `id` columns
+                UNIT_ASSERT_VALUES_EQUAL(actualRequestUnits, 3415);
+                UNIT_ASSERT_VALUES_EQUAL(formulaRequestUnitsApproximation, 4170);
+            } else {
+                // here `formulaRequestUnitsApproximation` much less than `actualRequestUnits`
+                // because we do less than 5 kmeans iterations or buffer some rows
+                UNIT_ASSERT_VALUES_EQUAL(actualRequestUnits, 18552);
+                UNIT_ASSERT_VALUES_EQUAL(formulaRequestUnitsApproximation, 27648);
+            }
+        }
+    }
+
     Y_UNIT_TEST(Metering_CommonDB) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
         auto deterministicMetering = MakeCpuMeteringDeterministic(runtime);
 
@@ -481,7 +610,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
         auto deterministicMetering = MakeCpuMeteringDeterministic(runtime);
 
@@ -610,6 +739,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
             auto expectedId = TStringBuilder()
                 << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
             auto expectedBill = TBillRecord()
                 .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
@@ -674,6 +805,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
             auto expectedId = TStringBuilder()
                 << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
             auto expectedBill = TBillRecord()
                 .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
@@ -691,7 +824,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
         auto deterministicMetering = MakeCpuMeteringDeterministic(runtime);
 
@@ -781,6 +914,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
             auto expectedId = TStringBuilder()
                 << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
             auto expectedBill = TBillRecord()
                 .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
@@ -827,6 +962,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
             auto expectedId = TStringBuilder()
                 << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
             auto expectedBill = TBillRecord()
                 .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
@@ -884,6 +1021,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
             auto expectedId = TStringBuilder()
                 << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
             auto expectedBill = TBillRecord()
                 .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
@@ -987,7 +1126,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             buildIndexOperation.DebugString()
         );
 
-        using namespace NKikimr::NTableIndex::NTableVectorKmeansTreeIndex;
+        using namespace NKikimr::NTableIndex::NKMeans;
         TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", LevelTable), true, true), {
             NLs::IsTable,
             NLs::PartitionCount(3),
@@ -1255,6 +1394,114 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
     }
 
+    Y_UNIT_TEST(TTxInit_Checks_EnableVectorIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: [ "id" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NYdb::NTable::TGlobalIndexSettings globalIndexSettings;
+
+        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> kmeansTreeSettings;
+        {
+            Ydb::Table::KMeansTreeSettings proto;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                }
+                levels: 5
+                clusters: 4
+            )", &proto));
+            using T = NYdb::NTable::TKMeansTreeSettings;
+            kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));
+        }
+
+        TBlockEvents<TEvDataShard::TEvLocalKMeansRequest> blocked(runtime, [&](auto&) {
+            return true;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
+
+        runtime.WaitFor("block", [&]{ return blocked.size(); });
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
+            Cout << "BuildIndex 1 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: NO");
+        }
+
+        // turn off vector index and check that Scheme Shard has not progress it anymore:
+        runtime.GetAppData().FeatureFlags.SetEnableVectorIndex(false);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
+            Cout << "BuildIndex 2 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: NO");
+        }
+
+        // cancel should work:
+        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
+            Cout << "BuildIndex 3 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: YES");
+        }
+
+        // but we need to turn EnableVectorIndex back to progress:
+        runtime.GetAppData().FeatureFlags.SetEnableVectorIndex(true);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
+            Cout << "BuildIndex 4 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: YES");
+        }
+
+        // there should be no more attempts of index build:
+        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1);
+    }
+
     Y_UNIT_TEST(Shard_Build_Error) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1331,4 +1578,225 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: UploadRows: 0 UploadBytes: 0 ReadRows: 0 ReadBytes: 0");
         }
     }
+
+    Y_UNIT_TEST(UnknownState) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: [ "id" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NYdb::NTable::TGlobalIndexSettings globalIndexSettings;
+
+        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> kmeansTreeSettings;
+        {
+            Ydb::Table::KMeansTreeSettings proto;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                }
+                levels: 5
+                clusters: 4
+            )", &proto));
+            using T = NYdb::NTable::TKMeansTreeSettings;
+            kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));
+        }
+
+        TBlockEvents<TEvDataShard::TEvLocalKMeansRequest> kmeansBlocker(runtime, [&](const auto& ) {
+            return true;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
+
+        runtime.WaitFor("LocalKMeansRequest", [&]{ return kmeansBlocker.size(); });
+
+        {
+            // set unknown State value
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key '( '('Id (Uint64 '%lu)) ) )
+                    (let value '('('State (Uint32 '999999)) ) )
+                    (return (AsList (UpdateRow 'IndexBuild key value) ))
+                )
+            )", buildIndexTx);
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        }
+
+        Cerr << "... rebooting scheme shard" << Endl;
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        kmeansBlocker.Stop().Unblock();
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_UNSPECIFIED,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Unknown build state");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
+        }
+
+        {
+            // set a known State but unknown SubState
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key '( '('Id (Uint64 '%lu)) ) )
+                    (let value '('('State (Uint32 '40)) '('SubState (Uint32 '999999)) ) )
+                    (return (AsList (UpdateRow 'IndexBuild key value) ))
+                )
+            )", buildIndexTx);
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        }
+
+        Cerr << "... rebooting scheme shard" << Endl;
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Unknown build sub-state");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
+        }
+
+        {
+            // set a known SubState but unknown BuildKind
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key '( '('Id (Uint64 '%lu)) ) )
+                    (let value '('('SubState (Uint32 '0)) '('BuildKind (Uint32 '999999)) ) )
+                    (return (AsList (UpdateRow 'IndexBuild key value) ))
+                )
+            )", buildIndexTx);
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        }
+
+        Cerr << "... rebooting scheme shard" << Endl;
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Unknown build kind");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
+        }
+    }
+
+    Y_UNIT_TEST(CreateBuildProposeReject) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: [ "id" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NYdb::NTable::TGlobalIndexSettings globalIndexSettings;
+
+        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> kmeansTreeSettings;
+        {
+            Ydb::Table::KMeansTreeSettings proto;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                }
+                levels: 5
+                clusters: 4
+            )", &proto));
+            using T = NYdb::NTable::TKMeansTreeSettings;
+            kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));
+        }
+
+        const auto maxShards = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/vectors")
+            .GetPathDescription().GetDomainDescription().GetSchemeLimits().GetMaxShardsInPath();
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable) {
+                auto& op = *modifyScheme.MutableCreateTable();
+                // make shard count exceed the limit to fail the operation
+                op.SetUniformPartitionsCount(maxShards+1);
+            }
+            return false;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
+
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            Cout << "BuildIndex 1 " << buildIndexOperation.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Invalid partition count specified");
+        }
+
+        blocker.Stop().Unblock();
+
+        {
+            auto result = ReadSystemTable(runtime, TTestTxConfig::SchemeShard, "SnapshotTables", {"Id", "TableOwnerId", "TableLocalId"}, {"Id"});
+            auto value = NClient::TValue::Create(result);
+            auto rowCount = value["Result"]["List"].Size();
+            UNIT_ASSERT_VALUES_EQUAL_C(rowCount, 0, "Snapshot is not removed after rejecting index build");
+        }
+
+        // The next index build should succeed
+
+        const ui64 buildIndexTx2 = ++txId;
+        AsyncBuildVectorIndex(runtime, buildIndexTx2, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx2);
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx2);
+            Cout << "BuildIndex 2 " << buildIndexOperation.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                buildIndexOperation.DebugString()
+            );
+        }
+
+    }
+
 }

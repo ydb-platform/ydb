@@ -62,7 +62,7 @@ public:
     static int Munmap(void* addr, size_t size);
 };
 
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 class TAlignedPagePoolImpl {
 public:
     static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k
@@ -70,7 +70,7 @@ public:
     static constexpr ui64 ALLOC_AHEAD_PAGES = 31;
 
     explicit TAlignedPagePoolImpl(const TSourceLocation& location,
-            const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
+                                  const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
         : Counters_(counters)
         , DebugInfo_(location)
     {
@@ -82,8 +82,8 @@ public:
     TAlignedPagePoolImpl(const TAlignedPagePoolImpl&) = delete;
     TAlignedPagePoolImpl(TAlignedPagePoolImpl&& other) = delete;
 
-    TAlignedPagePoolImpl& operator = (const TAlignedPagePoolImpl&) = delete;
-    TAlignedPagePoolImpl& operator = (TAlignedPagePoolImpl&& other) = delete;
+    TAlignedPagePoolImpl& operator=(const TAlignedPagePoolImpl&) = delete;
+    TAlignedPagePoolImpl& operator=(TAlignedPagePoolImpl&& other) = delete;
 
     ~TAlignedPagePoolImpl();
 
@@ -259,6 +259,7 @@ protected:
     void* GetBlockImpl(size_t size);
 
     void* GetPageImpl();
+
 protected:
     std::stack<void*, std::vector<void*>> FreePages_;
     std::unordered_set<void*> AllPages_;
@@ -307,23 +308,23 @@ protected:
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;
 
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 void* GetAlignedPage(ui64 size);
 
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 void* GetAlignedPage();
 
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 void ReleaseAlignedPage(void* mem, ui64 size);
 
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 void ReleaseAlignedPage(void* mem);
 
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 i64 GetTotalMmapedBytes();
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 i64 GetTotalFreeListBytes();
 
 size_t GetMemoryMapsCount();
 
-} // NKikimr
+} // namespace NKikimr

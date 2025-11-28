@@ -184,28 +184,24 @@ namespace NKikimr {
                 }
                 pendingBlobs.clear();
             };
-            if (ScrubCtx->EnableDeepScrubbing) {
-                for (TBlobOnDisk *blob : blobs) {
-                    CheckIntegrity(blob->Id, false);
-                    UpdateReadableParts(blob->Id, blob->Local);
+            for (TBlobOnDisk *blob : blobs) {
+                if (ScrubCtx->EnableDeepScrubbing) {
+                    EnqueueCheckIntegrity(blob->Id, false);
                 }
-            } else {
-                for (TBlobOnDisk *blob : blobs) {
-                    const TDiskPart& part = blob->Part;
-                    const ui32 end = part.Offset + part.Size;
-                    Y_VERIFY_S(part.ChunkIdx == chunkIdx, LogPrefix);
-                    if (interval == TDiskPart()) {
-                        interval = blob->Part;
-                    } else if (end - interval.Offset <= ScrubCtx->PDiskCtx->Dsk->ReadBlockSize) {
-                        interval.Size = end - interval.Offset;
-                    } else {
-                        doCheck();
-                        interval = blob->Part;
-                    }
-                    pendingBlobs.push_back(blob);
+                const TDiskPart& part = blob->Part;
+                const ui32 end = part.Offset + part.Size;
+                Y_VERIFY_S(part.ChunkIdx == chunkIdx, LogPrefix);
+                if (interval == TDiskPart()) {
+                    interval = blob->Part;
+                } else if (end - interval.Offset <= ScrubCtx->PDiskCtx->Dsk->ReadBlockSize) {
+                    interval.Size = end - interval.Offset;
+                } else {
+                    doCheck();
+                    interval = blob->Part;
                 }
-                doCheck();
+                pendingBlobs.push_back(blob);
             }
+            doCheck();
         }
 
         if (blobsToCheck.empty()) {

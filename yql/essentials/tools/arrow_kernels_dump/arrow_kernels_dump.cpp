@@ -5,7 +5,7 @@
 #include <util/generic/algorithm.h>
 #include <util/folder/path.h>
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     Y_UNUSED(argc);
     Cerr << TFsPath(argv[0]).GetName() << " ABI version: " << NKikimr::NUdf::CurrentAbiVersionStr() << Endl;
 

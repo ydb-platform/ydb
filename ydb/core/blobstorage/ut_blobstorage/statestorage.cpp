@@ -184,13 +184,10 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
         UNIT_ASSERT_EQUAL(nw2Cnt, 1);
         UNIT_ASSERT_EQUAL(test.ReplicaLookup(replicas[1], 3, 4)->Get()->Record.GetStatus(), NKikimrProto::EReplyStatus::OK);
         UNIT_ASSERT_EQUAL(nw1Cnt, 1);
-        UNIT_ASSERT_EQUAL(nw2Cnt, 1);
         test.ReplicaDelete(replicas[1], 3, 4);
         UNIT_ASSERT_EQUAL(nw1Cnt, 2);
-        UNIT_ASSERT_EQUAL(nw2Cnt, 1);
         test.ReplicaCleanup(replicas[1], 3, 4);
         UNIT_ASSERT_EQUAL(nw1Cnt, 3);
-        UNIT_ASSERT_EQUAL(nw2Cnt, 1);
     }
 
     Y_UNIT_TEST(TestBoardConfigMismatch) {

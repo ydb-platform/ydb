@@ -1,10 +1,11 @@
 #include "pq_schema_actor.h"
 
+#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/persqueue/utils.h>
-#include <ydb/core/persqueue/user_info.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/util/proto_duration.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 
@@ -15,6 +16,8 @@
 #include <util/string/vector.h>
 
 #include <library/cpp/digest/md5/md5.h>
+
+#include <expected>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -58,21 +61,26 @@ namespace NKikimr::NGRpcProxy::V1 {
         return serviceTypes;
     }
 
-    TString ReadRuleServiceTypeMigration(NKikimrPQ::TPQTabletConfig *config, const NKikimrPQ::TPQConfig& pqConfig) {
-        auto rrServiceTypes = config->MutableReadRuleServiceTypes();
-        if (config->ReadRuleServiceTypesSize() > config->ReadRulesSize()) {
-            rrServiceTypes->Clear();
+    static std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration) {
+        if (duration.seconds() < 0) {
+            return std::unexpected(TStringBuilder() << "duration seconds cannot be negative, provided " << duration.seconds());
         }
-        if (config->ReadRuleServiceTypesSize() < config->ReadRulesSize()) {
-            rrServiceTypes->Reserve(config->ReadRulesSize());
-            if (pqConfig.GetDisallowDefaultClientServiceType()) {
-                return "service type must be set for all read rules";
+        return NKikimr::GetDuration(duration);
+    }
+
+    static std::expected<TMaybe<TDuration>, TMsgPqCodes> ConvertConsumerAvailabilityPeriod(const google::protobuf::Duration& duration, std::string_view consumerName) {
+        if (auto val = ConvertPositiveDuration(duration); val.has_value()) {
+            if (val.value() == TDuration::Zero()) {
+                return Nothing();
+            } else {
+                return val.value();
             }
-            for (ui64 i = rrServiceTypes->size(); i < config->ReadRulesSize(); ++i) {
-                *rrServiceTypes->Add() = pqConfig.GetDefaultClientServiceType().GetName();
-            }
+        } else {
+            return std::unexpected(TMsgPqCodes(
+                TStringBuilder() << "Invalid availability_period for consumer '" << consumerName << "': " << val.error(),
+                Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
+            ));
         }
-        return "";
     }
 
     TMsgPqCodes AddReadRuleToConfig(
@@ -91,12 +99,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                 TStringBuilder() << "consumer '" << rr.consumer_name() << "' has illegal symbols",
                 Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
             );
-        }
-        {
-            TString migrationError = ReadRuleServiceTypeMigration(config, pqConfig);
-            if (migrationError) {
-                return TMsgPqCodes(migrationError, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
-            }
         }
         if (consumerName == NPQ::CLIENTID_COMPACTION_CONSUMER && !config->GetEnableCompactification()) {
             return TMsgPqCodes(TStringBuilder() << "cannot add service consumer '" << consumerName << " to a topic without compactification enabled", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
@@ -154,6 +156,15 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (rr.important()) {
             consumer->SetImportant(true);
         }
+        if (auto period = ConvertConsumerAvailabilityPeriod(rr.availability_period(), rr.consumer_name()); period.has_value()) {
+            if (period.value().Defined()) {
+                consumer->SetAvailabilityPeriodMs(period.value()->MilliSeconds());
+            } else {
+                consumer->ClearAvailabilityPeriodMs();
+            }
+        } else {
+            return period.error();
+        }
 
         if (!rr.service_type().empty()) {
             if (!supportedClientServiceTypes.contains(rr.service_type())) {
@@ -177,8 +188,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
     }
 
-
-    void ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
+    TString ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
         if (alter.has_set_important()) {
             consumer.set_important(alter.set_important());
         }
@@ -191,6 +201,64 @@ namespace NKikimr::NGRpcProxy::V1 {
         for (auto& pair : alter.alter_attributes()) {
             (*consumer.mutable_attributes())[pair.first] = pair.second;
         }
+        if (alter.has_set_availability_period()) {
+            consumer.mutable_availability_period()->CopyFrom(alter.set_availability_period());
+        }
+        if (alter.has_reset_availability_period()) {
+            consumer.clear_availability_period();
+        }
+
+        if (alter.has_alter_streaming_consumer_type()) {
+            if (!consumer.has_streaming_consumer_type()) {
+                return "Cannot alter consumer type";
+            }
+        } else if (alter.has_alter_shared_consumer_type()) {
+            if (!consumer.has_shared_consumer_type()) {
+                return "Cannot alter consumer type";
+            }
+
+            auto* type = consumer.mutable_shared_consumer_type();
+            auto& alterType = alter.alter_shared_consumer_type();
+
+            if (alterType.has_set_default_processing_timeout()) {
+                type->mutable_default_processing_timeout()->CopyFrom(alterType.set_default_processing_timeout());
+            }
+
+            if (alterType.has_alter_dead_letter_policy()) {
+                auto& alterPolicy = alterType.alter_dead_letter_policy();
+                auto* policy = type->mutable_dead_letter_policy();
+                if (alterPolicy.has_set_enabled()) {
+                    policy->set_enabled(alterPolicy.set_enabled());
+                }
+
+                if (alterPolicy.has_alter_condition()) {
+                    policy->mutable_condition()->set_max_processing_attempts(alterPolicy.alter_condition().set_max_processing_attempts());
+                }
+
+                if (alterPolicy.has_alter_move_action()) {
+                    if (!policy->has_move_action()) {
+                        return "Cannot alter move action";
+                    }
+                    if (alterPolicy.alter_move_action().has_set_dead_letter_queue()) {
+                        if (alterPolicy.alter_move_action().set_dead_letter_queue().empty()) {
+                            return "Dead letter queue cannot be empty";
+                        }
+                        policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.alter_move_action().set_dead_letter_queue());
+                    }
+                } else if (alterPolicy.has_set_move_action()) {
+                    if (alterPolicy.set_move_action().dead_letter_queue().empty()) {
+                        return "Dead letter queue cannot be empty";
+                    }
+                    policy->clear_action();
+                    policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.set_move_action().dead_letter_queue());
+                } else if (alterPolicy.has_set_delete_action()) {
+                    policy->clear_action();
+                    policy->mutable_delete_action();
+                }
+            }
+        }
+
+        return {};
     }
 
     TMsgPqCodes AddReadRuleToConfig(
@@ -199,7 +267,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TClientServiceTypes& supportedClientServiceTypes,
         const bool checkServiceType,
         const NKikimrPQ::TPQConfig& pqConfig,
-        bool enableTopicDiskSubDomainQuota
+        bool enableTopicDiskSubDomainQuota,
+        const TAppData* appData
     ) {
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.name(), pqConfig);
         if (consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
@@ -208,16 +277,34 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (consumerName.empty()) {
             return TMsgPqCodes(TStringBuilder() << "consumer with empty name is forbidden", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
-        {
-            TString migrationError = ReadRuleServiceTypeMigration(config, pqConfig);
-            if (migrationError) {
-                return TMsgPqCodes(migrationError, migrationError.empty() ? Ydb::PersQueue::ErrorCode::OK : Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);  //find better issueCode
-            }
-        }
 
         auto* consumer = config->AddConsumers();
 
         consumer->SetName(consumerName);
+
+        if (rr.has_shared_consumer_type()) {
+                if (!appData->FeatureFlags.GetEnableTopicMessageLevelParallelism()) {
+                    return TMsgPqCodes(TStringBuilder() << "shared consumers is disabled", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+                }
+                consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
+
+                consumer->SetKeepMessageOrder(rr.shared_consumer_type().keep_messages_order());
+                consumer->SetDefaultProcessingTimeoutSeconds(rr.shared_consumer_type().default_processing_timeout().seconds());
+
+                consumer->SetDeadLetterPolicyEnabled(rr.shared_consumer_type().dead_letter_policy().enabled());
+                consumer->SetMaxProcessingAttempts(rr.shared_consumer_type().dead_letter_policy().condition().max_processing_attempts());
+
+                if (rr.shared_consumer_type().dead_letter_policy().has_move_action()) {
+                    consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+                    consumer->SetDeadLetterQueue(rr.shared_consumer_type().dead_letter_policy().move_action().dead_letter_queue());
+                } else if (rr.shared_consumer_type().dead_letter_policy().has_delete_action()) {
+                    consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
+                } else {
+                    consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
+                }
+        } else {
+            consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+        }
 
         if (rr.read_from().seconds() < 0) {
             return TMsgPqCodes(
@@ -307,10 +394,18 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
             consumer->SetImportant(true);
         }
+        if (auto period = ConvertConsumerAvailabilityPeriod(rr.availability_period(), rr.name()); period.has_value()) {
+            if (period.value().Defined()) {
+                consumer->SetAvailabilityPeriodMs(period.value()->MilliSeconds());
+            } else {
+                consumer->ClearAvailabilityPeriodMs();
+            }
+        } else {
+            return period.error();
+        }
 
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
     }
-
 
     TString RemoveReadRuleFromConfig(
         NKikimrPQ::TPQTabletConfig* config,
@@ -318,13 +413,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TString& consumerName,
         const NKikimrPQ::TPQConfig& /*pqConfig*/
     ) {
-        config->ClearReadRuleVersions();
-        config->ClearReadRules();
-        config->ClearReadFromTimestampsMs();
-        config->ClearConsumerFormatVersions();
-        config->ClearConsumerCodecs();
-        config->MutablePartitionConfig()->ClearImportantClientId();
-        config->ClearReadRuleServiceTypes();
         config->ClearConsumers();
 
         bool removed = false;
@@ -364,6 +452,11 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return true;
             }
             readRuleConsumers.insert(consumer.GetName());
+
+            if (consumer.GetImportant() && consumer.HasAvailabilityPeriodMs()) {
+                error = TStringBuilder() << "Consumer '" << consumer.GetName() << "' has both an important flag and a limited availability_period, which are mutually exclusive";
+                return false;
+            }
         }
 
         for (const auto& t : supportedClientServiceTypes) {
@@ -590,6 +683,8 @@ namespace NKikimr::NGRpcProxy::V1 {
                         return Ydb::StatusIds::BAD_REQUEST;
                     }
                 }
+            } else if (pair.first == "_cleanup_policy") {
+                config->SetEnableCompactification(pair.second == "compact");
             } else {
                 error = TStringBuilder() << "Attribute " << pair.first << " is not supported";
                 return Ydb::StatusIds::BAD_REQUEST;
@@ -637,6 +732,15 @@ namespace NKikimr::NGRpcProxy::V1 {
         return std::nullopt;
     }
 
+    static std::expected<i32, TString> CheckRetentionPeriod(auto seconds) {
+        if (std::cmp_greater(seconds, Max<i32>())) {
+            return std::unexpected{"retention_period must be less than " + ToString(ui64(Max<i32>()) + 1)};
+        } else if (std::cmp_less_equal(seconds, 0)) {
+            return std::unexpected{"retention_period must be positive"};
+        }
+        return seconds;
+    }
+
     Ydb::StatusIds::StatusCode FillProposeRequestImpl( // create and alter
             const TString& name, const Ydb::PersQueue::V1::TopicSettings& settings,
             NKikimrSchemeOp::TModifyScheme& modifyScheme, const TActorContext& ctx,
@@ -655,7 +759,12 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         switch (settings.retention_case()) {
             case Ydb::PersQueue::V1::TopicSettings::kRetentionPeriodMs: {
-                partConfig->SetLifetimeSeconds(Max(settings.retention_period_ms() / 1000ll, 1ll));
+                if (auto retentionPeriodSeconds = CheckRetentionPeriod(Max(settings.retention_period_ms() / 1000ll, 1ll))) {
+                    partConfig->SetLifetimeSeconds(retentionPeriodSeconds.value());
+                } else {
+                    error = TStringBuilder() << retentionPeriodSeconds.error() << ", provided " << settings.retention_period_ms() << " ms";
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
             }
             break;
 
@@ -690,7 +799,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoPartitioningSettings.partition_write_speed().up_utilization_percent(), 0 ,30));
                 pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoPartitioningSettings.partition_write_speed().down_utilization_percent(), 0, 90));
                 pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault<int64_t>(autoPartitioningSettings.partition_write_speed().stabilization_window().seconds(), 0L, 300L));
-                switch(autoPartitioningSettings.strategy()) {
+                switch (autoPartitioningSettings.strategy()) {
                     case ::Ydb::PersQueue::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP:
                         pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
                         break;
@@ -839,38 +948,19 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         //TODO: check all values with defaults
-
         if (settings.read_rules().size() > MAX_READ_RULES_COUNT) {
             error = TStringBuilder() << "read rules count cannot be more than "
                                      << MAX_READ_RULES_COUNT << ", provided " << settings.read_rules().size();
             return Ydb::StatusIds::BAD_REQUEST;
         }
 
-        {
-            error = ReadRuleServiceTypeMigration(pqTabletConfig, pqConfig);
-            if (error) {
-                return Ydb::StatusIds::INTERNAL_ERROR;
-            }
-        }
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(pqConfig);
-        bool haveCompConsumer = false;
         for (const auto& rr : settings.read_rules()) {
             auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr, supportedClientServiceTypes, pqConfig);
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;
             }
-            if (rr.consumer_name() == NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER) {
-                haveCompConsumer = true;
-            }
-        }
-
-        if(pqTabletConfig->GetEnableCompactification() && !haveCompConsumer) {
-            Ydb::PersQueue::V1::TopicSettings::ReadRule compConsumer;
-            compConsumer.set_consumer_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
-            compConsumer.set_important(true);
-            compConsumer.set_starting_message_timestamp_ms(0);
-            AddReadRuleToConfig(pqTabletConfig, compConsumer, supportedClientServiceTypes, pqConfig);
         }
 
         if (settings.has_remote_mirror_rule()) {
@@ -959,6 +1049,12 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
+        if (settings.has_metrics_level()) {
+            pqTabletConfig->SetMetricsLevel(settings.metrics_level());
+        } else {
+            pqTabletConfig->ClearMetricsLevel();
+        }
+
         return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST);
     }
 
@@ -1034,7 +1130,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoscaleSettings.partition_write_speed().up_utilization_percent(), 0, 90));
                 pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoscaleSettings.partition_write_speed().down_utilization_percent(), 0, 30));
                 pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault<int64_t>(autoscaleSettings.partition_write_speed().stabilization_window().seconds(), 0L, 300L));
-                switch(autoscaleSettings.strategy()) {
+                switch (autoscaleSettings.strategy()) {
                     case ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP:
                         pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
                         break;
@@ -1099,12 +1195,13 @@ namespace NKikimr::NGRpcProxy::V1 {
             partConfig->MutableExplicitChannelProfiles()->CopyFrom(channelProfiles);
         }
         if (request.has_retention_period()) {
-            if (request.retention_period().seconds() <= 0) {
-                error = TStringBuilder() << "retention_period must be not negative, provided " <<
+            if (auto retentionPeriodSeconds = CheckRetentionPeriod(request.retention_period().seconds())) {
+                partConfig->SetLifetimeSeconds(retentionPeriodSeconds.value());
+            } else {
+                error = TStringBuilder() << retentionPeriodSeconds.error() << ", provided " <<
                         request.retention_period().DebugString();
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
             }
-            partConfig->SetLifetimeSeconds(request.retention_period().seconds());
         } else {
             partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
         }
@@ -1141,13 +1238,6 @@ namespace NKikimr::NGRpcProxy::V1 {
             return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
 
-        {
-            error = ReadRuleServiceTypeMigration(pqTabletConfig, pqConfig);
-            if (error) {
-                return TYdbPqCodes(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
-            }
-        }
-
         Ydb::StatusIds::StatusCode code;
         if (!FillMeteringMode(request.metering_mode(), *pqTabletConfig, pqConfig.GetBillingMeteringConfig().GetEnabled(), false, code, error)) {
             return TYdbPqCodes(code, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
@@ -1156,25 +1246,17 @@ namespace NKikimr::NGRpcProxy::V1 {
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(pqConfig);
 
 
-        bool hasCompConsumer = false;
-        for (const auto& rr : request.consumers()) {
-            auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr, supportedClientServiceTypes, true, pqConfig,
-                                                      appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota());
+        for (const auto& consumer : request.consumers()) {
+            auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, consumer, supportedClientServiceTypes, true, pqConfig,
+                                                      appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota(), appData);
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, messageAndCode.PQCode);
             }
-            if (rr.name() == NPQ::CLIENTID_COMPACTION_CONSUMER) {
-                hasCompConsumer = true;
-            }
         }
-        if (!hasCompConsumer && pqTabletConfig->GetEnableCompactification()) {
-            Ydb::Topic::Consumer compConsumer;
-            compConsumer.set_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
-            compConsumer.set_important(true);
-            compConsumer.mutable_read_from()->set_seconds(0);
-            AddReadRuleToConfig(pqTabletConfig, compConsumer, supportedClientServiceTypes, false, pqConfig,
-                                appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota());
+
+        if (request.has_metrics_level()) {
+            pqTabletConfig->SetMetricsLevel(request.metrics_level());
         }
 
         return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST),
@@ -1255,7 +1337,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                     auto oldStrategy = pqTabletConfig->GetPartitionStrategy().GetPartitionStrategyType();
 
                     if (settings.alter_auto_partitioning_settings().has_set_strategy()) {
-                        switch(settings.alter_auto_partitioning_settings().set_strategy()) {
+                        switch (settings.alter_auto_partitioning_settings().set_strategy()) {
                             case ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP:
                                 pqTabletConfig->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
                                 break;
@@ -1294,7 +1376,12 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         if (request.has_set_retention_period()) {
-            partConfig->SetLifetimeSeconds(request.set_retention_period().seconds());
+            if (auto retentionPeriodSeconds = CheckRetentionPeriod(request.set_retention_period().seconds())) {
+                partConfig->SetLifetimeSeconds(retentionPeriodSeconds.value());
+            } else {
+                error = TStringBuilder() << retentionPeriodSeconds.error() << ", provided " << request.set_retention_period().ShortDebugString();
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
         }
 
         bool local = true; //todo: check locality
@@ -1332,12 +1419,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                 ct->AddCodecs(Ydb::Topic::Codec_IsValid(codec) ? LegacySubstr(to_lower(Ydb::Topic::Codec_Name((Ydb::Topic::Codec)codec)), 6) : "CUSTOM");
             }
         }
-        {
-            error = ReadRuleServiceTypeMigration(pqTabletConfig, pqConfig);
-            if (error) {
-                return Ydb::StatusIds::INTERNAL_ERROR;
-            }
-        }
 
         Ydb::StatusIds::StatusCode code;
         if (!FillMeteringMode(request.set_metering_mode(), *pqTabletConfig, pqConfig.GetBillingMeteringConfig().GetEnabled(), true, code, error)) {
@@ -1350,11 +1431,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         std::vector<std::pair<bool, Ydb::Topic::Consumer>> consumers;
 
         i32 dropped = 0;
-        bool hasCompConsumer = false;
         for (const auto& c : pqTabletConfig->GetConsumers()) {
             auto& oldName = c.GetName();
             auto name = NPersQueue::ConvertOldConsumerName(oldName, pqConfig);
-
             bool erase = false;
             for (auto consumer: request.drop_consumers()) {
                 if (consumer == name || consumer == oldName) {
@@ -1373,14 +1452,10 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             consumers.push_back({false, Ydb::Topic::Consumer{}}); // do not check service type for presented consumers
             auto& consumer = consumers.back().second;
-            consumer.set_name(name);
-            consumer.set_important(c.GetImportant());
-            consumer.mutable_read_from()->set_seconds(c.GetReadFromTimestampsMs() / 1000);
-            (*consumer.mutable_attributes())["_service_type"] = c.GetServiceType();
-            (*consumer.mutable_attributes())["_version"] = TStringBuilder() << c.GetVersion();
-            for (ui32 codec : c.GetCodec().GetIds()) {
-                consumer.mutable_supported_codecs()->add_codecs(codec + 1);
-            }
+
+            Ydb::StatusIds_StatusCode status;
+            TString error;
+            FillConsumer(consumer, c, status, error, false);
         }
 
 
@@ -1404,7 +1479,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             for (auto& consumer : consumers) {
                 if (consumer.second.name() == name || consumer.second.name() == oldName) {
                     found = true;
-                    ProcessAlterConsumer(consumer.second, alter);
+                    if (auto error_ = ProcessAlterConsumer(consumer.second, alter)) {
+                        error = error_;
+                        return Ydb::StatusIds::BAD_REQUEST;
+                    }
                     consumer.first = true; // check service type
                     break;
                 }
@@ -1415,35 +1493,23 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        pqTabletConfig->ClearReadRules();
-        partConfig->ClearImportantClientId();
-        pqTabletConfig->ClearConsumerCodecs();
-        pqTabletConfig->ClearReadFromTimestampsMs();
-        pqTabletConfig->ClearConsumerFormatVersions();
-        pqTabletConfig->ClearReadRuleServiceTypes();
-        pqTabletConfig->ClearReadRuleGenerations();
-        pqTabletConfig->ClearReadRuleVersions();
         pqTabletConfig->ClearConsumers();
 
         for (const auto& rr : consumers) {
             auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr.second, supportedClientServiceTypes, rr.first,
-                                                      pqConfig, appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota());
+                                                      pqConfig, appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota(), appData);
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;
             }
-            if (rr.second.name() == NPQ::CLIENTID_COMPACTION_CONSUMER) {
-                hasCompConsumer = true;
-            }
         }
-        if (!hasCompConsumer && pqTabletConfig->GetEnableCompactification()) {
-            Ydb::PersQueue::V1::TopicSettings::ReadRule compConsumer;
-            compConsumer.set_consumer_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
-            compConsumer.set_important(true);
-            compConsumer.set_starting_message_timestamp_ms(0);
-            AddReadRuleToConfig(pqTabletConfig, compConsumer, supportedClientServiceTypes, pqConfig);
 
+        if (request.has_set_metrics_level()) {
+            pqTabletConfig->SetMetricsLevel(request.set_metrics_level());
+        } else if (request.has_reset_metrics_level()) {
+            pqTabletConfig->ClearMetricsLevel();
         }
+
         return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
     }
 }

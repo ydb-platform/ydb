@@ -7,7 +7,7 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/client.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <unordered_map>
@@ -37,6 +37,10 @@ public:
     static void ConvertToProtoReadRule(const TReadRule& readRule, Ydb::PersQueue::V1::TopicSettings::ReadRule& rrProps) {
         rrProps.set_consumer_name(TStringType{readRule.ConsumerName_});
         rrProps.set_important(readRule.Important_);
+        if (readRule.AvailabilityPeriod_ != TDuration::Zero()) {
+            rrProps.mutable_availability_period()->set_seconds(readRule.AvailabilityPeriod_.Seconds());
+            rrProps.mutable_availability_period()->set_nanos(readRule.AvailabilityPeriod_.NanoSecondsOfSecond());
+        }
         rrProps.set_starting_message_timestamp_ms(readRule.StartingMessageTimestamp_.MilliSeconds());
         rrProps.set_version(readRule.Version_);
         rrProps.set_supported_format(static_cast<Ydb::PersQueue::V1::TopicSettings::Format>(readRule.SupportedFormat_));

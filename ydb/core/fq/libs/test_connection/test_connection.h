@@ -7,7 +7,6 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/signer/signer.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
@@ -38,6 +37,10 @@
     LOG_YQ_TEST_CONNECTION_AS_ERROR(a, s)
 #define TC_LOG_AS_T(a, s) \
     LOG_YQ_TEST_CONNECTION_AS_TRACE(a, s)
+
+namespace NKikimr::NMiniKQL {
+    class IFunctionRegistry;
+} // namespace NKikimr::NMiniKQL
 
 namespace NFq {
 

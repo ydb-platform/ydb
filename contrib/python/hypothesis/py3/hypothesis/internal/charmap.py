@@ -15,28 +15,70 @@ import os
 import sys
 import tempfile
 import unicodedata
-from functools import lru_cache
-from typing import Dict, Tuple
+from collections.abc import Collection, Iterable
+from functools import cache
+from pathlib import Path
+from typing import Literal, TypeAlias
 
 from hypothesis.configuration import storage_directory
 from hypothesis.control import _current_build_context
 from hypothesis.errors import InvalidArgument
-from hypothesis.internal.intervalsets import IntervalSet
+from hypothesis.internal.intervalsets import IntervalSet, IntervalsT
 
-intervals = Tuple[Tuple[int, int], ...]
-cache_type = Dict[Tuple[Tuple[str, ...], int, int, intervals], IntervalSet]
+# See https://en.wikipedia.org/wiki/Unicode_character_property#General_Category
+CategoryName: TypeAlias = Literal[
+    "L",  #  Letter
+    "Lu",  # Letter, uppercase
+    "Ll",  # Letter, lowercase
+    "Lt",  # Letter, titlecase
+    "Lm",  # Letter, modifier
+    "Lo",  # Letter, other
+    "M",  #  Mark
+    "Mn",  # Mark, nonspacing
+    "Mc",  # Mark, spacing combining
+    "Me",  # Mark, enclosing
+    "N",  #  Number
+    "Nd",  # Number, decimal digit
+    "Nl",  # Number, letter
+    "No",  # Number, other
+    "P",  #  Punctuation
+    "Pc",  # Punctuation, connector
+    "Pd",  # Punctuation, dash
+    "Ps",  # Punctuation, open
+    "Pe",  # Punctuation, close
+    "Pi",  # Punctuation, initial quote
+    "Pf",  # Punctuation, final quote
+    "Po",  # Punctuation, other
+    "S",  #  Symbol
+    "Sm",  # Symbol, math
+    "Sc",  # Symbol, currency
+    "Sk",  # Symbol, modifier
+    "So",  # Symbol, other
+    "Z",  #  Separator
+    "Zs",  # Separator, space
+    "Zl",  # Separator, line
+    "Zp",  # Separator, paragraph
+    "C",  #  Other
+    "Cc",  # Other, control
+    "Cf",  # Other, format
+    "Cs",  # Other, surrogate
+    "Co",  # Other, private use
+    "Cn",  # Other, not assigned
+]
+Categories: TypeAlias = Iterable[CategoryName]
+CategoriesTuple: TypeAlias = tuple[CategoryName, ...]
 
 
-def charmap_file(fname="charmap"):
+def charmap_file(fname: str = "charmap") -> Path:
     return storage_directory(
         "unicode_data", unicodedata.unidata_version, f"{fname}.json.gz"
     )
 
 
-_charmap = None
+_charmap: dict[CategoryName, IntervalsT] | None = None
 
 
-def charmap():
+def charmap() -> dict[CategoryName, IntervalsT]:
     """Return a dict that maps a Unicode category, to a tuple of 2-tuples
     covering the codepoint intervals for characters in that category.
 
@@ -50,8 +92,8 @@ def charmap():
     if _charmap is None:
         f = charmap_file()
         try:
-            with gzip.GzipFile(f, "rb") as i:
-                tmp_charmap = dict(json.load(i))
+            with gzip.GzipFile(f, "rb") as d:
+                tmp_charmap = dict(json.load(d))
 
         except Exception:
             # This loop is reduced to using only local variables for performance;
@@ -64,9 +106,9 @@ def charmap():
             for i in range(1, sys.maxunicode + 1):
                 cat = category(chr(i))
                 if cat != last_cat:
-                    tmp_charmap.setdefault(last_cat, []).append([last_start, i - 1])
+                    tmp_charmap.setdefault(last_cat, []).append((last_start, i - 1))
                     last_cat, last_start = cat, i
-            tmp_charmap.setdefault(last_cat, []).append([last_start, sys.maxunicode])
+            tmp_charmap.setdefault(last_cat, []).append((last_start, sys.maxunicode))
 
             try:
                 # Write the Unicode table atomically
@@ -75,9 +117,9 @@ def charmap():
                 fd, tmpfile = tempfile.mkstemp(dir=tmpdir)
                 os.close(fd)
                 # Explicitly set the mtime to get reproducible output
-                with gzip.GzipFile(tmpfile, "wb", mtime=1) as o:
+                with gzip.GzipFile(tmpfile, "wb", mtime=1) as fp:
                     result = json.dumps(sorted(tmp_charmap.items()))
-                    o.write(result.encode())
+                    fp.write(result.encode())
 
                 os.renames(tmpfile, f)
             except Exception:
@@ -88,7 +130,7 @@ def charmap():
             k: tuple(tuple(pair) for pair in pairs) for k, pairs in tmp_charmap.items()
         }
         # each value is a tuple of 2-tuples (that is, tuples of length 2)
-        # and that both elements of that tuple are integers.
+        # and both elements of that tuple are integers.
         for vs in _charmap.values():
             ints = list(sum(vs, ()))
             assert all(isinstance(x, int) for x in ints)
@@ -99,7 +141,7 @@ def charmap():
     return _charmap
 
 
-@lru_cache(maxsize=None)
+@cache
 def intervals_from_codec(codec_name: str) -> IntervalSet:  # pragma: no cover
     """Return an IntervalSet of characters which are part of this codec."""
     assert codec_name == codecs.lookup(codec_name).name
@@ -128,18 +170,18 @@ def intervals_from_codec(codec_name: str) -> IntervalSet:  # pragma: no cover
         fd, tmpfile = tempfile.mkstemp(dir=tmpdir)
         os.close(fd)
         # Explicitly set the mtime to get reproducible output
-        with gzip.GzipFile(tmpfile, "wb", mtime=1) as o:
-            o.write(json.dumps(res.intervals).encode())
+        with gzip.GzipFile(tmpfile, "wb", mtime=1) as f:
+            f.write(json.dumps(res.intervals).encode())
         os.renames(tmpfile, fname)
     except Exception:
         pass
     return res
 
 
-_categories = None
+_categories: Categories | None = None
 
 
-def categories():
+def categories() -> Categories:
     """Return a tuple of Unicode categories in a normalised order.
 
     >>> categories() # doctest: +ELLIPSIS
@@ -148,15 +190,16 @@ def categories():
     global _categories
     if _categories is None:
         cm = charmap()
-        _categories = sorted(cm.keys(), key=lambda c: len(cm[c]))
-        _categories.remove("Cc")  # Other, Control
-        _categories.remove("Cs")  # Other, Surrogate
-        _categories.append("Cc")
-        _categories.append("Cs")
-    return tuple(_categories)
+        categories = sorted(cm.keys(), key=lambda c: len(cm[c]))
+        categories.remove("Cc")  # Other, Control
+        categories.remove("Cs")  # Other, Surrogate
+        categories.append("Cc")
+        categories.append("Cs")
+        _categories = tuple(categories)
+    return _categories
 
 
-def as_general_categories(cats, name="cats"):
+def as_general_categories(cats: Categories, name: str = "cats") -> CategoriesTuple:
     """Return a tuple of Unicode categories in a normalised order.
 
     This function expands one-letter designations of a major class to include
@@ -171,8 +214,6 @@ def as_general_categories(cats, name="cats"):
     If the collection ``cats`` includes any elements that do not represent a
     major class or a class with subclass, a deprecation warning is raised.
     """
-    if cats is None:
-        return None
     major_classes = ("L", "M", "N", "P", "S", "Z", "C")
     cs = categories()
     out = set(cats)
@@ -187,10 +228,10 @@ def as_general_categories(cats, name="cats"):
     return tuple(c for c in cs if c in out)
 
 
-category_index_cache = {(): ()}
+category_index_cache: dict[frozenset[CategoryName], IntervalsT] = {frozenset(): ()}
 
 
-def _category_key(cats):
+def _category_key(cats: Iterable[str] | None) -> CategoriesTuple:
     """Return a normalised tuple of all Unicode categories that are in
     `include`, but not in `exclude`.
 
@@ -206,7 +247,7 @@ def _category_key(cats):
     return tuple(c for c in cs if c in cats)
 
 
-def _query_for_key(key):
+def _query_for_key(key: Categories) -> IntervalsT:
     """Return a tuple of codepoint intervals covering characters that match one
     or more categories in the tuple of categories `key`.
 
@@ -215,10 +256,13 @@ def _query_for_key(key):
     >>> _query_for_key(('Zl', 'Zp', 'Co'))
     ((8232, 8233), (57344, 63743), (983040, 1048573), (1048576, 1114109))
     """
+    key = tuple(key)
+    # ignore ordering on the cache key to increase potential cache hits.
+    cache_key = frozenset(key)
     context = _current_build_context.value
     if context is None or not context.data.provider.avoid_realization:
         try:
-            return category_index_cache[key]
+            return category_index_cache[cache_key]
         except KeyError:
             pass
     elif not key:  # pragma: no cover  # only on alternative backends
@@ -232,21 +276,23 @@ def _query_for_key(key):
         )
     assert isinstance(result, IntervalSet)
     if context is None or not context.data.provider.avoid_realization:
-        category_index_cache[key] = result.intervals
+        category_index_cache[cache_key] = result.intervals
     return result.intervals
 
 
-limited_category_index_cache: cache_type = {}
+limited_category_index_cache: dict[
+    tuple[CategoriesTuple, int, int, IntervalsT, IntervalsT], IntervalSet
+] = {}
 
 
 def query(
     *,
-    categories=None,
-    min_codepoint=None,
-    max_codepoint=None,
-    include_characters="",
-    exclude_characters="",
-):
+    categories: Categories | None = None,
+    min_codepoint: int | None = None,
+    max_codepoint: int | None = None,
+    include_characters: Collection[str] = "",
+    exclude_characters: Collection[str] = "",
+) -> IntervalSet:
     """Return a tuple of intervals covering the codepoints for all characters
     that meet the criteria.
 
@@ -265,8 +311,8 @@ def query(
     if max_codepoint is None:
         max_codepoint = sys.maxunicode
     catkey = _category_key(categories)
-    character_intervals = IntervalSet.from_string(include_characters or "")
-    exclude_intervals = IntervalSet.from_string(exclude_characters or "")
+    character_intervals = IntervalSet.from_string("".join(include_characters))
+    exclude_intervals = IntervalSet.from_string("".join(exclude_characters))
     qkey = (
         catkey,
         min_codepoint,

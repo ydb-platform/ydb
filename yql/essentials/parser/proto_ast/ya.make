@@ -1,5 +1,7 @@
 LIBRARY()
 
+HEADERS(common.h)
+
 PEERDIR(
     contrib/libs/protobuf
     yql/essentials/parser/common

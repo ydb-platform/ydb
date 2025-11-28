@@ -4,7 +4,6 @@
 #include "helpers.h"
 #include "http.h"
 #include "http_client.h"
-#include "requests.h"
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
@@ -124,8 +123,13 @@ THostManager::TClusterHostList THostManager::GetHosts(const TClientContext& cont
         auto requestId = CreateGuidAsString();
         // TODO: we need to set socket timeout here
         UpdateHeaderForProxyIfNeed(context.ServerName, context, header);
-        auto response = context.HttpClient->Request(GetFullUrlForProxy(context.ServerName, context, header), requestId, header);
+        auto url = GetFullUrlForProxy(context.ServerName, context, header);
+        auto response = context.HttpClient->Request(url, requestId, header);
         auto hosts = ParseJsonStringArray(response->GetResponse());
+        if (hosts.empty()) {
+            const auto error = Format("Getting %Qv returned empty host list", url);
+            return TClusterHostList(std::make_exception_ptr(yexception() << error));
+        }
         for (auto& host : hosts) {
             host = CreateHostNameWithPort(host, context);
         }

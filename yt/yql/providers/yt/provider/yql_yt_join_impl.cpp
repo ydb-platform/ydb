@@ -264,6 +264,7 @@ TYtJoinNodeLeaf::TPtr ConvertYtEquiJoinToLeaf(const TYtJoinNodeOp& op, TPosition
                 .Columns<TCoVoid>().Build()
                 .Ranges<TCoVoid>().Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
             .Build()
         .Build()
         .Settings()
@@ -913,7 +914,7 @@ void AddAnyJoinOptionsToCommonJoinCore(TExprNode::TListType& options, bool swapT
     }
 }
 
-TExprNode::TPtr BuildYtReduceLambda(TPositionHandle pos, const TExprNode::TPtr& groupArg, TExprNode::TPtr&& flatMapLambdaBody, const bool sysColumns, TExprContext& ctx)
+TExprNode::TPtr BuildYtReduceLambda(TPositionHandle pos, const TExprNode::TPtr& groupArg, TExprNode::TPtr&& flatMapLambdaBody, const bool sysColumns, const TYtState::TPtr& state, TExprContext& ctx)
 {
     TExprNode::TPtr chopperHandler = ctx.NewLambda(pos, ctx.NewArguments(pos, {ctx.NewArgument(pos, "stup"), groupArg }), std::move(flatMapLambdaBody));
     TExprNode::TPtr chopperSwitch;
@@ -953,9 +954,8 @@ TExprNode::TPtr BuildYtReduceLambda(TPositionHandle pos, const TExprNode::TPtr& 
                 .Seal()
             .Seal()
             .Build();
-    }
-    else {
-        chopperSwitch = ctx.Builder(pos)
+    } else if (state->Types->DirectRowDependsOn) {
+         chopperSwitch = ctx.Builder(pos)
             .Lambda()
                 .Param("key")
                 .Param("item")
@@ -963,6 +963,16 @@ TExprNode::TPtr BuildYtReduceLambda(TPositionHandle pos, const TExprNode::TPtr& 
                     .Callable(0, "DependsOn")
                         .Arg(0, "item")
                     .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    } else {
+        chopperSwitch = ctx.Builder(pos)
+            .Lambda()
+                .Param("key")
+                .Param("item")
+                .Callable("YtIsKeySwitch")
+                    .Arg(0, "item")
                 .Seal()
             .Seal()
             .Build();
@@ -1028,6 +1038,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
 
     TVector<bool> sortDirections(sortTableOrder.size(), true);
     ui64 nativeTypeFlags = state.Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
+    const bool useNativeYtDefaultColumnOrder = state.Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
     TMaybe<NYT::TNode> nativeType;
 
     if (needRemapBeforeSort) {
@@ -1056,6 +1067,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
                     .Columns<TCoVoid>().Build()
                     .Ranges<TCoVoid>().Build()
                     .Stat<TCoVoid>().Build()
+                    .QLFilter<TCoVoid>().Build()
                 .Build()
             .Build()
             .Settings().Build()
@@ -1076,7 +1088,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
     sortOut.RowSpec->SortDirections = sortDirections;
 
     if (nativeType) {
-        sortOut.RowSpec->CopyTypeOrders(*nativeType);
+        sortOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
     }
 
     return Build<TYtSection>(ctx, pos)
@@ -1099,6 +1111,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
                 .Columns<TCoVoid>().Build()
                 .Ranges<TCoVoid>().Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
             .Build()
         .Build()
         .Settings().Build()
@@ -1406,7 +1419,7 @@ bool RewriteYtMergeJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoin
             .Add(outTableInfo.ToExprNode(ctx, pos).Cast<TYtOutTable>())
         .Build()
         .Settings(settingsBuilder.Done())
-        .Reducer(BuildYtReduceLambda(pos, groupArg, std::move(joined), useSystemColumns, ctx))
+        .Reducer(BuildYtReduceLambda(pos, groupArg, std::move(joined), useSystemColumns, state, ctx))
         .Done();
 
     return true;
@@ -2322,6 +2335,7 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                 .Columns<TCoVoid>().Build()
                 .Ranges<TCoVoid>().Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
                 .Done()
             );
         }
@@ -2778,14 +2792,20 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
                     .Value(ToString(EYtSettingType::KeySwitch), TNodeFlags::Default)
                 .Build()
             .Build();
-    }
-    else {
+    } else if (state->Types->DirectRowDependsOn) {
         chopperSwitch = Build<TCoLambda>(ctx, pos)
             .Args({"key", "item"})
             .Body<TYtIsKeySwitch>()
-                .DependsOn<TCoDependsOn>()
+                .Row<TCoDependsOn>()
                     .Input("item")
                 .Build()
+            .Build()
+            .Done().Ptr();
+    } else {
+        chopperSwitch = Build<TCoLambda>(ctx, pos)
+            .Args({"key", "item"})
+            .Body<TYtIsKeySwitch>()
+                .Row("item")
             .Build()
             .Done().Ptr();
     }
@@ -2989,6 +3009,7 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
                 .Columns<TCoVoid>().Build()
                 .Ranges(ranges)
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
                 .Done()
             );
         }
@@ -3001,6 +3022,7 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
             .Columns<TCoVoid>().Build()
             .Ranges<TCoVoid>().Build()
             .Stat<TCoVoid>().Build()
+            .QLFilter<TCoVoid>().Build()
             .Done()
         );
 
@@ -4809,7 +4831,7 @@ EStarRewriteStatus RewriteYtEquiJoinStarSingleChain(TYtEquiJoin equiJoin, TYtJoi
             .Add(outTableInfo.ToExprNode(ctx, pos).Cast<TYtOutTable>())
         .Build()
         .Settings(settingsBuilder.Done())
-        .Reducer(BuildYtReduceLambda(pos, groupArg, std::move(finalRenamedStream), useSystemColumns, ctx))
+        .Reducer(BuildYtReduceLambda(pos, groupArg, std::move(finalRenamedStream), useSystemColumns, state, ctx))
         .Done();
 
     op.Output = reduceOp;

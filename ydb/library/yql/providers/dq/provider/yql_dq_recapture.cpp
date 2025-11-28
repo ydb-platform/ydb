@@ -103,7 +103,8 @@ public:
             .WatermarksMode = State_->Settings->WatermarksMode.Get(),
             .WatermarksGranularityMs = State_->Settings->WatermarksGranularityMs.Get(),
             .WatermarksLateArrivalDelayMs = State_->Settings->WatermarksLateArrivalDelayMs.Get(),
-            .WatermarksEnableIdlePartitions = State_->Settings->WatermarksEnableIdlePartitions.Get()
+            .WatermarksEnableIdlePartitions = State_->Settings->WatermarksEnableIdlePartitions.Get(),
+            .WatermarksIdleTimeoutMs = State_->Settings->WatermarksIdleTimeoutMs.Get(),
         };
         IGraphTransformer::TStatus status = NDq::DqWrapIO(input, output, ctx, *State_->TypeCtx, wrSettings);
         if (input != output) {
@@ -202,8 +203,17 @@ private:
                     Scan(*node.Child(i), ctx, good, visited);
                 }
             }
-        }
-        else if (TCoScriptUdf::Match(&node)) {
+        } else if (TCoScriptUdf::Match(&node)) {
+            if (node.ChildrenSize() > 4) {
+                for (const auto& setting: node.Child(4)->Children()) {
+                    YQL_ENSURE(setting->Head().IsAtom());
+                    if (setting->Head().Content() == "layers") {
+                        AddInfo(ctx, TStringBuilder() << "Cannot execute udf " << node.Head().Content() << " with layers in DQ");
+                        good = false;
+                    }
+                }
+            }
+
             if (good && TCoScriptUdf::Match(&node) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(node.Head().Content()))) {
                 AddInfo(ctx, TStringBuilder() << "system python udf");
                 good = false;
@@ -213,8 +223,15 @@ private:
                     Scan(*node.Child(i), ctx, good, visited);
                 }
             }
-        }
-        else {
+        } else if (TCoUdf::Match(&node) && node.ChildrenSize() == 8) {
+            for (const auto& setting: node.Child(7)->Children()) {
+                YQL_ENSURE(setting->Head().IsAtom());
+                if (setting->Head().Content() == "layers") {
+                    AddInfo(ctx, TStringBuilder() << "Cannot execute udf " << node.Head().Content() << " with layers in DQ");
+                    good = false;
+                }
+            }
+        } else {
             for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
                 Scan(*node.Child(i), ctx, good, visited);
             }

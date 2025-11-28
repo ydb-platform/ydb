@@ -86,33 +86,46 @@ void InitFeatureFlagsConfigurator(TTenantTestRuntime& runtime) {
     runtime.DispatchEvents(options);
 }
 
-void WaitForUpdate(TTenantTestRuntime& runtime) {
-    struct TIsConfigNotificationProcessed {
-        bool operator()(IEventHandle& ev) {
-            if (ev.GetTypeRewrite() == NConsole::TEvConsole::EvConfigNotificationResponse) {
-                auto& rec = ev.Get<NConsole::TEvConsole::TEvConfigNotificationResponse>()->Record;
-                if (rec.GetConfigId().ItemIdsSize() != 1 || rec.GetConfigId().GetItemIds(0).GetId())
-                    return true;
-            }
+class TConfigUpdatesObserver {
+public:
+    TConfigUpdatesObserver(TTestActorRuntime& runtime)
+        : Runtime(runtime)
+        , Holder(Runtime.AddObserver<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+            [this](auto& ev) {
+                auto& rec = ev->Get()->Record;
+                if (rec.GetConfigId().ItemIdsSize() != 1 || rec.GetConfigId().GetItemIds(0).GetId()) {
+                    ++Count;
+                }
+            }))
+    {}
 
-            return false;
-        }
-    };
+    void Clear() {
+        Count = 0;
+    }
 
-    TDispatchOptions options;
-    options.FinalEvents.emplace_back(TIsConfigNotificationProcessed(), 1);
-    runtime.DispatchEvents(options);
-}
+    void Wait() {
+        Runtime.WaitFor("config update", [this]{ return this->Count > 0; });
+        --Count;
+    }
+
+private:
+    TTestActorRuntime& Runtime;
+    TTestActorRuntime::TEventObserverHolder Holder;
+    size_t Count = 0;
+};
 
 template <class ...Ts>
 void ConfigureAndWaitUpdate(
-    TTenantTestRuntime& runtime, Ts&&... args)
+    TTenantTestRuntime& runtime, TConfigUpdatesObserver& updates, Ts&&... args)
 {
     auto* event = new TEvConsole::TEvConfigureRequest;
     CollectActions(event->Record, std::forward<Ts>(args)...);
 
+    updates.Clear();
     runtime.SendToConsole(event);
-    WaitForUpdate(runtime);
+    auto ev = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigureResponse>(runtime.Sender);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+    updates.Wait();
 }
 
 void CompareFeatureFlags(TTenantTestRuntime& runtime, const TString& expected) {
@@ -127,8 +140,11 @@ Y_UNIT_TEST_SUITE(FeatureFlagsConfiguratorTest) {
 
     Y_UNIT_TEST(TestFeatureFlagsUpdates) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        runtime.SimulateSleep(TDuration::MilliSeconds(100)); // settle down
+
+        TConfigUpdatesObserver updates(runtime);
         InitFeatureFlagsConfigurator(runtime);
-        WaitForUpdate(runtime); // initial update
+        updates.Wait(); // initial update
 
         CompareFeatureFlags(runtime,
             "EnableExternalHive: false\n"
@@ -141,14 +157,14 @@ Y_UNIT_TEST_SUITE(FeatureFlagsConfiguratorTest) {
         // We must receive the first (spurious) notification
         runtime.GrabEdgeEventRethrow<TEvFeatureFlags::TEvChanged>(sender);
 
-        ConfigureAndWaitUpdate(runtime, MakeAddAction(ITEM_FEATURE_FLAGS_DEFAULT));
+        ConfigureAndWaitUpdate(runtime, updates, MakeAddAction(ITEM_FEATURE_FLAGS_DEFAULT));
         CompareFeatureFlags(runtime,
             "EnableExternalHive: false\n");
 
         // We must receive a notification (contents are not checked)
         runtime.GrabEdgeEventRethrow<TEvFeatureFlags::TEvChanged>(sender);
 
-        ConfigureAndWaitUpdate(runtime, MakeAddAction(ITEM_FEATURE_FLAGS_1));
+        ConfigureAndWaitUpdate(runtime, updates, MakeAddAction(ITEM_FEATURE_FLAGS_1));
         CompareFeatureFlags(runtime,
             "EnableExternalHive: false\n"
             "EnableDataShardVolatileTransactions: false\n");
@@ -156,7 +172,7 @@ Y_UNIT_TEST_SUITE(FeatureFlagsConfiguratorTest) {
         // We must receive a notification on every change
         runtime.GrabEdgeEventRethrow<TEvFeatureFlags::TEvChanged>(sender);
 
-        ConfigureAndWaitUpdate(runtime, MakeAddAction(ITEM_FEATURE_FLAGS_2));
+        ConfigureAndWaitUpdate(runtime, updates, MakeAddAction(ITEM_FEATURE_FLAGS_2));
         CompareFeatureFlags(runtime,
             "EnableVolatileTransactionArbiters: false\n");
 

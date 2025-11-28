@@ -4,15 +4,16 @@
 
 namespace NMVP::NOIDC {
 
-class TExtensionFinal : public TExtension {
+class TExtensionFinal : public IExtension {
 private:
-    using TBase = TExtension;
+    const TOpenIdConnectSettings Settings;
+    TIntrusivePtr<TExtensionContext> Context;
 
 public:
     TExtensionFinal(const TOpenIdConnectSettings& settings)
-        : TBase(settings)
+        : Settings(settings)
     {}
-    void Handle(TEvPrivate::TEvExtensionRequest::TPtr event) override;
+    void Execute(TIntrusivePtr<TExtensionContext> ctx) override;
 
 private:
     TString FixReferenceInHtml(TStringBuf html, TStringBuf host, TStringBuf findStr);

@@ -40,6 +40,10 @@ private:
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
+    TString GetRpcMethodName() const override {
+        return Ctx_->GetRpcMethodName();
+    }
+
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
         Ctx_->GetAuthState().State = state;
     }
@@ -337,10 +341,10 @@ void TEtcdKVService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 etcdserverpb::Y_CAT(secondName, Response)>>(reqCtx),                             \
             Stuff));                                                                              \
         },                                                                                         \
-        &etcdserverpb::KV::AsyncService::Y_CAT(Request, methodName),                               \
-        "KV/" Y_STRINGIZE(methodName),                                                             \
-        logger,                                                                                    \
-        getCounterBlock("etcd", Y_STRINGIZE(methodName))                                           \
+        &etcdserverpb::KV::AsyncService::Y_CAT(Request, methodName),                                \
+        Y_STRINGIZE(methodName),                                                                     \
+        logger,                                                                                       \
+        getCounterBlock("etcd", Y_STRINGIZE(methodName))                                               \
     )->Run()
 
     SETUP_ETCD_KV_METHOD(Range,Range);
@@ -391,11 +395,11 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 etcdserverpb::Y_CAT(methodName, Request),                                       \
                 etcdserverpb::Y_CAT(methodName, Response)>>(reqCtx),                             \
             Stuff));                                                                              \
-        },                                                                                        \
-        &etcdserverpb::Lease::AsyncService::Y_CAT(Request, methodName),                           \
-        "Lease/" Y_STRINGIZE(methodName),                                                         \
-        logger,                                                                                   \
-        getCounterBlock("etcd", Y_STRINGIZE(methodName))                                          \
+        },                                                                                         \
+        &etcdserverpb::Lease::AsyncService::Y_CAT(Request, methodName),                             \
+        Y_STRINGIZE(methodName),                                                                     \
+        logger,                                                                                       \
+        getCounterBlock("etcd", Y_STRINGIZE(methodName))                                               \
     )->Run()
 
     SETUP_ETCD_LEASE_METHOD(LeaseGrant);

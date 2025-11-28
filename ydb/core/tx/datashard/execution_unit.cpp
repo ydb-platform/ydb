@@ -76,6 +76,10 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreatePrepareDistributedEraseTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::LoadAndWaitInRS:
         return CreateLoadAndWaitInRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::LoadInRS:
+        return CreateLoadInRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::BlockFailPoint:
+        return CreateBlockFailPointUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteDataTx:
         return CreateExecuteDataTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteKqpDataTx:

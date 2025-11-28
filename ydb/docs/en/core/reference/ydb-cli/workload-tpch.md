@@ -1,6 +1,6 @@
 # TPC-H workload
 
-The workload is based on the TPC-H [documentation](https://www.tpc.org/tpc_documents_current_versions/pdf/tpc-h_v2.17.1.pdf), with the queries and table schemas adapted for {{ ydb-short-name }}.
+The workload is based on the TPC-H [specification](https://www.tpc.org/tpc_documents_current_versions/pdf/tpc-h_v2.17.1.pdf), with the queries and table schemas adapted for {{ ydb-short-name }}.
 
 The benchmark generates a workload typical for decision support systems.
 
@@ -54,7 +54,7 @@ See the command description:
 |---------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
 | `--scale <value>`                           | Data scale. Powers of ten are usually used.                                                                                                                        |               |
 | `--tables <value>`                          | Comma-separated list of tables to generate. Available tables: `customer`, `nation`, `order_line`, `part_psupp`, `region`, `supplier`.                              | All tables    |
-| `--proccess-count <value>` or `-C <value>`  | Data generation can be split into several processes, this parameter specifies the number of processes.                                                             | 1             |  
+| `--proccess-count <value>` or `-C <value>`  | Data generation can be split into several processes, this parameter specifies the number of processes.                                                             | 1             |
 | `--proccess-index <value>` or `-i <value>`  | Data generation can be split into several processes, this parameter specifies the process number.                                                                  | 0             |
 | `--state <path>`                            | Path to the generation state file. If the generation was interrupted for some reason, the download will be continued from the same place when it is started again. |               |
 | `--clear-state`                             | Relevant if the `--state` parameter is specified. Clear the state file and start the download from the beginning.                                                  |               |

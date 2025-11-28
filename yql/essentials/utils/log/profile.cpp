@@ -3,11 +3,9 @@
 
 #include <util/stream/format.h>
 
-
-#define YQL_PERF_LOG(level, file, line) YQL_LOG_IMPL( \
+#define YQL_PERF_LOG(level, file, line) YQL_LOG_IMPL(                 \
     ::NYql::NLog::YqlLogger(), ::NYql::NLog::EComponent::Perf, level, \
     ::NYql::NLog::TContextPreprocessor, file, line)
-
 
 namespace NYql {
 namespace NLog {
@@ -30,8 +28,8 @@ TProfilingScope::~TProfilingScope() {
 
         auto doLog = [&]() {
             YQL_PERF_LOG(Level_, File_, Line_)
-                    << TStringBuf("Execution of [") << Name_
-                    << TStringBuf("] took ") << Prec(elapsed, 3) << unit;
+                << TStringBuf("Execution of [") << Name_
+                << TStringBuf("] took ") << Prec(elapsed, 3) << unit;
         };
 
         if (!LogCtxPath_.first.empty() || !LogCtxPath_.second.empty()) {
@@ -46,5 +44,5 @@ TProfilingScope::~TProfilingScope() {
     }
 }
 
-} // namspace NLog
-} // namspace NYql
+} // namespace NLog
+} // namespace NYql

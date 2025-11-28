@@ -30,12 +30,10 @@ using TSQLHints = TMap<NYql::TPosition, TVector<TSQLHint>>;
 // in this case TSQLHints will consist of single entry with position of SELECT token
 
 bool CollectSqlHints(ILexer& lexer, const TString& query, const TString& queryName,
-    const TString& queryFile, TSQLHints& hints, NYql::TIssues& issues, size_t maxErrors, bool utf8Aware);
+                     const TString& queryFile, TSQLHints& hints, NYql::TIssues& issues, size_t maxErrors, bool utf8Aware);
 
-}
+} // namespace NSQLTranslation
 
 Y_DECLARE_OUT_SPEC(inline, NSQLTranslation::TSQLHint, stream, value) {
     value.Out(stream);
 }
-
-

@@ -17,7 +17,8 @@ namespace NYql {
 
 class TFileStorageConfig;
 
-struct IFileStorage: public TThrRefBase {
+class IFileStorage: public TThrRefBase {
+public:
     virtual ~IFileStorage() = default;
     virtual TFileLinkPtr PutFile(const TString& file, const TString& outFileName = {}) = 0;
     virtual TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5 = {}) = 0;
@@ -30,6 +31,7 @@ struct IFileStorage: public TThrRefBase {
 
     virtual TFsPath GetRoot() const = 0;
     virtual TFsPath GetTemp() const = 0;
+    virtual TFsPath GetLockFilePath(const TString& lockName) const = 0;
     virtual const TFileStorageConfig& GetConfig() const = 0;
 };
 
@@ -47,4 +49,4 @@ inline TFileStoragePtr CreateAsyncFileStorage(const TFileStorageConfig& params, 
 void LoadFsConfigFromFile(TStringBuf path, TFileStorageConfig& params);
 void LoadFsConfigFromResource(TStringBuf path, TFileStorageConfig& params);
 
-} // NYql
+} // namespace NYql

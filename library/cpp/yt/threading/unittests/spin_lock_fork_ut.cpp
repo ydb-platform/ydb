@@ -101,6 +101,9 @@ TEST(TReaderWriterSpinLockTest, ForkFriendlyness)
 
 TEST(TForkAwareSpinLockTest, ForkSafety)
 {
+    // TODO(pavook): reenable.
+    GTEST_SKIP_("We are forced to use WriterStarvingRWSpinLock because of reentrancy problems - skipping the non-starvation test");
+
     std::atomic<bool> stopped = {false};
     YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, lock);
 
@@ -157,4 +160,4 @@ TEST(TForkAwareSpinLockTest, ForkSafety)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NConcurrency
+} // namespace NYT::NThreading

@@ -76,15 +76,17 @@ public:
         using TResponseType = decltype(typename TCallType::TResponseEventType().Response);
         const auto& requestId = ev->Get()->RequestId;
         if (!Connection) {
-            BLOG_GRPC_D(Prefix(requestId) << "Connect to "
-                        << ((Config.EnableSsl || !Config.SslCredentials.pem_root_certs.empty()) ? "grpcs://" : "grpc://")
-                        << Config.Locator);
+            TString schema;
+            if (!Config.UseXds) {
+                schema = ((Config.EnableSsl || !Config.SslCredentials.pem_root_certs.empty()) ? "grpcs://" : "grpc://");
+            }
+            BLOG_GRPC_D(Prefix(requestId) << "Connect to " << schema << Config.Locator);
             Connection = Client.CreateGRpcServiceConnection<TGrpcService>(Config);
         }
 
         const TRequestType& request = ev->Get()->Request;
         NYdbGrpc::TCallMeta meta;
-        meta.Timeout = Config.Timeout;
+        meta.Timeout = Config.Timeout ? NYdb::TDeadline::SafeDurationCast(Config.Timeout) : NYdb::TDeadline::Duration::max();
         if (auto token = ev->Get()->Token) {
             if (!AsciiHasPrefixIgnoreCase(token, "Bearer "sv)) {
                 token = "Bearer " + token;
@@ -123,7 +125,7 @@ public:
 
     static NYdbGrpc::TGRpcClientConfig InitGrpcConfig(const NGrpcActorClient::TGrpcClientSettings& settings) {
         const TDuration requestTimeout = TDuration::MilliSeconds(settings.RequestTimeoutMs);
-        NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, requestTimeout, NYdbGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
+        NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, requestTimeout, NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
         config.EnableSsl = settings.EnableSsl;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = settings.GrpcKeepAliveTimeMs;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = settings.GrpcKeepAliveTimeoutMs;
@@ -131,6 +133,9 @@ public:
         config.IntChannelParams[GRPC_ARG_HTTP2_MAX_PINGS_WITHOUT_DATA] = 0;
         config.IntChannelParams[GRPC_ARG_HTTP2_MIN_SENT_PING_INTERVAL_WITHOUT_DATA_MS] = settings.GrpcKeepAlivePingInterval;
         config.IntChannelParams[GRPC_ARG_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS] = settings.GrpcKeepAlivePingInterval;
+        if (!settings.SslTargetNameOverride.empty()) {
+            config.SslTargetNameOverride = settings.SslTargetNameOverride;
+        }
         return config;
     }
 

@@ -1430,6 +1430,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue->SetWeight(100);
     queue->MutableLimit()->SetCpu(1);
 
+    queue = config.AddQueues();
+    queue->SetName("queue_system_tablet_backup");
+    queue->SetWeight(100);
+    queue->MutableLimit()->SetCpu(1);
+
     auto task = config.AddTasks();
     task->SetName(NLocalDb::UnknownTaskName);
     task->SetQueueName(NLocalDb::DefaultQueueName);
@@ -1559,6 +1564,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task->SetName("statistics_scan");
     task->SetQueueName("queue_statistics_scan");
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
+
+    task = config.AddTasks();
+    task->SetName("system_tablet_backup");
+    task->SetQueueName("queue_system_tablet_backup");
+    task->SetDefaultDuration(TDuration::Minutes(1).GetValue());
 
     config.MutableResourceLimit()->SetCpu(TotalCPU);
     config.MutableResourceLimit()->SetMemory(TotalMemory);

@@ -1,0 +1,9 @@
+import "google/protobuf/descriptor.proto";
+
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+extend google.protobuf.FieldOptions {
+    // Flags marked with (RequireCompileCacheInvalidate) = true requires cache invalidation right after the config changes
+    optional bool InvalidateCompileCache = 56682;
+}

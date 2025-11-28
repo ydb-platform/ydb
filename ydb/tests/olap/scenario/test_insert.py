@@ -7,7 +7,7 @@ from ydb.tests.olap.scenario.helpers import (
 )
 from ydb.tests.olap.common.thread_helper import TestThread, TestThreads
 from ydb import PrimitiveType, issues
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 from ydb.tests.olap.lib.utils import get_external_param
 
 import random
@@ -47,15 +47,15 @@ class TestInsert(BaseTestSet):
         sth = ScenarioTestHelper(ctx)
         log: str = sth.get_full_path("log" + table)
         cnt: str = sth.get_full_path("cnt" + table)
-        ignore_error: tuple[str] = (
+        ignore_error: Set[str] = {
             "Transaction locks invalidated"
-        )
+        }
         for iteration in range(rows_count):
             for attempt in range(10):
                 logger.info(f'Inserting data to {cnt}, iteration {iteration}, attempt {attempt}...')
                 result = sth.execute_query(
                     yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({iteration}, $cnt)',
-                    retries=0, fail_on_error=False, return_error=True, ignore_error=ignore_error,
+                    retries=0, fail_on_error=True, return_error=True, ignore_error=ignore_error,
                 )
                 if result == []:  # query succeeded
                     logger.info(f'Inserting data to {cnt}, iteration {iteration}, attempt {attempt}... succeeded')

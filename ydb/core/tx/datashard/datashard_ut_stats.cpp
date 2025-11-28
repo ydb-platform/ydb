@@ -1,4 +1,5 @@
 #include "datashard_ut_common_kqp.h"
+#include <ydb/core/tablet_flat/shared_cache_counters.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
@@ -390,6 +391,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false);
+        serverSettings.AppConfig->MutableDataShardConfig()
+            ->SetStatsReportIntervalSeconds(0);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -400,8 +403,6 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
-
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
         NLocalDb::TCompactionPolicyPtr policy = NLocalDb::CreateDefaultUserTablePolicy();
         policy->InMemForceStepsToSnapshot = 1;
@@ -833,6 +834,47 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
     }
 
+    Y_UNIT_TEST(BackupTableStatsReportInterval) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        // Create a backup copy table
+        {
+            auto senderCopy = runtime.AllocateEdgeActor();
+            ui64 txId = AsyncCreateCopyTable(
+                server, senderCopy, "/Root", "table-2", "/Root/table-1", /*isBackup=*/true);
+            WaitTxNotification(server, senderCopy, txId);
+        }
+        auto tableId2 = ResolveTableId(server, sender, "/Root/table-2");
+
+        std::unordered_map<TLocalPathId, size_t> tableToStatsCount;
+        auto observerFunc = [&](auto& ev) {
+            const NKikimrTxDataShard::TEvPeriodicTableStats& record = ev->Get()->Record;
+            ++tableToStatsCount[record.GetTableLocalId()];
+        };
+        auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>(observerFunc);
+
+        runtime.WaitFor("First stats event", [&]{ return !tableToStatsCount.empty(); });
+        runtime.SimulateSleep(TDuration::Seconds(45));
+        // Once every 10 seconds
+        UNIT_ASSERT_GE(tableToStatsCount[tableId1.PathId.LocalPathId], 4);
+        UNIT_ASSERT_LE(tableToStatsCount[tableId1.PathId.LocalPathId], 5);
+        // Once every 30 seconds
+        UNIT_ASSERT_GE(tableToStatsCount[tableId2.PathId.LocalPathId], 1);
+        UNIT_ASSERT_LE(tableToStatsCount[tableId2.PathId.LocalPathId], 2);
+    }
 }
 
 }

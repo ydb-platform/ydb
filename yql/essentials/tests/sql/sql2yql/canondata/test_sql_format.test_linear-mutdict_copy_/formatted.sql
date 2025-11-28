@@ -1,0 +1,3 @@
+SELECT
+    Block(($parent) -> (FromMutDict(WithSideEffects(ToMutDict({'a': 1, 'b': 2}, $parent)))))
+;

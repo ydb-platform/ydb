@@ -99,6 +99,10 @@ public:
         RedistributeQuotas();
     }
 
+    ui32 GetOwnerWeight(TOwner id) {
+        return QuotaForOwner[id].GetWeight();
+    }
+
     void RemoveOwner(TOwner id) {
         bool isFound = false;
         for (ui64 idx = 0; idx < ActiveOwnerIds.size(); ++idx) {
@@ -228,8 +232,12 @@ public:
         str << "\n</table>";
     }
 
-    ui32 ColorFlagLimit(TOwner id, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+    ui32 ColorFlagLimit(TOwner id, NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
         return QuotaForOwner[id].ColorFlagLimit(color);
+    }
+
+    double GetOccupancyForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
+        return ColorLimits.GetOccupancyForColor(color, Total);
     }
 };
 
@@ -246,6 +254,7 @@ using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
     THolder<TQuotaRecord> SharedQuota;
     THolder<TPerOwnerQuotaTracker> OwnerQuota;
     TKeeperParams Params;
+    TColorLimits ColorLimits;
 
     TColor::E ColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
     double ColorBorderOccupancy = 0;
@@ -260,8 +269,6 @@ public:
     // OwnerBeginUser - per-VDisk qouta
 
     const i64 SysReserveSize = 5;
-    const i64 CommonStaticLogSize = 70;
-    i64 MaxCommonLogChunks = 200;
 
     TChunkTracker()
         : GlobalQuota(new TPerOwnerQuotaTracker())
@@ -271,6 +278,7 @@ public:
 
     bool Reset(const TKeeperParams &params, const TColorLimits &limits, TString &outErrorReason) {
         Params = params;
+        ColorLimits = limits;
 
         GlobalQuota->Reset(params.TotalChunks, limits);
         i64 unappropriated = params.TotalChunks;
@@ -289,7 +297,7 @@ public:
             return false;
         }
 
-        i64 staticLog = params.HasStaticGroups ? CommonStaticLogSize : 0;
+        i64 staticLog = params.HasStaticGroups ? params.CommonStaticLogChunks : 0;
         unappropriated += GlobalQuota->AddSystemOwner(OwnerCommonStaticLog, staticLog, "Common Log Static Group Bonus");
         if (unappropriated < 0) {
             outErrorReason = (TStringBuilder() << "Error adding OwnerCommonStaticLog quota, size# " << staticLog
@@ -297,9 +305,8 @@ public:
             return false;
         }
 
-        MaxCommonLogChunks = params.MaxCommonLogChunks;
         if (params.SeparateCommonLog) {
-            i64 commonLog = MaxCommonLogChunks;
+            i64 commonLog = params.MaxCommonLogChunks;
             if (commonLog + staticLog < params.CommonLogSize) {
                 commonLog = params.CommonLogSize - staticLog;
             }
@@ -361,7 +368,7 @@ public:
         }
 
         ColorBorder = params.SpaceColorBorder;
-        ColorBorderOccupancy = chunkLimits.GetOccupancyForColor(ColorBorder, GlobalQuota->GetHardLimit(OwnerBeginUser));
+        ColorBorderOccupancy = OwnerQuota->GetOccupancyForColor(ColorBorder);
         return true;
     }
 
@@ -378,6 +385,11 @@ public:
     void RemoveOwner(TOwner owner) {
         Y_VERIFY(IsOwnerUser(owner));
         OwnerQuota->RemoveOwner(owner);
+    }
+
+    ui32 GetOwnerWeight(TOwner owner) {
+        Y_VERIFY(IsOwnerUser(owner));
+        return OwnerQuota->GetOwnerWeight(owner);
     }
 
     ui32 GetNumActiveSlots() const {
@@ -429,10 +441,10 @@ public:
     }
     /////////////////////////////////////////////////////
 
-    i64 GetOwnerFree(TOwner owner) const {
+    i64 GetOwnerFree(TOwner owner, bool personal) const {
         if (IsOwnerUser(owner)) {
-            // fix for CLOUDINC-1822: remove OwnerQuota->GetFree(owner) since it broke group balancing in Hive
-            return SharedQuota->GetFree();
+            // See CLOUDINC-1822: OwnerQuota->GetFree(owner) broke group balancing in Hive and was replaced by SharedQuota
+            return personal ? OwnerQuota->GetFree(owner) : SharedQuota->GetFree();
         } else {
             switch (owner) {
                 case OwnerCommonStaticLog:
@@ -578,7 +590,7 @@ public:
         OwnerQuota->PrintHTML(str, SharedQuota.Get(), &ColorBorder, &ColorBorderOccupancy);
     }
 
-    ui32 ColorFlagLimit(TOwner owner, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+    ui32 ColorFlagLimit(TOwner owner, NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
         if (IsOwnerUser(owner)) {
             return OwnerQuota->ColorFlagLimit(owner, color);
         } else {
@@ -596,6 +608,15 @@ public:
                     break;
             }
         }
+    }
+
+    void SetExpectedOwnerCount(size_t newOwnerCount) {
+        OwnerQuota->SetExpectedOwnerCount(newOwnerCount);
+    }
+
+    void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
+        ColorBorder = colorBorder;
+        ColorBorderOccupancy = OwnerQuota->GetOccupancyForColor(ColorBorder);
     }
 };
 

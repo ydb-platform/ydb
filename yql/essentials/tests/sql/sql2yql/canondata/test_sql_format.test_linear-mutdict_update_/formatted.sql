@@ -1,0 +1,16 @@
+SELECT
+    ListSort(
+        DictItems(
+            Block(
+                ($parent) -> (
+                    FromMutDict(
+                        MutDictUpdate(
+                            ToMutDict({'a': 1, 'b': 2}, $parent),
+                            'b', 3
+                        )
+                    )
+                )
+            )
+        )
+    )
+;

@@ -128,8 +128,6 @@ private:
     std::atomic<bool> WasCleared{false};
 };
 
-using TTerminalTask = TTask<void>;
-
 //-----------------------------------------------------------------------------
 
 class alignas(64) TTerminal {
@@ -164,7 +162,7 @@ public:
     bool IsDone() const;
 
 private:
-    TTerminalTask Run();
+    NThreading::TFuture<void> Run();
 
 private:
     ITaskQueue& TaskQueue;
@@ -174,7 +172,7 @@ private:
     std::atomic<bool>& StopWarmup;
     std::shared_ptr<TTerminalStats> Stats;
 
-    TTerminalTask Task;
+    NThreading::TFuture<void> TaskFuture;
 
     bool Started = false;
     bool WarmupWasStopped = false;

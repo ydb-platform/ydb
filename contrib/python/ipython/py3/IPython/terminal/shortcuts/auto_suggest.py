@@ -9,7 +9,7 @@ import prompt_toolkit
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.key_binding import KeyPressEvent
 from prompt_toolkit.key_binding.bindings import named_commands as nc
-from prompt_toolkit.auto_suggest import AutoSuggestFromHistory, Suggestion, AutoSuggest
+from prompt_toolkit.auto_suggest import AutoSuggestFromHistory, Suggestion
 from prompt_toolkit.document import Document
 from prompt_toolkit.history import History
 from prompt_toolkit.shortcuts import PromptSession
@@ -23,12 +23,6 @@ from IPython.core.getipython import get_ipython
 from IPython.utils.tokenutil import generate_tokens
 
 from .filters import pass_through
-
-try:
-    import jupyter_ai_magics
-    import jupyter_ai.completions.models as jai_models
-except ModuleNotFoundError:
-    jai_models = None
 
 
 def _get_query(document: Document):
@@ -109,29 +103,32 @@ class AppendAutoSuggestionInAnyLine(Processor):
         if len(suggestions) == 0:
             return noop("noop: no suggestions")
 
-        suggestions_longer_than_buffer: bool = (
-            len(suggestions) + ti.document.cursor_position_row > ti.document.line_count
-        )
+        if prompt_toolkit.VERSION < (3, 0, 49):
+            if len(suggestions) > 1 and prompt_toolkit.VERSION < (3, 0, 49):
+                if ti.lineno == ti.document.cursor_position_row:
+                    return Transformation(
+                        fragments=ti.fragments
+                        + [
+                            (
+                                "red",
+                                "(Cannot show multiline suggestion; requires prompt_toolkit > 3.0.49)",
+                            )
+                        ]
+                    )
+                else:
+                    return Transformation(fragments=ti.fragments)
+            elif len(suggestions) == 1:
+                if ti.lineno == ti.document.cursor_position_row:
+                    return Transformation(
+                        fragments=ti.fragments + [(self.style, suggestions[0])]
+                    )
+            return Transformation(fragments=ti.fragments)
 
-        if len(suggestions) >= 1 and prompt_toolkit.VERSION < (3, 0, 49):
-            if ti.lineno == ti.document.cursor_position_row:
-                return Transformation(
-                    fragments=ti.fragments
-                    + [
-                        (
-                            "red",
-                            "(Cannot show multiline suggestion; requires prompt_toolkit > 3.0.49)",
-                        )
-                    ]
-                )
-            else:
-                return Transformation(fragments=ti.fragments)
         if delta == 0:
             suggestion = suggestions[0]
             return Transformation(fragments=ti.fragments + [(self.style, suggestion)])
         if is_last_line:
             if delta < len(suggestions):
-                extra = f"; {len(suggestions) - delta} line(s) hidden"
                 suggestion = f"… rest of suggestion ({len(suggestions) - delta} lines) and code hidden"
                 return Transformation([(self.style, suggestion)])
 
@@ -170,19 +167,24 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
     _connected_apps: list[PromptSession]
 
     # handle to the currently running llm task that appends suggestions to the
-    # current buffer; we keep a handle to it in order to cancell it when there is a cursor movement, or
+    # current buffer; we keep a handle to it in order to cancel it when there is a cursor movement, or
     # another request.
     _llm_task: asyncio.Task | None = None
 
-    # This is the instance of the LLM provider from jupyter-ai to which we forward the request
-    # to generate inline completions.
-    _llm_provider: Any | None
+    # This is the constructor of the LLM provider from jupyter-ai
+    # to which we forward the request to generate inline completions.
+    _init_llm_provider: Callable | None
+
+    _llm_provider_instance: Any | None
+    _llm_prefixer: Callable = lambda self, x: "wrong"
 
     def __init__(self):
         super().__init__()
         self.skip_lines = 0
         self._connected_apps = []
-        self._llm_provider = None
+        self._llm_provider_instance = None
+        self._init_llm_provider = None
+        self._request_number = 0
 
     def reset_history_position(self, _: Buffer):
         self.skip_lines = 0
@@ -304,7 +306,7 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
 
     def _cancel_running_llm_task(self) -> None:
         """
-        Try to cancell the currently running llm_task if exists, and set it to None.
+        Try to cancel the currently running llm_task if exists, and set it to None.
         """
         if self._llm_task is not None:
             if self._llm_task.done():
@@ -318,6 +320,16 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
                     "LLM task not cancelled, does your provider support cancellation?"
                 )
 
+    @property
+    def _llm_provider(self):
+        """Lazy-initialized instance of the LLM provider.
+
+        Do not use in the constructor, as `_init_llm_provider` can trigger slow side-effects.
+        """
+        if self._llm_provider_instance is None and self._init_llm_provider:
+            self._llm_provider_instance = self._init_llm_provider()
+        return self._llm_provider_instance
+
     async def _trigger_llm(self, buffer) -> None:
         """
         This will ask the current llm provider a suggestion for the current buffer.
@@ -325,13 +337,15 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
         If there is a currently running llm task, it will cancel it.
         """
         # we likely want to store the current cursor position, and cancel if the cursor has moved.
+        try:
+            import jupyter_ai_magics
+        except ModuleNotFoundError:
+            jupyter_ai_magics = None
         if not self._llm_provider:
             warnings.warn("No LLM provider found, cannot trigger LLM completions")
             return
-        if jai_models is None:
-            warnings.warn(
-                "LLM Completion requires `jupyter_ai_magics` and `jupyter_ai` to be installed"
-            )
+        if jupyter_ai_magics is None:
+            warnings.warn("LLM Completion requires `jupyter_ai_magics` to be installed")
 
         self._cancel_running_llm_task()
 
@@ -343,10 +357,10 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
             try:
                 await self._trigger_llm_core(buffer)
             except Exception as e:
-                get_ipython().log.error("error")
+                get_ipython().log.error("error %s", e)
                 raise
 
-        # here we need a cancellable task so we can't just await the error catched
+        # here we need a cancellable task so we can't just await the error caught
         self._llm_task = asyncio.create_task(error_catcher(buffer))
         await self._llm_task
 
@@ -358,11 +372,10 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
         provider to stream it's response back to us iteratively setting it as
         the suggestion on the current buffer.
 
-        Unlike with JupyterAi, as we do not have multiple cell, the cell number
-        is always set to `0`, note that we _could_ set it to a new number each
-        time and ignore threply from past numbers.
+        Unlike with JupyterAi, as we do not have multiple cells, the cell id
+        is always set to `None`.
 
-        We set the prefix to the current cell content, but could also inset the
+        We set the prefix to the current cell content, but could also insert the
         rest of the history or even just the non-fail history.
 
         In the same way, we do not have cell id.
@@ -374,11 +387,28 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
         stream_inline_completions, I'm not sure it is the case for all
         providers.
         """
+        try:
+            import jupyter_ai.completions.models as jai_models
+        except ModuleNotFoundError:
+            jai_models = None
+
+        if not jai_models:
+            raise ValueError("jupyter-ai is not installed")
+
+        if not self._llm_provider:
+            raise ValueError("No LLM provider found, cannot trigger LLM completions")
+
+        hm = buffer.history.shell.history_manager
+        prefix = self._llm_prefixer(hm)
+        get_ipython().log.debug("prefix: %s", prefix)
+
+        self._request_number += 1
+        request_number = self._request_number
 
         request = jai_models.InlineCompletionRequest(
-            number=0,
-            prefix=buffer.document.text,
-            suffix="",
+            number=request_number,
+            prefix=prefix + buffer.document.text_before_cursor,
+            suffix=buffer.document.text_after_cursor,
             mime="text/x-python",
             stream=True,
             path=None,
@@ -389,6 +419,9 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
         async for reply_and_chunks in self._llm_provider.stream_inline_completions(
             request
         ):
+            if self._request_number != request_number:
+                # If a new suggestion was requested, skip processing this one.
+                return
             if isinstance(reply_and_chunks, jai_models.InlineCompletionReply):
                 if len(reply_and_chunks.list.items) > 1:
                     raise ValueError(
@@ -404,9 +437,6 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
         return
 
 
-_MIN_LINES = 5
-
-
 async def llm_autosuggestion(event: KeyPressEvent):
     """
     Ask the AutoSuggester from history to delegate to ask an LLM for completion
@@ -414,16 +444,17 @@ async def llm_autosuggestion(event: KeyPressEvent):
     This will first make sure that the current buffer have _MIN_LINES (7)
     available lines to insert the LLM completion
 
-    Provisional as of 8.32, may change without warnigns
+    Provisional as of 8.32, may change without warnings
 
     """
+    _MIN_LINES = 5
     provider = get_ipython().auto_suggest
     if not isinstance(provider, NavigableAutoSuggestFromHistory):
         return
     doc = event.current_buffer.document
     lines_to_insert = max(0, _MIN_LINES - doc.line_count + doc.cursor_position_row)
     for _ in range(lines_to_insert):
-        event.current_buffer.insert_text("\n", move_cursor=False)
+        event.current_buffer.insert_text("\n", move_cursor=False, fire_event=False)
 
     await provider._trigger_llm(event.current_buffer)
 

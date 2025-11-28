@@ -380,4 +380,4 @@ void TLikeRegexPredicateNode::Accept(IAstNodeVisitor& visitor) const {
     return visitor.VisitLikeRegexPredicate(*this);
 }
 
-}
+} // namespace NYql::NJsonPath

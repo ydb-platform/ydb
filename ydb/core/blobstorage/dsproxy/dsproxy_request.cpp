@@ -59,6 +59,7 @@ namespace NKikimr {
                         .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
                         .ExecutionRelay = ev->Get()->ExecutionRelay,
+                        .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                     }
                 }),
                 ev->Get()->Deadline
@@ -110,6 +111,7 @@ namespace NKikimr {
                             .ExecutionRelay = ev->Get()->ExecutionRelay,
                             .LogAccEnabled = ev->Get()->IsVerboseNoDataEnabled || ev->Get()->CollectDebugInfo,
                             .LatencyQueueKind = kind,
+                            .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                         },
                         .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo),
                         .AccelerationParams = GetAccelerationParams(),
@@ -134,6 +136,7 @@ namespace NKikimr {
                             .Event = ev->Get(),
                             .ExecutionRelay = ev->Get()->ExecutionRelay,
                             .LatencyQueueKind = kind,
+                            .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                         },
                     }),
                     ev->Get()->Deadline
@@ -199,14 +202,14 @@ namespace NKikimr {
 
         TInstant now = TActivationContext::Now();
 
-        if (Controls.EnablePutBatching.Update(now) && partSize < MinHugeBlobInBytes &&
-                partSize <= MaxBatchedPutSize) {
+        if (Controls.EnablePutBatching.Update(now) && partSize < MinHugeBlobInBytes && partSize <= MaxBatchedPutSize &&
+                !BatchedPutIds.contains(ev->Get()->Id)) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
             Y_ABORT_UNLESS((ui64)handleClass <= PutHandleClassCount);
             Y_ABORT_UNLESS(tactic <= PutTacticCount);
 
-            TBatchedQueue<TEvBlobStorage::TEvPut::TPtr> &batchedPuts = BatchedPuts[handleClass][tactic];
+            TBatchedPutQueue &batchedPuts = BatchedPuts[handleClass][tactic];
             if (batchedPuts.Queue.empty()) {
                 PutBatchedBucketQueue.emplace_back(handleClass, tactic);
             }
@@ -217,6 +220,7 @@ namespace NKikimr {
                 ProcessBatchedPutRequests(batchedPuts, handleClass, tactic);
             }
 
+            BatchedPutIds.insert(ev->Get()->Id);
             batchedPuts.Queue.push_back(ev.Release());
             batchedPuts.Bytes += partSize;
         } else {
@@ -239,7 +243,8 @@ namespace NKikimr {
                         .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
                         .ExecutionRelay = ev->Get()->ExecutionRelay,
-                        .LatencyQueueKind = kind
+                        .LatencyQueueKind = kind,
+                        .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                     },
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                     .Stats = PerDiskStats,
@@ -270,6 +275,7 @@ namespace NKikimr {
                     .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay,
+                    .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                 }
             }),
             ev->Get()->Deadline
@@ -292,7 +298,8 @@ namespace NKikimr {
                     .RestartCounter = ev->Get()->RestartCounter,
                     .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
-                    .ExecutionRelay = ev->Get()->ExecutionRelay
+                    .ExecutionRelay = ev->Get()->ExecutionRelay,
+                    .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                 }
             }),
             ev->Get()->Deadline
@@ -315,7 +322,8 @@ namespace NKikimr {
                     .RestartCounter = ev->Get()->RestartCounter,
                     .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
-                    .ExecutionRelay = ev->Get()->ExecutionRelay
+                    .ExecutionRelay = ev->Get()->ExecutionRelay,
+                    .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                 }
             }),
             ev->Get()->Deadline
@@ -343,7 +351,8 @@ namespace NKikimr {
                     .RestartCounter = ev->Get()->RestartCounter,
                     .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
-                    .ExecutionRelay = ev->Get()->ExecutionRelay
+                    .ExecutionRelay = ev->Get()->ExecutionRelay,
+                    .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                 },
                 .UseVPatch = static_cast<bool>(Controls.EnableVPatch.Update(TActivationContext::Now()))
             }),
@@ -383,7 +392,8 @@ namespace NKikimr {
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay,
                     .LogAccEnabled = (erasure != TBlobStorageGroupType::ErasureMirror3dc) &&
-                            (erasure != TBlobStorageGroupType::ErasureMirror3of4)
+                            (erasure != TBlobStorageGroupType::ErasureMirror3of4),
+                    .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                 }
             }),
             ev->Get()->Deadline
@@ -411,7 +421,8 @@ namespace NKikimr {
                     .RestartCounter = ev->Get()->RestartCounter,
                     .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
-                    .ExecutionRelay = ev->Get()->ExecutionRelay
+                    .ExecutionRelay = ev->Get()->ExecutionRelay,
+                    .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                 }
             }),
             ev->Get()->Deadline
@@ -436,7 +447,8 @@ namespace NKikimr {
                         .RestartCounter = ev->Get()->RestartCounter,
                         .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
-                        .ExecutionRelay = ev->Get()->ExecutionRelay
+                        .ExecutionRelay = ev->Get()->ExecutionRelay,
+                        .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                     }
                 }),
                 ev->Get()->Deadline
@@ -456,7 +468,8 @@ namespace NKikimr {
                         .RestartCounter = ev->Get()->RestartCounter,
                         .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
-                        .ExecutionRelay = ev->Get()->ExecutionRelay
+                        .ExecutionRelay = ev->Get()->ExecutionRelay,
+                        .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                     }
                 }),
                 ev->Get()->Deadline
@@ -485,10 +498,11 @@ namespace NKikimr {
                     .RestartCounter = ev->Get()->RestartCounter,
                     .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
-                    .ExecutionRelay = ev->Get()->ExecutionRelay
+                    .ExecutionRelay = ev->Get()->ExecutionRelay,
+                    .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                 }
             }),
-            TInstant::Max()
+            ev->Get()->Deadline
         );
     }
 
@@ -508,7 +522,8 @@ namespace NKikimr {
                     .RestartCounter = ev->Get()->RestartCounter,
                     .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
-                    .ExecutionRelay = ev->Get()->ExecutionRelay
+                    .ExecutionRelay = ev->Get()->ExecutionRelay,
+                    .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                 }
             }),
             TInstant::Max()
@@ -535,64 +550,100 @@ namespace NKikimr {
         ev->Get()->Process(this);
     }
 
-    void TBlobStorageGroupProxy::ProcessBatchedPutRequests(TBatchedQueue<TEvBlobStorage::TEvPut::TPtr> &batchedPuts,
+    void TBlobStorageGroupProxy::ProcessBatchedPutRequests(TBatchedPutQueue &batchedPuts,
             NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic) {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(handleClass);
+
+        for (auto& ev : batchedPuts.Queue) {
+            const size_t n = BatchedPutIds.erase(ev->Get()->Id);
+            Y_ABORT_UNLESS(n == 1);
+        }
 
         if (Info) {
             if (CurrentStateFunc() == &TThis::StateWork) {
                 TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
                 bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
                 // TODO(alexvru): MinLatency support
-                if (batchedPuts.Queue.size() == 1) {
-                    auto& ev = batchedPuts.Queue.front();
-                    PushRequest(CreateBlobStorageGroupPutRequest(
-                        TBlobStorageGroupPutParameters{
-                            .Common = {
-                                .GroupInfo = Info,
-                                .GroupQueues = Sessions->GroupQueues,
-                                .Mon = Mon,
-                                .Source = ev->Sender,
-                                .Cookie = ev->Cookie,
-                                .Now = TActivationContext::Monotonic(),
-                                .StoragePoolCounters = StoragePoolCounters,
-                                .RestartCounter = ev->Get()->RestartCounter,
-                                .TraceId = std::move(ev->TraceId),
-                                .Event = ev->Get(),
-                                .ExecutionRelay = ev->Get()->ExecutionRelay,
-                                .LatencyQueueKind = kind,
-                            },
-                            .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
-                            .Stats = PerDiskStats,
-                            .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
-                            .AccelerationParams = GetAccelerationParams(),
-                            .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
-                        }),
-                        ev->Get()->Deadline
-                    );
+                auto process = [&](std::optional<ui32> forceGroupGeneration, TBatchedPutQueue& batch) {
+                    if (batch.Queue.size() == 1) {
+                        auto& ev = batch.Queue.front();
+                        PushRequest(CreateBlobStorageGroupPutRequest(
+                            TBlobStorageGroupPutParameters{
+                                .Common = {
+                                    .GroupInfo = Info,
+                                    .GroupQueues = Sessions->GroupQueues,
+                                    .Mon = Mon,
+                                    .Source = ev->Sender,
+                                    .Cookie = ev->Cookie,
+                                    .Now = TActivationContext::Monotonic(),
+                                    .StoragePoolCounters = StoragePoolCounters,
+                                    .RestartCounter = ev->Get()->RestartCounter,
+                                    .TraceId = std::move(ev->TraceId),
+                                    .Event = ev->Get(),
+                                    .ExecutionRelay = ev->Get()->ExecutionRelay,
+                                    .LatencyQueueKind = kind,
+                                    .ForceGroupGeneration = forceGroupGeneration,
+                                },
+                                .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
+                                .Stats = PerDiskStats,
+                                .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
+                                .AccelerationParams = GetAccelerationParams(),
+                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
+                            }),
+                            ev->Get()->Deadline
+                        );
+                    } else {
+                        PushRequest(CreateBlobStorageGroupPutRequest(
+                            TBlobStorageGroupMultiPutParameters{
+                                .Common = {
+                                    .GroupInfo = Info,
+                                    .GroupQueues = Sessions->GroupQueues,
+                                    .Mon = Mon,
+                                    .Now = TActivationContext::Monotonic(),
+                                    .StoragePoolCounters = StoragePoolCounters,
+                                    .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batch.Queue),
+                                    .LatencyQueueKind = kind,
+                                    .ForceGroupGeneration = forceGroupGeneration,
+                                },
+                                .Events = batch.Queue,
+                                .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
+                                .Stats = PerDiskStats,
+                                .HandleClass = handleClass,
+                                .Tactic = tactic,
+                                .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
+                                .AccelerationParams = GetAccelerationParams(),
+                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
+                            }),
+                            TInstant::Max()
+                        );
+                    }
+                };
+
+                std::optional<std::optional<ui32>> forceGroupGeneration;
+                bool split = false;
+                for (const auto& ev : batchedPuts.Queue) {
+                    if (!forceGroupGeneration) {
+                        forceGroupGeneration.emplace(ev->Get()->ForceGroupGeneration);
+                    } else if (*forceGroupGeneration != ev->Get()->ForceGroupGeneration) {
+                        split = true;
+                        break;
+                    }
+                }
+                if (split) {
+                    struct THash {
+                        size_t operator ()(std::optional<ui32> x) const { return x.value_or(Max<ui32>()); }
+                    };
+                    THashMap<std::optional<ui32>, TBatchedPutQueue, THash> m;
+                    for (const auto& ev : batchedPuts.Queue) {
+                        auto& item = m[ev->Get()->ForceGroupGeneration];
+                        item.Bytes += Info->Type.PartSize(ev->Get()->Id);
+                        item.Queue.push_back(ev);
+                    }
+                    for (auto& [forceGroupGeneration, batch] : m) {
+                        process(forceGroupGeneration, batch);
+                    }
                 } else {
-                    PushRequest(CreateBlobStorageGroupPutRequest(
-                        TBlobStorageGroupMultiPutParameters{
-                            .Common = {
-                                .GroupInfo = Info,
-                                .GroupQueues = Sessions->GroupQueues,
-                                .Mon = Mon,
-                                .Now = TActivationContext::Monotonic(),
-                                .StoragePoolCounters = StoragePoolCounters,
-                                .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batchedPuts.Queue),
-                                .LatencyQueueKind = kind,
-                            },
-                            .Events = batchedPuts.Queue,
-                            .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
-                            .Stats = PerDiskStats,
-                            .HandleClass = handleClass,
-                            .Tactic = tactic,
-                            .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
-                            .AccelerationParams = GetAccelerationParams(),
-                            .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
-                        }),
-                        TInstant::Max()
-                    );
+                    process(*forceGroupGeneration, batchedPuts);
                 }
             } else {
                 for (auto it = batchedPuts.Queue.begin(); it != batchedPuts.Queue.end(); ++it) {
@@ -647,7 +698,9 @@ namespace NKikimr {
 
     void TBlobStorageGroupRequestActor::BootstrapImpl() {
         GetActiveCounter()->Inc();
-        Bootstrap();
+        if (BootstrapCheck()) {
+            Bootstrap();
+        }
     }
 
     TActorId TBlobStorageGroupRequestActor::GetVDiskActorId(const TVDiskIdShort &shortId) const {
@@ -696,6 +749,7 @@ namespace NKikimr {
             << " Response# " << SingleLineProto(record));
 
         // process the RACE status
+        Y_ABORT_UNLESS(status == NKikimrProto::RACE);
         const TActorId& nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
         if (vdiskId.GroupGeneration < Info->GroupGeneration) { // vdisk is older than our group
             RacingDomains |= {&Info->GetTopology(), vdiskId};
@@ -707,19 +761,30 @@ namespace NKikimr {
             if (group && (group->GetGroupID() != Info->GroupID.GetRawId() || group->GetGroupGeneration() != vdiskId.GroupGeneration)) {
                 return done(NKikimrProto::ERROR, "incorrect RecentGroup for RACE response");
             }
+            RacingGeneration = Max(RacingGeneration, vdiskId.GroupGeneration);
             Send(nodeWardenId, new TEvBlobStorage::TEvUpdateGroupInfo(vdiskId.GroupID, vdiskId.GroupGeneration,
                 group ? std::make_optional(*group) : std::nullopt));
         }
 
         // make NodeWarden restart the query just after proxy reconfiguration
-        Y_DEBUG_ABORT_UNLESS(RestartCounter < 100);
-        auto q = RestartQuery(RestartCounter + 1);
-        if (q->Type() != TEvBlobStorage::EvBunchOfEvents) {
-            SetExecutionRelay(*q, std::exchange(ExecutionRelay, {}));
+        if (ForceGroupGeneration) {
+            Y_VERIFY_DEBUG_S(*ForceGroupGeneration == Info->GroupGeneration && *ForceGroupGeneration != vdiskId.GroupGeneration,
+                "ForceGroupGeneration# " << *ForceGroupGeneration
+                << " Info->GroupGeneration# " << Info->GroupGeneration
+                << " VDiskId# " << vdiskId.ToString()
+                << " Record# " << SingleLineProto(record)
+                << " Type# " << type);
+            return done(NKikimrProto::RACE, "forced group generation mismatch");
+        } else {
+            Y_DEBUG_ABORT_UNLESS(RestartCounter < 100);
+            auto q = RestartQuery(RestartCounter + 1);
+            if (q->Type() != TEvBlobStorage::EvBunchOfEvents) {
+                SetExecutionRelay(*q, std::exchange(ExecutionRelay, {}));
+            }
+            ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
+            const TActorId& proxyId = MakeBlobStorageProxyID(Info->GroupID);
+            TActivationContext::Send(new IEventHandle(nodeWardenId, Source, q.release(), 0, Cookie, &proxyId, Span.GetTraceId()));
         }
-        ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
-        const TActorId& proxyId = MakeBlobStorageProxyID(Info->GroupID);
-        TActivationContext::Send(new IEventHandle(nodeWardenId, Source, q.release(), 0, Cookie, &proxyId, Span.GetTraceId()));
         PassAway();
         return true;
     }
@@ -827,6 +892,11 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupRequestActor::SendToProxy(std::unique_ptr<IEventBase> event, ui64 cookie, NWilson::TTraceId traceId) {
+        if (ForceGroupGeneration) {
+            if (auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(event.get())) {
+                common->ForceGroupGeneration = ForceGroupGeneration;
+            }
+        }
         Send(ProxyActorId, event.release(), 0, cookie, std::move(traceId));
     }
 
@@ -848,7 +918,9 @@ namespace NKikimr {
         // ensure that we are dying for the first time
         Y_ABORT_UNLESS(!std::exchange(Dead, true));
         GetActiveCounter()->Dec();
-        SendToProxy(std::make_unique<TEvDeathNote>(Responsiveness));
+        if (DoSendDeathNote) {
+            SendToProxy(std::make_unique<TEvDeathNote>(Responsiveness));
+        }
         TActor::PassAway();
     }
 
@@ -865,6 +937,7 @@ namespace NKikimr {
                 auto& msg = static_cast<TEvBlobStorage::TEv##T##Result&>(*ev); \
                 status = msg.Status; \
                 errorReason = msg.ErrorReason; \
+                msg.RacingGeneration = RacingGeneration; \
                 Mon->RespStat##T->Account(status); \
                 break; \
             }
@@ -1040,6 +1113,16 @@ namespace NKikimr {
         CheckPostponedQueue();
     }
 
+    bool TBlobStorageGroupRequestActor::BootstrapCheck() {
+        if (ForceGroupGeneration && *ForceGroupGeneration != Info->GroupGeneration) {
+            ErrorReason = "forced group generation mismatch";
+            RacingGeneration = Info->GroupGeneration;
+            ReplyAndDie(NKikimrProto::RACE);
+            return false;
+        }
+        Y_VERIFY_S(!Info->Group || !Info->Group->HasBridgeProxyGroupId() || ForceGroupGeneration, "Type# " << TypeName(*this));
+        return true;
+    }
 
     void TBlobStorageGroupProxy::Handle(TEvGetQueuesInfo::TPtr ev) {
         ui32 groupSize = Info->GetTotalVDisksNum();
@@ -1054,6 +1137,11 @@ namespace NKikimr {
             }
         }
         TActivationContext::Send(ev->Sender, std::move(res));
+    }
+
+    void TBlobStorageGroupProxy::Handle(TEvExplicitMultiPut::TPtr ev) {
+        IActor *reqActor = CreateBlobStorageGroupPutRequest(std::move(ev->Get()->Parameters));
+        TActivationContext::Register(reqActor);
     }
 
 } // NKikimr

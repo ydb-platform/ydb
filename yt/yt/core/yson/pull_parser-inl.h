@@ -16,17 +16,6 @@ namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYsonItem::TYsonItem(const TYsonItem& other)
-{
-    memcpy(this, &other, sizeof(*this));
-}
-
-TYsonItem& TYsonItem::operator =(const TYsonItem& other)
-{
-    memcpy(this, &other, sizeof(*this));
-    return *this;
-}
-
 TYsonItem TYsonItem::Simple(EYsonItemType type)
 {
     TYsonItem result;

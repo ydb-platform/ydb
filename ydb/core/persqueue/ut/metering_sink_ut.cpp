@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/size_literals.h>
 #include <ydb/core/metering/metering.h>
-#include "metering_sink.h"
+#include <ydb/core/persqueue/pqtablet/metering_sink.h>
 
 
 namespace NKikimr::NPQ {
@@ -45,7 +45,7 @@ Y_UNIT_TEST(FlushPutEventsV1) {
         ",\"unit\":\"put_events\"," <<
         "\"start\":" << emptyFlushTs / 1'000'000 << ",\"finish\":" << flushTs / 1'000'000 <<
         "},\"labels\":{\"datastreams_stream_name\":\"streamName\"," <<
-        "\"ydb_database\":\"databaseId\"},\"version\":\"v1\",\"source_id\":\"tabletId\"," <<
+        "\"ydb_database\":\"databaseId\",\"Category\":\"Topic\"},\"version\":\"v1\",\"source_id\":\"tabletId\"," <<
         "\"source_wt\":" << flushTs / 1'000'000 << "}\n";
 
     UNIT_ASSERT_VALUES_EQUAL(fullMetering, referencePutUnitsJson);
@@ -89,7 +89,7 @@ Y_UNIT_TEST(FlushResourcesReservedV1) {
         partitions * (flushTs - creationTs) / 1'000'000 << ",\"unit\":\"second\"," <<
         "\"start\":" << creationTs / 1'000'000 << ",\"finish\":" << flushTs / 1'000'000 <<
         "},\"labels\":{\"datastreams_stream_name\":\"streamName\"," <<
-        "\"ydb_database\":\"databaseId\"},\"version\":\"v1\",\"source_id\":\"tabletId\"," <<
+        "\"ydb_database\":\"databaseId\",\"Category\":\"Topic\"},\"version\":\"v1\",\"source_id\":\"tabletId\"," <<
         "\"source_wt\":" << flushTs / 1'000'000 << "}\n";
 
     UNIT_ASSERT_VALUES_EQUAL(fullMetering, referenceResourcesReservedJson);
@@ -125,7 +125,7 @@ Y_UNIT_TEST(FlushThroughputV1) {
         "{\"reserved_throughput_bps\":" << writeQuota << ",\"reserved_consumers_count\":" << 0 << "}," << "\"usage\":{\"quantity\":" <<
         partitions * (flushTs - creationTs) / 1'000'000 << ",\"unit\":\"second\"" <<
         ",\"start\":" << creationTs / 1'000'000 << ",\"finish\":" << flushTs / 1'000'000 <<
-        "},\"labels\":{\"datastreams_stream_name\":\"streamName\",\"ydb_database\":\"databaseId\"}," <<
+        "},\"labels\":{\"datastreams_stream_name\":\"streamName\",\"ydb_database\":\"databaseId\",\"Category\":\"Topic\"}," <<
         "\"version\":\"v1\",\"source_id\":\"tabletId\"," <<
         "\"source_wt\":" << flushTs / 1'000'000 << "}\n";
     UNIT_ASSERT_VALUES_EQUAL(fullMetering, referenceThrougputJson);
@@ -161,7 +161,7 @@ Y_UNIT_TEST(FlushStorageV1) {
         ((flushTs - creationTs) / 1'000'000) * partitions * (reservedSpace / 1_MB) <<
         ",\"unit\":\"mbyte*second\"" <<
         ",\"start\":" << creationTs / 1'000'000 << ",\"finish\":" << flushTs / 1'000'000 <<
-        "},\"labels\":{\"datastreams_stream_name\":\"streamName\",\"ydb_database\":\"databaseId\"}," <<
+        "},\"labels\":{\"datastreams_stream_name\":\"streamName\",\"ydb_database\":\"databaseId\",\"Category\":\"Topic\"}," <<
         "\"version\":\"v1\",\"source_id\":\"tabletId\"," <<
         "\"source_wt\":" << flushTs / 1'000'000 << "}\n";
     UNIT_ASSERT_VALUES_EQUAL(fullMetering, referenceStorageJson);
@@ -198,8 +198,36 @@ Y_UNIT_TEST(UsedStorageV1) {
         "\n{\"cloud_id\":\"cloudId\",\"folder_id\":\"folderId\",\"resource_id\":\"streamPath\","
         << "\"id\":\"used_storage-databaseId-tabletId-1651752943168-" << meteringSink.GetMeteringCounter() << "\","
         << "\"schema\":\"ydb.serverless.v1\",\"tags\":{\"ydb_size\":6815},\"usage\":{\"quantity\":2000,\"unit\":\"byte*second\",\"start\":1651752943,\"finish\":1651754943},"
-        << "\"labels\":{\"datastreams_stream_name\":\"streamName\",\"ydb_database\":\"databaseId\"},\"version\":\"1.0.0\",\"source_id\":\"tabletId\",\"source_wt\":1651754943}\n";
+        << "\"labels\":{\"datastreams_stream_name\":\"streamName\",\"ydb_database\":\"databaseId\",\"Category\":\"Topic\"},\"version\":\"1.0.0\",\"source_id\":\"tabletId\",\"source_wt\":1651754943}\n";
     UNIT_ASSERT_VALUES_EQUAL(fullMetering, referenceStorageJson);
+}
+
+Y_UNIT_TEST(UnusedStorageV1) {
+    const ui64 creationTs = 1651752943168786;
+    const ui64 flushTs    = 1651754943168786;
+    const ui32 partitions = 7;
+    const ui64 reservedSpace = 42_GB;
+
+    TMeteringSink meteringSink;
+    meteringSink.Create(TInstant::FromValue(creationTs), {
+            .FlushInterval = TDuration::Seconds(10),
+            .TabletId = "tabletId",
+            .YcCloudId = "cloudId",
+            .YcFolderId = "folderId",
+            .YdbDatabaseId = "databaseId",
+            .StreamName = "streamName",
+            .ResourceId = "streamPath",
+            .PartitionsSize = partitions,
+            .ReservedSpace = reservedSpace,
+        }, {EMeteringJson::UsedStorageV1}, [&](TString json) {
+            UNIT_FAIL("Flush should not be called");
+            Y_UNUSED(json);
+        });
+
+    const ui32 quantity = 0;
+
+    meteringSink.IncreaseQuantity(EMeteringJson::UsedStorageV1, quantity);
+    meteringSink.MayFlushForcibly(TInstant::FromValue(flushTs));
 }
 
 } // Y_UNIT_TEST_SUITE(MeteringSink)

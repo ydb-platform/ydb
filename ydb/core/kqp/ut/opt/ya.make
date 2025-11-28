@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-IF (WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -13,6 +13,7 @@ ENDIF()
 SRCS(
     kqp_agg_ut.cpp
     kqp_extract_predicate_unpack_ut.cpp
+    kqp_hash_combine_ut.cpp
     kqp_kv_ut.cpp
     kqp_merge_ut.cpp
     kqp_named_expressions_ut.cpp

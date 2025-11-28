@@ -5,6 +5,8 @@
 namespace NYdb::inline Dev {
 
 struct TIamServiceParams : TIamEndpoint {
+    TCredentialsProviderFactoryPtr SystemServiceAccountCredentials;
+
     std::string ServiceId;
     std::string MicroserviceId;
     std::string ResourceId;

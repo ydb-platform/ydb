@@ -1,7 +1,7 @@
 self: super: with self; {
   boost_bimap = stdenv.mkDerivation rec {
     pname = "boost_bimap";
-    version = "1.88.0";
+    version = "1.89.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";

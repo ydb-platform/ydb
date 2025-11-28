@@ -30,6 +30,7 @@ PEERDIR(
     library/cpp/int128
     library/cpp/yt/misc
     library/cpp/yt/memory
+    library/cpp/yt/threading
 )
 
 END()

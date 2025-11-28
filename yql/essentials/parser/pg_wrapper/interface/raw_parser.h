@@ -1,8 +1,8 @@
 #pragma once
 
 extern "C" {
-struct List;
-struct Node;
+    struct List;
+    struct Node;
 }
 
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -22,4 +22,4 @@ TString GetCommandName(Node* node);
 
 void PGParse(const TString& input, IPGParseEvents& events);
 
-}
+} // namespace NYql

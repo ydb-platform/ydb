@@ -17,9 +17,11 @@ typedef std::span<const TExprNodePtr> TExprNodeSpan;
 class TExprNodeReplaceBuilder;
 
 class TExprNodeBuilder {
-friend class TExprNodeReplaceBuilder;
+    friend class TExprNodeReplaceBuilder;
+
 public:
     typedef std::function<TExprNodePtr(const TStringBuf&)> ExtArgsFuncType;
+
 public:
     TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx);
     TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx, ExtArgsFuncType extArgsFunc);
@@ -107,18 +109,21 @@ private:
 };
 
 namespace NNodes {
-    template<typename TParent, typename TNode>
-    class TNodeBuilder;
-}
+template <typename TParent, typename TNode>
+class TNodeBuilder;
+} // namespace NNodes
 
 class TExprNodeReplaceBuilder {
-friend class TExprNodeBuilder;
+    friend class TExprNodeBuilder;
+
 private:
     struct TBuildAdapter {
         typedef TExprNodeReplaceBuilder& ResultType;
 
         TBuildAdapter(TExprNodeReplaceBuilder& builder)
-            : Builder(builder) {}
+            : Builder(builder)
+        {
+        }
 
         ResultType Value() {
             return Builder;
@@ -142,18 +147,16 @@ public:
     TExprNodeBuilder With(ui32 argIndex);
     TExprNodeBuilder WithNode(TExprNodePtr&& fromNode);
 
-    template<typename TNode>
+    template <typename TNode>
     NNodes::TNodeBuilder<TBuildAdapter, TNode> With(ui32 argIndex) {
         TBuildAdapter adapter(*this);
 
-        NNodes::TNodeBuilder<TBuildAdapter, TNode> builder(Owner_->Ctx_, Owner_->Pos_,
+        NNodes::TNodeBuilder<TBuildAdapter, TNode> builder(
+            Owner_->Ctx_, Owner_->Pos_,
             [adapter, argIndex](const TNode& node) mutable -> TBuildAdapter& {
                 adapter.Builder = adapter.Builder.With(argIndex, node.Get());
-                return adapter;
-            },
-            [adapter] (const TStringBuf& argName) {
-                return adapter.Builder.Owner_->FindArgument(argName);
-            });
+                return adapter; },
+            [adapter](const TStringBuf& argName) { return adapter.Builder.Owner_->FindArgument(argName); });
 
         return builder;
     }
@@ -175,4 +178,3 @@ private:
 };
 
 } // namespace NYql
-

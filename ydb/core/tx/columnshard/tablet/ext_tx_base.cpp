@@ -19,7 +19,7 @@ TExtendedTransactionBase::TExtendedTransactionBase(TColumnShard* self, const TSt
     , TxInfo(txInfo)
     , TabletTxNo(++Self->TabletTxCounter)
 {
-
+    AFL_VERIFY(!TxInfo.empty());
 }
 
 } //namespace NKikimr::NColumnShard

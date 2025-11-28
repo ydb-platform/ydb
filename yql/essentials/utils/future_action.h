@@ -43,12 +43,12 @@ NThreading::TFuture<std::function<V()>> AddConstantActionToFuture(NThreading::TF
 /*
 Transform action result by applying mapper
 */
-template <typename R, typename TMapper, typename ...Args>
+template <typename R, typename TMapper, typename... Args>
 auto MapFutureAction(NThreading::TFuture<std::function<R(Args&&...)>> f, const TMapper& mapper) {
     using V = decltype(mapper(std::declval<R>()));
 
     return f.Apply([mapper](NThreading::TFuture<std::function<R(Args&&...)>> f) {
-        std::function<V(Args&&...)> r = [f, mapper](Args&& ...args) {
+        std::function<V(Args && ...)> r = [f, mapper](Args&&... args) {
             return mapper(f.GetValue()(std::forward<Args>(args)...));
         };
 
@@ -56,4 +56,4 @@ auto MapFutureAction(NThreading::TFuture<std::function<R(Args&&...)>> f, const T
     });
 }
 
-}
+} // namespace NYql

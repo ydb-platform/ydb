@@ -16,12 +16,58 @@
 #include "helpers.h"
 
 static int no_msg;
+static int no_sync_msg;
 
-static int test_own(struct io_uring *ring)
+static int test_own_sync(struct io_uring *ring)
 {
+	struct io_uring_sqe sqe = { };
 	struct io_uring_cqe *cqe;
+	int ret;
+
+	if (no_sync_msg)
+		return 0;
+
+	io_uring_prep_msg_ring(&sqe, ring->ring_fd, 0x10, 0x1234, 0);
+	sqe.user_data = 1;
+
+	ret = io_uring_register_sync_msg(&sqe);
+	if (ret == -EINVAL) {
+		no_sync_msg = 1;
+		return 0;
+	} else if (ret != 0) {
+		fprintf(stderr, "register_sync_msg: %d\n", ret);
+		return 1;
+	}
+
+	ret = io_uring_wait_cqe(ring, &cqe);
+	if (ret < 0) {
+		fprintf(stderr, "wait completion %d\n", ret);
+		return 1;
+	}
+	switch (cqe->user_data) {
+	case 0x1234:
+		if (cqe->res != 0x10) {
+			fprintf(stderr, "invalid len %x\n", cqe->res);
+			return -1;
+		}
+		break;
+	default:
+		fprintf(stderr, "Invalid user_data\n");
+		return -1;
+	}
+
+	io_uring_cqe_seen(ring, cqe);
+	return 0;
+}
+
+static int test_own(struct io_uring *ring, int do_sync)
+{
 	struct io_uring_sqe *sqe;
+	struct io_uring_cqe *cqe;
 	int ret, i;
+
+	if (do_sync)
+		return test_own_sync(ring);
 
 	sqe = io_uring_get_sqe(ring);
 	if (!sqe) {
@@ -117,7 +163,47 @@ err:
 	return (void *) (unsigned long) 1;
 }
 
-static int test_remote(struct io_uring *ring, unsigned int ring_flags)
+static int test_remote_sync(unsigned int ring_flags)
+{
+	struct io_uring *target;
+	pthread_t thread;
+	void *tret;
+	struct io_uring_sqe sqe = { };
+	struct data d;
+	int ret;
+
+	if (no_sync_msg)
+		return 0;
+
+	d.flags = ring_flags;
+	pthread_barrier_init(&d.barrier, NULL, 2);
+	pthread_barrier_init(&d.startup, NULL, 2);
+	pthread_create(&thread, NULL, wait_cqe_fn, &d);
+
+	pthread_barrier_wait(&d.startup);
+	target = d.ring;
+
+	io_uring_prep_msg_ring(&sqe, target->ring_fd, 0x20, 0x5aa5, 0);
+	sqe.user_data = 1;
+
+	pthread_barrier_wait(&d.barrier);
+
+	ret = io_uring_register_sync_msg(&sqe);
+	if (ret == -EINVAL) {
+		no_sync_msg = 1;
+		return 0;
+	} else if (ret != 0) {
+		fprintf(stderr, "sync_msg: %d\n", ret);
+		goto err;
+	}
+	pthread_join(thread, &tret);
+	return 0;
+err:
+	return 1;
+}
+
+static int test_remote(struct io_uring *ring, unsigned int ring_flags,
+		       int do_sync)
 {
 	struct io_uring *target;
 	pthread_t thread;
@@ -126,6 +212,9 @@ static int test_remote(struct io_uring *ring, unsigned int ring_flags)
 	struct io_uring_sqe *sqe;
 	struct data d;
 	int ret;
+
+	if (do_sync)
+		return test_remote_sync(ring_flags);
 
 	d.flags = ring_flags;
 	pthread_barrier_init(&d.barrier, NULL, 2);
@@ -368,16 +457,29 @@ static int test(int ring_flags)
 		return T_EXIT_FAIL;
 	}
 
-	ret = test_own(&ring);
+	ret = test_own(&ring, 0);
 	if (ret) {
-		fprintf(stderr, "test_own failed\n");
+		fprintf(stderr, "test_own sync failed\n");
 		return T_EXIT_FAIL;
 	}
 	if (no_msg)
 		return T_EXIT_SKIP;
-	ret = test_own(&pring);
+
+	ret = test_own(&ring, 1);
 	if (ret) {
-		fprintf(stderr, "test_own iopoll failed\n");
+		fprintf(stderr, "test_own async failed\n");
+		return T_EXIT_FAIL;
+	}
+
+	ret = test_own(&pring, 0);
+	if (ret) {
+		fprintf(stderr, "test_own async iopoll failed\n");
+		return T_EXIT_FAIL;
+	}
+
+	ret = test_own(&pring, 1);
+	if (ret) {
+		fprintf(stderr, "test_own sync iopoll failed\n");
 		return T_EXIT_FAIL;
 	}
 
@@ -395,9 +497,15 @@ static int test(int ring_flags)
 		}
 	}
 
-	ret = test_remote(&ring, ring_flags);
+	ret = test_remote(&ring, ring_flags, 0);
 	if (ret) {
 		fprintf(stderr, "test_remote failed\n");
+		return T_EXIT_FAIL;
+	}
+
+	ret = test_remote(&ring, ring_flags, 1);
+	if (ret) {
+		fprintf(stderr, "test_remote sync failed\n");
 		return T_EXIT_FAIL;
 	}
 
@@ -412,9 +520,15 @@ static int test(int ring_flags)
 			return T_EXIT_FAIL;
 		}
 
-		ret = test_own(&ring);
+		ret = test_own(&ring, 0);
 		if (ret) {
-			fprintf(stderr, "test_own deferred failed\n");
+			fprintf(stderr, "test_own async deferred failed\n");
+			return T_EXIT_FAIL;
+		}
+
+		ret = test_own(&ring, 1);
+		if (ret) {
+			fprintf(stderr, "test_own sync deferred failed\n");
 			return T_EXIT_FAIL;
 		}
 

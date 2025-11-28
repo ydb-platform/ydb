@@ -35,6 +35,7 @@ public:
     TTupleLiteralBuilder& Add(TRuntimeNode value);
     TTupleLiteral* Build();
     void Clear();
+
 private:
     const TTypeEnvironment& Env_;
     TVector<TType*> Types_;
@@ -134,7 +135,7 @@ private:
 class TCallableBuilder {
 public:
     TCallableBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType,
-        bool disableMerge = false);
+                     bool disableMerge = false);
     TCallableBuilder(const TCallableBuilder&) = default;
     TCallableBuilder& operator=(const TCallableBuilder&) = default;
     void Reserve(ui32 size);
@@ -160,5 +161,5 @@ private:
     bool HasPayload_;
 };
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

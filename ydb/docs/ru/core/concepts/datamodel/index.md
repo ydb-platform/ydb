@@ -1,14 +1,4 @@
-# Структура кластера
-
-В разделе собраны описания сущностей схемы кластера, которыми оперирует {{ ydb-short-name }}.
-
-## Схема кластера {{ ydb-short-name }} {#cluster-scheme}
-
-Схема кластера {{ ydb-short-name }} — это иерархическое пространство имён кластера {{ ydb-short-name }}. Верхнеуровневым элементом этого пространства имён является **корень схемы кластера**. Дочерними элементами корня схемы кластера выступают [базы данных](../../concepts/glossary.md#database). Внутри каждой базы данных можно создавать произвольную иерархию с помощью вложенных директорий.
-
-![cluster scheme diagram](_assets/cluster-scheme.png =500x)
-
-## Схемные объекты {{ ydb-short-name }}
+# Схемные объекты {{ ydb-short-name }}
 
 В {{ ydb-short-name }} поддерживается следующий перечень схемных объектов:
 
@@ -16,14 +6,18 @@
 * [Таблицы](table.md)
 
 {% if feature_view %}
-* [Представления (VIEW)](view.md)
+* [Представления](view.md)
 {% endif %}
 
-* [Топики](../topic.md)
+* [Топики](topic.md)
+* [Узлы координации](coordination-node.md)
 * [Секреты](secrets.md)
-* [Подключения к внешним БД](external_data_source.md)
-* [Внешние источники данных](external_table.md)
+* [Внешние источники данных](external_data_source.md)
+* [Внешние таблицы](external_table.md)
 
-Все схемные объекты в {{ ydb-short-name }} имеют одинаковые требования к своим наименованиям.
+Схемные объекты размещаются в [пространстве имен кластера](cluster-namespace.md) и именуются согласно общим для всех схемных объектов [правилам именования](cluster-namespace.md#object-naming-rules).
 
-{% include [object naming rules](./_includes/object-naming-rules.md) %}
+## См. также {#see-also}
+
+- [{#T}](../index.md)
+- [{#T}](../topology.md)

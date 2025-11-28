@@ -1,4 +1,5 @@
 PROTO_LIBRARY(api-grpc-persqueue-deprecated)
+PROTOC_FATAL_WARNINGS()
 
 MAVEN_GROUP_ID(com.yandex.ydb)
 

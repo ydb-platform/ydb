@@ -20,6 +20,10 @@ void TClassifierSettings::TParser::operator()(TString* setting) const {
     *setting = Value;
 }
 
+void TClassifierSettings::TParser::operator()(std::optional<TString>* setting) const {
+    *setting = Value;
+}
+
 //// TClassifierSettings::TExtractor
 
 TString TClassifierSettings::TExtractor::operator()(i64* setting) const {
@@ -28,6 +32,10 @@ TString TClassifierSettings::TExtractor::operator()(i64* setting) const {
 
 TString TClassifierSettings::TExtractor::operator()(TString* setting) const {
     return *setting;
+}
+
+TString TClassifierSettings::TExtractor::operator()(std::optional<TString>* setting) const {
+    return setting->value_or(TString{});
 }
 
 //// TPoolSettings
@@ -42,9 +50,12 @@ std::unordered_map<TString, TClassifierSettings::TProperty> TClassifierSettings:
 }
 
 std::optional<TString> TClassifierSettings::Validate() const {
-    NACLib::TUserToken token(MemberName, TVector<NACLib::TSID>{});
+    if (!MemberName) {
+        return std::nullopt;
+    }
+    NACLib::TUserToken token(*MemberName, TVector<NACLib::TSID>{});
     if (token.IsSystemUser()) {
-        return TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << MemberName;
+        return TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << *MemberName;
     }
     return std::nullopt;
 }

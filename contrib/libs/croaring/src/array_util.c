@@ -459,7 +459,7 @@ int32_t intersect_vector16(const uint16_t *__restrict__ A, size_t s_a,
     return (int32_t)count;
 }
 
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 int array_container_to_uint32_array_vector16(void *vout, const uint16_t *array,
                                              size_t cardinality,
                                              uint32_t base) {
@@ -2136,7 +2136,7 @@ bool memequals(const void *s1, const void *s2, size_t n) {
 #if CROARING_IS_X64
 #if CROARING_COMPILER_SUPPORTS_AVX512
 CROARING_TARGET_AVX512
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 int avx512_array_container_to_uint32_array(void *vout, const uint16_t *array,
                                            size_t cardinality, uint32_t base) {
     int outpos = 0;

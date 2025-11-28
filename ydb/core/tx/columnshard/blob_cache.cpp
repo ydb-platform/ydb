@@ -93,6 +93,7 @@ private:
     static constexpr i64 MAX_IN_FLIGHT_BYTES = 250ll << 20;
     static constexpr i64 MAX_REQUEST_BYTES = 8ll << 20;
     static constexpr TDuration DEFAULT_READ_DEADLINE = TDuration::Seconds(30);
+    static constexpr ui64 DEFAULT_MAX_CACHE_DATA_SIZE = 1000ull << 20;
 
     TLRUCache<TBlobRange, TString> Cache;
     /// List of cached ranges by blob id.
@@ -101,6 +102,7 @@ private:
     THashMultiSet<TBlobRange, BlobRangeHash, BlobRangeEqual> CachedRanges;
 
     TControlWrapper MaxCacheDataSize;
+    const bool UseMaxCacheDataSizeFromConfig;
     TControlWrapper MaxInFlightDataSize;
     i64 CacheDataSize;              // Current size of all blobs in cache
     ui64 ReadCookie;
@@ -134,6 +136,7 @@ private:
     const TCounterPtr SizeBlobsInFlight;
     const TCounterPtr ReadRequests;
     const TCounterPtr ReadsInQueue;
+    const TCounterPtr MaxSizeBytes;
 
     TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
 
@@ -143,10 +146,11 @@ public:
     }
 
 public:
-    explicit TBlobCache(ui64 maxSize, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
+    explicit TBlobCache(const std::optional<ui64>& maxSize, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : TActorBootstrapped<TBlobCache>()
         , Cache(SIZE_MAX)
-        , MaxCacheDataSize(maxSize, 0, 1ull << 40)
+        , MaxCacheDataSize(maxSize.value_or(DEFAULT_MAX_CACHE_DATA_SIZE), 0, 1ull << 40)
+        , UseMaxCacheDataSizeFromConfig(maxSize.has_value())
         , MaxInFlightDataSize(Min<i64>(MaxCacheDataSize, MAX_IN_FLIGHT_BYTES), 0, 10ull << 30)
         , CacheDataSize(0)
         , ReadCookie(1)
@@ -171,17 +175,20 @@ public:
         , SizeBlobsInFlight(counters->GetCounter("SizeBlobsInFlight"))
         , ReadRequests(counters->GetCounter("ReadRequests", true))
         , ReadsInQueue(counters->GetCounter("ReadsInQueue"))
-    {}
+        , MaxSizeBytes(counters->GetCounter("MaxSizeBytes")) {
+    }
 
     void Bootstrap(const TActorContext& ctx) {
         auto& icb = AppData(ctx)->Icb;
-        icb->RegisterSharedControl(MaxCacheDataSize, "BlobCache.MaxCacheDataSize");
-        icb->RegisterSharedControl(MaxInFlightDataSize, "BlobCache.MaxInFlightDataSize");
+        TControlBoard::RegisterSharedControl(MaxCacheDataSize, icb->BlobCache.MaxCacheDataSize);
+        TControlBoard::RegisterSharedControl(MaxInFlightDataSize, icb->BlobCache.MaxInFlightDataSize);
 
         LOG_S_NOTICE("MaxCacheDataSize: " << (i64)MaxCacheDataSize
             << " InFlightDataSize: " << (i64)InFlightDataSize);
 
-        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::BlobCache));
+        MaxSizeBytes->Set((i64)MaxCacheDataSize);
+
+        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::ColumnTablesBlobCache));
 
         Become(&TBlobCache::StateFunc);
         ScheduleWakeup();
@@ -347,6 +354,10 @@ private:
     }
 
     void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext&) {
+        if (UseMaxCacheDataSizeFromConfig) {
+            return;
+        }
+
         const i64 newMaxCacheDataSize = ev->Get()->LimitBytes;
         if (newMaxCacheDataSize == (i64)MaxCacheDataSize) {
             return;
@@ -355,6 +366,8 @@ private:
         LOG_S_DEBUG("Updating max cache data size: " << newMaxCacheDataSize);
 
         MaxCacheDataSize = newMaxCacheDataSize;
+
+        MaxSizeBytes->Set((i64)MaxCacheDataSize);
     }
 
     void UpdateConsumption() {
@@ -632,7 +645,7 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateBlobCache(ui64 maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
+NActors::IActor* CreateBlobCache(const std::optional<ui64>& maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     return new TBlobCache(maxBytes, counters);
 }
 

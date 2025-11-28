@@ -7,18 +7,17 @@
 namespace NYql {
 
 TDataProviderInitializer GetPgDataProviderInitializer() {
-    return [] (
-        const TString& userName,
-        const TString& sessionId,
-        const TGatewaysConfig* gatewaysConfig,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        TIntrusivePtr<IRandomProvider> randomProvider,
-        TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        const TOperationProgressWriter& progressWriter,
-        const TYqlOperationOptions& operationOptions,
-        THiddenQueryAborter hiddenAborter,
-        const TQContext& qContext
-    ) {
+    return [](
+               const TString& userName,
+               const TString& sessionId,
+               const TGatewaysConfig* gatewaysConfig,
+               const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+               TIntrusivePtr<IRandomProvider> randomProvider,
+               TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+               const TOperationProgressWriter& progressWriter,
+               const TYqlOperationOptions& operationOptions,
+               THiddenQueryAborter hiddenAborter,
+               const TQContext& qContext) {
         Y_UNUSED(userName);
         Y_UNUSED(sessionId);
         Y_UNUSED(gatewaysConfig);
@@ -38,12 +37,12 @@ TDataProviderInitializer GetPgDataProviderInitializer() {
         info.Source = CreatePgDataSource(state);
         info.Sink = CreatePgDataSink(state);
         info.OpenSession = [](
-            const TString& sessionId,
-            const TString& username,
-            const TOperationProgressWriter& progressWriter,
-            const TYqlOperationOptions& operationOptions,
-            TIntrusivePtr<IRandomProvider> randomProvider,
-            TIntrusivePtr<ITimeProvider> timeProvider) {
+                               const TString& sessionId,
+                               const TString& username,
+                               const TOperationProgressWriter& progressWriter,
+                               const TYqlOperationOptions& operationOptions,
+                               TIntrusivePtr<IRandomProvider> randomProvider,
+                               TIntrusivePtr<ITimeProvider> timeProvider) {
             Y_UNUSED(sessionId);
             Y_UNUSED(username);
             Y_UNUSED(progressWriter);
@@ -62,4 +61,4 @@ TDataProviderInitializer GetPgDataProviderInitializer() {
     };
 }
 
-}
+} // namespace NYql

@@ -19,8 +19,8 @@
 #include <vector>
 
 namespace NYT {
-    class TNode;
-}
+class TNode;
+} // namespace NYT
 
 namespace NYql {
 namespace NCommon {
@@ -29,20 +29,17 @@ void WriteYsonValue(
     NYson::TYsonConsumerBase& writer,
     const NKikimr::NUdf::TUnboxedValuePod& value,
     NKikimr::NMiniKQL::TType* type,
-    const TVector<ui32>* structPositions = nullptr
-);
+    const TVector<ui32>* structPositions = nullptr);
 
 TString WriteYsonValue(
     const NKikimr::NUdf::TUnboxedValuePod& value,
     NKikimr::NMiniKQL::TType* type,
     const TVector<ui32>* structPositions = nullptr,
-    NYson::EYsonFormat format = NYson::EYsonFormat::Binary
-);
+    NYson::EYsonFormat format = NYson::EYsonFormat::Binary);
 
 TMaybe<TVector<ui32>> CreateStructPositions(
     NKikimr::NMiniKQL::TType* inputType,
-    const TVector<TString>* columns = nullptr
-);
+    const TVector<TString>* columns = nullptr);
 
 NYT::TNode ValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type);
 TExprNode::TPtr NodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode& type, const NYT::TNode& node, TExprContext& ctx);
@@ -56,8 +53,7 @@ struct TCodecContext {
     TCodecContext(
         const NKikimr::NMiniKQL::TTypeEnvironment& env,
         const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-        const NKikimr::NMiniKQL::THolderFactory* holderFactory = nullptr
-    );
+        const NKikimr::NMiniKQL::THolderFactory* holderFactory = nullptr);
 };
 
 void SkipYson(char cmd, TInputBuf& buf);
@@ -67,13 +63,13 @@ TStringBuf ReadNextString(char cmd, TInputBuf& buf);
 NKikimr::NUdf::TUnboxedValue ReadYsonValue(NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::THolderFactory& holderFactory, char cmd, TInputBuf& buf);
 
 TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonValue(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    const TStringBuf& yson, NKikimr::NMiniKQL::TType* type, IOutputStream* err);
+                                                    const TStringBuf& yson, NKikimr::NMiniKQL::TType* type, IOutputStream* err);
 
 TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonNodeInResultFormat(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    const NYT::TNode& node, NKikimr::NMiniKQL::TType* type, IOutputStream* err);
+                                                                 const NYT::TNode& node, NKikimr::NMiniKQL::TType* type, IOutputStream* err);
 
 TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikimr::NUdf::TUnboxedValuePod& value, TExprContext& ctx,
-    TPositionHandle pos = {});
+                                   TPositionHandle pos = {});
 
 } // namespace NCommon
 } // namespace NYql

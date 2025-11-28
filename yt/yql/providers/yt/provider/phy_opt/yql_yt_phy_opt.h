@@ -40,6 +40,8 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> YtDqProcessWrite(NNodes::TExprBase node, TExprContext& ctx) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> Create(NNodes::TExprBase node, TExprContext& ctx) const;
+
     NNodes::TMaybeNode<NNodes::TExprBase> Write(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> Fill(NNodes::TExprBase node, TExprContext& ctx) const;
@@ -105,6 +107,9 @@ private:
     NNodes::TMaybeNode<NNodes::TExprBase> WeakFields(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> EquiJoin(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
+
+    template <class TNodeType>
+    NNodes::TMaybeNode<NNodes::TExprBase> ConvertDynamicTablesToStatic(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> EarlyMergeJoin(NNodes::TExprBase node, TExprContext& ctx) const;
 

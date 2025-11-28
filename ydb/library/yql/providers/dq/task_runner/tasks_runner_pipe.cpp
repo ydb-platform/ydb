@@ -714,9 +714,15 @@ public:
         }
     }
 
+    void Push(TInstant watermark) override {
+        Y_UNUSED(watermark);
+        ythrow yexception() << "unimplemented";
+    }
+
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override {
         Y_UNUSED(batch);
+        Y_UNUSED(watermark);
         ythrow yexception() << "unimplemented";
     }
 
@@ -736,15 +742,31 @@ public:
         ythrow yexception() << "unimplemented";
     }
 
-    void Pause() override {
+    void PauseByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    void Resume() override {
+    void ResumeByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    bool IsPaused() const override {
+    bool IsPausedByCheckpoint() const override {
+        return false;
+    }
+
+    void PauseByWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    void AddWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    void ResumeByWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    bool IsPausedByWatermark() const override {
         return false;
     }
 
@@ -772,7 +794,7 @@ private:
 
 class TDqSource: public IDqAsyncInputBuffer {
 public:
-    TDqSource(ui64 taskId, ui64 inputIndex, TType* inputType, i64 channelBufferSize, IPipeTaskRunner* taskRunner)
+    TDqSource(ui64 taskId, ui64 inputIndex, TType* inputType, i64 channelBufferSize, IPipeTaskRunner* taskRunner, NKikimr::NMiniKQL::EValuePackerVersion packerVersion)
         : TaskId(taskId)
         , TaskRunner(taskRunner)
         , Input(TaskRunner->GetInput())
@@ -780,6 +802,7 @@ public:
         , InputType(inputType)
         , BufferSize(channelBufferSize)
         , FreeSpace(channelBufferSize)
+        , PackerVersion(packerVersion)
     {
         PushStats.InputIndex = inputIndex;
     }
@@ -859,13 +882,18 @@ public:
 
     void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) override {
         auto inputType = GetInputType();
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, PackerVersion);
         TDqSerializedBatch serialized = dataSerializer.Serialize(batch, inputType);
         Push(std::move(serialized), space);
     }
 
+    void Push(TInstant watermark) override {
+        Y_UNUSED(watermark);
+        ythrow yexception() << "unimplemented";
+    }
+
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& /* watermark */) override {
         Y_UNUSED(batch);
         ythrow yexception() << "unimplemented";
     }
@@ -891,15 +919,31 @@ public:
         return InputType;
     }
 
-    void Pause() override {
+    void PauseByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    void Resume() override {
+    void ResumeByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    bool IsPaused() const override {
+    bool IsPausedByCheckpoint() const override {
+        return false;
+    }
+
+    void PauseByWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    void AddWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    void ResumeByWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    bool IsPausedByWatermark() const override {
         return false;
     }
 
@@ -923,6 +967,7 @@ private:
     TDqInputStats PopStats;
     i64 BufferSize;
     i64 FreeSpace;
+    NKikimr::NMiniKQL::EValuePackerVersion PackerVersion;
 };
 
 /*______________________________________________________________________________________________*/
@@ -1617,7 +1662,7 @@ private:
         for (ui32 i = 0; i < Task.InputsSize(); ++i) {
             auto& inputDesc = Task.GetInputs(i);
             if (inputDesc.HasSource()) {
-                Sources[i] = new TDqSource(Task.GetId(), i, InputTypes.at(i), ChannelBufferSize, this);
+                Sources[i] = new TDqSource(Task.GetId(), i, InputTypes.at(i), ChannelBufferSize, this, NDq::FromProto(Task.GetValuePackerVersion()));
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();

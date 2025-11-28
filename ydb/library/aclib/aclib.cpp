@@ -189,7 +189,7 @@ bool TSecurityObject::CheckAccess(ui32 access, const TUserToken& user) const {
                 if (user.IsExist(ace.GetSID())) {
                     switch(static_cast<EAccessType>(ace.GetAccessType())) {
                     case EAccessType::Deny:
-                        if (access && ace.GetAccessRight() != 0)
+                        if (access & ace.GetAccessRight())
                             return false; // deny entries have precedence over allow entries
                         break;
                     case EAccessType::Allow:
@@ -513,7 +513,7 @@ TString TACL::ToString(const NACLibProto::TACE& ace) {
     str << ':';
     str << ace.GetSID();
     auto inh = ace.GetInheritanceType();
-    if (inh != (EInheritanceType::InheritContainer | EInheritanceType::InheritObject)) {
+    if (inh != EInheritanceType::DefaultInheritanceType) {
         str << ':';
         if (inh == EInheritanceType::InheritNone)
             str << '-';
@@ -587,6 +587,8 @@ ui32 TACL::SpecialRightsFromString(const TString& string) {
             result |= EAccessRights::GrantAccessRights;
         if (r == "ConnDB")
             result |= EAccessRights::ConnectDatabase;
+        if (r == "WUA")
+            result |= EAccessRights::WriteUserAttributes;
     }
     return result;
 }
@@ -668,7 +670,7 @@ void TACL::FromString(NACLibProto::TACE& ace, const TString& string) {
     auto end_pos = string.find(':', start_pos);
     ace.SetSID(string.substr(start_pos, end_pos == TString::npos ? end_pos : end_pos - start_pos));
     if (end_pos == TString::npos) {
-        ace.SetInheritanceType(EInheritanceType::InheritContainer | EInheritanceType::InheritObject);
+        ace.SetInheritanceType(EInheritanceType::DefaultInheritanceType);
         return;
     }
     ui32 inheritanceType = 0;

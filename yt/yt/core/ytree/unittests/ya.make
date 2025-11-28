@@ -5,15 +5,17 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 PROTO_NAMESPACE(yt)
 
 SRCS(
-    attributes_ut.cpp
     attribute_filter_ut.cpp
+    attributes_ut.cpp
+    complex_key_map.cpp
+    lazy_ypath_service_ut.cpp
+    options_ut.cpp
     resolver_ut.cpp
     serialize_ut.cpp
     service_combiner_ut.cpp
     size_ut.cpp
     text_yson_convert_ut.cpp
     tree_builder_ut.cpp
-    lazy_ypath_service_ut.cpp
     yson_schema_ut.cpp
     yson_struct_update_ut.cpp
     yson_struct_ut.cpp
@@ -30,6 +32,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 PEERDIR(
     yt/yt/core
     yt/yt/core/test_framework
+    yt/yt/client
 )
 
 REQUIREMENTS(

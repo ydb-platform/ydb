@@ -83,6 +83,10 @@ def set_env(key, value):
         f.write("\n")
 
 
+def del_env(key):
+    set_env(key, None)
+
+
 def tty():
     if os.isatty(1):
         return

@@ -53,4 +53,11 @@ NThreading::TFuture<std::optional<TChunkedBuffer>> TDqComputeStorage::GetInterna
     return future;
 }
 
+void TDqComputeStorage::ReportAlloc(ui64 bytes) {
+    Y_UNUSED(bytes);
+}
+void TDqComputeStorage::ReportFree(ui64 bytes) {
+    Y_UNUSED(bytes);
+}
+
 } // namespace NYql::NDq

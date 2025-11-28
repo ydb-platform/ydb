@@ -18,9 +18,6 @@ namespace NYT::NYson {
 class TYsonItem
 {
 public:
-    Y_FORCE_INLINE TYsonItem(const TYsonItem& other);
-    Y_FORCE_INLINE TYsonItem& operator =(const TYsonItem& other);
-
     static Y_FORCE_INLINE TYsonItem Simple(EYsonItemType type);
     static Y_FORCE_INLINE TYsonItem Boolean(bool data);
     static Y_FORCE_INLINE TYsonItem Int64(i64 data);
@@ -50,7 +47,8 @@ private:
     };
     union TData
     {
-        TData() {
+        TData()
+        {
             Zero(*this);
         }
 

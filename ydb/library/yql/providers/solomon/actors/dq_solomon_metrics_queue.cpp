@@ -13,6 +13,8 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/string/join.h>
+
 #define LOG_E(name, stream) \
     LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << stream)
 #define LOG_W(name, stream) \
@@ -36,7 +38,8 @@ public:
         enum {
             EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),  // Leave space for RetryQueue events
 
-            EvNextListingChunkReceived = EvBegin,
+            EvNextLabelsListingChunkReceived = EvBegin,
+            EvNextMetricsListingChunkReceived,
             EvRoundRobinStageTimeout,
             EvTransitToErrorState,
 
@@ -46,9 +49,17 @@ public:
             EvEnd <= EventSpaceEnd(NActors::TEvents::ES_PRIVATE),
             "expected EvEnd <= EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvNextListingChunkReceived : public NActors::TEventLocal<TEvNextListingChunkReceived, EvNextListingChunkReceived> {
+        struct TEvNextLabelsListingChunkReceived : public NActors::TEventLocal<TEvNextLabelsListingChunkReceived, EvNextLabelsListingChunkReceived> {
+            NSo::TSelectors Selectors;
+            NSo::TListMetricsLabelsResponse Response;
+            explicit TEvNextLabelsListingChunkReceived(NSo::TSelectors&& selectors, NSo::TListMetricsLabelsResponse&& response)
+                : Selectors(std::move(selectors))
+                , Response(std::move(response)) {}
+        };
+
+        struct TEvNextMetricsListingChunkReceived : public NActors::TEventLocal<TEvNextMetricsListingChunkReceived, EvNextMetricsListingChunkReceived> {
             NSo::TListMetricsResponse Response;
-            explicit TEvNextListingChunkReceived(NSo::TListMetricsResponse&& response)
+            explicit TEvNextMetricsListingChunkReceived(NSo::TListMetricsResponse&& response)
                 : Response(std::move(response)) {}
         };
 
@@ -65,17 +76,21 @@ public:
 
     TDqSolomonMetricsQueueActor(
         ui64 consumersCount,
-        ui64 pageSize,
-        ui64 prefetchSize,
-        ui64 batchCountLimit,
         TDqSolomonReadParams&& readParams,
+        bool enableSolomonClientPostApi,
+        ui64 batchCountLimit,
+        TDuration truePointsFindRange,
+        ui64 maxListingPageSize,
+        ui64 maxApiInflight,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
-        : CurrentPage(0)
-        , ConsumersCount(consumersCount)
-        , PageSize(pageSize)
-        , PrefetchSize(prefetchSize)
-        , BatchCountLimit(batchCountLimit)
+        : ConsumersCount(consumersCount)
         , ReadParams(std::move(readParams))
+        , EnableSolomonClientPostApi(enableSolomonClientPostApi)
+        , BatchCountLimit(batchCountLimit)
+        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - truePointsFindRange)
+        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + truePointsFindRange)
+        , MaxListingPageSize(maxListingPageSize)
+        , MaxApiInflight(maxApiInflight)
         , CredentialsProvider(credentialsProvider)
         , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
     {}
@@ -85,6 +100,11 @@ public:
 
         LOG_I("TDqSolomonMetricsQueueActor", "Bootstrap there are metrics to list, consumersCount=" << ConsumersCount);
         Become(&TDqSolomonMetricsQueueActor::ThereAreMetricsToListState);
+
+        NSo::TSelectors selectors;
+        NSo::ProtoToSelectors(ReadParams.Source.GetSelectors(), selectors);
+        PendingLabelRequests.push_back(selectors);
+        TryFetch();
     }
 
     STATEFN(ThereAreMetricsToListState) {
@@ -92,9 +112,9 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvSolomonProvider::TEvGetNextBatch, HandleGetNextBatch);
-                hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
+                hFunc(TEvPrivatePrivate::TEvNextLabelsListingChunkReceived, HandleNextLabelsListingChunkReceived);
+                hFunc(TEvPrivatePrivate::TEvNextMetricsListingChunkReceived, HandleNextMetricsListingChunkReceived);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
-                hFunc(TEvPrivatePrivate::TEvTransitToErrorState, HandleTransitToErrorState);
                 cFunc(NActors::TEvents::TSystem::Poison, HandlePoison);
                 default:
                     MaybeIssues = TStringBuilder{} << "An event with unknown type has been received: '" << etype << "'";
@@ -157,7 +177,6 @@ private:
         if (HasEnoughToSend()) {
             LOG_I("TDqSolomonMetricsQueueActor", "HandleGetNextBatch has enough metrics to send, trying to send them");
             TrySendMetrics(ev->Sender, ev->Get()->Record.GetTransportMeta());
-            TryPreFetch();
         } else {
             LOG_I("TDqSolomonMetricsQueueActor", "HandleGetNextBatch doesn't have enough to send, trying to fetch");
             ScheduleRequest(ev->Sender, ev->Get()->Record.GetTransportMeta());
@@ -165,22 +184,87 @@ private:
         }
     }
 
-    void HandleNextListingChunkReceived(TEvPrivatePrivate::TEvNextListingChunkReceived::TPtr& ev) {
-        YQL_ENSURE(ListingFuture.Defined());
-        ListingFuture = Nothing();
-        LOG_D("TDqSolomonMetricsQueueActor", "HandleNextListingChunkReceived");
-        if (SaveRetrievedResults(ev->Get()->Response)) {
-            AnswerPendingRequests(true);
-            if (!HasPendingRequests) {
-                LOG_D("TDqSolomonMetricsQueueActor", "HandleNextListingChunkReceived no pending requests. Trying to prefetch");
-                TryPreFetch();
-            } else {
-                LOG_D("TDqSolomonMetricsQueueActor", "HandleNextListingChunkReceived there are pending requests. Fetching more metrics");
-                TryFetch();
-            }
-        } else {
+    void HandleNextLabelsListingChunkReceived(TEvPrivatePrivate::TEvNextLabelsListingChunkReceived::TPtr& ev) {
+        LOG_D("TDqSolomonMetricsQueueActor", "HandleNextLabelsListingChunkReceived");
+        auto& batch = *ev->Get();
+        CurrentInflight--;
+        DownloadedBytes += batch.Response.DownloadedBytes;
+
+        if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
+            MaybeIssues = batch.Response.Error;
             TransitToErrorState();
+            return;
         }
+
+        auto listLabelsResult = batch.Response.Result;
+        if (listLabelsResult.TotalCount <= MaxListingPageSize) {
+            PendingListingRequests.push_back(batch.Selectors);
+        } else {
+            auto selectors = batch.Selectors;
+            auto& labels = listLabelsResult.Labels;
+            auto maxSizeLabelIt = std::max_element(labels.begin(), labels.end(),
+                [](const NSo::TLabelValues& a, const NSo::TLabelValues& b) {
+                    return std::make_pair(!a.Truncated, a.Values.size()) < std::make_pair(!b.Truncated, b.Values.size());
+                }
+            );
+
+            if (maxSizeLabelIt->Truncated) {
+                MaybeIssues = "couldn't list metrics, all label values are too big for listing";
+                TransitToErrorState();
+                return;
+            }
+
+            auto& label = *maxSizeLabelIt;
+
+            if (label.Values.empty()) {
+                return;
+            }
+
+            double metricsPerLabelValue = std::max<double>(1, listLabelsResult.TotalCount * 1.0 / label.Values.size());
+            ui64 batchSize = std::max<ui64>(1, MaxListingPageSize * 0.75 / metricsPerLabelValue);
+
+            if (!EnableSolomonClientPostApi) {
+                ui64 sumLength = 0;
+                for (const auto& value: label.Values) {
+                    sumLength += value.size();
+                }
+
+                double avgLength = std::max<double>(1.0, sumLength * 1.0 / label.Values.size());
+                batchSize = std::min<ui64>(batchSize, MaxHttpGetRequestSize * 0.5 / avgLength);
+            }
+
+            for (ui64 i = 0; i * batchSize < label.Values.size(); i++) {
+                auto batchFromIt = label.Values.begin() + i * batchSize;
+                auto batchToIt = label.Values.begin() + std::min<ui64>((i + 1) * batchSize, label.Values.size());
+
+                selectors[label.Name] = { "=", JoinRange("|", batchFromIt, batchToIt) };
+                PendingLabelRequests.push_back(selectors);
+            }
+            if (label.Absent) {
+                selectors[label.Name] = { "=", "-" };
+                PendingLabelRequests.push_back(selectors);
+            }
+            
+        }
+
+        while (TryFetch()) {}
+    }
+
+    void HandleNextMetricsListingChunkReceived(TEvPrivatePrivate::TEvNextMetricsListingChunkReceived::TPtr& ev) {
+        LOG_D("TDqSolomonMetricsQueueActor", "HandleNextMetricsListingChunkReceived");
+        auto& batch = *ev->Get();
+        CurrentInflight--;
+        DownloadedBytes += batch.Response.DownloadedBytes;
+
+        if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
+            MaybeIssues = batch.Response.Error;
+            TransitToErrorState();
+            return;
+        }
+
+        SaveRetrievedResults(batch.Response);
+        AnswerPendingRequests(true);
+        while (TryFetch()) {}
     }
 
     void HandleRoundRobinStageTimeout() {
@@ -189,11 +273,6 @@ private:
             RoundRobinStageFinished = true;
             AnswerPendingRequests();
         }
-    }
-
-    void HandleTransitToErrorState(TEvPrivatePrivate::TEvTransitToErrorState::TPtr& ev) {
-        MaybeIssues = ev->Get()->Issues;
-        TransitToErrorState();
     }
 
     void HandlePoison() {
@@ -225,75 +304,73 @@ private:
         Become(&TDqSolomonMetricsQueueActor::AnErrorOccurredState);
     }
 
-    bool SaveRetrievedResults(const NSo::TListMetricsResponse& response) {
+    void SaveRetrievedResults(const NSo::TListMetricsResponse& response) {
         LOG_T("TDqSolomonMetricsQueueActor", "SaveRetrievedResults");
-        if (response.Status != NSo::EStatus::STATUS_OK) {
-            MaybeIssues = response.Error;
-            return false;
-        }
-
-        if (CurrentPage >= response.Result.PagesCount) {
-            LOG_I("TDqSolomonMetricsQueueActor", "SaveRetrievedResults no more metrics to list");
-            HasMoreMetrics = false;
-            Become(&TDqSolomonMetricsQueueActor::NoMoreMetricsState);
-        }
 
         LOG_D("TDqSolomonMetricsQueueActor", "SaveRetrievedResults saving: " << response.Result.Metrics.size() << " metrics");
         for (const auto& metric : response.Result.Metrics) {
             NSo::MetricQueue::TMetric protoMetric;
             protoMetric.SetType(metric.Type);
-            protoMetric.MutableLabels()->insert(metric.Labels.begin(), metric.Labels.end());
+            NSo::SelectorsToProto(metric.Selectors, *protoMetric.MutableSelectors());
             Metrics.emplace_back(std::move(protoMetric));
         }
-        return true;
-    }
-
-    bool TryPreFetch() {
-        if (Metrics.size() < PrefetchSize) {
-            return TryFetch();
-        }
-        return false;
     }
 
     bool TryFetch() {
-        if (FetchingInProgress()) {
-            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch fetching already in progress");
-            return true;
+        if (CurrentInflight >= MaxApiInflight) {
+            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch can't start fetching, have " << CurrentInflight << " inflight requests, current max: " << MaxApiInflight);
+            return false;
         }
 
-        if (HasMoreMetrics) {
-            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch fetching metrics");
-            Fetch();
-            return true;
+        if (PendingLabelRequests.empty() && PendingListingRequests.empty()) {
+            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch doesn't have anything to fetch yet, current inflight: " << CurrentInflight);
+
+            if (!CurrentInflight) {
+                Become(&TDqSolomonMetricsQueueActor::NoMoreMetricsState);
+                AnswerPendingRequests();
+            }
+            return false;
         }
 
-        LOG_D("TDqSolomonMetricsQueueActor", "TryFetch couldn't start fetching");
-        AnswerPendingRequests();
-        return false;
+        LOG_D("TDqSolomonMetricsQueueActor", "TryFetch fetching metrics");
+        Fetch();
+        return true;
     }
 
     void Fetch() {
+        YQL_ENSURE(!PendingLabelRequests.empty() || !PendingListingRequests.empty());
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-        std::map<TString, TString> selectors(ReadParams.Source.GetSelectors().begin(), ReadParams.Source.GetSelectors().end());
-        ListingFuture = 
-            SolomonClient
-                ->ListMetrics(selectors, PageSize, CurrentPage++)
-                .Subscribe([actorSystem, selfId = SelfId()](
-                                NThreading::TFuture<NSo::TListMetricsResponse> future) -> void {
-                    try {
-                        actorSystem->Send(
-                            selfId, 
-                            new TEvPrivatePrivate::TEvNextListingChunkReceived(future.ExtractValue()));
-                    } catch (const std::exception& e) {
-                        actorSystem->Send(
-                            selfId,
-                            new TEvPrivatePrivate::TEvTransitToErrorState(TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"));
-                    }
-                });
-    }
+        CurrentInflight++;
+        
+        if (!PendingLabelRequests.empty()) {
+            auto selectors = PendingLabelRequests.back();
+            PendingLabelRequests.pop_back();
+            
+            auto labelsListingFuture = SolomonClient->ListMetricsLabels(selectors, TrueRangeFrom, TrueRangeTo);
+            labelsListingFuture.Subscribe([actorSystem, selectors = std::move(selectors), selfId = SelfId()]
+                (NThreading::TFuture<NSo::TListMetricsLabelsResponse> future) mutable {
+                actorSystem->Send(
+                    selfId, 
+                    new TEvPrivatePrivate::TEvNextLabelsListingChunkReceived(std::move(selectors), future.ExtractValue()));
+            });
 
-    bool FetchingInProgress() const {
-        return ListingFuture.Defined();
+            return;
+        }
+        
+        if (!PendingListingRequests.empty()) {
+            auto selectors = PendingListingRequests.back();
+            PendingListingRequests.pop_back();
+
+            auto metricsListingFuture = SolomonClient->ListMetrics(selectors, TrueRangeFrom, TrueRangeTo);
+            metricsListingFuture.Subscribe([actorSystem, selfId = SelfId()]
+                (NThreading::TFuture<NSo::TListMetricsResponse> future) {
+                actorSystem->Send(
+                    selfId, 
+                    new TEvPrivatePrivate::TEvNextMetricsListingChunkReceived(future.ExtractValue()));
+            });
+
+            return;
+        }
     }
 
     void AnswerPendingRequests(bool earlyStop = false) {
@@ -344,7 +421,7 @@ private:
     }
     
     bool HasNoMoreItems() const {
-        return !HasMoreMetrics && Metrics.empty();
+        return CurrentInflight == 0 && PendingLabelRequests.empty() && PendingListingRequests.empty() && Metrics.empty();
     }
 
     void TrySendMetrics(const NActors::TActorId& consumer, const NDqProto::TMessageTransportMeta& transportMeta) {
@@ -368,7 +445,8 @@ private:
         }
 
         LOG_D("TDqSolomonMetricsQueueActor", "SendMetrics Sending " << result.size() << " metrics to consumer with id " << consumer);
-        Send(consumer, new TEvSolomonProvider::TEvMetricsBatch(std::move(result), HasNoMoreItems(), transportMeta));
+        Send(consumer, new TEvSolomonProvider::TEvMetricsBatch(std::move(result), HasNoMoreItems(), DownloadedBytes, transportMeta));
+        DownloadedBytes = 0;
 
         if (HasNoMoreItems()) {
             TryFinish(consumer, transportMeta.GetSeqNo());
@@ -402,27 +480,32 @@ private:
     }
 
 private:
-    ui64 CurrentPage;
     ui64 ProcessedMetrics = 0;
     ui64 ConsumersCount;
-    bool HasMoreMetrics = true;
     bool IsRoundRobinFinishScheduled = false;
     bool RoundRobinStageFinished = false;
+    ui64 CurrentInflight = 0;
     THashSet<NActors::TActorId> StartedConsumers;
     THashSet<NActors::TActorId> UpdatedConsumers;
     THashSet<NActors::TActorId> FinishedConsumers;
     THashMap<NActors::TActorId, ui64> FinishingConsumerToLastSeqNo;
 
-    TMaybe<NThreading::TFuture<NSo::TListMetricsResponse>> ListingFuture;
     bool HasPendingRequests;
     THashMap<NActors::TActorId, TDeque<NDqProto::TMessageTransportMeta>> PendingRequests;
+    std::vector<NSo::TSelectors> PendingLabelRequests;
+    std::vector<NSo::TSelectors> PendingListingRequests;
     std::vector<NSo::MetricQueue::TMetric> Metrics;
+    ui64 DownloadedBytes = 0;
     TMaybe<TString> MaybeIssues;
     
-    ui64 PageSize;
-    ui64 PrefetchSize;
-    ui64 BatchCountLimit;
     const TDqSolomonReadParams ReadParams;
+    const bool EnableSolomonClientPostApi;
+    const ui64 BatchCountLimit;
+    const TInstant TrueRangeFrom;
+    const TInstant TrueRangeTo;
+    const ui64 MaxListingPageSize;
+    const ui64 MaxApiInflight;
+    const ui64 MaxHttpGetRequestSize = 4096;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
     const NSo::ISolomonAccessorClient::TPtr SolomonClient;
 
@@ -440,14 +523,9 @@ NActors::IActor* CreateSolomonMetricsQueueActor(
 {
     const auto& settings = readParams.Source.settings();
 
-    ui64 pageSize = 0;
-    if (auto it = settings.find("metricsQueuePageSize"); it != settings.end()) {
-        pageSize = FromString<ui64>(it->second);
-    }
-
-    ui64 prefetchSize = 0;
-    if (auto it = settings.find("metricsQueuePrefetchSize"); it != settings.end()) {
-        prefetchSize = FromString<ui64>(it->second);
+    bool enableSolomonClientPostApi = false;
+    if (auto it = settings.find("enableSolomonClientPostApi"); it != settings.end()) {
+        enableSolomonClientPostApi = FromString<bool>(it->second);
     }
 
     ui64 batchCountLimit = 0;
@@ -455,7 +533,22 @@ NActors::IActor* CreateSolomonMetricsQueueActor(
         batchCountLimit = FromString<ui64>(it->second);
     }
 
-    return new TDqSolomonMetricsQueueActor(consumersCount, pageSize, prefetchSize, batchCountLimit, std::move(readParams), credentialsProvider);
+    ui64 truePointsFindRange = 301;
+    if (auto it = settings.find("truePointsFindRange"); it != settings.end()) {
+        truePointsFindRange = FromString<ui64>(it->second);
+    }
+
+    ui64 maxListingPageSize = 20000;
+    if (auto it = settings.find("maxListingPageSize"); it != settings.end()) {
+        maxListingPageSize = FromString<ui64>(it->second);
+    }
+
+    ui64 maxInflight = 40;
+    if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
+        maxInflight = FromString<ui64>(it->second);
+    }
+
+    return new TDqSolomonMetricsQueueActor(consumersCount, std::move(readParams), enableSolomonClientPostApi, batchCountLimit, TDuration::Seconds(truePointsFindRange), maxListingPageSize, maxInflight, credentialsProvider);
 }
 
 } // namespace NYql::NDq

@@ -7,9 +7,9 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/mind/hive/hive.h>
-#include <ydb/core/persqueue/config/config.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/config.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -176,19 +176,20 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         return nullptr;
     }
 
-    const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
-    if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
-        auto cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
-        tabletConfig.SetYcCloudId(cloudId);
+    const auto& attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
+    if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
+        tabletConfig.SetYcCloudId(it->second);
     }
-    if (dbRootEl->UserAttrs->Attrs.contains("folder_id")) {
-        auto folderId = dbRootEl->UserAttrs->Attrs.at("folder_id");
-        tabletConfig.SetYcFolderId(folderId);
+    if (auto it = attrs.find("folder_id"); it != attrs.end()) {
+        tabletConfig.SetYcFolderId(it->second);
     }
-    if (dbRootEl->UserAttrs->Attrs.contains("database_id")) {
-        auto databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
-        tabletConfig.SetYdbDatabaseId(databaseId);
+    if (auto it = attrs.find("database_id"); it != attrs.end()) {
+        tabletConfig.SetYdbDatabaseId(it->second);
     }
+    if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
+        tabletConfig.SetMonitoringProjectId(it->second);
+    }
+
     const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
     tabletConfig.SetYdbDatabasePath(databasePath);
 

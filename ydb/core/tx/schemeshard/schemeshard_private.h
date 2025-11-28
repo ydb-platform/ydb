@@ -365,11 +365,15 @@ namespace TEvPrivate {
 
     struct TEvContinuousBackupCleanerResult : public NActors::TEventLocal<TEvContinuousBackupCleanerResult, EvContinuousBackupCleanerResult> {
     public:
-        TEvContinuousBackupCleanerResult(bool success, const TString& error = "")
-            : Success(success)
+        TEvContinuousBackupCleanerResult(ui64 backupId, TPathId item, bool success, const TString& error = "")
+            : BackupId(backupId)
+            , Item(item)
+            , Success(success)
             , Error(error)
         {}
 
+        const ui64 BackupId = 0;
+        const TPathId Item;
         const bool Success = false;
         const TString Error;
     };

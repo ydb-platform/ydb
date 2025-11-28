@@ -134,7 +134,7 @@ constexpr EValueType WireTypeToValueType()
     }
 }
 
-template<EWireType wireType, bool isOptional>
+template <EWireType wireType, bool isOptional>
 void ConvertSimpleValueImpl(const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext* context)
 {
     if constexpr (isOptional) {
@@ -327,7 +327,7 @@ private:
 };
 
 TUnversionedValueToSkiffConverter CreateMissingCompositeValueConverter(TString name) {
-    return [name=std::move(name)] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext*) {
+    return [name = std::move(name)] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext*) {
         if (value.Type != EValueType::Null) {
             THROW_ERROR_EXCEPTION("Cannot represent nonnull value of column %Qv absent in schema as composite Skiff value",
                     name);
@@ -389,8 +389,7 @@ TUnversionedValueToSkiffConverter CreateTzValueConverter(const std::shared_ptr<T
                 ? ConvertSimpleValueImpl<EWireType::String32, false>
                 : ConvertSimpleValueImpl<EWireType::String32, true>;
 
-        case EWireType::Tuple:
-        {
+        case EWireType::Tuple: {
             const auto& children = skiffSchema->GetChildren();
             YT_VERIFY(children.size() == 2);
             const auto innerWireType = children[0]->GetWireType();
@@ -520,7 +519,7 @@ TUnversionedValueToSkiffConverter CreateComplexValueConverter(
     TYsonToSkiffConverterConfig config;
     config.AllowOmitTopLevelOptional = isSparse;
     auto ysonToSkiff = CreateYsonToSkiffConverter(descriptor, skiffSchema, config);
-    return [ysonToSkiff=ysonToSkiff] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* skiffWriter, TWriteContext* /*context*/) {
+    return [ysonToSkiff = ysonToSkiff] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* skiffWriter, TWriteContext* /*context*/) {
         TMemoryInput input;
         if (value.Type == EValueType::Any || value.Type == EValueType::Composite) {
             // NB. value.Type might be EValueType::Any if user has used override_intermediate_table_schema
@@ -664,6 +663,7 @@ struct TSkiffWriterTableDescription
     int KeySwitchFieldIndex = -1;
     int RangeIndexFieldIndex = -1;
     int RowIndexFieldIndex = -1;
+    int RemainingRowBytesFieldIndex = -1;
     ERowRangeIndexMode RangeIndexMode = ERowRangeIndexMode::Incremental;
     ERowRangeIndexMode RowIndexMode = ERowRangeIndexMode::Incremental;
     bool HasSparseColumns = false;
@@ -722,6 +722,8 @@ public:
 
             writerTableDescription.RangeIndexFieldIndex = MissingSystemColumn;
             writerTableDescription.RangeIndexMode = commonTableDescription.RangeIndexMode;
+
+            writerTableDescription.RemainingRowBytesFieldIndex = commonTableDescription.RemainingRowBytesFieldIndex.value_or(MissingSystemColumn);
 
             auto& knownFields = writerTableDescription.KnownFields;
 
@@ -944,17 +946,22 @@ private:
             const auto keySwitchFieldIndex = TableDescriptionList_[tableIndex].KeySwitchFieldIndex;
             const auto rowIndexFieldIndex = TableDescriptionList_[tableIndex].RowIndexFieldIndex;
             const auto rangeIndexFieldIndex = TableDescriptionList_[tableIndex].RangeIndexFieldIndex;
+            const auto remainingRowBytesFieldIndex = TableDescriptionList_[tableIndex].RemainingRowBytesFieldIndex;
 
             const bool isLastRowInBatch = rowIndexInBatch + 1 == rowCount;
 
             constexpr ui16 missingColumnPlaceholder = -1;
             constexpr ui16 keySwitchColumnPlaceholder = -2;
+            constexpr ui16 remainigRowBytesColumnPlaceholder = -3;
             DenseIndexes_.assign(denseFields.size(), missingColumnPlaceholder);
             SparseFields_.clear();
             OtherValueIndexes_.clear();
 
             if (keySwitchFieldIndex != MissingSystemColumn) {
                 DenseIndexes_[keySwitchFieldIndex] = keySwitchColumnPlaceholder;
+            }
+            if (remainingRowBytesFieldIndex != MissingSystemColumn) {
+                DenseIndexes_[remainingRowBytesFieldIndex] = remainigRowBytesColumnPlaceholder;
             }
 
             ui16 rowIndexValueId = missingColumnPlaceholder;
@@ -1019,7 +1026,8 @@ private:
             }
 
             SkiffWriter_->WriteVariant16Tag(tableIndex);
-            for (size_t idx = 0; idx < denseFields.size(); ++idx) {
+
+            for (int idx = 0; idx < std::ssize(denseFields); ++idx) {
                 const auto& fieldInfo = denseFields[idx];
                 const auto valueIndex = DenseIndexes_[idx];
 
@@ -1032,6 +1040,9 @@ private:
                         break;
                     case keySwitchColumnPlaceholder:
                         SkiffWriter_->WriteBoolean(CheckKeySwitch(row, isLastRowInBatch));
+                        break;
+                    case remainigRowBytesColumnPlaceholder:
+                        SkiffWriter_->StartBlob();
                         break;
                     default: {
                         const auto& value = row[valueIndex];
@@ -1071,6 +1082,11 @@ private:
                 writer.OnEndMap();
                 SkiffWriter_->WriteYson32(TStringBuf(YsonBuffer_.Data(), YsonBuffer_.Size()));
             }
+
+            if (remainingRowBytesFieldIndex != MissingSystemColumn) {
+                SkiffWriter_->FinishBlob();
+            }
+
             SkiffWriter_->Flush();
             TryFlushBuffer(false);
         }

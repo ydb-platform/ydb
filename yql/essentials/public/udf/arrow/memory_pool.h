@@ -17,5 +17,5 @@ inline arrow::MemoryPool* GetYqlMemoryPool() {
 }
 #endif
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

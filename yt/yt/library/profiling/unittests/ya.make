@@ -14,6 +14,7 @@ SRCS(
     solomon_ut.cpp
     tag_ut.cpp
     cube_ut.cpp
+    encoder_ut.cpp
     exporter_ut.cpp
 )
 

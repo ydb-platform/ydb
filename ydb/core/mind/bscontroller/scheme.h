@@ -4,6 +4,7 @@
 #include "mood.h"
 
 namespace NKikimr {
+
 namespace NBsController {
 
 struct Schema : NIceDb::Schema {
@@ -45,11 +46,12 @@ struct Schema : NIceDb::Schema {
         struct ShredComplete : Column<19, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
         struct MaintenanceStatus : Column<20, NScheme::NTypeIds::Uint8> { using Type = NKikimrBlobStorage::TMaintenanceStatus::E; static constexpr Type Default = NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST; };
         struct InferPDiskSlotCountFromUnitSize : Column<21, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
+        struct InferPDiskSlotCountMax : Column<22, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
 
         using TKey = TableKey<NodeID, PDiskID>; // order is important
         using TColumns = TableColumns<NodeID, PDiskID, Path, Category, Guid, SharedWithOs, ReadCentric, NextVSlotId,
               Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus, Mood,
-              ShredComplete, MaintenanceStatus, InferPDiskSlotCountFromUnitSize>;
+              ShredComplete, MaintenanceStatus, InferPDiskSlotCountFromUnitSize, InferPDiskSlotCountMax>;
     };
 
     struct Group : Table<4> {
@@ -69,7 +71,7 @@ struct Schema : NIceDb::Schema {
         struct SeenOperational : Column<14, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct DecommitStatus : Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TGroupDecommitStatus::E; };
         struct GroupSizeInUnits : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
-        struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; };
+        struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; static constexpr Type Default = TBridgePileId(); };
 
         // VirtualGroup management code
         struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group
@@ -247,9 +249,11 @@ struct Schema : NIceDb::Schema {
         struct Kind : Column<6, NScheme::NTypeIds::Uint64> {};
         struct PDiskConfig : Column<7, NScheme::NTypeIds::String> {};
         struct InferPDiskSlotCountFromUnitSize : Column<8, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
+        struct InferPDiskSlotCountMax : Column<9, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
 
         using TKey = TableKey<HostConfigId, Path>;
-        using TColumns = TableColumns<HostConfigId, Path, TypeCol, SharedWithOs, ReadCentric, Kind, PDiskConfig, InferPDiskSlotCountFromUnitSize>;
+        using TColumns = TableColumns<HostConfigId, Path, TypeCol, SharedWithOs, ReadCentric, Kind, PDiskConfig, InferPDiskSlotCountFromUnitSize,
+            InferPDiskSlotCountMax>;
     };
 
     struct BoxHostV2 : Table<105> {
@@ -443,6 +447,18 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<GroupId, HiveId, BlobDepotId>;
     };
 
+    struct BridgeSyncState : Table<132> {
+        struct TargetGroupId : Column<1, NScheme::NTypeIds::Uint32> {}; // PK
+        struct Stage : Column<2, NScheme::NTypeIds::Uint32> { using Type = NKikimrBridge::TGroupState::EStage; };
+        struct LastError : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct LastErrorTimestamp : Column<4, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+        struct FirstErrorTimestamp : Column<5, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+        struct ErrorCount : Column<6, NScheme::NTypeIds::Uint32> {};
+
+        using TKey = TableKey<TargetGroupId>;
+        using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp, ErrorCount>;
+    };
+
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -466,7 +482,8 @@ struct Schema : NIceDb::Schema {
         MigrationEntry,
         ScrubState,
         DriveSerial,
-        BlobDepotDeleteQueue
+        BlobDepotDeleteQueue,
+        BridgeSyncState
     >;
 
     using TSettings = SchemaSettings<

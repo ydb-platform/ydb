@@ -8,28 +8,54 @@ namespace NSQLTranslationV1 {
 
 namespace {
 
-class TParser : public NSQLTranslation::IParser {
+class TParser: public NSQLTranslation::IParser {
 public:
+    explicit TParser(bool isAmbuguityError, bool isAmbiguityDebugging)
+        : IsAmbiguityError_(isAmbuguityError)
+        , IsAmbiguityDebugging_(isAmbiguityDebugging)
+    {
+    }
+
     google::protobuf::Message* Parse(
-    const TString& query, const TString& queryName, NProtoAST::IErrorCollector& err,
+        const TString& query, const TString& queryName, NProtoAST::IErrorCollector& err,
         google::protobuf::Arena* arena) final {
         YQL_ENSURE(arena);
-        NProtoAST::TProtoASTBuilder4<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder4<
+            NALPAnsiAntlr4::SQLv1Antlr4Parser,
+            NALPAnsiAntlr4::SQLv1Antlr4Lexer>
+            builder(query, queryName, arena, IsAmbiguityError_, IsAmbiguityDebugging_);
         return builder.BuildAST(err);
     }
+
+private:
+    bool IsAmbiguityError_;
+    bool IsAmbiguityDebugging_;
 };
 
 class TFactory: public NSQLTranslation::IParserFactory {
 public:
-    std::unique_ptr<NSQLTranslation::IParser> MakeParser() const final {
-        return std::make_unique<TParser>();
+    explicit TFactory(bool isAmbuguityError, bool isAmbiguityDebugging)
+        : IsAmbiguityError_(isAmbuguityError)
+        , IsAmbiguityDebugging_(isAmbiguityDebugging)
+    {
     }
+
+    std::unique_ptr<NSQLTranslation::IParser> MakeParser() const final {
+        return std::make_unique<TParser>(IsAmbiguityError_, IsAmbiguityDebugging_);
+    }
+
+private:
+    bool IsAmbiguityError_;
+    bool IsAmbiguityDebugging_;
 };
 
+} // namespace
+
+NSQLTranslation::TParserFactoryPtr MakeAntlr4AnsiParserFactory(
+    bool isAmbiguityError,
+    bool isAmbiguityDebugging)
+{
+    return MakeIntrusive<TFactory>(isAmbiguityError, isAmbiguityDebugging);
 }
 
-NSQLTranslation::TParserFactoryPtr MakeAntlr4AnsiParserFactory() {
-    return MakeIntrusive<TFactory>();
-}
-
-}
+} // namespace NSQLTranslationV1

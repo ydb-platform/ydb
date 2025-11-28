@@ -1,13 +1,15 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/plain_status/status.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
 #include <util/string/cast.h>
 
 #include <jwt-cpp/jwt.h>
+
+using namespace std::chrono_literals;
 
 namespace NYdb::inline Dev {
 
@@ -97,7 +99,7 @@ TLoginCredentialsProvider::TLoginCredentialsProvider(std::weak_ptr<ICoreFacility
 
             return true;
         };
-        strongFacility->AddPeriodicTask(std::move(periodicTask), TDuration::Minutes(1));
+        strongFacility->AddPeriodicTask(std::move(periodicTask), 1min);
     }
 }
 
@@ -137,7 +139,7 @@ void TLoginCredentialsProvider::RequestToken() {
         request.set_user(TStringType{Params_.User});
         request.set_password(TStringType{Params_.Password});
         TRpcRequestSettings rpcSettings;
-        rpcSettings.ClientTimeout = TDuration::Seconds(60);
+        rpcSettings.Deadline = TDeadline::AfterDuration(60s);
 
         TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<Ydb::Auth::V1::AuthService, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>(
             strongFacility, std::move(request), std::move(responseCb), &Ydb::Auth::V1::AuthService::Stub::AsyncLogin,

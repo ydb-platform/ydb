@@ -1,5 +1,6 @@
 #include "table.h"
 #include <util/string/join.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 namespace NKikimr::NFormats {
 
@@ -14,19 +15,32 @@ arrow::Result<TArrowCSV> TArrowCSVTable::Create(const std::vector<NYdb::NTable::
             errors.emplace_back("column " + column.Name + ": " + arrowType.status().ToString());
             continue;
         }
+
         const auto csvArrowType = GetCSVArrowType(column.Type);
         if (!csvArrowType.ok()) {
             errors.emplace_back("column " + column.Name + ": " + csvArrowType.status().ToString());
             continue;
         }
-        convertedColumns.emplace_back(TColumnInfo{TString{column.Name}, *arrowType, *csvArrowType});
+
+        auto tp = ExtractType(column.Type);
+        TColumnInfo columnInfo{TString{column.Name}, *arrowType, *csvArrowType};
+        if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Decimal) {
+            columnInfo.Precision = tp.GetDecimal().Precision;
+            columnInfo.Scale = tp.GetDecimal().Scale;
+        } else if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Primitive && tp.GetPrimitive() == NYdb::EPrimitiveType::Bool) {
+            columnInfo.IsBool = true;
+        }
+
+        convertedColumns.emplace_back(columnInfo);
         if (NYdb::TTypeParser(column.Type).GetKind() != NYdb::TTypeParser::ETypeKind::Optional || column.NotNull.value_or(false)) {
             notNullColumns.emplace(column.Name);
         }
     }
+
     if (!errors.empty()) {
         return arrow::Status::TypeError(ErrorPrefix() + "columns errors: " + JoinSeq("; ", errors));
     }
+
     return TArrowCSVTable(convertedColumns, header, notNullColumns);
 }
 
@@ -35,6 +49,7 @@ NYdb::TTypeParser TArrowCSVTable::ExtractType(const NYdb::TType& type) {
     if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
         tp.OpenOptional();
     }
+
     return std::move(tp);
 }
 
@@ -42,11 +57,11 @@ arrow::Result<std::shared_ptr<arrow::DataType>> TArrowCSVTable::GetArrowType(con
     auto tp = ExtractType(type);
     switch (tp.GetKind()) {
     case NYdb::TTypeParser::ETypeKind::Decimal:
-        return arrow::decimal(tp.GetDecimal().Precision, tp.GetDecimal().Scale);
+        return std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE);
     case NYdb::TTypeParser::ETypeKind::Primitive:
         switch (tp.GetPrimitive()) {
             case NYdb::EPrimitiveType::Bool:
-                return arrow::boolean();
+                return arrow::uint8();
             case NYdb::EPrimitiveType::Int8:
                 return arrow::int8();
             case NYdb::EPrimitiveType::Uint8:
@@ -114,6 +129,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> TArrowCSVTable::GetCSVArrowType(
             break;
         }
     }
+
     return GetArrowType(type);
 }
 

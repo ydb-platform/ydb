@@ -50,11 +50,35 @@ def build_nm_bundle_path(p):
     return os.path.join(p, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME)
 
 
-def build_nm_store_path(moddir: str) -> str:
-    nots_store_path = os.getenv("NOTS_STORE_PATH", os.path.join(home_dir(), ".nots"))
-    build_path = os.path.join(nots_store_path, "nm_store", moddir)
+def build_nots_path(build_root: str) -> str:
+    home_nots = os.getenv("NOTS_STORE_PATH", os.path.join(home_dir(), ".nots"))
+    build_nots = os.path.join(build_root, ".nots")
 
-    return build_path
+    try:
+        if not os.path.exists(home_nots):
+            os.makedirs(home_nots)
+        if not os.path.exists(build_nots):
+            os.symlink(home_nots, build_nots)
+    except (OSError, RuntimeError):
+        os.makedirs(build_nots, exist_ok=True)
+
+    return build_nots
+
+
+def build_nm_store_path(build_root: str, moddir: str) -> str:
+    return os.path.join(build_nots_path(build_root), "nm_store", moddir)
+
+
+def build_vs_store_path(build_root: str, moddir: str) -> str:
+    return os.path.join(build_nots_path(build_root), "vm_store", moddir)
+
+
+def build_traces_store_path(build_root: str, moddir: str) -> str:
+    return os.path.join(build_nots_path(build_root), "traces", moddir)
+
+
+def build_pnpm_store_path(build_root: str) -> str:
+    return os.path.join(build_nots_path(build_root), "pnpm_store")
 
 
 def extract_package_name_from_path(p):

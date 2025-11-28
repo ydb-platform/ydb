@@ -15,7 +15,7 @@ def post_install(self):
 boost_config = NixSourceProject(
     nixattr="boost_config",
     arcdir=boost.make_arcdir("config"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/**/*.hpp",
     ],

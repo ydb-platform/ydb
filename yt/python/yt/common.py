@@ -5,8 +5,6 @@ except ImportError:
     from six import iteritems, PY3, text_type, binary_type, string_types
     from six.moves import map as imap
 
-import yt.json_wrapper as json
-
 try:
     from library.python.prctl import prctl
 except ImportError:
@@ -31,6 +29,8 @@ import ctypes
 import errno
 import functools
 import inspect
+# Intentionally use python-native json module because custom JSONEncoder is required.
+import json
 import os
 import re
 import signal
@@ -49,6 +49,8 @@ YT_DATETIME_FORMAT_STRING = "%Y-%m-%dT%H:%M:%S.%fZ"
 YT_NULL_TRANSACTION_ID = "0-0-0-0"
 
 _T = typing.TypeVar('_T')
+
+BYTES_PRINTABLE = set(bytes(string.printable, "ascii"))
 
 
 # Deprecation stuff.
@@ -267,6 +269,10 @@ class YtError(Exception):
         """Rpc unavailable."""
         return self.contains_code(105)
 
+    def is_proxy_banned(self):
+        """Proxy is banned."""
+        return self.contains_code(2100)
+
     def is_rpc_response_memory_pressure(self):
         """Rpc response memory pressure."""
         return self.contains_code(122)
@@ -319,6 +325,10 @@ class YtError(Exception):
         """Tablet is in intermediate state."""
         # TODO(ifsmirnov) migrate to error code, YT-10993
         return self.contains_code(1744) or self._matches_regexp("Tablet .* is in state .*")
+
+    def is_hunk_tablet_store_toggle_conflict(self):
+        """Hunk tablet store toggle conflict."""
+        return self.contains_code(1745)
 
     def is_no_such_tablet(self):
         """No such tablet."""
@@ -377,6 +387,14 @@ class YtError(Exception):
     def is_backup_checkpoint_rejected(self):
         """Backup checkpoint rejected."""
         return self.contains_code(1733)
+
+    def is_sorting_order_violated(self):
+        """Sort order violation."""
+        return self.contains_code(301)
+
+    def is_command_not_supported(self):
+        """Command is not supported/Command is not supported by api."""
+        return self.contains_text("is not supported")
 
 
 class YtResponseError(YtError):
@@ -447,10 +465,29 @@ def _pretty_format_escape(value):
         return "".join(imap(escape, value))
 
 
+def _pretty_format_bytes(value):
+    def escape(byte):
+        if byte in BYTES_PRINTABLE:
+            return chr(byte)
+        return "\\x{0:02x}".format(byte)
+
+    try:
+        return value.decode("utf-8")
+    except UnicodeDecodeError:
+        return "".join(imap(escape, value))
+
+
 def _pretty_format_attribute(name, value, attribute_length_limit):
     name = to_native_str(name)
     if isinstance(value, PrettyPrintableDict):
-        value = json.dumps(value, indent=2)
+        class BytesEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, bytes):
+                    return _pretty_format_bytes(obj)
+                else:
+                    return super().default(obj)
+
+        value = json.dumps(value, indent=2, cls=BytesEncoder)
         value = value.replace("\n", "\n" + " " * (15 + 1 + 4))
     else:
         # YsonStringProxy attribute formatting.
@@ -853,21 +890,22 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
     if ignore_exceptions:
         def check_predicate():
             try:
-                return predicate(), None
+                return predicate(), None, None
             # Do not catch BaseException because pytest exceptions are inherited from it
             # pytest.fail raises exception inherited from BaseException.
             except Exception as ex:
-                return False, ex
+                ex_traceback = sys.exc_info()[2]
+                return False, ex, ex_traceback
     else:
         def check_predicate():
-            return predicate(), None
+            return predicate(), None, None
 
     if timeout is None:
         if iter is None:
             iter = 100
         index = 0
         while index < iter:
-            result, last_exception = check_predicate()
+            result, last_exception, last_exception_traceback = check_predicate()
             if result:
                 return
             index += 1
@@ -875,7 +913,7 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
     else:
         start_time = datetime.datetime.now()
         while datetime.datetime.now() - start_time < datetime.timedelta(seconds=timeout):
-            result, last_exception = check_predicate()
+            result, last_exception, last_exception_traceback = check_predicate()
             if result:
                 return
             time.sleep(sleep_backoff)
@@ -889,4 +927,9 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
     if last_exception is not None:
         error_message += f", exception = {last_exception}"
     error_message += ")"
-    raise WaitFailed(error_message)
+
+    ex = WaitFailed(error_message)
+    if last_exception_traceback is None:
+        raise ex
+    else:
+        raise ex.with_traceback(last_exception_traceback)

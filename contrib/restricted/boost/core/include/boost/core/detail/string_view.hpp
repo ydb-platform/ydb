@@ -34,6 +34,9 @@
 #if !defined(BOOST_NO_CXX20_HDR_CONCEPTS) // std::common_reference_with
 # include <type_traits>
 #endif
+#if !defined(BOOST_NO_CXX20_HDR_FORMAT)
+# include <format> // std::formatter
+#endif
 
 namespace boost
 {
@@ -1257,6 +1260,17 @@ struct std::basic_common_reference<
     Q1, Q2>
 {
     using type = boost::core::basic_string_view<Ch>;
+};
+
+#endif
+
+// std::format support
+
+#if !defined(BOOST_NO_CXX20_HDR_FORMAT)
+
+template<class Ch, class Ch2>
+struct std::formatter<boost::core::basic_string_view<Ch>, Ch2>: std::formatter<std::basic_string_view<Ch>, Ch2>
+{
 };
 
 #endif

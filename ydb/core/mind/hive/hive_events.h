@@ -89,9 +89,9 @@ struct TEvPrivate {
 
     struct TEvRestartComplete : TEventLocal<TEvRestartComplete, EvRestartComplete> {
         TFullTabletId TabletId;
-        TStringBuf Status;
+        TString Status;
 
-        TEvRestartComplete(TFullTabletId tabletId, TStringBuf status)
+        TEvRestartComplete(TFullTabletId tabletId, const TString& status)
             : TabletId(tabletId)
             , Status(status)
         {}

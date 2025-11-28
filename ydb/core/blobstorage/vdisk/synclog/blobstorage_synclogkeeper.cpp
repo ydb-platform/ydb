@@ -2,12 +2,14 @@
 #include "blobstorage_synclogkeeper_state.h"
 #include "blobstorage_synclog.h"
 #include "blobstorage_synclog_private_events.h"
+#include "blobstorage_synclog_public_events.h"
 
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 #include <ydb/core/blobstorage/vdisk/common/circlebufstream.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 
 using namespace NKikimrServices;
 
@@ -33,7 +35,8 @@ namespace NKikimr {
             void Bootstrap(const TActorContext &ctx) {
                 KeepState.Init(
                     std::make_shared<TActorNotify>(ctx.ActorSystem(), ctx.SelfID),
-                    std::make_shared<TActorSystemLoggerCtx>(ctx.ActorSystem()));
+                    std::make_shared<TActorSystemLoggerCtx>(ctx.ActorSystem()),
+                    ctx.SelfID);
                 PerformActions(ctx);
                 Become(&TThis::StateFunc);
             }
@@ -237,7 +240,10 @@ namespace NKikimr {
             // for tests/debug purposes only, remove almost all log
             void Handle(TEvBlobStorage::TEvVBaldSyncLog::TPtr &ev, const TActorContext &ctx) {
                 Y_UNUSED(ev);
-                KeepState.BaldLogEvent();
+                bool dropChunksExplicitly = ev->Get()->Record.HasDropChunksExplicitly()
+                        ? ev->Get()->Record.GetDropChunksExplicitly()
+                        : false;
+                KeepState.BaldLogEvent(dropChunksExplicitly);
                 PerformActions(ctx);
             }
 
@@ -245,6 +251,24 @@ namespace NKikimr {
                 auto response = std::make_unique<TEvListChunksResult>();
                 KeepState.ListChunks(ev->Get()->ChunksOfInterest, response->ChunksSyncLog);
                 ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+            }
+
+            void Handle(TEvPhantomFlagStorageAddFlagsFromSnapshot::TPtr ev) {
+                KeepState.AddFlagsToPhantomFlagStorage(std::move(ev->Get()->Flags));
+            }
+
+            void Handle(const TEvPhantomFlagStorageGetSnapshot::TPtr& ev) {
+                Send(ev->Sender, new TEvPhantomFlagStorageGetSnapshotResult(KeepState.GetPhantomFlagStorageSnapshot()));
+            }
+
+            void Handle(const TEvLocalSyncData::TPtr& ev) {
+                TVDiskIdShort vdiskId(ev->Get()->VDiskID);
+                ui32 orderNumber = SlCtx->VCtx->Top->GetOrderNumber(vdiskId);
+                KeepState.ProcessLocalSyncData(orderNumber, ev->Get()->Data);
+            }
+
+            void Handle(const TEvSyncLogUpdateNeighbourSyncedLsn::TPtr& ev) {
+                KeepState.UpdateNeighbourSyncedLsn(ev->Get()->OrderNumber, ev->Get()->SyncedLsn);
             }
 
             STRICT_STFUNC(StateFunc,
@@ -259,6 +283,10 @@ namespace NKikimr {
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)
                 HFunc(TEvListChunks, Handle)
+                hFunc(TEvPhantomFlagStorageAddFlagsFromSnapshot, Handle)
+                hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
+                hFunc(TEvLocalSyncData, Handle)
+                hFunc(TEvSyncLogUpdateNeighbourSyncedLsn, Handle)
             )
 
         public:
@@ -271,7 +299,7 @@ namespace NKikimr {
                     std::unique_ptr<TSyncLogRepaired> repaired)
                 : TActorBootstrapped<TSyncLogKeeperActor>()
                 , SlCtx(std::move(slCtx))
-                , KeepState(SlCtx->VCtx, std::move(repaired), SlCtx->SyncLogMaxMemAmount, SlCtx->SyncLogMaxDiskAmount,
+                , KeepState(SlCtx, std::move(repaired), SlCtx->SyncLogMaxMemAmount, SlCtx->SyncLogMaxDiskAmount,
                     SlCtx->SyncLogMaxEntryPointSize)
             {}
         };

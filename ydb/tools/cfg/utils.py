@@ -43,7 +43,8 @@ def write_to_file(file_path, value):
 
     with open(file_path, 'w') as writer:
         writer.write(value)
-        writer.write('\n')
+        if os.path.basename(file_path) != "cluster.txt":
+            writer.write('\n')
 
 
 def write_proto_to_file(file_path, proto):

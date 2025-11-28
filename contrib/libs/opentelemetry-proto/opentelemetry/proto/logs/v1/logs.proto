@@ -23,7 +23,7 @@ option csharp_namespace = "OpenTelemetry.Proto.Logs.V1";
 option java_multiple_files = true;
 option java_package = "io.opentelemetry.proto.logs.v1";
 option java_outer_classname = "LogsProto";
-option go_package = "go.opentelemetry.io/proto/otlp/logs/v1";
+option go_package = "a.yandex-team.ru/contrib/libs/opentelemetry-proto";
 
 // LogsData represents the logs data that can be stored in a persistent storage,
 // OR can be embedded by other protocols that transfer OTLP logs data but do not

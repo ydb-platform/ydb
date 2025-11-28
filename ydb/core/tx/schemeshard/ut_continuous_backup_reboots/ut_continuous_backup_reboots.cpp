@@ -144,8 +144,9 @@ Y_UNIT_TEST_SUITE(TContinuousBackupWithRebootsTests) {
                                     OwnerId: %)" PRIu64 R"(
                                     LocalId: %)" PRIu64 R"(
                                 }
+                                TxId: %)" PRIu64 R"(
                             }
-                        )", ownerId, localId)),
+                        )", ownerId, localId, txId)),
                 });
 
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/1_continuousBackupImpl"), {
@@ -171,7 +172,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupWithRebootsTests) {
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl"), {
                     NLs::PathExist,
                     NLs::IsTable,
-                    NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__ydb_incrBackupImpl_deleted"}, {}, {"key"}),
+                    NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),
                 });
             }
         });
@@ -271,19 +272,19 @@ Y_UNIT_TEST_SUITE(TContinuousBackupWithRebootsTests) {
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl1"), {
                     NLs::PathExist,
                     NLs::IsTable,
-                    NLs::CheckColumns("IncrBackupImpl1", {"key", "value", "__ydb_incrBackupImpl_deleted"}, {}, {"key"}),
+                    NLs::CheckColumns("IncrBackupImpl1", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),
                 });
 
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl2"), {
                     NLs::PathExist,
                     NLs::IsTable,
-                    NLs::CheckColumns("IncrBackupImpl2", {"key", "value", "__ydb_incrBackupImpl_deleted"}, {}, {"key"}),
+                    NLs::CheckColumns("IncrBackupImpl2", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),
                 });
 
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl3"), {
                     NLs::PathExist,
                     NLs::IsTable,
-                    NLs::CheckColumns("IncrBackupImpl3", {"key", "value", "__ydb_incrBackupImpl_deleted"}, {}, {"key"}),
+                    NLs::CheckColumns("IncrBackupImpl3", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),
                 });
             }
         });

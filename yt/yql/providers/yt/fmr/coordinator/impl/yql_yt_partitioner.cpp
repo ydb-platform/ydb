@@ -29,7 +29,7 @@ std::pair<std::vector<TTaskTableInputRef>, bool> TFmrPartitioner::PartitionFmrTa
         auto partIds = PartIdsForTables_.at(fmrTable.FmrTableId);
         for (auto& partId: partIds) {
             std::vector<TChunkStats> stats = PartIdStats_.at(partId);
-            HandleFmrPartition(fmrTable.FmrTableId, partId, stats, maxDataWeightPerPart, currentFmrTasks, leftoverRanges);
+            HandleFmrPartition(fmrTable, partId, stats, maxDataWeightPerPart, currentFmrTasks, leftoverRanges);
             if (!CheckMaxTasksSize(currentFmrTasks)) {
                 return {{}, false};
             }
@@ -43,7 +43,7 @@ std::pair<std::vector<TTaskTableInputRef>, bool> TFmrPartitioner::PartitionFmrTa
 }
 
 void TFmrPartitioner::HandleFmrPartition(
-    const TFmrTableId& fmrTable,
+    const TFmrTableRef& fmrTable,
     const TString& partId,
     const std::vector<TChunkStats> stats,
     ui64 maxDataWeightPerPart,
@@ -64,7 +64,7 @@ void TFmrPartitioner::HandleFmrPartition(
         } else {
             if (curMinChunk != -1) {
                 std::vector<TTableRange> tableRange{TTableRange{.PartId = partId, .MinChunk = static_cast<ui64>(curMinChunk), .MaxChunk = i}};
-                TFmrTableInputRef fmrTableInput{.TableId = fmrTable.Id, .TableRanges = tableRange};
+                TFmrTableInputRef fmrTableInput{.TableId = fmrTable.FmrTableId.Id, .TableRanges = tableRange, .Columns = fmrTable.Columns, .SerializedColumnGroups = fmrTable.SerializedColumnGroups};
                 currentFmrTasks.emplace_back(TTaskTableInputRef{.Inputs = {fmrTableInput}});
             }
             curMinChunk = -1;
@@ -76,7 +76,7 @@ void TFmrPartitioner::HandleFmrPartition(
                     break;
                 }
                 std::vector<TTableRange> tableRange{TTableRange{.PartId = partId, .MinChunk = j, .MaxChunk = j + 1}};
-                TFmrTableInputRef fmrTableInput{.TableId = fmrTable.Id, .TableRanges = tableRange};
+                TFmrTableInputRef fmrTableInput{.TableId = fmrTable.FmrTableId.Id, .TableRanges = tableRange, .Columns = fmrTable.Columns, .SerializedColumnGroups = fmrTable.SerializedColumnGroups};
                 currentFmrTasks.emplace_back(TTaskTableInputRef{.Inputs = {fmrTableInput}});
                 ++j;
             }
@@ -86,7 +86,7 @@ void TFmrPartitioner::HandleFmrPartition(
 
     if (curMinChunk != -1) {
         TTableRange leftoverTableRange{.PartId = partId, .MinChunk = static_cast<ui64>(curMinChunk), .MaxChunk = stats.size()};
-        leftoverRanges.emplace_back(TLeftoverRange{.TableId = fmrTable.Id, .TableRange = leftoverTableRange, .DataWeight = curDataWeight});
+        leftoverRanges.emplace_back(TLeftoverRange{.TableId = fmrTable.FmrTableId.Id, .TableRange = leftoverTableRange, .DataWeight = curDataWeight, .Columns = fmrTable.Columns, .SerializedColumnGroups = fmrTable.SerializedColumnGroups});
     }
 }
 
@@ -117,6 +117,8 @@ void TFmrPartitioner::HandleFmrLeftoverRanges(
         curTableId = range.TableId;
         curFmrTable.TableId = curTableId;
         curFmrTable.TableRanges.emplace_back(range.TableRange);
+        curFmrTable.Columns = range.Columns;
+        curFmrTable.SerializedColumnGroups = range.SerializedColumnGroups;
         curDataWeight += range.DataWeight;
     }
 

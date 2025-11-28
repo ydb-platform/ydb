@@ -142,6 +142,18 @@ DEFINE_REFCOUNTED_TYPE(TServiceConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TMethodTestingConfig
+    : public NYTree::TYsonStructLite
+{
+    std::optional<TDuration> RandomDelay;
+
+    REGISTER_YSON_STRUCT_LITE(TMethodTestingConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TMethodConfig
     : public NYTree::TYsonStruct
 {
@@ -158,6 +170,8 @@ struct TMethodConfig
     NConcurrency::TThroughputThrottlerConfigPtr LoggingSuppressionFailedRequestThrottler;
     std::optional<ERequestTracingMode> TracingMode;
     std::optional<bool> Pooled;
+
+    TMethodTestingConfig Testing;
 
     REGISTER_YSON_STRUCT(TMethodConfig);
 
@@ -469,6 +483,8 @@ struct TServiceMethod
     std::string Service;
     std::string Method;
 
+    int MaxWindow;
+
     REGISTER_YSON_STRUCT_LITE(TServiceMethod);
 
     static void Register(TRegistrar registrar);
@@ -540,7 +556,7 @@ DEFINE_ENUM(EOverloadTrackerConfigType,
     (BacklogQueueFillFraction)
 );
 
-DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(OverloadTrackerConfig, EOverloadTrackerConfigType, MeanWaitTime,
+DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(OverloadTrackerConfig, EOverloadTrackerConfigType, MeanWaitTime, TOverloadTrackerConfigBase,
     ((Base)                     (TOverloadTrackerConfigBase))
     ((MeanWaitTime)             (TOverloadTrackerMeanWaitTimeConfig))
     ((BacklogQueueFillFraction) (TOverloadTrackerBacklogQueueFillFractionConfig))

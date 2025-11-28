@@ -1,6 +1,5 @@
 #pragma once
 
-
 namespace NYql {
 
 void SetCurrentOperationId(const char* operationId);

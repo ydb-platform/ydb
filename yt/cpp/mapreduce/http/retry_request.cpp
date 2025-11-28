@@ -2,7 +2,6 @@
 
 #include "context.h"
 #include "helpers.h"
-#include "http_client.h"
 #include "requests.h"
 
 #include <yt/cpp/mapreduce/common/wait_proxy.h>

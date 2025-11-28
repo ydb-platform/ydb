@@ -1,7 +1,7 @@
 import codecs
 import re
 from string import ascii_letters, ascii_lowercase, digits
-from typing import Optional, cast
+from typing import cast
 
 BASCII_LOWERCASE = ascii_lowercase.encode("ascii")
 BPCT_ALLOWED = {f"%{i:02X}".encode("ascii") for i in range(256)}
@@ -33,14 +33,14 @@ class _Quoter:
         self._qs = qs
         self._requote = requote
 
-    def __call__(self, val: Optional[str]) -> Optional[str]:
+    def __call__(self, val: str) -> str:
         if val is None:
             return None
         if not isinstance(val, str):
             raise TypeError("Argument should be str")
         if not val:
             return ""
-        bval = cast(str, val).encode("utf8", errors="ignore")
+        bval = val.encode("utf8", errors="ignore")
         ret = bytearray()
         pct = bytearray()
         safe = self._safe
@@ -116,13 +116,14 @@ class _Quoter:
 
 
 class _Unquoter:
-    def __init__(self, *, unsafe: str = "", qs: bool = False) -> None:
+    def __init__(self, *, ignore: str = "", unsafe: str = "", qs: bool = False) -> None:
+        self._ignore = ignore
         self._unsafe = unsafe
         self._qs = qs
         self._quoter = _Quoter()
         self._qs_quoter = _Quoter(qs=True)
 
-    def __call__(self, val: Optional[str]) -> Optional[str]:
+    def __call__(self, val: str) -> str:
         if val is None:
             return None
         if not isinstance(val, str):
@@ -158,7 +159,7 @@ class _Unquoter:
                         if to_add is None:  # pragma: no cover
                             raise RuntimeError("Cannot quote None")
                         ret.append(to_add)
-                    elif unquoted in self._unsafe:
+                    elif unquoted in self._unsafe or unquoted in self._ignore:
                         to_add = self._quoter(unquoted)
                         if to_add is None:  # pragma: no cover
                             raise RuntimeError("Cannot quote None")

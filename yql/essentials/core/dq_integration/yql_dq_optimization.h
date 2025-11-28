@@ -6,7 +6,8 @@ namespace NYql {
 
 class IDqOptimization {
 public:
-    virtual ~IDqOptimization() {}
+    virtual ~IDqOptimization() {
+    }
 
     /**
         Rewrite DqReadWrap's underlying provider specific read callable

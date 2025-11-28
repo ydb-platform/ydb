@@ -610,7 +610,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
                 Name: "ValueIndex"
                 KeyColumnNames: ["value"]
             }
-        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
+        )", ownerActorId, { NKikimrScheme::StatusPreconditionFailed }, 1, true);
         env.TestWaitNotification(runtime, txId);
         ++txId;
 

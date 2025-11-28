@@ -1,3 +1,5 @@
+#include "complex_key_map.h"
+
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/yson/writer.h>
@@ -2344,6 +2346,65 @@ TEST(TYsonStructTest, TestComplexSerialization)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTestOmittingConfig
+    : public TYsonStruct
+{
+    TTestSubconfigPtr RequiredSubconfig;
+    TTestSubconfigPtr OptionalSubconfig;
+
+    REGISTER_YSON_STRUCT(TTestOmittingConfig);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("required_subconfig", &TThis::RequiredSubconfig);
+        registrar.Parameter("optional_subconfig", &TThis::OptionalSubconfig)
+            .Default();
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TYsonStructTest, TestOmitting)
+{
+    TBufferStream stream;
+
+    {
+        auto config = New<TTestOmittingConfig>();
+        config->RequiredSubconfig = New<TTestSubconfig>();
+        config->OptionalSubconfig = New<TTestSubconfig>();
+
+        ::Save(&stream, config);
+        ::Load(&stream, config);
+
+        EXPECT_TRUE(config->RequiredSubconfig);
+        EXPECT_TRUE(config->OptionalSubconfig);
+
+        auto node = ConvertToNode(config)->AsMap();
+        auto description = Format("Actual node: %v", ConvertToYsonString(node, EYsonFormat::Pretty).ToString());
+        EXPECT_TRUE(node->FindChild("required_subconfig")) << description;
+        EXPECT_TRUE(node->FindChild("optional_subconfig")) << description;
+    }
+
+    {
+        auto config = New<TTestOmittingConfig>();
+        config->RequiredSubconfig = New<TTestSubconfig>();
+        config->OptionalSubconfig = nullptr;
+
+        ::Save(&stream, config);
+        ::Load(&stream, config);
+
+        EXPECT_TRUE(config->RequiredSubconfig);
+        EXPECT_FALSE(config->OptionalSubconfig);
+
+        auto node = ConvertToNode(config)->AsMap();
+        auto description = Format("Actual node: %v", ConvertToYsonString(node, EYsonFormat::Pretty).ToString());
+        EXPECT_TRUE(node->FindChild("required_subconfig")) << description;
+        EXPECT_FALSE(node->FindChild("optional_subconfig")) << description;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TTestOptionalNoInit
     : public NYT::NYTree::TYsonStructLite
 {
@@ -3347,7 +3408,7 @@ TEST(TYsonStructTest, TestSlicing2)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_POLYMORPHIC_YSON_STRUCT(MyPoly,
+DEFINE_POLYMORPHIC_YSON_STRUCT(MyPoly, TPolyBase,
     ((Base) (TPolyBase))
     ((Drv1) (TPolyDerived1))
     ((Drv2) (TPolyDerived2))
@@ -3468,7 +3529,94 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructMergeIfPossible)
     EXPECT_EQ(drv1Ptr->Field1, 18);
 }
 
-DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(MyPolyDefault, Drv1,
+DEFINE_POLYMORPHIC_YSON_STRUCT(MyPolyWithoutBaseMapping, TPolyBase,
+    ((Drv1) (TPolyDerived1))
+    ((Drv2) (TPolyDerived2))
+);
+
+TEST(TYsonStructTest, TestPolymorphicYsonWithoutBaseMapping)
+{
+    TMyPolyWithoutBaseMapping poly;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv1")
+            .Item("base_field").Value(14)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyWithoutBaseMappingType::Drv1);
+
+    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 14);
+    EXPECT_EQ(drv1Ptr->Field1, 33);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv2")
+            .Item("base_field").Value(15)
+            .Item("field2").Value(18)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyWithoutBaseMappingType::Drv2);
+
+    auto drv2Ptr = poly.TryGetConcrete<TPolyDerived2>();
+    EXPECT_TRUE(drv2Ptr.operator bool());
+    EXPECT_EQ(drv2Ptr->BaseField, 15);
+    EXPECT_EQ(drv2Ptr->Field2, 18);
+}
+
+DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(MyPolyDefaultWithoutBaseMapping, Drv1, TPolyBase,
+    ((Drv1) (TPolyDerived1))
+    ((Drv2) (TPolyDerived2))
+);
+
+TEST(TYsonStructTest, TestPolymorphicYsonStructDefaultWithoutBaseMapping)
+{
+    TMyPolyDefaultWithoutBaseMapping poly;
+
+    auto empty = BuildYsonNodeFluently()
+        .BeginMap()
+        .EndMap();
+
+    Deserialize(poly, empty->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultWithoutBaseMappingType::Drv1);
+
+    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+
+    ///////////////
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("base_field").Value(11)
+            .Item("field1").Value(123)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultWithoutBaseMappingType::Drv1);
+
+    drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 11);
+    EXPECT_EQ(drv1Ptr->Field1, 123);
+
+    ///////////////
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv2")
+            .Item("base_field").Value(14)
+            .Item("field2").Value(111)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultWithoutBaseMappingType::Drv2);
+}
+
+DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(MyPolyDefault, Drv1, TPolyBase,
     ((Base) (TPolyBase))
     ((Drv1) (TPolyDerived1))
     ((Drv2) (TPolyDerived2))
@@ -3477,6 +3625,18 @@ DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(MyPolyDefault, Drv1,
 TEST(TYsonStructTest, TestPolymorphicYsonStructDefault)
 {
     TMyPolyDefault poly;
+
+    auto empty = BuildYsonNodeFluently()
+        .BeginMap()
+        .EndMap();
+
+    Deserialize(poly, empty->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultType::Drv1);
+
+    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+
+    ///////////////
 
     auto node = BuildYsonNodeFluently()
         .BeginMap()
@@ -3487,10 +3647,12 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructDefault)
     Deserialize(poly, node->AsMap());
     EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultType::Drv1);
 
-    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(drv1Ptr.operator bool());
     EXPECT_EQ(drv1Ptr->BaseField, 11);
     EXPECT_EQ(drv1Ptr->Field1, 123);
+
+    ///////////////
 
     node = BuildYsonNodeFluently()
         .BeginMap()
@@ -3501,6 +3663,8 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructDefault)
 
     Deserialize(poly, node->AsMap());
     EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultType::Drv2);
+
+    ///////////////
 
     node = BuildYsonNodeFluently()
     .BeginMap()
@@ -3518,7 +3682,7 @@ DEFINE_ENUM(EMyPolyDefaultEnum,
     (Drv2)
 );
 
-DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(MyPolyDefaultEnum, EMyPolyDefaultEnum, Base,
+DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(MyPolyDefaultEnum, EMyPolyDefaultEnum, Base, TPolyBase,
     ((Base) (TPolyBase))
     ((Drv1) (TPolyDerived1))
     ((Drv2) (TPolyDerived2))
@@ -3527,6 +3691,18 @@ DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(MyPolyDefaultEnum, EMyPolyD
 TEST(TYsonStructTest, TestPolymorphicYsonStructDefaultEnum)
 {
     TMyPolyDefaultEnum poly;
+
+    auto empty = BuildYsonNodeFluently()
+        .BeginMap()
+        .EndMap();
+
+    Deserialize(poly, empty->AsMap());
+
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Base);
+    auto basePtr = poly.TryGetConcrete<TPolyBase>();
+    EXPECT_TRUE(basePtr.operator bool());
+
+    ///////////////
 
     auto node = BuildYsonNodeFluently()
         .BeginMap()
@@ -3537,9 +3713,11 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructDefaultEnum)
     Deserialize(poly, node->AsMap());
     EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Base);
 
-    auto basePtr = poly.TryGetConcrete<TPolyBase>();
+    basePtr = poly.TryGetConcrete<TPolyBase>();
     EXPECT_TRUE(basePtr.operator bool());
     EXPECT_EQ(basePtr->BaseField, 11);
+
+    ///////////////
 
     node = BuildYsonNodeFluently()
         .BeginMap()
@@ -3550,6 +3728,8 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructDefaultEnum)
 
     Deserialize(poly, node->AsMap());
     EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Drv1);
+
+    ///////////////
 
     node = BuildYsonNodeFluently()
     .BeginMap()
@@ -3562,6 +3742,59 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructDefaultEnum)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(MyPolyDefaultEnumWithoutBaseMapping, EMyPolyDefaultEnum, Drv1, TPolyBase,
+    ((Drv1) (TPolyDerived1))
+    ((Drv2) (TPolyDerived2))
+);
+
+TEST(TYsonStructTest, TestPolymorphicYsonStructDefaultEnumWithoutBaseMapping)
+{
+    TMyPolyDefaultEnumWithoutBaseMapping poly;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("base_field").Value(14)
+            .Item("field1").Value(111)
+        .EndMap();
+
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Drv1);
+
+    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 14);
+    EXPECT_EQ(drv1Ptr->Field1, 111);
+
+    ///////////////
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv2")
+            .Item("base_field").Value(14)
+            .Item("field2").Value(111)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Drv2);
+
+    auto drv2Ptr = poly.TryGetConcrete<TPolyDerived2>();
+    EXPECT_TRUE(drv2Ptr.operator bool());
+    EXPECT_EQ(drv2Ptr->BaseField, 14);
+    EXPECT_EQ(drv2Ptr->Field2, 111);
+
+    ///////////////
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("base_field").Value(14)
+            .Item("field1").Value(111)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Drv1);
+}
 
 struct TPolyHolder
     : public TYsonStructLite
@@ -3585,7 +3818,8 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructSerializeEmpty)
 
     auto node = ConvertToNode(holder);
 
-    Deserialize(holder, node->AsMap());
+    // Field `type` is mandatory for structs without configured default type.
+    EXPECT_THROW(Deserialize(holder, node->AsMap()), std::exception);
 }
 
 TEST(TYsonStructTest, TestPolymorphicYsonStructAsField)
@@ -3950,6 +4184,211 @@ TEST(TYsonStructTest, ProtoSerialize)
     EXPECT_TRUE(AreNodesEqual(node, expectedNode));
     auto otherStruct = ConvertTo<TTestYsonStructWithProtoPtr>(node);
     EXPECT_EQ(*otherStruct, *ysonStruct);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestYsonStructWithYsonString
+    : public TYsonStruct
+{
+    int Integer;
+    TYsonString YsonString;
+
+    REGISTER_YSON_STRUCT(TTestYsonStructWithYsonString);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("integer", &TThis::Integer)
+            .Default();
+        registrar.Parameter("yson_string", &TThis::YsonString)
+            .Default();
+    }
+};
+
+using TTestYsonStructWithYsonStringPtr = TIntrusivePtr<TTestYsonStructWithYsonString>;
+
+TEST(TYsonStructTest, YsonStringSerialize)
+{
+    auto ysonStruct = New<TTestYsonStructWithYsonString>();
+    ysonStruct->Integer = 42;
+
+    auto node = ConvertToNode(ysonStruct);
+    auto fromNode = ConvertTo<TTestYsonStructWithYsonStringPtr>(node);
+    EXPECT_EQ(fromNode->Integer, ysonStruct->Integer);
+    EXPECT_EQ(fromNode->YsonString, ysonStruct->YsonString);
+
+    auto buffer = ConvertToYsonString(ysonStruct);
+    auto fromBuffer = ConvertTo<TTestYsonStructWithYsonStringPtr>(buffer);
+    EXPECT_EQ(fromBuffer->Integer, ysonStruct->Integer);
+    EXPECT_EQ(fromBuffer->YsonString, ysonStruct->YsonString);
+
+    ysonStruct->YsonString = ConvertToYsonString(42);
+
+    node = ConvertToNode(ysonStruct);
+    fromNode = ConvertTo<TTestYsonStructWithYsonStringPtr>(node);
+    EXPECT_EQ(fromNode->Integer, ysonStruct->Integer);
+    EXPECT_EQ(fromNode->YsonString, ysonStruct->YsonString);
+
+    buffer = ConvertToYsonString(ysonStruct);
+    fromBuffer = ConvertTo<TTestYsonStructWithYsonStringPtr>(buffer);
+    EXPECT_EQ(fromBuffer->Integer, ysonStruct->Integer);
+    EXPECT_EQ(fromBuffer->YsonString, ysonStruct->YsonString);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestBase
+    : public TYsonStructLite
+{
+    int X = 0;
+
+    static TTestBase Create(int x)
+    {
+        TTestBase result;
+        result.X = x;
+        return result;
+    }
+
+    REGISTER_YSON_STRUCT_LITE(TTestBase);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("x", &TThis::X)
+            .Default(0);
+    }
+};
+
+struct TTestDerived
+    : public TTestBase
+{
+    int Y = 0;
+
+    static TTestDerived Create(int x, int y)
+    {
+        TTestDerived result;
+        result.X = x;
+        result.Y = y;
+        return result;
+    }
+
+    REGISTER_YSON_STRUCT_LITE(TTestDerived);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("y", &TThis::Y)
+            .Default(0);
+    }
+};
+
+TEST(TYsonStructTest, YsonStructLiteCopyAssign)
+{
+    // Note that the lambda below has arguments of type TTestBase&, so if TTestDerived& is provided it will be implicitly
+    // converted to TTestBase& and corresponding operator= will be invoked.
+    // That is that the test checks: it verifies that assignment of the base works as expected and does not change metadata.
+    auto set = [](TTestBase& dst, const TTestBase& src) {
+        dst = src;
+    };
+
+    {
+        auto dst = TTestDerived::Create(1, 2);
+        auto src = TTestDerived::Create(3, 4);
+        set(dst, src);
+        EXPECT_EQ(dst.X, 3);
+        EXPECT_EQ(dst.Y, 2);
+        EXPECT_TRUE(dst.GetMeta()->GetParameterMap().contains("y"));
+    }
+
+    {
+        auto dst = TTestDerived::Create(5, 6);
+        auto src = TTestBase::Create(7);
+        set(dst, src);
+        EXPECT_EQ(dst.X, 7);
+        EXPECT_EQ(dst.Y, 6);
+        EXPECT_TRUE(dst.GetMeta()->GetParameterMap().contains("y"));
+    }
+
+    {
+        auto dst = TTestBase::Create(8);
+        auto src = TTestDerived::Create(9, 10);
+        set(dst, src);
+        EXPECT_EQ(dst.X, 9);
+        EXPECT_FALSE(dst.GetMeta()->GetParameterMap().contains("y"));
+    }
+}
+
+TEST(TYsonStructTest, YsonStructLiteMoveAssign)
+{
+    // Note that the lambda below has arguments of type TTestBase&/&&, so if TTestDerived&/&& is provided it will be implicitly
+    // converted to TTestBase&/&& and corresponding operator= will be invoked.
+    // That is that the test checks: it verifies that move assignment of the base works as expected and does not change metadata.
+    auto set = [](TTestBase& dst, TTestBase&& src) {
+        dst = std::move(src);
+    };
+
+    {
+        auto dst = TTestDerived::Create(1, 2);
+        auto src = TTestDerived::Create(3, 4);
+        set(dst, std::move(src));
+        EXPECT_EQ(dst.X, 3);
+        EXPECT_EQ(dst.Y, 2);
+        EXPECT_TRUE(dst.GetMeta()->GetParameterMap().contains("y"));
+    }
+
+    {
+        auto dst = TTestDerived::Create(5, 6);
+        auto src = TTestBase::Create(7);
+        set(dst, std::move(src));
+        EXPECT_EQ(dst.X, 7);
+        EXPECT_EQ(dst.Y, 6);
+        EXPECT_TRUE(dst.GetMeta()->GetParameterMap().contains("y"));
+    }
+
+    {
+        auto dst = TTestBase::Create(8);
+        auto src = TTestDerived::Create(9, 10);
+        set(dst, std::move(src));
+        EXPECT_EQ(dst.X, 9);
+        EXPECT_FALSE(dst.GetMeta()->GetParameterMap().contains("y"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestYsonStructWithMap
+    : public TYsonStruct
+{
+    std::map<TString, TString> Map;
+    std::map<TTestComplexKey, TString> ComplexMap;
+    TTestComplexKey ComplexKey;
+
+    REGISTER_YSON_STRUCT(TTestYsonStructWithMap);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("map", &TThis::Map)
+            .Default();
+        registrar.Parameter("complex_map", &TThis::ComplexMap)
+            .Default();
+        registrar.Parameter("complex_key", &TThis::ComplexKey)
+            .Default();
+    }
+};
+
+using TTestYsonStructWithMapPtr = TIntrusivePtr<TTestYsonStructWithMap>;
+
+TEST(TYsonStructTest, Map)
+{
+    auto ysonStruct = New<TTestYsonStructWithMap>();
+    ysonStruct->Map["abc"] = "def";
+    ysonStruct->ComplexMap[{"abc", "def"}] = "ghi";
+    ysonStruct->ComplexKey = {"abc", "def"};
+
+    auto node = ConvertToNode(ysonStruct);
+    auto fromNode = ConvertTo<TTestYsonStructWithMapPtr>(node);
+    EXPECT_EQ(fromNode->Map, ysonStruct->Map);
+    EXPECT_EQ(fromNode->ComplexMap, ysonStruct->ComplexMap);
+    EXPECT_EQ(fromNode->ComplexKey, ysonStruct->ComplexKey);
+    EXPECT_EQ(*fromNode, *ysonStruct);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

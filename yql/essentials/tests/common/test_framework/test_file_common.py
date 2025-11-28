@@ -1,5 +1,4 @@
 import codecs
-import os
 import pytest
 import re
 import cyson
@@ -8,13 +7,21 @@ import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_con
 
 from google.protobuf import text_format
 from yql_utils import execute, get_supported_providers, get_tables, get_files, get_http_files, \
-    get_pragmas, KSV_ATTR, is_xfail, get_param, YQLExecResult, yql_binary_path, do_custom_error_check
+    get_pragmas, KSV_ATTR, is_xfail, get_param, YQLExecResult, skip_on_ubsan_known_failure, yql_binary_path, do_custom_error_check
 from yqlrun import YQLRun
 
-from test_utils import get_parameters_json, replace_vars
+from test_utils import get_parameters_json, replace_vars, get_case_file
 
 
-def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is_hybrid=False, allow_llvm=True, postprocess_func=None):
+def get_gateways_config(
+    http_files,
+    yql_http_file_server,
+    force_blocks=False,
+    is_hybrid=False,
+    allow_llvm=True,
+    postprocess_func=None,
+    is_yql_select=False,
+):
     config = None
 
     if http_files or force_blocks or is_hybrid or not allow_llvm or postprocess_func is not None:
@@ -39,6 +46,8 @@ def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is
             flags.Name = 'LLVM_OFF'
         if postprocess_func is not None:
             postprocess_func(config_message)
+        if is_yql_select:
+            config_message.SqlCore.TranslationFlags.extend(['AutoYqlSelect'])
         config = text_format.MessageToString(config_message)
 
     return config
@@ -56,7 +65,7 @@ def check_provider(provider, config):
         pytest.skip('%s provider is not supported here' % provider)
 
 
-def get_sql_query(provider, suite, case, config, data_path=None, template='.sql'):
+def get_sql_query(provider, suite, case, config, data_path=None, template=['.sql', '.yql']):
     pragmas = get_pragmas(config)
 
     if get_param('TARGET_PLATFORM'):
@@ -66,7 +75,7 @@ def get_sql_query(provider, suite, case, config, data_path=None, template='.sql'
     if get_param('TARGET_PLATFORM') and is_xfail(config):
         pytest.skip('xfail is not supported on non-default target platform')
 
-    program_sql = os.path.join(data_path, suite, '%s%s' % (case, template))
+    program_sql = get_case_file(data_path, suite, case, template)
 
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
@@ -88,15 +97,16 @@ def get_sql_query(provider, suite, case, config, data_path=None, template='.sql'
 
 def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                       yqlrun_binary=None, extra_args=[], force_blocks=False, allow_llvm=True, data_path=None,
-                      run_sql=True, cfg_postprocess=None, langver=None):
+                      run_sql=True, cfg_postprocess=None, langver=None, attr_postprocess=None,
+                      is_yql_select=False):
     check_provider(provider, config)
 
-    sql_query = get_sql_query(provider, suite, case, config, data_path, template='.sql' if run_sql else '.yqls')
+    sql_query = get_sql_query(provider, suite, case, config, data_path, template=['.sql', '.yql'] if run_sql else '.yqls')
     sql_query = replace_vars(sql_query, "yqlrun_var")
 
     xfail = is_xfail(config)
 
-    in_tables, out_tables = get_tables(suite, config, data_path, def_attr=KSV_ATTR) if provider != 'pure' else (None, None)
+    in_tables, out_tables = get_tables(suite, config, data_path, def_attr=KSV_ATTR, attr_postprocess=attr_postprocess) if provider != 'pure' else (None, None)
     files = get_files(suite, config, data_path)
     http_files = get_http_files(suite, config, data_path)
     http_files_urls = yql_http_file_server.register_files({}, http_files)
@@ -117,7 +127,8 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
         keep_temp=not re.search(r"yt\.ReleaseTempData", sql_query),
         binary=yqlrun_binary,
         gateway_config=get_gateways_config(http_files, yql_http_file_server, force_blocks=force_blocks, is_hybrid=is_hybrid(provider), allow_llvm=allow_llvm,
-                                           postprocess_func=cfg_postprocess),
+                                           postprocess_func=cfg_postprocess,
+                                           is_yql_select=is_yql_select),
         extra_args=extra_args,
         udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'),
         langver=langver
@@ -136,6 +147,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
         parameters=parameters)
 
     fixed_stderr = res.std_err
+    skip_on_ubsan_known_failure(res.std_err)
     if xfail:
         assert res.execution_result.exit_code != 0
         do_custom_error_check(res, sql_query)
@@ -158,13 +170,13 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
 
 def run_file(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary=None,
              extra_args=[], force_blocks=False, allow_llvm=True, data_path=None, run_sql=True,
-             cfg_postprocess=None, langver=None):
+             cfg_postprocess=None, langver=None, attr_postprocess=None):
     if (suite, case, cfg) not in run_file.cache:
         run_file.cache[(suite, case, cfg)] = \
             run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                               yqlrun_binary, extra_args, force_blocks=force_blocks, allow_llvm=allow_llvm,
                               data_path=data_path, run_sql=run_sql, cfg_postprocess=cfg_postprocess,
-                              langver=langver)
+                              langver=langver, attr_postprocess=attr_postprocess)
 
     return run_file.cache[(suite, case, cfg)]
 

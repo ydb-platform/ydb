@@ -52,8 +52,10 @@ template <typename TProviderContext = TTestContext>
 std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root, const TOptimizerHints& hints = {}) {
     auto ctx = TProviderContext();
     TExprContext dummyCtx;
+
+    TCBOSettings settings{};
     auto optimizer =
-        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, std::numeric_limits<ui32>::max(), dummyCtx, false));
+        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, settings, dummyCtx, false));
 
     Y_ENSURE(root->Kind == EOptimizerNodeKind::JoinNodeType);
     auto res = optimizer->JoinSearch(std::static_pointer_cast<TJoinOptimizerNode>(root), hints);
@@ -460,6 +462,55 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             auto optimizedJoin = Enumerate(join, TOptimizerHints::Parse("Rows(B C # 0)"));
             UNIT_ASSERT(HaveSameConditionCount(optimizedJoin, join));
         }
+    }
+
+    Y_UNIT_TEST(TwoJoinsTwoTheSameKeyInCyclicGraphTransitiveClosure) {
+        auto join = Join(Join("A", "B", "A.a_a=B.b_a"), "C", "A.a_a=C.c_a,B.b_b=C.c_a");
+
+        auto graph = MakeJoinHypergraph<TNodeSet64>(join);
+        Cout << graph.String() << Endl;
+
+        auto A = graph.GetNodesByRelNames({"A"});
+        auto B = graph.GetNodesByRelNames({"B"});
+        auto C = graph.GetNodesByRelNames({"C"});
+
+        // Check that edge lhsNodes -> rhsNodes exists and has the same
+        // condition as specified in expectedCondition in format:
+        // "a_a=b_b,a_b=b_b" (note lhs, rhs are sorted and conditions are sorted)
+        auto checkConditions = [&graph](auto lhsNodes, auto rhsNodes, const std::string& expectedCondition) {
+            auto* edge = graph.FindEdgeBetween(lhsNodes, rhsNodes);
+            UNIT_ASSERT(edge);
+
+            // Extract actual join key names from hyperedge
+            UNIT_ASSERT_EQUAL(edge->LeftJoinKeys.size(), edge->RightJoinKeys.size());
+            std::vector<std::pair<std::string, std::string>> actualJoinKeys;
+            for (ui32 i = 0; i < edge->LeftJoinKeys.size(); ++ i) {
+                std::string lhs = edge->LeftJoinKeys[i].AttributeName.c_str();
+                std::string rhs = edge->RightJoinKeys[i].AttributeName.c_str();
+                actualJoinKeys.emplace_back(std::min(lhs, rhs), std::max(lhs, rhs));
+            }
+
+            std::sort(actualJoinKeys.begin(), actualJoinKeys.end());
+
+            std::string actualCondition = "";
+            for (auto [lhs, rhs] : actualJoinKeys) {
+                if (!actualCondition.empty()) {
+                    actualCondition += ",";
+                }
+
+                actualCondition += lhs + "=" + rhs;
+            }
+
+            // Ensure expected and actual join keys are the same
+            UNIT_ASSERT_STRINGS_EQUAL(actualCondition, expectedCondition);
+        };
+
+        checkConditions(A, B, "a_a=b_a,a_a=b_b");
+        checkConditions(B, A, "a_a=b_a,a_a=b_b");
+        checkConditions(A, C, "a_a=c_a");
+        checkConditions(C, A, "a_a=c_a");
+        checkConditions(B, C, "b_a=c_a,b_b=c_a");
+        checkConditions(C, B, "b_a=c_a,b_b=c_a");
     }
 
     auto MakeClique(size_t size) {

@@ -110,6 +110,9 @@ namespace orc {
         return result;
       }
       case Operator::NOT:
+        if (children_.size() != 1) {
+          throw std::invalid_argument("NOT operator must have exactly one child");
+        }
         return !children_.at(0)->evaluate(leaves);
       case Operator::LEAF:
         return leaves[leaf_];
@@ -159,6 +162,9 @@ namespace orc {
         sstream << ')';
         break;
       case Operator::NOT:
+        if (children_.size() != 1) {
+          throw std::invalid_argument("NOT operator must have exactly one child");
+        }
         sstream << "(not " << children_.at(0)->toString() << ')';
         break;
       case Operator::LEAF:

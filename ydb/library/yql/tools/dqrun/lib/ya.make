@@ -25,7 +25,6 @@ PEERDIR(
     yql/essentials/sql/settings
     yql/essentials/utils/log
 
-    ydb/core/fq/libs/row_dispatcher
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/shared_resources/interface
     ydb/core/fq/libs/config/protos
@@ -68,7 +67,6 @@ PEERDIR(
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/common/db_id_async_resolver
 
-    ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/transform
     ydb/library/yql/dq/actors/compute

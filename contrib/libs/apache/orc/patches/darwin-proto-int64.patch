@@ -1,0 +1,10 @@
+--- a/c++/src/sargs/PredicateLeaf.cc
++++ b/c++/src/sargs/PredicateLeaf.cc
+@@ -480,5 +480,5 @@ namespace orc {
+-  static std::vector<int64_t> literal2Long(const std::vector<Literal>& values) {
+-    std::vector<int64_t> result;
++  static std::vector<google::protobuf::int64> literal2Long(const std::vector<Literal>& values) {
++    std::vector<google::protobuf::int64> result;
+     std::for_each(values.cbegin(), values.cend(), [&](const Literal& val) {
+       if (!val.isNull()) {
+         result.emplace_back(val.getLong());

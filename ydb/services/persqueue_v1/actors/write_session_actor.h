@@ -14,7 +14,7 @@
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
@@ -131,7 +131,6 @@ private:
     void Handle(typename TEvWrite::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(typename TEvUpdateToken::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void LogSession(const TActorContext& ctx);
     bool InitAfterDiscovery(const TActorContext& ctx);

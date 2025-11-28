@@ -24,12 +24,13 @@ public:
     virtual const TDqInputChannelStats& GetPushStats() const = 0;
 
     virtual void Push(TDqSerializedBatch&& data) = 0;
+    virtual void Push(TInstant watermark) = 0;
 
     virtual void Finish() = 0;
 };
 
 IDqInputChannel::TPtr CreateDqInputChannel(ui64 channelId, ui32 srcStageId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,
     TCollectStatsLevel level, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NDqProto::EDataTransportVersion transportVersion);
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion);
 
 } // namespace NYql::NDq

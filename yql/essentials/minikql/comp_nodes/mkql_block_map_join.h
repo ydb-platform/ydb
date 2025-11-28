@@ -8,5 +8,5 @@ IComputationNode* WrapBlockStorage(TCallable& callable, const TComputationNodeFa
 IComputationNode* WrapBlockMapJoinIndex(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-} // NKikimr
-} // NMiniKQL
+} // namespace NMiniKQL
+} // namespace NKikimr

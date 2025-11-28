@@ -1,6 +1,6 @@
 # Working with topics
 
-This article provides examples of how to use the {{ ydb-short-name }} SDK to work with [topics](../../concepts/topic.md).
+This article provides examples of how to use the {{ ydb-short-name }} SDK to work with [topics](../../concepts/datamodel/topic.md).
 
 Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and [add a consumer](../ydb-cli/topic-consumer-add.md).
 
@@ -1423,7 +1423,7 @@ To establish a connection to the `my-topic` and `my-specific-topic` topics using
 
 ### Reading messages {#reading-messages}
 
-The server stores the [consumer offset](../../concepts/topic.md#consumer-offset). After reading a message, the client should [send a commit to the server](#commit). The consumer offset changes and only uncommitted messages will be read in case of a new connection.
+The server stores the [consumer offset](../../concepts/datamodel/topic.md#consumer-offset). After reading a message, the client should [send a commit to the server](#commit). The consumer offset changes and only uncommitted messages will be read in case of a new connection.
 
 You can read messages without a [commit](#no-commit) as well. In this case, all uncommited messages, including those processed, will be read if there is a new connection.
 

@@ -259,7 +259,6 @@ JOIN_SRCS(
     system/condvar.cpp
     system/daemon.cpp
     system/datetime.cpp
-    system/defaults.c
     system/direct_io.cpp
     system/dynlib.cpp
     system/env.cpp

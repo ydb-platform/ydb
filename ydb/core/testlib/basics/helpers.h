@@ -43,7 +43,7 @@ namespace NFake {
 
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
                            bool replicasOnFirstNode = false);
-    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize);
+    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize, ui32 ringGroups = 1);
     TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups, int replicasInRingGroup);
     TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups,
                                                            const THashMap<ui32, TVector<ui32>>& pileIdToNodeIds);
@@ -61,7 +61,7 @@ namespace NFake {
     void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupSysViewService(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupIcb(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrConfig::TImmediateControlsConfig& config,
-            const TIntrusivePtr<NKikimr::TControlBoard>& icb);
+            const TIntrusivePtr<NKikimr::TControlBoard>& icb, const TIntrusivePtr<NKikimr::TDynamicControlBoard>& dcb);
 
     // StateStorage, NodeWarden, TabletResolver, ResourceBroker, SharedPageCache
     void SetupBasicServices(TTestActorRuntime &runtime, TAppPrepare &app, bool mockDisk = false,

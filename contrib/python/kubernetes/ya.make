@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(33.1.0)
+VERSION(34.1.0)
 
 LICENSE(Apache-2.0)
 
@@ -11,7 +11,6 @@ PEERDIR(
     contrib/python/certifi
     contrib/python/durationpy
     contrib/python/google-auth
-    contrib/python/oauthlib
     contrib/python/python-dateutil
     contrib/python/requests
     contrib/python/requests-oauthlib
@@ -78,6 +77,7 @@ PY_SRCS(
     kubernetes/client/api/rbac_authorization_api.py
     kubernetes/client/api/rbac_authorization_v1_api.py
     kubernetes/client/api/resource_api.py
+    kubernetes/client/api/resource_v1_api.py
     kubernetes/client/api/resource_v1alpha3_api.py
     kubernetes/client/api/resource_v1beta1_api.py
     kubernetes/client/api/resource_v1beta2_api.py
@@ -106,15 +106,19 @@ PY_SRCS(
     kubernetes/client/models/core_v1_event.py
     kubernetes/client/models/core_v1_event_list.py
     kubernetes/client/models/core_v1_event_series.py
+    kubernetes/client/models/core_v1_resource_claim.py
     kubernetes/client/models/discovery_v1_endpoint_port.py
     kubernetes/client/models/events_v1_event.py
     kubernetes/client/models/events_v1_event_list.py
     kubernetes/client/models/events_v1_event_series.py
     kubernetes/client/models/flowcontrol_v1_subject.py
     kubernetes/client/models/rbac_v1_subject.py
+    kubernetes/client/models/resource_v1_resource_claim.py
     kubernetes/client/models/storage_v1_token_request.py
     kubernetes/client/models/v1_affinity.py
     kubernetes/client/models/v1_aggregation_rule.py
+    kubernetes/client/models/v1_allocated_device_status.py
+    kubernetes/client/models/v1_allocation_result.py
     kubernetes/client/models/v1_api_group.py
     kubernetes/client/models/v1_api_group_list.py
     kubernetes/client/models/v1_api_resource.py
@@ -135,6 +139,10 @@ PY_SRCS(
     kubernetes/client/models/v1_binding.py
     kubernetes/client/models/v1_bound_object_reference.py
     kubernetes/client/models/v1_capabilities.py
+    kubernetes/client/models/v1_capacity_request_policy.py
+    kubernetes/client/models/v1_capacity_request_policy_range.py
+    kubernetes/client/models/v1_capacity_requirements.py
+    kubernetes/client/models/v1_cel_device_selector.py
     kubernetes/client/models/v1_ceph_fs_persistent_volume_source.py
     kubernetes/client/models/v1_ceph_fs_volume_source.py
     kubernetes/client/models/v1_certificate_signing_request.py
@@ -162,9 +170,12 @@ PY_SRCS(
     kubernetes/client/models/v1_config_map_projection.py
     kubernetes/client/models/v1_config_map_volume_source.py
     kubernetes/client/models/v1_container.py
+    kubernetes/client/models/v1_container_extended_resource_request.py
     kubernetes/client/models/v1_container_image.py
     kubernetes/client/models/v1_container_port.py
     kubernetes/client/models/v1_container_resize_policy.py
+    kubernetes/client/models/v1_container_restart_rule.py
+    kubernetes/client/models/v1_container_restart_rule_on_exit_codes.py
     kubernetes/client/models/v1_container_state.py
     kubernetes/client/models/v1_container_state_running.py
     kubernetes/client/models/v1_container_state_terminated.py
@@ -173,6 +184,8 @@ PY_SRCS(
     kubernetes/client/models/v1_container_user.py
     kubernetes/client/models/v1_controller_revision.py
     kubernetes/client/models/v1_controller_revision_list.py
+    kubernetes/client/models/v1_counter.py
+    kubernetes/client/models/v1_counter_set.py
     kubernetes/client/models/v1_cron_job.py
     kubernetes/client/models/v1_cron_job_list.py
     kubernetes/client/models/v1_cron_job_spec.py
@@ -215,6 +228,25 @@ PY_SRCS(
     kubernetes/client/models/v1_deployment_spec.py
     kubernetes/client/models/v1_deployment_status.py
     kubernetes/client/models/v1_deployment_strategy.py
+    kubernetes/client/models/v1_device.py
+    kubernetes/client/models/v1_device_allocation_configuration.py
+    kubernetes/client/models/v1_device_allocation_result.py
+    kubernetes/client/models/v1_device_attribute.py
+    kubernetes/client/models/v1_device_capacity.py
+    kubernetes/client/models/v1_device_claim.py
+    kubernetes/client/models/v1_device_claim_configuration.py
+    kubernetes/client/models/v1_device_class.py
+    kubernetes/client/models/v1_device_class_configuration.py
+    kubernetes/client/models/v1_device_class_list.py
+    kubernetes/client/models/v1_device_class_spec.py
+    kubernetes/client/models/v1_device_constraint.py
+    kubernetes/client/models/v1_device_counter_consumption.py
+    kubernetes/client/models/v1_device_request.py
+    kubernetes/client/models/v1_device_request_allocation_result.py
+    kubernetes/client/models/v1_device_selector.py
+    kubernetes/client/models/v1_device_sub_request.py
+    kubernetes/client/models/v1_device_taint.py
+    kubernetes/client/models/v1_device_toleration.py
     kubernetes/client/models/v1_downward_api_projection.py
     kubernetes/client/models/v1_downward_api_volume_file.py
     kubernetes/client/models/v1_downward_api_volume_source.py
@@ -235,6 +267,7 @@ PY_SRCS(
     kubernetes/client/models/v1_ephemeral_volume_source.py
     kubernetes/client/models/v1_event_source.py
     kubernetes/client/models/v1_eviction.py
+    kubernetes/client/models/v1_exact_device_request.py
     kubernetes/client/models/v1_exec_action.py
     kubernetes/client/models/v1_exempt_priority_level_configuration.py
     kubernetes/client/models/v1_expression_warning.py
@@ -242,6 +275,7 @@ PY_SRCS(
     kubernetes/client/models/v1_fc_volume_source.py
     kubernetes/client/models/v1_field_selector_attributes.py
     kubernetes/client/models/v1_field_selector_requirement.py
+    kubernetes/client/models/v1_file_key_selector.py
     kubernetes/client/models/v1_flex_persistent_volume_source.py
     kubernetes/client/models/v1_flex_volume_source.py
     kubernetes/client/models/v1_flocker_volume_source.py
@@ -335,6 +369,7 @@ PY_SRCS(
     kubernetes/client/models/v1_namespace_list.py
     kubernetes/client/models/v1_namespace_spec.py
     kubernetes/client/models/v1_namespace_status.py
+    kubernetes/client/models/v1_network_device_data.py
     kubernetes/client/models/v1_network_policy.py
     kubernetes/client/models/v1_network_policy_egress_rule.py
     kubernetes/client/models/v1_network_policy_ingress_rule.py
@@ -367,6 +402,7 @@ PY_SRCS(
     kubernetes/client/models/v1_object_field_selector.py
     kubernetes/client/models/v1_object_meta.py
     kubernetes/client/models/v1_object_reference.py
+    kubernetes/client/models/v1_opaque_device_configuration.py
     kubernetes/client/models/v1_overhead.py
     kubernetes/client/models/v1_owner_reference.py
     kubernetes/client/models/v1_param_kind.py
@@ -388,6 +424,7 @@ PY_SRCS(
     kubernetes/client/models/v1_pod_affinity.py
     kubernetes/client/models/v1_pod_affinity_term.py
     kubernetes/client/models/v1_pod_anti_affinity.py
+    kubernetes/client/models/v1_pod_certificate_projection.py
     kubernetes/client/models/v1_pod_condition.py
     kubernetes/client/models/v1_pod_disruption_budget.py
     kubernetes/client/models/v1_pod_disruption_budget_list.py
@@ -395,6 +432,7 @@ PY_SRCS(
     kubernetes/client/models/v1_pod_disruption_budget_status.py
     kubernetes/client/models/v1_pod_dns_config.py
     kubernetes/client/models/v1_pod_dns_config_option.py
+    kubernetes/client/models/v1_pod_extended_resource_claim_status.py
     kubernetes/client/models/v1_pod_failure_policy.py
     kubernetes/client/models/v1_pod_failure_policy_on_exit_codes_requirement.py
     kubernetes/client/models/v1_pod_failure_policy_on_pod_conditions_pattern.py
@@ -443,16 +481,26 @@ PY_SRCS(
     kubernetes/client/models/v1_replication_controller_spec.py
     kubernetes/client/models/v1_replication_controller_status.py
     kubernetes/client/models/v1_resource_attributes.py
-    kubernetes/client/models/v1_resource_claim.py
+    kubernetes/client/models/v1_resource_claim_consumer_reference.py
+    kubernetes/client/models/v1_resource_claim_list.py
+    kubernetes/client/models/v1_resource_claim_spec.py
+    kubernetes/client/models/v1_resource_claim_status.py
+    kubernetes/client/models/v1_resource_claim_template.py
+    kubernetes/client/models/v1_resource_claim_template_list.py
+    kubernetes/client/models/v1_resource_claim_template_spec.py
     kubernetes/client/models/v1_resource_field_selector.py
     kubernetes/client/models/v1_resource_health.py
     kubernetes/client/models/v1_resource_policy_rule.py
+    kubernetes/client/models/v1_resource_pool.py
     kubernetes/client/models/v1_resource_quota.py
     kubernetes/client/models/v1_resource_quota_list.py
     kubernetes/client/models/v1_resource_quota_spec.py
     kubernetes/client/models/v1_resource_quota_status.py
     kubernetes/client/models/v1_resource_requirements.py
     kubernetes/client/models/v1_resource_rule.py
+    kubernetes/client/models/v1_resource_slice.py
+    kubernetes/client/models/v1_resource_slice_list.py
+    kubernetes/client/models/v1_resource_slice_spec.py
     kubernetes/client/models/v1_resource_status.py
     kubernetes/client/models/v1_role.py
     kubernetes/client/models/v1_role_binding.py
@@ -565,6 +613,8 @@ PY_SRCS(
     kubernetes/client/models/v1_volume_attachment_source.py
     kubernetes/client/models/v1_volume_attachment_spec.py
     kubernetes/client/models/v1_volume_attachment_status.py
+    kubernetes/client/models/v1_volume_attributes_class.py
+    kubernetes/client/models/v1_volume_attributes_class_list.py
     kubernetes/client/models/v1_volume_device.py
     kubernetes/client/models/v1_volume_error.py
     kubernetes/client/models/v1_volume_mount.py
@@ -597,6 +647,10 @@ PY_SRCS(
     kubernetes/client/models/v1alpha1_named_rule_with_operations.py
     kubernetes/client/models/v1alpha1_param_kind.py
     kubernetes/client/models/v1alpha1_param_ref.py
+    kubernetes/client/models/v1alpha1_pod_certificate_request.py
+    kubernetes/client/models/v1alpha1_pod_certificate_request_list.py
+    kubernetes/client/models/v1alpha1_pod_certificate_request_spec.py
+    kubernetes/client/models/v1alpha1_pod_certificate_request_status.py
     kubernetes/client/models/v1alpha1_server_storage_version.py
     kubernetes/client/models/v1alpha1_storage_version.py
     kubernetes/client/models/v1alpha1_storage_version_condition.py
@@ -612,52 +666,20 @@ PY_SRCS(
     kubernetes/client/models/v1alpha2_lease_candidate.py
     kubernetes/client/models/v1alpha2_lease_candidate_list.py
     kubernetes/client/models/v1alpha2_lease_candidate_spec.py
-    kubernetes/client/models/v1alpha3_allocated_device_status.py
-    kubernetes/client/models/v1alpha3_allocation_result.py
-    kubernetes/client/models/v1alpha3_basic_device.py
     kubernetes/client/models/v1alpha3_cel_device_selector.py
-    kubernetes/client/models/v1alpha3_counter.py
-    kubernetes/client/models/v1alpha3_counter_set.py
-    kubernetes/client/models/v1alpha3_device.py
-    kubernetes/client/models/v1alpha3_device_allocation_configuration.py
-    kubernetes/client/models/v1alpha3_device_allocation_result.py
-    kubernetes/client/models/v1alpha3_device_attribute.py
-    kubernetes/client/models/v1alpha3_device_claim.py
-    kubernetes/client/models/v1alpha3_device_claim_configuration.py
-    kubernetes/client/models/v1alpha3_device_class.py
-    kubernetes/client/models/v1alpha3_device_class_configuration.py
-    kubernetes/client/models/v1alpha3_device_class_list.py
-    kubernetes/client/models/v1alpha3_device_class_spec.py
-    kubernetes/client/models/v1alpha3_device_constraint.py
-    kubernetes/client/models/v1alpha3_device_counter_consumption.py
-    kubernetes/client/models/v1alpha3_device_request.py
-    kubernetes/client/models/v1alpha3_device_request_allocation_result.py
     kubernetes/client/models/v1alpha3_device_selector.py
-    kubernetes/client/models/v1alpha3_device_sub_request.py
     kubernetes/client/models/v1alpha3_device_taint.py
     kubernetes/client/models/v1alpha3_device_taint_rule.py
     kubernetes/client/models/v1alpha3_device_taint_rule_list.py
     kubernetes/client/models/v1alpha3_device_taint_rule_spec.py
     kubernetes/client/models/v1alpha3_device_taint_selector.py
-    kubernetes/client/models/v1alpha3_device_toleration.py
-    kubernetes/client/models/v1alpha3_network_device_data.py
-    kubernetes/client/models/v1alpha3_opaque_device_configuration.py
-    kubernetes/client/models/v1alpha3_resource_claim.py
-    kubernetes/client/models/v1alpha3_resource_claim_consumer_reference.py
-    kubernetes/client/models/v1alpha3_resource_claim_list.py
-    kubernetes/client/models/v1alpha3_resource_claim_spec.py
-    kubernetes/client/models/v1alpha3_resource_claim_status.py
-    kubernetes/client/models/v1alpha3_resource_claim_template.py
-    kubernetes/client/models/v1alpha3_resource_claim_template_list.py
-    kubernetes/client/models/v1alpha3_resource_claim_template_spec.py
-    kubernetes/client/models/v1alpha3_resource_pool.py
-    kubernetes/client/models/v1alpha3_resource_slice.py
-    kubernetes/client/models/v1alpha3_resource_slice_list.py
-    kubernetes/client/models/v1alpha3_resource_slice_spec.py
     kubernetes/client/models/v1beta1_allocated_device_status.py
     kubernetes/client/models/v1beta1_allocation_result.py
-    kubernetes/client/models/v1beta1_audit_annotation.py
+    kubernetes/client/models/v1beta1_apply_configuration.py
     kubernetes/client/models/v1beta1_basic_device.py
+    kubernetes/client/models/v1beta1_capacity_request_policy.py
+    kubernetes/client/models/v1beta1_capacity_request_policy_range.py
+    kubernetes/client/models/v1beta1_capacity_requirements.py
     kubernetes/client/models/v1beta1_cel_device_selector.py
     kubernetes/client/models/v1beta1_cluster_trust_bundle.py
     kubernetes/client/models/v1beta1_cluster_trust_bundle_list.py
@@ -683,15 +705,22 @@ PY_SRCS(
     kubernetes/client/models/v1beta1_device_sub_request.py
     kubernetes/client/models/v1beta1_device_taint.py
     kubernetes/client/models/v1beta1_device_toleration.py
-    kubernetes/client/models/v1beta1_expression_warning.py
     kubernetes/client/models/v1beta1_ip_address.py
     kubernetes/client/models/v1beta1_ip_address_list.py
     kubernetes/client/models/v1beta1_ip_address_spec.py
+    kubernetes/client/models/v1beta1_json_patch.py
     kubernetes/client/models/v1beta1_lease_candidate.py
     kubernetes/client/models/v1beta1_lease_candidate_list.py
     kubernetes/client/models/v1beta1_lease_candidate_spec.py
     kubernetes/client/models/v1beta1_match_condition.py
     kubernetes/client/models/v1beta1_match_resources.py
+    kubernetes/client/models/v1beta1_mutating_admission_policy.py
+    kubernetes/client/models/v1beta1_mutating_admission_policy_binding.py
+    kubernetes/client/models/v1beta1_mutating_admission_policy_binding_list.py
+    kubernetes/client/models/v1beta1_mutating_admission_policy_binding_spec.py
+    kubernetes/client/models/v1beta1_mutating_admission_policy_list.py
+    kubernetes/client/models/v1beta1_mutating_admission_policy_spec.py
+    kubernetes/client/models/v1beta1_mutation.py
     kubernetes/client/models/v1beta1_named_rule_with_operations.py
     kubernetes/client/models/v1beta1_network_device_data.py
     kubernetes/client/models/v1beta1_opaque_device_configuration.py
@@ -714,20 +743,14 @@ PY_SRCS(
     kubernetes/client/models/v1beta1_service_cidr_list.py
     kubernetes/client/models/v1beta1_service_cidr_spec.py
     kubernetes/client/models/v1beta1_service_cidr_status.py
-    kubernetes/client/models/v1beta1_type_checking.py
-    kubernetes/client/models/v1beta1_validating_admission_policy.py
-    kubernetes/client/models/v1beta1_validating_admission_policy_binding.py
-    kubernetes/client/models/v1beta1_validating_admission_policy_binding_list.py
-    kubernetes/client/models/v1beta1_validating_admission_policy_binding_spec.py
-    kubernetes/client/models/v1beta1_validating_admission_policy_list.py
-    kubernetes/client/models/v1beta1_validating_admission_policy_spec.py
-    kubernetes/client/models/v1beta1_validating_admission_policy_status.py
-    kubernetes/client/models/v1beta1_validation.py
     kubernetes/client/models/v1beta1_variable.py
     kubernetes/client/models/v1beta1_volume_attributes_class.py
     kubernetes/client/models/v1beta1_volume_attributes_class_list.py
     kubernetes/client/models/v1beta2_allocated_device_status.py
     kubernetes/client/models/v1beta2_allocation_result.py
+    kubernetes/client/models/v1beta2_capacity_request_policy.py
+    kubernetes/client/models/v1beta2_capacity_request_policy_range.py
+    kubernetes/client/models/v1beta2_capacity_requirements.py
     kubernetes/client/models/v1beta2_cel_device_selector.py
     kubernetes/client/models/v1beta2_counter.py
     kubernetes/client/models/v1beta2_counter_set.py

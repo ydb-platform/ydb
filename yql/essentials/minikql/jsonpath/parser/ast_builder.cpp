@@ -60,7 +60,7 @@ bool TryStringContent(const TString& str, TString& result, TString& error, bool 
     }
 }
 
-}
+} // namespace
 
 TAstBuilder::TAstBuilder(TIssues& issues)
     : Issues_(issues)
@@ -294,7 +294,7 @@ TAstNodePtr TAstBuilder::BuildLikeRegexExpr(const TRule_like_regex_expr& node, T
     IRePtr compiledRegex;
     try {
         compiledRegex = NDispatcher::Compile(regex, parsedFlags,
-            NDispatcher::Has(RegexpLibId) ? RegexpLibId : TSerialization::kRe2);
+                                             NDispatcher::Has(RegexpLibId) ? RegexpLibId : TSerialization::kRe2);
     } catch (const NReWrapper::TCompileException& e) {
         Error(GetPos(regexToken), e.AsStrBuf());
         return nullptr;
@@ -497,4 +497,4 @@ ui32 GetReLibId() {
     return RegexpLibId;
 }
 
-}
+} // namespace NYql::NJsonPath

@@ -4,13 +4,18 @@ from parso import utils
 
 
 def test_load_inexisting_grammar():
-    # This version shouldn't be out for a while, but if we ever do, wow!
-    with pytest.raises(NotImplementedError):
-        load_grammar(version='15.8')
-    # The same is true for very old grammars (even though this is probably not
-    # going to be an issue.
+    # We support future grammars assuming future compatibility,
+    # but we don't know how to parse old grammars.
     with pytest.raises(NotImplementedError):
         load_grammar(version='1.5')
+
+
+def test_load_grammar_uses_older_syntax():
+    load_grammar(version='4.0')
+
+
+def test_load_grammar_doesnt_warn(each_version):
+    load_grammar(version=each_version)
 
 
 @pytest.mark.parametrize(('string', 'result'), [

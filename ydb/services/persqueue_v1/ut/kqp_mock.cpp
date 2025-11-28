@@ -1,5 +1,5 @@
 #include "kqp_mock.h"
-#include <ydb/core/persqueue/write_id.h>
+#include <ydb/core/persqueue/public/write_id.h>
 
 namespace NKikimr::NPersQueueTests {
 

@@ -9,7 +9,7 @@ namespace NFastCheck {
 
 namespace {
 
-class TLexerRunner : public TCheckRunnerBase {
+class TLexerRunner: public TCheckRunnerBase {
 public:
     TString GetCheckName() const final {
         return "lexer";
@@ -17,12 +17,12 @@ public:
 
     TCheckResponse DoRun(const TChecksRequest& request) final {
         switch (request.Syntax) {
-        case ESyntax::SExpr:
-            return RunSExpr(request);
-        case ESyntax::PG:
-            return RunPg(request);
-        case ESyntax::YQL:
-            return RunYql(request);
+            case ESyntax::SExpr:
+                return RunSExpr(request);
+            case ESyntax::PG:
+                return RunPg(request);
+            case ESyntax::YQL:
+                return RunYql(request);
         }
     }
 
@@ -40,7 +40,7 @@ private:
     }
 
     TCheckResponse RunYql(const TChecksRequest& request) {
-        TCheckResponse res {.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = GetCheckName()};
         NSQLTranslation::TTranslationSettings settings;
         settings.SyntaxVersion = request.SyntaxVersion;
         settings.AnsiLexer = request.IsAnsiLexer;
@@ -65,11 +65,11 @@ private:
     }
 };
 
-}
+} // namespace
 
 std::unique_ptr<ICheckRunner> MakeLexerRunner() {
     return std::make_unique<TLexerRunner>();
 }
 
-}
-}
+} // namespace NFastCheck
+} // namespace NYql

@@ -753,6 +753,9 @@ namespace NKikimr::NPDisk {
         header->EncryptData(cypher);
         header->Encrypt(cypher);
 
+        // fill padding to make msan comfortable
+        memset(buffer.GetDataMut() + sizeof(TMetadataHeader) + payloadSize, 0,
+            bytesToWrite - sizeof(TMetadataHeader) - payloadSize);
         return buffer;
     }
 

@@ -9,6 +9,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <util/generic/hash_set.h>
+#include <util/string/vector.h>
 
 namespace NYdb::NTPCC {
 
@@ -38,6 +39,45 @@ void CheckTablesExist(TDriver& driver, const TString& path, const char* what) {
             std::exit(1);
         }
     }
+
+
+}
+
+void CheckPathExistOrCreate(TDriver& driver, const TString& database, const TString& path) {
+    if (path.empty() || path == database) {
+        return;
+    }
+
+    NScheme::TSchemeClient schemeClient(driver);
+    auto listResult = schemeClient.ListDirectory(path, {}).GetValueSync();
+    if (listResult.IsSuccess()) {
+        return;
+    }
+
+    // path is full path, we must ignore database part
+    TString relativePath = path.substr(database.size() + 1); // skip /DB/
+    if (relativePath.empty()) {
+        return;
+    }
+
+    TVector<TString> pathComponents = SplitString(relativePath, "/");
+    TString subPath = database;
+    for (const auto& component: pathComponents) {
+        subPath = subPath + "/" + component;
+
+        listResult = schemeClient.ListDirectory(subPath, {}).GetValueSync();
+        if (listResult.IsSuccess()) {
+            continue;
+        }
+
+        auto createResult = schemeClient.MakeDirectory(subPath).GetValueSync();
+        if (!createResult.IsSuccess()) {
+            Cerr << "Failed to create '" << subPath << "', please, check the path and permissions" << Endl;
+            std::exit(1);
+        }
+    }
+
+    Cout << "Path '" << path << "' was not found in the database, so it was created automatically." << Endl;
 }
 
 void CheckNoTablesExist(TDriver& driver, const TString& path, const char* what) {
@@ -69,7 +109,7 @@ void CheckNoIndexExists(TDriver& driver, const TString& path, const TString& tab
     const std::vector<NTable::TIndexDescription>& indexes = desc.GetIndexDescriptions();
     if (!indexes.empty()) {
         Cerr << "Table '" << fullPath
-             << "' already has index/indices. Are you importing to the existing data?" << Endl;
+             << "' already has index/indices. Are you importing to the already imported data?" << Endl;
         std::exit(1);
     }
 }
@@ -79,7 +119,7 @@ void CheckIndexExistsAndReady(TDriver& driver, const TString& path, const TStrin
     auto desc = DescribeTable(driver, path, tableName);
     const std::vector<NTable::TIndexDescription>& indexes = desc.GetIndexDescriptions();
     if (indexes.empty()) {
-        Cerr << "Table '" << fullPath << "' has no index" << Endl;
+        Cerr << "Table '" << fullPath << "' has no index, did you forget to run 'tpcc import'?" << Endl;
         std::exit(1);
     }
 
@@ -149,6 +189,7 @@ void CheckPathForInit(
     auto connectionConfigCopy = connectionConfig;
     TDriver driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
 
+    CheckPathExistOrCreate(driver, connectionConfig.Database, path);
     CheckNoTablesExist(driver, path, "Already inited or forgot to clean?");
 }
 
@@ -167,7 +208,8 @@ void CheckPathForImport(
 
     int whCount = GetWarehouseCount(driver, path);
     if (whCount != 0) {
-        Cerr << path << " already has " << whCount << " warehouses. Are you importing to the existing data?" << Endl;
+        Cerr << path << " already has " << whCount
+            << " warehouses. Are you importing to the already imported data?" << Endl;
         std::exit(1);
     }
 
@@ -199,7 +241,7 @@ void CheckPathForRun(
     int whCount = GetWarehouseCount(driver, path);
     if (whCount != expectedWhCount) {
         if (whCount == 0) {
-            Cerr << "Empty warehouse table (and maybe missing other TPC-C data), run import first" << Endl;
+            Cerr << "Empty warehouse table (and maybe missing other TPC-C data), run 'tpcc import' first" << Endl;
             std::exit(1);
         }
         if (whCount < expectedWhCount) {

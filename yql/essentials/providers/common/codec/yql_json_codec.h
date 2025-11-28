@@ -26,16 +26,17 @@ using TValueConvertPolicy = TEnumBitSet<EValueConvertPolicy, EValueConvertPolicy
 class DefaultPolicy {
 public:
     static DefaultPolicy& GetInstance() {
-        static DefaultPolicy instance;
-        return instance;
+        static DefaultPolicy Instance;
+        return Instance;
     }
 
 private:
-    DefaultPolicy() {}
+    DefaultPolicy() {
+    }
 
 public:
-    DefaultPolicy(DefaultPolicy &) = delete;
-    void operator=(const DefaultPolicy &) = delete;
+    DefaultPolicy(DefaultPolicy&) = delete;
+    void operator=(const DefaultPolicy&) = delete;
 
     TValueConvertPolicy CloudFunction() const {
         return CloudFunctionPolicy_;
@@ -50,13 +51,12 @@ private:
     TValueConvertPolicy ExportPolicy_ = TValueConvertPolicy{DISALLOW_NaN};
 };
 
-
 NJson::TJsonWriterConfig MakeJsonConfig();
 
 void WriteValueToJson(NJson::TJsonWriter& writer, const NUdf::TUnboxedValuePod& value,
                       NMiniKQL::TType* type, TValueConvertPolicy convertPolicy = {});
 
 NUdf::TUnboxedValue ReadJsonValue(NJson::TJsonValue& json, NMiniKQL::TType* type, const NMiniKQL::THolderFactory& holderFactory);
-} // NJsonCodec
-} // NCommon
-} // NYql
+} // namespace NJsonCodec
+} // namespace NCommon
+} // namespace NYql

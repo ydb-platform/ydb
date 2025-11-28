@@ -97,19 +97,41 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
 
+    REGISTER_SETTING(*this, UseDqHashCombine);
+
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
     REGISTER_SETTING(*this, EnableSpillingNodes)
         .Parser([](const TString& v) { return ParseEnableSpillingNodes(v); });
+    REGISTER_SETTING(*this, CostBasedOptimization)
+        .Parser(
+            [&](TString val) {
+                for (char& c: val) { c = ToLower(c); }
+
+                if (val == "on") {
+                    CostBasedOptimizationLevel = Max<ui32>();
+                } else if (val == "off") {
+                    CostBasedOptimizationLevel = 0;
+                } else if (val == "auto") {
+                    CostBasedOptimizationLevel = DefaultCostBasedOptimizationLevel;
+                } else {
+                    Y_ENSURE(false, "undefined cbo setting, available: [on, off, auto]");
+                }
+
+                return val;
+            }
+    );
     REGISTER_SETTING(*this, UseBlockReader);
 
     REGISTER_SETTING(*this, MaxDPHypDPTableSize);
+    REGISTER_SETTING(*this, ShuffleEliminationJoinNumCutoff);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
     REGISTER_SETTING(*this, DataSizePerPartition);
     REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
 
     REGISTER_SETTING(*this, KMeansTreeSearchTopSize);
+    REGISTER_SETTING(*this, DisableCheckpoints);
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
@@ -155,10 +177,6 @@ bool TKikimrSettings::HasOptEnableInplaceUpdate() const {
 
 bool TKikimrSettings::HasOptEnableOlapPushdown() const {
     return GetOptionalFlagValue(OptEnableOlapPushdown.Get()) != EOptionalFlag::Disabled;
-}
-
-bool TKikimrSettings::HasOptEnableOlapPushdownAggregate() const {
-    return GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) != EOptionalFlag::Disabled;
 }
 
 bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
@@ -209,5 +227,13 @@ bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
 bool TKikimrConfiguration::GetEnableParallelUnionAllConnectionsForExtend() const {
     return ((GetOptionalFlagValue(OptEnableParallelUnionAllConnectionsForExtend.Get()) == EOptionalFlag::Enabled) ||
             EnableParallelUnionAllConnectionsForExtend);
+}
+
+bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownAggregate);
+}
+
+bool TKikimrConfiguration::GetUseDqHashCombine() const {
+    return UseDqHashCombine.Get().GetOrElse(EnableDqHashCombineByDefault);
 }
 }

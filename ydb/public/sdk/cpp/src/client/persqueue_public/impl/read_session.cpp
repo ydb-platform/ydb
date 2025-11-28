@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
@@ -147,7 +147,7 @@ void TReadSession::StartClusterDiscovery() {
     };
 
     auto rpcSettings = TRpcRequestSettings::Make(Settings);
-    rpcSettings.ClientTimeout = TDuration::Seconds(5); // TODO: make client timeout setting
+    rpcSettings.Deadline = TDeadline::AfterDuration(std::chrono::seconds(5)); // TODO: make client timeout setting
     Connections->RunDeferred<Ydb::PersQueue::V1::ClusterDiscoveryService,
                              Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest,
                              Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResponse>(

@@ -27,15 +27,24 @@ TActorId TLocalProxyActor::RegisterActor(IActor* actor) const {
     return RegisterWithSameMailbox(actor);
 }
 
+TString TLocalProxyActor::MakeLocalPath(TString path) const {
+    if (path.StartsWith(Database + "/")) {
+        return path.substr(Database.length() + 1);
+    }
+
+    return path;
+}
+
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
     LOG_T("Handle " << ev->Get()->ToString());
 
     auto args = std::move(ev->Get()->GetArgs());
-    auto& path = std::get<TString>(args);
+    const auto localPath = MakeLocalPath(std::get<TString>(args));
     auto& settings = std::get<NYdb::NTopic::TAlterTopicSettings>(args);
 
     auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
-    request.get()->set_path(TStringBuilder() << "/" << Database << path);
+    request.get()->set_path(TStringBuilder() << Database << "/" << localPath);
+
     for (auto& c : settings.AddConsumers_) {
         auto* consumer = request.get()->add_add_consumers();
         consumer->set_name(c.ConsumerName_);
@@ -45,27 +54,38 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
         *consumer = c;
     }
 
-    auto callback = [replyTo = ev->Sender, cookie = ev->Cookie, path = path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
+    auto callback = [
+        actorSystem = TActivationContext::ActorSystem(),
+        replyTo = ev->Sender,
+        cookie = ev->Cookie,
+        path = localPath
+    ](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
         NYdb::NIssue::TIssues issues;
         NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
-        Send(replyTo, new TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
+
+        actorSystem->Send(replyTo, new TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
     };
 
-    NGRpcService::DoAlterTopicRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);
+    NGRpcService::DoAlterTopicRequest(std::make_unique<TLocalProxyRequest>(localPath, Database, std::move(request), callback), *this);
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
     LOG_T("Handle " << ev->Get()->ToString());
 
     auto args = std::move(ev->Get()->GetArgs());
-    auto& path = std::get<TString>(args);
+    const auto localPath = MakeLocalPath(std::get<TString>(args));
     auto& settings = std::get<NYdb::NTopic::TDescribeTopicSettings>(args);
     Y_UNUSED(settings);
 
     auto request = std::make_unique<Ydb::Topic::DescribeTopicRequest>();
-    request.get()->set_path(TStringBuilder() << "/" << Database << path);
+    request.get()->set_path(TStringBuilder() << Database << "/" << localPath);
 
-    auto callback = [replyTo = ev->Sender, cookie = ev->Cookie, path = path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
+    auto callback = [
+        actorSystem = TActivationContext::ActorSystem(),
+        replyTo = ev->Sender,
+        cookie = ev->Cookie,
+        path = localPath
+    ](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
         NYdb::NIssue::TIssues issues;
         Ydb::Topic::DescribeTopicResult describe;
         if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
@@ -80,24 +100,30 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
 
         NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
         NYdb::NTopic::TDescribeTopicResult r(std::move(status), std::move(describe));
-        Send(replyTo, new TEvYdbProxy::TEvDescribeTopicResponse(r), 0, cookie);
+
+        actorSystem->Send(replyTo, new TEvYdbProxy::TEvDescribeTopicResponse(r), 0, cookie);
     };
 
-    NGRpcService::DoDescribeTopicRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);
+    NGRpcService::DoDescribeTopicRequest(std::make_unique<TLocalProxyRequest>(localPath, Database, std::move(request), callback), *this);
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
     LOG_T("Handle " << ev->Get()->ToString());
 
     auto args = std::move(ev->Get()->GetArgs());
-    auto& path = std::get<TString>(args);
+    const auto localPath = MakeLocalPath(std::get<TString>(args));
     auto& settings = std::get<NYdb::NScheme::TDescribePathSettings>(args);
     Y_UNUSED(settings);
 
     auto request = std::make_unique<Ydb::Scheme::DescribePathRequest>();
-    request.get()->set_path(TStringBuilder() << "/" << Database << path);
+    request.get()->set_path(TStringBuilder() << Database << "/" << localPath);
 
-    auto callback = [replyTo = ev->Sender, cookie = ev->Cookie, path = path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
+    auto callback = [
+        actorSystem = TActivationContext::ActorSystem(),
+        replyTo = ev->Sender,
+        cookie = ev->Cookie,
+        path = localPath
+    ](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
         NYdb::NIssue::TIssues issues;
         NYdb::NScheme::TSchemeEntry entry;
         if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
@@ -112,10 +138,11 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
 
         NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
         NYdb::NScheme::TDescribePathResult r(std::move(status), std::move(entry));
-        Send(replyTo, new TEvYdbProxy::TEvDescribePathResponse(r), 0, cookie);
+
+        actorSystem->Send(replyTo, new TEvYdbProxy::TEvDescribePathResponse(r), 0, cookie);
     };
 
-    NGRpcService::DoDescribePathRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);
+    NGRpcService::DoDescribePathRequest(std::make_unique<TLocalProxyRequest>(localPath, Database, std::move(request), callback), *this);
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev) {

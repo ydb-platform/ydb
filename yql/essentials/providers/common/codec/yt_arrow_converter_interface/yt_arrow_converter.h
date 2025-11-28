@@ -11,4 +11,4 @@ public:
     virtual ~IYtColumnConverter() = default;
 };
 
-}
+} // namespace NYql

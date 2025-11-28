@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_actor.h>
+#include <ydb/core/kqp/runtime/scheduler/fwd.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/actors/core/actor.h>
@@ -11,6 +11,7 @@
 
 namespace NKikimr::NKqp {
     struct TKqpFederatedQuerySetup;
+    class TNodeState;
 }
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -92,13 +93,6 @@ public:
     }
 };
 
-struct IKqpNodeState {
-    virtual ~IKqpNodeState() = default;
-
-    virtual void OnTaskTerminate(ui64 txId, ui64 taskId, bool success) = 0;
-};
-
-
 struct IKqpNodeComputeActorFactory {
     virtual ~IKqpNodeComputeActorFactory() = default;
 
@@ -127,14 +121,12 @@ public:
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
-        std::shared_ptr<IKqpNodeState> State = nullptr;
-        TSchedulableOptions SchedulableOptions;
+        std::shared_ptr<TNodeState> State = nullptr;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
+        bool EnableWatermarks;
 
-#if defined(USE_HDRF_SCHEDULER)
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
-#endif
     };
 
     typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;

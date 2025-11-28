@@ -6,7 +6,6 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
 
-
 namespace NYql {
 
 using namespace NNodes;
@@ -24,6 +23,7 @@ public:
         YQL_ENSURE(parentsIt != parentsMap->cend());
         YQL_ENSURE(parentsIt->second.size() == 1, "Bad usage of local optimizer. Try to switch to global mode");
     }
+
 private:
     TOptimizeTransformerBase::TGetParents GetParents_;
 };
@@ -47,11 +47,11 @@ public:
     bool HasError() const {
         return HasError_;
     }
+
 private:
     TNodeOnNodeOwnedMap& Remaps_;
     bool HasError_ = false;
 };
-
 
 TOptimizeTransformerBase::TOptimizeTransformerBase(TTypeAnnotationContext* types, NLog::EComponent logComponent, const TSet<TString>& disabledOpts)
     : Types(types)
@@ -65,10 +65,10 @@ IGraphTransformer::TStatus TOptimizeTransformerBase::DoTransform(TExprNode::TPtr
     IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
 
     output = input;
-    for (auto& step: Steps_) {
+    for (auto& step : Steps_) {
         TParentsMap parentsMap;
         bool parentsMapInit = false;
-        TGetParents getParents = [&input, &parentsMap, &parentsMapInit] () {
+        TGetParents getParents = [&input, &parentsMap, &parentsMapInit]() {
             if (!parentsMapInit) {
                 GatherParents(*input, parentsMap);
                 parentsMapInit = true;
@@ -79,10 +79,8 @@ IGraphTransformer::TStatus TOptimizeTransformerBase::DoTransform(TExprNode::TPtr
             TNodeOnNodeOwnedMap remaps;
             auto optCtx = TRemapOptimizationContext{remaps};
             VisitExpr(output,
-                [&optCtx, &step](const TExprNode::TPtr& node) {
-                    return optCtx.CanContinue() && !node->StartsExecution() && !step.ProcessedNodes.contains(node->UniqueId());
-                },
-                [this, &step, &getParents, &ctx, &optCtx](const TExprNode::TPtr& node) -> bool {
+                      [&optCtx, &step](const TExprNode::TPtr& node) { return optCtx.CanContinue() && !node->StartsExecution() && !step.ProcessedNodes.contains(node->UniqueId()); },
+                      [this, &step, &getParents, &ctx, &optCtx](const TExprNode::TPtr& node) -> bool {
                     if (optCtx.CanContinue() && !node->StartsExecution() && !step.ProcessedNodes.contains(node->UniqueId())) {
                         for (auto& opt: step.Optimizers) {
                             if (opt.Filter(node.Get())) {
@@ -108,9 +106,7 @@ IGraphTransformer::TStatus TOptimizeTransformerBase::DoTransform(TExprNode::TPtr
                             step.ProcessedNodes.insert(node->UniqueId());
                         }
                     }
-                    return true;
-                }
-            );
+                    return true; });
 
             if (optCtx.HasError()) {
                 status = IGraphTransformer::TStatus::Error;
@@ -122,7 +118,7 @@ IGraphTransformer::TStatus TOptimizeTransformerBase::DoTransform(TExprNode::TPtr
             settings.ProcessedNodes = &step.ProcessedNodes;
             status = OptimizeExpr(output, output, [this, &step, &getParents](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
                 TIgnoreOptimizationContext ignoreOptCtx(getParents);
-                for (auto& opt: step.Optimizers) {
+                for (auto& opt : step.Optimizers) {
                     if (opt.Filter(node.Get())) {
                         try {
                             auto ret = opt.Handler(NNodes::TExprBase(node), ctx, ignoreOptCtx, getParents);
@@ -154,27 +150,27 @@ IGraphTransformer::TStatus TOptimizeTransformerBase::DoTransform(TExprNode::TPtr
 }
 
 void TOptimizeTransformerBase::Rewind() {
-    for (auto& step: Steps_) {
+    for (auto& step : Steps_) {
         step.ProcessedNodes.clear();
     }
 }
 
 TOptimizeTransformerBase::TFilter TOptimizeTransformerBase::Any() {
-    return [] (const TExprNode* node) {
+    return [](const TExprNode* node) {
         Y_UNUSED(node);
         return true;
     };
 }
 
 TOptimizeTransformerBase::TFilter TOptimizeTransformerBase::Names(std::initializer_list<TStringBuf> names) {
-    return [filter = THashSet<TStringBuf>(names)] (const TExprNode* node) {
+    return [filter = THashSet<TStringBuf>(names)](const TExprNode* node) {
         return node->IsCallable(filter);
     };
 }
 
 TOptimizeTransformerBase::TFilter TOptimizeTransformerBase::Or(std::initializer_list<TOptimizeTransformerBase::TFilter> filters) {
-    return [orFilters = TVector<TFilter>(filters)] (const TExprNode* node) {
-        for (auto& f: orFilters) {
+    return [orFilters = TVector<TFilter>(filters)](const TExprNode* node) {
+        for (auto& f : orFilters) {
             if (f(node)) {
                 return true;
             }
@@ -210,4 +206,4 @@ void TOptimizeTransformerBase::SetGlobal(size_t step) {
     Steps_[step].Global = true;
 }
 
-}
+} // namespace NYql

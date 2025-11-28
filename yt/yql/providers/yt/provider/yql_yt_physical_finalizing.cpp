@@ -515,6 +515,7 @@ private:
                                     .Columns<TCoVoid>().Build()
                                     .Ranges<TCoVoid>().Build()
                                     .Stat<TCoVoid>().Build()
+                                    .QLFilter<TCoVoid>().Build()
                                 .Build()
                             .Build()
                             .Settings<TCoNameValueTupleList>()
@@ -681,7 +682,10 @@ private:
 
     TStatus OptimizeFieldSubsetForMultiUsage(TExprNode::TPtr input, TExprNode::TPtr& output, const TOpDeps& opDeps, const TNodeSet& lefts, TExprContext& ctx) {
         TVector<std::pair<const TOpDeps::value_type*, THashSet<TString>>> matchedOps;
+
         const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+        const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
         for (auto& x: opDeps) {
             auto writer = x.first;
 
@@ -852,7 +856,7 @@ private:
                             if (sorted = sorted->FilterFields(ctx, [&columns](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && columns.contains(path.front()); })) {
                                 TKeySelectorBuilder builder(map.Mapper().Pos(), ctx, useNativeDescSort, outStructType);
                                 builder.ProcessConstraint(*sorted);
-                                builder.FillRowSpecSort(*mapOut.RowSpec);
+                                builder.FillRowSpecSort(*mapOut.RowSpec, useNativeYtDefaultColumnOrder);
 
                                 if (builder.NeedMap()) {
                                     mapper = ctx.Builder(map.Mapper().Pos())
@@ -872,7 +876,7 @@ private:
                         }
                     }
                 } else {
-                    mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(outTable.RowSpec()));
+                    mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(outTable.RowSpec()), useNativeYtDefaultColumnOrder);
                 }
                 mapOut.SetUnique(distinct, map.Mapper().Pos(), ctx);
                 mapOut.RowSpec->SetConstraints(outTable.Ref().GetConstraintSet());
@@ -889,12 +893,12 @@ private:
                 auto merge = TYtMerge(writer);
                 auto prevRowSpec = TYqlRowSpecInfo(merge.Output().Item(0).RowSpec());
                 TYtOutTableInfo mergeOut(outStructType, prevRowSpec.GetNativeYtTypeFlags());
-                mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
+                mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                 mergeOut.SetUnique(distinct, merge.Pos(), ctx);
                 mergeOut.RowSpec->SetConstraints(outTable.Ref().GetConstraintSet());
 
                 if (auto nativeType = prevRowSpec.GetNativeYtType()) {
-                    mergeOut.RowSpec->CopyTypeOrders(*nativeType);
+                    mergeOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
                 }
 
                 TSet<TStringBuf> columnSet;
@@ -1361,6 +1365,7 @@ private:
                                     .Columns<TCoVoid>().Build()
                                     .Ranges<TCoVoid>().Build()
                                     .Stat<TCoVoid>().Build()
+                                    .QLFilter<TCoVoid>().Build()
                                 .Done()
                             );
                             prevPaths.erase(prevPaths.begin(), prevPaths.begin() + count);
@@ -1967,6 +1972,7 @@ private:
                                                         .Columns<TCoVoid>().Build()
                                                         .Ranges<TCoVoid>().Build()
                                                         .Stat<TCoVoid>().Build()
+                                                        .QLFilter<TCoVoid>().Build()
                                                     .Build()
                                                 .Build()
                                                 .Settings().Build()

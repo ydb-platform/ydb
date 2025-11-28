@@ -61,5 +61,5 @@ TVector<TCheckFilter> ParseChecks(const TString& checks);
 TSet<TString> ListChecks(const TMaybe<TVector<TCheckFilter>>& filters = Nothing());
 TChecksResponse RunChecks(const TChecksRequest& request);
 
-}
-}
+} // namespace NFastCheck
+} // namespace NYql

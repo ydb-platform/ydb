@@ -16,6 +16,8 @@ struct TServiceDiscoveryConfig
 {
     bool Enable;
 
+    bool EnableMetrics;
+
     //! Provider endpoint.
     TString Fqdn;
     int GrpcPort;

@@ -151,7 +151,7 @@ def post_install(self):
 
 
 protobuf = NixProject(
-    owners=["g:cpp-committee", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/protobuf",
     nixattr="protobuf",
     license_analysis_extra_dirs=[

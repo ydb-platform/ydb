@@ -8,7 +8,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/plain_status/status.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
@@ -31,7 +31,7 @@ struct TConnectionState {
 };
 
 struct TPgWireAuthData {
-    TActorId Sender;
+    NActors::TActorId Sender;
     TString UserName;
     TString DatabasePath;
     TString Password;
@@ -112,15 +112,15 @@ struct TEvEvents {
         TString SerializedToken;
         TString Ticket;
         TString ErrorMessage;
-        TActorId Sender;
+        NActors::TActorId Sender;
 
-        TEvAuthResponse(const TString& serializedToken, const TString& ticket, const TActorId& sender)
+        TEvAuthResponse(const TString& serializedToken, const TString& ticket, const NActors::TActorId& sender)
             : SerializedToken(serializedToken)
             , Ticket(ticket)
             , Sender(sender)
         {}
 
-        TEvAuthResponse(const TString& errorMessage, const TActorId& sender)
+        TEvAuthResponse(const TString& errorMessage, const NActors::TActorId& sender)
             : ErrorMessage(errorMessage)
             , Sender(sender)
         {}

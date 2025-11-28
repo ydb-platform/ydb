@@ -38,22 +38,14 @@ namespace NKikimr::NStorage {
 
         if (InvokePipelineGeneration == Self->InvokePipelineGeneration) {
             Y_ABORT_UNLESS(!Self->Binding);
-
-            switch (auto& state = Self->RootState) {
-                case ERootState::INITIAL:
-                    state = ERootState::LOCAL_QUORUM_OP;
-                    break;
-
-                case ERootState::RELAX:
-                    state = ERootState::IN_PROGRESS;
-                    break;
-
-                case ERootState::LOCAL_QUORUM_OP:
-                case ERootState::IN_PROGRESS:
-                case ERootState::ERROR_TIMEOUT:
-                    Y_ABORT_S("unexpected RootState# " << state);
+            if (Self->RootState == ERootState::RELAX) {
+                Y_ABORT_UNLESS(Self->Scepter); // node must have scepter
+                Self->RootState = ERootState::IN_PROGRESS;
+            } else {
+                Y_ABORT_UNLESS(Self->RootState == ERootState::INITIAL);
+                Y_ABORT_UNLESS(!Self->Scepter); // this operation is invoked without a scepter
+                InvokedWithoutScepter = true;
             }
-
             ExecuteQuery();
         } else {
             // TEvAbortQuery will come soon (must be already in mailbox)
@@ -167,6 +159,15 @@ namespace NKikimr::NStorage {
                     case TQuery::kNotifyBridgeSyncFinished:
                         return NotifyBridgeSyncFinished(op.Command.GetNotifyBridgeSyncFinished());
 
+                    case TQuery::kUpdateBridgeGroupInfo:
+                        return UpdateBridgeGroupInfo(op.Command.GetUpdateBridgeGroupInfo());
+
+                    case TQuery::kNotifyBridgeSuspended:
+                        return NotifyBridgeSuspended(op.Command.GetNotifyBridgeSuspended());
+
+                    case TQuery::kDescendCommittedStorageConfig:
+                        return DescendCommittedStorageConfig(op.Command.GetDescendCommittedStorageConfig());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
                 }
@@ -187,16 +188,14 @@ namespace NKikimr::NStorage {
                     } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
                         throw TExError() << *r.ErrorReason;
                     } else if (r.ConfigToPropose) {
-                        CheckSyncersAfterCommit = r.CheckSyncersAfterCommit;
-                        StartProposition(&r.ConfigToPropose.value(), true,
-                            r.PropositionBase ? &r.PropositionBase.value() : nullptr);
+                        StartProposition(&r.ConfigToPropose.value(), /*mindPrev=*/ true,
+                            r.PropositionBase ? &r.PropositionBase.value() : nullptr, r.AutomaticBootstrap);
                     } else {
                         Finish(TResult::OK, std::nullopt);
                     }
                 });
             },
             [&](TProposeConfig& op) {
-                CheckSyncersAfterCommit = op.CheckSyncersAfterCommit;
                 StartProposition(&op.Config);
             }
         }, Query);
@@ -233,20 +232,26 @@ namespace NKikimr::NStorage {
         StartProposition(request->MutableConfig());
     }
 
+    void TInvokeRequestHandlerActor::DescendCommittedStorageConfig(const TQuery::TDescendCommittedStorageConfig& request) {
+        if (!Self->BridgeInfo) {
+            throw TExError() << "Not in bridge mode";
+        } else {
+            Self->ApplyCommittedStorageConfig(request.GetCommittedStorageConfig());
+            Finish(TResult::OK, std::nullopt);
+        }
+    }
+
     void TInvokeRequestHandlerActor::AdvanceGeneration() {
         RunCommonChecks();
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         StartProposition(&config);
     }
 
-    void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum,
-            const NKikimrBlobStorage::TStorageConfig *propositionBase) {
-        if (auto error = UpdateClusterState(config)) {
-            throw TExError() << *error;
-        } else if (!Self->HasConnectedNodeQuorum(*config, acceptLocalQuorum)) {
-            throw TExError() << "No quorum to start propose/commit configuration";
-        } else if (!acceptLocalQuorum && !Self->Scepter) {
-            throw TExError() << "No scepter";
+    void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
+            const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap) {
+        if (!Self->HasConnectedNodeQuorum(*config)) {
+            // we won't be able to have quorum for this configuration if we start proposing now
+            throw TExNoQuorum() << "No quorum to start propose/commit configuration";
         }
 
         if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query)) {
@@ -276,13 +281,13 @@ namespace NKikimr::NStorage {
 
                     auto wrapEmpty = [](const TString& value) { return value ? value : TString("{none}"); };
 
-                    AUDIT_PART("component", TString("distconf"))
+                    AUDIT_PART("component", "distconf")
                     AUDIT_PART("remote_address", wrapEmpty(NKikimr::NAddressClassifier::ExtractAddress(replaceConfig.GetPeerName())))
                     AUDIT_PART("subject", wrapEmpty(userToken.GetUserSID()))
                     AUDIT_PART("sanitized_token", wrapEmpty(userToken.GetSanitizedToken()))
-                    AUDIT_PART("status", TString("SUCCESS"))
+                    AUDIT_PART("status", "SUCCESS")
                     AUDIT_PART("reason", TString(), false)
-                    AUDIT_PART("operation", TString("REPLACE CONFIG"))
+                    AUDIT_PART("operation", "REPLACE CONFIG")
                     AUDIT_PART("old_config", oldConfig)
                     AUDIT_PART("new_config", newConfig)
                 );
@@ -293,9 +298,13 @@ namespace NKikimr::NStorage {
             propositionBase = Self->StorageConfig.get();
         }
 
+        if (propositionBase && !propositionBase->GetGeneration() && !fromBootstrap) {
+            throw TExError() << "First distconf config-changing command has to be BootstrapCluster";
+        }
+
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-            SelfId(), CheckSyncersAfterCommit);
+            SelfId(), mindPrev);
         if (error) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
                 (Error, *error), (ProposedConfig, *config));
@@ -320,13 +329,6 @@ namespace NKikimr::NStorage {
     // Query termination and result delivery
 
     void TInvokeRequestHandlerActor::RunCommonChecks(bool requireScepter) {
-        Y_ABORT_UNLESS(
-            Self->RootState == ERootState::LOCAL_QUORUM_OP ||
-            Self->RootState == ERootState::IN_PROGRESS
-        );
-
-        Y_ABORT_UNLESS(!Self->CurrentProposition);
-
         if (!Self->StorageConfig) {
             throw TExError() << "No agreed StorageConfig";
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
@@ -334,6 +336,12 @@ namespace NKikimr::NStorage {
         } else if (requireScepter && !Self->Scepter) {
             throw TExError() << "No scepter";
         }
+
+        if (requireScepter) {
+            Y_ABORT_UNLESS(Self->RootState == ERootState::IN_PROGRESS);
+        }
+
+        Y_ABORT_UNLESS(!Self->CurrentProposition);
     }
 
     void TInvokeRequestHandlerActor::Finish(TResult::EStatus status, std::optional<TStringBuf> errorReason,
@@ -367,12 +375,16 @@ namespace NKikimr::NStorage {
                 TActivationContext::Send(handle.release());
             },
             [&](TCollectConfigsAndPropose&) {
-                // this is just temporary failure
-                // TODO(alexvru): backoff?
+                if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
+                    // reschedule operation
+                    TActivationContext::Schedule(Self->CollectConfigsBackoffTimer.Next(),
+                        new IEventHandle(TEvPrivate::EvRetryCollectConfigsAndPropose, 0, Self->SelfId(), {}, nullptr,
+                            InvokePipelineGeneration));
+                }
             },
             [&](TProposeConfig&) {
-                Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
-                if (status != TResult::OK) { // we were asked to commit config, but error has occured
+                if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
+                    // we were asked to commit config, but error has occured
                     Y_ABORT_UNLESS(errorReason);
                     switchToError.emplace(*errorReason);
                 }
@@ -383,25 +395,16 @@ namespace NKikimr::NStorage {
         PassAway();
 
         // reset root state in keeper actor if this query is still valid and there is no pending proposition
-        if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition) {
-            switch (auto& state = Self->RootState) {
-                case ERootState::IN_PROGRESS:
-                    state = ERootState::RELAX;
-                    break;
-
-                case ERootState::LOCAL_QUORUM_OP:
-                    state = Self->Scepter ? ERootState::RELAX : ERootState::INITIAL;
-                    break;
-
-                case ERootState::INITIAL:
-                case ERootState::ERROR_TIMEOUT:
-                case ERootState::RELAX:
-                    Y_ABORT_S("unexpected RootState# " << state);
+        if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition && !InvokedWithoutScepter) {
+            if (Self->RootState == ERootState::IN_PROGRESS) {
+                Self->RootState = ERootState::RELAX;
+            } else {
+                Y_ABORT_UNLESS(Self->RootState == ERootState::INITIAL); // this operation has been executed without a scepter
             }
         }
 
         if (switchToError) {
-            InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, std::move(*switchToError), true);
+            InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, std::move(*switchToError));
         }
     }
 
@@ -448,8 +451,10 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TDistributedConfigKeeper::Handle(TEvNodeConfigInvokeOnRoot::TPtr ev) {
-        if (Binding) {
+    void TDistributedConfigKeeper::HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev) {
+        if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
+            InvokeOnRootPending.push_back(std::move(ev));
+        } else if (Binding) {
             // we have binding, so we have to forward this message to 'hop' node and return answer
             const ui32 hopNodeId = Binding->NodeId;
             const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {.Sender = ev->Sender,
@@ -468,9 +473,13 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Invoke(TInvokeQuery&& query) {
         const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, std::move(query)));
-        InvokeQ.push_back(TInvokeOperation{actorId});
-        if (InvokeQ.size() == 1) {
-            TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, actorId, {}, nullptr, 0));
+        if (RootState != ERootState::ERROR_TIMEOUT) {
+            InvokeQ.push_back(TInvokeOperation{actorId});
+            if (InvokeQ.size() == 1) {
+                TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, actorId, {}, nullptr, 0));
+            }
+        } else {
+            InvokePending.push_back(TInvokeOperation{actorId});
         }
     }
 
@@ -489,7 +498,9 @@ namespace NKikimr::NStorage {
             DeadActorWaitingForProposition = true;
         } else {
             InvokeQ.pop_front();
-            if (!InvokeQ.empty()) {
+            if (InvokeQ.empty()) {
+                CheckForConfigUpdate();
+            } else {
                 TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, InvokeQ.front().ActorId, {},
                     nullptr, 0));
             }

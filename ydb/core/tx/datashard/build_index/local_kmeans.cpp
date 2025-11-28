@@ -51,8 +51,8 @@ class TLocalKMeansScan: public TActor<TLocalKMeansScan>, public IActorExceptionH
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
-    NTableIndex::TClusterId Parent = 0;
-    NTableIndex::TClusterId Child = 0;
+    NTableIndex::NKMeans::TClusterId Parent = 0;
+    NTableIndex::NKMeans::TClusterId Child = 0;
 
     EState State;
     const EState UploadState;
@@ -79,6 +79,7 @@ protected:
     const ui32 K = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
+    bool IsEmpty = false;
 
     const TIndexBuildScanSettings ScanSettings;
 
@@ -122,7 +123,7 @@ public:
         , Lead{std::move(lead)}
         , TabletId(tabletId)
         , BuildId{request.GetId()}
-        , Uploader(request.GetScanSettings())
+        , Uploader(request.GetDatabaseName(), request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
         , K(request.GetK())
         , ScanSettings(request.GetScanSettings())
@@ -140,11 +141,11 @@ public:
         {
             Ydb::Type type;
             auto levelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
-            type.set_type_id(NTableIndex::ClusterIdType);
-            (*levelTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
-            (*levelTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
+            type.set_type_id(NTableIndex::NKMeans::ClusterIdType);
+            (*levelTypes)[0] = {NTableIndex::NKMeans::ParentColumn, type};
+            (*levelTypes)[1] = {NTableIndex::NKMeans::IdColumn, type};
             type.set_type_id(Ydb::Type::STRING);
-            (*levelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
+            (*levelTypes)[2] = {NTableIndex::NKMeans::CentroidColumn, type};
             LevelBuf = Uploader.AddDestination(request.GetLevelName(), std::move(levelTypes));
         }
         OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data));
@@ -173,6 +174,7 @@ public:
         record.MutableMeteringStats()->SetReadRows(ReadRows);
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
+        record.SetIsEmpty(IsEmpty);
 
         Uploader.Finish(record, status);
 
@@ -371,10 +373,11 @@ protected:
             if (rows.size() == 0) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this prefix
+                IsEmpty = true;
                 return true;
             }
             if (rows.size() < K) {
-                // if this datashard have less than K valid embeddings for this parent
+                // if this datashard has less than K valid embeddings for this parent
                 // lets make single centroid for it
                 rows.resize(1);
             }
@@ -431,7 +434,7 @@ protected:
     void FeedSample(TArrayRef<const TCell> row)
     {
         const auto embedding = row.at(EmbeddingPos).AsRef();
-        if (!Clusters->IsExpectedSize(embedding)) {
+        if (!Clusters->IsExpectedFormat(embedding)) {
             return;
         }
 

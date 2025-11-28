@@ -59,7 +59,8 @@ private:
 
 // Providers may subclass this struct to associate specific statistics, useful to
 // derive stats for higher-level operators in the plan.
-struct IProviderStatistics {
+class IProviderStatistics {
+public:
     virtual ~IProviderStatistics() {}
 };
 

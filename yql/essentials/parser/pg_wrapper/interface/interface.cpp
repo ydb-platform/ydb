@@ -12,26 +12,25 @@ namespace NYql {
 
 namespace {
 
-std::array<TStringBuf,6> Prefixes = {
+std::array<TStringBuf, 6> Prefixes = {
     "",
     " ",
     "  ",
     "   ",
     "    ",
-    "     "
-};
+    "     "};
 
 TStringBuf Prefix(int level) {
     return level < (int)Prefixes.size()
-        ? Prefixes[level]
-        : Prefixes.back();
+               ? Prefixes[level]
+               : Prefixes.back();
 }
 
 void PrettyPrintVar(TStringBuilder& b, const IOptimizer::TInput* input, IOptimizer::TVarId varId) {
     const auto& [relno, varno] = varId;
     auto varName = input
-        ? input->Rels[relno-1].TargetVars[varno-1].Name
-        : '\0';
+                       ? input->Rels[relno - 1].TargetVars[varno - 1].Name
+                       : '\0';
     if (!varName) {
         b << "(" << relno << "," << varno << ")";
     } else {
@@ -52,21 +51,36 @@ void PrettyPrintNode(int level, TStringBuilder& b, const IOptimizer::TOutput& ou
     TStringBuf prefix = Prefix(level);
     const auto& node = output.Nodes[id];
     switch (node.Mode) {
-        case IOptimizer::EJoinType::Unknown: b << prefix <<  " Node\n"; break;
-        case IOptimizer::EJoinType::Inner: b << prefix <<  " Inner Join\n"; break;
-        case IOptimizer::EJoinType::Left: b << prefix <<  " Left Join\n"; break;
-        case IOptimizer::EJoinType::Right: b << prefix <<  " Right Join\n"; break;
-        default: b << prefix <<  " Unknown\n"; break;
+        case IOptimizer::EJoinType::Unknown:
+            b << prefix << " Node\n";
+            break;
+        case IOptimizer::EJoinType::Inner:
+            b << prefix << " Inner Join\n";
+            break;
+        case IOptimizer::EJoinType::Left:
+            b << prefix << " Left Join\n";
+            break;
+        case IOptimizer::EJoinType::Right:
+            b << prefix << " Right Join\n";
+            break;
+        default:
+            b << prefix << " Unknown\n";
+            break;
     }
     switch (node.Strategy) {
-        case IOptimizer::EJoinStrategy::Hash: b << prefix <<  " Hash Strategy\n"; break;
-        case IOptimizer::EJoinStrategy::Loop: b << prefix <<  " Loop Strategy\n"; break;
-        default: break;
+        case IOptimizer::EJoinStrategy::Hash:
+            b << prefix << " Hash Strategy\n";
+            break;
+        case IOptimizer::EJoinStrategy::Loop:
+            b << prefix << " Loop Strategy\n";
+            break;
+        default:
+            break;
     }
     if (!node.Rels.empty())
     {
         b << prefix << " Rels: [";
-        for (int i = 0; i < (int)node.Rels.size()-1; i++) {
+        for (int i = 0; i < (int)node.Rels.size() - 1; i++) {
             b << node.Rels[i] << ",";
         }
         b << node.Rels.back();
@@ -85,12 +99,12 @@ void PrettyPrintNode(int level, TStringBuilder& b, const IOptimizer::TOutput& ou
 
     if (node.Outer != -1) {
         b << prefix << " {\n";
-        PrettyPrintNode(level+1, b, output, node.Outer);
+        PrettyPrintNode(level + 1, b, output, node.Outer);
         b << prefix << " }\n";
     }
     if (node.Inner != -1) {
         b << prefix << " {\n";
-        PrettyPrintNode(level+1, b, output, node.Inner);
+        PrettyPrintNode(level + 1, b, output, node.Inner);
         b << prefix << " }\n";
     }
 }
@@ -193,7 +207,7 @@ void IOptimizer::TInput::Normalize() {
         }
     }
     EqClasses.clear();
-    for (auto& [_, ids]: eqClasses) {
+    for (auto& [_, ids] : eqClasses) {
         TEq eqClass;
         eqClass.Vars.reserve(ids.size());
         for (auto id : ids) {
@@ -204,4 +218,4 @@ void IOptimizer::TInput::Normalize() {
     }
 }
 
-}
+} // namespace NYql

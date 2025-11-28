@@ -600,12 +600,66 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
         .Done();
 }
 
+NYql::NNodes::TExprBase KqpPrecomputeParameter(NYql::NNodes::TExprBase param, NYql::TExprContext& ctx) {
+    auto* type = param.Raw()->GetTypeAnn();
+    YQL_ENSURE(type);
+    if (type->GetKind() == ETypeAnnotationKind::Optional) {
+        param = Build<TCoUnwrap>(ctx, param.Pos())
+            .Optional(param)
+            .Done();
+    }
+    return Build<TDqPhyPrecompute>(ctx, param.Pos())
+        .Connection<TDqCnValue>()
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
+                        .Build()
+                    .Program()
+                        .Args({})
+                        .Body<TCoToStream>()
+                            .Input<TCoAsList>()
+                                .Add(param)
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Settings().Build()
+                    .Build()
+                .Index().Build("0")
+                .Build()
+            .Build()
+        .Done();
+}
+
 NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx) {
     if (!node.Maybe<TKqlStreamLookupTable>()) {
         return node;
     }
 
     const auto& lookup = node.Cast<TKqlStreamLookupTable>();
+
+    const auto& settingsSrc = lookup.Settings();
+    auto settings = TKqpStreamLookupSettings::Parse(settingsSrc);
+
+    // Target and/or limit may be expressions (usually very simple ones), in this case
+    // we wrap them in a PhyPrecompute, and let kqp_opt_build_txs.cpp handle them
+    // by scanning the whole query for Precomputes in stage inputs AND in KqpCnStreamLookup
+    // parameters, and replacing them with KqpTxResultBindings, and then, in a more pass,
+    // replacing KqpTxResultBindings with KqpParameterBindings. Then kqp_query_data.cpp
+    // can materialize values with MaterializeParamValue(). That's how dynamic limit/target
+    // values work.
+    bool rebuild = false;
+    if (settings.VectorTopTarget || settings.VectorTopLimit) {
+        auto exprTop = TExprBase(settings.VectorTopTarget);
+        if (!exprTop.Maybe<TCoString>() && !exprTop.Maybe<TCoParameter>()) {
+            settings.VectorTopTarget = KqpPrecomputeParameter(exprTop, ctx).Ptr();
+            rebuild = true;
+        }
+        auto exprLimit = TExprBase(settings.VectorTopLimit);
+        if (!exprLimit.Maybe<TCoUint64>() && !exprLimit.Maybe<TCoParameter>()) {
+            settings.VectorTopLimit = KqpPrecomputeParameter(exprLimit, ctx).Ptr();
+            rebuild = true;
+        }
+    }
 
     TMaybeNode<TKqpCnStreamLookup> cnStreamLookup;
     if (IsDqPureExpr(lookup.LookupKeys())) {
@@ -632,7 +686,7 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
             .Table(lookup.Table())
             .Columns(lookup.Columns())
             .InputType(ExpandType(lookup.Pos(), *lookup.LookupKeys().Ref().GetTypeAnn(), ctx))
-            .Settings(lookup.Settings())
+            .Settings(rebuild ? settings.BuildNode(ctx, lookup.Pos()) : lookup.Settings())
             .Done();
 
     } else if (lookup.LookupKeys().Maybe<TDqCnUnionAll>()) {
@@ -643,7 +697,7 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
             .Table(lookup.Table())
             .Columns(lookup.Columns())
             .InputType(ExpandType(lookup.Pos(), *output.Ref().GetTypeAnn(), ctx))
-            .Settings(lookup.Settings())
+            .Settings(rebuild ? settings.BuildNode(ctx, lookup.Pos()) : lookup.Settings())
             .Done();
     } else {
         return node;
@@ -667,7 +721,149 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
         .Build().Done();
 }
 
-NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(
+NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    TTypeAnnotationContext& typeCtx, bool ruleEnabled)
+{
+    if (!ruleEnabled) {
+        return node;
+    }
+
+    if (!node.Maybe<TKqlIndexLookupJoin>()) {
+        return node;
+    }
+
+    const auto& idxLookupJoin = node.Cast<TKqlIndexLookupJoin>();
+
+    if (!idxLookupJoin.Input().Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    auto unionAll = idxLookupJoin.Input().Cast<TDqCnUnionAll>();
+    auto inputStats = typeCtx.GetStats(unionAll.Output().Raw());
+    if (!inputStats || !inputStats->SortColumns) {
+        return node;
+    }
+
+    auto stage = unionAll
+        .Output().Maybe<TDqOutput>()
+        .Stage().Maybe<TDqStageBase>();
+
+    auto streamLookup = unionAll
+        .Output().Maybe<TDqOutput>()
+        .Stage().Maybe<TDqStageBase>()
+        .Inputs().Item(0).Maybe<TKqpCnStreamLookup>();
+
+    if (!streamLookup.IsValid()) {
+        return node;
+    }
+
+    TExprNodeList fields;
+
+    auto tupleType = streamLookup.Cast().InputType().Cast<TCoListType>().ItemType().Cast<TCoTupleType>();
+
+    auto arg = Build<TCoArgument>(ctx, node.Pos()).Name("row").Done();
+    TExprNodeList args;
+    args.push_back(arg.Ptr());
+
+    auto leftStruct = tupleType.Arg(0).Cast<TCoStructType>();
+
+    for (auto structContent : leftStruct) {
+        auto attrName = structContent.Ptr()->Child(0);
+        auto field = Build<TCoNameValueTuple>(ctx, node.Pos())
+                .Name(attrName)
+                .Value<TCoMember>()
+                    .Struct<TCoNth>()
+                        .Tuple(arg)
+                        .Index().Value("0").Build()
+                        .Build()
+                    .Name(attrName)
+                    .Build()
+                .Done().Ptr();
+
+        fields.push_back(field);
+    }
+
+    auto payload = Build<TCoNameValueTuple>(ctx, node.Pos())
+                .Name().Build("_payload")
+                .Value(arg)
+                .Done().Ptr();
+
+    fields.push_back(payload);
+
+    auto stageLambda = stage.Cast().Program();
+
+    auto orderedMap = Build<TCoOrderedMap>(ctx, node.Pos())
+        .Input(stageLambda.Body())
+        .Lambda()
+            .Args(args)
+            .Body<TCoAsStruct>()
+                .Add(fields).Build()
+            .Build()
+        .Done();
+
+    auto builder = Build<TDqSortColumnList>(ctx, node.Pos());
+    for (size_t i = 0; i < inputStats->SortColumns->Columns.size(); i++) {
+        auto columnName = inputStats->SortColumns->Columns[i];
+        if (inputStats->SortColumns->Aliases[i] != "") {
+            columnName = inputStats->SortColumns->Aliases[i] + "." + columnName;
+        }
+        builder.Add<TDqSortColumn>()
+            .Column<TCoAtom>().Build(columnName)
+            .SortDirection().Build(TTopSortSettings::AscendingSort)
+            .Build();
+    }
+
+    auto newStage = Build<TDqStage>(ctx, node.Pos())
+        .Inputs(stage.Cast().Inputs())
+        .Program()
+            .Args(stageLambda.Args())
+            .Body(orderedMap)
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Done().Ptr();
+
+    auto merge = Build<TDqCnMerge>(ctx, node.Pos())
+        .Output()
+            .Stage(newStage)
+            .Index().Build(0)
+            .Build()
+        .SortColumns(builder.Build().Value())
+        .Done().Ptr();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage<TDqStage>()
+            .Inputs()
+                .Add(merge)
+            .Build()
+            .Program()
+                .Args({"stream_lookup_join_output"})
+                .Body<TKqpIndexLookupJoin>()
+                    .Input<TCoOrderedMap>()
+                        .Input<TCoToStream>()
+                            .Input("stream_lookup_join_output")
+                            .Build()
+                        .Lambda()
+                            .Args({"arg"})
+                            .Body<TCoMember>()
+                                .Struct("arg")
+                                .Name().Build("_payload")
+                                .Build()
+                            .Build()
+                        .Build()
+                    .JoinType(idxLookupJoin.JoinType())
+                    .LeftLabel(idxLookupJoin.LeftLabel())
+                    .RightLabel(idxLookupJoin.RightLabel())
+                    .Build()
+                .Build()
+            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+            .Build()
+        .Index().Build("0")
+        .Build()
+    .Done();
+}
+
+NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(
     NYql::NNodes::TExprBase node,
     NYql::TExprContext& ctx,
     TTypeAnnotationContext& typeCtx,
@@ -717,10 +913,10 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(
     TExprNodeList args;
     args.push_back(arg.Ptr());
 
-    auto rightStruct = tupleType.Arg(1).Cast<TCoStructType>();
+    auto leftStruct = tupleType.Arg(0).Cast<TCoStructType>();
 
     THashSet<TString> passthroughColumns;
-    for (const auto& structContent : rightStruct ) {
+    for (const auto& structContent : leftStruct) {
         auto attrName = structContent.Ptr()->Child(0);
         passthroughColumns.insert(TString(attrName->Content()));
         auto field = Build<TCoNameValueTuple>(ctx, node.Pos())

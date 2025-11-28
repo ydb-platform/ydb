@@ -13,7 +13,6 @@ TMeteringStats& operator += (TMeteringStats& value, const TMeteringStats& other)
 TMeteringStats& operator -= (TMeteringStats& value, const TMeteringStats& other);
 
 struct TMeteringStatsHelper {
-    static void TryFixOldFormat(TMeteringStats& value);
     static TMeteringStats ZeroValue();
     static bool IsZero(TMeteringStats& value);
 };

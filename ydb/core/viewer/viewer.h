@@ -298,8 +298,9 @@ public:
     virtual TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPFORWARD(const TRequestState& request, const TString& location, const TString& candidates) = 0;
     virtual bool CheckAccessViewer(const TRequestState& request) = 0;
+    virtual bool CheckAccessMonitoring(const TRequestState& request) = 0;
     virtual bool CheckAccessAdministration(const TRequestState& request) = 0;
-    virtual void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) = 0;
+    virtual void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, const TRequestState& request, TString& bscError, bool& forceRetryPossible) = 0;
     virtual TString MakeForward(const TRequestState& request, const std::vector<ui32>& nodes) = 0;
 
     virtual void AddRunningQuery(const TString& queryId, const TActorId& actorId) = 0;

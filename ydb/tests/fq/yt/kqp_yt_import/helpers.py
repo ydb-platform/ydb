@@ -16,13 +16,20 @@ def add_sample_table(kqp_run: KqpRun, table_name: str = 'input', infer_schema: b
     attrs: Optional[str] = None
     if not infer_schema:
         attrs = """
-            {"_yql_row_spec" = {
+        {
+            "schema" = <"strict" = %true; "unique_keys" = %false> [
+                { "type" = "string"; "required" = %true; "name" = "key" };
+                { "type" = "int64"; "required" = %true; "name" = "subkey" };
+                { "type" = "string"; "required" = %true; "name" = "value" };
+            ];
+            "_yql_row_spec" = {
                 "Type" = ["StructType"; [
                     ["key"; ["DataType"; "String"]];
                     ["subkey"; ["DataType"; "Int64"]];
                     ["value"; ["DataType"; "String"]];
                 ]]
-            }}
+            };
+        }
         """
 
     kqp_run.add_table(table_name, [

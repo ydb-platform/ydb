@@ -39,7 +39,7 @@ public:
         EnableYDBBacktraceFormat();
 
         TFqSetupSettings settings;
-        settings.VerboseLevel = TFqSetupSettings::EVerbose::Max;
+        settings.VerbosityLevel = TFqSetupSettings::EVerbosity::InitLogs;
         settings.EnableYdbCompute = true;
 
         auto& logConfig = *settings.AppConfig.MutableLogConfig();

@@ -302,6 +302,8 @@ TVector<TSerializedPointOrRange> BuildFullRange(const TVector<NScheme::TTypeInfo
 TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyParamValue& rangesParam, const TStageInfo& stageInfo, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    Y_ASSERT(stageInfo.Meta.Tx.Params);
+
     auto guard = typeEnv.BindAllocator();
     TString paramName = rangesParam.GetParamName();
     auto [_, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
@@ -341,21 +343,6 @@ TVector<TSerializedPointOrRange> FillReadRangesInternal(const TVector<NScheme::T
     }
 
     return BuildFullRange(keyColumnTypes);
-}
-
-TVector<TPartitionWithRange> GetKeyRangesIntersectionPartitions(const TVector<TTableRange>& ranges,
-    const TVector<NScheme::TTypeInfo>& keyColumnTypes, const TVector<TKeyDesc::TPartitionInfo>& partitions)
-{
-    if (ranges.empty()) {
-        return {};
-    }
-
-    TTableRange intersection = ranges.front();
-    for (size_t i = 1; i < ranges.size(); ++i) {
-        intersection = Intersect(keyColumnTypes, intersection, ranges[i]);
-    }
-
-    return GetKeyRangePartitions(intersection, partitions, keyColumnTypes);
 }
 
 } // anonymous namespace
@@ -453,7 +440,7 @@ TString TShardInfo::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const 
 
 THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRange& readRange, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig, bool& isFullScan)
+    const TPartitionPrunerConfig& prunerConfig, bool& isFullScan)
 {
     auto guard = typeEnv.BindAllocator();
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
@@ -465,16 +452,13 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRange& 
     isFullScan = IsFullRange(keyColumnTypes, range);
 
     TTableRange tableRange = range.ToTableRange();
-    TVector<TPartitionWithRange> readPartitions;
 
     if (prunerConfig.BatchOperationRange) {
         isFullScan = false;
-        readPartitions = GetKeyRangesIntersectionPartitions({tableRange, prunerConfig.BatchOperationRange->ToTableRange()},
-            keyColumnTypes,stageInfo.Meta.ShardKey->GetPartitions());
-    } else {
-        readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
-        keyColumnTypes);
+        tableRange = Intersect(keyColumnTypes, tableRange, prunerConfig.BatchOperationRange->ToTableRange());
     }
+
+    auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(), keyColumnTypes);
 
     THashMap<ui64, TShardInfo> shardInfoMap;
     for (TPartitionWithRange& partitionWithRange : readPartitions) {
@@ -495,7 +479,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRange& 
 
 THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRanges& readRanges, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig, bool& isFullScan)
+    const TPartitionPrunerConfig& prunerConfig, bool& isFullScan)
 {
     Y_UNUSED(holderFactory);
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
@@ -511,16 +495,13 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRanges&
         TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
             ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
             : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
-        TVector<TPartitionWithRange> readPartitions;
 
         if (prunerConfig.BatchOperationRange) {
             isFullScan = false;
-            readPartitions = GetKeyRangesIntersectionPartitions({tableRange, prunerConfig.BatchOperationRange->ToTableRange()},
-                keyColumnTypes, stageInfo.Meta.ShardKey->GetPartitions());
-        } else {
-            readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
-            keyColumnTypes);
+            tableRange = Intersect(keyColumnTypes, tableRange, prunerConfig.BatchOperationRange->ToTableRange());
         }
+
+        auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(), keyColumnTypes);
 
         for (TPartitionWithRange& partitionWithRange : readPartitions) {
             auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
@@ -570,7 +551,7 @@ TVector<TSerializedPointOrRange> ExtractRanges(const NKqpProto::TKqpReadRangesSo
 }
 
 std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, const TPartitionPrunerConfig& prunerConfig)
 {
     auto guard = typeEnv.BindAllocator();
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
@@ -582,8 +563,13 @@ std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadR
     if (!ranges.empty()) {
         auto& range = source.GetReverse() ? ranges.back() : ranges[0];
         TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
-            ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
+            ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true,
+                std::get<TSerializedCellVec>(range).GetCells(), true, true)
             : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
+
+        if (prunerConfig.BatchOperationRange) {
+            tableRange = Intersect(keyColumnTypes, tableRange, prunerConfig.BatchOperationRange->ToTableRange());
+        }
 
         auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
             keyColumnTypes);
@@ -600,6 +586,16 @@ std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadR
             result.KeyReadRanges.ConstructInPlace();
         }
 
+        if (prunerConfig.BatchOperationRange) {
+            TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
+                ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true,
+                    std::get<TSerializedCellVec>(range).GetCells(), true, true)
+                : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
+
+            range = TSerializedTableRange(Intersect(keyColumnTypes,
+                tableRange, prunerConfig.BatchOperationRange->ToTableRange()));
+        }
+
         result.KeyReadRanges->Add(std::move(range));
     }
     return {shard, result};
@@ -607,7 +603,7 @@ std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadR
 
 THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig, bool& isFullScan)
+    const TPartitionPrunerConfig& prunerConfig, bool& isFullScan)
 {
     auto guard = typeEnv.BindAllocator();
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
@@ -623,16 +619,13 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpReadRangesSource
         TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
             ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
             : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
-        TVector<TPartitionWithRange> readPartitions;
 
         if (prunerConfig.BatchOperationRange) {
             isFullScan = false;
-            readPartitions = GetKeyRangesIntersectionPartitions({tableRange, prunerConfig.BatchOperationRange->ToTableRange()},
-                keyColumnTypes, stageInfo.Meta.ShardKey->GetPartitions());
-        } else {
-            readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
-            keyColumnTypes);
+            tableRange = Intersect(keyColumnTypes, tableRange, prunerConfig.BatchOperationRange->ToTableRange());
         }
+
+        auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(), keyColumnTypes);
 
         for (TPartitionWithRange& partitionWithRange : readPartitions) {
             auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
@@ -656,7 +649,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpReadRangesSource
 
 THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig, bool& isFullScan)
+    const TPartitionPrunerConfig& prunerConfig, bool& isFullScan)
 {
     Y_UNUSED(holderFactory);
     Y_UNUSED(prunerConfig);
@@ -690,7 +683,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadOlapRan
 
 THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig, bool& isFullScan)
+    const TPartitionPrunerConfig& prunerConfig, bool& isFullScan)
 {
     switch (operation.GetTypeCase()) {
         case NKqpProto::TKqpPhyTableOperation::kReadRanges:
@@ -705,18 +698,10 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyTableOperatio
     }
 }
 
-
-namespace {
-
-using namespace NMiniKQL;
-
-} // namespace
-
-
 template <typename TEffect>
 THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TEffect& effect,
     const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig)
+    const TPartitionPrunerConfig& prunerConfig)
 {
     Y_UNUSED(prunerConfig);
     auto guard = typeEnv.BindAllocator();
@@ -759,19 +744,19 @@ THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TEffect& effect,
 }
 
 THashMap<ui64, TShardInfo> PruneEffectPartitions(const NKqpProto::TKqpPhyOpUpsertRows& effect, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, const TPartitionPruner::TConfig& prunerConfig)
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, const TPartitionPrunerConfig& prunerConfig)
 {
     return PruneEffectPartitionsImpl(effect, stageInfo, holderFactory, typeEnv, prunerConfig);
 }
 
 THashMap<ui64, TShardInfo> PruneEffectPartitions(const NKqpProto::TKqpPhyOpDeleteRows& effect, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, const TPartitionPruner::TConfig& prunerConfig)
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, const TPartitionPrunerConfig& prunerConfig)
 {
     return PruneEffectPartitionsImpl(effect, stageInfo, holderFactory, typeEnv, prunerConfig);
 }
 
 THashMap<ui64, TShardInfo> PruneEffectPartitions(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, const TPartitionPruner::TConfig& prunerConfig)
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, const TPartitionPrunerConfig& prunerConfig)
 {
     switch(operation.GetTypeCase()) {
         case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
@@ -783,37 +768,39 @@ THashMap<ui64, TShardInfo> PruneEffectPartitions(const NKqpProto::TKqpPhyTableOp
     }
 }
 
-ui64 ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoPhyValue,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
+    const NUdf::TUnboxedValue& defaultValue)
 {
-    switch (protoItemsLimit.GetKindCase()) {
+    switch (protoPhyValue.GetKindCase()) {
         case NKqpProto::TKqpPhyValue::kLiteralValue: {
-            const auto& literalValue = protoItemsLimit.GetLiteralValue();
+            const auto& literalValue = protoPhyValue.GetLiteralValue();
 
             auto [type, value] = NMiniKQL::ImportValueFromProto(
                 literalValue.GetType(), literalValue.GetValue(), typeEnv, holderFactory);
 
             YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
-            return value.Get<ui64>();
+            return value;
         }
 
         case NKqpProto::TKqpPhyValue::kParamValue: {
-            const TString& itemsLimitParamName = protoItemsLimit.GetParamValue().GetParamName();
-            if (!itemsLimitParamName) {
-                return 0;
+            const TString& paramName = protoPhyValue.GetParamValue().GetParamName();
+            if (!paramName) {
+                return defaultValue;
             }
 
-            auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(itemsLimitParamName);
-            YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
-            return value.Get<ui64>();
+            auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
+            YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data ||
+                type->GetKind() == NMiniKQL::TType::EKind::Tagged, "Unexpected PhyValue kind " << (int)type->GetKind());
+            return value;
         }
 
         case NKqpProto::TKqpPhyValue::kParamElementValue:
         case NKqpProto::TKqpPhyValue::kRowsList:
-            YQL_ENSURE(false, "Unexpected ItemsLimit kind " << protoItemsLimit.DebugString());
+            YQL_ENSURE(false, "Unexpected PhyValue kind " << protoPhyValue.DebugString());
 
         case NKqpProto::TKqpPhyValue::KIND_NOT_SET:
-            return 0;
+            return defaultValue;
     }
 }
 
@@ -824,7 +811,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
 
     switch(operation.GetTypeCase()){
         case NKqpProto::TKqpPhyTableOperation::kReadRanges: {
-            readSettings.ItemsLimit = ExtractItemsLimit(stageInfo, operation.GetReadRanges().GetItemsLimit(), holderFactory, typeEnv);
+            readSettings.ItemsLimit = ExtractPhyValue(stageInfo, operation.GetReadRanges().GetItemsLimit(), holderFactory, typeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>();
             if (operation.GetReadRanges().GetReverse()) {
                 readSettings.SetSorting(ERequestSorting::DESC);
             }
@@ -832,7 +819,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
         }
 
         case NKqpProto::TKqpPhyTableOperation::kReadRange: {
-            readSettings.ItemsLimit = ExtractItemsLimit(stageInfo, operation.GetReadRange().GetItemsLimit(), holderFactory, typeEnv);
+            readSettings.ItemsLimit = ExtractPhyValue(stageInfo, operation.GetReadRange().GetItemsLimit(), holderFactory, typeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>();
             if (operation.GetReadRange().GetReverse()) {
                 readSettings.SetSorting(ERequestSorting::DESC);
             }
@@ -847,7 +834,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
             } else {
                 readSettings.SetSorting(ERequestSorting::NONE);
             }
-            readSettings.ItemsLimit = ExtractItemsLimit(stageInfo, operation.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv);
+            readSettings.ItemsLimit = ExtractPhyValue(stageInfo, operation.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>();
             NKikimrMiniKQL::TType minikqlProtoResultType;
             ConvertYdbTypeToMiniKQLType(operation.GetReadOlapRange().GetResultType(), minikqlProtoResultType);
             readSettings.ResultType = ImportTypeFromProto(minikqlProtoResultType, typeEnv);
@@ -861,30 +848,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
     return readSettings;
 }
 
-bool IsParallelPointReadPossible(const THashMap<ui64, TShardInfo>& partitions) {
-    for (const auto& [_, shardInfo] : partitions) {
-        if (!shardInfo.KeyReadRanges || shardInfo.KeyWriteRanges) {
-            return false;
-        }
-
-        const TShardKeyRanges& ranges = *shardInfo.KeyReadRanges;
-        if (ranges.FullRange) {
-            return false;
-        }
-
-        for (const TSerializedPointOrRange& range : ranges.Ranges) {
-            if (const auto* tableRange = std::get_if<TSerializedTableRange>(&range);
-                tableRange && !tableRange->Point)
-            {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-TPartitionPruner::TPartitionPruner(const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, TPartitionPruner::TConfig config)
+TPartitionPruner::TPartitionPruner(const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, TPartitionPrunerConfig config)
     : HolderFactory(&holderFactory)
     , TypeEnv(&typeEnv)
     , Config(std::move(config))
@@ -895,12 +859,26 @@ THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpPhyTable
     return PrunePartitions(operation, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan);
 }
 
-THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan) {
-    return PrunePartitions(source, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan);
+const THashMap<ui64, TShardInfo>& TPartitionPruner::Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan) {
+    const auto& stageId = stageInfo.Id;
+    auto partition = SourceScanStageIdToParititions.find(stageId);
+
+    if (partition == SourceScanStageIdToParititions.end()) {
+        partition = SourceScanStageIdToParititions.emplace(stageId, std::make_pair(PrunePartitions(source, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan), false)).first;
+        partition->second.second = isFullScan;
+    } else {
+        isFullScan = partition->second.second;
+    }
+
+    return partition->second.first;
 }
 
 THashMap<ui64, TShardInfo> TPartitionPruner::PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo) {
     return PruneEffectPartitions(operation, stageInfo, *HolderFactory, *TypeEnv, Config);
+}
+
+std::pair<ui64, TShardInfo> TPartitionPruner::MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo) {
+    return ::NKikimr::NKqp::MakeVirtualTablePartition(source, stageInfo, *HolderFactory, *TypeEnv, Config);
 }
 
 } // namespace NKikimr::NKqp

@@ -22,6 +22,7 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
         AddHandler(0, &TYtReadTable::Match, HNDL(UpdateDataSourceCluster));
     }
     AddHandler(0, &TCoMux::Match, HNDL(Mux));
+    AddHandler(0, &TYtCreateTable::Match, HNDL(Create));
     AddHandler(0, &TYtWriteTable::Match, HNDL(Write));
     if (!State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
         AddHandler(0, &TYtWriteTable::Match, HNDL(DqWrite));
@@ -61,6 +62,8 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(0, &TCoAssumeDistinct::Match, HNDL(AssumeConstraints));
     AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
     AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
+    AddHandler(0, &TYtTransientOpBase::Match, HNDL(ConvertDynamicTablesToStatic<TYtTransientOpBase>));
+    AddHandler(0, &TYtReadTable::Match, HNDL(ConvertDynamicTablesToStatic<TYtReadTable>));
     AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
     AddHandler(0, &TYtEquiJoin::Match, HNDL(AddPruneKeys));
     AddHandler(0, &TYtOutputOpBase::Match, HNDL(TableContentWithSettings));

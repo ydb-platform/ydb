@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package nebius.iam.v1;
 
-import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+//import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
 import "ydb/public/api/client/nc_private/common/v1/metadata.proto";
 import "ydb/public/api/client/nc_private/annotations.proto";
 
@@ -20,8 +20,8 @@ message TenantUserAccount {
   option (resource_behavior) = UNNAMED;
   // option (resource) = "tenantuseraccount"; // This option conflicts with other options by its number
 
-  common.v1.ResourceMetadata metadata = 1 [(buf.validate.field).required = true];
-  TenantUserAccountSpec spec = 2 [(buf.validate.field).required = true];
+  common.v1.ResourceMetadata metadata = 1; // [(buf.validate.field).required = true];
+  TenantUserAccountSpec spec = 2; // [(buf.validate.field).required = true];
   TenantUserAccountStatus status = 3 [(field_behavior) = OUTPUT_ONLY];
 }
 
@@ -42,14 +42,14 @@ message UserAttributes {
   optional string preferred_username = 4 [(sensitive) = true];
   optional string picture = 5 [(sensitive) = true];
   optional string email = 6 [
-    (buf.validate.field) = {
-      cel: {
-        id: "string.email",
-        message: "value must be a valid email address",
-        expression: "this == \'\' || this.isEmail()"
-      }
-    },
-    (buf.validate.field).required = false,
+  //   (buf.validate.field) = {
+  //     cel: {
+  //       id: "string.email",
+  //       message: "value must be a valid email address",
+  //       expression: "this == \'\' || this.isEmail()"
+  //     }
+  //   },
+  //   (buf.validate.field).required = false,
     (sensitive) = true
   ];
   optional bool email_verified = 7 [deprecated = true];

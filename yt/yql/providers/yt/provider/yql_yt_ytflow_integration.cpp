@@ -21,7 +21,7 @@ using namespace NNodes;
 
 class TYtYtflowIntegration: public IYtflowIntegration {
 public:
-    TYtYtflowIntegration(TYtState* state)
+    TYtYtflowIntegration(TYtState::TWeakPtr state)
         : State_(state)
     {
     }
@@ -81,10 +81,13 @@ public:
         auto tableName = TString(TYtTableInfo::GetTableLabel(maybeWriteTable.Cast().Table()));
         auto commitEpoch = TEpochInfo::Parse(maybeWriteTable.Cast().Table().CommitEpoch().Ref());
 
-        auto tableDesc = State_->TablesData->GetTable(
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
+        auto tableDesc = ytState->TablesData->GetTable(
             cluster, tableName, 0);
 
-        auto commitTableDesc = State_->TablesData->GetTable(
+        auto commitTableDesc = ytState->TablesData->GetTable(
             cluster, tableName, commitEpoch);
 
         if (!tableDesc.Meta->IsDynamic
@@ -117,6 +120,15 @@ public:
         auto maybeWriteTable = TMaybeNode<TYtWriteTable>(&write);
         YQL_ENSURE(maybeWriteTable);
         return maybeWriteTable.Cast().World().Ptr();
+    }
+
+    TExprNode::TPtr UpdateWriteWorld(const TExprNode::TPtr& write, const TExprNode::TPtr& world, TExprContext& ctx) override {
+        auto maybeWriteTable = TMaybeNode<TYtWriteTable>(write);
+        YQL_ENSURE(maybeWriteTable);
+        return Build<TYtWriteTable>(ctx, write->Pos())
+            .InitFrom(maybeWriteTable.Cast())
+            .World(world)
+            .Done().Ptr();
     }
 
     TExprNode::TPtr GetWriteContent(const TExprNode& write, TExprContext& /*ctx*/) override {
@@ -171,7 +183,10 @@ public:
             auto cluster = TString(maybeWriteTable.Cast().DataSink().Cluster().Value());
             auto tableName = TString(TYtTableInfo::GetTableLabel(maybeWriteTable.Cast().Table()));
 
-            auto tableDesc = State_->TablesData->GetTable(
+            auto ytState = State_.lock();
+            YQL_ENSURE(ytState);
+
+            auto tableDesc = ytState->TablesData->GetTable(
                 cluster, tableName, 0);
 
             sinkSettings.SetDoesExist(tableDesc.Meta->DoesExist);
@@ -197,11 +212,11 @@ private:
     }
 
 private:
-    TYtState* State_;
+    TYtState::TWeakPtr State_;
 };
 
-THolder<IYtflowIntegration> CreateYtYtflowIntegration(TYtState* state) {
-    Y_ABORT_UNLESS(state);
+THolder<IYtflowIntegration> CreateYtYtflowIntegration(TYtState::TWeakPtr state) {
+    YQL_ENSURE(!state.expired());
     return MakeHolder<TYtYtflowIntegration>(state);
 }
 

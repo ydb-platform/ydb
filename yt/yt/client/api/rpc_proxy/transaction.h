@@ -21,6 +21,7 @@ NApi::ITransactionPtr CreateTransaction(
     NTransactionClient::EDurability durability,
     TDuration timeout,
     bool pingAncestors,
+    std::optional<std::string> pingerIP,
     std::optional<TDuration> pingPeriod,
     std::optional<TStickyTransactionParameters> stickyParameters,
     i64 sequenceNumberSourceId,

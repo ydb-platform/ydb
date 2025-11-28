@@ -13,8 +13,17 @@ PEERDIR(
     ydb/core/kqp/federated_query
     ydb/core/kqp/host
     ydb/core/ydb_convert
+    ydb/core/kqp/compile_service/helpers
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    helpers
+)
+
+RECURSE_FOR_TESTS(
+    ut
+)

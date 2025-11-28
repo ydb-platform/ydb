@@ -27,7 +27,7 @@ DEFINE_REFCOUNTED_TYPE(IFairShareActionQueue)
 ////////////////////////////////////////////////////////////////////////////////
 
 IFairShareActionQueuePtr CreateFairShareActionQueue(
-    const TString& threadName,
+    std::string threadName,
     const std::vector<TString>& queueNames,
     const THashMap<TString, std::vector<TString>>& bucketToQueues = {},
     NThreading::TThreadOptions threadOptions = {},
@@ -48,7 +48,7 @@ struct IEnumIndexedFairShareActionQueue
 
 template <typename EQueue, typename EBucket = EQueue>
 IEnumIndexedFairShareActionQueuePtr<EQueue> CreateEnumIndexedFairShareActionQueue(
-    const TString& threadName,
+    std::string threadName,
     const THashMap<EBucket, std::vector<EQueue>>& bucketToQueues = {},
     NThreading::TThreadOptions threadOptions = {},
     NProfiling::IRegistryPtr registry = {});

@@ -8,7 +8,7 @@ namespace {
     i64 CountTotal(const TNode& data)
     {
         if (data.IsMap()) {
-            if (auto totalPtr = data.AsMap().FindPtr("total")) {
+            if (data.AsMap().FindPtr("total")) {
                 return data["total"].IntCast<i64>();
             } else {
                 i64 total = 0;

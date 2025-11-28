@@ -2,6 +2,8 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/interconnect/logging/logging.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
@@ -9,11 +11,13 @@
 #include <util/generic/set.h>
 #include <util/system/datetime.h>
 
-#include "poller_tcp.h"
-#include "logging.h"
 #include "event_filter.h"
 
 #include <atomic>
+
+namespace NInterconnect::NRdma {
+    class IMemPool;
+}
 
 namespace NActors {
     enum class EEncryptionMode {
@@ -62,6 +66,7 @@ namespace NActors {
         double ErrorSleepRetryMultiplier = 4.0;
         TDuration EventDelay = TDuration::Zero();
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
+        bool RdmaChecksum = true;
     };
 
     struct TWhiteboardSessionStatus {
@@ -89,6 +94,7 @@ namespace NActors {
         double Utilization;
         ui64 ConnectTime;
         ui64 BytesWrittenToSocket;
+        TString PeerBridgePileName;
     };
 
     struct TChannelSettings {
@@ -129,6 +135,15 @@ namespace NActors {
         std::optional<ui32> OutgoingHandshakeInflightLimit;
         std::vector<TActorId> ConnectionCheckerActorIds; // a list of actors used for checking connection params
 
+        std::atomic_uint64_t NumSessionsWithDataInQueue = 0;
+        std::atomic_uint64_t CyclesOnLastSwitch = 0;
+        std::atomic_uint64_t CyclesWithNonzeroSessions = 0;
+        std::atomic_uint64_t CyclesWithZeroSessions = 0;
+
+        double CalculateNetworkUtilization();
+        void AddSessionWithDataInQueue();
+        void RemoveSessionWithDataInQueue();
+
         struct TVersionInfo {
             TString Tag; // version tag for this node
             TSet<TString> AcceptedTags; // we accept all enlisted version tags of peer nodes, but no others; empty = accept all
@@ -140,6 +155,8 @@ namespace NActors {
         std::optional<TString> CompatibilityInfo;
         std::function<bool(const TString&, TString&)> ValidateCompatibilityInfo;
         std::function<bool(const TInterconnectProxyCommon::TVersionInfo&, TString&)> ValidateCompatibilityOldFormat;
+
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
 
         using TPtr = TIntrusivePtr<TInterconnectProxyCommon>;
     };

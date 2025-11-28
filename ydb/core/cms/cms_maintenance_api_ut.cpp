@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/core/base/hive.h>
+
 namespace NKikimr::NCmsTest {
 
 using namespace Ydb::Maintenance;
@@ -87,13 +89,13 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         const auto &a1 = response.action_group_states(0).action_states(0);
         UNIT_ASSERT_VALUES_EQUAL(a1.status(), ActionState::ACTION_STATUS_PERFORMED);
         UNIT_ASSERT_VALUES_EQUAL(a1.reason(), ActionState::ACTION_REASON_OK);
-        UNIT_ASSERT(a1.reason_details().empty());
+        UNIT_ASSERT(a1.details().empty());
 
         UNIT_ASSERT_VALUES_EQUAL(response.action_group_states(1).action_states().size(), 1);
         const auto &a2 = response.action_group_states(1).action_states(0);
         UNIT_ASSERT_VALUES_EQUAL(a2.status(), ActionState::ACTION_STATUS_PENDING);
         UNIT_ASSERT_VALUES_EQUAL(a2.reason(), ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS);
-        UNIT_ASSERT(a2.reason_details().Contains("too many unavailable vdisks"));
+        UNIT_ASSERT(a2.details().Contains("too many unavailable vdisks"));
     }
 
     Y_UNIT_TEST(SimplifiedMirror3DC) {
@@ -316,6 +318,119 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
             const auto& a = response.action_group_states(i).action_states(0);
             UNIT_ASSERT_VALUES_EQUAL(a.status(), ActionState::ACTION_STATUS_PERFORMED);
         }
+    }
+
+    Y_UNIT_TEST(TestDrainAction) {
+        TCmsTestEnv env(8);
+
+        ui64 requestDrainCount = 0;
+        auto observer = env.AddObserver([&](auto&& ev) {
+            if (ev->Type == TEvHive::EvDrainNode) {
+                env.Send(new IEventHandle(ev->Sender, env.GetSender(), new TEvHive::TEvDrainNodeAck(), 0, ev->Cookie), 0);
+            }
+            if (ev->Type == TEvHive::EvRequestDrainInfo) {
+                auto response = std::make_unique<TEvHive::TEvResponseDrainInfo>();
+                response->Record.SetNodeId(env.GetNodeId(1));
+                response->Record.SetDrainSeqNo(requestDrainCount++);
+                response->Record.MutableDrainInProgress();
+                env.Send(new IEventHandle(ev->Sender, env.GetSender(), response.release(), 0, ev->Cookie), 0);
+            }
+        });
+
+        env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            MakeActionGroup(
+                MakeDrainAction(env.GetNodeId(1))
+            )
+        );
+
+        auto getResult1 = env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::SUCCESS);
+        auto status1 = getResult1.action_group_states(0).action_states(0).status();
+        UNIT_ASSERT(status1 == ActionState::ACTION_STATUS_IN_PROGRESS);
+        auto getResult2 = env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::SUCCESS);
+        auto status2 = getResult2.action_group_states(0).action_states(0).status();
+        UNIT_ASSERT(status2 == ActionState::ACTION_STATUS_PERFORMED);
+    }
+
+    Y_UNIT_TEST(TestCordonAction) {
+        TCmsTestEnv env(8);
+
+        auto observer = env.AddObserver([&](auto&& ev) {
+            if (ev->Type == TEvHive::EvSetDown) {
+                env.Send(new IEventHandle(ev->Sender, env.GetSender(), new TEvHive::TEvSetDownReply(), 0, ev->Cookie), 0);
+            }
+        });
+
+        env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            MakeActionGroup(
+                MakeCordonAction(env.GetNodeId(1))
+            )
+        );
+
+        auto getResult = env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::SUCCESS);
+        const auto& actionState = getResult.action_group_states(0).action_states(0);
+        UNIT_ASSERT_VALUES_EQUAL(actionState.status(), ActionState::ACTION_STATUS_PERFORMED);
+        UNIT_ASSERT(actionState.action().has_cordon_action());
+    }
+
+    Y_UNIT_TEST(DisableCMS){
+        TCmsTestEnv env(16);
+
+        auto r1 = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))
+            )
+        );
+        UNIT_ASSERT_VALUES_EQUAL(r1.action_group_states().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(r1.action_group_states(0).action_states().size(), 1);
+        const auto &a1 = r1.action_group_states(0).action_states(0);
+        UNIT_ASSERT_VALUES_EQUAL(a1.status(), ActionState::ACTION_STATUS_PERFORMED);
+
+        // Pending task
+        auto r2 = env.CheckMaintenanceTaskCreate("task-2", Ydb::StatusIds::SUCCESS,
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))
+            )
+        );
+        UNIT_ASSERT_VALUES_EQUAL(r2.action_group_states().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(r2.action_group_states(0).action_states().size(), 1);
+        const auto &a2 = r2.action_group_states(0).action_states(0);
+        UNIT_ASSERT_VALUES_EQUAL(a2.status(), ActionState::ACTION_STATUS_PENDING);
+
+        // Disable CMS
+        NKikimrCms::TCmsConfig config;
+        config.SetEnable(false);
+        env.SetCmsConfig(config);
+
+        env.CheckCompleteAction(a1.action_uid(), Ydb::StatusIds::SUCCESS);
+
+        // Requests should fail
+        env.CheckMaintenanceTaskCreate("task-3", Ydb::StatusIds::UNAVAILABLE,
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))
+            )
+        );
+        env.CheckMaintenanceTaskRefresh("task-2", Ydb::StatusIds::UNAVAILABLE);
+
+        // Enable CMS back
+        config.SetEnable(true);
+        env.SetCmsConfig(config);
+
+        // Requests should be ok
+        auto r3 = env.CheckMaintenanceTaskCreate("task-3", Ydb::StatusIds::SUCCESS,
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(9), TDuration::Minutes(10))
+            )
+        );
+        UNIT_ASSERT_VALUES_EQUAL(r3.action_group_states().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(r3.action_group_states(0).action_states().size(), 1);
+        const auto &a3 = r3.action_group_states(0).action_states(0);
+        UNIT_ASSERT_VALUES_EQUAL(a3.status(), ActionState::ACTION_STATUS_PERFORMED);
+
+        auto r4 = env.CheckMaintenanceTaskRefresh("task-2", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(r4.action_group_states().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(r4.action_group_states(0).action_states().size(), 1);
+        const auto &a4 = r4.action_group_states(0).action_states(0);
+        UNIT_ASSERT_VALUES_EQUAL(a4.status(), ActionState::ACTION_STATUS_PERFORMED);
     }
 }
 

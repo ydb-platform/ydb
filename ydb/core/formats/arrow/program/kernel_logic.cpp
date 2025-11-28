@@ -6,11 +6,12 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/partial.h>
 
 #include <yql/essentials/core/arrow_kernels/request/request.h>
+#include <yql/essentials/types/binary_json/read.h>
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
-    const std::shared_ptr<TAccessorsCollection>& resources) const {
+TConclusion<bool> TGetJsonPath::DoExecute(
+    const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output, TAccessorsCollection& resources) const {
     auto description = BuildDescription(input, resources);
     if (description.IsFail()) {
         return description;
@@ -34,19 +35,55 @@ TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& i
     if (applied && !*applied) {
         return false;
     }
-    resources->AddVerified(output.front().GetColumnId(), builder.Finish(), false);
+    resources.AddVerified(output.front().GetColumnId(), builder.Finish(), false);
     return true;
 }
 
 std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
+    std::shared_ptr<IChunkedArray> accessor;
+
     if (jsonAcc->GetType() == IChunkedArray::EType::SubColumnsArray) {
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsArray>(jsonAcc);
-        return accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        accessor = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
     } else {
         AFL_VERIFY(jsonAcc->GetType() == IChunkedArray::EType::SubColumnsPartialArray);
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(jsonAcc);
-        return accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        accessor = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
     }
+
+    if (!accessor) {
+        return accessor;
+    }
+
+    auto builder = NAccessor::TTrivialArray::MakeBuilderUtf8(accessor->GetRecordsCount());
+
+    ui32 recordIndex = 0;
+    accessor->VisitValues([&](std::shared_ptr<arrow::Array> arr) {
+        AFL_VERIFY(arr);
+        AFL_VERIFY(arr->type_id() == arrow::binary()->id());
+        const auto& binaryArray = static_cast<const arrow::BinaryArray&>(*arr);
+        for (int64_t i = 0; i < binaryArray.length(); ++i) {
+            auto value = binaryArray.Value(i);
+            if (value.empty()) {
+                builder.AddNull(recordIndex);
+                ++recordIndex;
+                continue;
+            }
+
+            auto reader = NBinaryJson::TBinaryJsonReader::Make(TStringBuf(value.data(), value.size()));
+            auto rootCursor = reader->GetRootCursor();
+            if (rootCursor.GetType() == NBinaryJson::EContainerType::TopLevelScalar &&
+                rootCursor.GetElement(0).GetType() == NBinaryJson::EEntryType::String) {
+                builder.AddRecord(recordIndex, rootCursor.GetElement(0).GetString());
+            } else {
+                builder.AddRecord(recordIndex, NBinaryJson::SerializeToJson(rootCursor));
+            }
+
+            ++recordIndex;
+        }
+    });
+
+    return builder.Finish(recordIndex);
 }
 
 NAccessor::TCompositeChunkedArray::TBuilder TGetJsonPath::MakeCompositeBuilder() const {

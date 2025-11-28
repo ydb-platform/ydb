@@ -10,5 +10,5 @@ namespace NUdf {
 using TUdfModuleWrapperList = TVector<TUdfModuleWrapper>;
 const TUdfModuleWrapperList& GetStaticUdfModuleWrapperList();
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

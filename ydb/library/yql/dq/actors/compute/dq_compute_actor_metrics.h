@@ -15,7 +15,7 @@ public:
     void ReportEvent(ui32 type, TAutoPtr<NActors::IEventHandle>& ev);
     void ReportAsyncInputData(ui32 id, ui64 rows, ui64 bytes, TMaybe<TInstant> watermark);
     void ReportInputChannelWatermark(ui32 id, ui64 dataSize, TMaybe<TInstant> watermark);
-    void ReportInjectedToTaskRunnerWatermark(TInstant watermark);
+    void ReportInjectedToTaskRunnerWatermark(TInstant watermark, TDuration discreapancy);
     void ReportInjectedToOutputsWatermark(TInstant watermark);
 
 private:
@@ -32,6 +32,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr InjectedToTaskRunnerWatermark;
     NMonitoring::TDynamicCounters::TCounterPtr InjectedToOutputsWatermark;
     NMonitoring::THistogramPtr WatermarkCollectLatency;
+    NMonitoring::THistogramPtr WatermarkDiscrepancy;
     NMonitoring::THistogramPtr InputRows;
     NMonitoring::THistogramPtr InputBytes;
 
@@ -55,7 +56,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr AsyncInputError;
     NMonitoring::TDynamicCounters::TCounterPtr OtherEvent;
 
-    THashMap<TInstant, TInstant> WatermarkStartedAt;
+    TMap<TInstant, TInstant> WatermarkStartedAt;
 };
 
 }

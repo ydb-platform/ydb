@@ -2,11 +2,19 @@
 
 {{ ydb-short-name }} supports bulk upsert of many records without atomicity guarantees. The upsert process is split into multiple independent parallel transactions, each covering a single partition. For that reason, this approach is more effective than using YQL. If successful, the `BulkUpsert` method guarantees inserting all the data transmitted by the query.
 
+{% note warning %}
+
+When you load data to [column-oriented tables](../../concepts/datamodel/table.md#column-oriented-tables) using `BulkUpsert`, you must provide values for **all** columns, even `NULL` values.
+
+{% endnote %}
+
 Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for bulk upsert:
 
 {% list tabs %}
 
 - Go (native)
+
+  {% cut "Bulk upsert with native {{ ydb-short-name }} data" %}
 
   ```go
   package main
@@ -77,6 +85,141 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
     }
   }
   ```
+
+  {% endcut %}
+
+  {% cut "Bulk upsert `CSV` data" %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/table"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+
+    csv := `skip row
+    
+  id,val
+  42,"text42"
+  43,"text43"
+  44,hello
+  `
+
+    // execute bulk upsert from CSV data
+    err = db.Table().BulkUpsert(ctx, "/local/bulk_upsert_example", table.BulkUpsertDataCsv(
+      []byte(csv),
+      table.WithCsvHeader(),
+      table.WithCsvSkipRows(2),
+      table.WithCsvNullValue([]byte("hello")), // "hello" would be interpreted as NULL
+    ))
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Bulk upsert `Apache Arrow` data" %}
+
+  In the following example, the [arrow package](https://pkg.go.dev/github.com/apache/arrow-go/v18/arrow) is used to prepare the data.
+
+  ```go
+  package main
+
+  import (
+    "bytes"
+    "context"
+    "fmt"
+
+    "github.com/apache/arrow-go/v18/arrow"
+    "github.com/apache/arrow-go/v18/arrow/array"
+    "github.com/apache/arrow-go/v18/arrow/ipc"
+    "github.com/apache/arrow-go/v18/arrow/memory"
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/table"
+  )
+
+  func main() {
+    ctx := context.Background()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx) // cleanup resources
+
+    mem := memory.NewGoAllocator()
+
+    schema := arrow.NewSchema([]arrow.Field{
+      {Name: "id", Type: arrow.PrimitiveTypes.Int64},
+      {Name: "val", Type: arrow.BinaryTypes.String},
+    }, nil)
+
+    b := array.NewRecordBuilder(mem, schema)
+    defer b.Release()
+
+    b.Field(0).(*array.Int64Builder).AppendValues(
+      []int64{123, 234}, nil)
+
+    b.Field(1).(*array.StringBuilder).AppendValues(
+      []string{"data1", "data2"}, nil)
+
+    rec := b.NewRecordBatch()
+    defer rec.Release()
+
+    schemaPayload := ipc.GetSchemaPayload(rec.Schema(), mem)
+    defer schemaPayload.Release()
+
+    dataPayload, err := ipc.GetRecordBatchPayload(rec)
+    if err != nil {
+      panic(err)
+    }
+    defer dataPayload.Release()
+
+    var schemaBuf bytes.Buffer
+    _, err = schemaPayload.WritePayload(&schemaBuf)
+    if err != nil {
+      panic(err)
+    }
+
+    var dataBuf bytes.Buffer
+    _, err = dataPayload.WritePayload(&dataBuf)
+    if err != nil {
+      panic(err)
+    }
+
+    err = db.Table().BulkUpsert(ctx, "/local/bulk_upsert_example", table.BulkUpsertDataArrow(
+      dataBuf.Bytes(),
+      table.WithArrowSchema(schemaBuf.Bytes()), // schema is required
+    ))
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+  }
+  ```
+
+  {% endcut %}
 
 - Go (database/sql)
 

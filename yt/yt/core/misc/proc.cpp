@@ -584,8 +584,7 @@ std::optional<i64> GetCgroupAnonymousMemoryLimit(
 {
 #ifdef _linux_
     TString path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.anon.limit";
-    auto content = Trim(TUnbufferedFileInput(path).ReadAll(), "\n");
-    return FromString<i64>(content);
+    return FromString<i64>(Trim(TUnbufferedFileInput(path).ReadAll(), "\n"));
 #else
     Y_UNUSED(cgroupPath, cgroupMountPoint);
     return {};
@@ -635,7 +634,7 @@ TString GetProcessName(int pid)
 {
 #ifdef _linux_
     TString path = Format("/proc/%v/comm", pid);
-    return Trim(TUnbufferedFileInput(path).ReadAll(), "\n");
+    return TString(Trim(TUnbufferedFileInput(path).ReadAll(), "\n"));
 #else
     Y_UNUSED(pid);
     return "";
@@ -1166,7 +1165,7 @@ TString SafeGetUsernameByUid(int /*uid*/)
 }
 #endif
 
-void CloseAllDescriptors(const std::vector<int>& exceptFor)
+std::vector<int> CloseAllDescriptors(const std::vector<int>& exceptFor)
 {
 #ifdef _linux_
     std::vector<int> fds;
@@ -1190,8 +1189,11 @@ void CloseAllDescriptors(const std::vector<int>& exceptFor)
     for (int fd : fds) {
         YT_VERIFY(TryClose(fd, ignoreBadFD));
     }
+
+    return fds;
 #else
     Y_UNUSED(exceptFor);
+    return {};
 #endif
 }
 
@@ -1307,7 +1309,7 @@ void SendSignal(const std::vector<int>& pids, const TString& signalName)
 #endif
 }
 
-std::optional<int> FindSignalIdBySignalName(const TString& signalName)
+std::optional<int> FindSignalIdBySignalName(std::string_view signalName)
 {
     static const THashMap<TString, int> SignalNameToNumber{
         { "SIGTERM", SIGTERM },
@@ -1766,6 +1768,48 @@ const TString& GetLinuxKernelVersion()
 #else
     static TString release = "unknown";
     return release;
+#endif
+}
+
+std::vector<int> ParseLinuxKernelVersion()
+{
+#ifdef _linux_
+    const auto& version = GetLinuxKernelVersion();
+    if (version == "unknown") {
+        return {};
+    }
+
+    std::vector<int> parsedVersion;
+
+    TStringBuf significantVersion, remainder;
+    TStringBuf(version).Split('-', significantVersion, remainder);
+
+    StringSplitter(significantVersion).Split('.').ParseInto(&parsedVersion);
+
+    return parsedVersion;
+#else
+    return {};
+#endif
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool IsUringEnabled()
+{
+#ifdef _linux_
+    try {
+        TFileInput stream("/proc/sys/kernel/io_uring_perm");
+
+        return stream.ReadLine() != "0";
+    } catch (const TSystemError& ex) {
+        if (ex.Status() == ENOENT) {
+            return false;
+        } else {
+            throw;
+        }
+    }
+#else
+    return false;
 #endif
 }
 

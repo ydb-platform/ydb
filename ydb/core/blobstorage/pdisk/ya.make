@@ -74,6 +74,7 @@ SRCS(
 END()
 
 RECURSE(
+    metadata
     mock
 )
 

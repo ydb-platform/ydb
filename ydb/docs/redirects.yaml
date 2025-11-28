@@ -89,6 +89,34 @@ common:
     to: /devops/manual/federated-queries/connector-deployment.md
   - from: /deploy/manual/deploy-ydb-federated-query.md
     to: /devops/manual/federated-queries/index.md
+  - from: /devops/manual/monitoring.md
+    to: /devops/observability/monitoring.md
+  - from: /devops/manual/maintenance-without-downtime.md
+    to: /devops/concepts/maintenance-without-downtime.md
+  - from: /devops/manual/backup-and-recovery.md
+    to: /devops/backup-and-recovery.md
+  - from: /devops/manual/static-group-move.md
+    to: /devops/configuration-management/configuration-v1/static-group-move.md
+  - from: /devops/manual/system-views.md
+    to: /devops/observability/system-views.md
+  - from: /devops/manual/logging.md
+    to: /devops/observability/logging.md
+  - from: /devops/manual/state-storage-move.md
+    to: /devops/configuration-management/configuration-v1/state-storage-move.md
+  - from: /maintenance/manual/change_actorsystem_configs.md
+    to: /devops/configuration-management/configuration-v1/change_actorsystem_configs.md
+  - from: /maintenance/manual/dynamic-config-selectors.md
+    to: /devops/configuration-management/configuration-v1/dynamic-config-selectors.md
+  - from: /maintenance/manual/dynamic-config.md
+    to: /devops/configuration-management/configuration-v1/dynamic-config.md
+  - from: /maintenance/manual/config-overview.md
+    to: /devops/configuration-management/configuration-v1/config-overview.md
+  - from: /maintenance/manual/dynamic-config-volatile-config.md
+    to: /devops/configuration-management/configuration-v1/dynamic-config-volatile-config.md
+  - from: /maintenance/manual/cms.md
+    to: /devops/configuration-management/configuration-v1/cms.md
+  - from: /devops/manual/upgrade.md
+    to: /devops/deployment-options/manual/update-executable.md
 
   # Redirects for Deployment Options
   - from: /devops/(ansible|kubernetes|manual)/(.*)$
@@ -121,10 +149,6 @@ common:
     to: /devops/concepts/system-requirements.md
   - from: /cluster/system-requirements.md
     to: /devops/concepts/system-requirements.md
-
-  # Redirects for maintenance folder
-  - from: /maintenance/(.*)$
-    to: /devops/deployment-options/manual/$1
 
   # Dev-related redirects
   - from: /db/index.md
@@ -274,6 +298,8 @@ common:
   - from: /concepts/clusters/index.md
     to: /concepts/topology.md
   - from: /concepts/clusters/common_scheme_ydb.md
+    to: /contributor/general-schema.md
+  - from: /concepts/cluster/common_scheme_ydb.md
     to: /contributor/general-schema.md
   - from: /concepts/clusters/distributed_storage.md
     to: /contributor/distributed-storage.md
@@ -438,6 +464,14 @@ common:
   - from: /reference/configuration/node-authentication.md
     to: /reference/configuration/client_certificate_authorization.md
 
+# Redirects for the olap section
+
+  - from: /olap/(.*)$
+    to: /analyst/$1
+  - from: /olap/datasets/(.*)$
+    to: /analyst/datasets/$1
+
+
 ru:
   - from: /postgresql/index.md
     to: /postgresql/intro.md
@@ -445,6 +479,12 @@ ru:
     to: /dev/terraform.md
   - from: /postgresql/docker-connect.md
     to: /postgresql/connect.md
+  - from: /maintenance/manual/replacing_nodes.md
+    to: /devops/configuration-management/configuration-v1/replacing-nodes.md
+  - from: /maintenance/manual/cluster_expansion.md
+    to: /devops/configuration-management/configuration-v1/cluster-expansion.md
+  - from: /concepts/topic.md
+    to: /concepts/datamodel/topic.md 
 
 en:
   - from: /cluster/system-requirements.md
@@ -452,12 +492,8 @@ en:
   - from: /devops/observability/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment.md
 
-  - from: /maintenance/manual/selfheal.md
-    to: /devops/deployment-options/manual/selfheal.md
   - from: /maintenance/manual/index.md
     to: /devops/deployment-options/manual/index.md
-  - from: /maintenance/manual/cms.md
-    to: /devops/deployment-options/manual/cms.md
 
   - from: /public-materials/videos/2017.md
     to: /public-materials/videos/2022.md
@@ -475,3 +511,5 @@ en:
     to: /public-materials/publications/2024.md
   - from: /public-materials/podcasts.md
     to: /public-materials/videos.md
+  - from: /reference/ydbops/scenarios.md
+    to: /reference/ydbops/rolling-restart-scenario.md

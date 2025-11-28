@@ -23,4 +23,5 @@ RECURSE(
     ut
     writer
     yson
+    ordered_maps
 )

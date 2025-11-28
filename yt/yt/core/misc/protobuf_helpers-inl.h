@@ -42,6 +42,8 @@ DEFINE_TRIVIAL_PROTO_CONVERSIONS(ui32)
 DEFINE_TRIVIAL_PROTO_CONVERSIONS(i64)
 DEFINE_TRIVIAL_PROTO_CONVERSIONS(ui64)
 DEFINE_TRIVIAL_PROTO_CONVERSIONS(bool)
+DEFINE_TRIVIAL_PROTO_CONVERSIONS(float)
+DEFINE_TRIVIAL_PROTO_CONVERSIONS(double)
 
 #undef DEFINE_TRIVIAL_PROTO_CONVERSIONS
 
@@ -610,7 +612,7 @@ void TRefCountedProto<TProto>::RegisterExtraSpace()
     auto spaceUsed = TProto::SpaceUsed();
     YT_ASSERT(static_cast<size_t>(spaceUsed) >= sizeof(TProto));
     YT_ASSERT(ExtraSpace_ == 0);
-    ExtraSpace_ = TProto::SpaceUsed() - sizeof(TProto);
+    ExtraSpace_ = spaceUsed - sizeof(TProto);
     auto cookie = GetRefCountedTypeCookie<TRefCountedProto<TProto>>();
     TRefCountedTrackerFacade::AllocateSpace(cookie, ExtraSpace_);
 }

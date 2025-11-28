@@ -270,6 +270,10 @@ public:
         }
         return usedTiers;
     }
+
+    bool operator==(const TTiering& other) const {
+       return OrderedTiers == other.OrderedTiers && TTLColumnName == other.TTLColumnName;
+    }
 };
 
 }

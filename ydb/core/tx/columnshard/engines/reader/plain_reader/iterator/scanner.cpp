@@ -89,7 +89,7 @@ TConclusionStatus TScanHead::Start() {
             if (!i->NeedAccessorsFetching()) {
                 i->SetSourceInMemory(true);
             }
-            i->InitFetchingPlan(Context->GetColumnsFetchingPlan(i));
+            i->InitFetchingPlan(Context->GetColumnsFetchingPlan(i, true));
         }
         context.OnFinishPoint(point);
         if (context.GetCurrentSources().size()) {

@@ -12,13 +12,15 @@ items:
   include:
     mode: link
     path: ../yql/reference/recipes/toc_i.yaml
-- name: Для аналитиков
-  href: ../olap/index.md
-  include:
-    mode: link
-    path: ../olap/toc_p.yaml
 - name: AI
   href: vector-search/index.md
   include:
     mode: link
     path: vector-search/toc_p.yaml
+- name: Трансфер
+  href: transfer/index.md
+  include:
+    mode: link
+    path: transfer/toc_p.yaml
+- name: Импорт и экспорт данных в колоночные таблицы
+  href: import-export-column-tables.md

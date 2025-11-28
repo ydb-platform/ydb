@@ -39,8 +39,8 @@ using namespace NAuth;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const auto Logger = JaegerLogger;
-static constexpr auto& Profiler = TracingProfiler;
+static constinit const auto Logger = JaegerLogger;
+static constinit const auto Profiler = TracingProfiler;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -220,7 +220,7 @@ void ToProto(NProto::Span* proto, const TTraceContextPtr& traceContext)
     }
 }
 
-template<typename TK, typename TV>
+template <typename TK, typename TV>
 std::vector<TK> ExtractKeys(THashMap<TK, TV> const& inputMap) {
     std::vector<TK> retval;
     for (auto const& element : inputMap) {

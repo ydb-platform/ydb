@@ -41,7 +41,6 @@ protected:
     const bool ExtendedForm_;
 };
 
-
 template <typename TDerived>
 class TYqlTypeYsonSaverImpl: public TYqlTypeYsonSaverBase {
     typedef TYqlTypeYsonSaverImpl<TDerived> TSelf;
@@ -112,6 +111,24 @@ protected:
         Writer_.OnListItem();
         TSelf item(Writer_, ExtendedForm_);
         item.Save(optionalType.GetItemType());
+        Writer_.OnEndList();
+    }
+
+    template <typename TLinearType>
+    void SaveLinearType(const TLinearType& linearType) {
+        SaveTypeHeader("LinearType");
+        Writer_.OnListItem();
+        TSelf item(Writer_, ExtendedForm_);
+        item.Save(linearType.GetItemType());
+        Writer_.OnEndList();
+    }
+
+    template <typename TLinearType>
+    void SaveDynamicLinearType(const TLinearType& linearType) {
+        SaveTypeHeader("DynamicLinearType");
+        Writer_.OnListItem();
+        TSelf item(Writer_, ExtendedForm_);
+        item.Save(linearType.GetItemType());
         Writer_.OnEndList();
     }
 
@@ -197,6 +214,24 @@ protected:
         Writer_.OnListItem();
         TSelf item(Writer_, ExtendedForm_);
         item.Save(variantType.GetUnderlyingType());
+        Writer_.OnEndList();
+    }
+
+    template <typename TBlockType>
+    void SaveBlockType(const TBlockType& blockType) {
+        SaveTypeHeader("BlockType");
+        Writer_.OnListItem();
+        TSelf item(Writer_, ExtendedForm_);
+        item.Save(blockType.GetItemType());
+        Writer_.OnEndList();
+    }
+
+    template <typename TScalarType>
+    void SaveScalarType(const TScalarType& scalarType) {
+        SaveTypeHeader("ScalarType");
+        Writer_.OnListItem();
+        TSelf item(Writer_, ExtendedForm_);
+        item.Save(scalarType.GetItemType());
         Writer_.OnEndList();
     }
 };
@@ -314,13 +349,33 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
             return Nothing();
         }
         return loader.LoadOptionalType(*itemType, level);
+    } else if (typeName == "LinearType") {
+        if (node.Size() != 2) {
+            loader.Error("Invalid optional type scheme");
+            return Nothing();
+        }
+        auto itemType = DoLoadTypeFromYson(loader, node[1], level + 1);
+        if (!itemType) {
+            return Nothing();
+        }
+        return loader.LoadLinearType(*itemType, level);
+    } else if (typeName == "DynamicLinearType") {
+        if (node.Size() != 2) {
+            loader.Error("Invalid optional type scheme");
+            return Nothing();
+        }
+        auto itemType = DoLoadTypeFromYson(loader, node[1], level + 1);
+        if (!itemType) {
+            return Nothing();
+        }
+        return loader.LoadDynamicLinearType(*itemType, level);
     } else if (typeName == "TupleType") {
         if (node.Size() != 2 || !node[1].IsList()) {
             loader.Error("Invalid tuple type scheme");
             return Nothing();
         }
         TVector<typename TLoader::TType> elements;
-        for (auto& item: node[1].AsList()) {
+        for (auto& item : node[1].AsList()) {
             auto itemType = DoLoadTypeFromYson(loader, item, level + 1);
             if (!itemType) {
                 return Nothing();
@@ -378,7 +433,7 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
         TVector<typename TLoader::TType> argTypes;
         TVector<TString> argNames;
         TVector<ui64> argFlags;
-        for (auto& item: node[3].AsList()) {
+        for (auto& item : node[3].AsList()) {
             if (!item.IsList() || item.AsList().size() < 1 || item.AsList().size() > 3) {
                 loader.Error("Invalid callable type scheme");
                 return Nothing();
@@ -418,6 +473,26 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
             return Nothing();
         }
         return loader.LoadVariantType(*underlyingType, level);
+    } else if (typeName == "BlockType") {
+        if (node.Size() != 2) {
+            loader.Error("Invalid block type scheme");
+            return Nothing();
+        }
+        auto itemType = DoLoadTypeFromYson(loader, node[1], level + 1);
+        if (!itemType) {
+            return Nothing();
+        }
+        return loader.LoadBlockType(*itemType, level);
+    } else if (typeName == "ScalarType") {
+        if (node.Size() != 2) {
+            loader.Error("Invalid scalar type scheme");
+            return Nothing();
+        }
+        auto itemType = DoLoadTypeFromYson(loader, node[1], level + 1);
+        if (!itemType) {
+            return Nothing();
+        }
+        return loader.LoadScalarType(*itemType, level);
     }
     loader.Error("unsupported type: " + typeName);
     return Nothing();

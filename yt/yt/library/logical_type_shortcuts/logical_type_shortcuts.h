@@ -1,3 +1,5 @@
+#pragma once
+
 #include <yt/yt/client/table_client/logical_type.h>
 
 /**
@@ -94,6 +96,9 @@ inline TLogicalTypePtr Tuple(const T&... args)
 }
 
 namespace NPrivate {
+
+////////////////////////////////////////////////////////////////////////////////
+
 inline void StructFieldList(std::vector<TStructField>* /*fields*/)
 { }
 
@@ -104,9 +109,14 @@ inline void StructFieldList(
     const TLogicalTypePtr& type,
     const T&... args)
 {
-    fields->push_back({name, type});
+    fields->push_back({
+        .Name = name,
+        .Type = type,
+    });
     StructFieldList(fields, args...);
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NPrivate
 

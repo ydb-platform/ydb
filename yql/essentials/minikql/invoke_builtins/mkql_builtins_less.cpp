@@ -11,25 +11,42 @@ namespace NMiniKQL {
 namespace {
 
 template <typename T1, typename T2,
-    std::enable_if_t<std::is_integral<T1>::value && std::is_integral<T2>::value && std::is_signed<T1>::value == std::is_signed<T2>::value, bool> Aggr>
+          std::enable_if_t<std::is_integral<T1>::value &&
+                               std::is_integral<T2>::value &&
+                               std::is_signed<T1>::value == std::is_signed<T2>::value,
+                           bool>
+              Aggr>
 Y_FORCE_INLINE bool Less(T1 x, T2 y) {
     return x < y;
 }
 
 template <typename T1, typename T2,
-    std::enable_if_t<std::is_integral<T1>::value && std::is_integral<T2>::value && std::is_signed<T1>::value && std::is_unsigned<T2>::value, bool> Aggr>
+          std::enable_if_t<std::is_integral<T1>::value &&
+                               std::is_integral<T2>::value &&
+                               std::is_signed<T1>::value &&
+                               std::is_unsigned<T2>::value,
+                           bool>
+              Aggr>
 Y_FORCE_INLINE bool Less(T1 x, T2 y) {
     return x < T1(0) || static_cast<std::make_unsigned_t<T1>>(x) < y;
 }
 
 template <typename T1, typename T2,
-    std::enable_if_t<std::is_integral<T1>::value && std::is_integral<T2>::value && std::is_unsigned<T1>::value && std::is_signed<T2>::value, bool> Aggr>
+          std::enable_if_t<std::is_integral<T1>::value &&
+                               std::is_integral<T2>::value &&
+                               std::is_unsigned<T1>::value &&
+                               std::is_signed<T2>::value,
+                           bool>
+              Aggr>
 Y_FORCE_INLINE bool Less(T1 x, T2 y) {
     return T2(0) < y && x < static_cast<std::make_unsigned_t<T2>>(y);
 }
 
 template <typename T1, typename T2,
-    std::enable_if_t<std::is_floating_point<T1>::value || std::is_floating_point<T2>::value, bool> Aggr>
+          std::enable_if_t<std::is_floating_point<T1>::value ||
+                               std::is_floating_point<T2>::value,
+                           bool>
+              Aggr>
 Y_FORCE_INLINE bool Less(T1 x, T2 y) {
     using F1 = std::conditional_t<std::is_floating_point<T1>::value, T1, T2>;
     using F2 = std::conditional_t<std::is_floating_point<T2>::value, T2, T1>;
@@ -37,8 +54,9 @@ Y_FORCE_INLINE bool Less(T1 x, T2 y) {
     const auto l = static_cast<FT>(x);
     const auto r = static_cast<FT>(y);
     if constexpr (Aggr) {
-        if (std::isunordered(l, r))
+        if (std::isunordered(l, r)) {
             return !std::isnan(l);
+        }
     }
     return l < r;
 }
@@ -68,16 +86,16 @@ Value* GenLessFloats<true>(Value* lhs, Value* rhs, BasicBlock* block) {
 }
 
 template <typename T1, typename T2>
-Value* GenLessIntegralLeftSigned(Value* x, Value* y, LLVMContext &context, BasicBlock* block) {
+Value* GenLessIntegralLeftSigned(Value* x, Value* y, LLVMContext& context, BasicBlock* block) {
     const auto zero = ConstantInt::get(x->getType(), 0);
     const auto neg = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, x, zero, "negative", block);
     using T = std::conditional_t<(sizeof(std::make_unsigned_t<T1>) > sizeof(T2)), std::make_unsigned_t<T1>, T2>;
     const auto comp = GenLessUnsigned(StaticCast<T1, T>(x, context, block), StaticCast<T2, T>(y, context, block), block);
     return SelectInst::Create(neg, ConstantInt::getTrue(context), comp, "result", block);
- }
+}
 
 template <typename T1, typename T2>
-Value* GenLessIntegralRightSigned(Value* x, Value* y, LLVMContext &context, BasicBlock* block) {
+Value* GenLessIntegralRightSigned(Value* x, Value* y, LLVMContext& context, BasicBlock* block) {
     const auto zero = ConstantInt::get(y->getType(), 0);
     const auto neg = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, y, zero, "negative", block);
     using T = std::conditional_t<(sizeof(T1) > sizeof(std::make_unsigned_t<T2>)), T1, std::make_unsigned_t<T2>>;
@@ -85,39 +103,51 @@ Value* GenLessIntegralRightSigned(Value* x, Value* y, LLVMContext &context, Basi
     return SelectInst::Create(neg, ConstantInt::getFalse(context), comp, "result", block);
 }
 
-
 template <typename T1, typename T2,
-    std::enable_if_t<std::is_unsigned<T1>::value && std::is_unsigned<T2>::value, bool> Aggr>
-inline Value* GenLess(Value* x, Value* y, LLVMContext &context, BasicBlock* block) {
+          std::enable_if_t<std::is_unsigned<T1>::value && std::is_unsigned<T2>::value, bool> Aggr>
+inline Value* GenLess(Value* x, Value* y, LLVMContext& context, BasicBlock* block) {
     using T = std::conditional_t<(sizeof(T1) > sizeof(T2)), T1, T2>;
     return GenLessUnsigned(StaticCast<T1, T>(x, context, block), StaticCast<T2, T>(y, context, block), block);
 }
 
 template <typename T1, typename T2,
-    std::enable_if_t<std::is_signed<T1>::value && std::is_signed<T2>::value &&
-    std::is_integral<T1>::value && std::is_integral<T2>::value, bool> Aggr>
-inline Value* GenLess(Value* x, Value* y, LLVMContext &context, BasicBlock* block) {
+          std::enable_if_t<std::is_signed<T1>::value && std::is_signed<T2>::value &&
+                               std::is_integral<T1>::value && std::is_integral<T2>::value,
+                           bool>
+              Aggr>
+inline Value* GenLess(Value* x, Value* y, LLVMContext& context, BasicBlock* block) {
     using T = std::conditional_t<(sizeof(T1) > sizeof(T2)), T1, T2>;
     return GenLessSigned(StaticCast<T1, T>(x, context, block), StaticCast<T2, T>(y, context, block), block);
 }
 
 template <typename T1, typename T2,
-    std::enable_if_t<std::is_integral<T1>::value && std::is_integral<T2>::value
-    && std::is_signed<T1>::value && std::is_unsigned<T2>::value, bool> Aggr>
-inline Value* GenLess(Value* x, Value* y, LLVMContext &context, BasicBlock* block) {
+          std::enable_if_t<std::is_integral<T1>::value &&
+                               std::is_integral<T2>::value &&
+                               std::is_signed<T1>::value &&
+                               std::is_unsigned<T2>::value,
+                           bool>
+              Aggr>
+inline Value* GenLess(Value* x, Value* y, LLVMContext& context, BasicBlock* block) {
     return GenLessIntegralLeftSigned<T1, T2>(x, y, context, block);
 }
 
 template <typename T1, typename T2,
-    std::enable_if_t<std::is_integral<T1>::value && std::is_integral<T2>::value
-    && std::is_unsigned<T1>::value && std::is_signed<T2>::value, bool> Aggr>
-inline Value* GenLess(Value* x, Value* y, LLVMContext &context, BasicBlock* block) {
+          std::enable_if_t<std::is_integral<T1>::value &&
+                               std::is_integral<T2>::value &&
+                               std::is_unsigned<T1>::value &&
+                               std::is_signed<T2>::value,
+                           bool>
+              Aggr>
+inline Value* GenLess(Value* x, Value* y, LLVMContext& context, BasicBlock* block) {
     return GenLessIntegralRightSigned<T1, T2>(x, y, context, block);
 }
 
 template <typename T1, typename T2,
-    std::enable_if_t<std::is_floating_point<T1>::value || std::is_floating_point<T2>::value, bool> Aggr>
-inline Value* GenLess(Value* x, Value* y, LLVMContext &context, BasicBlock* block) {
+          std::enable_if_t<std::is_floating_point<T1>::value ||
+                               std::is_floating_point<T2>::value,
+                           bool>
+              Aggr>
+inline Value* GenLess(Value* x, Value* y, LLVMContext& context, BasicBlock* block) {
     using F1 = std::conditional_t<std::is_floating_point<T1>::value, T1, T2>;
     using F2 = std::conditional_t<std::is_floating_point<T2>::value, T2, T1>;
     using FT = std::conditional_t<(sizeof(F1) > sizeof(F2)), F1, F2>;
@@ -135,8 +165,8 @@ struct TAggrLess {
 #endif
 };
 
-template<typename TLeft, typename TRight, bool Aggr>
-struct TLess : public TCompareArithmeticBinary<TLeft, TRight, TLess<TLeft, TRight, Aggr>>, public TAggrLess {
+template <typename TLeft, typename TRight, bool Aggr>
+struct TLess: public TCompareArithmeticBinary<TLeft, TRight, TLess<TLeft, TRight, Aggr>>, public TAggrLess {
     static bool Do(TLeft left, TRight right)
     {
         return Less<TLeft, TRight, Aggr>(left, right);
@@ -150,44 +180,50 @@ struct TLess : public TCompareArithmeticBinary<TLeft, TRight, TLess<TLeft, TRigh
 #endif
 };
 
-template<typename TLeft, typename TRight, typename TOutput>
+template <typename TLeft, typename TRight, typename TOutput>
 struct TLessOp;
 
-template<typename TLeft, typename TRight>
-struct TLessOp<TLeft, TRight, bool> : public TLess<TLeft, TRight, false> {
+template <typename TLeft, typename TRight>
+struct TLessOp<TLeft, TRight, bool>: public TLess<TLeft, TRight, false> {
     static constexpr auto NullMode = TKernel::ENullMode::Default;
 };
 
-template<typename TLeft, typename TRight, bool Aggr>
-struct TDiffDateLess : public TCompareArithmeticBinary<typename TLeft::TLayout, typename TRight::TLayout, TDiffDateLess<TLeft, TRight, Aggr>>, public TAggrLess {
+template <typename TLeft, typename TRight, bool Aggr>
+struct TDiffDateLess: public TCompareArithmeticBinary<typename TLeft::TLayout, typename TRight::TLayout,
+                                                      TDiffDateLess<TLeft, TRight, Aggr>>,
+                      public TAggrLess {
     static bool Do(typename TLeft::TLayout left, typename TRight::TLayout right)
     {
-        return std::is_same<TLeft, TRight>::value ?
-            Less<typename TLeft::TLayout, typename TRight::TLayout, Aggr>(left, right):
-            Less<TScaledDate, TScaledDate, Aggr>(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
+        return std::is_same<TLeft, TRight>::value
+                   ? Less<typename TLeft::TLayout, typename TRight::TLayout, Aggr>(left, right)
+                   : Less<TScaledDate, TScaledDate, Aggr>(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        return std::is_same<TLeft, TRight>::value ?
-            GenLess<typename TLeft::TLayout, typename TRight::TLayout, Aggr>(left, right, context, block):
-            GenLess<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
+        return std::is_same<TLeft, TRight>::value
+                   ? GenLess<typename TLeft::TLayout, typename TRight::TLayout, Aggr>(left, right, context, block)
+                   : GenLess<TScaledDate, TScaledDate, Aggr>(
+                         GenToScaledDate<TLeft>(left, context, block),
+                         GenToScaledDate<TRight>(right, context, block), context, block);
     }
 #endif
 };
 
-template<typename TLeft, typename TRight, typename TOutput>
+template <typename TLeft, typename TRight, typename TOutput>
 struct TDiffDateLessOp;
 
-template<typename TLeft, typename TRight>
-struct TDiffDateLessOp<TLeft, TRight, NUdf::TDataType<bool>> : public TDiffDateLess<TLeft, TRight, false> {
+template <typename TLeft, typename TRight>
+struct TDiffDateLessOp<TLeft, TRight, NUdf::TDataType<bool>>: public TDiffDateLess<TLeft, TRight, false> {
     static constexpr auto NullMode = TKernel::ENullMode::Default;
 };
 
-template<typename TLeft, typename TRight, bool Aggr>
-struct TAggrTzDateLess : public TCompareArithmeticBinaryWithTimezone<TLeft, TRight, TAggrTzDateLess<TLeft, TRight, Aggr>>, public TAggrLess {
+template <typename TLeft, typename TRight, bool Aggr>
+struct TAggrTzDateLess: public TCompareArithmeticBinaryWithTimezone<TLeft, TRight,
+                                                                    TAggrTzDateLess<TLeft, TRight, Aggr>>,
+                        public TAggrLess {
     static bool Do(TLeft left, TRight right)
     {
         return Less<TLeft, TRight, Aggr>(left, right);
@@ -210,8 +246,8 @@ struct TAggrTzDateLess : public TCompareArithmeticBinaryWithTimezone<TLeft, TRig
 #endif
 };
 
-template<NUdf::EDataSlot Slot>
-struct TCustomLess : public TAggrLess {
+template <NUdf::EDataSlot Slot>
+struct TCustomLess: public TAggrLess {
     static NUdf::TUnboxedValuePod Execute(NUdf::TUnboxedValuePod left, NUdf::TUnboxedValuePod right) {
         return NUdf::TUnboxedValuePod(CompareCustomsWithCleanup<Slot>(left, right) < 0);
     }
@@ -252,7 +288,7 @@ struct TDecimalLess {
 #endif
 };
 
-struct TDecimalAggrLess : public TAggrLess {
+struct TDecimalAggrLess: public TAggrLess {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const auto l = left.GetInt128();
         const auto r = right.GetInt128();
@@ -271,7 +307,7 @@ struct TDecimalAggrLess : public TAggrLess {
 #endif
 };
 
-}
+} // namespace
 
 void RegisterLess(IBuiltinFunctionRegistry& registry) {
     const auto name = "Less";
@@ -281,7 +317,8 @@ void RegisterLess(IBuiltinFunctionRegistry& registry) {
     RegisterCompareBigDatetime<TDiffDateLess, TCompareArgsOpt>(registry, name);
 
     RegisterCompareStrings<TCustomLess, TCompareArgsOpt>(registry, name);
-    RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, TDecimalLess, TCompareArgsOpt>(registry, name);
+    RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>,
+                             TDecimalLess, TCompareArgsOpt>(registry, name);
 
     const auto aggrName = "AggrLess";
     RegisterAggrComparePrimitive<TLess, TCompareArgsOpt>(registry, aggrName);
@@ -291,7 +328,8 @@ void RegisterLess(IBuiltinFunctionRegistry& registry) {
     RegisterAggrCompareBigTzDatetime<TAggrTzDateLess, TCompareArgsOpt>(registry, aggrName);
 
     RegisterAggrCompareStrings<TCustomLess, TCompareArgsOpt>(registry, aggrName);
-    RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrLess, TCompareArgsOpt>(registry, aggrName);
+    RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>,
+                                 TDecimalAggrLess, TCompareArgsOpt>(registry, aggrName);
 }
 
 void RegisterLess(TKernelFamilyMap& kernelFamilyMap) {

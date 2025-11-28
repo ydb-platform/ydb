@@ -5,158 +5,174 @@
 namespace NYql {
 
 Y_UNIT_TEST_SUITE(TokenBuilderTest) {
-    Y_UNIT_TEST(Empty) {
-        const TStructuredTokenBuilder b;
-        UNIT_ASSERT_VALUES_EQUAL("{}", b.ToJson());
-        const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
-        UNIT_ASSERT(!p.HasServiceAccountIdAuth());
-        UNIT_ASSERT(!p.HasBasicAuth());
-        UNIT_ASSERT(!p.HasIAMToken());
-        UNIT_ASSERT(!p.IsNoAuth());
-    }
-
-    Y_UNIT_TEST(ServiceAccountId) {
-        TStructuredTokenBuilder b;
-        b.SetServiceAccountIdAuth("my_sa_id", "my_sa_sign");
-        UNIT_ASSERT_VALUES_EQUAL(R"({"sa_id":"my_sa_id","sa_id_signature":"my_sa_sign"})", b.ToJson());
-        const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
-        UNIT_ASSERT(p.HasServiceAccountIdAuth());
-        UNIT_ASSERT(!p.HasBasicAuth());
-        UNIT_ASSERT(!p.HasIAMToken());
-        UNIT_ASSERT(!p.IsNoAuth());
-        TString id, sign;
-        UNIT_ASSERT(p.GetServiceAccountIdAuth(id, sign));
-        UNIT_ASSERT_VALUES_EQUAL(id, "my_sa_id");
-        UNIT_ASSERT_VALUES_EQUAL(sign, "my_sa_sign");
-    }
-
-    Y_UNIT_TEST(ServiceAccountIdWithSecret) {
-        TStructuredTokenBuilder b;
-        b.SetServiceAccountIdAuthWithSecret("my_sa_id", "my_sa_sign_reference", "my_sa_sign");
-        UNIT_ASSERT_VALUES_EQUAL(R"({"sa_id":"my_sa_id","sa_id_signature":"my_sa_sign","sa_id_signature_ref":"my_sa_sign_reference"})", b.ToJson());
-        const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
-        UNIT_ASSERT(p.HasServiceAccountIdAuth());
-        UNIT_ASSERT(!p.HasBasicAuth());
-        UNIT_ASSERT(!p.HasIAMToken());
-        UNIT_ASSERT(!p.IsNoAuth());
-        TString id, sign, reference;
-        UNIT_ASSERT(p.GetServiceAccountIdAuth(id, sign, reference));
-        UNIT_ASSERT_VALUES_EQUAL(id, "my_sa_id");
-        UNIT_ASSERT_VALUES_EQUAL(sign, "my_sa_sign");
-        UNIT_ASSERT_VALUES_EQUAL(reference, "my_sa_sign_reference");
-        b.RemoveSecrets();
-        UNIT_ASSERT_VALUES_EQUAL(R"({"sa_id":"my_sa_id","sa_id_signature_ref":"my_sa_sign_reference"})", b.ToJson());
-        TSet<TString> references;
-        p.ListReferences(references);
-        UNIT_ASSERT_VALUES_EQUAL(references.size(), 1);
-        UNIT_ASSERT(references.contains("my_sa_sign_reference"));
-        b.ReplaceReferences({{"my_sa_sign_reference", "my_sa_sign_value"}});
-        UNIT_ASSERT_VALUES_EQUAL(R"({"sa_id":"my_sa_id","sa_id_signature":"my_sa_sign_value"})", b.ToJson());
-    }
-
-    Y_UNIT_TEST(BasicAuth) {
-        TStructuredTokenBuilder b;
-        b.SetBasicAuth("my_login", "my_passw");
-        UNIT_ASSERT_VALUES_EQUAL(R"({"basic_login":"my_login","basic_password":"my_passw"})", b.ToJson());
-        const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
-        UNIT_ASSERT(!p.HasServiceAccountIdAuth());
-        UNIT_ASSERT(p.HasBasicAuth());
-        UNIT_ASSERT(!p.HasIAMToken());
-        UNIT_ASSERT(!p.IsNoAuth());
-        TString login, password;
-        UNIT_ASSERT(p.GetBasicAuth(login, password));
-        UNIT_ASSERT_VALUES_EQUAL(login, "my_login");
-        UNIT_ASSERT_VALUES_EQUAL(password, "my_passw");
-    }
-
-    Y_UNIT_TEST(BasicAuthWithSecret) {
-        TStructuredTokenBuilder b;
-        b.SetBasicAuthWithSecret("my_login", "my_passw_reference");
-        UNIT_ASSERT_VALUES_EQUAL(R"({"basic_login":"my_login","basic_password_ref":"my_passw_reference"})", b.ToJson());
-        const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
-        UNIT_ASSERT(!p.HasServiceAccountIdAuth());
-        UNIT_ASSERT(p.HasBasicAuth());
-        UNIT_ASSERT(!p.HasIAMToken());
-        UNIT_ASSERT(!p.IsNoAuth());
-        TString login, password, reference;
-        UNIT_ASSERT(p.GetBasicAuth(login, password, reference));
-        UNIT_ASSERT_VALUES_EQUAL(login, "my_login");
-        UNIT_ASSERT_VALUES_EQUAL(password, "");
-        UNIT_ASSERT_VALUES_EQUAL(reference, "my_passw_reference");
-        TSet<TString> references;
-        p.ListReferences(references);
-        UNIT_ASSERT_VALUES_EQUAL(references.size(), 1);
-        UNIT_ASSERT(references.contains("my_passw_reference"));
-        b.ReplaceReferences({{"my_passw_reference", "my_passw_value"}});
-        UNIT_ASSERT_VALUES_EQUAL(R"({"basic_login":"my_login","basic_password":"my_passw_value"})", b.ToJson());
-        b.RemoveSecrets();
-        UNIT_ASSERT_VALUES_EQUAL(R"({"basic_login":"my_login"})", b.ToJson());
-    }
-
-    Y_UNIT_TEST(TokenAuthWithSecret) {
-        TStructuredTokenBuilder b;
-        b.SetTokenAuthWithSecret("my_token_reference", "my_token");
-        UNIT_ASSERT_VALUES_EQUAL(R"({"token":"my_token","token_ref":"my_token_reference"})", b.ToJson());
-        TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
-        UNIT_ASSERT(!p.HasServiceAccountIdAuth());
-        UNIT_ASSERT(!p.HasBasicAuth());
-        UNIT_ASSERT(p.HasIAMToken());
-        UNIT_ASSERT(!p.IsNoAuth());
-        UNIT_ASSERT(p.GetIAMToken() == "my_token");
-        TSet<TString> references;
-        p.ListReferences(references);
-        UNIT_ASSERT_VALUES_EQUAL(references.size(), 1);
-        UNIT_ASSERT(references.contains("my_token_reference"));
-        b.RemoveSecrets();
-        UNIT_ASSERT_VALUES_EQUAL(R"({"token_ref":"my_token_reference"})", b.ToJson());
-        b.ReplaceReferences({{"my_token_reference", "my_token"}});
-        UNIT_ASSERT_VALUES_EQUAL(R"({"token":"my_token"})", b.ToJson());
-    }
-
-    Y_UNIT_TEST(IAMToken) {
-        TStructuredTokenBuilder b;
-        b.SetIAMToken("my_token");
-        UNIT_ASSERT_VALUES_EQUAL(R"({"token":"my_token"})", b.ToJson());
-        const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
-        UNIT_ASSERT(!p.HasServiceAccountIdAuth());
-        UNIT_ASSERT(!p.HasBasicAuth());
-        UNIT_ASSERT(p.HasIAMToken());
-        UNIT_ASSERT(!p.IsNoAuth());
-        TString token = p.GetIAMToken();
-        UNIT_ASSERT_VALUES_EQUAL(token, "my_token");
-    }
-
-    Y_UNIT_TEST(NoAuth) {
-        TStructuredTokenBuilder b;
-        b.SetNoAuth();
-        UNIT_ASSERT_VALUES_EQUAL(R"({"no_auth":""})", b.ToJson());
-        const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
-        UNIT_ASSERT(!p.HasServiceAccountIdAuth());
-        UNIT_ASSERT(!p.HasBasicAuth());
-        UNIT_ASSERT(!p.HasIAMToken());
-        UNIT_ASSERT(p.IsNoAuth());
-    }
-
-    Y_UNIT_TEST(BasicAuthAndToken) {
-        TStructuredTokenBuilder b;
-        b.SetBasicAuth("my_login", "my_passw");
-        b.SetIAMToken("my_token");
-        UNIT_ASSERT_VALUES_EQUAL(R"({"basic_login":"my_login","basic_password":"my_passw","token":"my_token"})", b.ToJson());
-        const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
-        UNIT_ASSERT(!p.HasServiceAccountIdAuth());
-        UNIT_ASSERT(p.HasBasicAuth());
-        UNIT_ASSERT(p.HasIAMToken());
-        UNIT_ASSERT(!p.IsNoAuth());
-
-        TString login, password;
-        UNIT_ASSERT(p.GetBasicAuth(login, password));
-        UNIT_ASSERT_VALUES_EQUAL(login, "my_login");
-        UNIT_ASSERT_VALUES_EQUAL(password, "my_passw");
-
-        TString token = p.GetIAMToken();
-        UNIT_ASSERT_VALUES_EQUAL(token, "my_token");
-
-    }
+Y_UNIT_TEST(Empty) {
+    const TStructuredTokenBuilder b;
+    UNIT_ASSERT_VALUES_EQUAL("{}", b.ToJson());
+    const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
+    UNIT_ASSERT(!p.HasServiceAccountIdAuth());
+    UNIT_ASSERT(!p.HasBasicAuth());
+    UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(!p.IsNoAuth());
 }
 
+Y_UNIT_TEST(ServiceAccountId) {
+    TStructuredTokenBuilder b;
+    b.SetServiceAccountIdAuth("my_sa_id", "my_sa_sign");
+    UNIT_ASSERT_VALUES_EQUAL(R"({"sa_id":"my_sa_id","sa_id_signature":"my_sa_sign"})", b.ToJson());
+    const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
+    UNIT_ASSERT(p.HasServiceAccountIdAuth());
+    UNIT_ASSERT(!p.HasBasicAuth());
+    UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(!p.IsNoAuth());
+    TString id, sign;
+    UNIT_ASSERT(p.GetServiceAccountIdAuth(id, sign));
+    UNIT_ASSERT_VALUES_EQUAL(id, "my_sa_id");
+    UNIT_ASSERT_VALUES_EQUAL(sign, "my_sa_sign");
 }
+
+Y_UNIT_TEST(ServiceAccountIdWithSecret) {
+    TStructuredTokenBuilder b;
+    b.SetServiceAccountIdAuthWithSecret("my_sa_id", "my_sa_sign_reference", "my_sa_sign");
+    UNIT_ASSERT_VALUES_EQUAL(R"({"sa_id":"my_sa_id","sa_id_signature":"my_sa_sign","sa_id_signature_ref":"my_sa_sign_reference"})", b.ToJson());
+    const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
+    UNIT_ASSERT(p.HasServiceAccountIdAuth());
+    UNIT_ASSERT(!p.HasBasicAuth());
+    UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(!p.IsNoAuth());
+    TString id, sign, reference;
+    UNIT_ASSERT(p.GetServiceAccountIdAuth(id, sign, reference));
+    UNIT_ASSERT_VALUES_EQUAL(id, "my_sa_id");
+    UNIT_ASSERT_VALUES_EQUAL(sign, "my_sa_sign");
+    UNIT_ASSERT_VALUES_EQUAL(reference, "my_sa_sign_reference");
+    b.RemoveSecrets();
+    UNIT_ASSERT_VALUES_EQUAL(R"({"sa_id":"my_sa_id","sa_id_signature_ref":"my_sa_sign_reference"})", b.ToJson());
+    TSet<TString> references;
+    p.ListReferences(references);
+    UNIT_ASSERT_VALUES_EQUAL(references.size(), 1);
+    UNIT_ASSERT(references.contains("my_sa_sign_reference"));
+    b.ReplaceReferences({{"my_sa_sign_reference", "my_sa_sign_value"}});
+    UNIT_ASSERT_VALUES_EQUAL(R"({"sa_id":"my_sa_id","sa_id_signature":"my_sa_sign_value"})", b.ToJson());
+}
+
+Y_UNIT_TEST(BasicAuth) {
+    TStructuredTokenBuilder b;
+    b.SetBasicAuth("my_login", "my_passw");
+    UNIT_ASSERT_VALUES_EQUAL(R"({"basic_login":"my_login","basic_password":"my_passw"})", b.ToJson());
+    const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
+    UNIT_ASSERT(!p.HasServiceAccountIdAuth());
+    UNIT_ASSERT(p.HasBasicAuth());
+    UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(!p.IsNoAuth());
+    TString login, password;
+    UNIT_ASSERT(p.GetBasicAuth(login, password));
+    UNIT_ASSERT_VALUES_EQUAL(login, "my_login");
+    UNIT_ASSERT_VALUES_EQUAL(password, "my_passw");
+}
+
+Y_UNIT_TEST(BasicAuthWithSecret) {
+    TStructuredTokenBuilder b;
+    b.SetBasicAuthWithSecret("my_login", "my_passw_reference");
+    UNIT_ASSERT_VALUES_EQUAL(R"({"basic_login":"my_login","basic_password_ref":"my_passw_reference"})", b.ToJson());
+    const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
+    UNIT_ASSERT(!p.HasServiceAccountIdAuth());
+    UNIT_ASSERT(p.HasBasicAuth());
+    UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(!p.IsNoAuth());
+    TString login, password, reference;
+    UNIT_ASSERT(p.GetBasicAuth(login, password, reference));
+    UNIT_ASSERT_VALUES_EQUAL(login, "my_login");
+    UNIT_ASSERT_VALUES_EQUAL(password, "");
+    UNIT_ASSERT_VALUES_EQUAL(reference, "my_passw_reference");
+    TSet<TString> references;
+    p.ListReferences(references);
+    UNIT_ASSERT_VALUES_EQUAL(references.size(), 1);
+    UNIT_ASSERT(references.contains("my_passw_reference"));
+    b.ReplaceReferences({{"my_passw_reference", "my_passw_value"}});
+    UNIT_ASSERT_VALUES_EQUAL(R"({"basic_login":"my_login","basic_password":"my_passw_value"})", b.ToJson());
+    b.RemoveSecrets();
+    UNIT_ASSERT_VALUES_EQUAL(R"({"basic_login":"my_login"})", b.ToJson());
+}
+
+Y_UNIT_TEST(TokenAuthWithSecret) {
+    TStructuredTokenBuilder b;
+    b.SetTokenAuthWithSecret("my_token_reference", "my_token");
+    UNIT_ASSERT_VALUES_EQUAL(R"({"token":"my_token","token_ref":"my_token_reference"})", b.ToJson());
+    TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
+    UNIT_ASSERT(!p.HasServiceAccountIdAuth());
+    UNIT_ASSERT(!p.HasBasicAuth());
+    UNIT_ASSERT(p.HasIAMToken());
+    UNIT_ASSERT(!p.IsNoAuth());
+    UNIT_ASSERT(p.GetIAMToken() == "my_token");
+    TSet<TString> references;
+    p.ListReferences(references);
+    UNIT_ASSERT_VALUES_EQUAL(references.size(), 1);
+    UNIT_ASSERT(references.contains("my_token_reference"));
+    b.RemoveSecrets();
+    UNIT_ASSERT_VALUES_EQUAL(R"({"token_ref":"my_token_reference"})", b.ToJson());
+    b.ReplaceReferences({{"my_token_reference", "my_token"}});
+    UNIT_ASSERT_VALUES_EQUAL(R"({"token":"my_token"})", b.ToJson());
+}
+
+Y_UNIT_TEST(IAMToken) {
+    TStructuredTokenBuilder b;
+    b.SetIAMToken("my_token");
+    UNIT_ASSERT_VALUES_EQUAL(R"({"token":"my_token"})", b.ToJson());
+    const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
+    UNIT_ASSERT(!p.HasServiceAccountIdAuth());
+    UNIT_ASSERT(!p.HasBasicAuth());
+    UNIT_ASSERT(p.HasIAMToken());
+    UNIT_ASSERT(!p.IsNoAuth());
+    TString token = p.GetIAMToken();
+    UNIT_ASSERT_VALUES_EQUAL(token, "my_token");
+}
+
+Y_UNIT_TEST(NoAuth) {
+    TStructuredTokenBuilder b;
+    b.SetNoAuth();
+    UNIT_ASSERT_VALUES_EQUAL(R"({"no_auth":""})", b.ToJson());
+    const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
+    UNIT_ASSERT(!p.HasServiceAccountIdAuth());
+    UNIT_ASSERT(!p.HasBasicAuth());
+    UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(p.IsNoAuth());
+}
+
+Y_UNIT_TEST(BasicAuthAndToken) {
+    TStructuredTokenBuilder b;
+    b.SetBasicAuth("my_login", "my_passw");
+    b.SetIAMToken("my_token");
+    UNIT_ASSERT_VALUES_EQUAL(R"({"basic_login":"my_login","basic_password":"my_passw","token":"my_token"})", b.ToJson());
+    const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
+    UNIT_ASSERT(!p.HasServiceAccountIdAuth());
+    UNIT_ASSERT(p.HasBasicAuth());
+    UNIT_ASSERT(p.HasIAMToken());
+    UNIT_ASSERT(!p.IsNoAuth());
+
+    TString login, password;
+    UNIT_ASSERT(p.GetBasicAuth(login, password));
+    UNIT_ASSERT_VALUES_EQUAL(login, "my_login");
+    UNIT_ASSERT_VALUES_EQUAL(password, "my_passw");
+
+    TString token = p.GetIAMToken();
+    UNIT_ASSERT_VALUES_EQUAL(token, "my_token");
+}
+
+Y_UNIT_TEST(ComposeForBasicAuth) {
+    // Test with both login and password
+    TString json1 = ComposeStructuredTokenJsonForBasicAuth("user1", "pass1");
+    UNIT_ASSERT_VALUES_EQUAL(json1, R"({"basic_login":"user1","basic_password":"pass1"})");
+
+    // Test with login but empty password
+    TString json2 = ComposeStructuredTokenJsonForBasicAuth("user2", "");
+    UNIT_ASSERT_VALUES_EQUAL(json2, R"({"basic_login":"user2","basic_password":""})");
+
+    // Test with empty login (should return no_auth)
+    TString json3 = ComposeStructuredTokenJsonForBasicAuth("", "pass3");
+    UNIT_ASSERT_VALUES_EQUAL(json3, R"({"no_auth":""})");
+
+    // Test with both empty (should return no_auth)
+    TString json4 = ComposeStructuredTokenJsonForBasicAuth("", "");
+    UNIT_ASSERT_VALUES_EQUAL(json4, R"({"no_auth":""})");
+}
+} // Y_UNIT_TEST_SUITE(TokenBuilderTest)
+} // namespace NYql

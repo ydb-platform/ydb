@@ -31,6 +31,10 @@ is_extra_target = true
 is_test = true
 is_extra_target = true
 
+[targets.junit6]
+is_test = true
+is_extra_target = true
+
 [attrs.target]
 # DEPRECATED
 annotation_processors="list"
@@ -39,7 +43,9 @@ required_jdk="str"
 add_vcs_info_to_mf="bool"
 junit4_test="flag"
 junit5_test="flag"
+junit6_test="flag"
 test_cwd="list"
+test_env="list"
 app_main_class="str"
 enable_preview="flag"
 use_annotation_processor="list"
@@ -59,9 +65,9 @@ resource_sets-realdir="str"
 resource_sets-globs="list"
 resource_sets-prefix="str"
 
-publish="flag"
-publish_group="str"
-publish_version="str"
+publish="skip"
+publish_group="skip"
+publish_version="skip"
 
 proto_files="list"
 proto_namespace="str"
@@ -74,6 +80,10 @@ proto_grpc_version="str"
 proto_kotlin="flag"
 proto_kotlin_grpc="flag"
 proto_kotlin_grpc_version="str"
+
+proto_plugins="list"
+proto_plugins-name="str"
+proto_plugins-bin="str"
 
 kotlin_version="str"
 with_kotlin="flag"
@@ -103,6 +113,7 @@ custom_runs-cmake_packages="list"
 custom_runs-cmake_packages-ITEM="dict"
 custom_runs-cmake_packages-name="str"
 custom_runs-cmake_packages-components="list"
+custom_runs-jar="str"
 
 javac-flags="list"
 kotlinc-flags="list"
@@ -116,9 +127,18 @@ target_commands-args_escaped="list"
 target_commands-flags="list"
 
 with_kapt="flag"
-kapt-classpaths="list"
 kapt-opts="list"
 kapt-processors="list"
+kapt-classpaths="list"
+kapt-ap_opts="list"
+
+from_sandboxes="list"
+from_sandboxes-mode="str"
+from_sandboxes-resource_id="str"
+from_sandboxes-renames="list"
+from_sandboxes-outs="list"
+from_sandboxes-reldir="str"
+from_sandboxes-executable="bool"
 
 [attrs.root]
 

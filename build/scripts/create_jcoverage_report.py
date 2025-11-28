@@ -6,6 +6,9 @@ import os
 import sys
 import time
 import subprocess
+import platform
+
+PY3 = sys.version_info[0] == 3
 
 
 def mkdir_p(path):
@@ -78,7 +81,8 @@ def main(
                 else:
                     continue
 
-                entry.filename = entry.filename.encode('utf-8')
+                if not PY3:
+                    entry.filename = entry.filename.encode('utf-8')
                 jf.extract(entry, dest)
     timer.step("Jar files extracted")
 
@@ -113,9 +117,8 @@ def main(
 
 
 if __name__ == '__main__':
-    if 'LC_ALL' in os.environ:
-        if os.environ['LC_ALL'] == 'C':
-            os.environ['LC_ALL'] = 'en_GB.UTF-8'
+    if platform.system() == 'Linux' and os.getenv('LC_ALL', 'C') == 'C':
+        os.environ['LC_ALL'] = 'C.UTF-8'
 
     parser = argparse.ArgumentParser()
 

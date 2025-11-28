@@ -106,7 +106,7 @@ void Deserialize(TSize& value, NYson::TYsonPullParserCursor* cursor)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NYTree
+} // namespace NYTree
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -120,7 +120,7 @@ NYT::NYTree::TSize FromStringImpl<NYT::NYTree::TSize, char>(const char* data, si
     return NYT::NYTree::TSize::FromString(TStringBuf(data, size));
 }
 
-template<>
+template <>
 bool TryFromStringImpl<NYT::NYTree::TSize, char>(const char* data, size_t size, NYT::NYTree::TSize& value)
 {
     try {

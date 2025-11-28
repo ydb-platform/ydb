@@ -34,20 +34,44 @@ public:
         return DateTimeFormatName;
     }
 
-    TExprNode::TPtr GetDateTimeFormat() {
+    TExprNode::TPtr GetDateTimeFormat() const {
         return DateTimeFormat;
     }
 
-    TExprNode::TPtr GetTimestampFormatName() {
+    TExprNode::TPtr GetTimestampFormatName() const {
         return TimestampFormatName;
     }
 
-    TExprNode::TPtr GetTimestampFormat() {
+    TExprNode::TPtr GetTimestampFormat() const {
         return TimestampFormat;
     }
 
-    TExprNode::TPtr GetDateFormat() {
+    TExprNode::TPtr GetDateFormat() const {
         return DateFormat;
+    }
+
+    TExprNode::TPtr GetWatermarkAdjustLateEvents() const {
+        return WatermarkAdjustLateEvents;
+    }
+
+    TExprNode::TPtr GetWatermarkDropLateEvents() const {
+        return WatermarkDropLateEvents;
+    }
+
+    TExprNode::TPtr GetWatermarkGranularity() const {
+        return WatermarkGranularity;
+    }
+
+    TExprNode::TPtr GetWatermarkIdleTimeout() const {
+        return WatermarkIdleTimeout;
+    }
+
+    TExprNode::TPtr GetWatermark() const {
+        return Watermark;
+    }
+
+    TExprNode::TPtr GetSkipJsonErrors() const {
+        return SkipJsonErrors;
     }
 
     bool Parse(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx);
@@ -67,6 +91,12 @@ private:
     TExprNode::TPtr DateFormat;
     TExprNode::TPtr UserSchema;
     TExprNode::TPtr ColumnOrder;
+    TExprNode::TPtr WatermarkAdjustLateEvents;
+    TExprNode::TPtr WatermarkDropLateEvents;
+    TExprNode::TPtr WatermarkGranularity;
+    TExprNode::TPtr WatermarkIdleTimeout;
+    TExprNode::TPtr Watermark;
+    TExprNode::TPtr SkipJsonErrors;
 };
 
 } // namespace NYql

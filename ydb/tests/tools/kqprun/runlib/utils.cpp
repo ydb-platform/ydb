@@ -18,6 +18,8 @@ namespace NKikimrRun {
 
 namespace {
 
+std::terminate_handler DefaultTerminateHandler;
+
 void TerminateHandler() {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
@@ -29,7 +31,11 @@ void TerminateHandler() {
     }
     Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
 
-    abort();
+    if (DefaultTerminateHandler) {
+        DefaultTerminateHandler();
+    } else {
+        abort();
+    }
 }
 
 TString SignalToString(int signal) {
@@ -115,14 +121,11 @@ void TStatsPrinter::PrintInProgressStatistics(const TString& plan, IOutputStream
         auto publicStat = StatProcessor->GetPublicStat(fullStat);
 
         output << "\nCPU usage: " << cpuUsage << Endl;
-        PrintStatistics(fullStat, flatStat, publicStat, output);
+        PrintStatistics(fullStat, flatStat, publicStat, convertedPlan, output);
     } catch (const NJson::TJsonException& ex) {
         output << "Error stat conversion: " << ex.what() << Endl;
         return;
     }
-
-    output << "\nPlan visualization:" << Endl;
-    PrintPlan(convertedPlan, output);
 }
 
 void TStatsPrinter::PrintTimeline(const TString& plan, IOutputStream& output) {
@@ -131,7 +134,7 @@ void TStatsPrinter::PrintTimeline(const TString& plan, IOutputStream& output) {
     output.Write(planVisualizer.PrintSvg());
 }
 
-void TStatsPrinter::PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, IOutputStream& output) {
+void TStatsPrinter::PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, const TString& plan, IOutputStream& output) const {
     output << "\nFlat statistics:" << Endl;
     for (const auto& [propery, value] : flatStat) {
         TString valueString = ToString(value);
@@ -169,6 +172,9 @@ void TStatsPrinter::PrintStatistics(const TString& fullStat, const THashMap<TStr
     if (auto runningTasks = publicStat.RunningTasks) {
         output << "RunningTasks = " << FormatNumber(*runningTasks) << Endl;
     }
+
+    output << "\nPlan visualization:" << Endl;
+    PrintPlan(plan, output);
 
     output << "\nFull statistics:" << Endl;
     NJson::TJsonValue statsJson;
@@ -271,7 +277,8 @@ TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName
 }
 
 void SetupSignalActions() {
-    std::set_terminate(&TerminateHandler);
+    DefaultTerminateHandler = std::set_terminate(&TerminateHandler);
+
     for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
         signal(sig, &BackTraceSignalHandler);
     }

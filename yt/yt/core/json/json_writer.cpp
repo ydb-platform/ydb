@@ -16,7 +16,8 @@ using namespace NYson;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TJsonWriter
-    : public IJsonWriter
+    : public TYsonConsumerBase
+    , public IJsonWriter
 {
 public:
     TJsonWriter(IOutputStream* output, bool isPretty);
@@ -42,7 +43,6 @@ public:
     void OnBeginAttributes() override;
 
     void OnEndAttributes() override;
-    void OnRaw(TStringBuf yson, EYsonType type) override;
 
     void StartNextValue() override;
 
@@ -101,6 +101,7 @@ public:
     void OnEndAttributes() override;
 
     void SetAnnotateWithTypesParameter(bool value) override;
+    void SetStringifyParameter(bool value) override;
 
     void OnStringScalarWeightLimited(TStringBuf value, std::optional<i64> weightLimit) override;
     void OnNodeWeightLimited(TStringBuf yson, std::optional<i64> weightLimit) override;
@@ -130,6 +131,35 @@ private:
     bool HasAttributes_ = false;
     int Depth_ = 0;
     bool CheckLimit_ = true;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TWebJsonConsumer
+    : public TJsonConsumer
+{
+public:
+    static constexpr i64 MaxSafeInteger = (static_cast<i64>(1) << 53) - 1;
+    static constexpr i64 MinSafeInteger = -MaxSafeInteger;
+
+    TWebJsonConsumer(
+        IJsonWriter* jsonWriter,
+        NYson::EYsonType type,
+        TWebJsonFormatConfigPtr config);
+
+    TWebJsonConsumer(
+        std::unique_ptr<IJsonWriter> jsonWriter,
+        NYson::EYsonType type,
+        TWebJsonFormatConfigPtr config);
+
+    void OnInt64Scalar(i64 value);
+    void OnUint64Scalar(ui64 value);
+
+private:
+    const TWebJsonFormatConfigPtr Config_;
+
+    void SetUnsafeIntegerSerializationParameters();
+    void ResetUnsafeIntegerSerializationParameters();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -279,11 +309,6 @@ void TJsonWriter::OnBeginAttributes()
 void TJsonWriter::OnEndAttributes()
 {
     THROW_ERROR_EXCEPTION("TJsonWriter does not support attributes");
-}
-
-void TJsonWriter::OnRaw(TStringBuf /*yson*/, NYT::NYson::EYsonType /*type*/)
-{
-    THROW_ERROR_EXCEPTION("TJsonWriter does not support OnRaw()");
 }
 
 ui64 TJsonWriter::GetWrittenByteCount() const
@@ -630,6 +655,11 @@ void TJsonConsumer::SetAnnotateWithTypesParameter(bool value)
     Config_->AnnotateWithTypes = value;
 }
 
+void TJsonConsumer::SetStringifyParameter(bool value)
+{
+    Config_->Stringify = value;
+}
+
 void TJsonConsumer::OnStringScalarWeightLimited(TStringBuf value, std::optional<i64> weightLimit)
 {
     TStringBuf writeValue = value;
@@ -676,6 +706,74 @@ std::unique_ptr<IJsonWriter> CreateJsonWriter(
     bool pretty)
 {
     return std::make_unique<TJsonWriter>(output, pretty);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TWebJsonConsumer::TWebJsonConsumer(
+    IJsonWriter* jsonWriter,
+    NYson::EYsonType type,
+    TWebJsonFormatConfigPtr config)
+    : TJsonConsumer(jsonWriter, type, New<TJsonFormatConfig>())
+    , Config_(config)
+{ }
+
+TWebJsonConsumer::TWebJsonConsumer(
+    std::unique_ptr<IJsonWriter> jsonWriter,
+    NYson::EYsonType type,
+    TWebJsonFormatConfigPtr config)
+    : TJsonConsumer(std::move(jsonWriter), type, New<TJsonFormatConfig>())
+    , Config_(config)
+{ }
+
+void TWebJsonConsumer::SetUnsafeIntegerSerializationParameters()
+{
+    SetAnnotateWithTypesParameter(true);
+    SetStringifyParameter(true);
+}
+
+void TWebJsonConsumer::ResetUnsafeIntegerSerializationParameters()
+{
+    // Reset to default values.
+    SetAnnotateWithTypesParameter(false);
+    SetStringifyParameter(false);
+}
+
+void TWebJsonConsumer::OnInt64Scalar(i64 value)
+{
+    bool unsafe = value > MaxSafeInteger || value < MinSafeInteger;
+    if (unsafe) {
+        SetUnsafeIntegerSerializationParameters();
+    }
+    TJsonConsumer::OnInt64Scalar(value);
+    if (unsafe) {
+        ResetUnsafeIntegerSerializationParameters();
+    }
+}
+
+void TWebJsonConsumer::OnUint64Scalar(ui64 value)
+{
+    bool unsafe = value > static_cast<ui64>(MaxSafeInteger);
+    if (unsafe) {
+        SetUnsafeIntegerSerializationParameters();
+    }
+    TJsonConsumer::OnUint64Scalar(value);
+    if (unsafe) {
+        ResetUnsafeIntegerSerializationParameters();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::unique_ptr<IJsonConsumer> CreateWebJsonConsumer(
+    IOutputStream* output,
+    EYsonType type,
+    TWebJsonFormatConfigPtr config)
+{
+    auto jsonWriter = CreateJsonWriter(
+        output,
+        /*pretty*/ config->Format == EJsonFormat::Pretty);
+    return std::make_unique<TWebJsonConsumer>(std::move(jsonWriter), type, std::move(config));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

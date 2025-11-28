@@ -35,4 +35,4 @@ private:
     TPatternGroup AllowedUrls_;
 };
 
-}
+} // namespace NYql

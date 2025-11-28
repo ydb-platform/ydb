@@ -11,9 +11,12 @@ ELSE()
 ENDIF()
 
 SRCS(
+    kqp_connection_ut.cpp
     kqp_effects_ut.cpp
     kqp_immediate_effects_ut.cpp
     kqp_inplace_update_ut.cpp
+    kqp_overload_ut.cpp
+    kqp_reattach_ut.cpp
     kqp_write_ut.cpp
 )
 

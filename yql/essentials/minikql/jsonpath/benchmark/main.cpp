@@ -24,12 +24,12 @@ using namespace NJson;
 using namespace NKikimr::NMiniKQL;
 
 TString RandomString(ui32 min, ui32 max) {
-    static TReallyFastRng32 rand(0);
+    static TReallyFastRng32 Rand(0);
     TString result;
-    const ui32 length = rand.Uniform(min, max + 1);
+    const ui32 length = Rand.Uniform(min, max + 1);
     result.reserve(length);
     for (ui32 i = 0; i < length; ++i) {
-        result.push_back(char(rand.Uniform('a', 'z' + 1)));
+        result.push_back(char(Rand.Uniform('a', 'z' + 1)));
     }
     return result;
 }
@@ -62,14 +62,13 @@ TString GenerateRandomJson() {
 
 const size_t MAX_PARSE_ERRORS = 100;
 
-#define PREPARE() \
+#define PREPARE()                                                                                       \
     TIntrusivePtr<IFunctionRegistry> FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry())); \
-    TScopedAlloc Alloc(__LOCATION__); \
-    TTypeEnvironment Env(Alloc); \
-    TMemoryUsageInfo MemInfo("Memory"); \
-    THolderFactory HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get()); \
-    TDefaultValueBuilder ValueBuilder(HolderFactory); \
-
+    TScopedAlloc Alloc(__LOCATION__);                                                                   \
+    TTypeEnvironment Env(Alloc);                                                                        \
+    TMemoryUsageInfo MemInfo("Memory");                                                                 \
+    THolderFactory HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get());                         \
+    TDefaultValueBuilder ValueBuilder(HolderFactory);
 
 Y_CPU_BENCHMARK(JsonPath, iface) {
     PREPARE()

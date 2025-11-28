@@ -190,7 +190,7 @@ class TThreadPoolPollerImpl
 public:
     TThreadPoolPollerImpl(
         int threadCount,
-        const TString& threadNamePrefix,
+        std::string threadNamePrefix,
         TDuration pollingPeriod)
         : TThread(Format("%v:%v", threadNamePrefix, "Poll"))
         , Logger(ConcurrencyLogger().WithTag("ThreadNamePrefix: %v", threadNamePrefix))
@@ -288,6 +288,11 @@ public:
     IInvokerPtr GetInvoker() const override
     {
         return AuxInvoker_;
+    }
+
+    ITwoLevelFairShareThreadPoolPtr GetFairShareThreadPool() const override
+    {
+        return FairShareThreadPool_;
     }
 
     void Shutdown() override
@@ -513,7 +518,7 @@ class TThreadPoolPoller
     : public IThreadPoolPoller
 {
 public:
-    TThreadPoolPoller(int threadCount, const TString& threadNamePrefix, TDuration pollingPeriod)
+    TThreadPoolPoller(int threadCount, std::string threadNamePrefix, TDuration pollingPeriod)
         : Poller_(New<TThreadPoolPollerImpl>(threadCount, threadNamePrefix, pollingPeriod))
     { }
 
@@ -577,6 +582,11 @@ public:
         return Poller_->GetInvoker();
     }
 
+    ITwoLevelFairShareThreadPoolPtr GetFairShareThreadPool() const override
+    {
+        return Poller_->GetFairShareThreadPool();
+    }
+
 private:
     TIntrusivePtr<TThreadPoolPollerImpl> Poller_;
 };
@@ -585,7 +595,7 @@ private:
 
 IThreadPoolPollerPtr CreateThreadPoolPoller(
     int threadCount,
-    const TString& threadNamePrefix,
+    std::string threadNamePrefix,
     TDuration pollingPeriod)
 {
     auto poller = New<TThreadPoolPoller>(threadCount, threadNamePrefix, pollingPeriod);

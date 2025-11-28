@@ -39,7 +39,7 @@ public:
     void SetUserCredentials(const TUserCredentials& userCredentials) {
         UserCredentials_ = userCredentials;
     }
-    
+
     void SetGroups(std::unordered_set<TString>&& groups) {
         Groups_ = std::move(groups);
     }
@@ -48,10 +48,18 @@ public:
         return Groups_;
     }
 
+    void SetIsRobot(bool isRobot) {
+        IsRobot_ = isRobot;
+    }
+
+    bool IsRobot() const {
+        return IsRobot_;
+    }
+
     const TCredential* FindCredential(const TStringBuf& name) const;
     TString FindCredentialContent(const TStringBuf& name1, const TStringBuf& name2, const TString& defaultContent) const;
 
-    const TUserCredentials& GetUserCredentials() const  {
+    const TUserCredentials& GetUserCredentials() const {
         return UserCredentials_;
     }
     void ForEach(const std::function<void(const TString, const TCredential&)>& callback) const;
@@ -60,6 +68,7 @@ private:
     THashMap<TString, TCredential> CredentialTable_;
     TUserCredentials UserCredentials_;
     std::unordered_set<TString> Groups_;
+    bool IsRobot_ = false;
 };
 
 } // namespace NYql

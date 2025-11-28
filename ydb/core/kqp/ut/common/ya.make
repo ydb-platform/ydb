@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    arrow_builders.cpp
     json2_udf.cpp
     kqp_ut_common.cpp
     kqp_ut_common.h
@@ -11,6 +12,7 @@ SRCS(
     math_udf.cpp
     unicode_udf.cpp
     digest_udf.cpp
+    kqp_benches.cpp
 )
 
 PEERDIR(

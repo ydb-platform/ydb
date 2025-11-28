@@ -12,3 +12,4 @@ Table of contents:
 - [Random choice](balancing-random-choice.md)
 - [Prefer the nearest data center](balancing-prefer-local.md)
 - [Prefer the specific availability zone](balancing-prefer-location.md)
+- [Prefer a pile with a specific state](balancing-prefer-pile.md)

@@ -1,22 +1,24 @@
 PyHamcrest
 ==========
 
-| |docs| |travis| |coveralls| |landscape| |scrutinizer| |codeclimate|
+| |docs| |travis| |coveralls| |landscape| |scrutinizer|
 | |version| |downloads| |wheel| |supported-versions| |supported-implementations|
+| |GitHub forks| |GitHub stars| |GitHub watchers| |GitHub contributors| |Lines of Code|
+| |GitHub issues| |GitHub issues-closed| |GitHub pull-requests| |GitHub pull-requests closed|
 
-.. |docs| image:: https://readthedocs.org/projects/pyhamcrest/badge/?style=flat
+.. |docs| image:: https://readthedocs.org/projects/pyhamcrest/badge/
     :target: https://pyhamcrest.readthedocs.org/
     :alt: Documentation Status
 
-.. |travis| image:: http://img.shields.io/travis/hamcrest/PyHamcrest/master.png?style=flat
+.. |travis| image:: http://img.shields.io/travis/hamcrest/PyHamcrest/master.svg
     :alt: Travis-CI Build Status
     :target: https://travis-ci.org/hamcrest/PyHamcrest
 
-.. |appveyor| image:: https://ci.appveyor.com/api/projects/status/github/hamcrest/PyHamcrest?branch=master
+.. |appveyor| image:: https://ci.appveyor.com/api/projects/status/github/hamcrest/PyHamcrest?branch=master&svg=true
     :alt: AppVeyor Build Status
     :target: https://ci.appveyor.com/project/hamcrest/PyHamcrest
 
-.. |coveralls| image:: http://img.shields.io/coveralls/hamcrest/PyHamcrest/master.png?style=flat
+.. |coveralls| image:: http://img.shields.io/coveralls/hamcrest/PyHamcrest/master.svg?style=flat
     :alt: Coverage Status
     :target: https://coveralls.io/r/hamcrest/PyHamcrest
 
@@ -24,31 +26,63 @@ PyHamcrest
     :target: https://landscape.io/github/hamcrest/PyHamcrest/master
     :alt: Code Quality Status
 
-.. |codeclimate| image:: https://codeclimate.com/github/hamcrest/PyHamcrest/badges/gpa.svg
-   :target: https://codeclimate.com/github/hamcrest/PyHamcrest
-   :alt: Code Climate
-
-.. |version| image:: http://img.shields.io/pypi/v/PyHamcrest.png?style=flat
+.. |version| image:: http://img.shields.io/pypi/v/PyHamcrest.svg?style=flat
     :alt: PyPI Package latest release
     :target: https://pypi.python.org/pypi/PyHamcrest
 
-.. |downloads| image:: http://img.shields.io/pypi/dm/PyHamcrest.png?style=flat
+.. |downloads| image:: http://img.shields.io/pypi/dm/PyHamcrest.svg?style=flat
     :alt: PyPI Package monthly downloads
     :target: https://pypi.python.org/pypi/PyHamcrest
 
-.. |wheel| image:: https://pypip.in/wheel/PyHamcrest/badge.png?style=flat
+.. |wheel| image:: https://pypip.in/wheel/PyHamcrest/badge.svg?style=flat
     :alt: PyPI Wheel
     :target: https://pypi.python.org/pypi/PyHamcrest
 
-.. |supported-versions| image:: https://pypip.in/py_versions/PyHamcrest/badge.png?style=flat
+.. |supported-versions| image:: https://pypip.in/py_versions/PyHamcrest/badge.svg?style=flat
     :alt: Supported versions
     :target: https://pypi.python.org/pypi/PyHamcrest
 
-.. |supported-implementations| image:: https://pypip.in/implementation/PyHamcrest/badge.png?style=flat
-    :alt: Supported imlementations
+.. |GitHub forks| image:: https://img.shields.io/github/forks/hamcrest/PyHamcrest.svg?label=Fork&logo=github
+    :alt: GitHub forks
+    :target: https://github.com/hamcrest/PyHamcrest/network/members
+
+.. |GitHub stars| image:: https://img.shields.io/github/stars/hamcrest/PyHamcrest.svg?label=Star&logo=github
+    :alt: GitHub stars
+    :target: https://github.com/hamcrest/PyHamcrest/stargazers/
+
+.. |GitHub watchers| image:: https://img.shields.io/github/watchers/hamcrest/PyHamcrest.svg?label=Watch&logo=github
+    :alt: GitHub watchers
+    :target: https://github.com/hamcrest/PyHamcrest/watchers/
+
+.. |GitHub contributors| image:: https://img.shields.io/github/contributors/hamcrest/PyHamcrest.svg?logo=github
+    :alt: GitHub contributors
+    :target: https://github.com/hamcrest/PyHamcrest/graphs/contributors/
+
+.. |GitHub issues| image:: https://img.shields.io/github/issues/hamcrest/PyHamcrest.svg?logo=github
+    :alt: GitHub issues
+    :target: https://github.com/hamcrest/PyHamcrest/issues/
+
+.. |GitHub issues-closed| image:: https://img.shields.io/github/issues-closed/hamcrest/PyHamcrest.svg?logo=github
+    :alt: GitHub issues-closed
+    :target: https://github.com/hamcrest/PyHamcrest/issues?q=is%3Aissue+is%3Aclosed
+
+.. |GitHub pull-requests| image:: https://img.shields.io/github/issues-pr/hamcrest/PyHamcrest.svg?logo=github
+    :alt: GitHub pull-requests
+    :target: https://github.com/hamcrest/PyHamcrest/pulls
+
+.. |GitHub pull-requests closed| image:: https://img.shields.io/github/issues-pr-closed/hamcrest/PyHamcrest.svg?logo=github
+    :alt: GitHub pull-requests closed
+    :target: https://github.com/hamcrest/PyHamcrest/pulls?utf8=%E2%9C%93&q=is%3Apr+is%3Aclosed
+
+.. |Lines of Code| image:: https://tokei.rs/b1/github/hamcrest/PyHamcrest
+    :alt: Lines of Code
+    :target: https://github.com/hamcrest/PyHamcrest
+
+.. |supported-implementations| image:: https://pypip.in/implementation/PyHamcrest/badge.svg?style=flat
+    :alt: Supported implementations
     :target: https://pypi.python.org/pypi/PyHamcrest
 
-.. |scrutinizer| image:: https://img.shields.io/scrutinizer/g/hamcrest/PyHamcrest/master.png?style=flat
+.. |scrutinizer| image:: https://img.shields.io/scrutinizer/g/hamcrest/PyHamcrest/master.svg?style=flat
     :alt: Scrtinizer Status
     :target: https://scrutinizer-ci.com/g/hamcrest/PyHamcrest/
 
@@ -163,7 +197,7 @@ PyHamcrest comes with a library of useful matchers:
   * ``all_of`` - ``and`` together all matchers
   * ``any_of`` - ``or`` together all matchers
   * ``anything`` - match anything, useful in composite matchers when you don't care about a particular value
-  * ``is_not`` - negate the matcher
+  * ``is_not``, ``not_`` - negate the matcher
 
 * Sequence
 
@@ -184,7 +218,7 @@ PyHamcrest comes with a library of useful matchers:
 
 * Decorator
 
-  * ``calling`` - wrap a callable in a deffered object, for subsequent matching on calling behaviour
+  * ``calling`` - wrap a callable in a deferred object, for subsequent matching on calling behaviour
   * ``raises`` - Ensure that a deferred callable raises as expected
   * ``described_as`` - give the matcher a custom failure description
   * ``is_`` - decorator to improve readability - see `Syntactic sugar` below
@@ -238,7 +272,7 @@ This is the test we want to write:
 .. code:: python
 
  def testDateIsOnASaturday(self):
-     d = datetime.date(2008, 04, 26)
+     d = datetime.date(2008, 4, 26)
      assert_that(d, is_(on_a_saturday()))
 
 And here's the implementation:
@@ -275,7 +309,7 @@ failure message looks:
 
 .. code:: python
 
- assert_that(datetime.date(2008, 04, 06), is_(on_a_saturday()))
+ assert_that(datetime.date(2008, 4, 6), is_(on_a_saturday()))
 
 fails with the message::
 
@@ -294,7 +328,7 @@ could use it in our test by importing the factory function ``on_a_saturday``:
 
  class DateTest(unittest.TestCase):
      def testDateIsOnASaturday(self):
-         d = datetime.date(2008, 04, 26)
+         d = datetime.date(2008, 4, 26)
          assert_that(d, is_(on_a_saturday()))
 
  if __name__ == '__main__':
@@ -314,7 +348,7 @@ More resources
 * Sources_
 * Hamcrest_
 
-.. _Documentation: http://readthedocs.org/docs/pyhamcrest/en/V1.8.2/
+.. _Documentation: https://pyhamcrest.readthedocs.io/
 .. _Package: http://pypi.python.org/pypi/PyHamcrest
 .. _Sources: https://github.com/hamcrest/PyHamcrest
 .. _Hamcrest: http://hamcrest.org

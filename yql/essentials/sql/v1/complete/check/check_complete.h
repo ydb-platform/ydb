@@ -10,12 +10,12 @@
 
 namespace NSQLComplete {
 
-    bool CheckComplete(
-        TStringBuf query,
-        NYql::TExprNode::TPtr root,
-        NYql::TExprContext& ctx,
-        NYql::TIssues& issues);
+bool CheckComplete(
+    TStringBuf query,
+    NYql::TExprNode::TPtr root,
+    NYql::TExprContext& ctx,
+    NYql::TIssues& issues);
 
-    bool CheckComplete(TStringBuf query, NYql::TAstNode& root, NYql::TIssues& issues);
+bool CheckComplete(TStringBuf query, NYql::TAstNode& root, NYql::TIssues& issues);
 
 } // namespace NSQLComplete

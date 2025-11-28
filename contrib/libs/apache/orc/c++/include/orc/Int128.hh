@@ -193,43 +193,13 @@ namespace orc {
      * Shift left by the given number of bits.
      * Values larger than 2**127 will shift into the sign bit.
      */
-    Int128& operator<<=(uint32_t bits) {
-      if (bits != 0) {
-        if (bits < 64) {
-          highbits_ <<= bits;
-          highbits_ |= (lowbits_ >> (64 - bits));
-          lowbits_ <<= bits;
-        } else if (bits < 128) {
-          highbits_ = static_cast<int64_t>(lowbits_) << (bits - 64);
-          lowbits_ = 0;
-        } else {
-          highbits_ = 0;
-          lowbits_ = 0;
-        }
-      }
-      return *this;
-    }
+    Int128& operator<<=(uint32_t bits);
 
     /**
      * Shift right by the given number of bits. Negative values will
      * sign extend and fill with one bits.
      */
-    Int128& operator>>=(uint32_t bits) {
-      if (bits != 0) {
-        if (bits < 64) {
-          lowbits_ >>= bits;
-          lowbits_ |= static_cast<uint64_t>(highbits_ << (64 - bits));
-          highbits_ = static_cast<int64_t>(static_cast<uint64_t>(highbits_) >> bits);
-        } else if (bits < 128) {
-          lowbits_ = static_cast<uint64_t>(highbits_ >> (bits - 64));
-          highbits_ = highbits_ >= 0 ? 0 : -1l;
-        } else {
-          highbits_ = highbits_ >= 0 ? 0 : -1l;
-          lowbits_ = static_cast<uint64_t>(highbits_);
-        }
-      }
-      return *this;
-    }
+    Int128& operator>>=(uint32_t bits);
 
     bool operator==(const Int128& right) const {
       return highbits_ == right.highbits_ && lowbits_ == right.lowbits_;

@@ -61,7 +61,7 @@ struct TYqlRowSpecInfo: public TThrRefBase {
     // Includes aux columns
     const TStructExprType* GetExtendedType(TExprContext& ctx) const;
     // Returns true if sortness is changed
-    bool CopySortness(TExprContext& ctx, const TYqlRowSpecInfo& from, ECopySort mode = ECopySort::Pure);
+    bool CopySortness(TExprContext& ctx, const TYqlRowSpecInfo& from, bool useNativeYtDefaultColumnOrder, ECopySort mode = ECopySort::Pure);
     // Returns true if sortness is changed
     bool MakeCommonSortness(TExprContext& ctx, const TYqlRowSpecInfo& from);
     bool CompareSortness(const TYqlRowSpecInfo& with, bool checkUniqueFlag = true) const;
@@ -98,7 +98,7 @@ struct TYqlRowSpecInfo: public TThrRefBase {
         NativeYtTypeFlags = from.NativeYtTypeFlags;
     }
 
-    void CopyTypeOrders(const NYT::TNode& typeNode);
+    void CopyTypeOrders(const NYT::TNode& typeNode, bool useNativeYtDefaultColumnOrder);
 
     ui64 GetNativeYtTypeFlags(const NCommon::TStructMemberMapper& mapper = {}) const;
 
@@ -155,5 +155,6 @@ private:
 };
 
 ui64 GetNativeYtTypeFlags(const TStructExprType& type, const NCommon::TStructMemberMapper& mapper = {});
+TColumnOrder GetNativeYtDefaultColumnOrder(const TStructExprType* type, const TVector<TString>& sortMembers);
 
 }

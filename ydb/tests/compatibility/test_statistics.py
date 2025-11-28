@@ -1,17 +1,25 @@
 # -*- coding: utf-8 -*-
+import json
+import logging
 import pytest
 import random
 import threading
+
+from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 TABLE_NAME = "table"
+
+logger = logging.getLogger(__name__)
 
 
 class TestStatisticsTLI(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(
+            tenant_db="mydb",
         )
 
     def write_data(self):
@@ -25,14 +33,7 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
                     commit_tx=True
                 )
 
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        driver.wait()
-
+        driver = self.create_driver()
         with ydb.QuerySessionPool(driver) as session_pool:
             session_pool.retry_operation_sync(operation)
 
@@ -60,14 +61,7 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
                 for query in queries:
                     session.transaction().execute(query, commit_tx=True)
 
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        driver.wait()
-
+        driver = self.create_driver()
         with ydb.QuerySessionPool(driver) as session_pool:
             session_pool.retry_operation_sync(operation)
 
@@ -179,3 +173,75 @@ class TestStatisticsFollowersRollingUpdate(RollingUpgradeAndDowngradeFixture):
         for _ in self.roll():
             self.write_data()
             self.check_statistics()
+
+
+class TestBaseStatisticsRollingUpdate(RollingUpgradeAndDowngradeFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        self.row_count = 0
+        yield from self.setup_cluster(
+            tenant_db="mydb",
+            additional_log_configs={
+                'STATISTICS': LogLevels.DEBUG,
+            },
+        )
+
+    def create_table(self):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            query = f"""
+                    CREATE TABLE {TABLE_NAME} (
+                    key Int64 NOT NULL,
+                    value Utf8 NOT NULL,
+                    PRIMARY KEY (key)
+                )
+                """
+            session_pool.execute_with_retries(query)
+
+    def write_data(self, count):
+        next_row_count = self.row_count + count
+
+        values_str = ", ".join(f"({k}, 'Hello, YDB {k}!')"
+                               for k in range(self.row_count, next_row_count))
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(
+                f"UPSERT INTO {TABLE_NAME} (key, value) VALUES {values_str}")
+        self.row_count = next_row_count
+
+    def get_planner_row_count_estimate(self):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            res = session_pool.explain_with_retries(f"SELECT count(*) FROM {TABLE_NAME}")
+            logger.debug(f"SELECT count explain: {res}")
+            explain = json.loads(res)
+
+        def get_estimate(plan_node):
+            if plan_node.get("Name") == "TableFullScan" and plan_node.get("Table") == TABLE_NAME:
+                rc = plan_node.get("E-Rows")
+                return int(rc) if rc is not None else None
+            for p in plan_node.get("Plans", []) + plan_node.get("Operators", []):
+                rc = get_estimate(p)
+                if rc is not None:
+                    return rc
+
+        rc = get_estimate(explain["Plan"])
+        logger.debug(f"planner row count estimate: {rc}")
+        return rc
+
+    def test(self):
+        BATCH_SIZE = 100
+        self.create_table()
+        self.write_data(BATCH_SIZE)
+
+        assert wait_for(
+            lambda: self.get_planner_row_count_estimate() == self.row_count, timeout_seconds=300), \
+            "base stats not ready before node roll"
+
+        for _ in self.roll():
+            self.write_data(BATCH_SIZE)
+            rc_estimate = self.get_planner_row_count_estimate()
+            assert rc_estimate <= self.row_count
+            assert rc_estimate >= BATCH_SIZE
+
+        assert wait_for(
+            lambda: self.get_planner_row_count_estimate() == self.row_count, timeout_seconds=300), \
+            "base stats not ready after node roll"

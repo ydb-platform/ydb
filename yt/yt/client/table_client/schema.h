@@ -427,7 +427,6 @@ private:
         std::vector<TDeletedColumn> DeletedColumns;
     };
 
-
     std::shared_ptr<const TColumnInfo> ColumnInfo_;
     int KeyColumnCount_ = 0;
     bool HasMaterializedComputedColumns_ = false;
@@ -620,37 +619,6 @@ struct TTableSchemaEquals
     bool operator() (const TTableSchema& lhs, const TTableSchema& rhs) const;
     bool operator() (const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const;
     bool operator() (const TTableSchemaPtr& lhs, const TTableSchema& rhs) const;
-};
-
-struct TCellTaggedTableSchema
-{
-    TCellTaggedTableSchema(TTableSchema tableSchema, NObjectClient::TCellTag cellTag);
-
-    TTableSchema TableSchema;
-    NObjectClient::TCellTag CellTag;
-};
-
-struct TCellTaggedTableSchemaPtr
-{
-    TCellTaggedTableSchemaPtr(TTableSchemaPtr tableSchema, NObjectClient::TCellTag cellTag);
-
-    TTableSchemaPtr TableSchema;
-    NObjectClient::TCellTag CellTag;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TCellTaggedTableSchemaHash
-{
-    size_t operator() (const TCellTaggedTableSchema& cellTaggedSchema) const;
-    size_t operator() (const TCellTaggedTableSchemaPtr& cellTaggedSchemaPtr) const;
-};
-
-struct TCellTaggedTableSchemaEquals
-{
-    bool operator() (const TCellTaggedTableSchema& lhs, const TCellTaggedTableSchema& rhs) const;
-    bool operator() (const TCellTaggedTableSchemaPtr& lhs, const TCellTaggedTableSchemaPtr& rhs) const;
-    bool operator() (const TCellTaggedTableSchemaPtr& lhs, const TCellTaggedTableSchema& rhs) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

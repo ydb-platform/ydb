@@ -7,9 +7,9 @@
 
 namespace NKikimr::NPersQueueTests {
 
-class FunctionExecutorWrapper : public NYdb::NPersQueue::IExecutor {
+class FunctionExecutorWrapper : public NYdb::IExecutor {
 public:
-    using TExecutorPtr = NYdb::NPersQueue::IExecutor::TPtr;
+    using TExecutorPtr = NYdb::IExecutor::TPtr;
 
     explicit FunctionExecutorWrapper(TExecutorPtr executor);
 
@@ -28,6 +28,7 @@ public:
 
 private:
     void DoStart() override;
+    void Stop() override;
 
     TFunction MakeTask(TFunction func);
     void RunTask(TFunction&& func);
@@ -40,7 +41,7 @@ private:
     std::atomic<size_t> Executed = 0;
 };
 
-TIntrusivePtr<FunctionExecutorWrapper> CreateThreadPoolExecutorWrapper(size_t threads);
-TIntrusivePtr<FunctionExecutorWrapper> CreateSyncExecutorWrapper();
+std::shared_ptr<FunctionExecutorWrapper> CreateThreadPoolExecutorWrapper(size_t threads);
+std::shared_ptr<FunctionExecutorWrapper> CreateSyncExecutorWrapper();
 
 }

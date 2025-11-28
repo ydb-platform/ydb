@@ -152,6 +152,15 @@ void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TDropTable& proto) c
 }
 
 template <>
+TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
+    return TSchemeShardLocalPathId(proto.GetSchemeShardLocalPathId());
+}
+template <>
+void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const {
+    proto.SetSchemeShardLocalPathId(PathId);
+}
+
+template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrSchemeOp::TGranuleShardingInfo& proto) {
     return TSchemeShardLocalPathId(proto.GetPathId());
 }
@@ -225,7 +234,7 @@ NColumnShard::TUnifiedPathId IPathIdTranslator::GetUnifiedByInternalVerified(con
 
 NColumnShard::TSchemeShardLocalPathId IPathIdTranslator::ResolveSchemeShardLocalPathIdVerified(const TInternalPathId internalPathId) const {
     auto result = ResolveSchemeShardLocalPathId(internalPathId);
-    AFL_VERIFY(result);
+    AFL_VERIFY(result)("path_id", internalPathId.DebugString());
     return *result;
 }
 

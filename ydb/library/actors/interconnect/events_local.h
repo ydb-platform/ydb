@@ -1,73 +1,16 @@
 #pragma once
 
-#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/protos/interconnect.pb.h>
+#include <ydb/library/actors/interconnect/rdma/rdma.h>
 #include <util/generic/deque.h>
 #include <util/network/address.h>
 
+#include "events/events.h"
 #include "interconnect_stream.h"
 #include "types.h"
 
 namespace NActors {
-    enum class ENetwork : ui32 {
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // local messages
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        Start = EventSpaceBegin(TEvents::ES_INTERCONNECT_TCP),
-
-        SocketReadyRead = Start,
-        SocketReadyWrite,
-        SocketError,
-        Connect,
-        Disconnect,
-        IncomingConnection,
-        HandshakeAsk,
-        HandshakeAck,
-        HandshakeNak,
-        HandshakeDone,
-        HandshakeFail,
-        Kick,
-        Flush,
-        NodeInfo,
-        BunchOfEventsToDestroy,
-        HandshakeRequest,
-        HandshakeReplyOK,
-        HandshakeReplyError,
-        ResolveAddress,
-        AddressInfo,
-        ResolveError,
-        HTTPStreamStatus,
-        HTTPSendContent,
-        ConnectProtocolWakeup,
-        HTTPProtocolRetry,
-        EvPollerRegister,
-        EvPollerRegisterResult,
-        EvPollerReady,
-        EvUpdateFromInputSession,
-        EvConfirmUpdate,
-        EvSessionBufferSizeRequest,
-        EvSessionBufferSizeResponse,
-        EvProcessPingRequest,
-        EvGetSecureSocket,
-        EvSecureSocket,
-        HandshakeBrokerTake,
-        HandshakeBrokerFree,
-        HandshakeBrokerPermit,
-
-        // external data channel messages
-        EvSubscribeForConnection,
-        EvReportConnection,
-
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        // interconnect load test message
-        EvLoadMessage = Start + 256,
-    };
-
     struct TEvSocketReadyRead: public TEventLocal<TEvSocketReadyRead, ui32(ENetwork::SocketReadyRead)> {
     };
 
@@ -181,7 +124,9 @@ namespace NActors {
                 ui64 nextPacket,
                 TAutoPtr<TProgramInfo>&& programInfo,
                 TSessionParams params,
-                TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket)
+                TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket,
+                NInterconnect::NRdma::TQueuePair::TPtr qp,
+                NInterconnect::NRdma::ICq::TPtr cq)
             : Socket(std::move(socket))
             , Peer(peer)
             , Self(self)
@@ -189,6 +134,8 @@ namespace NActors {
             , ProgramInfo(std::move(programInfo))
             , Params(std::move(params))
             , XdcSocket(std::move(xdcSocket))
+            , RdmaQp(qp)
+            , RdmaCq(cq)
         {
         }
 
@@ -199,6 +146,8 @@ namespace NActors {
         TAutoPtr<TProgramInfo> ProgramInfo;
         const TSessionParams Params;
         TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
+        NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
+        NInterconnect::NRdma::ICq::TPtr RdmaCq;
     };
 
     struct TEvHandshakeFail: public TEventLocal<TEvHandshakeFail, ui32(ENetwork::HandshakeFail)> {

@@ -10,7 +10,6 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/string/cast.h>
 
-
 namespace NYql::NResult {
 
 class IDataProcessor {
@@ -19,7 +18,7 @@ public:
     virtual void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) = 0;
 };
 
-class TVoidProcessor : public IDataProcessor {
+class TVoidProcessor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsString());
@@ -28,7 +27,7 @@ public:
     }
 };
 
-class TNullProcessor : public IDataProcessor {
+class TNullProcessor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsEntity());
@@ -36,7 +35,7 @@ public:
     }
 };
 
-class TEmptyListProcessor : public IDataProcessor {
+class TEmptyListProcessor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsList() && dataNode.AsList().size() == 0);
@@ -44,7 +43,7 @@ public:
     }
 };
 
-class TEmptyDictProcessor : public IDataProcessor {
+class TEmptyDictProcessor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsList() && dataNode.AsList().size() == 0);
@@ -53,7 +52,7 @@ public:
 };
 
 template <typename T, void (IDataVisitor::*Func)(T)>
-class TIntegerProcessor : public IDataProcessor {
+class TIntegerProcessor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsString());
@@ -62,7 +61,7 @@ public:
 };
 
 template <typename T, T (*Conv)(TStringBuf), void (IDataVisitor::*Func)(T)>
-class TFloatingProcessor : public IDataProcessor {
+class TFloatingProcessor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsString());
@@ -70,7 +69,7 @@ public:
     }
 };
 
-class TBoolProcessor : public IDataProcessor {
+class TBoolProcessor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsBool());
@@ -79,11 +78,11 @@ public:
 };
 
 template <void (IDataVisitor::*Func)(TStringBuf, bool)>
-class TStringProcessor : public IDataProcessor {
+class TStringProcessor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsString() ||
-            dataNode.IsList() && dataNode.AsList().size() == 1 && dataNode.AsList()[0].IsString());
+              dataNode.IsList() && dataNode.AsList().size() == 1 && dataNode.AsList()[0].IsString());
         if (dataNode.IsString()) {
             (visitor.*Func)(dataNode.AsString(), true);
         } else {
@@ -93,7 +92,7 @@ public:
 };
 
 template <void (IDataVisitor::*Func)(TStringBuf)>
-class TUtf8Processor : public IDataProcessor {
+class TUtf8Processor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsString());
@@ -101,7 +100,7 @@ public:
     }
 };
 
-class TYsonProcessor : public IDataProcessor {
+class TYsonProcessor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         auto str = DecodeRestrictedYson(dataNode);
@@ -109,11 +108,12 @@ public:
     }
 };
 
-class TOptionalProcessor : public IDataProcessor {
+class TOptionalProcessor: public IDataProcessor {
 public:
     TOptionalProcessor(std::unique_ptr<IDataProcessor>&& inner)
         : Inner_(std::move(inner))
-    {}
+    {
+    }
 
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsEntity() || dataNode.IsList() && dataNode.AsList().size() <= 1);
@@ -133,11 +133,12 @@ private:
     const std::unique_ptr<IDataProcessor> Inner_;
 };
 
-class TListProcessor : public IDataProcessor {
+class TListProcessor: public IDataProcessor {
 public:
     TListProcessor(std::unique_ptr<IDataProcessor>&& inner)
         : Inner_(std::move(inner))
-    {}
+    {
+    }
 
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsList());
@@ -155,11 +156,12 @@ private:
     const std::unique_ptr<IDataProcessor> Inner_;
 };
 
-class TTupleProcessor : public IDataProcessor {
+class TTupleProcessor: public IDataProcessor {
 public:
     TTupleProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
         : Inners_(std::move(inners))
-    {}
+    {
+    }
 
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsList());
@@ -178,11 +180,12 @@ private:
     const TVector<std::unique_ptr<IDataProcessor>> Inners_;
 };
 
-class TStructProcessor : public IDataProcessor {
+class TStructProcessor: public IDataProcessor {
 public:
     TStructProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
         : Inners_(std::move(inners))
-    {}
+    {
+    }
 
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsList());
@@ -201,12 +204,13 @@ private:
     const TVector<std::unique_ptr<IDataProcessor>> Inners_;
 };
 
-class TDictProcessor : public IDataProcessor {
+class TDictProcessor: public IDataProcessor {
 public:
     TDictProcessor(std::unique_ptr<IDataProcessor>&& innerKey, std::unique_ptr<IDataProcessor>&& innerPayload)
         : InnerKey_(std::move(innerKey))
         , InnerPayload_(std::move(innerPayload))
-    {}
+    {
+    }
 
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsList());
@@ -231,11 +235,12 @@ private:
     const std::unique_ptr<IDataProcessor> InnerPayload_;
 };
 
-class TVariantProcessor : public IDataProcessor {
+class TVariantProcessor: public IDataProcessor {
 public:
     TVariantProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
         : Inners_(std::move(inners))
-    {}
+    {
+    }
 
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsList() && dataNode.AsList().size() == 2);
@@ -251,11 +256,11 @@ private:
     const TVector<std::unique_ptr<IDataProcessor>> Inners_;
 };
 
-class TPgProcessor : public IDataProcessor {
+class TPgProcessor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
         CHECK(dataNode.IsEntity() || dataNode.IsString() ||
-            dataNode.IsList() && dataNode.AsList().size() == 1 && dataNode.AsList()[0].IsString());
+              dataNode.IsList() && dataNode.AsList().size() == 1 && dataNode.AsList()[0].IsString());
         if (dataNode.IsEntity()) {
             visitor.OnPg(Nothing(), true);
         } else if (dataNode.IsString()) {
@@ -266,7 +271,7 @@ public:
     }
 };
 
-class TDataProcessorBuilder : public TThrowingTypeVisitor {
+class TDataProcessorBuilder: public TThrowingTypeVisitor {
 public:
     TDataProcessorBuilder() {
         IsVariant_.push_back(false);
@@ -1161,4 +1166,4 @@ void TThrowingDataVisitor::Do() {
 void TEmptyDataVisitor::Do() {
 }
 
-}
+} // namespace NYql::NResult

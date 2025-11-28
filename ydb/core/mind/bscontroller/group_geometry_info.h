@@ -86,7 +86,7 @@ namespace NKikimr::NBsController {
         void AllocateGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group,
                 TGroupMapper::TGroupConstraintsDefinition& constrainsts,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
-                ui32 groupSizeInUnits, i64 requiredSpace, std::optional<TBridgePileId> bridgePileId) const {
+                ui32 groupSizeInUnits, i64 requiredSpace, TBridgePileId bridgePileId) const {
             TString error;
             for (const bool requireOperational : {true, false}) {
                 if (mapper.AllocateGroup(groupId.GetRawId(), group, constrainsts, replacedDisks, forbid, groupSizeInUnits, requiredSpace,
@@ -101,7 +101,7 @@ namespace NKikimr::NBsController {
         std::pair<TVDiskIdShort, TPDiskId> SanitizeGroup(TGroupMapper &mapper, TGroupId groupId,
                 TGroupMapper::TGroupDefinition &group, TGroupMapper::TGroupConstraintsDefinition&,
                 const THashMap<TVDiskIdShort, TPDiskId>& /*replacedDisks*/, TGroupMapper::TForbiddenPDisks forbid,
-                ui32 groupSizeInUnits, i64 requiredSpace, std::optional<TBridgePileId> bridgePileId) const {
+                ui32 groupSizeInUnits, i64 requiredSpace, TBridgePileId bridgePileId) const {
             TString error;
             auto misplacedVDisks = mapper.FindMisplacedVDisks(group, groupSizeInUnits);
             if (misplacedVDisks.Disks.size() == 0) {

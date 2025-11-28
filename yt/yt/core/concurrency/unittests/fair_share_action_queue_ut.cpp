@@ -88,7 +88,7 @@ public:
             auto value = mapEntry->FindChildValue<int>("value");
             EXPECT_TRUE(value);
 
-            if (auto threadName = labels->FindChildValue<TString>("thread")) {
+            if (auto threadName = labels->FindChildValue<std::string>("thread")) {
                 EXPECT_EQ(threadName, "ActionQueue");
 
                 if (auto bucketName = labels->FindChildValue<TString>("bucket")) {

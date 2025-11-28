@@ -9,11 +9,11 @@ Passing of parameters is supported in the SDK, CLI, and graphical interfaces.
 ## Syntax
 
 ```yql
-DECLARE $named-node AS data_type;
+DECLARE $named_node AS data_type;
 ```
 
 1. `DECLARE` keyword.
-1. `$named-node`: The name by which you can access the passed value. It must start with `$`.
+1. `$named_node`: The name by which you can access the passed value. It must start with `$`.
 1. `AS` keyword.
 1. `data_type` is the data type [represented as a string in the accepted format](../types/type_string.md).
 

@@ -11,7 +11,7 @@ struct TBinaryFunctionArgsDesc {
 };
 
 TBinaryFunctionArgsDesc CheckBinaryFunctionArgs(TType* left, TType* right,
-    bool allowOptionalInput, bool requiresBooleanArgs);
+                                                bool allowOptionalInput, bool requiresBooleanArgs);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

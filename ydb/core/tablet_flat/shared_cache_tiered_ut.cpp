@@ -1,20 +1,39 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/tablet_flat/shared_cache_switchable.h>
 #include <ydb/core/tablet_flat/shared_cache_tiered.h>
 #include <ydb/core/tablet_flat/ut/shared_cache_ut_common.h>
-
 
 namespace NKikimr::NSharedCache {
 
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+using ECacheMode = NTable::NPage::ECacheMode;
 using namespace NKikimr::NSharedCache::NTest;
+using TCache = TTieredCache<NTest::TPage, TPageTraits>;
+using TStats = TCache::TStats;
 
 Y_UNIT_TEST_SUITE(TieredCache) {
 
-    TVector<ui32> Touch(auto& cache, TPage& page) {
-        auto evicted = cache.Touch(&page);
+    TVector<ui32> Touch(auto& cache, NTest::TPage& page) {
+        if (TPageTraits::GetLocation(&page) != ES3FIFOPageLocation::None) {
+            page.IncrementFrequency();
+            return {};
+        }
+
+        auto evicted = cache.Insert(&page);
         TVector<ui32> result;
         for (auto& p : evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(p.Location, ES3FIFOPageLocation::None);
+            UNIT_ASSERT_VALUES_EQUAL(p.Frequency.load(), 0);
+            result.push_back(p.Id);
+        }
+        return result;
+    }
+
+    TVector<ui32> InsertUntouched(auto& cache, NTest::TPage& page) {
+        auto evicted = cache.InsertUntouched(&page);
+        TVector<ui32> result;
+        for (auto& p : evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(p.Location, ES3FIFOPageLocation::None);
+            UNIT_ASSERT_VALUES_EQUAL(p.Frequency.load(), 0);
             result.push_back(p.Id);
         }
         return result;
@@ -23,333 +42,269 @@ Y_UNIT_TEST_SUITE(TieredCache) {
     TVector<ui32> EvictNext(auto& cache) {
         auto evicted = cache.EvictNext();
         TVector<ui32> result;
-        for (auto& p : evicted) {
-            result.push_back(p.Id);
+        if (evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(evicted->Location, ES3FIFOPageLocation::None);
+            UNIT_ASSERT_VALUES_EQUAL(evicted->Frequency.load(), 0);
+            result.push_back(evicted->Id);
         }
         return result;
     }
 
-    TVector<ui32> Switch(auto& cache, auto&& cache2, auto& counter) {
-        auto evicted = cache.Switch(std::move(cache2), counter);
+    TVector<ui32> EnsureLimits(auto& cache) {
+        auto evicted = cache.EnsureLimits();
         TVector<ui32> result;
         for (auto& p : evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(p.Location, ES3FIFOPageLocation::None);
+            UNIT_ASSERT_VALUES_EQUAL(p.Frequency.load(), 0);
             result.push_back(p.Id);
         }
         return result;
     }
 
-    struct TExpectedValues {
-        ui64 RegularBytes;
-        ui64 TryKeepInMemoryBytes;
-        ui64 RegularLimit;
-        ui64 TryKeepInMemoryLimit;
-    };
+    void CheckStats(TCache& cache, const TStats& expected) {
+        auto actual = cache.GetStats();
 
-    void CheckCaches(const std::span<TSimpleCache*>& caches, const TExpectedValues& expected) {
-        UNIT_ASSERT_VALUES_EQUAL(caches[0]->GetSize(), expected.RegularBytes);
-        UNIT_ASSERT_VALUES_EQUAL(caches[1]->GetSize(), expected.TryKeepInMemoryBytes);
-        UNIT_ASSERT_VALUES_EQUAL(caches[0]->GetLimit(), expected.RegularLimit);
-        UNIT_ASSERT_VALUES_EQUAL(caches[1]->GetLimit(), expected.TryKeepInMemoryLimit);
+        UNIT_ASSERT_VALUES_EQUAL(actual.RegularBytes, expected.RegularBytes);
+        UNIT_ASSERT_VALUES_EQUAL(actual.TryKeepInMemoryBytes, expected.TryKeepInMemoryBytes);
+        UNIT_ASSERT_VALUES_EQUAL(actual.RegularLimit, expected.RegularLimit);
+        UNIT_ASSERT_VALUES_EQUAL(actual.TryKeepInMemoryLimit, expected.TryKeepInMemoryLimit);
     }
 
     Y_UNIT_TEST(Touch) {
-        TVector<TSimpleCache*> caches;
-        auto makeCache = [&caches]() {
-            auto cacheHolder = MakeHolder<TSimpleCache>();
-            caches.push_back(cacheHolder.Get());
-            return cacheHolder;
-        };
-
-        TSharedPageCacheCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
-        TTieredCache<TPage, TPageTraits> cache(10, makeCache, NKikimrSharedCache::S3FIFO, counters);
-        UNIT_ASSERT_VALUES_EQUAL(caches.size(), 2);
+        TCache cache(10);
         cache.UpdateLimit(10, 5);
 
-        TPage page1{1, 3};
+        NTest::TPage page1{1, 3};
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 3b}; TryKeepInMemoryTier: ");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {1 0f 3b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue:  MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 3);
-        CheckCaches(caches, {.RegularBytes = 3, .TryKeepInMemoryBytes = 0, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
+        CheckStats(cache, {.RegularBytes = 3, .TryKeepInMemoryBytes = 0, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
 
-        TPage page2{2, 5};
-        page2.CacheTier = ECacheTier::TryKeepInMemory;
+        NTest::TPage page2{2, 5};
+        page2.CacheMode = ECacheMode::TryKeepInMemory;
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 3b}; TryKeepInMemoryTier: {2 5b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {1 0f 3b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 0f 5b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 8);
-        CheckCaches(caches, {.RegularBytes = 3, .TryKeepInMemoryBytes = 5, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
+        CheckStats(cache, {.RegularBytes = 3, .TryKeepInMemoryBytes = 5, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
 
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 3b}; TryKeepInMemoryTier: {2 5b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {1 1f 3b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 0f 5b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 8);
-        CheckCaches(caches, {.RegularBytes = 3, .TryKeepInMemoryBytes = 5, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
+        CheckStats(cache, {.RegularBytes = 3, .TryKeepInMemoryBytes = 5, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
 
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 3b}; TryKeepInMemoryTier: {2 5b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {1 1f 3b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 1f 5b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 8);
-        CheckCaches(caches, {.RegularBytes = 3, .TryKeepInMemoryBytes = 5, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
-
-        TPage page3{3, 2};
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), (TVector<ui32>{}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 3b}, {3 2b}; TryKeepInMemoryTier: {2 5b}");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 10);
-        CheckCaches(caches, {.RegularBytes = 5, .TryKeepInMemoryBytes = 5, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
-
-        TPage page4{4, 3};
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), (TVector<ui32>{1}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {3 2b}, {4 3b}; TryKeepInMemoryTier: {2 5b}");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 10);
-        CheckCaches(caches, {.RegularBytes = 5, .TryKeepInMemoryBytes = 5, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
-
-        cache.UpdateLimit(8, 4);
-
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), (TVector<ui32>{3}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {4 3b}; TryKeepInMemoryTier: {2 5b}");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 8);
-        CheckCaches(caches, {.RegularBytes = 3, .TryKeepInMemoryBytes = 5, .RegularLimit = 4, .TryKeepInMemoryLimit = 4});
-
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), (TVector<ui32>{2}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {4 3b}; TryKeepInMemoryTier: ");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 3);
-        CheckCaches(caches, {.RegularBytes = 3, .TryKeepInMemoryBytes = 0, .RegularLimit = 4, .TryKeepInMemoryLimit = 4});
-
-        cache.Erase(&page4);
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: ; TryKeepInMemoryTier: ");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 0);
-        CheckCaches(caches, {.RegularBytes = 0, .TryKeepInMemoryBytes = 0, .RegularLimit = 4, .TryKeepInMemoryLimit = 4});
-
-        page4.CacheTier = ECacheTier::TryKeepInMemory;
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), (TVector<ui32>{}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: ; TryKeepInMemoryTier: {4 3b}");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 3);
-        CheckCaches(caches, {.RegularBytes = 0, .TryKeepInMemoryBytes = 3, .RegularLimit = 4, .TryKeepInMemoryLimit = 4});
+        CheckStats(cache, {.RegularBytes = 3, .TryKeepInMemoryBytes = 5, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
     }
 
     Y_UNIT_TEST(Erase) {
-        TVector<TSimpleCache*> caches;
-        auto makeCache = [&caches]() {
-            auto cacheHolder = MakeHolder<TSimpleCache>();
-            caches.push_back(cacheHolder.Get());
-            return cacheHolder;
-        };
-
-        TSharedPageCacheCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
-        TTieredCache<TPage, TPageTraits> cache(10, makeCache, NKikimrSharedCache::S3FIFO, counters);
-        UNIT_ASSERT_VALUES_EQUAL(caches.size(), 2);
+        TCache cache(10);
         cache.UpdateLimit(10, 6);
 
-        TPage page1{1, 1};
-        TPage page2{2, 2};
-        page2.CacheTier = ECacheTier::TryKeepInMemory;
-        TPage page3{3, 3};
-        TPage page4{4, 4};
-        page4.CacheTier = ECacheTier::TryKeepInMemory;
+        NTest::TPage page1{1, 1};
+        NTest::TPage page2{2, 2};
+        page2.CacheMode = ECacheMode::TryKeepInMemory;
+        NTest::TPage page3{3, 3};
+        NTest::TPage page4{4, 4};
+        page4.CacheMode = ECacheMode::TryKeepInMemory;
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 1b}, {3 3b}; TryKeepInMemoryTier: {2 2b}, {4 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {1 0f 1b}, {3 0f 3b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 0f 2b}, {4 0f 4b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 10);
-        CheckCaches(caches, {.RegularBytes = 4, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 4, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
         
         cache.Erase(&page2);
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 1b}, {3 3b}; TryKeepInMemoryTier: {4 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {1 0f 1b}, {3 0f 3b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {4 0f 4b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 8);
-        CheckCaches(caches, {.RegularBytes = 4, .TryKeepInMemoryBytes = 4, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 4, .TryKeepInMemoryBytes = 4, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
 
-        TPage page5{5, 4};
+        NTest::TPage page5{5, 4};
         cache.Erase(&page5);
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 1b}, {3 3b}; TryKeepInMemoryTier: {4 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {1 0f 1b}, {3 0f 3b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {4 0f 4b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 8);
-        CheckCaches(caches, {.RegularBytes = 4, .TryKeepInMemoryBytes = 4, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 4, .TryKeepInMemoryBytes = 4, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
 
         cache.Erase(&page3);
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 1b}; TryKeepInMemoryTier: {4 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {1 0f 1b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {4 0f 4b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 5);
-        CheckCaches(caches, {.RegularBytes = 1, .TryKeepInMemoryBytes = 4, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 1, .TryKeepInMemoryBytes = 4, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
     }
 
     Y_UNIT_TEST(EvictNext) {
-        TVector<TSimpleCache*> caches;
-        auto makeCache = [&caches]() {
-            auto cacheHolder = MakeHolder<TSimpleCache>();
-            caches.push_back(cacheHolder.Get());
-            return cacheHolder;
-        };
-
-        TSharedPageCacheCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
-        TTieredCache<TPage, TPageTraits> cache(10, makeCache, NKikimrSharedCache::S3FIFO, counters);
-        UNIT_ASSERT_VALUES_EQUAL(caches.size(), 2);
+        TCache cache(10);
         cache.UpdateLimit(10, 6);
 
-        TPage page1{1, 1};
-        TPage page2{2, 2};
-        page2.CacheTier = ECacheTier::TryKeepInMemory;
-        TPage page3{3, 3};
-        TPage page4{4, 4};
-        page4.CacheTier = ECacheTier::TryKeepInMemory;
+        NTest::TPage page1{1, 1};
+        NTest::TPage page2{2, 2};
+        page2.CacheMode = ECacheMode::TryKeepInMemory;
+        NTest::TPage page3{3, 3};
+        NTest::TPage page4{4, 4};
+        page4.CacheMode = ECacheMode::TryKeepInMemory;
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 1b}, {3 3b}; TryKeepInMemoryTier: {2 2b}, {4 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {1 0f 1b}, {3 0f 3b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 0f 2b}, {4 0f 4b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 10);
-        CheckCaches(caches, {.RegularBytes = 4, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 4, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
 
         UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{1});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {3 3b}; TryKeepInMemoryTier: {2 2b}, {4 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {3 0f 3b} MainQueue:  GhostQueue: 1; TryKeepInMemoryTier: SmallQueue: {2 0f 2b}, {4 0f 4b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 9);
-        CheckCaches(caches, {.RegularBytes = 3, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 3, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
 
         UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{3});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: ; TryKeepInMemoryTier: {2 2b}, {4 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue:  MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 0f 2b}, {4 0f 4b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 6);
-        CheckCaches(caches, {.RegularBytes = 0, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 0, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
 
         UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{2});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: ; TryKeepInMemoryTier: {4 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue:  MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {4 0f 4b} MainQueue:  GhostQueue: 2");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 4);
-        CheckCaches(caches, {.RegularBytes = 0, .TryKeepInMemoryBytes = 4, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 0, .TryKeepInMemoryBytes = 4, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
 
         UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{4});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: ; TryKeepInMemoryTier: ");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue:  MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue:  MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 0);
-        CheckCaches(caches, {.RegularBytes = 0, .TryKeepInMemoryBytes = 0, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 0, .TryKeepInMemoryBytes = 0, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
     }
 
     Y_UNIT_TEST(UpdateLimit) {
-        TVector<TSimpleCache*> caches;
-        auto makeCache = [&caches]() {
-            auto cacheHolder = MakeHolder<TSimpleCache>();
-            caches.push_back(cacheHolder.Get());
-            return cacheHolder;
-        };
+        TCache cache(10);
 
-        TSharedPageCacheCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
-        TTieredCache<TPage, TPageTraits> cache(10, makeCache, NKikimrSharedCache::S3FIFO, counters);
-        UNIT_ASSERT_VALUES_EQUAL(caches.size(), 2);
-
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: ; TryKeepInMemoryTier: ");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue:  MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue:  MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 0);
-        CheckCaches(caches, {.RegularBytes = 0, .TryKeepInMemoryBytes = 0, .RegularLimit = 10, .TryKeepInMemoryLimit = 0});
+        CheckStats(cache, {.RegularBytes = 0, .TryKeepInMemoryBytes = 0, .RegularLimit = 10, .TryKeepInMemoryLimit = 0});
 
         cache.UpdateLimit(10, 6);
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: ; TryKeepInMemoryTier: ");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue:  MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue:  MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 0);
-        CheckCaches(caches, {.RegularBytes = 0, .TryKeepInMemoryBytes = 0, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 0, .TryKeepInMemoryBytes = 0, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
 
-        TPage page1{1, 1};
-        TPage page2{2, 2};
-        page2.CacheTier = ECacheTier::TryKeepInMemory;
-        TPage page3{3, 3};
-        TPage page4{4, 4};
-        page4.CacheTier = ECacheTier::TryKeepInMemory;
+        NTest::TPage page1{1, 1};
+        NTest::TPage page2{2, 2};
+        page2.CacheMode = ECacheMode::TryKeepInMemory;
+        NTest::TPage page3{3, 3};
+        NTest::TPage page4{4, 4};
+        page4.CacheMode = ECacheMode::TryKeepInMemory;
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {3 3b}, {1 1b}; TryKeepInMemoryTier: {2 2b}, {4 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {3 0f 3b}, {1 0f 1b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 0f 2b}, {4 0f 4b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 10);
-        CheckCaches(caches, {.RegularBytes = 4, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 4, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
 
         cache.UpdateLimit(15, 6);
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {3 3b}, {1 1b}; TryKeepInMemoryTier: {2 2b}, {4 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {3 0f 3b}, {1 0f 1b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 0f 2b}, {4 0f 4b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 10);
-        CheckCaches(caches, {.RegularBytes = 4, .TryKeepInMemoryBytes = 6, .RegularLimit = 9, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 4, .TryKeepInMemoryBytes = 6, .RegularLimit = 9, .TryKeepInMemoryLimit = 6});
 
-        TPage page5{5, 5};
+        NTest::TPage page5{5, 5};
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {3 3b}, {1 1b}, {5 5b}; TryKeepInMemoryTier: {2 2b}, {4 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {3 0f 3b}, {1 0f 1b}, {5 0f 5b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 0f 2b}, {4 0f 4b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 15);
-        CheckCaches(caches, {.RegularBytes = 9, .TryKeepInMemoryBytes = 6, .RegularLimit = 9, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 9, .TryKeepInMemoryBytes = 6, .RegularLimit = 9, .TryKeepInMemoryLimit = 6});
 
         cache.UpdateLimit(15, 11);
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {3 3b}, {1 1b}, {5 5b}; TryKeepInMemoryTier: {2 2b}, {4 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {3 0f 3b}, {1 0f 1b}, {5 0f 5b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 0f 2b}, {4 0f 4b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 15);
-        CheckCaches(caches, {.RegularBytes = 9, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 11});
+        CheckStats(cache, {.RegularBytes = 9, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 11});
 
         cache.Erase(&page5);
-        page5.CacheTier = ECacheTier::TryKeepInMemory;
+        page5.CacheMode = ECacheMode::TryKeepInMemory;
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {3 3b}, {1 1b}; TryKeepInMemoryTier: {2 2b}, {4 4b}, {5 5b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {3 0f 3b}, {1 0f 1b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 0f 2b}, {4 0f 4b}, {5 0f 5b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 15);
-        CheckCaches(caches, {.RegularBytes = 4, .TryKeepInMemoryBytes = 11, .RegularLimit = 4, .TryKeepInMemoryLimit = 11});
+        CheckStats(cache, {.RegularBytes = 4, .TryKeepInMemoryBytes = 11, .RegularLimit = 4, .TryKeepInMemoryLimit = 11});
 
         cache.UpdateLimit(13, 11);
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {3 3b}, {1 1b}; TryKeepInMemoryTier: {2 2b}, {4 4b}, {5 5b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {3 0f 3b}, {1 0f 1b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 0f 2b}, {4 0f 4b}, {5 0f 5b} MainQueue:  GhostQueue: ");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 15);
-        CheckCaches(caches, {.RegularBytes = 4, .TryKeepInMemoryBytes = 11, .RegularLimit = 2, .TryKeepInMemoryLimit = 11});
+        CheckStats(cache, {.RegularBytes = 4, .TryKeepInMemoryBytes = 11, .RegularLimit = 2, .TryKeepInMemoryLimit = 11});
 
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{3});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 1b}; TryKeepInMemoryTier: {2 2b}, {4 4b}, {5 5b}");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 12);
-        CheckCaches(caches, {.RegularBytes = 1, .TryKeepInMemoryBytes = 11, .RegularLimit = 2, .TryKeepInMemoryLimit = 11});
+        NTest::TPage page6{6, 1};
+        page5.CacheMode = ECacheMode::TryKeepInMemory;
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page6), TVector<ui32>{3});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {1 0f 1b}, {6 0f 1b} MainQueue:  GhostQueue: 3; TryKeepInMemoryTier: SmallQueue: {2 0f 2b}, {4 0f 4b}, {5 0f 5b} MainQueue:  GhostQueue: ");
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 13);
+        CheckStats(cache, {.RegularBytes = 2, .TryKeepInMemoryBytes = 11, .RegularLimit = 2, .TryKeepInMemoryLimit = 11});
 
         cache.UpdateLimit(6, 11);
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 1b}; TryKeepInMemoryTier: {2 2b}, {4 4b}, {5 5b}");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 12);
-        CheckCaches(caches, {.RegularBytes = 1, .TryKeepInMemoryBytes = 11, .RegularLimit = 0, .TryKeepInMemoryLimit = 6});
-
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), (TVector<ui32>{1}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: ; TryKeepInMemoryTier: {2 2b}, {4 4b}, {5 5b}");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 11);
-        CheckCaches(caches, {.RegularBytes = 0, .TryKeepInMemoryBytes = 11, .RegularLimit = 0, .TryKeepInMemoryLimit = 6});
-
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), (TVector<ui32>{2, 4}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: ; TryKeepInMemoryTier: {5 5b}");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 5);
-        CheckCaches(caches, {.RegularBytes = 0, .TryKeepInMemoryBytes = 5, .RegularLimit = 0, .TryKeepInMemoryLimit = 6});
+        CheckStats(cache, {.RegularBytes = 2, .TryKeepInMemoryBytes = 11, .RegularLimit = 0, .TryKeepInMemoryLimit = 6});
     }
 
-    Y_UNIT_TEST(Switch) {
-        TVector<TSimpleCache*> caches;
-        auto makeCache = [&caches]() {
-            auto cacheHolder = MakeHolder<TSimpleCache>();
-            caches.push_back(cacheHolder.Get());
-            return cacheHolder;
-        };
+    Y_UNIT_TEST(InsertUntouched) {
+        TCache cache(10);
+        cache.UpdateLimit(10, 5);
 
-        TCounterPtr sizeCounter2 = MakeIntrusive<NMonitoring::TCounterForPtr>();
-        TSharedPageCacheCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
-        TTieredCache<TPage, TPageTraits> cache(10, makeCache, NKikimrSharedCache::S3FIFO, counters);
-        UNIT_ASSERT_VALUES_EQUAL(caches.size(), 2);
-        cache.UpdateLimit(10, 2);
+        NTest::TPage page1{1, 3};
+        UNIT_ASSERT_VALUES_EQUAL(InsertUntouched(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {1 0f 3b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue:  MainQueue:  GhostQueue: ");
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 3);
+        CheckStats(cache, {.RegularBytes = 3, .TryKeepInMemoryBytes = 0, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
 
-        TPage page1{1, 1};
-        TPage page2{2, 2};
-        page2.CacheTier = ECacheTier::TryKeepInMemory;
-        TPage page3{3, 3};
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        NTest::TPage page2{2, 5};
+        page2.CacheMode = ECacheMode::TryKeepInMemory;
+        UNIT_ASSERT_VALUES_EQUAL(InsertUntouched(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: SmallQueue: {1 0f 3b} MainQueue:  GhostQueue: ; TryKeepInMemoryTier: SmallQueue: {2 0f 5b} MainQueue:  GhostQueue: ");
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 8);
+        CheckStats(cache, {.RegularBytes = 3, .TryKeepInMemoryBytes = 5, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
+    }
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 1b}, {3 3b}; TryKeepInMemoryTier: {2 2b}");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 6);
-        CheckCaches(caches, {.RegularBytes = 4, .TryKeepInMemoryBytes = 2, .RegularLimit = 8, .TryKeepInMemoryLimit = 2});
-        UNIT_ASSERT_VALUES_EQUAL(counters.ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 6);
-        UNIT_ASSERT_VALUES_EQUAL(sizeCounter2->Val(), 0);
+    Y_UNIT_TEST(EnsureLimits) {
+        TCache cache(6);
+        cache.UpdateLimit(6, 3);
 
-        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, makeCache, sizeCounter2), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(caches.size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 1b}, {3 3b}; ; TryKeepInMemoryTier: {2 2b}; ");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 6);
-        CheckCaches(caches, {.RegularBytes = 4, .TryKeepInMemoryBytes = 2, .RegularLimit = 8, .TryKeepInMemoryLimit = 2});
-        UNIT_ASSERT_VALUES_EQUAL(counters.ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 6);
-        UNIT_ASSERT_VALUES_EQUAL(sizeCounter2->Val(), 0);
+        TVector<THolder<NTest::TPage>> pages;
+        for (ui32 pageId : xrange(6)) {
+            pages.push_back(MakeHolder<NTest::TPage>(pageId, 1));
+            if (pageId % 2) {
+                pages.back()->CacheMode = ECacheMode::TryKeepInMemory;
+            }
+            Touch(cache, *pages.back());
+        }
 
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        cache.UpdateLimit(10, 6);
-        TPage page4{4, 4};
-        page4.CacheTier = ECacheTier::TryKeepInMemory;
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 1b}, {3 3b}; TryKeepInMemoryTier: {4 4b}, {2 2b}");
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 10);
-        CheckCaches({caches.data() + 2, 2}, {.RegularBytes = 4, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 6});
-        UNIT_ASSERT_VALUES_EQUAL(counters.ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sizeCounter2->Val(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(),
+            "RegularTier: SmallQueue: {0 0f 1b}, {2 0f 1b}, {4 0f 1b} MainQueue:  GhostQueue: ; "
+            "TryKeepInMemoryTier: SmallQueue: {1 0f 1b}, {3 0f 1b}, {5 0f 1b} MainQueue:  GhostQueue: ");
+
+        cache.UpdateLimit(6, 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(),
+            "RegularTier: SmallQueue: {0 0f 1b}, {2 0f 1b}, {4 0f 1b} MainQueue:  GhostQueue: ; "
+            "TryKeepInMemoryTier: SmallQueue: {1 0f 1b}, {3 0f 1b}, {5 0f 1b} MainQueue:  GhostQueue: ");
+        UNIT_ASSERT_VALUES_EQUAL(EnsureLimits(cache), TVector<ui32>{1});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(),
+            "RegularTier: SmallQueue: {0 0f 1b}, {2 0f 1b}, {4 0f 1b} MainQueue:  GhostQueue: ; "
+            "TryKeepInMemoryTier: SmallQueue: {3 0f 1b}, {5 0f 1b} MainQueue:  GhostQueue: 1");
+
+        cache.UpdateLimit(6, 4);
+
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(),
+            "RegularTier: SmallQueue: {0 0f 1b}, {2 0f 1b}, {4 0f 1b} MainQueue:  GhostQueue: ; "
+            "TryKeepInMemoryTier: SmallQueue: {3 0f 1b}, {5 0f 1b} MainQueue:  GhostQueue: 1");
+        UNIT_ASSERT_VALUES_EQUAL(EnsureLimits(cache), TVector<ui32>{0});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(),
+            "RegularTier: SmallQueue: {2 0f 1b}, {4 0f 1b} MainQueue:  GhostQueue: 0; "
+            "TryKeepInMemoryTier: SmallQueue: {3 0f 1b}, {5 0f 1b} MainQueue:  GhostQueue: 1");
+
+        cache.UpdateLimit(0, 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(),
+            "RegularTier: SmallQueue: {2 0f 1b}, {4 0f 1b} MainQueue:  GhostQueue: 0; "
+            "TryKeepInMemoryTier: SmallQueue: {3 0f 1b}, {5 0f 1b} MainQueue:  GhostQueue: 1");
+        UNIT_ASSERT_VALUES_EQUAL(EnsureLimits(cache), (TVector<ui32>{2, 4, 3, 5}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(),
+            "RegularTier: SmallQueue:  MainQueue:  GhostQueue: ; "
+            "TryKeepInMemoryTier: SmallQueue:  MainQueue:  GhostQueue: ");
     }
 }
 

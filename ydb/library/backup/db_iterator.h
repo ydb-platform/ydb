@@ -47,6 +47,8 @@ private:
             NScheme::ESchemeEntryType::Topic,
             NScheme::ESchemeEntryType::CoordinationNode,
             NScheme::ESchemeEntryType::Replication,
+            NScheme::ESchemeEntryType::SysView,
+            NScheme::ESchemeEntryType::Transfer,
         };
 
         return values;
@@ -157,6 +159,10 @@ public:
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Directory;
     }
 
+    bool IsSystemDir() const {
+        return NConsoleClient::IsSystemDir(*GetCurrentNode());
+    }
+
     bool IsReplication() const {
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Replication;
     }
@@ -169,6 +175,14 @@ public:
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::ExternalTable;
     }
 
+    bool IsSystemView() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::SysView;
+    }
+
+    bool IsTransfer() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Transfer;
+    }
+
     bool IsListed() const {
         return NextNodes.front().IsListed;
     }
@@ -177,8 +191,27 @@ public:
         return bool{NextNodes};
     }
 
-    bool IsSkipped() const {
-        return NConsoleClient::IsSystemObject(*GetCurrentNode());
+    bool IsMaterializedSysDir() {
+        const auto& entry = *GetCurrentNode();
+        if (IsDir() && entry.Name == ".sys") {
+            // TODO(n00bcracker): drop this check after removing EnableRealSystemViewPaths flag
+            const TString& fullPath = GetFullPath();
+            NScheme::TListDirectoryResult listResult = Client.ListDirectory(GetFullPath()).GetValueSync();
+            Y_ENSURE(listResult.IsSuccess(), "Can't list '.sys' directory, maybe it doesn't exist, dbPath# "
+                << fullPath.Quote());
+
+            for (const auto& child : listResult.GetChildren()) {
+                if (child.Type == NScheme::ESchemeEntryType::SysView) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    bool IsSkipped() {
+        return IsSystemDir() && !IsMaterializedSysDir();
     }
 
     void Next() {

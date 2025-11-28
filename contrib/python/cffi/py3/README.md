@@ -29,11 +29,10 @@ Contact
 Testing/development tips
 ------------------------
 
-To run tests under CPython, run the following in the source root directory:
+After `git clone` or `wget && tar`, we will get a directory called `cffi` or `cffi-x.x.x`. we call it `repo-directory`. To run tests under CPython, run the following in the `repo-directory`:
 
     pip install pytest
     pip install -e .  # editable install of CFFI for local development
-    pytest c/ testing/
-
+    pytest src/c/ testing/
 
 [Documentation]: http://cffi.readthedocs.org/

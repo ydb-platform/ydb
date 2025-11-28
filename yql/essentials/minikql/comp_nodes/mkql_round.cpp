@@ -18,11 +18,12 @@ using namespace NYql::NUdf;
 
 namespace {
 
-template<typename From, typename To>
-class TRoundIntegralWrapper : public TMutableComputationNode<TRoundIntegralWrapper<From, To>> {
+template <typename From, typename To>
+class TRoundIntegralWrapper: public TMutableComputationNode<TRoundIntegralWrapper<From, To>> {
     using TSelf = TRoundIntegralWrapper<From, To>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
+
 public:
     TRoundIntegralWrapper(TComputationMutables& mutables, IComputationNode* source, bool down)
         : TBaseComputation(mutables)
@@ -76,10 +77,11 @@ private:
     const bool Down;
 };
 
-class TRoundDateTypeWrapper : public TMutableComputationNode<TRoundDateTypeWrapper> {
+class TRoundDateTypeWrapper: public TMutableComputationNode<TRoundDateTypeWrapper> {
     using TSelf = TRoundDateTypeWrapper;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
+
 public:
     TRoundDateTypeWrapper(TComputationMutables& mutables, IComputationNode* source, bool down, EDataSlot from, EDataSlot to)
         : TBaseComputation(mutables)
@@ -156,10 +158,11 @@ private:
     const EDataSlot To;
 };
 
-class TRoundStringWrapper : public TMutableComputationNode<TRoundStringWrapper> {
+class TRoundStringWrapper: public TMutableComputationNode<TRoundStringWrapper> {
     using TSelf = TRoundStringWrapper;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
+
 public:
     TRoundStringWrapper(TComputationMutables& mutables, IComputationNode* source, bool down)
         : TBaseComputation(mutables)
@@ -186,22 +189,30 @@ private:
     const bool Down;
 };
 
-template<typename From>
+template <typename From>
 IComputationNode* FromIntegral(TComputationMutables& mutables, IComputationNode* source, bool down, EDataSlot target) {
     switch (target) {
-        case EDataSlot::Int8:    return new TRoundIntegralWrapper<From, i8>(mutables, source, down);
-        case EDataSlot::Uint8:   return new TRoundIntegralWrapper<From, ui8>(mutables, source, down);
-        case EDataSlot::Int16:   return new TRoundIntegralWrapper<From, i16>(mutables, source, down);
-        case EDataSlot::Uint16:  return new TRoundIntegralWrapper<From, ui16>(mutables, source, down);
-        case EDataSlot::Int32:   return new TRoundIntegralWrapper<From, i32>(mutables, source, down);
-        case EDataSlot::Uint32:  return new TRoundIntegralWrapper<From, ui32>(mutables, source, down);
-        case EDataSlot::Int64:   return new TRoundIntegralWrapper<From, i64>(mutables, source, down);
-        case EDataSlot::Uint64:  return new TRoundIntegralWrapper<From, ui64>(mutables, source, down);
-        default: Y_ENSURE(false, "Unsupported integral rounding");
+        case EDataSlot::Int8:
+            return new TRoundIntegralWrapper<From, i8>(mutables, source, down);
+        case EDataSlot::Uint8:
+            return new TRoundIntegralWrapper<From, ui8>(mutables, source, down);
+        case EDataSlot::Int16:
+            return new TRoundIntegralWrapper<From, i16>(mutables, source, down);
+        case EDataSlot::Uint16:
+            return new TRoundIntegralWrapper<From, ui16>(mutables, source, down);
+        case EDataSlot::Int32:
+            return new TRoundIntegralWrapper<From, i32>(mutables, source, down);
+        case EDataSlot::Uint32:
+            return new TRoundIntegralWrapper<From, ui32>(mutables, source, down);
+        case EDataSlot::Int64:
+            return new TRoundIntegralWrapper<From, i64>(mutables, source, down);
+        case EDataSlot::Uint64:
+            return new TRoundIntegralWrapper<From, ui64>(mutables, source, down);
+        default:
+            Y_ENSURE(false, "Unsupported integral rounding");
     }
     return nullptr;
 }
-
 
 } // namespace
 
@@ -224,14 +235,22 @@ IComputationNode* WrapRound(TCallable& callable, const TComputationNodeFactoryCo
     auto source = LocateNode(ctx.NodeLocator, callable, 0);
 
     switch (from) {
-        case EDataSlot::Int8:   return FromIntegral<i8>(ctx.Mutables, source, down, to);
-        case EDataSlot::Uint8:  return FromIntegral<ui8>(ctx.Mutables, source, down, to);
-        case EDataSlot::Int16:  return FromIntegral<i16>(ctx.Mutables, source, down, to);
-        case EDataSlot::Uint16: return FromIntegral<ui16>(ctx.Mutables, source, down, to);
-        case EDataSlot::Int32:  return FromIntegral<i32>(ctx.Mutables, source, down, to);
-        case EDataSlot::Uint32: return FromIntegral<ui32>(ctx.Mutables, source, down, to);
-        case EDataSlot::Int64:  return FromIntegral<i64>(ctx.Mutables, source, down, to);
-        case EDataSlot::Uint64: return FromIntegral<ui64>(ctx.Mutables, source, down, to);
+        case EDataSlot::Int8:
+            return FromIntegral<i8>(ctx.Mutables, source, down, to);
+        case EDataSlot::Uint8:
+            return FromIntegral<ui8>(ctx.Mutables, source, down, to);
+        case EDataSlot::Int16:
+            return FromIntegral<i16>(ctx.Mutables, source, down, to);
+        case EDataSlot::Uint16:
+            return FromIntegral<ui16>(ctx.Mutables, source, down, to);
+        case EDataSlot::Int32:
+            return FromIntegral<i32>(ctx.Mutables, source, down, to);
+        case EDataSlot::Uint32:
+            return FromIntegral<ui32>(ctx.Mutables, source, down, to);
+        case EDataSlot::Int64:
+            return FromIntegral<i64>(ctx.Mutables, source, down, to);
+        case EDataSlot::Uint64:
+            return FromIntegral<ui64>(ctx.Mutables, source, down, to);
         case EDataSlot::Datetime:
         case EDataSlot::Timestamp:
         case EDataSlot::Date32: // From Date cases are covered in NYql::NTypeAnnImpl::RoundWrapper
@@ -244,10 +263,10 @@ IComputationNode* WrapRound(TCallable& callable, const TComputationNodeFactoryCo
             return new TRoundStringWrapper(ctx.Mutables, source, down);
         default:
             Y_ENSURE(false,
-                "Unsupported rounding from " << GetDataTypeInfo(from).Name << " to " << GetDataTypeInfo(to).Name);
+                     "Unsupported rounding from " << GetDataTypeInfo(from).Name << " to " << GetDataTypeInfo(to).Name);
     }
     return nullptr;
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

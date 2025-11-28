@@ -130,6 +130,16 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                     continue;
                 }
 
+                const auto convertDynamicTablesToStatic = State_->Configuration->ConvertDynamicTablesToStatic.Get().GetOrElse(EConvertDynamicTablesToStatic::Disable);
+                const auto keepMergeWithDynamicInput = State_->Configuration->KeepMergeWithDynamicInput.Get().GetOrElse(false);
+                if (keepMergeWithDynamicInput || convertDynamicTablesToStatic != EConvertDynamicTablesToStatic::Disable) {
+                    if (AnyOf(innerMergeSection.Paths(), [](TYtPath path) {
+                        return TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic;
+                    })) {
+                        continue;
+                    }
+                }
+
                 const bool unordered = IsUnorderedOutput(path.Table().Cast<TYtOutput>());
                 if (innerMergeSection.Paths().Size() > 1) {
                     if (hasTakeSkip && sortedMerge) {
@@ -180,6 +190,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                         }
                         if (!path.Ranges().Maybe<TCoVoid>()) {
                             builder.Ranges(path.Ranges());
+                        }
+                        if (!path.QLFilter().Maybe<TCoVoid>()) {
+                            builder.QLFilter(path.QLFilter());
                         }
 
                         auto updatedPath = builder.Done();
@@ -516,6 +529,99 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ForceTransform(TExprBas
         return TExprBase(ctx.ChangeChild(merge.Ref(), TYtMerge::idx_Settings, NYql::AddSetting(merge.Settings().Ref(), EYtSettingType::ForceTransform, {}, ctx)));
     }
 
+    return node;
+}
+
+template TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic<TYtReadTable>(TExprBase node, TExprContext& ctx) const;
+template TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic<TYtTransientOpBase>(TExprBase node, TExprContext& ctx) const;
+
+template <class TNodeType>
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic(TExprBase node, TExprContext& ctx) const {
+    const auto convertDynamicTablesToStatic = State_->Configuration->ConvertDynamicTablesToStatic.Get().GetOrElse(EConvertDynamicTablesToStatic::Disable);
+    if (convertDynamicTablesToStatic == EConvertDynamicTablesToStatic::Disable) {
+        return node;
+    } else if (convertDynamicTablesToStatic == EConvertDynamicTablesToStatic::Join
+        && !TYtEquiJoin::Match(node.Raw())) {
+        return node;
+    }
+
+    if (TYtMerge::Match(node.Raw())) {
+        // To not get stuck in a loop
+        return node;
+    }
+
+    auto op = node.Cast<TNodeType>();
+
+    TVector<TYtSection> newInputs;
+    newInputs.reserve(op.Input().Size());
+    bool hasChanges = false;
+
+    for (const auto& input : op.Input()) {
+        auto section = input.template Cast<TYtSection>();
+
+        TVector<TYtPath> dynamicTableInputs;
+        dynamicTableInputs.reserve(section.Paths().Size());
+
+        TVector<TYtPath> otherInputs;
+        otherInputs.reserve(section.Paths().Size());
+
+        for (const auto& path : section.Paths()) {
+            if (TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic) {
+                dynamicTableInputs.emplace_back(path);
+            } else {
+                otherInputs.emplace_back(path);
+            }
+        }
+
+        TMaybeNode<NNodes::TYtDSink> dataSink;
+        if constexpr (std::is_same_v<TNodeType, TYtReadTable>) {
+            dataSink = TYtDSink(ctx.RenameNode(op.DataSource().Ref(), "DataSink"));
+        } else {
+            dataSink = op.DataSink();
+        }
+
+        if (!dynamicTableInputs.empty()) {
+            otherInputs.push_back(
+                CopyOrTrivialMap(
+                    section.Pos(),
+                    op.World(),
+                    dataSink.Cast(),
+                    *section.Ref().GetTypeAnn()->template Cast<TListExprType>()->GetItemType(),
+                    Build<TYtSection>(ctx, section.Pos())
+                        .Paths()
+                            .Add(dynamicTableInputs)
+                        .Build()
+                        .Settings(NYql::KeepOnlySettings(section.Settings().Ref(), EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::SysColumns, ctx))
+                        .Done(),
+                    {},
+                    ctx,
+                    State_,
+                    TCopyOrTrivialMapOpts()
+                        .SetTryKeepSortness(!NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Unordered))
+                        .SetConstraints(section.Ref().GetConstraintSet())
+            ));
+            newInputs.push_back(
+                Build<TYtSection>(ctx, section.Pos())
+                    .Paths()
+                        .Add(otherInputs)
+                    .Build()
+                    .Settings(section.Settings())
+                    .Done());
+            hasChanges = true;
+        } else {
+            newInputs.emplace_back(input);
+        }
+    }
+
+    if (hasChanges) {
+        return ctx.ChangeChild(
+            node.Ref(),
+            TNodeType::idx_Input,
+            Build<TYtSectionList>(ctx, op.Input().Pos())
+                .Add(newInputs)
+                .Done()
+                .Ptr());
+    }
     return node;
 }
 

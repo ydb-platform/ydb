@@ -17,13 +17,19 @@ class TestYdbWorkload(StressFixture):
             }
         )
 
-    @pytest.mark.parametrize("store_type", ["row", "column"])
-    def test(self, store_type):
+    @pytest.mark.parametrize("store_type, topic", [
+        ("row", "local"),
+        ("row", "remote"),
+        ("column", "local"),
+        ("column", "remote")
+    ])
+    def test(self, store_type, topic):
         cmd = [
             yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
             "--endpoint", self.endpoint,
             "--database", self.database,
             "--duration", "60",
-            "--mode", store_type
+            "--mode", store_type,
+            "--topic", topic
         ]
         yatest.common.execute(cmd, wait=True)

@@ -15,7 +15,7 @@ SOCKET CreateTcpServerSocket();
 SOCKET CreateUnixServerSocket();
 SOCKET CreateTcpClientSocket(int family);
 SOCKET CreateUnixClientSocket();
-SOCKET CreateUdpSocket();
+SOCKET CreateUdpSocket(int family);
 
 //! Start connect on the socket. Any errors other than EWOULDBLOCK,
 //! EAGAIN and EINPROGRESS are thrown as exceptions.

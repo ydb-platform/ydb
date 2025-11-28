@@ -85,6 +85,15 @@ namespace NTi {
     class TTzTimestampType;
     using TTzTimestampTypePtr = TIntrusiveConstPtr<TTzTimestampType>;
 
+    class TTzDate32Type;
+    using TTzDate32TypePtr = TIntrusiveConstPtr<TTzDate32Type>;
+
+    class TTzDatetime64Type;
+    using TTzDatetime64TypePtr = TIntrusiveConstPtr<TTzDatetime64Type>;
+
+    class TTzTimestamp64Type;
+    using TTzTimestamp64TypePtr = TIntrusiveConstPtr<TTzTimestamp64Type>;
+
     class TIntervalType;
     using TIntervalTypePtr = TIntrusiveConstPtr<TIntervalType>;
 

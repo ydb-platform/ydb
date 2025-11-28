@@ -18,3 +18,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    ut
+)

@@ -57,6 +57,10 @@ class Cursor:
         self.data = query_result.result_set
         self._rowcount = len(self.data)
         self._summary.append(query_result.summary)
+
+        # Need to reset cursor _ix after performing an execute
+        self._ix = 0
+
         if query_result.column_names:
             self.names = query_result.column_names
             self.types = [x.name for x in query_result.column_types]
@@ -106,9 +110,12 @@ class Cursor:
             raise ProgrammingError(f'Invalid parameters {parameters} passed to cursor executemany') from ex
         self._rowcount = len(self.data)
 
+        # Need to reset cursor _ix after performing an execute
+        self._ix = 0
+
     def fetchall(self):
         self.check_valid()
-        ret = self.data
+        ret = self.data[self._ix:]
         self._ix = self._rowcount
         return ret
 
@@ -122,7 +129,15 @@ class Cursor:
 
     def fetchmany(self, size: int = -1):
         self.check_valid()
-        end = self._ix + max(size, self._rowcount - self._ix)
+
+        if size < 0:
+            # Fetch all remaining rows
+            size = self._rowcount - self._ix
+        elif size == 0:
+            # Return empty list for size=0
+            return []
+
+        end = min(self._ix + size, self._rowcount)
         ret = self.data[self._ix: end]
         self._ix = end
         return ret

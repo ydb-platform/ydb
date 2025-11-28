@@ -13,7 +13,7 @@ void TS3Download::Out(IOutputStream& out) const {
         << " ProcessedBytes: " << ProcessedBytes
         << " WrittenBytes: " << WrittenBytes
         << " WrittenRows: " << WrittenRows
-        << " ChecksumState: " << ChecksumState.ShortDebugString()
+        << " ProcessedChecksumState: " << ProcessedChecksumState.ShortDebugString()
         << " DownloadState: " << SecureDebugString(DownloadState) // Can hold secure encryption key
     << " }";
 }

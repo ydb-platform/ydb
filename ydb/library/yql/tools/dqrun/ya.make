@@ -36,6 +36,7 @@ IF (NOT OS_WINDOWS)
         library/cpp/lfalloc/alloc_profiler
 
         ydb/library/yql/udfs/common/clickhouse/client
+        ydb/library/yql/dq/comp_nodes/llvm16
         ydb/public/sdk/cpp/src/client/persqueue_public/codecs
     )
 

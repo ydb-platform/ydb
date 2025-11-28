@@ -100,6 +100,6 @@ TVector<TSQLHint> ParseSqlHints(NYql::TPosition commentPos, const TStringBuf& co
     return result;
 }
 
-}
+} // namespace NDetail
 
-}
+} // namespace NSQLTranslation

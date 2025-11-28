@@ -32,6 +32,7 @@ void DoAlterPqPart(const TOperationId& opId, const TPath& tablePath, const TPath
     pqConfig.ClearPartitionKeySchema();
     auto& ib = *pqConfig.MutableOffloadConfig()->MutableIncrementalBackup();
     ib.SetDstPath(tablePath.PathString());
+    ib.SetTxId((ui64)opId.GetTxId());
 
     result.push_back(CreateAlterPQ(NextPartId(opId, result), outTx));
 }
@@ -57,17 +58,25 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
     replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
     replicationConfig.SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
 
-    // TODO: remove NotNull from all columns for correct deletion writing
+    // Set incremental backup config so DataShard can distinguish between async replica and incremental backup
+    auto& incrementalBackupConfig = *desc.MutableIncrementalBackupConfig();
+    incrementalBackupConfig.SetMode(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP);
+    incrementalBackupConfig.SetConsistency(NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_WEAK);
+    
+    for (auto& column : *desc.MutableColumns()) {
+        column.SetNotNull(false);
+    }
+    
+    auto* changeMetadataCol = desc.AddColumns();
+    changeMetadataCol->SetName("__ydb_incrBackupImpl_changeMetadata");
+    changeMetadataCol->SetType("String");
+    changeMetadataCol->SetNotNull(false);
     // TODO: cleanup all sequences
-
-    auto* col = desc.AddColumns();
-    col->SetName("__ydb_incrBackupImpl_deleted");
-    col->SetType("Bool");
 
     result.push_back(CreateNewTable(NextPartId(opId, result), outTx));
 }
 
-bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
+bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result, TPathId& outStream) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup);
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
@@ -112,7 +121,6 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
 
     NKikimrSchemeOp::TTableDescription schema;
     context.SS->DescribeTable(*table, typeRegistry, true, &schema);
-    schema.MutablePartitionConfig()->CopyFrom(table->TableDescription.GetPartitionConfig());
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
@@ -189,7 +197,13 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
         NCdc::DoAlterStream(result, alterCdcStreamOp, opId, workingDirPath, tablePath);
     }
 
+    outStream = streamPath->PathId;
     return true;
+}
+
+bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
+    TPathId unused;
+    return CreateAlterContinuousBackup(opId, tx, context, result, unused);
 }
 
 TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
@@ -197,7 +211,6 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
 
     CreateAlterContinuousBackup(opId, tx, context, result);
 
-    return result;
     return result;
 }
 

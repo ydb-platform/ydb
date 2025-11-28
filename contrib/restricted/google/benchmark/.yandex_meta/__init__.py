@@ -71,7 +71,7 @@ def post_install(self):
 
 
 benchmark = CMakeNinjaNixProject(
-    owners=["bulatman", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/restricted/google/benchmark",
     license="Apache-2.0",
     nixattr="gbenchmark",

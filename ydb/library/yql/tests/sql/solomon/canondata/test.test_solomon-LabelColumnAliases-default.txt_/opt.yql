@@ -1,0 +1,10 @@
+(
+(let $1 (Configure! world (DataSource '"config") '"DqEngine" '"force"))
+(let $2 (DataSink 'result))
+(let $3 (SoSourceSettings world '"my_project" (SecureParam '"cluster:default_local_solomon") (StructType '('"l2" (DataType 'String)) '('"value" (OptionalType (DataType 'Double)))) '('"value") '('"label2") '"1970-01-01T00:00:01Z" '"1970-01-02T00:00:01Z" '"" '"{}" (Bool '"false") '"AVG" '"PREVIOUS" (Uint32 '"15") '() '"" '('"l2")))
+(let $4 (DqStage '((DqSource (DataSource '"solomon" '"local_solomon") $3)) (lambda '($8) $8) '('('"_logical_id" '0))))
+(let $5 (DqStage '((DqCnUnionAll (TDqOutput $4 '"0"))) (lambda '($9) $9) '('('"_logical_id" '0))))
+(let $6 '('('type) '('autoref) '('columns '('"value" '"l2"))))
+(let $7 (ResPull! $1 $2 (Key) (DqCnResult (TDqOutput $5 '"0") '()) $6 '"dq"))
+(return (Commit! (Commit! $7 $2) (DataSink '"solomon" '"local_solomon")))
+)

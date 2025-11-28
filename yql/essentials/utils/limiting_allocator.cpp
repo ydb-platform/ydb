@@ -4,9 +4,12 @@
 #include <util/generic/yexception.h>
 
 namespace {
-class TLimitingAllocator : public IAllocator {
+class TLimitingAllocator: public IAllocator {
 public:
-    TLimitingAllocator(size_t limit, IAllocator* allocator) : Alloc_(allocator), Limit_(limit) {};
+    TLimitingAllocator(size_t limit, IAllocator* allocator)
+        : Alloc_(allocator)
+        , Limit_(limit)
+    {};
     TBlock Allocate(size_t len) override final {
         if (Allocated_ + len > Limit_) {
             throw std::runtime_error("Out of memory");
@@ -26,10 +29,10 @@ private:
     size_t Allocated_ = 0;
     const size_t Limit_;
 };
-}
+} // namespace
 
 namespace NYql {
 std::unique_ptr<IAllocator> MakeLimitingAllocator(size_t limit, IAllocator* underlying) {
     return std::make_unique<TLimitingAllocator>(limit, underlying);
 }
-}
+} // namespace NYql

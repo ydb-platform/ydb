@@ -29,14 +29,14 @@ struct TRequestConfig
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NHttpClient::IHttpResponsePtr RequestWithoutRetry(
+[[nodiscard]] NHttpClient::IHttpResponsePtr RequestWithoutRetry(
     const TClientContext& context,
     TMutationId& mutationId,
     THttpHeader& header,
     TMaybe<TStringBuf> body = {},
     const TRequestConfig& config = {});
 
-NHttpClient::IHttpRequestPtr StartRequestWithoutRetry(
+[[nodiscard]] NHttpClient::IHttpRequestPtr StartRequestWithoutRetry(
     const TClientContext& context,
     THttpHeader& header,
     const TRequestConfig& config = {});

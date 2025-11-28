@@ -329,12 +329,29 @@ public:
 
 class TProcessorContext {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<NAccessor::TAccessorsCollection>, Resources);
+    std::unique_ptr<NAccessor::TAccessorsCollection> Resources;
     YDB_READONLY_DEF(std::weak_ptr<IDataSource>, DataSource);
     YDB_READONLY_DEF(std::optional<ui32>, Limit);
     YDB_READONLY(bool, Reverse, false);
+    bool Extracted = false;
 
 public:
+    const NAccessor::TAccessorsCollection& GetResources() const {
+        AFL_VERIFY(!Extracted);
+        return *Resources;
+    }
+
+    NAccessor::TAccessorsCollection& MutableResources() const {
+        AFL_VERIFY(!Extracted);
+        return *Resources;
+    }
+
+    std::unique_ptr<NAccessor::TAccessorsCollection> ExtractResources() {
+        AFL_VERIFY(!Extracted);
+        Extracted = true;
+        return std::move(Resources);
+    }
+
     template <class T>
     std::shared_ptr<T> GetDataSourceVerifiedAs() const {
         auto result = std::static_pointer_cast<T>(DataSource.lock());
@@ -342,12 +359,13 @@ public:
         return result;
     }
 
-    TProcessorContext(std::weak_ptr<IDataSource>&& dataSource, const std::shared_ptr<NAccessor::TAccessorsCollection>& resources,
+    TProcessorContext(std::weak_ptr<IDataSource>&& dataSource, std::unique_ptr<NAccessor::TAccessorsCollection>&& resources,
         const std::optional<ui32> limit, const bool reverse)
-        : Resources(resources)
+        : Resources(std::move(resources))
         , DataSource(std::move(dataSource))
         , Limit(limit)
         , Reverse(reverse) {
+        AFL_VERIFY(!!Resources);
     }
 };
 
@@ -445,7 +463,7 @@ private:
 
     mutable THashMap<TBlobAddress, TString> Blobs;
     mutable THashMap<ui32, NAccessor::TChunkConstructionData> Info;
-    std::shared_ptr<NAccessor::TAccessorsCollection> Resources;
+    std::unique_ptr<NAccessor::TAccessorsCollection> Resources;
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const TProcessorContext& /*context*/, const TDataAddress& addr) override {
@@ -482,12 +500,29 @@ private:
     }
 
 public:
-    const std::shared_ptr<NAccessor::TAccessorsCollection>& GetResources() const {
-        return Resources;
+    const NAccessor::TAccessorsCollection& GetResources() const {
+        AFL_VERIFY(!!Resources);
+        return *Resources;
+    }
+
+    NAccessor::TAccessorsCollection& MutableResources() const {
+        AFL_VERIFY(!!Resources);
+        return *Resources;
+    }
+
+    std::unique_ptr<NAccessor::TAccessorsCollection> ExtractResources() {
+        AFL_VERIFY(!!Resources);
+        return std::move(Resources);
+    }
+
+    void ReturnResources(std::unique_ptr<NAccessor::TAccessorsCollection>&& res) {
+        AFL_VERIFY(!Resources);
+        AFL_VERIFY(!!res);
+        Resources = std::move(res);
     }
 
     TSimpleDataSource() {
-        Resources = std::make_shared<NAccessor::TAccessorsCollection>();
+        Resources = std::make_unique<NAccessor::TAccessorsCollection>();
     }
 
     void AddBlob(const ui32 columnId, const TString& subColumnName, const std::shared_ptr<arrow::Array>& data);

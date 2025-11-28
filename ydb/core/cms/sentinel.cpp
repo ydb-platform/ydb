@@ -85,11 +85,14 @@ void TNodeStatusComputer::AddState(ENodeState newState) {
 
 /// TPDiskStatusComputer
 
-TPDiskStatusComputer::TPDiskStatusComputer(const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
+TPDiskStatusComputer::TPDiskStatusComputer(const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits,
+                                           TInstant cmsFirstBootTimestamp, const TDuration& initialDeploymentGracePeriod)
     : DefaultStateLimit(defaultStateLimit)
     , GoodStateLimit(goodStateLimit)
     , StateLimits(stateLimits)
     , StateCounter(0)
+    , CMSFirstBootTimestamp(cmsFirstBootTimestamp)
+    , InitialDeploymentGracePeriod(initialDeploymentGracePeriod)
 {
 }
 
@@ -171,7 +174,11 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
             }
         }
 
-        return EPDiskStatus::INACTIVE;
+        if (IsInitialDeploymentGracePeriod() && State == NKikimrBlobStorage::TPDiskState::Normal) {
+            return EPDiskStatus::ACTIVE;
+        } else {
+            return EPDiskStatus::INACTIVE;
+        }
     }
 
     reason = TStringBuilder()
@@ -219,10 +226,25 @@ void TPDiskStatusComputer::ResetForcedStatus() {
     ForcedStatus.Clear();
 }
 
+bool TPDiskStatusComputer::IsInitialDeploymentGracePeriod() const {
+    if (TlsActivationContext) {
+        return CMSFirstBootTimestamp + InitialDeploymentGracePeriod > TActivationContext::Now();
+    } else {
+        return false; // unsupported outside of actorsystem
+    }
+}
+
 /// TPDiskStatus
 
+
 TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
-    : TPDiskStatusComputer(defaultStateLimit, goodStateLimit, stateLimits)
+    : TPDiskStatus(initialStatus, defaultStateLimit, goodStateLimit, stateLimits, TInstant::Zero(), TDuration::Zero())
+{}
+
+TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit,
+                           const ui32& goodStateLimit, const TLimitsMap& stateLimits,
+                           TInstant cmsFirstBootTimestamp, const TDuration& initialDeploymentGracePeriod)
+    : TPDiskStatusComputer(defaultStateLimit, goodStateLimit, stateLimits, cmsFirstBootTimestamp, initialDeploymentGracePeriod)
     , Current(initialStatus)
     , ChangingAllowed(true)
 {
@@ -284,8 +306,11 @@ void TPDiskStatus::DisallowChanging() {
 
 /// TPDiskInfo
 
-TPDiskInfo::TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
-    : TPDiskStatus(initialStatus, defaultStateLimit, goodStateLimit, stateLimits)
+TPDiskInfo::TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit,
+                       const ui32& goodStateLimit, const TLimitsMap& stateLimits,
+                       TInstant cmsFirstBootTimestamp, const TDuration& initialDeploymentGracePeriod)
+    : TPDiskStatus(initialStatus, defaultStateLimit, goodStateLimit, stateLimits,
+                   cmsFirstBootTimestamp, initialDeploymentGracePeriod)
     , ActualStatus(initialStatus)
 {
     Touch();
@@ -619,7 +644,9 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                     continue;
                 }
 
-                pdisks.emplace(id, new TPDiskInfo(pdisk.GetDriveStatus(), Config.DefaultStateLimit, Config.GoodStateLimit, Config.StateLimits));
+                pdisks.emplace(id, new TPDiskInfo(pdisk.GetDriveStatus(), Config.DefaultStateLimit,
+                                                  Config.GoodStateLimit, Config.StateLimits,
+                                                  CmsState->FirstBootTimestamp, Config.InitialDeploymentGracePeriod));
             }
 
             SentinelState->ConfigUpdaterState.GotBSCResponse = true;
@@ -1150,6 +1177,10 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         auto* updateRequest = request->Record.MutableSelfHealNodesStateUpdate();
         updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealConfig.WaitForConfigStep.GetValue() / 1000000); // milliseconds -> seconds
         updateRequest->SetEnableSelfHealStateStorage(Config.StateStorageSelfHealConfig.Enable);
+        updateRequest->SetPileupReplicas(Config.StateStorageSelfHealConfig.PileupReplicas);
+        updateRequest->SetOverrideReplicasInRingCount(Config.StateStorageSelfHealConfig.OverrideReplicasInRingCount);
+        updateRequest->SetOverrideRingsCount(Config.StateStorageSelfHealConfig.OverrideRingsCount);
+        updateRequest->SetReplicasSpecificVolume(Config.StateStorageSelfHealConfig.ReplicasSpecificVolume);
         for (auto& [nodeId, node] : SentinelState->Nodes) {
             SentinelState->NeedSelfHealStateStorage |= node.Compute();
             auto* nodeState = updateRequest->AddNodesState();
@@ -1293,6 +1324,11 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                     entry.MutableInfo()->SetIgnoreReason(info->IgnoreReason);
                     entry.MutableInfo()->SetStatusChangeFailed(info->StatusChangeFailed);
                 }
+            }
+            for (auto& [nodeId, node] : SentinelState->Nodes) {
+                auto* nodeState = record.AddNodesState();
+                nodeState->SetNodeId(nodeId);
+                nodeState->SetState(node.ActualState);
             }
         }
 

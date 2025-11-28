@@ -23,7 +23,7 @@ option csharp_namespace = "OpenTelemetry.Proto.Metrics.V1";
 option java_multiple_files = true;
 option java_package = "io.opentelemetry.proto.metrics.v1";
 option java_outer_classname = "MetricsProto";
-option go_package = "go.opentelemetry.io/proto/otlp/metrics/v1";
+option go_package = "a.yandex-team.ru/contrib/libs/opentelemetry-proto";
 
 // MetricsData represents the metrics data that can be stored in a persistent
 // storage, OR can be embedded by other protocols that transfer OTLP metrics
@@ -377,6 +377,16 @@ message NumberDataPoint {
   // where this point belongs. The list may be empty (may contain 0 elements).
   // Attribute keys MUST be unique (it is not allowed to have more than one
   // attribute with the same key).
+  //
+  // The attribute values SHOULD NOT contain empty values.
+  // The attribute values SHOULD NOT contain bytes values.
+  // The attribute values SHOULD NOT contain array values different than array of string values, bool values, int values,
+  // double values.
+  // The attribute values SHOULD NOT contain kvlist values.
+  // The behavior of software that receives attributes containing such values can be unpredictable.
+  // These restrictions can change in a minor release.
+  // The restrictions take origin from the OpenTelemetry specification:
+  // https://github.com/open-telemetry/opentelemetry-specification/blob/v1.47.0/specification/common/README.md#attribute.
   repeated opentelemetry.proto.common.v1.KeyValue attributes = 7;
 
   // StartTimeUnixNano is optional but strongly encouraged, see the
@@ -425,6 +435,16 @@ message HistogramDataPoint {
   // where this point belongs. The list may be empty (may contain 0 elements).
   // Attribute keys MUST be unique (it is not allowed to have more than one
   // attribute with the same key).
+  //
+  // The attribute values SHOULD NOT contain empty values.
+  // The attribute values SHOULD NOT contain bytes values.
+  // The attribute values SHOULD NOT contain array values different than array of string values, bool values, int values,
+  // double values.
+  // The attribute values SHOULD NOT contain kvlist values.
+  // The behavior of software that receives attributes containing such values can be unpredictable.
+  // These restrictions can change in a minor release.
+  // The restrictions take origin from the OpenTelemetry specification:
+  // https://github.com/open-telemetry/opentelemetry-specification/blob/v1.47.0/specification/common/README.md#attribute.
   repeated opentelemetry.proto.common.v1.KeyValue attributes = 9;
 
   // StartTimeUnixNano is optional but strongly encouraged, see the
@@ -509,6 +529,16 @@ message ExponentialHistogramDataPoint {
   // where this point belongs. The list may be empty (may contain 0 elements).
   // Attribute keys MUST be unique (it is not allowed to have more than one
   // attribute with the same key).
+  //
+  // The attribute values SHOULD NOT contain empty values.
+  // The attribute values SHOULD NOT contain bytes values.
+  // The attribute values SHOULD NOT contain array values different than array of string values, bool values, int values,
+  // double values.
+  // The attribute values SHOULD NOT contain kvlist values.
+  // The behavior of software that receives attributes containing such values can be unpredictable.
+  // These restrictions can change in a minor release.
+  // The restrictions take origin from the OpenTelemetry specification:
+  // https://github.com/open-telemetry/opentelemetry-specification/blob/v1.47.0/specification/common/README.md#attribute.
   repeated opentelemetry.proto.common.v1.KeyValue attributes = 1;
 
   // StartTimeUnixNano is optional but strongly encouraged, see the
@@ -625,6 +655,16 @@ message SummaryDataPoint {
   // where this point belongs. The list may be empty (may contain 0 elements).
   // Attribute keys MUST be unique (it is not allowed to have more than one
   // attribute with the same key).
+  //
+  // The attribute values SHOULD NOT contain empty values.
+  // The attribute values SHOULD NOT contain bytes values.
+  // The attribute values SHOULD NOT contain array values different than array of string values, bool values, int values,
+  // double values.
+  // The attribute values SHOULD NOT contain kvlist values.
+  // The behavior of software that receives attributes containing such values can be unpredictable.
+  // These restrictions can change in a minor release.
+  // The restrictions take origin from the OpenTelemetry specification:
+  // https://github.com/open-telemetry/opentelemetry-specification/blob/v1.47.0/specification/common/README.md#attribute.
   repeated opentelemetry.proto.common.v1.KeyValue attributes = 7;
 
   // StartTimeUnixNano is optional but strongly encouraged, see the

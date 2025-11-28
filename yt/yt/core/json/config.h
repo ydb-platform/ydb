@@ -54,4 +54,19 @@ DEFINE_REFCOUNTED_TYPE(TJsonFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+
+struct TWebJsonFormatConfig
+    : public NYTree::TYsonStruct
+{
+    EJsonFormat Format;
+
+    REGISTER_YSON_STRUCT(TWebJsonFormatConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TWebJsonFormatConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NJson

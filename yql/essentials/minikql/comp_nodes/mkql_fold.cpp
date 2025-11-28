@@ -1,5 +1,5 @@
 #include "mkql_fold.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -7,11 +7,12 @@ namespace NMiniKQL {
 
 namespace {
 
-class TFoldWrapper : public TMutableCodegeneratorRootNode<TFoldWrapper> {
+class TFoldWrapper: public TMutableCodegeneratorRootNode<TFoldWrapper> {
     typedef TMutableCodegeneratorRootNode<TFoldWrapper> TBaseComputation;
+
 public:
     TFoldWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list, IComputationExternalNode* item, IComputationExternalNode* state,
-        IComputationNode* newState, IComputationNode* initialState)
+                 IComputationNode* newState, IComputationNode* initialState)
         : TBaseComputation(mutables, kind)
         , List(list)
         , Item(item)
@@ -25,18 +26,17 @@ public:
         State->SetValue(compCtx, InitialState->GetValue(compCtx));
 
         TThresher<false>::DoForEachItem(List->GetValue(compCtx),
-            [this, &compCtx] (NUdf::TUnboxedValue&& item) {
-                Item->SetValue(compCtx, std::move(item));
-                State->SetValue(compCtx, NewState->GetValue(compCtx));
-            }
-        );
+                                        [this, &compCtx](NUdf::TUnboxedValue&& item) {
+                                            Item->SetValue(compCtx, std::move(item));
+                                            State->SetValue(compCtx, NewState->GetValue(compCtx));
+                                        });
 
         return State->GetValue(compCtx).Release();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     llvm::Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto &context = ctx.Codegen.GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto codegenState = dynamic_cast<ICodegeneratorExternalNode*>(State);
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
@@ -99,9 +99,7 @@ public:
         {
             block = slow;
 
-            const auto iterPtr = *Stateless_ || ctx.AlwaysInline ?
-                new AllocaInst(valueType, 0U, "iter_ptr", &ctx.Func->getEntryBlock().back()):
-                new AllocaInst(valueType, 0U, "iter_ptr", block);
+            const auto iterPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(valueType, 0U, "iter_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(valueType, 0U, "iter_ptr", block);
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(iterPtr, list, ctx.Codegen, block);
             const auto iter = new LoadInst(valueType, iterPtr, "iter", block);
 
@@ -130,8 +128,9 @@ public:
         }
 
         block = done;
-        if (List->IsTemporaryValue())
+        if (List->IsTemporaryValue()) {
             CleanupBoxed(list, ctx, block);
+        }
         return codegenState->CreateGetValue(ctx, block);
     }
 #endif
@@ -152,7 +151,7 @@ private:
     IComputationNode* const InitialState;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapFold(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
@@ -169,5 +168,5 @@ IComputationNode* WrapFold(TCallable& callable, const TComputationNodeFactoryCon
     return new TFoldWrapper(ctx.Mutables, kind, list, item, state, newState, initialState);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

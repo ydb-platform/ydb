@@ -38,7 +38,7 @@ public:
         if (AppliedFilter) {
             return *AppliedFilter;
         } else {
-            return Source->GetStageData().GetAppliedFilter();
+            return Accessors.GetAppliedFilter();
         }
     }
 

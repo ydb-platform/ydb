@@ -10,6 +10,8 @@
 
 #include <yt/yt/core/misc/fs.h>
 
+#include <vector>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -181,7 +183,7 @@ TString SafeGetUsernameByUid(int uid);
 
 void SetUid(int uid);
 
-void CloseAllDescriptors(const std::vector<int>& exceptFor = std::vector<int>());
+std::vector<int> CloseAllDescriptors(const std::vector<int>& exceptFor = std::vector<int>());
 
 int GetFileDescriptorCount();
 
@@ -222,7 +224,7 @@ using TNetworkInterfaceStatisticsMap = THashMap<TString, TNetworkInterfaceStatis
 TNetworkInterfaceStatisticsMap GetNetworkInterfaceStatistics();
 
 void SendSignal(const std::vector<int>& pids, const TString& signalName);
-std::optional<int> FindSignalIdBySignalName(const TString& signalName);
+std::optional<int> FindSignalIdBySignalName(std::string_view signalName);
 void ValidateSignalName(const TString& signalName);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -378,6 +380,11 @@ TFile MemfdCreate(const TString& name);
 ////////////////////////////////////////////////////////////////////////////////
 
 const TString& GetLinuxKernelVersion();
+std::vector<int> ParseLinuxKernelVersion();
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool IsUringEnabled();
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -32,6 +32,11 @@ KSV_ATTR = '''{_yql_row_spec={
         [subkey;[DataType;String]];
         [value;[DataType;String]]]]}}'''
 
+UNDEFINED_SANITIZER_IGNORE_STRINGS = [
+    "Failed to find UDF function",
+    "Module not loaded for script type"
+]
+
 
 def get_param(name, default=None):
     name = 'YQL_' + name.upper()
@@ -58,6 +63,11 @@ def do_custom_error_check(res, sql_query):
     assert err_string, 'Expected custom error check in test.\nTest error: %s' % res.std_err
     log('Custom error: ' + err_string)
     assert err_string in res.std_err, '"' + err_string + '" is not found in "' + res.std_err + "'"
+
+
+def skip_on_ubsan_known_failure(res_text):
+    if yatest.common.context.sanitize == 'undefined' and any(known_failure in res_text for known_failure in UNDEFINED_SANITIZER_IGNORE_STRINGS):
+        pytest.skip('An attempt to load UDF under UBSan was detected. Ignoring these tests due to problems with shared library loading under UBSan.')
 
 
 def get_gateway_cfg_suffix():
@@ -157,7 +167,7 @@ Table = namedtuple('Table', (
 
 
 def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir=None,
-              attr=None, format_name='yson', def_attr=None, should_exist=False, src_file_alternative=None):
+              attr=None, format_name='yson', def_attr=None, should_exist=False, src_file_alternative=None, attr_postprocess=None):
     assert '.' in full_name, 'expected name like cedar.Input'
     cluster = full_name.split('.')[0]
     name = '.'.join(full_name.split('.')[1:])
@@ -222,6 +232,9 @@ def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir
         attr = def_attr
 
     if attr is not None:
+        if attr_postprocess is not None:
+            attr = attr_postprocess(attr)
+
         # probably we get it, now write attr file to proper place
         attr_file = new_yqlrun_file + '.attr'
         with open(attr_file, 'w') as f:
@@ -417,7 +430,7 @@ def find_user_file(suite, path, data_path):
             raise Exception('Can not find file ' + path)
 
 
-def get_input_tables(suite, cfg, data_path, def_attr=None):
+def get_input_tables(suite, cfg, data_path, def_attr=None, attr_postprocess=None):
     in_tables = []
     for item in cfg:
         if item[0] in ('in', 'out'):
@@ -428,21 +441,19 @@ def get_input_tables(suite, cfg, data_path, def_attr=None):
                     yqlrun_file=os.path.join(data_path, suite if suite else '', file_name),
                     src_file_alternative=os.path.join(yql_work_path(), suite if suite else '', file_name),
                     def_attr=def_attr,
-                    should_exist=True
+                    should_exist=True,
+                    attr_postprocess=attr_postprocess
                 ))
     return in_tables
 
 
-def get_tables(suite, cfg, data_path, def_attr=None):
+def get_tables(suite, cfg, data_path, def_attr=None, attr_postprocess=None):
     in_tables = []
     out_tables = []
     suite_dir = os.path.join(data_path, suite)
     res_dir = get_yql_dir('table_')
 
     for splitted in cfg:
-        if splitted[0] == 'udf' and yatest.common.context.sanitize == 'undefined':
-            pytest.skip("udf under ubsan")
-
         if len(splitted) == 4:
             type_name, table, file_name, format_name = splitted
         elif len(splitted) == 3:
@@ -457,13 +468,15 @@ def get_tables(suite, cfg, data_path, def_attr=None):
                 yqlrun_file=yqlrun_file,
                 format_name=format_name,
                 def_attr=def_attr,
-                res_dir=res_dir
+                res_dir=res_dir,
+                attr_postprocess=attr_postprocess
             ))
         if type_name == 'out':
             out_tables.append(new_table(
                 full_name='plato.' + table if '.' not in table else table,
                 yqlrun_file=yqlrun_file if os.path.exists(yqlrun_file) else None,
-                res_dir=res_dir
+                res_dir=res_dir,
+                attr_postprocess=attr_postprocess
             ))
     return in_tables, out_tables
 
@@ -491,11 +504,18 @@ def is_os_supported(cfg):
     return True
 
 
-def is_xfail(cfg):
-    for item in cfg:
-        if item[0] == 'xfail':
-            return True
-    return False
+def is_xsqlfail(cfg, filename=''):
+    return (
+        any(item[0] == 'xsqlfail' for item in cfg) or
+        filename.endswith('.sqlx')
+    )
+
+
+def is_xfail(cfg, filename=''):
+    return (
+        any(item[0] == 'xfail' for item in cfg) or
+        is_xsqlfail(cfg, filename)
+    )
 
 
 def get_langver(cfg):
@@ -582,7 +602,8 @@ def execute(
         output_tables=None,
         pretty_plan=True,
         parameters={},
-        langver=None
+        langver=None,
+        attrs={}
 ):
     '''
     Executes YQL/SQL
@@ -599,6 +620,7 @@ def execute(
     :param output_tables: list of Table (will be returned)
     :param pretty_plan: whether to use pretty printing for plan or not
     :param parameters: query parameters as dict like {name: json_value}
+    :param attrs: query operation attributes as dict like {attr_name: attr value}
     :return: YQLExecResult
     '''
 
@@ -622,7 +644,8 @@ def execute(
         tables=(output_tables + input_tables),
         pretty_plan=pretty_plan,
         parameters=parameters,
-        langver=langver
+        langver=langver,
+        attrs=attrs
     )
 
     try:
@@ -679,9 +702,12 @@ def get_mount_config_file(content=None):
 
 
 def run_command(program, cmd, tmpdir_module=None, stdin=None,
-                check_exit_code=True, env=None, stdout=None):
+                check_exit_code=True, env=None, stdout=None,
+                cwd=None):
     if tmpdir_module is None:
         tmpdir_module = tempfile.mkdtemp()
+    if cwd is None:
+        cwd = tmpdir_module
 
     stdin_stream = None
     if isinstance(stdin, six.string_types):
@@ -712,7 +738,7 @@ def run_command(program, cmd, tmpdir_module=None, stdin=None,
 
     res = yatest.common.execute(
         cmd,
-        cwd=tmpdir_module,
+        cwd=cwd,
         stdin=stdin_stream,
         stdout=stdout_stream,
         stderr=stderr_stream,

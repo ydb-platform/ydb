@@ -78,6 +78,7 @@ constexpr auto PG_ERROR = ERROR;
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/uuid/uuid.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
@@ -1600,7 +1601,7 @@ private:
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx,
             const std::string_view& name, TUnboxedValueVector&& args, const TVector<NPg::TTypeDesc>& argDesc,
             const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc, const FmgrInfo* fInfo,
-            const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& holderFactory)
+            const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& /*holderFactory*/)
             : TCustomListValue(memInfo)
             , CompCtx(compCtx)
             , Name(name)
@@ -1611,7 +1612,6 @@ private:
             , FInfo(fInfo)
             , StructType(structType)
             , StructTypeDesc(structTypeDesc)
-            , HolderFactory(holderFactory)
         {
         }
 
@@ -1629,7 +1629,6 @@ private:
         const FmgrInfo* FInfo;
         const TStructType* StructType;
         const TVector<NPg::TTypeDesc>& StructTypeDesc;
-        const THolderFactory& HolderFactory;
     };
 
 public:
@@ -2238,7 +2237,7 @@ NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod value, TMaybe<N
         return NUdf::TUnboxedValuePod(res);
     }
     case NUdf::EDataSlot::Timestamp64: {
-        auto res = (i64)DatumGetInt64(ScalarDatumFromPod(value)) - PgTimestampShift;
+        auto res = SafeSub((i64)DatumGetInt64(ScalarDatumFromPod(value)), PgTimestampShift);
         if (res < NUdf::MIN_TIMESTAMP64 || res > NUdf::MAX_TIMESTAMP64) {
             return NUdf::TUnboxedValuePod();
         }

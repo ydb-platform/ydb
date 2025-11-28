@@ -27,19 +27,23 @@ namespace NYT::NYPath {
 class TRichYPath
 {
 public:
-    TRichYPath();
-    TRichYPath(const TRichYPath& other);
-    TRichYPath(TRichYPath&& other);
-    TRichYPath(const char* path);
-    TRichYPath(const TYPath& path);
-    TRichYPath(const TYPath& path, const NYTree::IAttributeDictionary& attributes);
-    TRichYPath& operator = (const TRichYPath& other);
+    TRichYPath() noexcept = default;
 
-    static TRichYPath Parse(const TString& str);
+    TRichYPath(const TRichYPath& other) noexcept;
+    TRichYPath& operator=(const TRichYPath& other) noexcept;
+
+    TRichYPath(TRichYPath&& other) noexcept = default;
+    TRichYPath& operator=(TRichYPath&& other) noexcept = default;
+
+    TRichYPath(const char* path);
+    TRichYPath(TYPath path);
+    TRichYPath(TYPath path, const NYTree::IAttributeDictionary& attributes);
+
+    static TRichYPath Parse(TStringBuf str);
     TRichYPath Normalize() const;
 
     const TYPath& GetPath() const;
-    void SetPath(const TYPath& path);
+    void SetPath(TYPath path);
 
     const NYTree::IAttributeDictionary& Attributes() const;
     NYTree::IAttributeDictionary& Attributes();
@@ -85,6 +89,11 @@ public:
     std::vector<NChunkClient::TReadRange> GetNewRanges(
         const NTableClient::TComparator& comparator = NTableClient::TComparator(),
         const NTableClient::TKeyColumnTypes& conversionTypeHints = {}) const;
+
+    //! Check whether ranges contain a range with row_index specified in either
+    //! limit. This method is intended to be more lightweight than #GetNewRanges
+    //! and it does not require comparator.
+    bool HasRowIndexInRanges() const;
 
     void SetRanges(const std::vector<NChunkClient::TReadRange>& ranges);
     bool HasNontrivialRanges() const;
@@ -175,6 +184,9 @@ public:
 
     // "access_method"
     std::optional<TString> GetAccessMethod() const;
+
+    // "input_query"
+    std::optional<TString> GetInputQuery() const;
 
 private:
     TYPath Path_;

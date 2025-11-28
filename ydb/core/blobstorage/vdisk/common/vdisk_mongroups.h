@@ -456,7 +456,7 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TLsmLevelGroup)
             {
-                COUNTER_INIT_PRIVATE(SstNum, false);
+                COUNTER_INIT(SstNum, false);
                 COUNTER_INIT(NumItems, false);
                 COUNTER_INIT(NumItemsInplaced, false);
                 COUNTER_INIT(NumItemsHuge, false);
@@ -477,24 +477,19 @@ public:                                                                         
         ///////////////////////////////////////////////////////////////////////////////////
         class TLsmAllLevelsStat {
         public:
+            static constexpr ui32 MaxCounterLevels = 24;
+
             TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
             // per-level information
-            TLsmLevelGroup Level0;
-            TLsmLevelGroup Level1to8;
-            TLsmLevelGroup Level9to16;
-            TLsmLevelGroup Level17;
-            TLsmLevelGroup Level18;
-            TLsmLevelGroup Level19;
+            std::unique_ptr<TLsmLevelGroup> Levels[MaxCounterLevels];
 
             TLsmAllLevelsStat(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
                 : Group(counters->GetSubgroup("subsystem", "levels"))
-                , Level0(Group, "level", "0")
-                , Level1to8(Group, "level", "1..8")
-                , Level9to16(Group, "level", "9..16")
-                , Level17(Group, "level", "17")
-                , Level18(Group, "level", "18")
-                , Level19(Group, "level", "19")
-            {}
+            {
+                for (ui32 level = 0; level < MaxCounterLevels; ++level) {
+                    Levels[level].reset(new TLsmLevelGroup(Group, "level", Sprintf("%u", level)));
+                }
+            }
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -612,10 +607,12 @@ public:                                                                         
             {
                 COUNTER_INIT_IF_EXTENDED(DefragBytesRewritten, true);
                 COUNTER_INIT_IF_EXTENDED(DefragThreshold, false);
+                COUNTER_INIT_IF_EXTENDED(SpaceInHugeChunksCouldBeFreedViaCompaction, false);
             }
 
             COUNTER_DEF(DefragBytesRewritten);
             COUNTER_DEF(DefragThreshold);
+            COUNTER_DEF(SpaceInHugeChunksCouldBeFreedViaCompaction);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -1003,6 +1000,20 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TPhantomFlagStorageGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TPhantomFlagStorageGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TPhantomFlagStorageGroup)
+            {
+                COUNTER_INIT(BuilderReadsFromDisk, true);
+                COUNTER_INIT(BuilderReadsFromDiskBytes, true);
+            }
+            COUNTER_DEF(BuilderReadsFromDisk);
+            COUNTER_DEF(BuilderReadsFromDiskBytes);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TFullSyncGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TFullSyncGroup : public TBase {
@@ -1016,6 +1027,5 @@ public:                                                                         
             COUNTER_DEF(UnorderedDataProtocolActorsCreated);
             COUNTER_DEF(UnorderedDataProtocolActorsTerminated);
         };
-
     } // NMonGroup
 } // NKikimr

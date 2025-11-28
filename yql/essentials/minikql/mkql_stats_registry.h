@@ -19,18 +19,26 @@ struct IStatsRegistry;
 class TStatKey: public TIntrusiveSListItem<TStatKey> {
     friend struct IStatsRegistry;
 
-// -- static part --
+    // -- static part --
     static ui32 IdSequence_;
     static TStatKey* KeysChain_;
 
-// -- instance part --
+    // -- instance part --
 public:
     TStatKey(TStringBuf name, bool deriv);
 
-    TStringBuf GetName() const noexcept { return Name_; }
-    bool IsDeriv() const noexcept { return Deriv_; }
-    ui32 GetId() const noexcept { return Id_; }
-    static ui32 GetMaxId() { return IdSequence_; }
+    TStringBuf GetName() const noexcept {
+        return Name_;
+    }
+    bool IsDeriv() const noexcept {
+        return Deriv_;
+    }
+    ui32 GetId() const noexcept {
+        return Id_;
+    }
+    static ui32 GetMaxId() {
+        return IdSequence_;
+    }
 
     template <typename F>
     static void ForEach(F f) {
@@ -82,11 +90,10 @@ using IStatsRegistryPtr = TAutoPtr<IStatsRegistry>;
 
 IStatsRegistryPtr CreateDefaultStatsRegistry();
 
-
 #define MKQL_STAT_MOD_IMPL(method, nullableStatsRegistry, key, value) \
-    do { \
-        if (nullableStatsRegistry) \
-            nullableStatsRegistry->method(key, value); \
+    do {                                                              \
+        if (nullableStatsRegistry)                                    \
+            nullableStatsRegistry->method(key, value);                \
     } while (0)
 
 #define MKQL_SET_STAT(statRegistry, key, value) \
@@ -110,7 +117,8 @@ public:
         : Key_(key)
         , Total_(0)
         , Start_(0)
-    {}
+    {
+    }
 
     void Reset() {
         Total_ = 0;
@@ -131,7 +139,8 @@ class TStatTimer: public TStatTimerBase {
 public:
     TStatTimer(const TStatKey& key)
         : TStatTimerBase(key)
-    {}
+    {
+    }
 
     void Acquire() {
         Start_ = GetCycleCount();
@@ -165,6 +174,7 @@ public:
             Counter_ = 0;
         }
     }
+
 private:
     const ui64 Frequency_;
     ui64 Counter_ = 0;

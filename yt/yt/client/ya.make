@@ -16,6 +16,8 @@ SRCS(
     api/delegating_transaction.cpp
     api/distributed_table_session.cpp
     api/distributed_table_client.cpp
+    api/distributed_file_session.cpp
+    api/distributed_file_client.cpp
     api/etc_client.cpp
     api/journal_client.cpp
     api/operation_client.cpp
@@ -247,6 +249,7 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     api/unittests
+    arrow/unittests
     query_client/unittests
     signature/unittests
     table_client/unittests

@@ -27,6 +27,10 @@ struct TReplicationStrategy : public IStrategy {
     };
 
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext&) const override {
+        if (!AppData()->FeatureFlags.GetEnableReplication()) {
+            result.SetError(NKikimrScheme::StatusPreconditionFailed, "Asynchronous replication is disabled");
+            return true;
+        }
         if (desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong replication configuration");
             return true;
@@ -85,6 +89,14 @@ struct TTransferStrategy : public IStrategy {
         if (!targetPath->IsColumnTable() && !targetPath->IsTable()) {
             result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' isn`t a table");
             return true;
+        }
+
+        if (target.HasDirectoryPath()) {
+            auto directoryPath = TPath::Resolve(target.GetDirectoryPath(), context.SS);
+            if (!directoryPath.IsResolved() || directoryPath.IsUnderDeleting() || directoryPath->IsUnderMoving() || directoryPath.IsDeleted()) {
+                result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination directory path '" << target.GetDirectoryPath() << "' not found");
+                return true;
+            }
         }
 
         if (!AppData()->TransferWriterFactory) {
@@ -374,7 +386,7 @@ public:
             return result;
         }
 
-        auto path = parentPath.Child(name);
+        auto path = parentPath.Child(name, TPath::TSplitChildTag{});
         {
             const auto checks = path.Check();
             checks
@@ -535,17 +547,29 @@ private:
 
 } // anonymous
 
-using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>;
+using TReplicationTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>;
+using TTransferTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer>;
 
 namespace NOperation {
 
 template <>
-std::optional<TString> GetTargetName<TTag>(TTag, const TTxTransaction& tx) {
+std::optional<TString> GetTargetName<TReplicationTag>(TReplicationTag, const TTxTransaction& tx) {
     return tx.GetReplication().GetName();
 }
 
 template <>
-bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
+bool SetName<TReplicationTag>(TReplicationTag, TTxTransaction& tx, const TString& name) {
+    tx.MutableReplication()->SetName(name);
+    return true;
+}
+
+template <>
+std::optional<TString> GetTargetName<TTransferTag>(TTransferTag, const TTxTransaction& tx) {
+    return tx.GetReplication().GetName();
+}
+
+template <>
+bool SetName<TTransferTag>(TTransferTag, TTxTransaction& tx, const TString& name) {
     tx.MutableReplication()->SetName(name);
     return true;
 }

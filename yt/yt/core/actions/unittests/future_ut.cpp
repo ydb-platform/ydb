@@ -5,6 +5,7 @@
 #include <yt/yt/core/actions/invoker_util.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
+#include <yt/yt/core/concurrency/context_switch.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/misc/ref_counted_tracker.h>
@@ -38,9 +39,7 @@ TEST_F(TFutureTest, NoncopyableGet)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
     EXPECT_TRUE(f.IsSet());
-    EXPECT_TRUE(f.Get().IsOK());
-    EXPECT_EQ(1, *f.Get().Value());
-    auto result =  f.GetUnique();
+    auto result =  f.AsUnique().Get();
     EXPECT_TRUE(result.IsOK());
     EXPECT_EQ(1, *result.Value());
 }
@@ -48,7 +47,7 @@ TEST_F(TFutureTest, NoncopyableGet)
 TEST_F(TFutureTest, NoncopyableApply1)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
-    auto g = f.ApplyUnique(BIND([] (TErrorOr<std::unique_ptr<int>>&& ptrOrError) {
+    auto g = f.AsUnique().Apply(BIND([] (TErrorOr<std::unique_ptr<int>>&& ptrOrError) {
         EXPECT_TRUE(ptrOrError.IsOK());
         EXPECT_EQ(1, *ptrOrError.Value());
     }));
@@ -59,10 +58,10 @@ TEST_F(TFutureTest, NoncopyableApply1)
 TEST_F(TFutureTest, NoncopyableApply2)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
-    auto g = f.ApplyUnique(BIND([] (TErrorOr<std::unique_ptr<int>>&& ptrOrError) -> TErrorOr<int> {
+    auto g = f.AsUnique().Apply(BIND([] (TErrorOr<std::unique_ptr<int>>&& ptrOrError) {
         EXPECT_TRUE(ptrOrError.IsOK());
         EXPECT_EQ(1, *ptrOrError.Value());
-        return 2;
+        return TErrorOr<int>(2);
     }));
     EXPECT_TRUE(g.IsSet());
     EXPECT_TRUE(g.Get().IsOK());
@@ -72,7 +71,7 @@ TEST_F(TFutureTest, NoncopyableApply2)
 TEST_F(TFutureTest, NoncopyableApply3)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
-    auto g = f.ApplyUnique(BIND([] (TErrorOr<std::unique_ptr<int>>&& ptrOrError) -> TFuture<int> {
+    auto g = f.AsUnique().Apply(BIND([] (TErrorOr<std::unique_ptr<int>>&& ptrOrError) {
         EXPECT_TRUE(ptrOrError.IsOK());
         EXPECT_EQ(1, *ptrOrError.Value());
         return MakeFuture(2);
@@ -85,7 +84,7 @@ TEST_F(TFutureTest, NoncopyableApply3)
 TEST_F(TFutureTest, NoncopyableApply4)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
-    auto g = f.ApplyUnique(BIND([] (std::unique_ptr<int>&& ptr) {
+    auto g = f.AsUnique().Apply(BIND([] (std::unique_ptr<int>&& ptr) {
         EXPECT_EQ(1, *ptr);
     }));
     EXPECT_TRUE(g.IsSet());
@@ -95,7 +94,7 @@ TEST_F(TFutureTest, NoncopyableApply4)
 TEST_F(TFutureTest, NoncopyableApply5)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
-    auto g = f.ApplyUnique(BIND([] (std::unique_ptr<int>&& ptr) -> TFuture<int> {
+    auto g = f.AsUnique().Apply(BIND([] (std::unique_ptr<int>&& ptr) {
         EXPECT_EQ(1, *ptr);
         return MakeFuture(2);
     }));
@@ -104,13 +103,87 @@ TEST_F(TFutureTest, NoncopyableApply5)
     EXPECT_EQ(2, g.Get().Value());
 }
 
+TEST_F(TFutureTest, NoncopyableApply6)
+{
+    auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
+    auto g = f.AsUnique().Apply(BIND([] (TErrorOr<std::unique_ptr<int>>&& ptrOrError) {
+        EXPECT_TRUE(ptrOrError.IsOK());
+        EXPECT_EQ(1, *ptrOrError.Value());
+        return MakeFuture<std::unique_ptr<double>>(nullptr).AsUnique();
+    }));
+    EXPECT_TRUE(g.IsSet());
+    EXPECT_TRUE(g.Get().IsOK());
+    EXPECT_EQ(nullptr, g.Get().Value());
+}
+
+TEST_F(TFutureTest, NoncopyableApply7)
+{
+    auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
+    auto g = f.AsUnique().Apply(BIND([] (std::unique_ptr<int>&& ptr) {
+        EXPECT_EQ(1, *ptr);
+        return MakeFuture<std::unique_ptr<double>>(nullptr).AsUnique();
+    }));
+    EXPECT_TRUE(g.IsSet());
+    EXPECT_TRUE(g.Get().IsOK());
+    EXPECT_EQ(nullptr, g.Get().Value());
+}
+
+TEST_F(TFutureTest, NoncopyableApply8)
+{
+    auto f = VoidFuture;
+    auto g = f.Apply(BIND([] {
+        return MakeFuture<std::unique_ptr<double>>(nullptr).AsUnique();
+    }));
+    EXPECT_TRUE(g.IsSet());
+    EXPECT_TRUE(g.Get().IsOK());
+    EXPECT_EQ(nullptr, g.Get().Value());
+}
+
+TEST_F(TFutureTest, NoncopyableApply9)
+{
+    auto f = MakeFuture(1);
+    auto g = f.Apply(BIND([] (const int& x) {
+        EXPECT_EQ(1, x);
+        return MakeFuture<std::unique_ptr<int>>(nullptr).AsUnique();
+    }));
+    EXPECT_TRUE(g.IsSet());
+    EXPECT_TRUE(g.Get().IsOK());
+    EXPECT_EQ(nullptr, g.Get().Value());
+}
+
+TEST_F(TFutureTest, NoncopyableApply10)
+{
+    auto f = MakeFuture(1);
+    auto g = f.Apply(BIND([] (int x) {
+        EXPECT_EQ(1, x);
+        return MakeFuture<std::unique_ptr<int>>(nullptr).AsUnique();
+    }));
+    EXPECT_TRUE(g.IsSet());
+    EXPECT_TRUE(g.Get().IsOK());
+    EXPECT_EQ(nullptr, g.Get().Value());
+}
+
+TEST_F(TFutureTest, NoncopyableApplySO5086)
+{
+    auto result = MakeFuture(std::string("hello"))
+        .AsUnique()
+        .Apply(BIND([] (std::string&& str) {
+            EXPECT_EQ("hello", str);
+            return MakeFuture(std::make_unique<int>(42)).AsUnique();
+        }))
+        .AsUnique()
+        .Get();
+    EXPECT_TRUE(result.IsOK());
+    EXPECT_EQ(42, *result.Value());
+}
+
 TEST_F(TFutureTest, NonAssignable1)
 {
     auto f = MakeFuture<TNonAssignable>({
         .Value = 1
     });
 
-    auto g = f.ApplyUnique(BIND([] (TNonAssignable&& object) {
+    auto g = f.AsUnique().Apply(BIND([] (TNonAssignable&& object) {
         EXPECT_EQ(1, object.Value);
     }));
 
@@ -129,7 +202,7 @@ TEST_F(TFutureTest, NonAssignable2)
     futures.push_back(f);
     futures.push_back(f);
 
-    auto g = AllSet(futures).ApplyUnique(BIND([] (std::vector<TErrorOr<TNonAssignable>>&& objects) {
+    auto g = AllSet(futures).AsUnique().Apply(BIND([] (std::vector<TErrorOr<TNonAssignable>>&& objects) {
         EXPECT_TRUE(objects.at(0).IsOK());
         EXPECT_TRUE(objects.at(1).IsOK());
         EXPECT_EQ(1, objects[0].Value().Value);
@@ -150,7 +223,7 @@ TEST_F(TFutureTest, NonAssignable3)
     futures.push_back(f);
     futures.push_back(f);
 
-    auto g = AllSucceeded(futures).ApplyUnique(BIND([] (std::vector<TNonAssignable>&& objects) {
+    auto g = AllSucceeded(futures).AsUnique().Apply(BIND([] (std::vector<TNonAssignable>&& objects) {
         EXPECT_EQ(1, objects[0].Value);
     }));
 
@@ -322,7 +395,7 @@ TEST_F(TFutureTest, GetUnique)
     promise.Set(v);
 
     EXPECT_TRUE(future.IsSet());
-    auto w = future.GetUnique();
+    auto w = future.AsUnique().Get();
     EXPECT_TRUE(w.IsOK());
     EXPECT_EQ(v, w.Value());
     EXPECT_TRUE(future.IsSet());
@@ -334,13 +407,13 @@ TEST_F(TFutureTest, TryGetUnique)
     auto future = promise.ToFuture();
 
     EXPECT_FALSE(future.IsSet());
-    EXPECT_FALSE(future.TryGetUnique());
+    EXPECT_FALSE(future.AsUnique().TryGet());
 
     std::vector v{1, 2, 3};
     promise.Set(v);
 
     EXPECT_TRUE(future.IsSet());
-    auto w = future.TryGetUnique();
+    auto w = future.AsUnique().TryGet();
     EXPECT_TRUE(w);
     EXPECT_TRUE(w->IsOK());
     EXPECT_EQ(v, w->Value());
@@ -355,7 +428,7 @@ TEST_F(TFutureTest, SubscribeUniqueBeforeSet)
     auto future = promise.ToFuture();
 
     std::vector<int> vv;
-    future.SubscribeUnique(BIND([&] (TErrorOr<std::vector<int>>&& arg) {
+    future.AsUnique().Subscribe(BIND([&] (TErrorOr<std::vector<int>>&& arg) {
         EXPECT_TRUE(arg.IsOK());
         vv = std::move(arg.Value());
     }));
@@ -378,7 +451,7 @@ TEST_F(TFutureTest, SubscribeUniqueAfterSet)
     EXPECT_TRUE(future.IsSet());
 
     std::vector<int> vv;
-    future.SubscribeUnique(BIND([&] (TErrorOr<std::vector<int>>&& arg) {
+    future.AsUnique().Subscribe(BIND([&] (TErrorOr<std::vector<int>>&& arg) {
         EXPECT_TRUE(arg.IsOK());
         vv = std::move(arg.Value());
     }));
@@ -1704,6 +1777,15 @@ TEST_F(TFutureTest, CancelAppliedToUncancellable)
     EXPECT_TRUE(future2.IsSet());
     EXPECT_EQ(NYT::EErrorCode::Canceled, future2.Get().GetCode());
 
+    auto immediatelyCancelable2 = future.ToImmediatelyCancelable(/*propagateCancelation*/ false);
+    auto future3 = immediatelyCancelable2.Apply(BIND([&] () -> void {}));
+    future3.Cancel(TError("Cancel"));
+    EXPECT_FALSE(promise.IsSet());
+    EXPECT_FALSE(promise.IsCanceled());
+    EXPECT_TRUE(immediatelyCancelable2.IsSet());
+    EXPECT_TRUE(future3.IsSet());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, future3.Get().GetCode());
+
     promise.Set();
     EXPECT_TRUE(uncancelable.IsSet());
     EXPECT_TRUE(future1.IsSet());
@@ -1863,6 +1945,74 @@ TEST_F(TFutureTest, ErrorFromException)
         EXPECT_TRUE(error.GetMessage().contains("test_fiber_canceled"));
         EXPECT_EQ(getAttribute(error), "");
     }
+}
+
+class TContextSwitchTracker
+    : public TContextSwitchGuard
+{
+public:
+    TContextSwitchTracker()
+        : TContextSwitchGuard([this] { Switched_ = true; }, nullptr)
+    { }
+
+    bool IsSwitched() const
+    {
+        return Switched_;
+    }
+
+private:
+    bool Switched_ = false;
+};
+
+TEST_W(TFutureTest, WaitForDelayed)
+{
+    auto future = TDelayedExecutor::MakeDelayed(TDuration::MilliSeconds(10))
+        .Apply(BIND([] { return 123; }));
+    TContextSwitchTracker switchTracker;
+    auto result = WaitFor(future);
+    EXPECT_TRUE(switchTracker.IsSwitched());
+    EXPECT_TRUE(result.IsOK());
+    EXPECT_EQ(result.Value(), 123);
+}
+
+TEST_W(TFutureTest, WaitForAlreadySet)
+{
+    auto future = MakeFuture<int>(123);
+    TContextSwitchTracker switchTracker;
+    auto result = WaitFor(future);
+    EXPECT_TRUE(switchTracker.IsSwitched());
+    EXPECT_TRUE(result.IsOK());
+    EXPECT_EQ(result.Value(), 123);
+}
+
+TEST_W(TFutureTest, WaitForFast)
+{
+    auto future = MakeFuture<int>(123);
+    TContextSwitchTracker switchTracker;
+    auto result = WaitForFast(future);
+    EXPECT_FALSE(switchTracker.IsSwitched());
+    EXPECT_TRUE(result.IsOK());
+    EXPECT_EQ(result.Value(), 123);
+}
+
+TEST_W(TFutureTest, WaitForUnique)
+{
+    auto future = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(123));
+    TContextSwitchTracker switchTracker;
+    auto result = WaitFor(future.AsUnique());
+    EXPECT_TRUE(switchTracker.IsSwitched());
+    EXPECT_TRUE(result.IsOK());
+    EXPECT_EQ(*result.Value(), 123);
+}
+
+TEST_W(TFutureTest, WaitForUniqueFast)
+{
+    auto future = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(123));
+    TContextSwitchTracker switchTracker;
+    auto result = WaitForFast(future.AsUnique());
+    EXPECT_FALSE(switchTracker.IsSwitched());
+    EXPECT_TRUE(result.IsOK());
+    EXPECT_EQ(*result.Value(), 123);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

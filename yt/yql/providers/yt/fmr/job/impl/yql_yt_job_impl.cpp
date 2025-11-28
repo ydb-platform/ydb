@@ -12,7 +12,7 @@
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
-#include <yt/yql/providers/yt/fmr/yt_job_service/interface/yql_yt_job_service.h>
+#include <yt/yql/providers/yt/fmr/yt_job_service/impl/yql_yt_job_service_impl.h>
 #include <yt/yql/providers/yt/fmr/request_options/proto_helpers/yql_yt_request_proto_helpers.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -51,7 +51,7 @@ public:
             YQL_ENSURE(clusterConnections.size() == 1);
 
             std::vector<NYT::TRawTableReaderPtr> ytTableReaders = GetYtTableReaders(YtJobService_, ytTableTaskRef, clusterConnections);
-            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(tableId, partId, TableDataService_, Settings_.FmrWriterSettings);
+            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(tableId, partId, TableDataService_, output.SerializedColumnGroups, Settings_.FmrWriterSettings);
 
             for (auto& ytTableReader: ytTableReaders) {
                 ParseRecords(ytTableReader, tableDataServiceWriter, Settings_.ParseRecordSettings.DonwloadReadBlockCount, Settings_.ParseRecordSettings.DonwloadReadBlockSize, cancelFlag);
@@ -76,14 +76,16 @@ public:
             const auto ytTable = params.Output;
             const auto tableId = params.Input.TableId;
             const auto tableRanges = params.Input.TableRanges;
+            const auto neededColumns = params.Input.Columns;
+            const auto columnGroups = params.Input.SerializedColumnGroups;
 
-            auto tableDataServiceReader = MakeIntrusive<TFmrTableDataServiceReader>(tableId, tableRanges, TableDataService_, Settings_.FmrReaderSettings);
+            auto tableDataServiceReader = MakeIntrusive<TFmrTableDataServiceReader>(tableId, tableRanges, TableDataService_, neededColumns, columnGroups, Settings_.FmrReaderSettings);
             YQL_ENSURE(clusterConnections.size() == 1);
             auto ytTableWriter = YtJobService_->MakeWriter(ytTable, clusterConnections.begin()->second, Settings_.YtWriterSettings);
             ParseRecords(tableDataServiceReader, ytTableWriter, Settings_.ParseRecordSettings.UploadReadBlockCount, Settings_.ParseRecordSettings.UploadReadBlockSize, cancelFlag);
             ytTableWriter->Flush();
 
-            return TStatistics();
+            return TStatistics(); // TODO - get actual stats from yt table.
         } catch (...) {
             YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside upload: " << CurrentExceptionMessage();
             return TError(CurrentExceptionMessage());
@@ -101,8 +103,8 @@ public:
 
             auto& parseRecordSettings = Settings_.ParseRecordSettings;
 
-            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(output.TableId, output.PartId, TableDataService_, Settings_.FmrWriterSettings);
-            auto threadPool = CreateThreadPool(parseRecordSettings.MergeNumThreads);
+            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(output.TableId, output.PartId, TableDataService_, output.SerializedColumnGroups, Settings_.FmrWriterSettings);
+            auto threadPool = CreateThreadPool(parseRecordSettings.MergeNumThreads, parseRecordSettings.MaxQueueSize, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
             TMaybe<TMutex> mutex = TMutex();
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
                 threadPool->SafeAddFunc([&, tableDataServiceWriter] {
@@ -137,7 +139,6 @@ public:
         TStringStream serializedJobStateStream(params.SerializedMapJobState);
         mapJob.Load(serializedJobStateStream);
         FillMapFmrJob(mapJob, params, clusterConnections, TableDataServiceDiscoveryFilePath_, YtJobService_);
-
         return JobLauncher_->LaunchJob(mapJob);
     }
 

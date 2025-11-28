@@ -61,6 +61,10 @@ NProto::Profile TCMallocProfileToProtoProfile(const tcmalloc::Profile& snapshot)
     }
 
     profile.set_period(tcmalloc::MallocExtension::GetProfileSamplingInterval());
+    if (const auto& startTime = snapshot.StartTime()) {
+        profile.set_time_nanos(ToUnixNanos(*startTime));
+    }
+    profile.set_duration_nanos(absl::ToInt64Nanoseconds(snapshot.Duration()));
 
     auto allocatedSizeId = addString("allocated_size");
     auto requestedSizeId = addString("requested_size");

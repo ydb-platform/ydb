@@ -14,15 +14,18 @@ def fix_win_bin_name(name):
         return res + '.exe'
     return res
 
+
 def find_compiler_bindir(command):
     for idx, word in enumerate(command):
         if '--compiler-bindir' in word:
             return idx
     return None
 
+
 def is_clang(command):
     cmplr_dir_idx = find_compiler_bindir(command)
     return cmplr_dir_idx is not None and 'clang' in command[cmplr_dir_idx]
+
 
 def fix_win(command, flags):
     if platform.system().lower() == "windows":
@@ -31,6 +34,7 @@ def fix_win(command, flags):
         if cmplr_dir_idx is not None:
             key, value = command[cmplr_dir_idx].split('=')
             command[cmplr_dir_idx] = key + '=' + fix_win_bin_name(value)
+
 
 def main():
     try:
@@ -68,6 +72,8 @@ def main():
         # nvcc concatenates the sources for clang, and clang reports unused
         # things from .h files as if they they were defined in a .cpp file.
         cflags += ['-Wno-unused-function', '-Wno-unused-parameter']
+        # nvcc format source files and give results to clang
+        cflags += ['-Wno-deprecated-literal-operator']
 
     if not is_clang(command) and '-fopenmp=libomp' in cflags:
         cflags.append('-fopenmp')
@@ -78,6 +84,7 @@ def main():
         # clang coverage
         '-fprofile-instr-generate',
         '-fcoverage-mapping',
+        '-fcoverage-mcdc',
         '/Zc:inline',  # disable unreferenced functions (kernel registrators) remove
         '-Wno-c++17-extensions',
         '-flto',
@@ -96,9 +103,8 @@ def main():
     if skip_nocxxinc:
         skip_list.append('-nostdinc++')
 
-    for flag in skip_list:
-        while flag in cflags:
-            cflags.remove(flag)
+    skip_list = tuple(skip_list)
+    cflags = [x for x in cflags if x not in skip_list]
 
     skip_prefix_list = [
         '-fsanitize=',

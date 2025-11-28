@@ -1,6 +1,6 @@
 
 /* Implementation of a C object with the 'buffer' or 'memoryview'
- * interface at C-level (as approriate for the version of Python we're
+ * interface at C-level (as appropriate for the version of Python we're
  * compiling for), but only a minimal but *consistent* part of the
  * 'buffer' interface at application level.
  */
@@ -140,8 +140,7 @@ static void
 mb_dealloc(MiniBufferObj *ob)
 {
     PyObject_GC_UnTrack(ob);
-    if (ob->mb_weakreflist != NULL)
-        PyObject_ClearWeakRefs((PyObject *)ob);
+    PyObject_ClearWeakRefs((PyObject *)ob);
     Py_XDECREF(ob->mb_keepalive);
     Py_TYPE(ob)->tp_free((PyObject *)ob);
 }

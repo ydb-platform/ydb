@@ -54,7 +54,7 @@ class TGRpcService
     : public NYdbGrpc::TGrpcServiceBase<NKikimrClient::TGRpcServer>
 {
 public:
-    TGRpcService();
+    TGRpcService(NActors::TActorId grpcRequestProxyId);
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
     void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override final;
@@ -70,22 +70,24 @@ private:
     void RegisterRequestActor(NActors::IActor* req);
 
     //! Setup handlers for incoming requests.
-    void SetupIncomingRequests();
+    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 
 private:
     using IThreadRef = TAutoPtr<IThreadFactory::IThread>;
 
 
-    NActors::TActorSystem* ActorSystem;
-    NActors::TActorId PQMeta;
-    NActors::TActorId MsgBusProxy;
+    NActors::TActorSystem* ActorSystem_;
+    NActors::TActorId PQMeta_;
+    NActors::TActorId MsgBusProxy_;
 
-    grpc::ServerCompletionQueue* CQ = nullptr;
+    grpc::ServerCompletionQueue* CQ_ = nullptr;
+    NYdbGrpc::TLoggerPtr Logger_;
 
-    size_t PersQueueWriteSessionsMaxCount = 1000000;
-    size_t PersQueueReadSessionsMaxCount  = 100000;
+    size_t PersQueueWriteSessionsMaxCount_ = 1000000;
+    size_t PersQueueReadSessionsMaxCount_  = 100000;
 
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
+    NActors::TActorId GRpcRequestProxyId_;
 
     std::function<void()> InitCb_;
     // In flight request management.

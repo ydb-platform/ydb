@@ -1,10 +1,10 @@
 #include "mkql_join.h"
 
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
-#include <yql/essentials/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_llvm_base.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
@@ -42,20 +42,20 @@ std::vector<bool> FillRequiredStructColumn(const ui32 inputWidth, const std::vec
     return result;
 }
 
-enum ETableIndex : ui32 {
+enum ETableIndex: ui32 {
     LeftIndex = 0U,
     RightIndex = 1U
 };
 
 namespace NFlow {
 
-using TFetcher = std::function<EFetchResult(TComputationContext&, NUdf::TUnboxedValue*const*)>;
+using TFetcher = std::function<EFetchResult(TComputationContext&, NUdf::TUnboxedValue* const*)>;
 using TLiveFetcher = std::function<EFetchResult(TComputationContext&, NUdf::TUnboxedValue*)>;
 
 class TSpillList {
 public:
     TSpillList(NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent,
-        TValuePacker& itemPacker, bool singleShot, size_t width = 0ULL)
+               TValuePacker& itemPacker, bool singleShot, size_t width = 0ULL)
         : Logger(logger)
         , LogComponent(logComponent)
         , Width(width)
@@ -66,7 +66,8 @@ public:
 #endif
         , Index(ui64(-1))
         , SingleShot(singleShot)
-    {}
+    {
+    }
 
     TSpillList(TSpillList&& rhs) = delete;
     TSpillList(const TSpillList& rhs) = delete;
@@ -127,8 +128,7 @@ public:
         } else {
             if (Count < DEFAULT_STACK_ITEMS) {
                 Stack[Count] = std::move(value);
-            }
-            else {
+            } else {
                 if (Count == DEFAULT_STACK_ITEMS) {
                     Y_DEBUG_ABORT_UNLESS(Heap.empty());
                     Heap.assign(Stack, Stack + DEFAULT_STACK_ITEMS);
@@ -213,9 +213,11 @@ public:
             if ((Index + 1) == 0) {
                 ++Index;
 
-                if (values != LiveValues)
-                    for (auto i = 0U; i < Width; ++i)
+                if (values != LiveValues) {
+                    for (auto i = 0U; i < Width; ++i) {
                         *values++ = std::move(*LiveValues++);
+                    }
+                }
 
                 LiveValues = nullptr;
                 return EFetchResult::One;
@@ -321,7 +323,8 @@ private:
         TFileState()
             : File(TTempFileHandle::InCurrentDir())
             , TotalSize(0)
-        {}
+        {
+        }
 
         TTempFileHandle File;
         ui64 TotalSize;
@@ -338,13 +341,15 @@ private:
 };
 
 template <EJoinKind Kind, bool TTrackRss>
-class TCommonJoinCoreWrapper : public TStatefulFlowComputationNode<TCommonJoinCoreWrapper<Kind, TTrackRss>> {
+class TCommonJoinCoreWrapper: public TStatefulFlowComputationNode<TCommonJoinCoreWrapper<Kind, TTrackRss>> {
     using TSelf = TCommonJoinCoreWrapper<Kind, TTrackRss>;
     using TBase = TStatefulFlowComputationNode<TSelf>;
     typedef TBase TBaseComputation;
+
 public:
-    class TValue : public TComputationValue<TValue> {
-    friend TSelf;
+    class TValue: public TComputationValue<TValue> {
+        friend TSelf;
+
     public:
         using TBase = TComputationValue<TValue>;
 
@@ -431,85 +436,86 @@ public:
                                 }
                             }
                             break;
-                        default: THROW yexception() << "Bad table index: " << tableIndex;
+                        default:
+                            THROW yexception() << "Bad table index: " << tableIndex;
                     }
                 }
             }
 
             while (true) {
                 switch (OutputMode) {
-                case EOutputMode::Unknown: {
+                    case EOutputMode::Unknown: {
                         List1.Seal(ctx);
                         List2.Seal(ctx);
                         switch (Kind) {
-                        case EJoinKind::Cross:
-                        case EJoinKind::Inner:
-                            if (List1.Empty() || List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            }
+                            case EJoinKind::Cross:
+                            case EJoinKind::Inner:
+                                if (List1.Empty() || List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                }
 
-                            break;
-                        case EJoinKind::Left:
-                            if (List1.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            }
-                            break;
+                                break;
+                            case EJoinKind::Left:
+                                if (List1.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                }
+                                break;
 
-                        case EJoinKind::LeftOnly:
-                            if (List1.Empty() || !List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            } else {
-                                OutputMode = EOutputMode::RightNull;
-                            }
-                            break;
+                            case EJoinKind::LeftOnly:
+                                if (List1.Empty() || !List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                } else {
+                                    OutputMode = EOutputMode::RightNull;
+                                }
+                                break;
 
-                        case EJoinKind::Right:
-                            if (List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            }
-                            break;
+                            case EJoinKind::Right:
+                                if (List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                }
+                                break;
 
-                        case EJoinKind::RightOnly:
-                            if (List2.Empty() || !List1.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            } else {
-                                OutputMode = EOutputMode::LeftNull;
-                            }
-                            break;
+                            case EJoinKind::RightOnly:
+                                if (List2.Empty() || !List1.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                } else {
+                                    OutputMode = EOutputMode::LeftNull;
+                                }
+                                break;
 
-                        case EJoinKind::Exclusion:
-                            if (!List1.Empty() && !List2.Empty() && !KeyHasNulls) {
-                                OutputMode = EOutputMode::None;
-                            } else if (List1.Empty()) {
-                                OutputMode = EOutputMode::LeftNull;
-                            } else if (List2.Empty()) {
-                                OutputMode = EOutputMode::RightNull;
-                            } else {
-                                OutputMode = EOutputMode::BothNull;
-                            }
-                            break;
+                            case EJoinKind::Exclusion:
+                                if (!List1.Empty() && !List2.Empty() && !KeyHasNulls) {
+                                    OutputMode = EOutputMode::None;
+                                } else if (List1.Empty()) {
+                                    OutputMode = EOutputMode::LeftNull;
+                                } else if (List2.Empty()) {
+                                    OutputMode = EOutputMode::RightNull;
+                                } else {
+                                    OutputMode = EOutputMode::BothNull;
+                                }
+                                break;
 
-                        case EJoinKind::Full:
-                            break;
+                            case EJoinKind::Full:
+                                break;
 
-                        case EJoinKind::LeftSemi:
-                            if (List1.Empty() || List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            } else {
-                                OutputMode = EOutputMode::RightNull;
-                            }
-                            break;
+                            case EJoinKind::LeftSemi:
+                                if (List1.Empty() || List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                } else {
+                                    OutputMode = EOutputMode::RightNull;
+                                }
+                                break;
 
-                        case EJoinKind::RightSemi:
-                            if (List1.Empty() || List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            } else {
-                                OutputMode = EOutputMode::LeftNull;
-                            }
-                            break;
+                            case EJoinKind::RightSemi:
+                                if (List1.Empty() || List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                } else {
+                                    OutputMode = EOutputMode::LeftNull;
+                                }
+                                break;
 
-                        default:
-                            Y_ABORT("Unknown kind");
+                            default:
+                                Y_ABORT("Unknown kind");
                         }
 
                         if (OutputMode == EOutputMode::Unknown) {
@@ -522,48 +528,47 @@ public:
                             } else if (List2.IsLive()) {
                                 OutputMode = EOutputMode::CrossSwap;
                             } else {
-                                OutputMode = List1.GetCount() >= List2.GetCount() ?
-                                    EOutputMode::Cross : EOutputMode::CrossSwap;
+                                OutputMode = List1.GetCount() >= List2.GetCount() ? EOutputMode::Cross : EOutputMode::CrossSwap;
                             }
                         }
                     }
-                    continue;
-                case EOutputMode::LeftNull:
-                    if (const auto item = List2.Next(ctx); item.IsSpecial()) {
-                        return item;
-                    } else {
-                        return PrepareNullItem<true>(ctx, item);
-                    }
-                case EOutputMode::RightNull:
-                    if (const auto item = List1.Next(ctx); item.IsSpecial()) {
-                        return item;
-                    } else {
-                        return PrepareNullItem<false>(ctx, item);
-                    }
-                case EOutputMode::BothNull:
-                    if (CrossMove1) {
-                        if (const auto item = List1.Next(ctx); item.IsFinish()) {
-                            CrossMove1 = false;
-                        } else if (item.IsYield()) {
+                        continue;
+                    case EOutputMode::LeftNull:
+                        if (const auto item = List2.Next(ctx); item.IsSpecial()) {
+                            return item;
+                        } else {
+                            return PrepareNullItem<true>(ctx, item);
+                        }
+                    case EOutputMode::RightNull:
+                        if (const auto item = List1.Next(ctx); item.IsSpecial()) {
                             return item;
                         } else {
                             return PrepareNullItem<false>(ctx, item);
                         }
-                    }
+                    case EOutputMode::BothNull:
+                        if (CrossMove1) {
+                            if (const auto item = List1.Next(ctx); item.IsFinish()) {
+                                CrossMove1 = false;
+                            } else if (item.IsYield()) {
+                                return item;
+                            } else {
+                                return PrepareNullItem<false>(ctx, item);
+                            }
+                        }
 
-                    if (const auto item = List2.Next(ctx); item.IsSpecial()) {
-                        return item;
-                    } else {
-                        return PrepareNullItem<true>(ctx, item);
-                    }
-                case EOutputMode::Cross:
-                    return PrepareCrossItem<false>(ctx);
-                case EOutputMode::CrossSwap:
-                    return PrepareCrossItem<true>(ctx);
-                case EOutputMode::None:
-                    return NUdf::TUnboxedValuePod::MakeFinish();
-                default:
-                    Y_ABORT("Unknown output mode");
+                        if (const auto item = List2.Next(ctx); item.IsSpecial()) {
+                            return item;
+                        } else {
+                            return PrepareNullItem<true>(ctx, item);
+                        }
+                    case EOutputMode::Cross:
+                        return PrepareCrossItem<false>(ctx);
+                    case EOutputMode::CrossSwap:
+                        return PrepareCrossItem<true>(ctx);
+                    case EOutputMode::None:
+                        return NUdf::TUnboxedValuePod::MakeFinish();
+                    default:
+                        Y_ABORT("Unknown output mode");
                 }
             }
         }
@@ -599,8 +604,7 @@ public:
                 auto member = value.GetElement(inIndex);
                 if (Self->IsRequiredColumn[inIndex]) {
                     ResItems[outIndex] = member.Release().GetOptionalValue();
-                }
-                else {
+                } else {
                     ResItems[outIndex] = std::move(member);
                 }
             }
@@ -671,7 +675,6 @@ public:
             }
         }
 
-
     private:
         const TSelf* const Self;
         const NUdf::TLoggerPtr Logger;
@@ -692,9 +695,9 @@ public:
     };
 
     TCommonJoinCoreWrapper(TComputationMutables& mutables, IComputationNode* flow, const TType* inputStructType, ui32 inputWidth, ui32 tableIndexPos,
-        std::vector<ui32>&& leftInputColumns, std::vector<ui32>&& rightInputColumns, std::vector<ui32>&& requiredColumns,
-        std::vector<ui32>&& leftOutputColumns, std::vector<ui32>&& rightOutputColumns, ui64 memLimit,
-        std::optional<ui32> sortedTableOrder, std::vector<ui32>&& keyColumns, EAnyJoinSettings anyJoinSettings)
+                           std::vector<ui32>&& leftInputColumns, std::vector<ui32>&& rightInputColumns, std::vector<ui32>&& requiredColumns,
+                           std::vector<ui32>&& leftOutputColumns, std::vector<ui32>&& rightOutputColumns, ui64 memLimit,
+                           std::optional<ui32> sortedTableOrder, std::vector<ui32>&& keyColumns, EAnyJoinSettings anyJoinSettings)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
         , Flow(flow)
         , InputStructType(inputStructType)
@@ -748,17 +751,20 @@ private:
 };
 
 template <EJoinKind Kind, bool TTrackRss>
-class TWideCommonJoinCoreWrapper : public TStatefulWideFlowCodegeneratorNode<TWideCommonJoinCoreWrapper<Kind, TTrackRss>>
+class TWideCommonJoinCoreWrapper: public TStatefulWideFlowCodegeneratorNode<TWideCommonJoinCoreWrapper<Kind, TTrackRss>>
 #ifndef MKQL_DISABLE_CODEGEN
-    , public ICodegeneratorRootNode
+    ,
+                                  public ICodegeneratorRootNode
 #endif
 {
     using TSelf = TWideCommonJoinCoreWrapper<Kind, TTrackRss>;
     using TBase = TStatefulWideFlowCodegeneratorNode<TSelf>;
     typedef TBase TBaseComputation;
+
 public:
-    class TValue : public TComputationValue<TValue> {
-    friend TSelf;
+    class TValue: public TComputationValue<TValue> {
+        friend TSelf;
+
     public:
         using TBase = TComputationValue<TValue>;
 
@@ -796,7 +802,7 @@ public:
             return false;
         }
 
-        EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
             while (EatInput) {
                 if (!InitialUsage) {
                     InitialUsage = ctx.HolderFactory.GetPagePool().GetUsed();
@@ -830,21 +836,20 @@ public:
                         }
 
                         if (Self->SortedTableOrder && *Self->SortedTableOrder == RightIndex) {
-                            auto fetcher = IsAnyJoinLeft(Self->AnyJoinSettings) ?
-                                TLiveFetcher(std::bind(Fetcher, std::placeholders::_1, Stubs.data())):
-                                [this] (TComputationContext& ctx, NUdf::TUnboxedValue* output) {
-                                    if (const auto status = Fetcher(ctx, Fields.data()); EFetchResult::One != status)
-                                        return status;
-                                    std::transform(Self->LeftInputColumns.cbegin(), Self->LeftInputColumns.cend(), output, [this] (ui32 index) { return std::move(this->Values[index]); });
-                                    return EFetchResult::One;
-                                };
-                            std::transform(Self->LeftInputColumns.cbegin(), Self->LeftInputColumns.cend(), Values.data(), [this] (ui32 index) { return std::move(this->Values[index]); });
+                            auto fetcher = IsAnyJoinLeft(Self->AnyJoinSettings) ? TLiveFetcher(std::bind(Fetcher, std::placeholders::_1, Stubs.data())) : [this](TComputationContext& ctx, NUdf::TUnboxedValue* output) {
+                                if (const auto status = Fetcher(ctx, Fields.data()); EFetchResult::One != status) {
+                                    return status;
+                                }
+                                std::transform(Self->LeftInputColumns.cbegin(), Self->LeftInputColumns.cend(), output, [this](ui32 index) { return std::move(this->Values[index]); });
+                                return EFetchResult::One;
+                            };
+                            std::transform(Self->LeftInputColumns.cbegin(), Self->LeftInputColumns.cend(), Values.data(), [this](ui32 index) { return std::move(this->Values[index]); });
                             List1.Live(std::move(fetcher), Values.data());
                             EatInput = false;
                         } else {
                             NUdf::TUnboxedValue* items = nullptr;
                             auto value = ctx.HolderFactory.CreateDirectArrayHolder(Self->LeftInputColumns.size(), items);
-                            std::transform(Self->LeftInputColumns.cbegin(), Self->LeftInputColumns.cend(), items, [this] (ui32 index) { return std::move(this->Values[index]); });
+                            std::transform(Self->LeftInputColumns.cbegin(), Self->LeftInputColumns.cend(), items, [this](ui32 index) { return std::move(this->Values[index]); });
                             List1.Add(std::move(value));
                             if (ctx.CheckAdjustedMemLimit<TTrackRss>(Self->MemLimit, *InitialUsage)) {
                                 List1.Spill();
@@ -859,105 +864,105 @@ public:
                         }
 
                         if (Self->SortedTableOrder && *Self->SortedTableOrder == LeftIndex) {
-                            auto fetcher = IsAnyJoinRight(Self->AnyJoinSettings) ?
-                                TLiveFetcher(std::bind(Fetcher, std::placeholders::_1, Stubs.data())):
-                                [this] (TComputationContext& ctx, NUdf::TUnboxedValue* output) {
-                                    if (const auto status = Fetcher(ctx, Fields.data()); EFetchResult::One != status)
-                                        return status;
-                                    std::transform(Self->RightInputColumns.cbegin(), Self->RightInputColumns.cend(), output, [this] (ui32 index) { return std::move(this->Values[index]); });
-                                    return EFetchResult::One;
-                                };
-                            std::transform(Self->RightInputColumns.cbegin(), Self->RightInputColumns.cend(), Values.data(), [this] (ui32 index) { return std::move(this->Values[index]); });
+                            auto fetcher = IsAnyJoinRight(Self->AnyJoinSettings) ? TLiveFetcher(std::bind(Fetcher, std::placeholders::_1, Stubs.data())) : [this](TComputationContext& ctx, NUdf::TUnboxedValue* output) {
+                                if (const auto status = Fetcher(ctx, Fields.data()); EFetchResult::One != status) {
+                                    return status;
+                                }
+                                std::transform(Self->RightInputColumns.cbegin(), Self->RightInputColumns.cend(), output, [this](ui32 index) { return std::move(this->Values[index]); });
+                                return EFetchResult::One;
+                            };
+                            std::transform(Self->RightInputColumns.cbegin(), Self->RightInputColumns.cend(), Values.data(), [this](ui32 index) { return std::move(this->Values[index]); });
                             List2.Live(std::move(fetcher), Values.data());
                             EatInput = false;
                         } else {
                             NUdf::TUnboxedValue* items = nullptr;
                             auto value = ctx.HolderFactory.CreateDirectArrayHolder(Self->RightInputColumns.size(), items);
-                            std::transform(Self->RightInputColumns.cbegin(), Self->RightInputColumns.cend(), items, [this] (ui32 index) { return std::move(this->Values[index]); });
+                            std::transform(Self->RightInputColumns.cbegin(), Self->RightInputColumns.cend(), items, [this](ui32 index) { return std::move(this->Values[index]); });
                             List2.Add(std::move(value));
                             if (ctx.CheckAdjustedMemLimit<TTrackRss>(Self->MemLimit, *InitialUsage)) {
                                 List2.Spill();
                             }
                         }
                         break;
-                    default: THROW yexception() << "Bad table index: " << tableIndex;
+                    default:
+                        THROW yexception() << "Bad table index: " << tableIndex;
                 }
             }
 
             while (true) {
                 switch (OutputMode) {
-                case EOutputMode::Unknown: {
+                    case EOutputMode::Unknown: {
                         List1.Seal(ctx);
                         List2.Seal(ctx);
                         switch (Kind) {
-                        case EJoinKind::Cross:
-                        case EJoinKind::Inner:
-                            if (List1.Empty() || List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            }
+                            case EJoinKind::Cross:
+                            case EJoinKind::Inner:
+                                if (List1.Empty() || List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                }
 
-                            break;
-                        case EJoinKind::Left:
-                            if (List1.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            }
-                            break;
+                                break;
+                            case EJoinKind::Left:
+                                if (List1.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                }
+                                break;
 
-                        case EJoinKind::LeftOnly:
-                            if (List1.Empty() || !List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            } else {
-                                OutputMode = EOutputMode::RightNull;
-                            }
-                            break;
+                            case EJoinKind::LeftOnly:
+                                if (List1.Empty() || !List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                } else {
+                                    OutputMode = EOutputMode::RightNull;
+                                }
+                                break;
 
-                        case EJoinKind::Right:
-                            if (List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            }
-                            break;
+                            case EJoinKind::Right:
+                                if (List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                }
+                                break;
 
-                        case EJoinKind::RightOnly:
-                            if (List2.Empty() || !List1.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            } else {
-                                OutputMode = EOutputMode::LeftNull;
-                            }
-                            break;
+                            case EJoinKind::RightOnly:
+                                if (List2.Empty() || !List1.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                } else {
+                                    OutputMode = EOutputMode::LeftNull;
+                                }
+                                break;
 
-                        case EJoinKind::Exclusion:
-                            if (!List1.Empty() && !List2.Empty() && !KeyHasNulls) {
-                                OutputMode = EOutputMode::None;
-                            } else if (List1.Empty()) {
-                                OutputMode = EOutputMode::LeftNull;
-                            } else if (List2.Empty()) {
-                                OutputMode = EOutputMode::RightNull;
-                            } else {
-                                OutputMode = EOutputMode::BothNull;
-                            }
-                            break;
+                            case EJoinKind::Exclusion:
+                                if (!List1.Empty() && !List2.Empty() && !KeyHasNulls) {
+                                    OutputMode = EOutputMode::None;
+                                } else if (List1.Empty()) {
+                                    OutputMode = EOutputMode::LeftNull;
+                                } else if (List2.Empty()) {
+                                    OutputMode = EOutputMode::RightNull;
+                                } else {
+                                    OutputMode = EOutputMode::BothNull;
+                                }
+                                break;
 
-                        case EJoinKind::Full:
-                            break;
+                            case EJoinKind::Full:
+                                break;
 
-                        case EJoinKind::LeftSemi:
-                            if (List1.Empty() || List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            } else {
-                                OutputMode = EOutputMode::RightNull;
-                            }
-                            break;
+                            case EJoinKind::LeftSemi:
+                                if (List1.Empty() || List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                } else {
+                                    OutputMode = EOutputMode::RightNull;
+                                }
+                                break;
 
-                        case EJoinKind::RightSemi:
-                            if (List1.Empty() || List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            } else {
-                                OutputMode = EOutputMode::LeftNull;
-                            }
-                            break;
+                            case EJoinKind::RightSemi:
+                                if (List1.Empty() || List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                } else {
+                                    OutputMode = EOutputMode::LeftNull;
+                                }
+                                break;
 
-                        default:
-                            Y_ABORT("Unknown kind");
+                            default:
+                                Y_ABORT("Unknown kind");
                         }
 
                         if (OutputMode == EOutputMode::Unknown) {
@@ -970,58 +975,60 @@ public:
                             } else if (List2.IsLive()) {
                                 OutputMode = EOutputMode::CrossSwap;
                             } else {
-                                OutputMode = List1.GetCount() >= List2.GetCount() ?
-                                    EOutputMode::Cross : EOutputMode::CrossSwap;
+                                OutputMode = List1.GetCount() >= List2.GetCount() ? EOutputMode::Cross : EOutputMode::CrossSwap;
                             }
                         }
                     }
-                    continue;
-                case EOutputMode::LeftNull:
-                    if (const auto res = List2.Next(ctx, Values.data()); EFetchResult::One != res) {
-                        return res;
-                    }
-
-                    PrepareNullItem<true>(ctx, output);
-                    return EFetchResult::One;
-
-                case EOutputMode::RightNull:
-                    if (const auto res = List1.Next(ctx, Values.data()); EFetchResult::One != res) {
-                        return res;
-                    }
-
-                    PrepareNullItem<false>(ctx, output);
-                    return EFetchResult::One;
-                case EOutputMode::BothNull:
-                    if (CrossMove1) {
-                        switch (List1.Next(ctx, Values.data())) {
-                            case EFetchResult::Finish: CrossMove1 = false; break;
-                            case EFetchResult::Yield: return EFetchResult::Yield;
-                            case EFetchResult::One:
-                                PrepareNullItem<false>(ctx, output);
-                                return EFetchResult::One;
+                        continue;
+                    case EOutputMode::LeftNull:
+                        if (const auto res = List2.Next(ctx, Values.data()); EFetchResult::One != res) {
+                            return res;
                         }
-                    }
 
-                    if (const auto res = List2.Next(ctx, Values.data()); EFetchResult::One != res) {
-                        return res;
-                    }
+                        PrepareNullItem<true>(ctx, output);
+                        return EFetchResult::One;
 
-                    PrepareNullItem<true>(ctx, output);
-                    return EFetchResult::One;
-                case EOutputMode::Cross:
-                    return PrepareCrossItem<false>(ctx, output);
-                case EOutputMode::CrossSwap:
-                    return PrepareCrossItem<true>(ctx, output);
-                case EOutputMode::None:
-                    return EFetchResult::Finish;
-                default:
-                    Y_ABORT("Unknown output mode");
+                    case EOutputMode::RightNull:
+                        if (const auto res = List1.Next(ctx, Values.data()); EFetchResult::One != res) {
+                            return res;
+                        }
+
+                        PrepareNullItem<false>(ctx, output);
+                        return EFetchResult::One;
+                    case EOutputMode::BothNull:
+                        if (CrossMove1) {
+                            switch (List1.Next(ctx, Values.data())) {
+                                case EFetchResult::Finish:
+                                    CrossMove1 = false;
+                                    break;
+                                case EFetchResult::Yield:
+                                    return EFetchResult::Yield;
+                                case EFetchResult::One:
+                                    PrepareNullItem<false>(ctx, output);
+                                    return EFetchResult::One;
+                            }
+                        }
+
+                        if (const auto res = List2.Next(ctx, Values.data()); EFetchResult::One != res) {
+                            return res;
+                        }
+
+                        PrepareNullItem<true>(ctx, output);
+                        return EFetchResult::One;
+                    case EOutputMode::Cross:
+                        return PrepareCrossItem<false>(ctx, output);
+                    case EOutputMode::CrossSwap:
+                        return PrepareCrossItem<true>(ctx, output);
+                    case EOutputMode::None:
+                        return EFetchResult::Finish;
+                    default:
+                        Y_ABORT("Unknown output mode");
                 }
             }
         }
 
         template <bool IsLeftNull>
-        void PrepareNullItem(TComputationContext&, NUdf::TUnboxedValue*const* output) {
+        void PrepareNullItem(TComputationContext&, NUdf::TUnboxedValue* const* output) {
             for (ui32 i = 0; i < Self->LeftInputColumns.size(); ++i) {
                 if (const auto out = output[Self->LeftOutputColumns[i]]) {
                     if constexpr (IsLeftNull) {
@@ -1048,7 +1055,7 @@ public:
         }
 
         template <bool SwapLists>
-        EFetchResult PrepareCrossItem(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        EFetchResult PrepareCrossItem(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
             if (KeyHasNulls) {
                 for (;;) {
                     if (const auto res = (CrossMove1 == SwapLists ? List2 : List1).Next(ctx, Values.data()); EFetchResult::Finish == res && CrossMove1) {
@@ -1058,10 +1065,11 @@ public:
                         return res;
                     }
 
-                    if (CrossMove1 == SwapLists)
+                    if (CrossMove1 == SwapLists) {
                         PrepareNullItem<true>(ctx, output);
-                    else
+                    } else {
                         PrepareNullItem<false>(ctx, output);
+                    }
 
                     return EFetchResult::One;
                 }
@@ -1119,7 +1127,6 @@ public:
             return pointers;
         }
 
-
         const TSelf* const Self;
         const NUdf::TLoggerPtr Logger;
         const NUdf::TLogComponentId LogComponent;
@@ -1141,14 +1148,18 @@ public:
     };
 
     TWideCommonJoinCoreWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, const TTupleType* inputLeftType, const TTupleType* inputRightType,
-        std::vector<EValueRepresentation>&& inputRepresentations, std::vector<EValueRepresentation>&& outputRepresentations, ui32 tableIndexPos,
-        std::vector<ui32>&& leftInputColumns, std::vector<ui32>&& rightInputColumns, std::vector<ui32>&& requiredColumns,
-        std::vector<ui32>&& leftOutputColumns, std::vector<ui32>&& rightOutputColumns, ui64 memLimit,
-        std::optional<ui32> sortedTableOrder, std::vector<ui32>&& keyColumns, EAnyJoinSettings anyJoinSettings)
+                               std::vector<EValueRepresentation>&& inputRepresentations, std::vector<EValueRepresentation>&& outputRepresentations, ui32 tableIndexPos,
+                               std::vector<ui32>&& leftInputColumns, std::vector<ui32>&& rightInputColumns, std::vector<ui32>&& requiredColumns,
+                               std::vector<ui32>&& leftOutputColumns, std::vector<ui32>&& rightOutputColumns, ui64 memLimit,
+                               std::optional<ui32> sortedTableOrder, std::vector<ui32>&& keyColumns, EAnyJoinSettings anyJoinSettings)
         : TBaseComputation(mutables, flow, EValueRepresentation::Any)
-        , Flow(flow), InputRepresentations(std::move(inputRepresentations)), OutputRepresentations(std::move(outputRepresentations))
-        , InputLeftType(inputLeftType), InputRightType(inputRightType)
-        , PackerLeft(mutables), PackerRight(mutables)
+        , Flow(flow)
+        , InputRepresentations(std::move(inputRepresentations))
+        , OutputRepresentations(std::move(outputRepresentations))
+        , InputLeftType(inputLeftType)
+        , InputRightType(inputRightType)
+        , PackerLeft(mutables)
+        , PackerRight(mutables)
         , TableIndexPos(tableIndexPos)
         , LeftInputColumns(std::move(leftInputColumns))
         , RightInputColumns(std::move(rightInputColumns))
@@ -1160,9 +1171,10 @@ public:
         , KeyColumns(std::move(keyColumns))
         , IsRequiredColumn(FillRequiredStructColumn(InputRepresentations.size(), RequiredColumns))
         , AnyJoinSettings(anyJoinSettings)
-    {}
+    {
+    }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
@@ -1239,9 +1251,9 @@ public:
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TValue::FetchValues>());
-        const auto funcType = FunctionType::get(Type::getInt32Ty(context), { statePtrType, ctx.Ctx->getType(), fields->getType() }, false);
+        const auto funcType = FunctionType::get(Type::getInt32Ty(context), {statePtrType, ctx.Ctx->getType(), fields->getType()}, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
-        const auto result = CallInst::Create(funcType, funcPtr, { stateArg, ctx.Ctx, fields }, "fetch", block);
+        const auto result = CallInst::Create(funcType, funcPtr, {stateArg, ctx.Ctx, fields}, "fetch", block);
 
         for (ui32 i = 0U; i < OutputRepresentations.size(); ++i) {
             ValueRelease(OutputRepresentations[i], pointers[i], ctx, block);
@@ -1255,9 +1267,7 @@ private:
 #ifdef MKQL_DISABLE_CODEGEN
         state = ctx.HolderFactory.Create<TValue>(ctx, this, std::bind(&IComputationWideFlowNode::FetchValues, Flow, std::placeholders::_1, std::placeholders::_2));
 #else
-        state = ctx.ExecuteLLVM && Fetch ?
-            ctx.HolderFactory.Create<TValue>(ctx, this, Fetch):
-            ctx.HolderFactory.Create<TValue>(ctx, this, std::bind(&IComputationWideFlowNode::FetchValues, Flow, std::placeholders::_1, std::placeholders::_2));
+        state = ctx.ExecuteLLVM && Fetch ? ctx.HolderFactory.Create<TValue>(ctx, this, Fetch) : ctx.HolderFactory.Create<TValue>(ctx, this, std::bind(&IComputationWideFlowNode::FetchValues, Flow, std::placeholders::_1, std::placeholders::_2));
 #endif
     }
 
@@ -1283,7 +1293,7 @@ private:
     const std::vector<bool> IsRequiredColumn;
     const EAnyJoinSettings AnyJoinSettings;
 #ifndef MKQL_DISABLE_CODEGEN
-    typedef EFetchResult (*TFetchPtr)(TComputationContext&, NUdf::TUnboxedValue*const*);
+    typedef EFetchResult (*TFetchPtr)(TComputationContext&, NUdf::TUnboxedValue* const*);
 
     TFetchPtr Fetch = nullptr;
 
@@ -1310,8 +1320,9 @@ private:
         auto& context = codegen.GetContext();
 
         const auto& name = MakeName();
-        if (const auto f = module.getFunction(name.c_str()))
+        if (const auto f = module.getFunction(name.c_str())) {
             return f;
+        }
 
         const auto valueType = Type::getInt128Ty(context);
         const auto pointerType = PointerType::getUnqual(valueType);
@@ -1374,7 +1385,7 @@ private:
 #endif
 };
 
-}
+} // namespace NFlow
 
 namespace NStream {
 
@@ -1391,7 +1402,8 @@ public:
 #endif
         , Index(ui64(-1))
         , SingleShot(singleShot)
-    {}
+    {
+    }
 
     TSpillList(TSpillList&& rhs) = delete;
     TSpillList(const TSpillList& rhs) = delete;
@@ -1450,8 +1462,7 @@ public:
         } else {
             if (Count < DEFAULT_STACK_ITEMS) {
                 Stack[Count] = std::move(value);
-            }
-            else {
+            } else {
                 if (Count == DEFAULT_STACK_ITEMS) {
                     Y_DEBUG_ABORT_UNLESS(Heap.empty());
                     Heap.assign(Stack, Stack + DEFAULT_STACK_ITEMS);
@@ -1604,7 +1615,8 @@ private:
         TFileState()
             : File(TTempFileHandle::InCurrentDir())
             , TotalSize(0)
-        {}
+        {
+        }
 
         TTempFileHandle File;
         ui64 TotalSize;
@@ -1619,17 +1631,18 @@ private:
 };
 
 template <EJoinKind Kind, bool TTrackRss>
-class TCommonJoinCoreWrapper : public TMutableComputationNode<TCommonJoinCoreWrapper<Kind, TTrackRss>> {
+class TCommonJoinCoreWrapper: public TMutableComputationNode<TCommonJoinCoreWrapper<Kind, TTrackRss>> {
     using TSelf = TCommonJoinCoreWrapper<Kind, TTrackRss>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
+
 public:
-    class TValue : public TComputationValue<TValue> {
+    class TValue: public TComputationValue<TValue> {
     public:
         using TBase = TComputationValue<TValue>;
 
         TValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream,
-            TComputationContext& ctx, const TSelf* self)
+               TComputationContext& ctx, const TSelf* self)
             : TBase(memInfo)
             , Stream(std::move(stream))
             , Ctx(ctx)
@@ -1717,85 +1730,86 @@ public:
                                 }
                             }
                             break;
-                        default: THROW yexception() << "Bad table index: " << tableIndex;
+                        default:
+                            THROW yexception() << "Bad table index: " << tableIndex;
                     }
                 }
             }
 
             while (true) {
                 switch (OutputMode) {
-                case EOutputMode::Unknown: {
+                    case EOutputMode::Unknown: {
                         List1.Seal();
                         List2.Seal();
                         switch (Kind) {
-                        case EJoinKind::Cross:
-                        case EJoinKind::Inner:
-                            if (List1.Empty() || List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            }
+                            case EJoinKind::Cross:
+                            case EJoinKind::Inner:
+                                if (List1.Empty() || List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                }
 
-                            break;
-                        case EJoinKind::Left:
-                            if (List1.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            }
-                            break;
+                                break;
+                            case EJoinKind::Left:
+                                if (List1.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                }
+                                break;
 
-                        case EJoinKind::LeftOnly:
-                            if (List1.Empty() || !List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            } else {
-                                OutputMode = EOutputMode::RightNull;
-                            }
-                            break;
+                            case EJoinKind::LeftOnly:
+                                if (List1.Empty() || !List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                } else {
+                                    OutputMode = EOutputMode::RightNull;
+                                }
+                                break;
 
-                        case EJoinKind::Right:
-                            if (List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            }
-                            break;
+                            case EJoinKind::Right:
+                                if (List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                }
+                                break;
 
-                        case EJoinKind::RightOnly:
-                            if (List2.Empty() || !List1.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            } else {
-                                OutputMode = EOutputMode::LeftNull;
-                            }
-                            break;
+                            case EJoinKind::RightOnly:
+                                if (List2.Empty() || !List1.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                } else {
+                                    OutputMode = EOutputMode::LeftNull;
+                                }
+                                break;
 
-                        case EJoinKind::Exclusion:
-                            if (!List1.Empty() && !List2.Empty() && !KeyHasNulls) {
-                                OutputMode = EOutputMode::None;
-                            } else if (List1.Empty()) {
-                                OutputMode = EOutputMode::LeftNull;
-                            } else if (List2.Empty()) {
-                                OutputMode = EOutputMode::RightNull;
-                            } else {
-                                OutputMode = EOutputMode::BothNull;
-                            }
-                            break;
+                            case EJoinKind::Exclusion:
+                                if (!List1.Empty() && !List2.Empty() && !KeyHasNulls) {
+                                    OutputMode = EOutputMode::None;
+                                } else if (List1.Empty()) {
+                                    OutputMode = EOutputMode::LeftNull;
+                                } else if (List2.Empty()) {
+                                    OutputMode = EOutputMode::RightNull;
+                                } else {
+                                    OutputMode = EOutputMode::BothNull;
+                                }
+                                break;
 
-                        case EJoinKind::Full:
-                            break;
+                            case EJoinKind::Full:
+                                break;
 
-                        case EJoinKind::LeftSemi:
-                            if (List1.Empty() || List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            } else {
-                                OutputMode = EOutputMode::RightNull;
-                            }
-                            break;
+                            case EJoinKind::LeftSemi:
+                                if (List1.Empty() || List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                } else {
+                                    OutputMode = EOutputMode::RightNull;
+                                }
+                                break;
 
-                        case EJoinKind::RightSemi:
-                            if (List1.Empty() || List2.Empty()) {
-                                OutputMode = EOutputMode::None;
-                            } else {
-                                OutputMode = EOutputMode::LeftNull;
-                            }
-                            break;
+                            case EJoinKind::RightSemi:
+                                if (List1.Empty() || List2.Empty()) {
+                                    OutputMode = EOutputMode::None;
+                                } else {
+                                    OutputMode = EOutputMode::LeftNull;
+                                }
+                                break;
 
-                        default:
-                            Y_ABORT("Unknown kind");
+                            default:
+                                Y_ABORT("Unknown kind");
                         }
 
                         if (OutputMode == EOutputMode::Unknown) {
@@ -1808,13 +1822,12 @@ public:
                             } else if (List2.IsLive()) {
                                 OutputMode = EOutputMode::CrossSwap;
                             } else {
-                                OutputMode = List1.GetCount() >= List2.GetCount() ?
-                                    EOutputMode::Cross : EOutputMode::CrossSwap;
+                                OutputMode = List1.GetCount() >= List2.GetCount() ? EOutputMode::Cross : EOutputMode::CrossSwap;
                             }
                         }
                     }
-                    continue;
-                case EOutputMode::LeftNull: {
+                        continue;
+                    case EOutputMode::LeftNull: {
                         NUdf::TUnboxedValue value;
                         auto status = List2.Next(value);
                         if (status != NUdf::EFetchStatus::Ok) {
@@ -1823,9 +1836,8 @@ public:
 
                         result = PrepareNullItem<true>(value);
                         return NUdf::EFetchStatus::Ok;
-                    }
-                    break;
-                case EOutputMode::RightNull: {
+                    } break;
+                    case EOutputMode::RightNull: {
                         NUdf::TUnboxedValue value;
                         auto status = List1.Next(value);
                         if (status != NUdf::EFetchStatus::Ok) {
@@ -1834,38 +1846,40 @@ public:
 
                         result = PrepareNullItem<false>(value);
                         return NUdf::EFetchStatus::Ok;
-                    }
-                    break;
-                case EOutputMode::BothNull: {
+                    } break;
+                    case EOutputMode::BothNull: {
                         NUdf::TUnboxedValue value;
 
                         if (CrossMove1) {
                             switch (const auto status = List1.Next(value)) {
-                            case NUdf::EFetchStatus::Finish: CrossMove1 = false; break;
-                            case NUdf::EFetchStatus::Yield: return status;
-                            case NUdf::EFetchStatus::Ok:
-                                result = PrepareNullItem<false>(value);
-                                return NUdf::EFetchStatus::Ok;
+                                case NUdf::EFetchStatus::Finish:
+                                    CrossMove1 = false;
+                                    break;
+                                case NUdf::EFetchStatus::Yield:
+                                    return status;
+                                case NUdf::EFetchStatus::Ok:
+                                    result = PrepareNullItem<false>(value);
+                                    return NUdf::EFetchStatus::Ok;
                             }
                         }
 
                         switch (const auto status = List2.Next(value)) {
-                        case NUdf::EFetchStatus::Yield:
-                        case NUdf::EFetchStatus::Finish: return status;
-                        case NUdf::EFetchStatus::Ok:
-                            result = PrepareNullItem<true>(value);
-                            return NUdf::EFetchStatus::Ok;
+                            case NUdf::EFetchStatus::Yield:
+                            case NUdf::EFetchStatus::Finish:
+                                return status;
+                            case NUdf::EFetchStatus::Ok:
+                                result = PrepareNullItem<true>(value);
+                                return NUdf::EFetchStatus::Ok;
                         }
-                    }
-                    break;
-                case EOutputMode::Cross:
-                    return PrepareCrossItem<false>(result);
-                case EOutputMode::CrossSwap:
-                    return PrepareCrossItem<true>(result);
-                case EOutputMode::None:
-                    return NUdf::EFetchStatus::Finish;
-                default:
-                    Y_ABORT("Unknown output mode");
+                    } break;
+                    case EOutputMode::Cross:
+                        return PrepareCrossItem<false>(result);
+                    case EOutputMode::CrossSwap:
+                        return PrepareCrossItem<true>(result);
+                    case EOutputMode::None:
+                        return NUdf::EFetchStatus::Finish;
+                    default:
+                        Y_ABORT("Unknown output mode");
                 }
             }
         }
@@ -1901,8 +1915,7 @@ public:
                 auto member = value.GetElement(inIndex);
                 if (Self->IsRequiredColumn[inIndex]) {
                     ResItems[outIndex] = member.Release().GetOptionalValue();
-                }
-                else {
+                } else {
                     ResItems[outIndex] = std::move(member);
                 }
             }
@@ -1977,7 +1990,6 @@ public:
             }
         }
 
-
     private:
         NUdf::TUnboxedValue Stream;
         TComputationContext& Ctx;
@@ -2000,9 +2012,9 @@ public:
     };
 
     TCommonJoinCoreWrapper(TComputationMutables& mutables, IComputationNode* stream, const TType* inputStructType, ui32 inputWidth, ui32 tableIndexPos,
-        std::vector<ui32>&& leftInputColumns, std::vector<ui32>&& rightInputColumns, std::vector<ui32>&& requiredColumns,
-        std::vector<ui32>&& leftOutputColumns, std::vector<ui32>&& rightOutputColumns, ui64 memLimit,
-        std::optional<ui32> sortedTableOrder, std::vector<ui32>&& keyColumns, EAnyJoinSettings anyJoinSettings)
+                           std::vector<ui32>&& leftInputColumns, std::vector<ui32>&& rightInputColumns, std::vector<ui32>&& requiredColumns,
+                           std::vector<ui32>&& leftOutputColumns, std::vector<ui32>&& rightOutputColumns, ui64 memLimit,
+                           std::optional<ui32> sortedTableOrder, std::vector<ui32>&& keyColumns, EAnyJoinSettings anyJoinSettings)
         : TBaseComputation(mutables)
         , Stream(stream)
         , InputStructType(inputStructType)
@@ -2058,17 +2070,15 @@ private:
     const EAnyJoinSettings AnyJoinSettings;
 };
 
-}
+} // namespace NStream
 
-}
+} // namespace
 
 IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 11U || callable.GetInputsCount() == 12U, "Expected 12 args");
     const auto type = callable.GetType()->GetReturnType();
 
-    const auto inputRowType = type->IsFlow() ?
-        AS_TYPE(TFlowType, callable.GetInput(0))->GetItemType():
-        AS_TYPE(TStreamType, callable.GetInput(0))->GetItemType();
+    const auto inputRowType = type->IsFlow() ? AS_TYPE(TFlowType, callable.GetInput(0))->GetItemType() : AS_TYPE(TStreamType, callable.GetInput(0))->GetItemType();
 
     std::vector<EValueRepresentation> inputRepresentations;
     std::vector<TType*> fieldTypes;
@@ -2099,26 +2109,27 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
         }
     }
 
-    const auto outputRowType = type->IsFlow() ?
-        AS_TYPE(TFlowType, type)->GetItemType():
-        AS_TYPE(TStreamType, type)->GetItemType();
+    const auto outputRowType = type->IsFlow() ? AS_TYPE(TFlowType, type)->GetItemType() : AS_TYPE(TStreamType, type)->GetItemType();
 
     std::vector<EValueRepresentation> outputRepresentations;
     if (outputRowType->IsTuple()) {
         const auto tupleType = AS_TYPE(TTupleType, outputRowType);
         outputRepresentations.reserve(tupleType->GetElementsCount());
-        for (ui32 i = 0U; i < tupleType->GetElementsCount(); ++i)
+        for (ui32 i = 0U; i < tupleType->GetElementsCount(); ++i) {
             outputRepresentations.emplace_back(GetValueRepresentation(tupleType->GetElementType(i)));
+        }
     } else if (outputRowType->IsMulti()) {
         const auto tupleType = AS_TYPE(TMultiType, outputRowType);
         outputRepresentations.reserve(tupleType->GetElementsCount());
-        for (ui32 i = 0U; i < tupleType->GetElementsCount(); ++i)
+        for (ui32 i = 0U; i < tupleType->GetElementsCount(); ++i) {
             outputRepresentations.emplace_back(GetValueRepresentation(tupleType->GetElementType(i)));
+        }
     } else if (outputRowType->IsStruct()) {
         const auto structType = AS_TYPE(TStructType, outputRowType);
         outputRepresentations.reserve(structType->GetMembersCount());
-        for (ui32 i = 0U; i < structType->GetMembersCount(); ++i)
+        for (ui32 i = 0U; i < structType->GetMembersCount(); ++i) {
             outputRepresentations.emplace_back(GetValueRepresentation(structType->GetMemberType(i)));
+        }
     }
 
     const auto rawKind = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().Get<ui32>();
@@ -2183,9 +2194,7 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
 
     const EAnyJoinSettings anyJoinSettings = GetAnyJoinSettings(AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<ui32>());
 
-    const auto tableIndexPos = 12U == callable.GetInputsCount() ?
-        AS_VALUE(TDataLiteral, callable.GetInput(11U))->AsValue().Get<ui32>():
-        AS_TYPE(TStructType, inputRowType)->GetMemberIndex("_yql_table_index");
+    const auto tableIndexPos = 12U == callable.GetInputsCount() ? AS_VALUE(TDataLiteral, callable.GetInput(11U))->AsValue().Get<ui32>() : AS_TYPE(TStructType, inputRowType)->GetMemberIndex("_yql_table_index");
 
     const bool trackRss = EGraphPerProcess::Single == ctx.GraphPerProcess;
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0U);
@@ -2193,37 +2202,36 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
     const auto leftInputType = TTupleType::Create(leftTypes.size(), leftTypes.data(), ctx.Env);
     const auto rightInputType = TTupleType::Create(rightTypes.size(), rightTypes.data(), ctx.Env);
 
-#define MAKE_COMMON_JOIN_CORE_WRAPPER(KIND)\
-    case EJoinKind::KIND: \
-    if (type->IsFlow()) { \
-        if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) \
-            if (trackRss) \
-                return new NFlow::TWideCommonJoinCoreWrapper<EJoinKind::KIND, true>(ctx.Mutables, wide, leftInputType, rightInputType, std::move(inputRepresentations), std::move(outputRepresentations), tableIndexPos, \
-                    std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns), \
-                    std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings); \
-            else \
-                return new NFlow::TWideCommonJoinCoreWrapper<EJoinKind::KIND, false>(ctx.Mutables, wide, leftInputType, rightInputType, std::move(inputRepresentations), std::move(outputRepresentations), tableIndexPos, \
-                    std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns), \
-                    std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings); \
-        else \
-            if (trackRss) \
-                return new NFlow::TCommonJoinCoreWrapper<EJoinKind::KIND, true>(ctx.Mutables, flow, inputRowType, inputRepresentations.size(), tableIndexPos, \
-                    std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns), \
-                    std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings); \
-            else \
-                return new NFlow::TCommonJoinCoreWrapper<EJoinKind::KIND, false>(ctx.Mutables, flow, inputRowType, inputRepresentations.size(), tableIndexPos, \
-                    std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns), \
-                    std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings); \
-    } else { \
-        if (trackRss) \
-            return new NStream::TCommonJoinCoreWrapper<EJoinKind::KIND, true>(ctx.Mutables, flow, inputRowType, inputRepresentations.size(), tableIndexPos, \
-                std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns), \
-                std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings); \
-        else \
-            return new NStream::TCommonJoinCoreWrapper<EJoinKind::KIND, false>(ctx.Mutables, flow, inputRowType, inputRepresentations.size(), tableIndexPos, \
-                std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns), \
-                std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings); \
-    }
+#define MAKE_COMMON_JOIN_CORE_WRAPPER(KIND)                                                                                                                                                                                   \
+    case EJoinKind::KIND:                                                                                                                                                                                                     \
+        if (type->IsFlow()) {                                                                                                                                                                                                 \
+            if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow))                                                                                                                                              \
+                if (trackRss)                                                                                                                                                                                                 \
+                    return new NFlow::TWideCommonJoinCoreWrapper<EJoinKind::KIND, true>(ctx.Mutables, wide, leftInputType, rightInputType, std::move(inputRepresentations), std::move(outputRepresentations), tableIndexPos,  \
+                                                                                        std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns),                                                \
+                                                                                        std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings);     \
+                else                                                                                                                                                                                                          \
+                    return new NFlow::TWideCommonJoinCoreWrapper<EJoinKind::KIND, false>(ctx.Mutables, wide, leftInputType, rightInputType, std::move(inputRepresentations), std::move(outputRepresentations), tableIndexPos, \
+                                                                                         std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns),                                               \
+                                                                                         std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings);    \
+            else if (trackRss)                                                                                                                                                                                                \
+                return new NFlow::TCommonJoinCoreWrapper<EJoinKind::KIND, true>(ctx.Mutables, flow, inputRowType, inputRepresentations.size(), tableIndexPos,                                                                 \
+                                                                                std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns),                                                        \
+                                                                                std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings);             \
+            else                                                                                                                                                                                                              \
+                return new NFlow::TCommonJoinCoreWrapper<EJoinKind::KIND, false>(ctx.Mutables, flow, inputRowType, inputRepresentations.size(), tableIndexPos,                                                                \
+                                                                                 std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns),                                                       \
+                                                                                 std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings);            \
+        } else {                                                                                                                                                                                                              \
+            if (trackRss)                                                                                                                                                                                                     \
+                return new NStream::TCommonJoinCoreWrapper<EJoinKind::KIND, true>(ctx.Mutables, flow, inputRowType, inputRepresentations.size(), tableIndexPos,                                                               \
+                                                                                  std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns),                                                      \
+                                                                                  std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings);           \
+            else                                                                                                                                                                                                              \
+                return new NStream::TCommonJoinCoreWrapper<EJoinKind::KIND, false>(ctx.Mutables, flow, inputRowType, inputRepresentations.size(), tableIndexPos,                                                              \
+                                                                                   std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns),                                                     \
+                                                                                   std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings);          \
+        }
 
     switch (kind) {
         MAKE_COMMON_JOIN_CORE_WRAPPER(Inner)
@@ -2236,11 +2244,11 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
         MAKE_COMMON_JOIN_CORE_WRAPPER(LeftSemi)
         MAKE_COMMON_JOIN_CORE_WRAPPER(RightSemi)
         MAKE_COMMON_JOIN_CORE_WRAPPER(Cross)
-    default:
-        Y_ABORT("Unknown kind");
+        default:
+            Y_ABORT("Unknown kind");
     }
 #undef MAKE_COMMON_JOIN_CORE_WRAPPER
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

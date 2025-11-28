@@ -8,6 +8,7 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 #include <ydb/library/grpc/server/grpc_request.h>
 
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -55,33 +56,37 @@ void TGRpcPQClusterDiscoveryService::DecRequest() {
     }
 }
 
+static void DoDiscoverPQClustersRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider&) {
+    auto ev = dynamic_cast<TEvDiscoverPQClustersRequest*>(ctx.release());
+    Y_ENSURE(ev);
+
+    auto evHandle = std::make_unique<NActors::IEventHandle>(
+        NPQ::NClusterDiscovery::MakeClusterDiscoveryServiceID(),
+        NPQ::NClusterDiscovery::MakeClusterDiscoveryServiceID(),
+        ev
+    );
+    evHandle->Rewrite(TRpcServices::EvDiscoverPQClusters, NPQ::NClusterDiscovery::MakeClusterDiscoveryServiceID());
+    NActors::TActivationContext::Send(std::move(evHandle));
+}
+
 void TGRpcPQClusterDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
+    using namespace Ydb::PersQueue::ClusterDiscovery;
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#ifdef SETUP_PQCD_METHOD
+#error SETUP_PQCD_METHOD macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<Ydb::PersQueue::ClusterDiscovery::IN, Ydb::PersQueue::ClusterDiscovery::OUT, TGRpcPQClusterDiscoveryService>>(this, &Service_, CQ_, \
-        [this](NYdbGrpc::IRequestContextBase* ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ACTION; \
-        }, &Ydb::PersQueue::V1::ClusterDiscoveryService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("pq_cluster_discovery", #NAME))->Run();
 
-        ADD_REQUEST(DiscoverClusters, DiscoverClustersRequest, DiscoverClustersResponse, {
-            ActorSystem_->Send(GRpcRequestProxyId_, new TEvDiscoverPQClustersRequest(ctx));
-        })
-#undef ADD_REQUEST
+#define SETUP_PQCD_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, pq_cluster_discovery, auditMode)
 
+    SETUP_PQCD_METHOD(DiscoverClusters, DoDiscoverPQClustersRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
+
+#undef SETUP_PQCD_METHOD
 }
 
 void TGRpcPQClusterDiscoveryService::StopService() noexcept {
     TGrpcServiceBase::StopService();
-}
-
-void TGRpcRequestProxyHandleMethods::Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(ev->Forward(NPQ::NClusterDiscovery::MakeClusterDiscoveryServiceID()));
 }
 
 } // namespace NKikimr::NGRpcService

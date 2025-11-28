@@ -3,7 +3,7 @@
 #include "iface.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
@@ -53,7 +53,7 @@ public:
         return DbDriverState_->DiscoveryCompleted();
     }
 
-    void ScheduleTask(const std::function<void()>& fn, TDuration timeout) override {
+    void ScheduleTask(const std::function<void()>& fn, TDeadline::Duration delay) override {
         std::weak_ptr<IClientImplCommon> weak = this->shared_from_this();
         auto cbGuard = [weak, fn]() {
             auto strongClient = weak.lock();
@@ -61,7 +61,7 @@ public:
                 fn();
             }
         };
-        Connections_->ScheduleOneTimeTask(std::move(cbGuard), timeout);
+        Connections_->ScheduleDelayedTask(std::move(cbGuard), delay);
     }
 
 protected:

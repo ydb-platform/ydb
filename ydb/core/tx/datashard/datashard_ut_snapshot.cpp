@@ -2279,7 +2279,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             rows->emplace_back(serializedKey, serializedValues);
 
             auto upsertSender = runtime.AllocateEdgeActor();
-            auto actor = NTxProxy::CreateUploadRowsInternal(upsertSender, "/Root/table-1", types, rows);
+            auto actor = NTxProxy::CreateUploadRowsInternal(upsertSender, "/Root", "/Root/table-1", types, rows);
             runtime.Register(actor);
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvUploadRowsResponse>(upsertSender);
@@ -2681,6 +2681,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         // Note: disable volatile transactions, since this test verifies lock
         // freezing and volatile transactions work without them.
         runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardWriteAlwaysVolatile(false);
 
         // Commit changes in tx 123
         observer.BlockReadSets = true;
@@ -2835,6 +2836,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         // until readsets arrive, and this test relies on tx cross blocking,
         // which doesn't happen with volatile transactions.
         runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardWriteAlwaysVolatile(false);
 
         // Commit changes in tx 123 (we expect locks to be ready for sending)
         observer.BlockReadSets = true;
@@ -4986,7 +4988,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(100)
-            .SetEnableDataShardVolatileTransactions(false);
+            .SetEnableDataShardVolatileTransactions(false)
+            .SetEnableDataShardWriteAlwaysVolatile(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();

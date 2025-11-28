@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
@@ -382,11 +383,10 @@ private:
             const auto& input = stage.Inputs().Item(i);
             const auto& inputArg = stage.Program().Args().Arg(i);
 
-            if (auto source = input.Maybe<TDqSource>()) {
+            if (input.Maybe<TDqSource>() || input.Maybe<TKqpCnStreamLookup>()) {
                 VisitExpr(input.Ptr(),
                     [&](const TExprNode::TPtr& node) {
                         TExprBase expr(node);
-                        YQL_ENSURE(!expr.Maybe<TDqConnection>().IsValid());
                         if (auto binding = expr.Maybe<TKqpTxResultBinding>()) {
                             sourceReplaceMap.emplace(node.Get(), makeParameterBinding(binding.Cast(), node->Pos()).Ptr());
                         }
@@ -479,6 +479,16 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
                     }
                     return true;
                   });
+        } else if (auto maybeStreamLookup = input.Maybe<TKqpCnStreamLookup>()) {
+            VisitExpr(maybeStreamLookup.Cast().Settings().Ptr(),
+                  [&] (const TExprNode::TPtr& ptr) {
+                    TExprBase node(ptr);
+                    if (auto maybePrecompute = node.Maybe<TDqPhyPrecompute>()) {
+                        result.push_back(maybePrecompute.Cast());
+                        return false;
+                    }
+                    return true;
+                  });
         }
     }
     return result;
@@ -503,6 +513,8 @@ public:
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .Add(CreateKqpBuildPhyStagesTransformer(config->EnableSpilling, typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
+            .Add(CreateKqpPhyOptTransformer(kqpCtx, typesCtx, config,
+                CreateTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(kqpCtx->Cluster, kqpCtx->Tables, typesCtx, config), typesCtx)), "KqpPhysicalOptimize")
             // TODO(ilezhankin): "BuildWideBlockChannels" transformer is required only for BLOCK_CHANNELS_FORCE mode.
             .Add(CreateKqpBuildWideBlockChannelsTransformer(typesCtx, config->BlockChannelsMode), "BuildWideBlockChannels")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")

@@ -1,3 +1,4 @@
+import sys
 import math
 from unittest import TestCase
 from simplejson.compat import long_type, text_type
@@ -36,3 +37,10 @@ class TestFloat(TestCase):
             self.assertEqual(int(json.dumps(num)), num)
             self.assertEqual(json.loads(json.dumps(num)), num)
             self.assertEqual(json.loads(text_type(json.dumps(num))), num)
+
+    def test_float_range(self):
+        try:
+            float_range = [sys.float_info.min, sys.float_info.max]
+        except AttributeError:
+            float_range = [2.2250738585072014e-308, 1.7976931348623157e+308]
+        self.assertEqual(json.loads(json.dumps(float_range)), float_range)

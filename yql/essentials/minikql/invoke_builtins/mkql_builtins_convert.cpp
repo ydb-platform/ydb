@@ -16,17 +16,19 @@ namespace {
 template <typename TIn, typename TOut>
 struct TFloatToIntegralImpl {
     static constexpr TIn MinValue = static_cast<TIn>(std::numeric_limits<TOut>::min());
-    static constexpr TIn MaxValue = std::is_same<TIn, double>::value ? MaxFloor<TOut>() : static_cast<TIn>(std::numeric_limits<TOut>::max());
+    static constexpr TIn MaxValue =
+        std::is_same<TIn, double>::value ? MaxFloor<TOut>()
+                                         : static_cast<TIn>(std::numeric_limits<TOut>::max());
 
     static NUdf::TUnboxedValuePod Do(TIn val) {
         switch (std::fpclassify(val)) {
-        case FP_NORMAL:
-            break;
-        case FP_ZERO:
-        case FP_SUBNORMAL:
-            return NUdf::TUnboxedValuePod::Zero();
-        default:
-            return NUdf::TUnboxedValuePod();
+            case FP_NORMAL:
+                break;
+            case FP_ZERO:
+            case FP_SUBNORMAL:
+                return NUdf::TUnboxedValuePod::Zero();
+            default:
+                return NUdf::TUnboxedValuePod();
         }
 
         if (val < MinValue || val > MaxValue) {
@@ -44,7 +46,7 @@ struct TFloatToIntegralImpl {
         const auto type = Type::getInt32Ty(context);
         const auto fnType = FunctionType::get(type, {val->getType()}, false);
         const auto name = std::is_same<TIn, float>() ? "MyFloatClassify" : "MyDoubleClassify";
-        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int(*)(TIn)>(&std::fpclassify)));
+        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int (*)(TIn)>(&std::fpclassify)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
         const auto classify = CallInst::Create(fnType, func, {val}, "fpclassify", block);
 
@@ -91,15 +93,15 @@ template <typename TIn>
 struct TFloatToIntegralImpl<TIn, bool> {
     static NUdf::TUnboxedValuePod Do(TIn val) {
         switch (std::fpclassify(val)) {
-        case FP_NORMAL:
-        case FP_INFINITE:
-            return NUdf::TUnboxedValuePod(true);
-            break;
-        case FP_ZERO:
-        case FP_SUBNORMAL:
-            return NUdf::TUnboxedValuePod(false);
-        default:
-            return NUdf::TUnboxedValuePod();
+            case FP_NORMAL:
+            case FP_INFINITE:
+                return NUdf::TUnboxedValuePod(true);
+                break;
+            case FP_ZERO:
+            case FP_SUBNORMAL:
+                return NUdf::TUnboxedValuePod(false);
+            default:
+                return NUdf::TUnboxedValuePod();
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
@@ -111,7 +113,7 @@ struct TFloatToIntegralImpl<TIn, bool> {
         const auto type = Type::getInt32Ty(context);
         const auto fnType = FunctionType::get(type, {val->getType()}, false);
         const auto name = std::is_same<TIn, float>() ? "MyFloatClassify" : "MyDoubleClassify";
-        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int(*)(TIn)>(&std::fpclassify)));
+        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int (*)(TIn)>(&std::fpclassify)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
         const auto classify = CallInst::Create(fnType, func, {val}, "fpclassify", block);
 
@@ -143,7 +145,7 @@ struct TFloatToIntegralImpl<TIn, bool> {
 };
 
 template <typename TInput, typename TOutput>
-struct TFloatToIntegral : public TArithmeticConstraintsUnary<TInput, TOutput> {
+struct TFloatToIntegral: public TArithmeticConstraintsUnary<TInput, TOutput> {
     static_assert(std::is_floating_point<TInput>::value, "Input type must be floating point!");
     static_assert(std::is_integral<TOutput>::value, "Output type must be integral!");
 
@@ -169,9 +171,9 @@ Value* GenInBounds(Value* val, Constant* low, Constant* high, BasicBlock* block)
 #endif
 
 template <typename TInput, typename TOutput,
-    TOutput MaxVal = std::numeric_limits<TOutput>::max(),
-    TOutput MinVal = std::numeric_limits<TOutput>::min()>
-struct TWideToShort : public TArithmeticConstraintsUnary<TInput, TOutput> {
+          TOutput MaxVal = std::numeric_limits<TOutput>::max(),
+          TOutput MinVal = std::numeric_limits<TOutput>::min()>
+struct TWideToShort: public TArithmeticConstraintsUnary<TInput, TOutput> {
     static_assert(std::is_integral_v<TInput>, "Input type must be integral!");
     static_assert(std::is_integral_v<TOutput>, "Output type must be integral!");
 
@@ -179,12 +181,12 @@ struct TWideToShort : public TArithmeticConstraintsUnary<TInput, TOutput> {
     static constexpr auto UpperBound = static_cast<TInput>(MaxVal);
 
     static constexpr bool SkipLower = std::is_unsigned_v<TInput> ||
-        (sizeof(TInput) < sizeof(TOutput) && std::is_signed_v<TOutput>);
+                                      (sizeof(TInput) < sizeof(TOutput) && std::is_signed_v<TOutput>);
     static constexpr bool SkipUpper = sizeof(TInput) < sizeof(TOutput) ||
-        (sizeof(TInput) == sizeof(TOutput) && std::is_signed_v<TInput> && std::is_unsigned_v<TOutput> && UpperBound < 0);
+                                      (sizeof(TInput) == sizeof(TOutput) && std::is_signed_v<TInput> &&
+                                       std::is_unsigned_v<TOutput> && UpperBound < 0);
 
     static_assert(!(SkipLower && SkipUpper), "Only for cut input digits!");
-
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg)
     {
@@ -199,12 +201,14 @@ struct TWideToShort : public TArithmeticConstraintsUnary<TInput, TOutput> {
         const auto val = GetterFor<TInput>(arg, context, block);
         const auto lb = ConstantInt::get(val->getType(), LowerBound);
         const auto ub = ConstantInt::get(val->getType(), UpperBound);
-        const auto good = SkipLower ?
-            CmpInst::Create(Instruction::ICmp, std::is_signed_v<TInput> ? ICmpInst::ICMP_SLE : ICmpInst::ICMP_ULE, val, ub, "ok", block):
-            SkipUpper ?
-                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGE, val, lb, "ok", block):
-                GenInBounds(val, lb, ub, block);
-        const auto full = SetterFor<TOutput>(StaticCast<TInput, TOutput>(val, context, block), context, block);
+        const auto good =
+            SkipLower   ? CmpInst::Create(Instruction::ICmp,
+                                        std::is_signed_v<TInput> ? ICmpInst::ICMP_SLE : ICmpInst::ICMP_ULE,
+                                          val, ub, "ok", block)
+            : SkipUpper ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGE, val, lb, "ok", block)
+                        : GenInBounds(val, lb, ub, block);
+        const auto full = SetterFor<TOutput>(
+            StaticCast<TInput, TOutput>(val, context, block), context, block);
         const auto res = SelectInst::Create(good, full, ConstantInt::get(arg->getType(), 0), "result", block);
         return res;
     }
@@ -212,7 +216,7 @@ struct TWideToShort : public TArithmeticConstraintsUnary<TInput, TOutput> {
 };
 
 template <typename TInput, typename TOutput>
-struct TConvert : public TArithmeticConstraintsUnary<TInput, TOutput> {
+struct TConvert: public TArithmeticConstraintsUnary<TInput, TOutput> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         return NUdf::TUnboxedValuePod(static_cast<TOutput>(arg.template Get<TInput>()));
     }
@@ -230,7 +234,7 @@ struct TConvert : public TArithmeticConstraintsUnary<TInput, TOutput> {
 };
 
 template <typename TInput, typename TOutput, TOutput Multiplier>
-struct TScaleUp : public TArithmeticConstraintsUnary<TInput, TOutput> {
+struct TScaleUp: public TArithmeticConstraintsUnary<TInput, TOutput> {
     static_assert(sizeof(TInput) < sizeof(TOutput), "Output should be wider than input.");
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         return NUdf::TUnboxedValuePod(Multiplier * static_cast<TOutput>(arg.template Get<TInput>()));
@@ -316,14 +320,14 @@ struct TBigDateScale<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TTime
 };
 
 template <typename TInput, typename TOutput>
-struct TBigDateScaleUp : public TArithmeticConstraintsUnary<typename TInput::TLayout, typename TOutput::TLayout> {
+struct TBigDateScaleUp: public TArithmeticConstraintsUnary<typename TInput::TLayout, typename TOutput::TLayout> {
     static_assert(
-            sizeof(typename TInput::TLayout) <= sizeof(typename TOutput::TLayout),
-            "Output size should be greater or equal than input size.");
+        sizeof(typename TInput::TLayout) <= sizeof(typename TOutput::TLayout),
+        "Output size should be greater or equal than input size.");
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         return NUdf::TUnboxedValuePod(
-                TBigDateScale<TInput, TOutput>::Modifier
-                * static_cast<typename TOutput::TLayout>(arg.template Get<typename TInput::TLayout>()));
+            TBigDateScale<TInput, TOutput>::Modifier *
+            static_cast<typename TOutput::TLayout>(arg.template Get<typename TInput::TLayout>()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -339,10 +343,10 @@ struct TBigDateScaleUp : public TArithmeticConstraintsUnary<typename TInput::TLa
 };
 
 template <typename TInput, typename TOutput, i64 UpperBound>
-struct TBigDateToNarrowScaleUp : public TArithmeticConstraintsUnary<typename TInput::TLayout, typename TOutput::TLayout> {
+struct TBigDateToNarrowScaleUp: public TArithmeticConstraintsUnary<typename TInput::TLayout, typename TOutput::TLayout> {
     static_assert(
-            sizeof(typename TInput::TLayout) <= sizeof(typename TOutput::TLayout),
-            "Output size should be greater or equal than input size.");
+        sizeof(typename TInput::TLayout) <= sizeof(typename TOutput::TLayout),
+        "Output size should be greater or equal than input size.");
     static_assert(std::is_signed_v<typename TInput::TLayout>, "Expect signed input type");
     static_assert(std::is_unsigned_v<typename TOutput::TLayout>, "Expect unsigned output type");
 
@@ -372,16 +376,16 @@ struct TBigDateToNarrowScaleUp : public TArithmeticConstraintsUnary<typename TIn
 };
 
 template <typename TInput, typename TOutput>
-struct TNarrowToBigDateScaleDown : public TArithmeticConstraintsUnary<typename TInput::TLayout, typename TOutput::TLayout> {
+struct TNarrowToBigDateScaleDown: public TArithmeticConstraintsUnary<typename TInput::TLayout, typename TOutput::TLayout> {
     static_assert(
-            sizeof(typename TInput::TLayout) >= sizeof(typename TOutput::TLayout),
-            "Output size should be smaller or equal than input size.");
+        sizeof(typename TInput::TLayout) >= sizeof(typename TOutput::TLayout),
+        "Output size should be smaller or equal than input size.");
     static_assert(std::is_unsigned_v<typename TInput::TLayout>, "Input type must be unsigned.");
     static_assert(std::is_signed_v<typename TOutput::TLayout>, "Output type must be signed.");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         return NUdf::TUnboxedValuePod(static_cast<typename TOutput::TLayout>(
-                    arg.template Get<typename TInput::TLayout>() / TBigDateScale<TOutput, TInput>::Modifier));
+            arg.template Get<typename TInput::TLayout>() / TBigDateScale<TOutput, TInput>::Modifier));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -397,18 +401,18 @@ struct TNarrowToBigDateScaleDown : public TArithmeticConstraintsUnary<typename T
 };
 
 template <typename TInput, typename TOutput>
-struct TBigDateScaleDown : public TArithmeticConstraintsUnary<typename TInput::TLayout, typename TOutput::TLayout> {
+struct TBigDateScaleDown: public TArithmeticConstraintsUnary<typename TInput::TLayout, typename TOutput::TLayout> {
     static_assert(
-            sizeof(typename TInput::TLayout) >= sizeof(typename TOutput::TLayout),
-            "Output size should be smaller or equal than input size.");
+        sizeof(typename TInput::TLayout) >= sizeof(typename TOutput::TLayout),
+        "Output size should be smaller or equal than input size.");
     static_assert(
-            std::is_signed_v<typename TInput::TLayout> &&
+        std::is_signed_v<typename TInput::TLayout> &&
             std::is_signed_v<typename TOutput::TLayout>,
-            "Only for signed layout types.");
+        "Only for signed layout types.");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         return NUdf::TUnboxedValuePod(static_cast<typename TOutput::TLayout>(
-                    arg.template Get<typename TInput::TLayout>() / TBigDateScale<TOutput, TInput>::Modifier));
+            arg.template Get<typename TInput::TLayout>() / TBigDateScale<TOutput, TInput>::Modifier));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -424,10 +428,10 @@ struct TBigDateScaleDown : public TArithmeticConstraintsUnary<typename TInput::T
 };
 
 template <typename TInput, typename TOutput, i64 UpperBound>
-struct TBigDateToNarrowScaleDown : public TArithmeticConstraintsUnary<typename TInput::TLayout, typename TOutput::TLayout> {
+struct TBigDateToNarrowScaleDown: public TArithmeticConstraintsUnary<typename TInput::TLayout, typename TOutput::TLayout> {
     static_assert(
-            sizeof(typename TInput::TLayout) > sizeof(typename TOutput::TLayout),
-            "Output size should be smaller than input size.");
+        sizeof(typename TInput::TLayout) > sizeof(typename TOutput::TLayout),
+        "Output size should be smaller than input size.");
     static_assert(std::is_same_v<i64, typename TInput::TLayout>, "Expect i64 input type");
     static_assert(std::is_unsigned_v<typename TOutput::TLayout>, "Expect unsigned output type");
 
@@ -460,7 +464,7 @@ struct TBigDateToNarrowScaleDown : public TArithmeticConstraintsUnary<typename T
 };
 
 template <typename TInput, typename TOutput, bool Tz = false>
-struct TDatetimeScaleUp : public TArithmeticConstraintsUnary<TInput, TOutput> {
+struct TDatetimeScaleUp: public TArithmeticConstraintsUnary<TInput, TOutput> {
     static_assert(sizeof(TInput) < sizeof(TOutput), "Output size should be wider than input size.");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
@@ -482,8 +486,8 @@ struct TDatetimeScaleUp : public TArithmeticConstraintsUnary<TInput, TOutput> {
         if constexpr (Tz) {
             const uint64_t init[] = {0ULL, 0xFFFFULL};
             const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init));
-            const auto tzid = BinaryOperator::CreateAnd(arg, mask, "tzid",  block);
-            const auto full = BinaryOperator::CreateOr(wide, tzid, "full",  block);
+            const auto tzid = BinaryOperator::CreateAnd(arg, mask, "tzid", block);
+            const auto full = BinaryOperator::CreateOr(wide, tzid, "full", block);
             return full;
         } else {
             return wide;
@@ -493,12 +497,14 @@ struct TDatetimeScaleUp : public TArithmeticConstraintsUnary<TInput, TOutput> {
 };
 
 template <typename TInput, typename TOutput, bool Tz = false>
-struct TDatetimeScaleDown : public TArithmeticConstraintsUnary<TInput, TOutput> {
+struct TDatetimeScaleDown: public TArithmeticConstraintsUnary<TInput, TOutput> {
     static_assert(sizeof(TInput) > sizeof(TOutput), "Output size should be narrower than input size.");
     static_assert(std::is_unsigned_v<TInput> && std::is_unsigned_v<TOutput>, "Only for unsigned.");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
-        auto result = NUdf::TUnboxedValuePod(static_cast<TOutput>(arg.template Get<TInput>() / TDatetimeScale<TOutput, TInput>::Modifier));
+        auto result = NUdf::TUnboxedValuePod(static_cast<TOutput>(
+            arg.template Get<TInput>() /
+            TDatetimeScale<TOutput, TInput>::Modifier));
         if constexpr (Tz) {
             result.SetTimezoneId(arg.GetTimezoneId());
         }
@@ -516,8 +522,8 @@ struct TDatetimeScaleDown : public TArithmeticConstraintsUnary<TInput, TOutput> 
         if constexpr (Tz) {
             const uint64_t init[] = {0ULL, 0xFFFFULL};
             const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init));
-            const auto tzid = BinaryOperator::CreateAnd(arg, mask, "tzid",  block);
-            const auto full = BinaryOperator::CreateOr(wide, tzid, "full",  block);
+            const auto tzid = BinaryOperator::CreateAnd(arg, mask, "tzid", block);
+            const auto full = BinaryOperator::CreateOr(wide, tzid, "full", block);
             return full;
         } else {
             return wide;
@@ -527,10 +533,10 @@ struct TDatetimeScaleDown : public TArithmeticConstraintsUnary<TInput, TOutput> 
 };
 
 template <typename TInput, typename TOutput, bool Tz>
-using TDatetimeRescale = std::conditional_t<sizeof(TInput) < sizeof(TOutput),
+using TDatetimeRescale = std::conditional_t<
+    sizeof(TInput) < sizeof(TOutput),
     TDatetimeScaleUp<TInput, TOutput, Tz>,
-    TDatetimeScaleDown<TInput, TOutput, Tz>
->;
+    TDatetimeScaleDown<TInput, TOutput, Tz>>;
 
 template <bool Cleanup = false>
 struct TDatetimeTzStub {
@@ -548,7 +554,7 @@ struct TDatetimeTzStub {
         if constexpr (Cleanup) {
             const uint64_t init[] = {0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFF0000ULL};
             const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init));
-            return BinaryOperator::CreateAnd(arg, mask, "clean",  block);
+            return BinaryOperator::CreateAnd(arg, mask, "clean", block);
         } else {
             return arg;
         }
@@ -622,7 +628,7 @@ struct TJsonDocumentToJsonConvert {
 #endif
 };
 
-}
+} // namespace
 
 namespace NDecimal {
 
@@ -647,8 +653,9 @@ template <typename TOutput>
 struct TConvertToIntegral {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         const auto v = arg.GetInt128();
-        return v >= std::numeric_limits<TOutput>::min() && v <= std::numeric_limits<TOutput>::max() ?
-            NUdf::TUnboxedValuePod(static_cast<TOutput>(arg.GetInt128())) : NUdf::TUnboxedValuePod();
+        return v >= std::numeric_limits<TOutput>::min() && v <= std::numeric_limits<TOutput>::max()
+                   ? NUdf::TUnboxedValuePod(static_cast<TOutput>(arg.GetInt128()))
+                   : NUdf::TUnboxedValuePod();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -658,7 +665,9 @@ struct TConvertToIntegral {
         const auto val = GetterForInt128(arg, block);
         const auto cut = CastInst::Create(Instruction::Trunc, val, GetTypeFor<TOutput>(context), "cut", block);
         const auto full = SetterFor<TOutput>(cut, context, block);
-        const auto good = GenInBounds<true>(val, GenConstant(std::numeric_limits<TOutput>::min(), context), GenConstant(std::numeric_limits<TOutput>::max(), context), block);
+        const auto good = GenInBounds<true>(val,
+                                            GenConstant(std::numeric_limits<TOutput>::min(), context),
+                                            GenConstant(std::numeric_limits<TOutput>::max(), context), block);
         const auto res = SelectInst::Create(good, full, ConstantInt::get(arg->getType(), 0), "result", block);
         return res;
     }
@@ -666,46 +675,47 @@ struct TConvertToIntegral {
     static_assert(std::is_arithmetic<TOutput>::value, "Output type must be arithmetic!");
 };
 
-template<typename TOutput, ui8 Scale>
+template <typename TOutput, ui8 Scale>
 TOutput GetFP(NYql::NDecimal::TInt128 v);
 
-template<>
+template <>
 float GetFP<float, 0>(NYql::NDecimal::TInt128 v) {
     return static_cast<float>(v);
 }
 
-template<>
+template <>
 double GetFP<double, 0>(NYql::NDecimal::TInt128 v) {
     return static_cast<double>(v);
 }
 
-template<typename TOutput, ui8 Scale>
+template <typename TOutput, ui8 Scale>
 TOutput GetFP(NYql::NDecimal::TInt128 v) {
-    if (v % 10)
+    if (v % 10) {
         return static_cast<TOutput>(v) / static_cast<TOutput>(NYql::NDecimal::GetDivider<Scale>());
-    else
+    } else {
         return GetFP<TOutput, Scale - 1>(v / 10);
+    }
 }
 
 #ifndef MKQL_DISABLE_CODEGEN
-template<typename TOutput, ui8 Scale>
+template <typename TOutput, ui8 Scale>
 void GenFP(PHINode* result, Value* val, const TCodegenContext& ctx, BasicBlock* done, BasicBlock*& block);
 
-template<>
+template <>
 void GenFP<float, 0>(PHINode* result, Value* val, const TCodegenContext& ctx, BasicBlock* done, BasicBlock*& block) {
     const auto cast = CastInst::Create(Instruction::SIToFP, val, GetTypeFor<float>(ctx.Codegen.GetContext()), "cast", block);
     result->addIncoming(cast, block);
     BranchInst::Create(done, block);
 }
 
-template<>
+template <>
 void GenFP<double, 0>(PHINode* result, Value* val, const TCodegenContext& ctx, BasicBlock* done, BasicBlock*& block) {
     const auto cast = CastInst::Create(Instruction::SIToFP, val, GetTypeFor<double>(ctx.Codegen.GetContext()), "cast", block);
     result->addIncoming(cast, block);
     BranchInst::Create(done, block);
 }
 
-template<typename TOutput, ui8 Scale>
+template <typename TOutput, ui8 Scale>
 void GenFP(PHINode* result, Value* val, const TCodegenContext& ctx, BasicBlock* done, BasicBlock*& block) {
     auto& context = ctx.Codegen.GetContext();
     const auto& str = ToString(Scale);
@@ -721,7 +731,11 @@ void GenFP(PHINode* result, Value* val, const TCodegenContext& ctx, BasicBlock* 
 
     block = stop;
     const auto cast = CastInst::Create(Instruction::SIToFP, val, GetTypeFor<TOutput>(ctx.Codegen.GetContext()), "cast", block);
-    const auto divf = BinaryOperator::CreateFDiv(cast, ConstantFP::get(GetTypeFor<TOutput>(context), static_cast<TOutput>(NYql::NDecimal::GetDivider<Scale>())), "divf", block);
+    const auto divf = BinaryOperator::CreateFDiv(
+        cast,
+        ConstantFP::get(GetTypeFor<TOutput>(context), static_cast<TOutput>(NYql::NDecimal::GetDivider<Scale>())),
+        "divf",
+        block);
     result->addIncoming(divf, block);
     BranchInst::Create(done, block);
 
@@ -736,14 +750,18 @@ template <typename TOutput, ui8 Scale>
 struct TToFP {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         const auto v = arg.GetInt128();
-        if (v == +NYql::NDecimal::Inf())
+        if (v == +NYql::NDecimal::Inf()) {
             return NUdf::TUnboxedValuePod(+std::numeric_limits<TOutput>::infinity());
-        if (v == -NYql::NDecimal::Inf())
+        }
+        if (v == -NYql::NDecimal::Inf()) {
             return NUdf::TUnboxedValuePod(-std::numeric_limits<TOutput>::infinity());
-        if (v == +NYql::NDecimal::Nan())
+        }
+        if (v == +NYql::NDecimal::Nan()) {
             return NUdf::TUnboxedValuePod(+std::numeric_limits<TOutput>::quiet_NaN());
-        if (v == -NYql::NDecimal::Nan())
+        }
+        if (v == -NYql::NDecimal::Nan()) {
             return NUdf::TUnboxedValuePod(-std::numeric_limits<TOutput>::quiet_NaN());
+        }
 
         return NUdf::TUnboxedValuePod(GetFP<TOutput, Scale>(v));
     }
@@ -796,8 +814,10 @@ struct TToFP {
     static_assert(Scale <= NYql::NDecimal::MaxPrecision, "Too large scale!");
 };
 
-template <ui8 Scale> using TToFloat = TToFP<float, Scale>;
-template <ui8 Scale> using TToDouble = TToFP<double, Scale>;
+template <ui8 Scale>
+using TToFloat = TToFP<float, Scale>;
+template <ui8 Scale>
+using TToDouble = TToFP<double, Scale>;
 
 template <ui8 Scale>
 struct TScaleUp {
@@ -876,8 +896,9 @@ struct TCheckBounds {
 
         using namespace NYql::NDecimal;
 
-        if (IsNormal<Precision>(v))
+        if (IsNormal<Precision>(v)) {
             return arg;
+        }
 
         return NUdf::TUnboxedValuePod(IsNan(v) ? Nan() : (v > 0 ? +Inf() : -Inf()));
     }
@@ -905,7 +926,7 @@ struct TCheckBounds {
     static_assert(Precision <= NYql::NDecimal::MaxPrecision, "Too large precision!");
 };
 
-}
+} // namespace NDecimal
 
 namespace {
 
@@ -938,13 +959,20 @@ void RegisterIntegralCasts(IBuiltinFunctionRegistry& registry) {
 
 template <typename TInput>
 void RegisterDecimalConvertFromIntegral(IBuiltinFunctionRegistry& registry) {
-    RegisterFunctionOpt<NUdf::TDataType<TInput>, NUdf::TDataType<NUdf::TDecimal>, NDecimal::TConvertFromIntegral<TInput>, TUnaryArgsOpt>(registry, decimal);
+    RegisterFunctionOpt<NUdf::TDataType<TInput>, NUdf::TDataType<NUdf::TDecimal>,
+                        NDecimal::TConvertFromIntegral<TInput>, TUnaryArgsOpt>(registry, decimal);
 }
 
 template <typename TOutput>
 void RegisterDecimalConvertToIntegral(IBuiltinFunctionRegistry& registry) {
-    RegisterFunctionImpl<NDecimal::TConvertToIntegral<TOutput>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<TOutput>, false>, TUnaryStub>(registry, integral);
-    RegisterFunctionImpl<NDecimal::TConvertToIntegral<TOutput>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<TOutput>, true>, TUnaryWrap>(registry, integral);
+    RegisterFunctionImpl<NDecimal::TConvertToIntegral<TOutput>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<TOutput>, false>,
+                         TUnaryStub>(
+        registry, integral);
+    RegisterFunctionImpl<NDecimal::TConvertToIntegral<TOutput>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<TOutput>, true>,
+                         TUnaryWrap>(
+        registry, integral);
 }
 
 void RegisterDecimalConvert(IBuiltinFunctionRegistry& registry) {
@@ -982,8 +1010,10 @@ void RegisterRealCasts(IBuiltinFunctionRegistry& registry) {
 
 template <typename TInput, typename TOutput>
 void RegisterRealToIntegralCastsImpl(IBuiltinFunctionRegistry& registry) {
-    RegisterFunctionImpl<TFloatToIntegral<typename TInput::TLayout, typename TOutput::TLayout>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, false>, TUnaryStub>(registry, integral);
-    RegisterFunctionImpl<TFloatToIntegral<typename TInput::TLayout, typename TOutput::TLayout>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, true>, TUnaryWrap>(registry, integral);
+    RegisterFunctionImpl<TFloatToIntegral<typename TInput::TLayout, typename TOutput::TLayout>,
+                         TUnaryArgsWithNullableResultOpt<TInput, TOutput, false>, TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TFloatToIntegral<typename TInput::TLayout, typename TOutput::TLayout>,
+                         TUnaryArgsWithNullableResultOpt<TInput, TOutput, true>, TUnaryWrap>(registry, integral);
 }
 
 template <typename TInput>
@@ -1001,31 +1031,45 @@ void RegisterRealToIntegralCasts(IBuiltinFunctionRegistry& registry) {
 
 template <typename TInput, typename TOutput>
 void RegisterWideToShortCastsImpl(IBuiltinFunctionRegistry& registry) {
-    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, false>, TUnaryStub>(registry, integral);
-    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, true>, TUnaryWrap>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout>,
+                         TUnaryArgsWithNullableResultOpt<TInput, TOutput, false>, TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout>,
+                         TUnaryArgsWithNullableResultOpt<TInput, TOutput, true>, TUnaryWrap>(registry, integral);
 }
 
 template <typename TInput, typename TOutput,
-    typename TInput::TLayout UpperBound = std::numeric_limits<typename TInput::TLayout>::max()>
+          typename TInput::TLayout UpperBound = std::numeric_limits<typename TInput::TLayout>::max()>
 void RegisterWideToDateCastsImpl(IBuiltinFunctionRegistry& registry) {
-    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout, UpperBound>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, false>, TUnaryStub>(registry, integral);
-    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout, UpperBound>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, true>, TUnaryWrap>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout, UpperBound>,
+                         TUnaryArgsWithNullableResultOpt<TInput, TOutput, false>, TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout, UpperBound>,
+                         TUnaryArgsWithNullableResultOpt<TInput, TOutput, true>, TUnaryWrap>(registry, integral);
 }
 
 template <typename TInput, typename TOutput,
-    typename TInput::TLayout UpperBound = std::numeric_limits<typename TInput::TLayout>::max(),
-    typename TInput::TLayout LowerBound = std::numeric_limits<typename TInput::TLayout>::min()>
+          typename TInput::TLayout UpperBound = std::numeric_limits<typename TInput::TLayout>::max(),
+          typename TInput::TLayout LowerBound = std::numeric_limits<typename TInput::TLayout>::min()>
 void RegisterWideToBigDateCastsImpl(IBuiltinFunctionRegistry& registry) {
-    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout, UpperBound, LowerBound>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, false>, TUnaryStub>(registry, integral);
-    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout, UpperBound, LowerBound>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, true>, TUnaryWrap>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout, UpperBound, LowerBound>,
+                         TUnaryArgsWithNullableResultOpt<TInput, TOutput, false>, TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout, UpperBound, LowerBound>,
+                         TUnaryArgsWithNullableResultOpt<TInput, TOutput, true>, TUnaryWrap>(registry, integral);
 }
 
 void RegisterWideToIntervalCasts(IBuiltinFunctionRegistry& registry) {
     constexpr auto TimestampLimit = static_cast<i64>(NUdf::MAX_TIMESTAMP - 1ULL);
-    RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TInterval>, false>, TUnaryStub>(registry, integral);
-    RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TInterval>, true>, TUnaryWrap>(registry, integral);
-    RegisterFunctionImpl<TWideToShort<ui64, i64, TimestampLimit>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TInterval>, false>, TUnaryStub>(registry, integral);
-    RegisterFunctionImpl<TWideToShort<ui64, i64, TimestampLimit>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TInterval>, true>, TUnaryWrap>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TInterval>, false>,
+                         TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TInterval>, true>,
+                         TUnaryWrap>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<ui64, i64, TimestampLimit>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TInterval>, false>,
+                         TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<ui64, i64, TimestampLimit>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TInterval>, true>,
+                         TUnaryWrap>(registry, integral);
 }
 
 template <typename TInput>
@@ -1309,29 +1353,57 @@ void RegisterNarrowToBigDateCasts(IBuiltinFunctionRegistry& registry) {
     RegisterBigDateScaleUp<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
     RegisterBigDateScaleUp<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTimestamp64>>(registry);
 
-    RegisterFunctionImpl<TNarrowToBigDateScaleDown<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate32>>, TUnaryArgsOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate32>, false>, TUnaryStub>(registry, convert);
-    RegisterFunctionImpl<TNarrowToBigDateScaleDown<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate32>>, TUnaryArgsOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate32>, true>, TUnaryWrap>(registry, convert);
+    RegisterFunctionImpl<TNarrowToBigDateScaleDown<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate32>>,
+                         TUnaryArgsOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate32>, false>,
+                         TUnaryStub>(registry, convert);
+    RegisterFunctionImpl<TNarrowToBigDateScaleDown<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate32>>,
+                         TUnaryArgsOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate32>, true>,
+                         TUnaryWrap>(registry, convert);
 
-    RegisterFunctionImpl<TNarrowToBigDateScaleDown<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate32>>, TUnaryArgsOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate32>, false>, TUnaryStub>(registry, convert);
-    RegisterFunctionImpl<TNarrowToBigDateScaleDown<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate32>>, TUnaryArgsOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate32>, true>, TUnaryWrap>(registry, convert);
+    RegisterFunctionImpl<TNarrowToBigDateScaleDown<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate32>>,
+                         TUnaryArgsOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate32>, false>,
+                         TUnaryStub>(registry, convert);
+    RegisterFunctionImpl<TNarrowToBigDateScaleDown<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate32>>,
+                         TUnaryArgsOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate32>, true>,
+                         TUnaryWrap>(registry, convert);
 
-    RegisterFunctionImpl<TNarrowToBigDateScaleDown<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime64>>, TUnaryArgsOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime64>, false>, TUnaryStub>(registry, convert);
-    RegisterFunctionImpl<TNarrowToBigDateScaleDown<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime64>>, TUnaryArgsOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime64>, true>, TUnaryWrap>(registry, convert);
+    RegisterFunctionImpl<TNarrowToBigDateScaleDown<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime64>>,
+                         TUnaryArgsOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime64>, false>,
+                         TUnaryStub>(registry, convert);
+    RegisterFunctionImpl<TNarrowToBigDateScaleDown<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime64>>,
+                         TUnaryArgsOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime64>, true>,
+                         TUnaryWrap>(registry, convert);
 }
 
 void RegisterBigDateToNarrowCasts(IBuiltinFunctionRegistry& registry) {
-    RegisterFunctionImpl<TWideToShort<i32, ui16, NYql::NUdf::MAX_DATE - 1U>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDate>, false>, TUnaryStub>(registry, integral);
-    RegisterFunctionImpl<TWideToShort<i32, ui16, NYql::NUdf::MAX_DATE - 1U>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDate>, true>, TUnaryWrap>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i32, ui16, NYql::NUdf::MAX_DATE - 1U>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDate>, false>,
+                         TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i32, ui16, NYql::NUdf::MAX_DATE - 1U>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDate>, true>,
+                         TUnaryWrap>(registry, integral);
 
-    RegisterFunctionImpl<TWideToShort<i64, ui32, NYql::NUdf::MAX_DATETIME - 1U>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDatetime>, false>, TUnaryStub>(registry, integral);
-    RegisterFunctionImpl<TWideToShort<i64, ui32, NYql::NUdf::MAX_DATETIME - 1U>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDatetime>, true>, TUnaryWrap>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i64, ui32, NYql::NUdf::MAX_DATETIME - 1U>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDatetime>, false>,
+                         TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i64, ui32, NYql::NUdf::MAX_DATETIME - 1U>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDatetime>, true>,
+                         TUnaryWrap>(registry, integral);
 
-    RegisterFunctionImpl<TWideToShort<i64, ui64, NYql::NUdf::MAX_TIMESTAMP - 1ULL>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTimestamp>, false>, TUnaryStub>(registry, integral);
-    RegisterFunctionImpl<TWideToShort<i64, ui64, NYql::NUdf::MAX_TIMESTAMP - 1ULL>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTimestamp>, true>, TUnaryWrap>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i64, ui64, NYql::NUdf::MAX_TIMESTAMP - 1ULL>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTimestamp>, false>,
+                         TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i64, ui64, NYql::NUdf::MAX_TIMESTAMP - 1ULL>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTimestamp>, true>,
+                         TUnaryWrap>(registry, integral);
 
     constexpr auto TimestampLimit = static_cast<i64>(NUdf::MAX_TIMESTAMP - 1ULL);
-    RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, false>, TUnaryStub>(registry, integral);
-    RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, true>, TUnaryWrap>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, false>,
+                         TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>,
+                         TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, true>,
+                         TUnaryWrap>(registry, integral);
 
     RegisterFunctionImpl<
         TBigDateToNarrowScaleUp<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDatetime>, NUdf::MAX_DATETIME - 1U>,
@@ -1390,8 +1462,12 @@ void RegisterBigDateToNarrowCasts(IBuiltinFunctionRegistry& registry) {
 
 template <typename TInput, typename TOutput, bool Tz = false>
 void RegisterRescaleOpt(IBuiltinFunctionRegistry& registry) {
-    RegisterFunctionImpl<TDatetimeRescale<typename TInput::TLayout, typename TOutput::TLayout, Tz>, TUnaryArgsOpt<TInput, TOutput, false>, TUnaryStub>(registry, convert);
-    RegisterFunctionImpl<TDatetimeRescale<typename TInput::TLayout, typename TOutput::TLayout, Tz>, TUnaryArgsOpt<TInput, TOutput, true>, TUnaryWrap>(registry, convert);
+    RegisterFunctionImpl<TDatetimeRescale<typename TInput::TLayout, typename TOutput::TLayout, Tz>,
+                         TUnaryArgsOpt<TInput, TOutput, false>,
+                         TUnaryStub>(registry, convert);
+    RegisterFunctionImpl<TDatetimeRescale<typename TInput::TLayout, typename TOutput::TLayout, Tz>,
+                         TUnaryArgsOpt<TInput, TOutput, true>,
+                         TUnaryWrap>(registry, convert);
 }
 
 void RegisterDatetimeRescale(IBuiltinFunctionRegistry& registry) {
@@ -1453,17 +1529,29 @@ void RegisterTzDateimeConvert(IBuiltinFunctionRegistry& registry) {
 void RegisterJsonDocumentConvert(IBuiltinFunctionRegistry& registry) {
     // String/Utf8 -> JsonDocument and JsonDocument -> String/Utf8 conversions. TStringConvert is used as a placeholder because
     // actual conversions are handled by ValueFromString and ValueToString in mkql_type_ops.cpp
-    RegisterFunctionOpt<NUdf::TDataType<char*>, NUdf::TDataType<NUdf::TJsonDocument>, TStringConvert, TUnaryArgsOpt>(registry, convert);
-    RegisterFunctionOpt<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<NUdf::TJsonDocument>, TStringConvert, TUnaryArgsOpt>(registry, convert);
-    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJsonDocument>, NUdf::TDataType<char*>, TStringConvert, TUnaryArgsOpt>(registry, convert);
-    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJsonDocument>, NUdf::TDataType<NUdf::TUtf8>, TStringConvert, TUnaryArgsOpt>(registry, convert);
+    RegisterFunctionOpt<NUdf::TDataType<char*>, NUdf::TDataType<NUdf::TJsonDocument>,
+                        TStringConvert,
+                        TUnaryArgsOpt>(registry, convert);
+    RegisterFunctionOpt<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<NUdf::TJsonDocument>,
+                        TStringConvert,
+                        TUnaryArgsOpt>(registry, convert);
+    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJsonDocument>, NUdf::TDataType<char*>,
+                        TStringConvert,
+                        TUnaryArgsOpt>(registry, convert);
+    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJsonDocument>, NUdf::TDataType<NUdf::TUtf8>,
+                        TStringConvert,
+                        TUnaryArgsOpt>(registry, convert);
 
     // Json -> JsonDocument and JsonDocument -> Json conversions
-    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJson>, NUdf::TDataType<NUdf::TJsonDocument>, TJsonToJsonDocumentConvert, TUnaryArgsOpt>(registry, convert);
-    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJsonDocument>, NUdf::TDataType<NUdf::TJson>, TJsonDocumentToJsonConvert, TUnaryArgsOpt>(registry, convert);
+    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJson>, NUdf::TDataType<NUdf::TJsonDocument>,
+                        TJsonToJsonDocumentConvert,
+                        TUnaryArgsOpt>(registry, convert);
+    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJsonDocument>, NUdf::TDataType<NUdf::TJson>,
+                        TJsonDocumentToJsonConvert,
+                        TUnaryArgsOpt>(registry, convert);
 }
 
-}
+} // namespace
 
 void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterIntegralCasts<NUdf::TDataType<i32>>(registry);

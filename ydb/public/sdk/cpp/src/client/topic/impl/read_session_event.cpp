@@ -88,6 +88,10 @@ const std::string& TMessageBase::GetData() const {
     return Data;
 }
 
+const std::string& TMessageBase::GetBrokenData() const {
+    return Data;
+}
+
 uint64_t TMessageBase::GetOffset() const {
     return Information.Offset;
 }
@@ -173,6 +177,13 @@ const std::string& TMessage::GetData() const {
         std::rethrow_exception(DecompressionException);
     }
     return TMessageBase::GetData();
+}
+
+const std::string& TMessage::GetBrokenData() const {
+    if (DecompressionException) {
+        return TMessageBase::GetData();
+    }
+    ythrow yexception() << "Can not get broken data after successful decompression";
 }
 
 bool TMessage::HasException() const {

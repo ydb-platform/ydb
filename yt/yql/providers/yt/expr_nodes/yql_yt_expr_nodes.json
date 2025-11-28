@@ -138,7 +138,8 @@
                 {"Index": 1, "Name": "Columns", "Type": "TExprBase"},
                 {"Index": 2, "Name": "Ranges", "Type": "TExprBase"},
                 {"Index": 3, "Name": "Stat", "Type": "TExprBase"},
-                {"Index": 4, "Name": "AdditionalAttributes", "Type": "TCoAtom", "Optional": true}
+                {"Index": 4, "Name": "QLFilter", "Type": "TExprBase"},
+                {"Index": 5, "Name": "AdditionalAttributes", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {
@@ -240,7 +241,7 @@
             "Match": {"Type": "CallableBase"},
             "Builder": {"Generate": "None"},
             "Children": [
-                {"Index": 0, "Name": "DependsOn", "Type": "TCoDependsOnBase"}
+                {"Index": 0, "Name": "Row", "Type": "TExprBase"}
             ]
         },
         {
@@ -385,11 +386,27 @@
             ]
         },
         {
-            "Name": "TYtDropTable",
+            "Name": "TYtIsolatedOpBase",
             "Base": "TYtOpBase",
-            "Match": {"Type": "Callable", "Name": "YtDropTable!"},
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
             "Children": [
                 {"Index": 2, "Name": "Table", "Type": "TYtTable"}
+            ]
+        },
+        {
+            "Name": "TYtDropTable",
+            "Base": "TYtIsolatedOpBase",
+            "Match": {"Type": "Callable", "Name": "YtDropTable!"}
+        },
+        {
+            "Name": "TYtCreateTable",
+            "Base": "TYtIsolatedOpBase",
+            "Match": {"Type": "Callable", "Name": "YtCreateTable!"},
+            "Children": [
+                {"Index": 3, "Name": "Columns", "Type": "TExprList"},
+                {"Index": 4, "Name": "OrderBy", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {

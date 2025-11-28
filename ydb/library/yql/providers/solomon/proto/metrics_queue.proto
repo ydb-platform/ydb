@@ -4,6 +4,20 @@ package NYql.NSo.MetricQueue;
 
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
 
+message TSelector {
+    string Operator = 1;
+    string Value = 2;
+}
+
+message TSelectors {
+    map<string, TSelector> Selectors = 1;
+}
+
+message TMetric {
+    TSelectors Selectors = 1;
+    string Type = 2;
+}
+
 message TEvUpdateConsumersCount {
     uint64 ConsumersCountDelta = 1;
     
@@ -21,6 +35,7 @@ message TEvGetNextBatch {
 message TEvMetricsBatch {
     bool NoMoreMetrics = 1;
     repeated TMetric Metrics = 2;
+    uint64 DownloadedBytes = 3;
 
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
@@ -29,9 +44,4 @@ message TEvMetricsReadError {
     string Issues = 1;
 
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
-}
-
-message TMetric {
-    map<string, string> Labels = 1;
-    string Type = 2;
 }

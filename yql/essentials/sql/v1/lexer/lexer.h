@@ -5,8 +5,6 @@
 namespace NSQLTranslationV1 {
 
 struct TLexers {
-    NSQLTranslation::TLexerFactoryPtr Antlr3;
-    NSQLTranslation::TLexerFactoryPtr Antlr3Ansi;
     NSQLTranslation::TLexerFactoryPtr Antlr4;
     NSQLTranslation::TLexerFactoryPtr Antlr4Ansi;
     NSQLTranslation::TLexerFactoryPtr Antlr4Pure;
@@ -34,4 +32,4 @@ bool SplitQueryToStatements(
     const TString& query, NSQLTranslation::ILexer::TPtr& lexer,
     TVector<TString>& statements, NYql::TIssues& issues, const TString& file = "",
     bool areBlankSkipped = true);
-}
+} // namespace NSQLTranslationV1

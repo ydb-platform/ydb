@@ -9,5 +9,5 @@ namespace NDecimal {
 size_t Serialize(TInt128 v, char* buff);
 std::pair<TInt128, size_t> Deserialize(const char* buff, size_t len);
 
-}
-}
+} // namespace NDecimal
+} // namespace NYql

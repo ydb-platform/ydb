@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -302,7 +302,10 @@ bool TTopicPartitionOperations::HasTabletId() const
 
 void TTopicPartitionOperations::SetTabletId(ui64 value)
 {
-    Y_ENSURE(TabletId_.Empty());
+    if (!TabletId_.Empty()) {
+        Y_ENSURE(TabletId_ == value);
+        return;
+    }
 
     TabletId_ = value;
 }
@@ -585,6 +588,13 @@ bool TTopicOperations::HasThisPartitionAlreadyBeenAdded(const TString& topicPath
     }
 
     return false;
+}
+
+void TTopicOperations::SetTabletId(const TString& topicPath, ui32 partitionId,
+                                   ui64 tabletId)
+{
+    TTopicPartition key{topicPath, partitionId};
+    Operations_[key].SetTabletId(tabletId);
 }
 
 void TTopicOperations::CacheSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNavigate::TResultSet& results)

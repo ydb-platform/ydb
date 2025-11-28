@@ -3,6 +3,7 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/filter.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
@@ -13,7 +14,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
-        source->GetStageData().GetTable()->ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
+        source->GetStageData().GetTable().ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
             source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
                 source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
             true));
@@ -21,10 +22,52 @@ TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NComm
     return true;
 }
 
+void VerifyConflictingPortion(const std::shared_ptr<NCommon::IDataSource>& source) {
+    // the portion must be a simple portion
+    AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
+    auto* portionSource = static_cast<TPortionDataSource*>(source.get());
+    auto& info = portionSource->GetPortionInfo();
+    auto status = portionSource->GetContext()->GetPortionStateAtScanStart(info);
+
+    // let's check that the portion state is ok
+    // we may have here only written portions (not compacted)
+    AFL_VERIFY(info.GetPortionType() == EPortionType::Written);
+    const auto& wPortionInfo = static_cast<const TWrittenPortionInfo&>(info);
+    // we may have here only conflicting portions
+    AFL_VERIFY(status.Conflicting);
+    const auto& requestSnapshot = source->GetContext()->GetReadMetadata()->GetRequestSnapshot();
+    // if portion was already committed at the scan start, it must have commit snapshot greater than the request snapshot
+    if (status.Committed) {
+        AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() > requestSnapshot)("error", "portion was committed and conflicting at the scan start, but has commit snapshot less than the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
+    } else {
+        // if the portion was uncommitted it means now it may be:
+        // 1. still uncommitted
+        if (!wPortionInfo.IsCommitted()) {
+            // do nothing, it is just fine
+        // 2. committed and removed, in this case its snapshot must be greater or equal to the request snapshot
+        } else if (wPortionInfo.HasRemoveSnapshot()) {
+            AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() >= requestSnapshot)("error", "portion was uncommitted and conflicting at the scan start, but now it is removed and committed and has commit snapshot less than the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
+        // 3. committed and not removed, in this case its snapshot must be greater than the request snapshot
+        } else {
+            AFL_VERIFY(wPortionInfo.GetCommitSnapshotVerified() > requestSnapshot)("error", "portion was uncommitted and conflicting at the scan start, but now it is committed and has commit snapshot less than the request snapshot")("portion_info", wPortionInfo.DebugString())("request_snapshot", requestSnapshot.DebugString());
+        }
+    }
+    // source must not be empty, we will mark it as conflicting
+    AFL_VERIFY(source->GetRecordsCount() > 0)("error", "source has no records");
+}
+
+TConclusion<bool> TConflictDetector::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    VerifyConflictingPortion(source);
+    // it is not empty (not filtered everything out by other filters) and conflicting, so we must mark the conflict here
+    AFL_VERIFY(source->AddTxConflict());
+    return true;
+}
+
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter =
-        MakeSnapshotFilter(source->GetStageData().GetTable()->ToTable(
+        MakeSnapshotFilter(source->GetStageData().GetTable().ToTable(
                                std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
                                source->GetContext()->GetCommonContext()->GetResolver()),
             source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
@@ -39,10 +82,10 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
 
 TConclusion<bool> TDeletionFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    if (!source->GetStageData().GetTable()->HasColumn((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
+    if (!source->GetStageData().GetTable().HasColumn((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
         return true;
     }
-    auto filterTable = source->GetStageData().GetTable()->ToTable(std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG }));
+    auto filterTable = source->GetStageData().GetTable().ToTable(std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG }));
     if (!filterTable) {
         return true;
     }
@@ -64,7 +107,7 @@ TConclusion<bool> TShardingFilter::DoExecuteInplace(
     const auto& shardingInfo = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo();
     const std::set<ui32> ids = source->GetContext()->GetCommonContext()->GetResolver()->GetColumnIdsSetVerified(shardingInfo->GetColumnNames());
     auto filter =
-        shardingInfo->GetFilter(source->GetStageData().GetTable()->ToTable(ids, source->GetContext()->GetCommonContext()->GetResolver()));
+        shardingInfo->GetFilter(source->GetStageData().GetTable().ToTable(ids, source->GetContext()->GetCommonContext()->GetResolver()));
     source->MutableStageData().AddFilter(filter);
     return true;
 }
@@ -84,22 +127,17 @@ TConclusion<bool> TStartPortionAccessorFetchingStep::DoExecuteInplace(
     return !source->MutableAs<IDataSource>()->StartFetchingAccessor(source, step);
 }
 
-TConclusion<bool> TDetectScript::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto plan = source->GetContext()->GetColumnsFetchingPlan(source);
-    source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
-    TFetchingScriptCursor cursor(plan, 0);
-    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sdmem"));
-    return cursor.Execute(source);
-}
-
 TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    if (!source->NeedPortionData()) {
+        source->SetSourceInMemory(true);
+        source->MutableAs<IDataSource>()->InitUsedRawBytes();
+    }
     if (source->HasSourceInMemoryFlag()) {
         return true;
     }
-    const auto& chainProgram = source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified();
-    if (Columns.GetColumnsCount() && !chainProgram->HasAggregations()) {
+    if (Columns.GetColumnsCount() && source->GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
+        !source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations()) {
         source->SetSourceInMemory(
             source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
@@ -125,17 +163,26 @@ public:
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
         Source->MutableAs<IDataSource>()->SetCursor(std::move(Step));
         Source->StartSyncSection();
-        plainReader->MutableScanner().GetResultSyncPoint()->OnSourcePrepared(std::move(Source), *plainReader);
+        const ui32 syncPointIndex = Source->GetAs<IDataSource>()->GetPurposeSyncPointIndex();
+        plainReader->MutableScanner().GetSyncPoint(syncPointIndex)->OnSourcePrepared(std::move(Source), *plainReader);
         return true;
     }
 };
 
-
 }   // namespace
 
-NKikimr::TConclusion<bool> TInitializeSourceStep::DoExecuteInplace(
+TConclusion<bool> TUpdateAggregatedMemoryStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    source->MutableAs<IDataSource>()->InitializeProcessing(source);
+    if (auto* portionSource = source->MutableOptionalAs<TPortionDataSource>()) {
+        portionSource->ActualizeAggregatedMemoryGuards();
+    }
+    return true;
+}
+
+TConclusion<bool> TInitializeSourceStep::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    auto* simpleSource = source->MutableAs<IDataSource>();
+    simpleSource->InitializeProcessing(source);
     return true;
 }
 
@@ -147,13 +194,13 @@ TConclusion<bool> TPortionAccessorFetchedStep::DoExecuteInplace(
 
 TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    AFL_VERIFY(source->GetAs<IDataSource>()->GetType() == IDataSource::EType::Aggregation);
+    AFL_VERIFY(source->GetType() == IDataSource::EType::SimpleAggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
-    std::vector<std::shared_ptr<NArrow::NSSA::TAccessorsCollection>> collections;
+    std::vector<std::unique_ptr<NArrow::NSSA::TAccessorsCollection>> collections;
     for (auto&& i : aggrSource->GetSources()) {
-        collections.emplace_back(i->GetStageData().GetTable());
+        collections.emplace_back(i->MutableStageData().ExtractTable());
     }
-    auto conclusion = Aggregator->Execute(collections, source->GetStageData().GetTable());
+    auto conclusion = Aggregator->Execute(std::move(collections), source->MutableStageData().MutableTable());
     if (conclusion.IsFail()) {
         return conclusion;
     }
@@ -163,7 +210,7 @@ TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
 
 TConclusion<bool> TCleanAggregationSources::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    AFL_VERIFY(source->GetAs<IDataSource>()->GetType() == IDataSource::EType::Aggregation);
+    AFL_VERIFY(source->GetType() == IDataSource::EType::SimpleAggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
     for (auto&& i : aggrSource->GetSources()) {
         i->MutableAs<IDataSource>()->ClearResult();
@@ -217,6 +264,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
         if (sSource->GetIsStartedByCursor() && !context->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
                                                   source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep_SKIP_CURSOR")("source_id", source->GetSourceId());
+            source->MutableStageResult().ExtractPageForResult();
             continue;
         } else {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep")("source_id", source->GetSourceId());
@@ -226,13 +274,9 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
     auto plan = std::move(acc).Build();
     AFL_VERIFY(!plan->IsFinished(0));
     source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
-    if (source->GetAs<IDataSource>()->NeedFullAnswer()) {
+    if (StartResultBuildingInplace) {
         TFetchingScriptCursor cursor(plan, 0);
-        const auto& commonContext = *context->GetCommonContext();
-        auto sCopy = source;
-        auto task = std::make_shared<TStepAction>(std::move(sCopy), std::move(cursor), commonContext.GetScanActorId(), false);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
-        return false;
+        return cursor.Execute(source);
     } else {
         return true;
     }
@@ -241,10 +285,12 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& filter) {
     if (auto source = Source.lock()) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetch_filter")("source", source->GetSourceId())(
-            "filter", filter.DebugString());
+            "filter", filter.DebugString())("aborted", source->GetContext()->IsAborted());
         if (source->GetContext()->IsAborted()) {
             return;
         }
+        AFL_VERIFY(filter.GetRecordsCountVerified() == source->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
+                                                         "source", source->GetRecordsCount());
         if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
             filter = filter.ApplyFilterFrom(*appliedFilter);
         }

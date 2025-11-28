@@ -11,8 +11,7 @@ using namespace NUdf;
 
 namespace {
 
-struct TPersonInfo
-{
+struct TPersonInfo {
     ui32 FirstName = 0;
     ui32 LastName = 0;
     ui32 Age = 0;
@@ -26,8 +25,7 @@ struct TPersonInfo
 //////////////////////////////////////////////////////////////////////////////
 // TPersonMember
 //////////////////////////////////////////////////////////////////////////////
-class TPersonMember: public TBoxedValue
-{
+class TPersonMember: public TBoxedValue {
 public:
     explicit TPersonMember(ui32 memberIndex)
         : MemberIndex_(memberIndex)
@@ -36,9 +34,8 @@ public:
 
 private:
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-    {
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override {
         Y_UNUSED(valueBuilder);
         return args[0].GetElement(MemberIndex_);
     }
@@ -49,8 +46,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TNewPerson
 //////////////////////////////////////////////////////////////////////////////
-class TNewPerson: public TBoxedValue
-{
+class TNewPerson: public TBoxedValue {
 public:
     explicit TNewPerson(const TPersonInfo& personIndexes)
         : Info_(personIndexes)
@@ -59,9 +55,8 @@ public:
 
 private:
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-    {
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override {
         TUnboxedValue name, surname, age;
         if (Info_.RemapKSV) {
             name = args->GetElement(Info_.Key);
@@ -88,14 +83,14 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TPersonModule
 //////////////////////////////////////////////////////////////////////////////
-class TPersonModule: public IUdfModule
-{
+class TPersonModule: public IUdfModule {
 public:
     TStringRef Name() const {
         return TStringRef::Of("Person");
     }
 
-    void CleanupOnTerminate() const final {}
+    void CleanupOnTerminate() const final {
+    }
 
     void GetAllFunctions(IFunctionsSink& sink) const final {
         sink.Add(TStringRef::Of("FirstName"));
@@ -105,22 +100,17 @@ public:
     }
 
     void BuildFunctionTypeInfo(
-            const TStringRef& name,
-            TType* userType,
-            const TStringRef& typeConfig,
-            ui32 flags,
-            IFunctionTypeInfoBuilder& builder) const final
-    {
+        const TStringRef& name,
+        TType* userType,
+        const TStringRef& typeConfig,
+        ui32 flags,
+        IFunctionTypeInfoBuilder& builder) const final {
         Y_UNUSED(userType);
         try {
             bool typesOnly = (flags & TFlags::TypesOnly);
 
             TPersonInfo personInfo;
-            auto personType = builder.Struct(personInfo.FieldsCount)->
-                    AddField<char*>("FirstName", &personInfo.FirstName)
-                    .AddField<char*>("LastName", &personInfo.LastName)
-                    .AddField<ui32>("Age", &personInfo.Age)
-                    .Build();
+            auto personType = builder.Struct(personInfo.FieldsCount)->AddField<char*>("FirstName", &personInfo.FirstName).AddField<char*>("LastName", &personInfo.LastName).AddField<ui32>("Age", &personInfo.Age).Build();
 
             if (TStringRef::Of("FirstName") == name) {
                 // function signature: String FirstName(PersonStruct p)
@@ -130,8 +120,7 @@ public:
                 if (!typesOnly) {
                     builder.Implementation(new TPersonMember(personInfo.FirstName));
                 }
-            }
-            else if (TStringRef::Of("LastName") == name) {
+            } else if (TStringRef::Of("LastName") == name) {
                 // function signature: String LastName(PersonStruct p)
                 // runConfig: void
                 builder.Returns<char*>().Args()->Add(personType).Done();
@@ -139,8 +128,7 @@ public:
                 if (!typesOnly) {
                     builder.Implementation(new TPersonMember(personInfo.LastName));
                 }
-            }
-            else if (TStringRef::Of("Age") == name) {
+            } else if (TStringRef::Of("Age") == name) {
                 // function signature: ui32 Age(PersonStruct p)
                 // runConfig: void
                 builder.Returns<ui32>().Args()->Add(personType).Done();
@@ -148,19 +136,14 @@ public:
                 if (!typesOnly) {
                     builder.Implementation(new TPersonMember(personInfo.Age));
                 }
-            }
-            else if (TStringRef::Of("New") == name) {
+            } else if (TStringRef::Of("New") == name) {
                 // function signature:
                 //    PersonStruct New(String firstName, String lastName, ui32 age)
                 // runConfig: void
                 builder.Returns(personType);
                 if (TStringRef::Of("RemapKSV") == typeConfig) {
                     personInfo.RemapKSV = true;
-                    auto inputType = builder.Struct(personInfo.FieldsCount)->
-                        AddField<char*>("key", &personInfo.Key)
-                        .AddField<char*>("subkey", &personInfo.Subkey)
-                        .AddField<char*>("value", &personInfo.Value)
-                        .Build();
+                    auto inputType = builder.Struct(personInfo.FieldsCount)->AddField<char*>("key", &personInfo.Key).AddField<char*>("subkey", &personInfo.Subkey).AddField<char*>("value", &personInfo.Value).Build();
                     builder.Args()->Add(inputType);
                 } else {
                     builder.Args()->Add<char*>().Add<char*>().Add<ui32>();

@@ -1,0 +1,86 @@
+# YDB configuration options and their values
+# are described in documentaion https://ydb.tech/en/docs/deploy/configuration/config
+
+yaml_config_enabled: true
+erasure: mirror-3-dc # erasue is the parameter that describes
+                      # the fault tolerance mode of the cluster.
+                      # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
+fail_domain_type: disk
+self_management_config: # automatic management of static resources (static group, state storage, etc)
+  enabled: true
+default_disk_type: SSD  # default disk type used for group creation of both kinds
+bridge_config:          # configuration of the bridge mode
+  piles:                # list of the pile names
+    - name: pile_1
+    - name: pile_2
+host_configs:           # the list of available host configurations in the cluster.
+- host_config_id: 1
+  drive:
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configration.
+    type: SSD                                       # kind of the disk: available kinds are SSD, NVME, HDD
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+    type: SSD
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+    type: SSD
+hosts:
+- host: ydb-node-zone-a.local       # storage node DNS name
+  host_config_id: 1                 # numeric host configuration template identifier
+  location:                         # this parameter describes where host is located.
+    body: 1                         # string representing a host serial number.
+    bridge_pile_name: pile_1        # name of the pile, to which node belongs
+    data_center: 'zone-a'           # string representing the datacenter / availability zone where the host is located.
+                                    # if cluster is deployed using mirror-3-dc fault tolerance mode, all hosts must be distributed
+                                    # across 3 datacenters.
+    rack: '1'                       # string representing a rack identifier where the host is located.
+                                    # if cluster is deployed using block-4-2 erasure, all hosts should be distrubited
+                                    # accross at least 8 racks.
+- host: ydb-node-zone-b.local
+  host_config_id: 1
+  location:
+    body: 2
+    bridge_pile_name: pile_1
+    data_center: 'zone-b'
+    rack: '2'
+- host: ydb-node-zone-c.local
+  host_config_id: 1
+  location:
+    body: 3
+    bridge_pile_name: pile_1
+    data_center: 'zone-c'
+    rack: '3'
+- host: ydb-node-zone-b.local
+  host_config_id: 1
+  location:
+    body: 4
+    bridge_pile_name: pile_2
+    data_center: 'zone-d'
+    rack: '4'
+- host: ydb-node-zone-b.local
+  host_config_id: 1
+  location:
+    body: 5
+    bridge_pile_name: pile_2
+    data_center: 'zone-e'
+    rack: '5'
+- host: ydb-node-zone-c.local
+  host_config_id: 1
+  location:
+    body: 6
+    bridge_pile_name: pile_2
+    data_center: 'zone-f'
+    rack: '6'
+actor_system_config:          # the configuration of the actor system which descibes how cores of the instance are distributed
+  use_auto_config: true       # accross different types of workloads in the instance.
+  cpu_count: 8
+interconnect_config:
+  start_tcp: true
+  encryption_mode: OPTIONAL
+  path_to_certificate_file: "/opt/ydb/certs/node.crt"
+  path_to_private_key_file: "/opt/ydb/certs/node.key"
+  path_to_ca_file: "/opt/ydb/certs/ca.crt"
+grpc_config:
+  cert: "/opt/ydb/certs/node.crt"
+  key: "/opt/ydb/certs/node.key"
+  ca: "/opt/ydb/certs/ca.crt"
+  services_enabled:
+  - legacy

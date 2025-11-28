@@ -1,6 +1,5 @@
 #include <dlfcn.h>
 #include <linux/limits.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -120,12 +119,8 @@ void __attribute__((constructor)) premain() {
         __llvm_profile_initialize_file();
         int rc = __llvm_profile_write_file();
         if (!rc && getenv("YA_COVERAGE_DUMP_PROFILE_EXIT_CODE")) {
-            if (const char* token = getenv("YA_COVERAGE_DUMP_PROFILE_RELIABILITY_TOKEN")) {
-                fprintf(stdout, "%s", token);
-                fflush(stdout);
-            }
             rc = atoi(getenv("YA_COVERAGE_DUMP_PROFILE_EXIT_CODE"));
         }
-        exit(rc);
+        _Exit(rc);
     }
 }

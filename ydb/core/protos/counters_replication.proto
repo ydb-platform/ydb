@@ -17,6 +17,7 @@ enum ESimpleCounters {
     COUNTER_ASSIGNED_TX_IDS = 8 [(CounterOpts) = {Name: "AssignedTxIds"}];
     COUNTER_WORKERS_WITH_HEARTBEAT = 9 [(CounterOpts) = {Name: "WorkersWithHeartbeat"}];
     COUNTER_WORKERS_PENDING_HEARTBEAT = 10 [(CounterOpts) = {Name: "WorkersPendingHeartbeat"}];
+    COUNTER_UNRESOLVED_DATABASE_REPLICATIONS = 11 [(CounterOpts) = {Name: "UnresolvedDatabaseReplications"}];
 }
 
 enum ECumulativeCounters {
@@ -56,4 +57,6 @@ enum ETxTypes {
     TXTYPE_ASSIGN_TX_ID = 15 [(TxTypeOpts) = {Name: "TxAssignTxId"}];
     TXTYPE_HEARTBEAT = 16 [(TxTypeOpts) = {Name: "TxHeartbeat"}];
     TXTYPE_COMMIT_CHANGES = 17 [(TxTypeOpts) = {Name: "TxCommitChanges"}];
+    TXTYPE_RESOLVE_RESOURCE_ID_RESULT = 18 [(TxTypeOpts) = {Name: "TxResolveResourceIdResult"}];
+    TXTYPE_RESOLVE_DATABASE_RESULT = 19 [(TxTypeOpts) = {Name: "TxResolveDatabaseResult"}];
 }

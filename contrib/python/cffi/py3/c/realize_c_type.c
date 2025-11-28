@@ -1,4 +1,11 @@
 
+#ifdef MS_WIN32
+#include "misc_win32.h"
+#else
+#include "misc_thread_posix.h"
+#endif
+
+
 typedef struct {
     struct _cffi_type_context_s ctx;   /* inlined substructure */
     PyObject *types_dict;
@@ -10,7 +17,7 @@ typedef struct {
 
 
 static PyObject *all_primitives[_CFFI__NUM_PRIM];
-static CTypeDescrObject *g_ct_voidp, *g_ct_chararray;
+static CTypeDescrObject *g_ct_voidp, *g_ct_chararray, *g_ct_int, *g_file_struct;
 
 static PyObject *build_primitive_type(int num);   /* forward */
 
@@ -22,6 +29,7 @@ static PyObject *build_primitive_type(int num);   /* forward */
 static int init_global_types_dict(PyObject *ffi_type_dict)
 {
     int err;
+    Py_ssize_t i;
     PyObject *ct_void, *ct_char, *ct2, *pnull;
     /* XXX some leaks in case these functions fail, but well,
        MemoryErrors during importing an extension module are kind
@@ -49,12 +57,40 @@ static int init_global_types_dict(PyObject *ffi_type_dict)
         return -1;
     g_ct_chararray = (CTypeDescrObject *)ct2;
 
+    g_ct_int = (CTypeDescrObject *)get_primitive_type(_CFFI_PRIM_INT);    // 'int'
+    if (g_ct_int == NULL)
+        return -1;
+
+    ct2 = new_struct_or_union_type("FILE",
+                                   CT_STRUCT | CT_IS_FILE); // 'FILE'
+    if (ct2 == NULL)
+        return -1;
+    g_file_struct = (CTypeDescrObject *)ct2;
+
     pnull = new_simple_cdata(NULL, g_ct_voidp);
     if (pnull == NULL)
         return -1;
     err = PyDict_SetItemString(ffi_type_dict, "NULL", pnull);
     Py_DECREF(pnull);
-    return err;
+    if (err < 0)
+        return err;
+
+#ifdef Py_GIL_DISABLED
+    // Ensure that all primitive types are initialised to avoid race conditions
+    // on the first access.
+    for (i = 0; i < _CFFI__NUM_PRIM; i++) {
+        ct2 = get_primitive_type(i);
+        if (ct2 == NULL)
+            return -1;
+    }
+#endif
+
+    return 0;
+}
+
+static CTypeDescrObject *_get_ct_int(void)
+{
+    return g_ct_int;
 }
 
 static void free_builder_c(builder_c_t *builder, int ctx_is_static)
@@ -151,8 +187,8 @@ static PyObject *build_primitive_type(int num)
         "uint_fast64_t",
         "intmax_t",
         "uintmax_t",
-        "float _Complex",
-        "double _Complex",
+        "_cffi_float_complex_t",
+        "_cffi_double_complex_t",
         "char16_t",
         "char32_t",
     };
@@ -246,11 +282,17 @@ unexpected_fn_type(PyObject *x)
     CTypeDescrObject *ct = unwrap_fn_as_fnptr(x);
     char *text1 = ct->ct_name;
     char *text2 = text1 + ct->ct_name_position + 1;
+    size_t prefix_size = ct->ct_name_position - 2;
+    char *buf = PyMem_Malloc(prefix_size + 1);
+    if (buf == NULL) {
+        return NULL;
+    }
+    memcpy(buf, text1, prefix_size);
+    buf[prefix_size] = '\0';
     assert(text2[-3] == '(');
-    text2[-3] = '\0';
     PyErr_Format(FFIError, "the type '%s%s' is a function type, not a "
-                           "pointer-to-function type", text1, text2);
-    text2[-3] = '(';
+                           "pointer-to-function type", buf, text2);
+    PyMem_Free(buf);
     return NULL;
 }
 
@@ -323,16 +365,12 @@ _realize_c_struct_or_union(builder_c_t *builder, int sindex)
 
     if (sindex == _CFFI__IO_FILE_STRUCT) {
         /* returns a single global cached opaque type */
-        static PyObject *file_struct = NULL;
-        if (file_struct == NULL)
-            file_struct = new_struct_or_union_type("FILE",
-                                                   CT_STRUCT | CT_IS_FILE);
-        Py_XINCREF(file_struct);
-        return file_struct;
+        Py_INCREF(g_file_struct);
+        return (PyObject *)g_file_struct;
     }
 
     s = &builder->ctx.struct_unions[sindex];
-    op2 = builder->ctx.types[s->type_index];
+    op2 = _CFFI_LOAD_OP(builder->ctx.types[s->type_index]);
     if ((((uintptr_t)op2) & 1) == 0) {
         x = (PyObject *)op2;     /* found already in the "primary" slot */
         Py_INCREF(x);
@@ -342,6 +380,8 @@ _realize_c_struct_or_union(builder_c_t *builder, int sindex)
 
         if (!(s->flags & _CFFI_F_EXTERNAL)) {
             int flags = (s->flags & _CFFI_F_UNION) ? CT_UNION : CT_STRUCT;
+            int is_opaque = (s->flags & _CFFI_F_OPAQUE);
+            flags |= is_opaque ? CT_IS_OPAQUE : 0;
             char *name = alloca(8 + strlen(s->name));
             _realize_name(name,
                           (s->flags & _CFFI_F_UNION) ? "union " : "struct ",
@@ -353,17 +393,17 @@ _realize_c_struct_or_union(builder_c_t *builder, int sindex)
             if (x == NULL)
                 return NULL;
 
-            if (!(s->flags & _CFFI_F_OPAQUE)) {
+            if (!is_opaque) {
                 assert(s->first_field_index >= 0);
                 ct = (CTypeDescrObject *)x;
                 ct->ct_size = (Py_ssize_t)s->size;
-                ct->ct_length = s->alignment;   /* may be -1 */
-                ct->ct_flags &= ~CT_IS_OPAQUE;
-                ct->ct_flags |= CT_LAZY_FIELD_LIST;
+                ct->ct_length = s->alignment; /* may be -1 */
+                ct->ct_lazy_field_list = 1;
                 ct->ct_extra = builder;
             }
-            else
+            else {
                 assert(s->first_field_index < 0);
+            }
         }
         else {
             assert(s->first_field_index < 0);
@@ -392,19 +432,29 @@ _realize_c_struct_or_union(builder_c_t *builder, int sindex)
                 }
             }
         }
+        if (ct != NULL) {
+            cffi_set_flag(ct->ct_unrealized_struct_or_union, 0);
+        }
 
         /* Update the "primary" OP_STRUCT_UNION slot */
         assert((((uintptr_t)x) & 1) == 0);
         assert(builder->ctx.types[s->type_index] == op2);
         Py_INCREF(x);
+#ifdef Py_GIL_DISABLED
+        cffi_atomic_store(&builder->ctx.types[s->type_index], x);
+#else
         builder->ctx.types[s->type_index] = x;
-
+#endif
         if (ct != NULL && s->size == (size_t)-2) {
             /* oops, this struct is unnamed and we couldn't generate
                a C expression to get its size.  We have to rely on
                complete_struct_or_union() to compute it now. */
             if (do_realize_lazy_struct(ct) < 0) {
+#ifdef Py_GIL_DISABLED
+                cffi_atomic_store(&builder->ctx.types[s->type_index], op2);
+#else
                 builder->ctx.types[s->type_index] = op2;
+#endif
                 return NULL;
             }
         }
@@ -466,7 +516,7 @@ realize_c_type_or_func_now(builder_c_t *builder, _cffi_opcode_t op,
         _cffi_opcode_t op2;
 
         e = &builder->ctx.enums[_CFFI_GETARG(op)];
-        op2 = builder->ctx.types[e->type_index];
+        op2 = _CFFI_LOAD_OP(builder->ctx.types[e->type_index]);
         if ((((uintptr_t)op2) & 1) == 0) {
             x = (PyObject *)op2;
             Py_INCREF(x);
@@ -541,7 +591,11 @@ realize_c_type_or_func_now(builder_c_t *builder, _cffi_opcode_t op,
             assert((((uintptr_t)x) & 1) == 0);
             assert(builder->ctx.types[e->type_index] == op2);
             Py_INCREF(x);
+#ifdef Py_GIL_DISABLED
+            cffi_atomic_store(&builder->ctx.types[e->type_index], x);
+#else
             builder->ctx.types[e->type_index] = x;
+#endif
 
             /* Done, leave without updating the "current" slot because
                it may be done already above.  If not, never mind, the
@@ -566,12 +620,12 @@ realize_c_type_or_func_now(builder_c_t *builder, _cffi_opcode_t op,
            pointer in the 'opcodes' array, and GETOP() returns a
            random even value.  But OP_FUNCTION_END is odd, so the
            condition below still works correctly. */
-        while (_CFFI_GETOP(opcodes[base_index + num_args]) !=
-                   _CFFI_OP_FUNCTION_END)
+        while (_CFFI_GETOP(_CFFI_LOAD_OP(opcodes[base_index + num_args]))
+               != _CFFI_OP_FUNCTION_END)
             num_args++;
 
         ellipsis = _CFFI_GETARG(opcodes[base_index + num_args]) & 0x01;
-        abi      = _CFFI_GETARG(opcodes[base_index + num_args]) & 0xFE;
+        abi = _CFFI_GETARG(opcodes[base_index + num_args]) & 0xFE;
         switch (abi) {
         case 0:
             abi = FFI_DEFAULT_ABI;
@@ -639,14 +693,25 @@ realize_c_type_or_func_now(builder_c_t *builder, _cffi_opcode_t op,
     return x;
 }
 
+#ifdef Py_GIL_DISABLED
+#ifdef MS_WIN32
+static __declspec(thread) int _realize_recursion_level;
+#elif defined(USE__THREAD)
+static __thread int _realize_recursion_level;
+#else
+#error "Cannot detect thread-local keyword"
+#endif
+#else
 static int _realize_recursion_level;
+#endif
 
 static PyObject *
-realize_c_type_or_func(builder_c_t *builder,
+realize_c_type_or_func_lock_held(builder_c_t *builder,
                         _cffi_opcode_t opcodes[], int index)
 {
+
     PyObject *x;
-     _cffi_opcode_t op = opcodes[index];
+    _cffi_opcode_t op = _CFFI_LOAD_OP(opcodes[index]);
 
     if ((((uintptr_t)op) & 1) == 0) {
         x = (PyObject *)op;
@@ -670,8 +735,25 @@ realize_c_type_or_func(builder_c_t *builder,
         assert((((uintptr_t)x) & 1) == 0);
         assert((((uintptr_t)opcodes[index]) & 1) == 1);
         Py_INCREF(x);
+#ifdef Py_GIL_DISABLED
+        cffi_atomic_store(&opcodes[index], x);
+#else
         opcodes[index] = x;
+#endif
     }
+
+    return x;
+}
+
+
+static PyObject *
+realize_c_type_or_func(builder_c_t *builder,
+                        _cffi_opcode_t opcodes[], int index)
+{
+    PyObject *x;
+    CFFI_LOCK();
+    x = realize_c_type_or_func_lock_held(builder, opcodes, index);
+    CFFI_UNLOCK();
     return x;
 }
 
@@ -701,19 +783,20 @@ realize_c_func_return_type(builder_c_t *builder,
     }
 }
 
-static int do_realize_lazy_struct(CTypeDescrObject *ct)
+static int do_realize_lazy_struct_lock_held(CTypeDescrObject *ct)
 {
     /* This is called by force_lazy_struct() in _cffi_backend.c */
     assert(ct->ct_flags & (CT_STRUCT | CT_UNION));
 
-    if (ct->ct_flags & CT_LAZY_FIELD_LIST) {
+    if (cffi_check_flag(ct->ct_lazy_field_list)) {
         builder_c_t *builder;
         char *p;
         int n, i, sflags;
         const struct _cffi_struct_union_s *s;
         const struct _cffi_field_s *fld;
-        PyObject *fields, *args, *res;
+        PyObject *fields, *res;
 
+        // opaque types should never set ct->ct_lazy_field_list
         assert(!(ct->ct_flags & CT_IS_OPAQUE));
 
         builder = ct->ct_extra;
@@ -789,19 +872,12 @@ static int do_realize_lazy_struct(CTypeDescrObject *ct)
         if (s->flags & _CFFI_F_PACKED)
             sflags |= SF_PACKED;
 
-        args = Py_BuildValue("(OOOnii)", ct, fields, Py_None,
-                             (Py_ssize_t)s->size,
-                             s->alignment,
-                             sflags);
-        Py_DECREF(fields);
-        if (args == NULL)
-            return -1;
-
         ct->ct_extra = NULL;
-        ct->ct_flags |= CT_IS_OPAQUE;
-        res = b_complete_struct_or_union(NULL, args);
-        ct->ct_flags &= ~CT_IS_OPAQUE;
-        Py_DECREF(args);
+        cffi_set_flag(ct->ct_under_construction, 1);
+        res = b_complete_struct_or_union_lock_held(ct, fields, s->size, s->alignment,
+                                                   sflags, 0);
+        cffi_set_flag(ct->ct_under_construction, 0);
+        Py_DECREF(fields);
 
         if (res == NULL) {
             ct->ct_extra = builder;
@@ -809,12 +885,18 @@ static int do_realize_lazy_struct(CTypeDescrObject *ct)
         }
 
         assert(ct->ct_stuff != NULL);
-        ct->ct_flags &= ~CT_LAZY_FIELD_LIST;
+        cffi_set_flag(ct->ct_lazy_field_list, 0);
         Py_DECREF(res);
-        return 1;
     }
-    else {
-        assert(ct->ct_flags & CT_IS_OPAQUE);
-        return 0;
-    }
+    return ct->ct_stuff != NULL;
+}
+
+
+static int do_realize_lazy_struct(CTypeDescrObject *ct)
+{
+    int res = 0;
+    CFFI_LOCK();
+    res = do_realize_lazy_struct_lock_held(ct);
+    CFFI_UNLOCK();
+    return res;
 }

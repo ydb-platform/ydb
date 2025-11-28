@@ -751,27 +751,35 @@ namespace orc {
     return *(contents_->schema.get());
   }
 
-  std::unique_ptr<StripeStatistics> ReaderImpl::getStripeStatistics(uint64_t stripeIndex) const {
+  std::unique_ptr<StripeStatistics> ReaderImpl::getStripeStatistics(uint64_t stripeIndex,
+                                                                    bool includeRowIndex) const {
     if (!isMetadataLoaded_) {
       readMetadata();
     }
     if (contents_->metadata == nullptr) {
       throw std::logic_error("No stripe statistics in file");
     }
-    size_t num_cols = static_cast<size_t>(
-        contents_->metadata->stripe_stats(static_cast<int>(stripeIndex)).col_stats_size());
-    std::vector<std::vector<proto::ColumnStatistics>> indexStats(num_cols);
 
     proto::StripeInformation currentStripeInfo = footer_->stripes(static_cast<int>(stripeIndex));
     proto::StripeFooter currentStripeFooter = getStripeFooter(currentStripeInfo, *contents_.get());
-
-    getRowIndexStatistics(currentStripeInfo, stripeIndex, currentStripeFooter, &indexStats);
 
     const Timezone& writerTZ = currentStripeFooter.has_writer_timezone()
                                    ? getTimezoneByName(currentStripeFooter.writer_timezone())
                                    : getLocalTimezone();
     StatContext statContext(hasCorrectStatistics(), &writerTZ);
-    return std::make_unique<StripeStatisticsImpl>(
+
+    if (!includeRowIndex) {
+      return std::make_unique<StripeStatisticsImpl>(
+          contents_->metadata->stripe_stats(static_cast<int>(stripeIndex)), statContext);
+    }
+
+    size_t num_cols = static_cast<size_t>(
+        contents_->metadata->stripe_stats(static_cast<int>(stripeIndex)).col_stats_size());
+    std::vector<std::vector<proto::ColumnStatistics>> indexStats(num_cols);
+
+    getRowIndexStatistics(currentStripeInfo, stripeIndex, currentStripeFooter, &indexStats);
+
+    return std::make_unique<StripeStatisticsWithRowGroupIndexImpl>(
         contents_->metadata->stripe_stats(static_cast<int>(stripeIndex)), indexStats, statContext);
   }
 
@@ -865,6 +873,8 @@ namespace orc {
       case proto::Type_Kind_CHAR:
       case proto::Type_Kind_STRING:
       case proto::Type_Kind_VARCHAR:
+      case proto::Type_Kind_GEOMETRY:
+      case proto::Type_Kind_GEOGRAPHY:
         return 4;
       default:
         return 0;

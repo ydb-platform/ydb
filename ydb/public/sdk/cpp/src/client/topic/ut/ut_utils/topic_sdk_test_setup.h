@@ -32,6 +32,10 @@ public:
                const std::optional<std::string> producer = std::nullopt,
                std::optional<std::uint64_t> seqNo = std::nullopt);
 
+    void Write(const std::string& topic, const std::string& message, std::uint32_t partitionId = 0,
+               const std::optional<std::string> producer = std::nullopt,
+               std::optional<std::uint64_t> seqNo = std::nullopt);
+
     struct TReadResult {
         std::shared_ptr<IReadSession> Reader;
         bool Timeout;
@@ -51,7 +55,7 @@ public:
     std::string GetEndpoint() const override;
     std::string GetDatabase() const override;
 
-    std::string GetFullTopicPath() const;
+    std::string GetFullTopicPath(const std::string& name = TEST_TOPIC) const;
 
     std::vector<std::uint32_t> GetNodeIds() override;
     std::uint16_t GetPort() const override;

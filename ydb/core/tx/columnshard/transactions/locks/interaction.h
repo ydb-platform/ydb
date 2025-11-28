@@ -2,16 +2,13 @@
 #include <ydb/core/formats/arrow/process_columns.h>
 #include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/engines/predicate/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
 #include <ydb/library/formats/arrow/replace_key.h>
 
 #include <util/generic/hash.h>
-
-namespace NKikimr::NOlap {
-class TPredicateContainer;
-}
 
 namespace NKikimr::NOlap::NTxInteractions {
 
@@ -219,10 +216,16 @@ private:
         , PrimaryKey(primaryKey) {
     }
 
-    TIntervalPoint(const std::shared_ptr<NArrow::TSimpleRow>& primaryKey, const int includeState)
-        : IncludeState(includeState) {
-        if (primaryKey) {
-            PrimaryKey = *primaryKey;
+    TIntervalPoint(const TPredicateContainer& point, const std::shared_ptr<arrow::Schema>& schema, const int includeState)
+        : IncludeState(includeState)
+    {
+        if (!point.IsAll()) {
+            auto fields = schema->fields();
+            fields.resize(point.NumColumns());
+            auto schemaTrimmed = std::make_shared<arrow::Schema>(fields);
+            auto builders = NArrow::MakeBuilders(schemaTrimmed);
+            point.AppendPointTo(builders);
+            PrimaryKey = NArrow::TSimpleRow(arrow::RecordBatch::Make(schemaTrimmed, 1, NArrow::Finish(std::move(builders))), 0);
         }
     }
 
@@ -414,7 +417,7 @@ public:
         return result;
     }
 
-    THashSet<ui64> GetAffectedTxIds(const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    THashSet<ui64> GetAffectedLockIds(const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch) const {
         auto it = ReadIntervalsByPathId.find(pathId);
         if (it == ReadIntervalsByPathId.end()) {
             return {};
@@ -422,29 +425,29 @@ public:
         return it->second.GetAffectedTxIds(batch);
     }
 
-    void AddInterval(const ui64 txId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
+    void AddInterval(const ui64 lockId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
         auto& intervals = ReadIntervalsByPathId[pathId];
         auto itFrom = intervals.InsertPoint(from);
         auto itTo = intervals.InsertPoint(to);
-        itFrom->second.AddStart(txId, from.IsIncluded());
+        itFrom->second.AddStart(lockId, from.IsIncluded());
         for (auto it = itFrom; it != itTo; ++it) {
-            it->second.AddIntervalTx(txId);
+            it->second.AddIntervalTx(lockId);
         }
-        itTo->second.AddFinish(txId, to.IsIncluded());
+        itTo->second.AddFinish(lockId, to.IsIncluded());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "add_interval")("interactions_info", DebugJson().GetStringRobust());
     }
 
-    void RemoveInterval(const ui64 txId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
+    void RemoveInterval(const ui64 lockId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
         auto itIntervals = ReadIntervalsByPathId.find(pathId);
         AFL_VERIFY(itIntervals != ReadIntervalsByPathId.end())("path_id", pathId);
         auto& intervals = itIntervals->second;
         auto itFrom = intervals.GetPointIterator(from);
         auto itTo = intervals.GetPointIterator(to);
-        itFrom->second.RemoveStart(txId, from.IsIncluded());
+        itFrom->second.RemoveStart(lockId, from.IsIncluded());
         for (auto it = itFrom; it != itTo; ++it) {
-            it->second.RemoveIntervalTx(txId);
+            it->second.RemoveIntervalTx(lockId);
         }
-        itTo->second.RemoveFinish(txId, to.IsIncluded());
+        itTo->second.RemoveFinish(lockId, to.IsIncluded());
         for (auto&& it = itFrom; it != itTo;) {
             if (it->second.IsEmpty()) {
                 it = intervals.Erase(it);

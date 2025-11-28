@@ -47,15 +47,22 @@ namespace {
         //CreateQuery
         TString queryId;
         {
-            auto request = ::NFq::TCreateQueryBuilder{}
-                                .SetText(yqlText)
-                                .Build();
-            auto result = client.CreateQuery(
-                request, CreateFqSettings<TCreateQuerySettings>(folderId))
-                .ExtractValueSync();
+            const auto result = DoWithRetryOnRetCode([&]() {
+                auto request = ::NFq::TCreateQueryBuilder{}
+                                    .SetText(yqlText)
+                                    .Build();
+                auto result = client.CreateQuery(
+                    request, CreateFqSettings<TCreateQuerySettings>(folderId))
+                    .ExtractValueSync();
 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            queryId = result.GetResult().query_id();
+                    if (result.GetStatus() != EStatus::SUCCESS) {
+                        return false;
+                    }
+
+                    queryId = result.GetResult().query_id();
+                    return true;
+            }, TRetryOptions(Retries));
+            UNIT_ASSERT_C(result, "failed to create the query");
         }
         // GetQueryStatus
         const auto request = ::NFq::TGetQueryStatusBuilder{}
@@ -71,6 +78,11 @@ namespace {
         UNIT_ASSERT_C(result, "the execution of the query did not end within the time limit");
 
         return queryId;
+    }
+
+    void Warmup(const TString& folderId, NYdb::NFq::TClient& client) {
+        // wait for backend up
+        CreateNewHistoryAndWaitFinish(folderId, client, "select 1", FederatedQuery::QueryMeta::COMPLETED);
     }
 
     void CheckGetResultData(
@@ -118,26 +130,19 @@ Y_UNIT_TEST_SUITE(Yq_1) {
             const auto request = ::NFq::TDescribeQueryBuilder()
                 .SetQueryId("foo")
                 .Build();
-            const auto result = DoWithRetryOnRetCode([&]() {
-                auto result = client.DescribeQuery(
-                    request, CreateFqSettings<TDescribeQuerySettings>("WTF"))
-                    .ExtractValueSync();
-                return result.GetStatus() == EStatus::BAD_REQUEST;
-            }, TRetryOptions(Retries));
-            UNIT_ASSERT_C(result, "the execution of the query did not end within the time limit");
+            auto result = client.DescribeQuery(
+                request, CreateFqSettings<TDescribeQuerySettings>("WTF"))
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         }
 
         {
             auto request = ::NFq::TListQueriesBuilder{}.Build();
-            auto result = DoWithRetryOnRetCode([&]() {
-                auto result = client.ListQueries(
+            auto result = client.ListQueries(
                     request, CreateFqSettings<TListQueriesSettings>("WTF"))
                     .ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                UNIT_ASSERT_VALUES_EQUAL(result.GetResult().query().size(), 0);
-                return result.GetStatus() == EStatus::SUCCESS;
-            }, TRetryOptions(Retries));
-            UNIT_ASSERT_C(result, "the execution of the query did not end within the time limit");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().query().size(), 0);
         }
 
         {
@@ -250,6 +255,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
+        Warmup(folderId, client);
         TString conId;
         {
             const auto request = ::NFq::TCreateConnectionBuilder()
@@ -286,7 +292,9 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         NYdb::NFq::TClient client(driver);
         const size_t conns = 3;
         const auto folderId = TString(__func__) + "folder_id";
-        {//CreateConnections
+        Warmup(folderId, client);
+        {
+            //CreateConnections
             for (size_t i = 0; i < conns - 1; ++i) {
                 const auto request = ::NFq::TCreateConnectionBuilder()
                     .SetName("testdb" + ToString(i))
@@ -344,6 +352,8 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
         NYdb::NFq::TClient client(driver);
+        const TString folderId = "some_folder_id";
+        Warmup(folderId, client);
 
         {
             const auto request = ::NFq::TListConnectionsBuilder().Build();
@@ -364,8 +374,8 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
         NYdb::NFq::TClient client(driver);
         const auto folderId = TString(__func__) + "folder_id";
+        Warmup(folderId, client);
         TString conId;
-
         {
             const auto request = ::NFq::TCreateConnectionBuilder()
                 .SetName("created_conn")
@@ -378,7 +388,8 @@ Y_UNIT_TEST_SUITE(Yq_1) {
             conId = result.GetResult().connection_id();
         }
 
-        {//Modify
+        {
+            //Modify
             const auto request = ::NFq::TModifyConnectionBuilder()
                 .SetName("modified_name")
                 .SetConnectionId(conId)
@@ -415,8 +426,8 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
         NYdb::NFq::TClient client(driver);
         const auto folderId = TString(__func__) + "folder_id";
+        Warmup(folderId, client);
         TString conId;
-
         {
             const auto request = ::NFq::TCreateConnectionBuilder()
                 .SetName("created_conn")
@@ -450,8 +461,8 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         NYdb::NFq::TClient client(driver);
 
         const auto folderId = TString(__func__) + "folder_id";
+        Warmup(folderId, client);
         TString conId;
-
         {
             const auto request = ::NFq::TCreateConnectionBuilder()
                 .SetName("created_conn")
@@ -485,9 +496,9 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         NYdb::NFq::TClient client(driver);
 
         const auto folderId = TString(__func__) + "folder_id";
+        Warmup(folderId, client);
         auto name = TString(__func__) + "_name";
         name.to_lower();
-
         {
             const auto request = ::NFq::TCreateConnectionBuilder()
                 .SetName(name)
@@ -518,12 +529,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TString userToken = "root@builtin";
         auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
         NYdb::NFq::TClient client(driver);
-
         const auto folderId = TString(__func__) + "folder_id";
+        Warmup(folderId, client);
         const auto name = "connection_name";
         const TString idempotencyKey = "idempotency_key";
         TString conId;
-
         {
             const auto request = ::NFq::TCreateConnectionBuilder()
                 .SetName(name)
@@ -560,6 +570,8 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         NYdb::NFq::TClient client(driver);
 
         const auto folderId = TString(__func__) + "folder_id";
+        Warmup(folderId, client);
+
         const TString idempotencyKey = "idempotency_key";
         const TString yqlText  = "select 1";
         TString queryId;
@@ -611,7 +623,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken(userToken));
         NYdb::NFq::TClient client(driver);
 
-        const TString yqlText  = "select count(*) from testdbWTF.`connections`";
+        const TString yqlText  = "select count(*) from testdbWTF.connections";
         CreateNewHistoryAndWaitFinish("folder_id_WTF", client,
             yqlText, FederatedQuery::QueryMeta::FAILED);
     }

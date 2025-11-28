@@ -36,25 +36,28 @@ struct TPhysicalShardReadSettings: public NYql::TSortingOperator<NYql::ERequestS
     NKikimr::NMiniKQL::TType* ResultType = nullptr;
 };
 
+struct TPartitionPrunerConfig {
+    TMaybe<TSerializedTableRange> BatchOperationRange;
+};
+
 class TPartitionPruner {
 public:
-    struct TConfig {
-        TMaybe<TSerializedTableRange> BatchOperationRange;
-    };
-
-public:
-    TPartitionPruner(const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, TConfig config = {});
+    TPartitionPruner(const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, TPartitionPrunerConfig config = {});
 
     THashMap<ui64, TShardInfo> Prune(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo, bool& isFullScan);
 
-    THashMap<ui64, TShardInfo> Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan);
+    const THashMap<ui64, TShardInfo>& Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan);
 
     THashMap<ui64, TShardInfo> PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo);
+
+    std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo);
 
 private:
     const NMiniKQL::THolderFactory* HolderFactory;
     const NMiniKQL::TTypeEnvironment* TypeEnv;
-    const TPartitionPruner::TConfig Config;
+    const TPartitionPrunerConfig Config;
+
+    THashMap<NYql::NDq::TStageId, std::pair<THashMap<ui64, TShardInfo>, bool /* isFullScan*/ >> SourceScanStageIdToParititions;
 };
 
 TSerializedTableRange MakeKeyRange(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
@@ -71,51 +74,48 @@ TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo
 
 THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRange& readRange, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig, bool& isFullScan);
+    const TPartitionPrunerConfig& prunerConfig, bool& isFullScan);
 
 THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRanges& readRanges, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig, bool& isFullScan);
+    const TPartitionPrunerConfig& prunerConfig, bool& isFullScan);
 
 std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
 
 THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig, bool& isFullScan);
+    const TPartitionPrunerConfig& prunerConfig, bool& isFullScan);
 
-ui64 ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
+NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
+    const NUdf::TUnboxedValue& defaultValue);
 
 // Returns the list of ColumnShards that can store rows from the specified range
 // NOTE: Unlike OLTP tables that store data in DataShards, data in OLAP tables is not range
 // partitioned and multiple ColumnShards store data from the same key range
 THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig, bool& isFullScan);
+    const TPartitionPrunerConfig& prunerConfig, bool& isFullScan);
 
 THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig, bool& isFullScan);
+    const TPartitionPrunerConfig& prunerConfig, bool& isFullScan);
 
 THashMap<ui64, TShardInfo> PruneEffectPartitions(const NKqpProto::TKqpPhyOpUpsertRows& effect, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig);
+    const TPartitionPrunerConfig& prunerConfig);
 
 THashMap<ui64, TShardInfo> PruneEffectPartitions(const NKqpProto::TKqpPhyOpDeleteRows& effect, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig);
+    const TPartitionPrunerConfig& prunerConfig);
 
 THashMap<ui64, TShardInfo> PruneEffectPartitions(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPruner::TConfig& prunerConfig);
+    const TPartitionPrunerConfig& prunerConfig);
 
 TPhysicalShardReadSettings ExtractReadSettings(
     const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
-
-// Returns true if parallel point read is possible for the given partitions
-// for EnableParallelPointReadConsolidation settings
-bool IsParallelPointReadPossible(const THashMap<ui64, TShardInfo>& partitions);
 
 } // namespace NKikimr::NKqp

@@ -333,25 +333,34 @@ public:
 public:
     TKqpReadActor(
         const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings,
-        const NYql::NDq::TDqAsyncIoFactory::TSourceArguments& args,
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena, // Arena for settings
+        const NActors::TActorId& computeActorId,
+        ui64 inputIndex,
+        NYql::NDq::TCollectStatsLevel statsLevel,
+        NYql::NDq::TTxId txId,
+        ui64 taskId,
+        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        const NWilson::TTraceId& traceId,
         TIntrusivePtr<TKqpCounters> counters)
         : Settings(settings)
-        , Arena(args.Arena)
-        , LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ", CA Id " << args.ComputeActorId << ". ")
-        , ComputeActorId(args.ComputeActorId)
-        , InputIndex(args.InputIndex)
-        , TypeEnv(args.TypeEnv)
-        , HolderFactory(args.HolderFactory)
-        , Alloc(args.Alloc)
+        , Arena(arena)
+        , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
+        , ComputeActorId(computeActorId)
+        , InputIndex(inputIndex)
+        , TypeEnv(typeEnv)
+        , HolderFactory(holderFactory)
+        , Alloc(alloc)
         , Counters(counters)
         , UseFollowers(false)
         , PipeCacheId(MainPipeCacheId)
-        , ReadActorSpan(TWilsonKqp::ReadActor,  NWilson::TTraceId(args.TraceId), "ReadActor")
+        , ReadActorSpan(TWilsonKqp::ReadActor, NWilson::TTraceId(traceId), "ReadActor")
     {
         Y_ABORT_UNLESS(Arena);
         Y_ABORT_UNLESS(settings->GetArena() == Arena->Get());
 
-        IngressStats.Level = args.StatsLevel;
+        IngressStats.Level = statsLevel;
 
         TableId = TTableId(
             Settings->GetTable().GetTableId().GetOwnerId(),
@@ -454,7 +463,7 @@ public:
     }
 
     bool StartShards() {
-        const ui32 maxAllowedInFlight = Settings->GetSorted() ? 1 : MaxInFlight;
+        const ui32 maxAllowedInFlight = Settings->GetSorted() || Settings->GetIsBatch() ? 1 : MaxInFlight;
         CA_LOG_D("effective maxinflight " << maxAllowedInFlight << " sorted " << Settings->GetSorted());
         bool isFirst = true;
         while (!PendingShards.Empty() && RunningReads() + 1 <= maxAllowedInFlight) {
@@ -511,6 +520,7 @@ public:
             << ", attempt #" << state->ResolveAttempt);
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = Settings->GetDatabase();
         request->ResultSet.emplace_back(std::move(keyDesc));
 
         request->ResultSet.front().UserData = ResolveShardId;
@@ -596,6 +606,9 @@ public:
             }
         } else if (!Snapshot.IsValid() && !Settings->HasLockTxId() && !Settings->GetAllowInconsistentReads()) {
             return RuntimeError("Inconsistent reads without locks", NDqProto::StatusIds::UNAVAILABLE);
+        }
+        if (Settings->GetIsolationLevel() == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
+            YQL_ENSURE(!Settings->HasLockTxId(), "SnapshotReadOnly should not take locks");
         }
 
         const auto& tr = *AppData()->TypeRegistry;
@@ -892,7 +905,11 @@ public:
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
 
-        Send(PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
+        bool newPipe = HasEstablishedPipe.insert(state->TabletId).second;
+        Send(PipeCacheId, new TEvPipeCache::TEvForward(
+            ev.Release(), state->TabletId, TEvPipeCache::TEvForwardOptions{
+                .AutoConnect = newPipe,
+                .Subscribe = newPipe}),
             IEventHandle::FlagTrackDelivery, 0, ReadActorSpan.GetTraceId());
 
         if (!FirstShardStarted) {
@@ -1060,7 +1077,7 @@ public:
         ui64 seqNo = record.GetSeqNo();
         Reads[id].RegisterMessage(msg);
 
-        if (Settings->GetIsBatch() && msg.GetRowsCount() > 0) {
+        if (Settings->GetIsBatch() && msg.GetRowsCount() > 0 && BatchOperationMaxRow.GetCells().empty()) {
             auto cells = msg.GetCells(msg.GetRowsCount() - 1);
             BatchOperationMaxRow = TSerializedCellVec{cells};
         }
@@ -1079,6 +1096,7 @@ public:
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         auto& msg = *ev->Get();
 
+        HasEstablishedPipe.erase(msg.TabletId);
         TVector<ui32> reads;
         reads = ReadIdByTabletId[msg.TabletId];
         CA_LOG_W("Got EvDeliveryProblem, TabletId: " << msg.TabletId << ", NotDelivered: " << msg.NotDelivered);
@@ -1391,7 +1409,10 @@ public:
                         }
                         Counters->SentIteratorAcks->Inc();
                         CA_LOG_D("sending ack for read #" << id << " limit " << limit << " seqno = " << record.GetSeqNo());
-                        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), Reads[id].Shard->TabletId, true),
+                        bool newPipe = HasEstablishedPipe.insert(Reads[id].Shard->TabletId).second;
+                        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), Reads[id].Shard->TabletId, TEvPipeCache::TEvForwardOptions{
+                            .AutoConnect = newPipe,
+                            .Subscribe = newPipe}),
                             IEventHandle::FlagTrackDelivery);
 
                         if (auto delay = ShardTimeout()) {
@@ -1645,6 +1666,8 @@ private:
         ui64 SeqNo;
         ui64 RowIndex;
     };
+
+    THashSet<ui64> HasEstablishedPipe;
     THashMap<TString, TDuplicationStats> DuplicateCheckStats;
     TVector<TResultColumn> DuplicateCheckExtraColumns;
     TVector<ui32> DuplicateCheckColumnRemap;
@@ -1659,13 +1682,28 @@ private:
     TSerializedCellVec BatchOperationMaxRow;
 };
 
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpReadActor(const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings,
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena, // Arena for settings
+    const NActors::TActorId& computeActorId,
+    ui64 inputIndex,
+    NYql::NDq::TCollectStatsLevel statsLevel,
+    NYql::NDq::TTxId txId,
+    ui64 taskId,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+    const NWilson::TTraceId& traceId,
+    TIntrusivePtr<TKqpCounters> counters) {
+    auto* actor = new TKqpReadActor(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
+    return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
+}
 
 void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {
     factory.RegisterSource<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(
         TString(NYql::KqpReadRangesSourceName),
         [counters] (const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
-            auto* actor = new TKqpReadActor(settings, args, counters);
-            return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
+            return CreateKqpReadActor(settings, args.Arena, args.ComputeActorId, args.InputIndex, args.StatsLevel,
+        args.TxId, args.TaskId, args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters);
         });
 }
 

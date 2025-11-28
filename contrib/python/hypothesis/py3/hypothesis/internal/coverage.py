@@ -11,8 +11,9 @@
 import json
 import os
 import sys
+from collections.abc import Callable
 from contextlib import contextmanager
-from typing import Callable, Dict, Set, Tuple, TypeVar
+from typing import TypeVar
 
 from hypothesis.internal.reflection import proxies
 
@@ -30,7 +31,7 @@ itself and has essentially no overhead.
 """
 
 Func = TypeVar("Func", bound=Callable)
-pretty_file_name_cache: Dict[str, str] = {}
+pretty_file_name_cache: dict[str, str] = {}
 
 
 def pretty_file_name(f):
@@ -55,7 +56,7 @@ if IN_COVERAGE_TESTS:
     # By this point, "branch-check" should have already been deleted by the
     # tox config. We can't delete it here because of #1718.
 
-    written: Set[Tuple[str, bool]] = set()
+    written: set[tuple[str, bool]] = set()
 
     def record_branch(name, value):
         key = (name, value)

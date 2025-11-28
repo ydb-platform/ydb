@@ -7,7 +7,7 @@
 using namespace NYql;
 
 TString ToLower(TString s) {
-    for (char& c: s) {
+    for (char& c : s) {
         c = std::tolower(c);
     }
     return s;
@@ -19,7 +19,8 @@ public:
         : Pos_(-1)
         , Size_(static_cast<i32>(text.size()) - 1)
         , Text_(text)
-    {}
+    {
+    }
 
     TOptimizerHints Parse() {
         Start();
@@ -72,7 +73,7 @@ private:
         TVector<EJoinAlgoType> joinAlgos = {EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin, EJoinAlgoType::MapJoin};
         TVector<TString> joinAlgosStr = {"shuffle", "lookup", "broadcast"};
 
-        for (const auto& [JoinType, joinAlgoStr]: Zip(joinAlgos, joinAlgosStr)) {
+        for (const auto& [JoinType, joinAlgoStr] : Zip(joinAlgos, joinAlgosStr)) {
             if (ToLower(reqJoinAlgoStr) == joinAlgoStr) {
                 Hints_.JoinAlgoHints->PushBack(std::move(labels), JoinType, "JoinType" + Text_.substr(beginPos, Pos_ - beginPos + 1));
                 return;
@@ -92,8 +93,7 @@ private:
 
         Hints_.JoinOrderHints->PushBack(
             std::move(joinOrderHintTree),
-            leading? "Leading" : "JoinOrder" + Text_.substr(beginPos, Pos_ - beginPos + 1)
-        );
+            leading ? "Leading" : "JoinOrder" + Text_.substr(beginPos, Pos_ - beginPos + 1));
     }
 
     std::shared_ptr<TJoinOrderHints::ITreeNode> JoinOrderLabels() {
@@ -128,12 +128,30 @@ private:
 
         TCardinalityHints::ECardOperation op;
         switch (sign) {
-            case '+': { op = TCardinalityHints::ECardOperation::Add; break; }
-            case '-': { op = TCardinalityHints::ECardOperation::Subtract; break; }
-            case '/': { op = TCardinalityHints::ECardOperation::Divide; break; }
-            case '*': { op = TCardinalityHints::ECardOperation::Multiply; break; }
-            case '#': { op = TCardinalityHints::ECardOperation::Replace; break; }
-            default: {ParseError(Sprintf("Unknown operation: '%c'", sign), Pos_ - 1); Y_UNREACHABLE();}
+            case '+': {
+                op = TCardinalityHints::ECardOperation::Add;
+                break;
+            }
+            case '-': {
+                op = TCardinalityHints::ECardOperation::Subtract;
+                break;
+            }
+            case '/': {
+                op = TCardinalityHints::ECardOperation::Divide;
+                break;
+            }
+            case '*': {
+                op = TCardinalityHints::ECardOperation::Multiply;
+                break;
+            }
+            case '#': {
+                op = TCardinalityHints::ECardOperation::Replace;
+                break;
+            }
+            default: {
+                ParseError(Sprintf("Unknown operation: '%c'", sign), Pos_ - 1);
+                Y_UNREACHABLE();
+            }
         }
 
         if (isRows) {
@@ -218,7 +236,7 @@ private:
     std::optional<TString> MaybeKeyword(const TVector<TString>& keywords) {
         try {
             return Keyword(keywords);
-        } catch(...) {
+        } catch (...) {
             return std::nullopt;
         }
     }
@@ -227,7 +245,7 @@ private:
         SkipWhiteSpaces();
         Y_ENSURE(Pos_ < Size_, Sprintf("Expected [%s], but got end of the string.", JoinSeq(", ", keywords).c_str()));
 
-        for (const auto& keyword: keywords) {
+        for (const auto& keyword : keywords) {
             size_t lowInclude = Pos_ + 1;
             size_t highExclude = lowInclude + keyword.size();
 
@@ -264,7 +282,7 @@ private:
     constexpr std::bitset<256> Chars(const TString& s) {
         std::bitset<256> res;
 
-        for (char c: s) {
+        for (char c : s) {
             res[c] = 1;
         }
 

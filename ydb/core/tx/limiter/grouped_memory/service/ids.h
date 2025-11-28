@@ -8,6 +8,47 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
+class TExternalIdsControl {
+private:
+    std::set<ui64> ExternalIds;
+
+public:
+    void Clear() {
+        ExternalIds.clear();
+    }
+
+    bool HasExternalId(const ui64 idExt) const {
+        return ExternalIds.contains(idExt);
+    }
+
+    ui64 GetSize() const {
+        return ExternalIds.size();
+    }
+
+    const std::set<ui64> GetExternalIds() const {
+        return ExternalIds;
+    }
+
+    std::optional<ui64> GetMinExternalIdOptional() const {
+        if (ExternalIds.empty()) {
+            return std::nullopt;
+        }
+        return *ExternalIds.begin();
+    }
+
+    ui64 GetMinExternalIdVerified() const;
+
+    ui64 GetMinExternalIdDef(const ui64 val) const {
+        return GetMinExternalIdOptional().value_or(val);
+    }
+
+    void RegisterExternalId(const ui64 id);
+
+    [[nodiscard]] bool UnregisterExternalId(const ui64 id) {
+        return ExternalIds.erase(id);
+    }
+};
+
 class TIdsControl {
 private:
     std::map<ui64, ui64> ExternalIdIntoInternalId;

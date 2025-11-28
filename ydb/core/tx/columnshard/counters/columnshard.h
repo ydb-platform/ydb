@@ -18,7 +18,8 @@ enum class EOverloadStatus {
     OverloadMetadata /* "overload_metadata" */,
     Disk /* "disk" */,
     None /* "none" */,
-    OverloadCompaction /* "overload_compaction" */
+    OverloadCompaction /* "overload_compaction" */,
+    RejectProbability,
 };
 
 enum class EWriteFailReason {
@@ -106,6 +107,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesSizeBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesSizeCount;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadRejectProbabilityBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadRejectProbabilityCount;
 
     std::shared_ptr<TValueAggregationClient> InternalCompactionGranuleBytes;
     std::shared_ptr<TValueAggregationClient> InternalCompactionGranulePortionsCount;
@@ -220,6 +223,11 @@ public:
     void OnWriteOverloadShardWritesSize(const ui64 size) const {
         OverloadShardWritesSizeBytes->Add(size);
         OverloadShardWritesSizeCount->Add(1);
+    }
+
+    void OnWriteOverloadRejectProbability(const ui64 size) const {
+        OverloadRejectProbabilityBytes->Add(size);
+        OverloadRejectProbabilityCount->Add(1);
     }
 
     void SkipIndexationInputDueToSplitCompaction(const ui64 size) const {

@@ -83,6 +83,8 @@ public:
         return MakeIntrusive<TMockYtTableWriter>(OutputTables_[serializedRichPath]);
     }
 
+    void Create(const TYtTableRef&, const TClusterConnection&, const NYT::TNode&) override {}
+
 private:
     std::unordered_map<TString, TString> InputTables_; // serialized rich yt path in string form -> total textYsonContent of it
     std::unordered_map<TString, TString>& OutputTables_;

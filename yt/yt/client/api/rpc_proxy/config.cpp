@@ -1,7 +1,5 @@
 #include "config.h"
 
-#include "address_helpers.h"
-
 #include <yt/yt/core/net/address.h>
 
 #include <yt/yt/core/bus/tcp/config.h>
@@ -130,6 +128,9 @@ void TConnectionConfig::Register(TRegistrar registrar)
     registrar.Parameter("enable_select_query_tracing_tag", &TThis::EnableSelectQueryTracingTag)
         .Default(false);
 
+    registrar.Parameter("do_not_drop_pure_exclusive_locks", &TThis::DoNotDropPureExclusiveLocks)
+        .Default(true);
+
     registrar.Postprocessor([] (TThis* config) {
         if (!config->ClusterName && config->ClusterUrl) {
             config->ClusterName = InferYTClusterFromClusterUrl(*config->ClusterUrl);
@@ -150,8 +151,8 @@ void ValidateConnectionConfig(const TConnectionConfigPtr& config)
     if (config->ProxyAddresses && config->ProxyAddresses->empty()) {
         THROW_ERROR_EXCEPTION("\"proxy_addresses\" must not be empty");
     }
-    if (!config->EnableProxyDiscovery && !config->ProxyAddresses) {
-        THROW_ERROR_EXCEPTION("If proxy discovery is disabled, \"proxy_addresses\" should be specified");
+    if (!config->EnableProxyDiscovery && !config->ProxyAddresses && !config->ProxyUnixDomainSocket) {
+        THROW_ERROR_EXCEPTION("If proxy discovery is disabled, \"proxy_addresses\" or \"proxy_unix_domain_socket\" must be specified");
     }
 }
 

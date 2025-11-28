@@ -29,8 +29,7 @@ int main() {
             TProtobufInputSpec<TInput>(),
             TProtobufOutputSpec<TOutput>(),
             Query,
-            ETranslationMode::SQL
-        );
+            ETranslationMode::SQL);
 
         auto result = program->Apply(MakeInput());
 

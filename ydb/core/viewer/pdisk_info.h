@@ -43,8 +43,8 @@ public:
     void Bootstrap() override {
         TString pDiskId = Params.Get("pdisk_id");
         if (pDiskId.Contains('-')) {
-            PDiskId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).Before('-'), Max<ui32>());
-            NodeId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).After('-'), 0);
+            NodeId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).Before('-'), 0);
+            PDiskId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).After('-'), Max<ui32>());
         } else {
             NodeId = FromStringWithDefault<ui32>(Params.Get("node_id"), 0);
             PDiskId = FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>());

@@ -3,7 +3,7 @@
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
  *
- * Copyright (c) 2020 Andrey Semashev
+ * Copyright (c) 2020-2025 Andrey Semashev
  */
 /*!
  * \file   atomic/detail/fence_ops_windows.hpp
@@ -14,7 +14,7 @@
 #ifndef BOOST_ATOMIC_DETAIL_FENCE_OPS_WINDOWS_HPP_INCLUDED_
 #define BOOST_ATOMIC_DETAIL_FENCE_OPS_WINDOWS_HPP_INCLUDED_
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 #include <boost/memory_order.hpp>
 #include <boost/atomic/detail/config.hpp>
 #include <boost/atomic/detail/interlocked.hpp>
@@ -32,7 +32,7 @@ namespace detail {
 //! Fence operations based on Windows-specific system calls or intrinsics
 struct fence_operations_windows
 {
-    static BOOST_FORCEINLINE void thread_fence(memory_order order) BOOST_NOEXCEPT
+    static BOOST_FORCEINLINE void thread_fence(memory_order order) noexcept
     {
         if (order != memory_order_relaxed)
         {
@@ -43,20 +43,20 @@ struct fence_operations_windows
         }
     }
 
-    static BOOST_FORCEINLINE void signal_fence(memory_order order) BOOST_NOEXCEPT
+    static BOOST_FORCEINLINE void signal_fence(memory_order order) noexcept
     {
         if (order != memory_order_relaxed)
             BOOST_ATOMIC_DETAIL_COMPILER_BARRIER();
     }
 
-    static BOOST_FORCEINLINE void hardware_full_fence() BOOST_NOEXCEPT
+    static BOOST_FORCEINLINE void hardware_full_fence() noexcept
     {
-        boost::uint32_t tmp;
+        std::uint32_t tmp;
         BOOST_ATOMIC_INTERLOCKED_INCREMENT(&tmp);
     }
 };
 
-typedef fence_operations_windows fence_operations;
+using fence_operations = fence_operations_windows;
 
 } // namespace detail
 } // namespace atomics

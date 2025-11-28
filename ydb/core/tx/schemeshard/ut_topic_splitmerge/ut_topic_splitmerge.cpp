@@ -136,15 +136,28 @@ void ModifyTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, std::fun
     env.TestWaitNotification(runtime, txId);
 }
 
-void SplitPartition(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui32 partition, TString boundary,
+void SplitPartitionTo(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui32 partition, TString boundary,
+                    const TConstArrayRef<ui32> childPartitionIds, bool allowRootLevelSibling,
                     const TVector<TExpectedResult>& expectedResults = {{TEvSchemeShard::EStatus::StatusAccepted}}) {
 
     ModifyTopic(runtime, env, txId, [&](auto& scheme) {
         auto* split = scheme.AddSplit();
         split->SetPartition(partition);
         split->SetSplitBoundary(boundary);
+        for (ui32 childPartitionId: childPartitionIds) {
+            split->AddChildPartitionIds(childPartitionId);
+        }
+        if (allowRootLevelSibling) {
+            split->SetCreateRootLevelSibling(allowRootLevelSibling);
+        }
     }, expectedResults);
 }
+
+void SplitPartition(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui32 partition, TString boundary,
+                    const TVector<TExpectedResult>& expectedResults = {{TEvSchemeShard::EStatus::StatusAccepted}}) {
+    return SplitPartitionTo(runtime, env, txId, partition, boundary, {}, false, expectedResults);
+}
+
 
 void MergePartition(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui32 partition,
                     const ui32 adjacentPartition,
@@ -159,8 +172,7 @@ void MergePartition(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const
 
 auto DescribeTopic(TTestBasicRuntime& runtime, TString path = "/MyRoot/USER_1/Topic1", ui64 ss = TTestTxConfig::SchemeShard) {
     {
-        TAtomic unused;
-        runtime.GetAppData().Icb->SetValue("SchemeShard_FillAllocatePQ", true, unused);
+        TControlBoard::SetValue(true, runtime.GetAppData().Icb->SchemeShardControls.FillAllocatePQ);
     }
 
     return DescribePath(runtime, ss, path, true, true, true).GetPathDescription().GetPersQueueGroup();
@@ -732,3 +744,445 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
     } // Y_UNIT_TEST(EnableSplitMerge)
 
 } // Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest)
+
+Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
+    Y_UNIT_TEST(SplitWithOnePartitionTo) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 1);
+
+        const unsigned char b[] = {0x7F};
+        TString boundary((char*)b, sizeof(b));
+
+        // Test with explicit child partition IDs (1 and 2)
+        SplitPartitionTo(runtime, env, txId, 0, boundary, {1, 2}, false);
+
+        auto topic = DescribeTopic(runtime);
+        auto partition0 = topic.GetPartitions()[0];
+        auto partition1 = topic.GetPartitions()[1];
+        auto partition2 = topic.GetPartitions()[2];
+
+        ValidatePartition(partition0, NKikimrPQ::ETopicPartitionStatus::Inactive, Nothing(), Nothing());
+        ValidatePartition(partition1, NKikimrPQ::ETopicPartitionStatus::Active, Nothing(), boundary);
+        ValidatePartition(partition2, NKikimrPQ::ETopicPartitionStatus::Active, boundary, Nothing());
+
+        ValidatePartitionParents(partition0, {});
+        ValidatePartitionParents(partition1, {0});
+        ValidatePartitionParents(partition2, {0});
+
+        ValidatePartitionChildren(partition0, {1, 2});
+        ValidatePartitionChildren(partition1, {});
+        ValidatePartitionChildren(partition2, {});
+
+        // Reboot to validate persistence
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        topic = DescribeTopic(runtime);
+        partition0 = topic.GetPartitions()[0];
+        partition1 = topic.GetPartitions()[1];
+        partition2 = topic.GetPartitions()[2];
+
+        ValidatePartition(partition0, NKikimrPQ::ETopicPartitionStatus::Inactive, Nothing(), Nothing());
+        ValidatePartition(partition1, NKikimrPQ::ETopicPartitionStatus::Active, Nothing(), boundary);
+        ValidatePartition(partition2, NKikimrPQ::ETopicPartitionStatus::Active, boundary, Nothing());
+    }
+
+    Y_UNIT_TEST(SplitWithOnePartitionToGapIndices) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 1);
+
+        const unsigned char b[] = {0x7F};
+        TString boundary((char*)b, sizeof(b));
+
+        // Test with gap in partition indices (1-2)
+        SplitPartitionTo(runtime, env, txId, 0, boundary, {3, 4}, false,
+                         {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Split/Merge operation with prescribed partition ids: Gap in the partition indices: attempt to create new partition (3) without creating a previous one (1)"}});
+    }
+
+    Y_UNIT_TEST(SplitWithOnePartitionToDifferentOrder) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 1);
+
+        const unsigned char b[] = {0x7F};
+        TString boundary((char*)b, sizeof(b));
+
+        // Test with child partitions in reverse order (2 and 1)
+        SplitPartitionTo(runtime, env, txId, 0, boundary, {2, 1}, false);
+
+        auto topic = DescribeTopic(runtime);
+        auto partition0 = topic.GetPartitions()[0];
+        auto partition1 = topic.GetPartitions()[1];
+        auto partition2 = topic.GetPartitions()[2];
+
+        ValidatePartition(partition0, NKikimrPQ::ETopicPartitionStatus::Inactive, Nothing(), Nothing());
+        ValidatePartition(partition1, NKikimrPQ::ETopicPartitionStatus::Active, boundary, Nothing());
+        ValidatePartition(partition2, NKikimrPQ::ETopicPartitionStatus::Active, Nothing(), boundary);
+
+        ValidatePartitionParents(partition0, {});
+        ValidatePartitionParents(partition1, {0});
+        ValidatePartitionParents(partition2, {0});
+
+        ValidatePartitionChildren(partition0, {1, 2});
+        ValidatePartitionChildren(partition1, {});
+        ValidatePartitionChildren(partition2, {});
+    }
+
+    Y_UNIT_TEST(SplitWithOnePartitionToInvalidSingleChild) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 1);
+
+        const unsigned char b[] = {0x7F};
+        TString boundary((char*)b, sizeof(b));
+
+        // Test with single child partition (should fail)
+        SplitPartitionTo(runtime, env, txId, 0, boundary, {1}, false,
+            {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Invalid number of child partitions"}});
+    }
+
+    Y_UNIT_TEST(SplitWithOnePartitionToInvalidThreeChildren) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 1);
+
+        const unsigned char b[] = {0x7F};
+        TString boundary((char*)b, sizeof(b));
+
+        // Test with three child partitions (should fail)
+        SplitPartitionTo(runtime, env, txId, 0, boundary, {1, 2, 3}, false,
+            {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Invalid number of child partitions"}});
+    }
+
+    Y_UNIT_TEST(SplitTwoPartitions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 2);
+
+        const unsigned char b0[] = {0x3F};
+        TString boundary0((char*)b0, sizeof(b0));
+
+        const unsigned char b1[] = {0xBF};
+        TString boundary1((char*)b1, sizeof(b1));
+
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            {
+                auto* split = scheme.AddSplit();
+                split->SetPartition(0);
+                split->SetSplitBoundary(boundary0);
+                split->AddChildPartitionIds(4);
+                split->AddChildPartitionIds(5);
+            }
+            {
+                auto* split = scheme.AddSplit();
+                split->SetPartition(1);
+                split->SetSplitBoundary(boundary1);
+                split->AddChildPartitionIds(2);
+                split->AddChildPartitionIds(3);
+            }
+        });
+
+        auto topic = DescribeTopic(runtime);
+        auto partition0 = topic.GetPartitions()[0];
+        auto partition1 = topic.GetPartitions()[1];
+        auto partition2 = topic.GetPartitions()[2];
+        auto partition3 = topic.GetPartitions()[3];
+        auto partition4 = topic.GetPartitions()[4];
+        auto partition5 = topic.GetPartitions()[5];
+
+        ValidatePartitionParents(partition0, {});
+        ValidatePartitionParents(partition1, {});
+        ValidatePartitionParents(partition2, {1});
+        ValidatePartitionParents(partition3, {1});
+        ValidatePartitionParents(partition4, {0});
+        ValidatePartitionParents(partition5, {0});
+
+        ValidatePartitionChildren(partition0, {4, 5});
+        ValidatePartitionChildren(partition1, {2, 3});
+    } // Y_UNIT_TEST(SplitTwoPartition)
+
+    Y_UNIT_TEST(SplitTwoPartitionsWithOverlap) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 2);
+
+        const unsigned char b0[] = {0x3F};
+        TString boundary0((char*)b0, sizeof(b0));
+
+        const unsigned char b1[] = {0xBF};
+        TString boundary1((char*)b1, sizeof(b1));
+
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            {
+                auto* split = scheme.AddSplit();
+                split->SetPartition(0);
+                split->SetSplitBoundary(boundary0);
+                split->AddChildPartitionIds(2);
+                split->AddChildPartitionIds(3);
+            }
+            {
+                auto* split = scheme.AddSplit();
+                split->SetPartition(1);
+                split->SetSplitBoundary(boundary1);
+                split->AddChildPartitionIds(3);
+                split->AddChildPartitionIds(4);
+            }
+        },
+        {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Split with prescribed partition ids: Attempt to reserve parition id (3) for multiple split/merge operations (0, 1)"}});
+    } // Y_UNIT_TEST(SplitTwoPartitionsWithOverlap)
+
+    Y_UNIT_TEST(SplitTwoPartitionsMixed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 2);
+
+        const unsigned char b0[] = {0x3F};
+        TString boundary0((char*)b0, sizeof(b0));
+
+        const unsigned char b1[] = {0xBF};
+        TString boundary1((char*)b1, sizeof(b1));
+
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            {
+                auto* split = scheme.AddSplit();
+                split->SetPartition(0);
+                split->SetSplitBoundary(boundary0);
+                split->AddChildPartitionIds(4);
+                split->AddChildPartitionIds(5);
+            }
+            {
+                auto* split = scheme.AddSplit();
+                split->SetPartition(1);
+                split->SetSplitBoundary(boundary1);
+            }
+        });
+
+        auto topic = DescribeTopic(runtime);
+        auto partition0 = topic.GetPartitions()[0];
+        auto partition1 = topic.GetPartitions()[1];
+        auto partition2 = topic.GetPartitions()[2];
+        auto partition3 = topic.GetPartitions()[3];
+        auto partition4 = topic.GetPartitions()[4];
+        auto partition5 = topic.GetPartitions()[5];
+
+        ValidatePartitionParents(partition0, {});
+        ValidatePartitionParents(partition1, {});
+        ValidatePartitionParents(partition2, {1});
+        ValidatePartitionParents(partition3, {1});
+        ValidatePartitionParents(partition4, {0});
+        ValidatePartitionParents(partition5, {0});
+
+        ValidatePartitionChildren(partition0, {4, 5});
+        ValidatePartitionChildren(partition1, {2, 3});
+    } // Y_UNIT_TEST(SplitTwoPartitionMixed)
+
+    Y_UNIT_TEST(SplitWithManyPartition) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        TString bound0((char*)bound_1_3, sizeof(bound_1_3));
+        TString bound1((char*)bound_2_3, sizeof(bound_2_3));
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        const unsigned char b[] = {0x7F};
+        TString boundary((char*)b, sizeof(b));
+        SplitPartitionTo(runtime, env, txId, 1, boundary, {3, 4}, false);
+
+        auto topic = DescribeTopic(runtime);
+        auto partition0 = topic.GetPartitions()[0];
+        auto partition1 = topic.GetPartitions()[1];
+        auto partition2 = topic.GetPartitions()[2];
+        auto partition3 = topic.GetPartitions()[3];
+        auto partition4 = topic.GetPartitions()[4];
+
+        ValidatePartition(partition0, NKikimrPQ::ETopicPartitionStatus::Active, Nothing(), bound0);
+        ValidatePartition(partition1, NKikimrPQ::ETopicPartitionStatus::Inactive, bound0, bound1);
+        ValidatePartition(partition2, NKikimrPQ::ETopicPartitionStatus::Active, bound1, Nothing());
+        ValidatePartition(partition3, NKikimrPQ::ETopicPartitionStatus::Active, bound0, boundary);
+        ValidatePartition(partition4, NKikimrPQ::ETopicPartitionStatus::Active, boundary, bound1);
+
+        ValidatePartitionParents(partition0, {});
+        ValidatePartitionParents(partition1, {});
+        ValidatePartitionParents(partition2, {});
+        ValidatePartitionParents(partition3, {1});
+        ValidatePartitionParents(partition4, {1});
+
+        ValidatePartitionChildren(partition0, {});
+        ValidatePartitionChildren(partition1, {3, 4});
+        ValidatePartitionChildren(partition2, {});
+        ValidatePartitionChildren(partition3, {});
+        ValidatePartitionChildren(partition4, {});
+
+        // Reboot for check Y_ABORT_UNLESS
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+    } // Y_UNIT_TEST(SplitWithManyPartition)
+
+    Y_UNIT_TEST(SplitWithDuplicatePartition) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        TString boundary = "\127";
+        SplitPartitionTo(runtime, env, txId, 1, boundary, {3, 3}, false,
+                       {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Splitting parition id (1) has repetition in the children partition ids (3)"}});
+
+    } // Y_UNIT_TEST(SplitWithWrongPartition)
+
+    Y_UNIT_TEST(SplitWithWrongPartition) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        TString boundary = "\127";
+        ui32 notExists = 7;
+        SplitPartitionTo(runtime, env, txId, notExists, boundary, {8, 9}, false,
+                       {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Splitting partition does not exists: 7"}});
+
+    } // Y_UNIT_TEST(SplitWithWrongPartition)
+
+    Y_UNIT_TEST(SplitInactivePartition) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        TString boundary = "\127";
+        SplitPartition(runtime, env, txId, 1, boundary);
+
+        SplitPartition(runtime, env, txId, 1, boundary,
+                       {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Invalid partition status"}});
+    } // Y_UNIT_TEST(SplitInactivePartition)
+
+    Y_UNIT_TEST(SplitWithExistingPartitionWithTotalOverlap) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        TString boundary = "\127";
+        ui32 notExists = 0;
+        SplitPartitionTo(runtime, env, txId, notExists, boundary, {1, 2}, false,
+                       {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Split with prescribed partition ids: Attempt to reserve partition id (1) that is less than the first availiable id (3)"}});
+
+    } // Y_UNIT_TEST(SplitWithExistingPartitionWithTotalOverlap)
+
+    Y_UNIT_TEST(SplitWithExistingPartitionWithTotalOverlapAndCreateRootLevelSibling) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        TString boundary = "\127";
+        ui32 notExists = 0;
+        SplitPartitionTo(runtime, env, txId, notExists, boundary, {1, 2}, true,
+                       {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Split with prescribed partition ids: Attempt to reserve partition id (1) that is less than the first availiable id (3)"}});
+
+    } // Y_UNIT_TEST(SplitWithExistingPartitionWithTotalOverlapAndCreateRootLevelSibling)
+
+    Y_UNIT_TEST(SplitWithExistingPartitionWithPartialOverlap) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        TString boundary = "\127";
+        SplitPartitionTo(runtime, env, txId, 0, boundary, {2, 3}, false,
+                       {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Split with prescribed partition ids: Attempt to reserve partition id (2) that is less than the first availiable id (3)"}});
+
+    } // Y_UNIT_TEST(SplitWithExistingPartitionWithTotalOverlap)
+
+    Y_UNIT_TEST(SplitWithExistingPartitionWithPartialOverlapAndCreateRootLevelSibling) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        TString bound0((char*)bound_1_3, sizeof(bound_1_3));
+        TString bound1((char*)bound_2_3, sizeof(bound_2_3));
+        TString boundary = "\064";
+        SplitPartitionTo(runtime, env, txId, 0, boundary, {2, 3}, true);
+
+        auto topic = DescribeTopic(runtime);
+        auto partition0 = topic.GetPartitions()[0];
+        auto partition1 = topic.GetPartitions()[1];
+        auto partition2 = topic.GetPartitions()[2];
+        auto partition3 = topic.GetPartitions()[3];
+
+        ValidatePartition(partition0, NKikimrPQ::ETopicPartitionStatus::Active, Nothing(), bound0);
+        ValidatePartition(partition1, NKikimrPQ::ETopicPartitionStatus::Active, bound0, bound1);
+        ValidatePartition(partition2, NKikimrPQ::ETopicPartitionStatus::Active, bound1, Nothing());
+        ValidatePartition(partition3, NKikimrPQ::ETopicPartitionStatus::Active, Nothing(), Nothing());
+
+
+        ValidatePartitionParents(partition0, {});
+        ValidatePartitionParents(partition1, {});
+        ValidatePartitionParents(partition2, {});
+        ValidatePartitionParents(partition3, {});
+
+        ValidatePartitionChildren(partition0, {});
+        ValidatePartitionChildren(partition1, {});
+        ValidatePartitionChildren(partition2, {});
+        ValidatePartitionChildren(partition3, {});
+
+    } // Y_UNIT_TEST
+}

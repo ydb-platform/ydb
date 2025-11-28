@@ -1,5 +1,6 @@
 #include "reattach.h"
 
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <library/cpp/random_provider/random_provider.h>
 

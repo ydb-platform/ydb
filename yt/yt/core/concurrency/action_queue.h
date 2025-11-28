@@ -20,7 +20,7 @@ class TActionQueue
     : public TRefCounted
 {
 public:
-    explicit TActionQueue(TString threadName = "ActionQueue");
+    explicit TActionQueue(std::string threadName = "ActionQueue");
     virtual ~TActionQueue();
 
     void Shutdown(bool graceful = false);

@@ -4,7 +4,8 @@ namespace NYql {
 namespace NUdf {
 
 IFunctionTypeInfoBuilder::IFunctionTypeInfoBuilder()
-{}
+{
+}
 
 } // namespace NUdf
 } // namespace NYql

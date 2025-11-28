@@ -12,7 +12,7 @@ public:
     virtual TCheckResponse Run(const TChecksRequest& request) = 0;
 };
 
-class TCheckRunnerBase : public ICheckRunner {
+class TCheckRunnerBase: public ICheckRunner {
 public:
     virtual TCheckResponse Run(const TChecksRequest& request) final;
 
@@ -32,5 +32,5 @@ std::unique_ptr<ICheckRunner> MakeParserRunner();
 std::unique_ptr<ICheckRunner> MakeTranslatorRunner();
 std::unique_ptr<ICheckRunner> MakeFormatRunner();
 
-}
-}
+} // namespace NFastCheck
+} // namespace NYql

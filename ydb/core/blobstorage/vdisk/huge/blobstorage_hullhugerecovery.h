@@ -24,6 +24,8 @@ namespace NKikimr {
 
             static const ui32 SerializedSize = sizeof(ui64) * 7;
 
+            THullHugeRecoveryLogPos() = default;
+
             THullHugeRecoveryLogPos(ui64 allocLsn, ui64 freeLsn, ui64 blobLoggedLsn,
                                     ui64 logoBlobsDelLsn, ui64 blocksDelLsn,
                                     ui64 barriersDelLsn, ui64 entryLsn)
@@ -39,15 +41,13 @@ namespace NKikimr {
             THullHugeRecoveryLogPos(const THullHugeRecoveryLogPos &) = default;
             THullHugeRecoveryLogPos &operator=(const THullHugeRecoveryLogPos &) = default;
 
-            static THullHugeRecoveryLogPos Default() {
-                return THullHugeRecoveryLogPos(0, 0, 0, 0, 0, 0, 0);
-            }
-
             TString ToString() const;
+
             TString Serialize() const;
-            void ParseFromString(const TString& prefix, const TString &serialized);
             void ParseFromArray(const TString& prefix, const char* data, size_t size);
-            static bool CheckEntryPoint(const TString &serialized);
+
+            void SaveToProto(NKikimrVDiskData::THullHugeRecoveryLogPos& logPos) const;
+            void LoadFromProto(const NKikimrVDiskData::THullHugeRecoveryLogPos& logPos);
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -72,6 +72,7 @@ namespace NKikimr {
 
         struct THullHugeKeeperPersState {
             static const ui32 Signature;
+            static const ui32 SignatureV2;
 
             TIntrusivePtr<TVDiskContext> VCtx;
             // current pos
@@ -87,6 +88,8 @@ namespace NKikimr {
             // last reported FirstLsnToKeep; can't decrease
             mutable ui64 FirstLsnToKeepReported = 0;
             ui64 PersistentLsn = 0;
+            bool LoadedFromProto = false;
+            bool EnableTinyDisks = false;
 
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                      const ui32 chunkSize,
@@ -95,8 +98,12 @@ namespace NKikimr {
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
+                                     const ui32 stepsBetweenPowersOf2,
+                                     const bool enableTinyDisks,
                                      const ui32 freeChunksReservation,
+                                     TControlWrapper chunksSoftLocking,
                                      std::function<void(const TString&)> logFunc);
+
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                      const ui32 chunkSize,
                                      const ui32 appendBlockSize,
@@ -104,29 +111,22 @@ namespace NKikimr {
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
-                                     const ui32 freeChunksReservation,
-                                     const ui64 entryPointLsn,
-                                     const TString &entryPointData,
-                                     std::function<void(const TString&)> logFunc);
-            THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
-                                     const ui32 chunkSize,
-                                     const ui32 appendBlockSize,
-                                     const ui32 minHugeBlobInBytes,
-                                     const ui32 milestoneHugeBlobInBytes,
-                                     const ui32 maxBlobInBytes,
-                                     const ui32 overhead,
+                                     const ui32 stepsBetweenPowersOf2,
+                                     const bool enableTinyDisks,
                                      const ui32 freeChunksReservation,
                                      const ui64 entryPointLsn,
                                      const TContiguousSpan &entryPointData,
+                                     TControlWrapper chunksSoftLocking,
                                      std::function<void(const TString&)> logFunc);
+
             ~THullHugeKeeperPersState();
 
             TString Serialize() const;
-            void ParseFromString(const TString &data);
             void ParseFromArray(const char* data, size_t size);
-            static TString ExtractLogPosition(const TString &data);
-            static TContiguousSpan ExtractLogPosition(TContiguousSpan data);
-            static bool CheckEntryPoint(const TString &data);
+
+            TString SaveToProto() const;
+            void LoadFromProto(const char* data, size_t size);
+
             static bool CheckEntryPoint(TContiguousSpan data);
             TString ToString() const;
             void RenderHtml(IOutputStream &str) const;
@@ -177,9 +177,6 @@ namespace NKikimr {
             TRlas Apply(const TActorContext &ctx,
                         ui64 lsn,
                         const NHuge::TPutRecoveryLogRec &rec);
-            TRlas ApplyEntryPoint(const TActorContext &ctx,
-                        ui64 lsn,
-                        const TString &data);
             TRlas ApplyEntryPoint(const TActorContext &ctx,
                         ui64 lsn,
                         const TContiguousSpan &data);

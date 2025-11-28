@@ -32,13 +32,14 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
         std::vector<ui64> toRemove;
         for (auto it = Groups.begin(); it != Groups.end();) {
             const ui64 externalGroupId = it->first;
+            TGrouppedAllocations& groupedAllocations = it->second;
             const bool forced = isPriorityProcess && externalGroupId == scope.GroupIds.GetMinExternalIdVerified();
             std::vector<std::shared_ptr<TAllocationInfo>> allocated;
             if (forced) {
-                allocated = it->second.ExtractAllocationsToVector();
+                allocated = groupedAllocations.ExtractAllocationsToVector();
                 AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "forced_group")("count", allocated.size())("external_group_id", externalGroupId);
             } else if (allocationsLimit) {
-                allocated = it->second.AllocatePossible(allocationsLimit - allocationsCount);
+                allocated = groupedAllocations.AllocatePossible(allocationsLimit - allocationsCount);
                 AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "common_forced_group")("count", allocated.size())(
                     "external_group_id", externalGroupId);
             } else {
@@ -54,10 +55,10 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
                     AFL_VERIFY(++allocationsCount <= allocationsLimit)("count", allocationsCount)("limit", allocationsLimit);
                 }
                 if (!forced) {
-                    AFL_VERIFY(it->second.Remove(i));
+                    AFL_VERIFY(groupedAllocations.Remove(i));
                 }
             }
-            if (!it->second.IsEmpty()) {
+            if (!groupedAllocations.IsEmpty()) {
                 break;
             }
             it = Groups.erase(it);

@@ -26,6 +26,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<i64> limit,
         bool commit,
         bool wait,
+        TPartitionReadOffsetMap partitionReadOffset,
         EMessagingFormat format,
         TVector<ETopicMetadataField> metadataFields,
         ETransformBody transform,
@@ -35,6 +36,7 @@ namespace NYdb::NConsoleClient {
         , MessagingFormat_(format)
         , Transform_(transform)
         , Limit_(limit)
+        , PartitionReadOffset_(std::move(partitionReadOffset))
         , Commit_(commit)
         , Wait_(wait) {
     }
@@ -43,7 +45,8 @@ namespace NYdb::NConsoleClient {
         std::shared_ptr<NTopic::IReadSession> readSession,
         TTopicReaderSettings params)
         : ReadSession_(readSession)
-        , ReaderParams_(params) {
+        , ReaderParams_(params)
+        , PartitionReadOffset_(ReaderParams_.PartitionReadOffset()) {
     }
 
     void TTopicReader::Init() {
@@ -105,12 +108,25 @@ namespace NYdb::NConsoleClient {
                 case ETopicMetadataField::SeqNo:
                     row.Column(idx, message.GetSeqNo());
                     break;
-                case ETopicMetadataField::Meta:
-                    NJson::TJsonValue json;
-                    for (auto const& [k, v] : message.GetMeta()->Fields) {
-                        json[k] = v;
+                case ETopicMetadataField::MessageMeta:
+                    {
+                        NJson::TJsonValue json;
+                        for (auto const& [k, v] : message.GetMessageMeta()->Fields) {
+                            json[k] = v;
+                        }
+                        row.Column(idx, json);
                     }
-                    row.Column(idx, json);
+                    break;
+                case ETopicMetadataField::SessionMeta:
+                    {
+                        NJson::TJsonValue json;
+                        for (auto const& [k, v] : message.GetMeta()->Fields) {
+                            json[k] = v;
+                        }
+                        row.Column(idx, json);
+                    }
+                    break;
+                default:
                     break;
             }
         }
@@ -174,8 +190,8 @@ namespace NYdb::NConsoleClient {
             return EXIT_SUCCESS;
         }
 
-        if (ActivePartitionSessions_[sessionId].second == EReadingStatus::PartitionWithoutData) {
-            ActivePartitionSessions_[sessionId].second = EReadingStatus::PartitionWithData;
+        if (ActivePartitionSessions_[sessionId].ReadingStatus == EReadingStatus::PartitionWithoutData) {
+            ActivePartitionSessions_[sessionId].ReadingStatus = EReadingStatus::PartitionWithData;
             ++PartitionsBeingRead_;
         }
 
@@ -187,6 +203,14 @@ namespace NYdb::NConsoleClient {
             if (ReaderParams_.Commit()) {
                 defCommit.Add(message);
             }
+
+            if (!PartitionReadOffset_.empty()) {
+                if (ui64* nextOffset = MapFindPtr(PartitionReadOffset_, event->GetPartitionSession()->GetPartitionId())) {
+                    *nextOffset = message.GetOffset() + 1; // memorize next offset for the case of session soft restart
+                }
+            }
+
+            ActivePartitionSessions_[sessionId].LastReadOffset = message.GetOffset();
 
             if (MessagesLeft_ == MessagesLimitUnlimited) {
                 continue;
@@ -202,6 +226,8 @@ namespace NYdb::NConsoleClient {
             defCommit.Commit();
         }
         LastMessageReceivedTs_ = Now();
+
+        event->GetPartitionSession()->RequestStatus();
         return EXIT_SUCCESS;
     }
 
@@ -211,17 +237,17 @@ namespace NYdb::NConsoleClient {
     }
 
     int TTopicReader::HandleStartPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent* event) {
-        event->Confirm();
+        const std::optional<uint64_t> readOffset = GetNextReadOffset(event->GetPartitionSession()->GetPartitionId());
+        event->Confirm(readOffset);
 
         EReadingStatus readingStatus = EReadingStatus::PartitionWithData;
-        if (event->GetCommittedOffset() == event->GetEndOffset()) {
+        if (event->GetCommittedOffset() == event->GetEndOffset() || (readOffset.has_value() && readOffset.value() >= event->GetEndOffset())) {
             readingStatus = EReadingStatus::PartitionWithoutData;
         } else {
             ++PartitionsBeingRead_;
         }
 
-        ActivePartitionSessions_.insert({event->GetPartitionSession()->GetPartitionSessionId(), {event->GetPartitionSession(), readingStatus}});
-
+        ActivePartitionSessions_.insert({event->GetPartitionSession()->GetPartitionSessionId(), {event->GetPartitionSession(), readingStatus, event->GetEndOffset()}});
         return EXIT_SUCCESS;
     }
 
@@ -231,6 +257,15 @@ namespace NYdb::NConsoleClient {
         return EXIT_SUCCESS;
     }
 
+    std::optional<uint64_t> TTopicReader::GetNextReadOffset(ui64 partitionId) const {
+        if (!PartitionReadOffset_.empty()) {
+            if (const ui64* offset = MapFindPtr(PartitionReadOffset_, partitionId)) {
+                return *offset;
+            }
+        }
+        return std::nullopt;
+    }
+
     int TTopicReader::HandlePartitionSessionStatusEvent(NTopic::TReadSessionEvent::TPartitionSessionStatusEvent* event) {
         ui64 sessionId = event->GetPartitionSession()->GetPartitionSessionId();
         if (!HasSession(sessionId)) {
@@ -238,17 +273,20 @@ namespace NYdb::NConsoleClient {
         }
 
         auto status = ActivePartitionSessions_.find(sessionId);
-        EReadingStatus currentPartitionStatus = status->second.second;
-        if (event->GetEndOffset() == event->GetCommittedOffset()) {
+        EReadingStatus currentPartitionStatus = status->second.ReadingStatus;
+        const std::optional<uint64_t> readOffset = GetNextReadOffset(event->GetPartitionSession()->GetPartitionId());
+        if (event->GetEndOffset() == event->GetCommittedOffset() ||
+           (event->GetEndOffset() == *ActivePartitionSessions_[sessionId].LastReadOffset + 1) ||
+           (readOffset.has_value() && readOffset.value() >= event->GetEndOffset())) {
             if (currentPartitionStatus == EReadingStatus::PartitionWithData) {
                 --PartitionsBeingRead_;
             }
-            ActivePartitionSessions_[sessionId].second = EReadingStatus::PartitionWithoutData;
+            ActivePartitionSessions_[sessionId].ReadingStatus = EReadingStatus::PartitionWithoutData;
         } else {
             if (currentPartitionStatus == EReadingStatus::PartitionWithoutData || currentPartitionStatus == EReadingStatus::NoPartitionTaken) {
                 ++PartitionsBeingRead_;
             }
-            ActivePartitionSessions_[sessionId].second = EReadingStatus::PartitionWithData;
+            ActivePartitionSessions_[sessionId].ReadingStatus = EReadingStatus::PartitionWithData;
         }
 
         return EXIT_SUCCESS;
@@ -262,7 +300,7 @@ namespace NYdb::NConsoleClient {
         event->Confirm();
 
         auto f = ActivePartitionSessions_.find(event->GetPartitionSession()->GetPartitionSessionId());
-        if (f->second.second == EReadingStatus::PartitionWithData) {
+        if (f->second.ReadingStatus == EReadingStatus::PartitionWithData) {
             --PartitionsBeingRead_;
         }
         ActivePartitionSessions_.erase(event->GetPartitionSession()->GetPartitionSessionId());
@@ -275,7 +313,7 @@ namespace NYdb::NConsoleClient {
             return EXIT_SUCCESS;
         }
 
-        if (ActivePartitionSessions_[event->GetPartitionSession()->GetPartitionSessionId()].second == EReadingStatus::PartitionWithData) {
+        if (ActivePartitionSessions_[event->GetPartitionSession()->GetPartitionSessionId()].ReadingStatus == EReadingStatus::PartitionWithData) {
             --PartitionsBeingRead_;
         }
         ActivePartitionSessions_.erase(event->GetPartitionSession()->GetPartitionSessionId());
@@ -318,14 +356,21 @@ namespace NYdb::NConsoleClient {
     int TTopicReader::Run(IOutputStream& output) {
         LastMessageReceivedTs_ = TInstant::Now();
 
-        bool waitForever = (ReaderParams_.Wait() || (ReaderParams_.Limit().Defined() && *ReaderParams_.Limit() == 0)) &&
-                           (ReaderParams_.MessagingFormat() == EMessagingFormat::NewlineDelimited ||
-                            ReaderParams_.MessagingFormat() == EMessagingFormat::Concatenated);
+        bool waitForever = (ReaderParams_.Wait()) && IsStreamingFormat(ReaderParams_.MessagingFormat());
+        if (ReaderParams_.Wait() && !IsStreamingFormat(ReaderParams_.MessagingFormat())) {
+            Cerr << "Option --wait is ignored because messaging format is not streaming." << Endl;
+        }
 
+        TInstant runStartTime = TInstant::Now();
         while ((MessagesLeft_ > 0 || MessagesLeft_ == -1) && !IsInterrupted()) {
-            TInstant messageReceiveDeadline = LastMessageReceivedTs_ + ReaderParams_.IdleTimeout();
+            TInstant messageReceiveDeadline = LastMessageReceivedTs_ + TDuration::MilliSeconds(100);
             NThreading::TFuture<void> future = ReadSession_->WaitEvent();
             future.Wait(messageReceiveDeadline);
+
+            if (!HasFirstMessage_ && (TInstant::Now() - runStartTime > ReaderParams_.IdleTimeout())) {
+                return EXIT_FAILURE;
+            }
+
             if (future.HasValue()) {
                 // TODO(shmel1k@): throttling?
                 // TODO(shmel1k@): think about limiting size of events
@@ -335,7 +380,6 @@ namespace NYdb::NConsoleClient {
                         return status;
                     }
                 }
-
                 continue;
             }
 
@@ -344,8 +388,7 @@ namespace NYdb::NConsoleClient {
                 continue;
             }
 
-            bool isReading = PartitionsBeingRead_ > 0;
-            if (!isReading || (isReading && HasFirstMessage_)) {
+            if (PartitionsBeingRead_ == 0) {
                 return EXIT_SUCCESS;
             }
         }

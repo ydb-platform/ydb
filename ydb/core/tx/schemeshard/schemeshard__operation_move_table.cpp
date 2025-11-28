@@ -150,6 +150,7 @@ public:
             auto move = tx.MutableMoveTable();
             move->SetSrcPathId(srcPath->PathId.LocalPathId);
             move->SetDstPathId(dstPath->PathId.LocalPathId);
+            move->SetDstPath(TPath::Init(dstPath->PathId, context.SS).PathString());
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
         } else {
             Y_ABORT();
@@ -181,8 +182,10 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
     if (srcPath->IsTable()) {
         context.SS->Tables.at(srcPath->PathId)->DetachShardsStats();
+        context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
+    } else if (srcPath->IsColumnTable()) {
+        context.SS->PersistColumnTableRemove(db, srcPath->PathId, context.Ctx);
     }
-    context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
     context.SS->PersistUserAttributes(db, srcPath->PathId, srcPath->UserAttrs, nullptr);
 
     IncParentDirAlterVersionWithRepublish(operationId, srcPath, context);
@@ -278,11 +281,13 @@ public:
             context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
             context.SS->PersistTable(db, dstPath.Base()->PathId);
             context.SS->PersistTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
+            context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo, TVector<TTableShardInfo>(tableInfo->GetPartitions()));
         } else if (srcPath->IsColumnTable()) {
             auto srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
             auto tableInfo = context.SS->ColumnTables.BuildNew(dstPath.Base()->PathId, srcTable.GetPtr());
             tableInfo->AlterVersion += 1;
             context.SS->PersistColumnTable(db, dstPath.Base()->PathId, *tableInfo, false);
+            context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         } else {
             Y_ABORT();
         }
@@ -346,7 +351,13 @@ public:
     TWaitRenamedPathPublication(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
+        IgnoreMessages(DebugHint(), {
+            TEvHive::TEvCreateTabletReply::EventType,
+            TEvDataShard::TEvProposeTransactionResult::EventType,
+            TEvColumnShard::TEvProposeTransactionResult::EventType,
+            TEvPrivate::TEvOperationPlan::EventType,
+            TEvPrivate::TEvCompletePublication::EventType,
+        });
     }
 
     template<typename TEvent>
@@ -434,7 +445,13 @@ public:
     TDeleteTableBarrier(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
+        IgnoreMessages(DebugHint(), {
+            TEvHive::TEvCreateTabletReply::EventType,
+            TEvDataShard::TEvProposeTransactionResult::EventType,
+            TEvColumnShard::TEvProposeTransactionResult::EventType,
+            TEvPrivate::TEvOperationPlan::EventType,
+            TEvPrivate::TEvCompletePublication::EventType,
+        });
     }
 
     template<typename TEvent>

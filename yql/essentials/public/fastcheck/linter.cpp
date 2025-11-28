@@ -13,7 +13,7 @@ namespace NFastCheck {
 
 namespace {
 
-class TCheckRunnerFactory : public ICheckRunnerFactory {
+class TCheckRunnerFactory: public ICheckRunnerFactory {
 public:
     using TRunnerFactoryFunction = std::function<std::unique_ptr<ICheckRunner>()>;
 
@@ -76,11 +76,11 @@ TCheckRunnerFactory& GetCheckRunnerFactory() {
     return *Singleton<TCheckRunnerFactory>();
 };
 
-}
+} // namespace
 
 TVector<TCheckFilter> ParseChecks(const TString& checks) {
     TVector<TCheckFilter> res;
-    for (TStringBuf one: StringSplitter(checks).SplitByString(",")) {
+    for (TStringBuf one : StringSplitter(checks).SplitByString(",")) {
         TCheckFilter f;
         TStringBuf afterPrefix = one;
         if (one.AfterPrefix("-", afterPrefix)) {
@@ -111,5 +111,5 @@ TChecksResponse RunChecks(const TChecksRequest& request) {
     return res;
 }
 
-}
-}
+} // namespace NFastCheck
+} // namespace NYql

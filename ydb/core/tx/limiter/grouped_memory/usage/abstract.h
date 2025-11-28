@@ -72,15 +72,18 @@ private:
     YDB_READONLY(ui64, ScopeId, 0)
     YDB_READONLY(ui64, AllocationId, 0)
     YDB_READONLY(ui64, Memory, 0)
+    std::shared_ptr<TStageFeatures> Stage;
     bool Released = false;
 
 public:
-    TAllocationGuard(const ui64 processId, const ui64 scopeId, const ui64 allocationId, const NActors::TActorId actorId, const ui64 memory)
+    TAllocationGuard(const ui64 processId, const ui64 scopeId, const ui64 allocationId, const NActors::TActorId actorId, const ui64 memory,
+        const std::shared_ptr<TStageFeatures>& stage)
         : ActorId(actorId)
         , ProcessId(processId)
         , ScopeId(scopeId)
         , AllocationId(allocationId)
-        , Memory(memory) {
+        , Memory(memory)
+        , Stage(stage) {
     }
 
     void Release() {
@@ -88,7 +91,7 @@ public:
         Released = true;
     }
 
-    void Update(const ui64 newVolume);
+    void Update(const ui64 newVolume, const bool notify = true);
 
     ~TAllocationGuard();
 };

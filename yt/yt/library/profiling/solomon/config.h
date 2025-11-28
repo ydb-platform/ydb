@@ -15,6 +15,8 @@ struct TShardConfig
 
     std::optional<TDuration> GridStep;
 
+    bool StripSensorsNamePrefix;
+
     REGISTER_YSON_STRUCT(TShardConfig);
 
     static void Register(TRegistrar registrar);

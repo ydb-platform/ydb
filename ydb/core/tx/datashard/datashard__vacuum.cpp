@@ -13,7 +13,7 @@ public:
         , Ev(ev)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_DATA_CLEANUP; }
+    TTxType GetTxType() const override { return TXTYPE_VACUUM; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto& record = Ev->Get()->Record;
@@ -91,7 +91,7 @@ public:
         , VacuumGeneration(vacuumGeneration)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_COMPLETE_DATA_CLEANUP; }
+    TTxType GetTxType() const override { return TXTYPE_COMPLETE_VACUUM; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);

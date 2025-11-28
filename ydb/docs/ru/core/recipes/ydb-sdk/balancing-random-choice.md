@@ -1,6 +1,6 @@
 # Равномерный случайный выбор
 
-{{ ydb-short-name }} SDK использует алгоритм `random_choice` (равномерную случайную балансировку) по умолчанию.
+{{ ydb-short-name }} SDK использует алгоритм `random_choice` (равномерную случайную балансировку) по умолчанию, кроме С++ SDK, который использует алгоритм ["предпочитать ближайший дата-центр"](./balancing-prefer-local.md) по умолчанию.
 
 Ниже приведены примеры кода принудительной установки алгоритма балансировки "равномерный случайный выбор" в разных {{ ydb-short-name }} SDK.
 
@@ -32,7 +32,7 @@
       panic(err)
     }
     defer db.Close(ctx)
-    ...
+    // ...
   }
   ```
 
@@ -75,7 +75,25 @@
 
     db := sql.OpenDB(connector)
     defer db.Close()
-    ...
+    // ...
+  }
+  ```
+
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+
+  int main() {
+    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+    auto driverConfig = NYdb::TDriverConfig(connectionString)
+      .SetBalancingPolicy(NYdb::TBalancingPolicy::UseAllNodes());
+
+    NYdb::TDriver driver(driverConfig);
+    // ...
+    driver.Stop(true);
+    return 0;
   }
   ```
 

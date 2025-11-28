@@ -19,8 +19,8 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 class TestMemAlloc(TestYdsBase):
     @yq_v1
+    @pytest.mark.skip("This test is not ready yet")
     def test_join_alloc(self, kikimr, client):
-        pytest.skip("This test is not ready yet")
 
         self.init_topics("select_join_alloc", create_output=False)
         create_stream("joined_topic")
@@ -50,8 +50,8 @@ class TestMemAlloc(TestYdsBase):
         logging.debug(st["Graph=1"]["TaskRunner"]["Stage=Total"]["MkqlMaxMemoryUsage"]["count"])
 
     @yq_v1
+    @pytest.mark.skip("This test is not ready yet")
     def test_hop_alloc(self, kikimr, client):
-        pytest.skip("This test is not ready yet")
 
         self.init_topics("select_hop_alloc", create_output=False)
 

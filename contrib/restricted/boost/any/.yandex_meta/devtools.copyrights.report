@@ -42,7 +42,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/any.hpp [360:360]
+        include/boost/any.hpp [373:373]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 56575c8d851d98611bafdb62f758a33b
 BELONGS ya.make
@@ -67,6 +67,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/any/basic_any.hpp [1:2]
+        include/boost/any/detail/config.hpp [1:1]
         include/boost/any/detail/placeholder.hpp [1:1]
         include/boost/any/fwd.hpp [1:1]
 
@@ -79,7 +80,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/any.hpp [361:361]
+        include/boost/any.hpp [374:374]
 
 KEEP     COPYRIGHT_SERVICE_LABEL fe4a46e0c33e697b28d96bddcd54d9da
 BELONGS ya.make

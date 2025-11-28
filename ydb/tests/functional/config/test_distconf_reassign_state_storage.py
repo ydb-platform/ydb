@@ -4,17 +4,23 @@ from hamcrest import assert_that, is_, has_length
 import time
 import requests
 from copy import deepcopy
+import re
+import yaml
 
 from ydb.tests.library.common.types import Erasure, TabletStates, TabletTypes
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.clients.kikimr_config_client import ConfigClient
+from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import get_kv_tablet_ids, wait_tablets_state_by_id
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.matchers.response import is_valid_response_with_field
+
+import ydb.public.api.protos.ydb_config_pb2 as config
+import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +28,46 @@ logger = logging.getLogger(__name__)
 def value_for(key, tablet_id):
     return "Value: <key = {key}, tablet_id = {tablet_id}>".format(
         key=key, tablet_id=tablet_id)
+
+
+def generate_config(dynconfig_client):
+    generate_config_response = dynconfig_client.fetch_startup_config()
+    assert_that(generate_config_response.operation.status == StatusIds.SUCCESS)
+
+    result = dynconfig.FetchStartupConfigResult()
+    generate_config_response.operation.result.Unpack(result)
+    return result.config
+
+
+def fetch_config_dynconfig(dynconfig_client):
+    fetch_config_response = dynconfig_client.fetch_config()
+    assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
+
+    result = dynconfig.GetConfigResult()
+    fetch_config_response.operation.result.Unpack(result)
+    if result.config[0] == "":
+        return None
+    else:
+        return result.config[0]
+
+
+def replace_config(config_client, config):
+    replace_config_response = config_client.replace_config(config)
+    logger.debug(f"replace_config: {replace_config_response}")
+
+    assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+
+def fetch_config(config_client):
+    fetch_config_response = config_client.fetch_all_configs()
+    assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
+
+    result = config.FetchConfigResult()
+    fetch_config_response.operation.result.Unpack(result)
+    if result.config:
+        return result.config[0].config
+    else:
+        return None
 
 
 def get_ring_group(request_config, config_name):
@@ -46,12 +92,14 @@ class KiKiMRDistConfReassignStateStorageTest(object):
     table_paths = {}
     erasure = Erasure.BLOCK_4_2
     use_config_store = True
+    use_self_management = True
     separate_node_configs = True
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
         "cluster": "",
     }
+    explicit_statestorage_config = None
 
     @classmethod
     def setup_class(cls):
@@ -67,8 +115,10 @@ class KiKiMRDistConfReassignStateStorageTest(object):
             metadata_section=cls.metadata_section,
             separate_node_configs=cls.separate_node_configs,
             simple_config=True,
-            use_self_management=True,
+            use_self_management=cls.use_self_management,
             extra_grpc_services=['config'],
+            explicit_hosts_and_host_configs=True,
+            explicit_statestorage_config=cls.explicit_statestorage_config,
             additional_log_configs=log_configs)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
@@ -79,6 +129,7 @@ class KiKiMRDistConfReassignStateStorageTest(object):
         grpc_port = cls.cluster.nodes[1].port
         cls.swagger_client = SwaggerClient(host, cls.cluster.nodes[1].mon_port)
         cls.config_client = ConfigClient(host, grpc_port)
+        cls.dynconfig_client = DynConfigClient(host, grpc_port)
 
     @classmethod
     def teardown_class(cls):
@@ -206,26 +257,26 @@ class TestKiKiMRDistConfReassignStateStorageBadCases(KiKiMRDistConfReassignState
         assert_that(resp.get("ErrorReason", "").startswith(message), {"Response": resp, "Expected": message})
 
     def do_test(self, storageName):
+        defaultRingGroup = get_ring_group(self.do_request_config(), storageName)
         self.check_failed({"ReconfigStateStorage": {}}, "New configuration is not defined")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": []}}},
-                          f"New {storageName} configuration RingGroups is not filled in")
+                          f"New {storageName} configuration is not filled in")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"Ring": {"Node": [1]}}}},
                           f"New {storageName} configuration Ring option is not allowed, use RingGroups")
-        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"Ring": [{"Node": [4]}]}]}}},
+        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"Ring": [{"Node": [4]}]}]}}},
                           f"{storageName} invalid ring group selection")
-        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 1, "Ring": [{"Ring": [{"Node": [4]}]}]}]}}},
+        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"NToSelect": 1, "Ring": [{"Ring": [{"Node": [4]}]}]}]}}},
                           f"{storageName} too deep nested ring declaration")
-        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 1, "Ring": [{"Node": [4]}]}]}}},
+        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"NToSelect": 1, "Ring": [{"Node": [4]}]}]}}},
                           "New introduced ring group should be WriteOnly")
-        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 2, "Ring": [{"Node": [4]}]}]}}},
+        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"NToSelect": 2, "Ring": [{"Node": [4]}]}]}}},
                           f"{storageName} invalid ring group selection")
-        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 1, "Node": [4], "Ring": [{"Node": [4]}]}]}}},
+        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"NToSelect": 1, "Node": [4], "Ring": [{"Node": [4]}]}]}}},
                           f"{storageName} Ring and Node are defined, use the one of them")
-        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"WriteOnly": True, "NToSelect": 1, "Ring": [{"Node": [4]}]}]}}},
+        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"WriteOnly": True, "NToSelect": 1, "Ring": [{"Node": [4]}]}, defaultRingGroup]}}},
                           f"New {storageName} configuration first RingGroup is writeOnly")
-        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 1, "Ring": [{"RingGroupActorIdOffset": 2, "Node": [4]}]}]}}},
+        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"NToSelect": 1, "Ring": [{"RingGroupActorIdOffset": 2, "Node": [4]}]}]}}},
                           f"{storageName} RingGroupActorIdOffset should be used in ring group level, not ring")
-        defaultRingGroup = get_ring_group(self.do_request_config(), storageName)
         node = defaultRingGroup["Node"][0] if "Node" in defaultRingGroup else defaultRingGroup["Ring"][0]["Node"][0]
         cmd = {"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [
             defaultRingGroup,
@@ -286,3 +337,147 @@ class TestKiKiMRDistConfReassignStateStorageMultipleRingGroup(KiKiMRDistConfReas
             ]
         self.do_test_change_state_storage(defaultRingGroup, newRingGroup, configName)
         assert_eq(self.do_request_config()[f"{configName}Config"], {"RingGroups": newRingGroup})
+
+
+class KiKiMRChangeRingGroupWithConfigTest(KiKiMRDistConfReassignStateStorageBaseTest):
+    def wait_for_all_nodes_start(self, expected_nodes_count, timeout_seconds=120):
+        start_time = time.time()
+        logger.info(f"Waiting for {expected_nodes_count} nodes to start and report Green status...")
+        last_exception = None
+        up_nodes_count = 0
+        reported_nodes = 0
+
+        while time.time() - start_time < timeout_seconds:
+            try:
+                nodes_info = self.swagger_client.nodes_info()
+                if nodes_info and 'Nodes' in nodes_info:
+                    current_up_nodes = 0
+                    reported_nodes = len(nodes_info['Nodes'])
+                    for node_status in nodes_info['Nodes']:
+                        system_state = node_status.get('SystemState', {})
+                        if system_state.get('SystemState') == 'Green':
+                            current_up_nodes += 1
+                    up_nodes_count = current_up_nodes
+
+                    logger.debug(f"Node status check: {up_nodes_count}/{expected_nodes_count} Green, {reported_nodes} reported.")
+                    if up_nodes_count == expected_nodes_count:
+                        logger.info(f"All {expected_nodes_count} nodes reported Green status.")
+                        return True
+                else:
+                    logger.debug("Waiting for nodes: Node info not available or empty in response.")
+
+            except Exception as e:
+                logger.debug(f"Error fetching node status, retrying: {e}")
+                last_exception = e
+
+            time.sleep(2)
+
+        error_message = (
+            f"Timeout: Only {up_nodes_count} out of {expected_nodes_count} nodes "
+            f"reached 'Green' status within {timeout_seconds} seconds. "
+            f"({reported_nodes} nodes reported in last check)."
+        )
+        if last_exception:
+            error_message += f" Last exception: {last_exception}"
+
+        try:
+            final_nodes_info = self.swagger_client.nodes_info()
+            error_message += f" Final status info: {final_nodes_info}"
+        except Exception as final_e:
+            error_message += f" Could not get final status: {final_e}"
+
+        raise TimeoutError(error_message)
+
+
+class TestKiKiMRChangeRingGroupWithConfigDistconfBadCases(KiKiMRDistConfReassignStateStorageTest):
+    def set_ss_config(self, parsed_fetched_config, ssConfig):
+        parsed_fetched_config["metadata"]["version"] = 1
+        parsed_fetched_config["config"]["domains_config"] = {
+            "explicit_state_storage_config": ssConfig,
+            "explicit_state_storage_board_config": ssConfig,
+            "explicit_scheme_board_config": ssConfig
+        }
+
+    def do_bad_case_test(self, ssConfig, message):
+        fetched_config = fetch_config(self.config_client)
+        parsed_fetched_config = yaml.safe_load(fetched_config)
+        logger.debug(f"parsed_fetched_config: {yaml.dump(parsed_fetched_config)}")
+
+        self.set_ss_config(parsed_fetched_config, ssConfig)
+        time.sleep(1)
+        replace_config_response = self.config_client.replace_config(yaml.dump(parsed_fetched_config))
+        logger.debug(f"replace_config: {replace_config_response}")
+
+        assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
+        assert_that(replace_config_response.operation.issues[0].message.startswith(message))
+
+    def test(self):
+        self.do_bad_case_test({"ring_groups": [{"nto_select": 10, "ring": [{"node": [1]}]}]},
+                              "Error while deriving StorageConfig: StateStorage NToSelect/rings differs")
+        self.do_bad_case_test({"ring_groups": [
+                              {"nto_select": 5, "ring": [{"node": [1]}, {"node": [2]}, {"node": [3]}, {"node": [4]}, {"node": [5]}, {"node": [6]}, {"node": [7]}, {"node": [8]}]},
+                              {"nto_select": 10, "ring": [{"node": [1]}]}]},
+                              "Error while deriving StorageConfig: StateStorage invalid ring group selection")
+
+
+class TestKiKiMRChangeRingGroupWithConfigDistconf(KiKiMRChangeRingGroupWithConfigTest):
+    def set_ss_config(self, parsed_fetched_config, ssConfig):
+        parsed_fetched_config["metadata"]["version"] = 1
+        parsed_fetched_config["config"]["domains_config"] = {
+            "explicit_state_storage_config": ssConfig,
+            "explicit_state_storage_board_config": ssConfig,
+            "explicit_scheme_board_config": ssConfig
+        }
+
+    def do_test(self, storageName):
+        fetched_config = fetch_config(self.config_client)
+        parsed_fetched_config = yaml.safe_load(fetched_config)
+        logger.debug(f"parsed_fetched_config: {yaml.dump(parsed_fetched_config)}")
+        ssConfig = {"ring_groups": [
+            {"nto_select": 5, "ring": [{"node": [1]}, {"node": [2]}, {"node": [3]}, {"node": [4]}, {"node": [5]}, {"node": [6]}, {"node": [7]}, {"node": [8]}]},
+            {"nto_select": 1, "write_only": True, "ring": [{"node": [3]}]}
+        ]}
+        self.set_ss_config(parsed_fetched_config, ssConfig)
+        time.sleep(1)
+        replace_config_response = self.config_client.replace_config(yaml.dump(parsed_fetched_config))
+        logger.debug(f"replace_config: {replace_config_response}")
+
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+        assert_eq(self.do_request_config()[f"{storageName}Config"], {"RingGroups": [
+            {"NToSelect": 5, "Ring": [{"Node": [1]}, {"Node": [2]}, {"Node": [3]}, {"Node": [4]}, {"Node": [5]}, {"Node": [6]}, {"Node": [7]}, {"Node": [8]}]},
+            {"NToSelect": 1, "WriteOnly": True, "Ring": [{"Node": [3]}]}
+        ]})
+
+
+class TestKiKiMRInitialDistconfExplicitConfigDistconf(KiKiMRChangeRingGroupWithConfigTest):
+    explicit_statestorage_config = {
+        "explicit_state_storage_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
+        "explicit_state_storage_board_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
+        "explicit_scheme_board_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
+    }
+
+    def do_test(self, storageName):
+        assert_eq(self.do_request_config()[f"{storageName}Config"],
+                  {'Ring': {'NToSelect': 1, 'Ring': [{'Node': [3]}]}})
+
+
+class TestKiKiMRInitialDistconfExplicitConfig(KiKiMRChangeRingGroupWithConfigTest):
+    use_self_management = False
+
+    explicit_statestorage_config = {
+        "explicit_state_storage_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
+        "explicit_state_storage_board_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
+        "explicit_scheme_board_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
+    }
+
+    def do_request_nw(self):
+        url = f'http://localhost:{self.cluster.nodes[1].mon_port}/actors/nodewarden'
+        return requests.get(url).text
+
+    def do_test(self, storageName):
+        resp = self.do_request_nw()
+        resp = re.sub(r'[\s]', '', resp)
+        logger.debug(resp)
+        assert_that("StateStorageConfig{Ring{NToSelect:1Ring{Node:3}}}" in resp)
+        assert_that("StateStorageBoardConfig{Ring{NToSelect:1Ring{Node:3}}}" in resp)
+        assert_that("SchemeBoardConfig{Ring{NToSelect:1Ring{Node:3}}}" in resp)

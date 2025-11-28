@@ -9,7 +9,7 @@ def post_install(self):
 boost_functional = NixSourceProject(
     nixattr="boost_functional",
     arcdir=boost.make_arcdir("functional"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

@@ -289,6 +289,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             SELECT a.join_info.Key as Key, b.Value as Value from AS_TABLE($a) as a
             LEFT JOIN `/Root/Join1_3` as b
             ON a.join_info.Key = b.Key
+            ORDER BY Key
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
@@ -553,6 +554,28 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         );
     }
 
+    Y_UNIT_TEST(LeftJoinPushdownPredicate_SqlIn) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        auto result = session.ExecuteDataQuery(Q_(R"(
+            SELECT t3.Key, t3.Value FROM `/Root/Join1_2` AS t2
+            LEFT JOIN `/Root/Join1_3` AS t3
+            ON t2.Fk3 = t3.Key
+            WHERE t3.Value in [1004, 1005, 1006];
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(
+            R"([
+                [["Name4"];[1004]]
+            ])",
+            FormatResultSetYson(result.GetResultSet(0))
+        );
+    }
+
     Y_UNIT_TEST(LeftJoinPushdownPredicate_NoPushdown) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -652,7 +675,10 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
      Y_UNIT_TEST(LeftJoinPushdownPredicate_NestedJoin) {
-        TKikimrRunner kikimr;
+        TKikimrSettings appsettings;
+        appsettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+
+        TKikimrRunner kikimr(appsettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -670,7 +696,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 INNER JOIN `/Root/Join1_3` AS t3
                 ON t1.Fk1 = t3.Key
 
-                WHERE t2.Value > 1001;
+                WHERE t2.Value > 1001
+
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(
@@ -693,7 +720,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 LEFT JOIN `/Root/Join1_2` AS t2
                 ON t1.Fk1 = t2.Key
 
-                WHERE t2.Value > 1001;
+                WHERE t2.Value > 1001
+                ORDER BY t1.Key1, t1.Key2;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(

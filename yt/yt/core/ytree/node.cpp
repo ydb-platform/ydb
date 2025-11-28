@@ -22,7 +22,7 @@ INodePtr IMapNode::GetChildOrThrow(const std::string& key) const
     return child;
 }
 
-std::string IMapNode::GetChildKeyOrThrow(const IConstNodePtr& child)
+std::string IMapNode::GetChildKeyOrThrow(const IConstNodePtr& child) const
 {
     auto optionalKey = FindChildKey(child);
     if (!optionalKey) {
@@ -42,7 +42,7 @@ INodePtr IListNode::GetChildOrThrow(int index) const
     return child;
 }
 
-int IListNode::GetChildIndexOrThrow(const IConstNodePtr& child)
+int IListNode::GetChildIndexOrThrow(const IConstNodePtr& child) const
 {
     auto optionalIndex = FindChildIndex(child);
     if (!optionalIndex) {

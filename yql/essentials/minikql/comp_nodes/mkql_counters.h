@@ -13,5 +13,5 @@ constexpr TStringRef Operator_Aggregation("Operator.Aggregation.");
 
 constexpr TStringRef Counter_OutputRows("OutputRows");
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

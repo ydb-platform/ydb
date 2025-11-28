@@ -18,6 +18,7 @@ class AsyncResponseIterator(object):
 
     async def _next(self):
         res = self.wrapper(await self.it.__anext__())
+
         if res is not None:
             return res
         return await self._next()

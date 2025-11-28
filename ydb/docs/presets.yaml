@@ -23,6 +23,7 @@ default:
   feature_resource_pool_classifier: true
   feature_view: true
   feature_async_replication: true
+  feature_transfer: true
   feature_batch_operations: true
   ydb: YDB
   ydb-name: YDB
@@ -62,7 +63,13 @@ default:
 
   datalens-name: DataLens
   airflow-name: Apache Airflow™
+  spark-name: Apache Spark™
   ydb-airflow: false
+  
+  # Preset variables for dbt integration
+  dbt-ydb: dbt-ydb
+  dbt: dbt
+  
   ydb-finebi: false
   ydb-superset: false
   ydb-datalens: false

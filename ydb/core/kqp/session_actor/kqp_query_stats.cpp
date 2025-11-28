@@ -34,10 +34,6 @@ void CollectQueryStatsImpl(const TActorContext& ctx, const T* queryStats,
     const TString& userSID, ui64 parametersSize, const TString& database,
     const NKikimrKqp::EQueryType type, ui64 requestUnits)
 {
-    if (!AppData()->FeatureFlags.GetEnableSystemViews()) {
-        return;
-    }
-
     auto collectEv = MakeHolder<NSysView::TEvSysView::TEvCollectQueryStats>();
     collectEv->Database = database;
 

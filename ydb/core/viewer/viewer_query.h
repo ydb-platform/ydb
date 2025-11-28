@@ -57,21 +57,24 @@ class TJsonQuery : public TViewerPipeClient {
     ui64 FetchResultSeqNum = 0;
     TString SessionId;
     ui64 OutputChunkMaxSize = 1000000; // 1 MB
-    bool Streaming = false;
+
+    enum class EStreamingType {
+        None,
+        MultiPart,
+        EventStream,
+    };
+    EStreamingType Streaming = EStreamingType::None;
+
     NHttp::THttpOutgoingResponsePtr HttpResponse;
     std::vector<bool> ResultSetHasColumns;
     bool ConcurrentResults = false;
+    bool InternalCall = false;
     TString ContentType;
 
 private:
     // Helper methods to reduce duplication
-    void InitJsonResponse(NJson::TJsonValue& jsonResponse, const TString& eventType = "") const {
-        if (Streaming) {
-            if (!eventType.empty()) {
-                NJson::TJsonValue& jsonMeta = jsonResponse["meta"];
-                jsonMeta["event"] = eventType;
-            }
-        } else {
+    void InitJsonResponse(NJson::TJsonValue& jsonResponse) const {
+        if (Streaming == EStreamingType::None) {
             jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
         }
     }
@@ -85,8 +88,8 @@ private:
         }
     }
 
-    void CreateStandardErrorResponse(NJson::TJsonValue& jsonResponse, const TString& message, const TString& eventType = "") {
-        InitJsonResponse(jsonResponse, eventType);
+    void CreateStandardErrorResponse(NJson::TJsonValue& jsonResponse, const TString& message) {
+        InitJsonResponse(jsonResponse);
         jsonResponse["error"]["severity"] = NYql::TSeverityIds::S_ERROR;
         jsonResponse["error"]["message"] = message;
         NJson::TJsonValue& issue = jsonResponse["issues"].AppendValue({});
@@ -247,6 +250,16 @@ private:
         }
     }
 
+    std::optional<TString> GetUserSID() const {
+        if (const auto tokenString = GetRequest().GetUserTokenObject()) {
+            if (NACLibProto::TUserToken userToken; userToken.ParseFromString(tokenString)) {
+                return userToken.GetUserSID();
+            }
+        }
+
+        return std::nullopt;
+    }
+
 public:
     ESchemaType StringToSchemaType(const TString& schemaStr) {
         if (schemaStr == "classic") {
@@ -282,7 +295,7 @@ public:
         if (params.Has("schema")) {
             Schema = StringToSchemaType(params.Get("schema"));
             if (Params.Get("schema") == "multipart") {
-                Streaming = true;
+                Streaming = EStreamingType::MultiPart;
                 if (params.Has("concurrent_results")) {
                     ConcurrentResults = FromStringWithDefault<bool>(params.Get("concurrent_results"), ConcurrentResults);
                 }
@@ -314,7 +327,7 @@ public:
             IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
         }
         if (params.Has("limit_rows")) {
-            LimitRows = std::clamp<int>(FromStringWithDefault<int>(params.Get("limit_rows"), 10000), 1, Streaming ? std::numeric_limits<int>::max() : 100000);
+            LimitRows = std::clamp<int>(FromStringWithDefault<int>(params.Get("limit_rows"), 10000), 1, Streaming != EStreamingType::None ? std::numeric_limits<int>::max() : 100000);
         }
         if (params.Has("resource_pool")) {
             ResourcePool = params.Get("resource_pool");
@@ -324,6 +337,7 @@ public:
             OutputChunkMaxSize = std::clamp<ui64>(OutputChunkMaxSize, 1, 500000000); // from 1 to 50 MB
         }
         CollectDiagnostics = FromStringWithDefault<bool>(params.Get("collect_diagnostics"), CollectDiagnostics);
+        InternalCall = FromStringWithDefault<bool>(params.Get("internal_call"), InternalCall);
         if (params.Has("stats_period")) {
             StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
         }
@@ -347,22 +361,28 @@ public:
                 return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "operation_id or execution_id required for fetch-long-query"), "BadRequest");
             }
         }
-        if (Streaming) {
+        if (Streaming != EStreamingType::None) {
             NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
             TStringBuf accept = headers["Accept"];
             auto posMixedReplace = accept.find("multipart/x-mixed-replace");
             auto posFormData = accept.find("multipart/form-data");
-            auto posFirst = std::min(posMixedReplace, posFormData);
+            auto posEventStream = accept.find("text/event-stream");
+            auto posFirst = std::min({posMixedReplace, posFormData, posEventStream});
             if (posFirst == TString::npos) {
                 return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Multipart request must accept multipart content-type"), "BadRequest");
             }
             if (posFirst == posMixedReplace) {
                 ContentType = "multipart/x-mixed-replace";
+                Streaming = EStreamingType::MultiPart;
             } else if (posFirst == posFormData) {
                 ContentType = "multipart/form-data";
+                Streaming = EStreamingType::MultiPart;
+            } else if (posFirst == posEventStream) {
+                ContentType = "text/event-stream";
+                Streaming = EStreamingType::EventStream;
             }
         }
-        if (Streaming && QueryId.empty()) {
+        if (Streaming != EStreamingType::None && QueryId.empty()) {
             QueryId = CreateGuidAsString();
         }
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
@@ -458,11 +478,16 @@ public:
             Viewer->AddRunningQuery(QueryId, SelfId());
         }
 
-        if (Action == "fetch-long-query") {
-            if (Streaming) {
-                HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), ContentType + ";boundary=boundary"));
-                Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
+        if (Streaming != EStreamingType::None) {
+            auto contentType = ContentType;
+            if (Streaming == EStreamingType::MultiPart) {
+                contentType += ";boundary=boundary";
             }
+            HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), contentType));
+            Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
+        }
+
+        if (Action == "fetch-long-query") {
             // For fetch-long-query, we need to directly check operation status and fetch results
             if (OperationId) {
                 CheckOperationStatus();
@@ -472,6 +497,7 @@ public:
                     SelfId(),
                     Database,
                     ExecutionId,
+                    GetUserSID(),
                     FetchResultSetIndex,
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows),
@@ -481,10 +507,6 @@ public:
             return;
         }
 
-        if (Streaming) {
-            HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), ContentType + ";boundary=boundary"));
-            Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
-        }
         if (Long) {
             ScriptResponse = MakeQueryRequest<NKqp::TEvKqp::TEvScriptRequest, NKqp::TEvKqp::TEvScriptResponse>();
         } else {
@@ -499,11 +521,8 @@ public:
             event->Record.SetApplicationName("ydb-ui");
             event->Record.SetClientAddress(request.GetRemoteAddr());
             event->Record.SetClientUserAgent(TString(request.GetHeader("User-Agent")));
-            if (TString tokenString = request.GetUserTokenObject()) {
-                NACLibProto::TUserToken userToken;
-                if (userToken.ParseFromString(tokenString)) {
-                    event->Record.SetUserSID(userToken.GetUserSID());
-                }
+            if (const auto userSID = GetUserSID()) {
+                event->Record.SetUserSID(*userSID);
             }
             CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
         }
@@ -607,6 +626,7 @@ public:
                 event->SetProgressStatsPeriod(StatsPeriod);
             }
         }
+        request.SetIsInternalCall(InternalCall);
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         return MakeRequest<TResponseType>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
     }
@@ -617,33 +637,100 @@ public:
         } else {
             CreateSessionResponse.Error("FailedToCreateSession");
             NYdb::NIssue::TIssue issue;
-            issue.SetMessage("Failed to create session");
+            issue.SetMessage(TStringBuilder() << "Failed to create session (" << ev->Get()->Record.GetError() << ")");
             issue.SetCode(ev->Get()->Record.GetYdbStatus(), NYdb::NIssue::ESeverity::Error);
             NJson::TJsonValue json;
             TString message;
             MakeJsonErrorReply(json, message, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NIssue::TIssues{issue}));
-            return ReplyWithJsonAndPassAway(json, message);
+            return ReplyWithJsonAndPassAway("Error", std::move(json), message);
         }
 
         SessionId = CreateSessionResponse->Record.GetResponse().GetSessionId();
         PingSession();
 
-        if (Streaming) {
+        if (Streaming != EStreamingType::None) {
             NJson::TJsonValue json;
             json["version"] = Viewer->GetCapabilityVersion("/viewer/query");
             NJson::TJsonValue& jsonMeta = json["meta"];
-            jsonMeta["event"] = "SessionCreated";
             jsonMeta["session_id"] = SessionId;
             jsonMeta["query_id"] = QueryId;
             jsonMeta["node_id"] = SelfId().NodeId();
-            StreamJsonResponse(json);
+            StreamJsonResponse("SessionCreated", std::move(json));
         }
         QueryResponse = MakeQueryRequest<NKqp::TEvKqp::TEvQueryRequest, NKqp::TEvKqp::TEvQueryResponse>();
     }
 
 private:
+    std::string WriteTime(ui32 value) {
+        ui32 hour, min, sec;
+
+        Y_ASSERT(value < 86400);
+        hour = value / 3600;
+        value -= hour * 3600;
+        min = value / 60;
+        sec = value - min * 60;
+
+        return TStringBuilder() << LeftPad(hour, 2, '0') << ':' << LeftPad(min, 2, '0') << ':' << LeftPad(sec, 2, '0');
+    }
+
+    std::string FormatDate32(const std::chrono::sys_time<NYdb::TWideDays>& tp) {
+        auto value = tp.time_since_epoch().count();
+
+        i32 year;
+        ui32 month;
+        ui32 day;
+        if (!NKikimr::NMiniKQL::SplitDate32(value, year, month, day)) {
+            return TStringBuilder() << "Error: failed to split Date32: " << value;
+        }
+
+        return TStringBuilder() << year << "-" << LeftPad(month, 2, '0') << '-' << LeftPad(day, 2, '0');
+    }
+
+    std::string FormatDatetime64(const std::chrono::sys_time<NYdb::TWideSeconds>& tp) {
+        auto value = tp.time_since_epoch().count();
+
+        if (Y_UNLIKELY(NUdf::MIN_DATETIME64 > value || value > NUdf::MAX_DATETIME64)) {
+            return TStringBuilder() << "Error: value out of range for Datetime64: " << value << " (min: " << NUdf::MIN_DATETIME64 << ", max: " << NUdf::MAX_DATETIME64 << ")";
+        }
+
+        auto date = value / 86400;
+        value -= date * 86400;
+        if (value < 0) {
+            date -= 1;
+            value += 86400;
+        }
+
+        return TStringBuilder() << FormatDate32(std::chrono::sys_time<NYdb::TWideDays>(NYdb::TWideDays(date))) << 'T' << WriteTime(value) << 'Z';
+    }
+
+    std::string FormatTimestamp64(const std::chrono::sys_time<NYdb::TWideMicroseconds>& tp) {
+        auto value = tp.time_since_epoch().count();
+
+        if (Y_UNLIKELY(NUdf::MIN_TIMESTAMP64 > value || value > NUdf::MAX_TIMESTAMP64)) {
+            return TStringBuilder() << "Error: value out of range for Timestamp64: " << value << " (min: " << NUdf::MIN_TIMESTAMP64 << ", max: " << NUdf::MAX_TIMESTAMP64 << ")";
+        }
+        auto date = value / 86400000000ll;
+        value -= date * 86400000000ll;
+        if (value < 0) {
+            date -= 1;
+            value += 86400000000ll;
+        }
+
+        TStringBuilder out;
+        out << FormatDate32(std::chrono::sys_time<NYdb::TWideDays>(NYdb::TWideDays(date)));
+        out << 'T';
+
+        const ui32 time = static_cast<ui32>(value / 1000000ull);
+        value -= time * 1000000ull;
+        out << WriteTime(time);
+        if (value) {
+            out << '.' << LeftPad(value, 6, '0');
+        }
+        return out << 'Z';
+    }
+
     NJson::TJsonValue ColumnPrimitiveValueToJsonValue(NYdb::TValueParser& valueParser) {
-        switch (const auto primitive = valueParser.GetPrimitiveType()) {
+        switch (valueParser.GetPrimitiveType()) {
             case NYdb::EPrimitiveType::Bool:
                 return valueParser.GetBool();
             case NYdb::EPrimitiveType::Int8:
@@ -677,13 +764,13 @@ private:
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return valueParser.GetDate32();
+                return FormatDate32(valueParser.GetDate32());
             case NYdb::EPrimitiveType::Datetime64:
-                return valueParser.GetDatetime64();
+                return FormatDatetime64(valueParser.GetDatetime64());
             case NYdb::EPrimitiveType::Timestamp64:
-                return valueParser.GetTimestamp64();
+                return FormatTimestamp64(valueParser.GetTimestamp64());
             case NYdb::EPrimitiveType::Interval64:
-                return valueParser.GetInterval64();
+                return valueParser.GetInterval64().count();
             case NYdb::EPrimitiveType::TzDate:
                 return valueParser.GetTzDate();
             case NYdb::EPrimitiveType::TzDatetime:
@@ -811,11 +898,15 @@ private:
 
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         NJson::TJsonValue jsonResponse;
-        if (Streaming) {
-            NJson::TJsonValue& jsonMeta = jsonResponse["meta"];
-            jsonMeta["event"] = "QueryResponse";
-        } else {
+        if (Streaming == EStreamingType::None) {
             jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
+        }
+        if (ev->Get()->Record.GetYdbStatus() != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+            if (Ydb::StatusIds_StatusCode_IsValid(ev->Get()->Record.GetYdbStatus())) {
+                jsonResponse["status"] = Ydb::StatusIds_StatusCode_Name(ev->Get()->Record.GetYdbStatus());
+            } else {
+                jsonResponse["status"] = ev->Get()->Record.GetYdbStatus();
+            }
         }
         if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             QueryResponse.Set(std::move(ev));
@@ -829,12 +920,12 @@ private:
             NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
             MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NAdapters::ToSdkIssues(std::move(issues))));
         }
-        ReplyWithJsonAndPassAway(jsonResponse);
+        ReplyWithJsonAndPassAway("QueryResponse", std::move(jsonResponse));
     }
 
     void HandleReply(NKqp::TEvKqp::TEvScriptResponse::TPtr& ev) {
         NJson::TJsonValue jsonResponse;
-        InitJsonResponse(jsonResponse, "ScriptResponse");
+        InitJsonResponse(jsonResponse);
 
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
             ScriptResponse.Set(std::move(ev));
@@ -848,8 +939,8 @@ private:
                 NYql::IssuesToMessage(ScriptResponse->Issues, issueMessage.mutable_issues());
                 Proto2Json(issueMessage, jsonResponse["issues"]);
             }
-            if (Streaming) {
-                StreamJsonResponse(jsonResponse);
+            if (Streaming != EStreamingType::None) {
+                StreamJsonResponse("ScriptResponse", std::move(jsonResponse));
                 OperationId = NOperationId::TOperationId(ScriptResponse->OperationId);
                 ExecutionId = ScriptResponse->ExecutionId;
             } else {
@@ -863,7 +954,7 @@ private:
         } else {
             ScriptResponse.Error("QueryError");
             MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Status), NYdb::NAdapters::ToSdkIssues(std::move(ev->Get()->Issues))));
-            ReplyWithJsonAndPassAway(jsonResponse);
+            ReplyWithJsonAndPassAway("ScriptResponse", std::move(jsonResponse));
         }
     }
 
@@ -877,14 +968,12 @@ private:
             MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(record.GetStatusCode()), NYdb::NAdapters::ToSdkIssues(std::move(issues))));
         }
         CancelQuery();
-        ReplyWithJsonAndPassAway(jsonResponse);
+        ReplyWithJsonAndPassAway("Aborted", std::move(jsonResponse));
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
-        if (Streaming) {
+        if (Streaming != EStreamingType::None) {
             NJson::TJsonValue json;
-            NJson::TJsonValue& jsonMeta = json["meta"];
-            jsonMeta["event"] = "Progress";
             auto& progress(ev->Get()->Record);
             if (progress.HasQueryPlan()) {
                 NJson::ReadJsonTree(progress.GetQueryPlan(), &(json["plan"]));
@@ -892,7 +981,7 @@ private:
             if (progress.HasQueryStats()) {
                 Proto2Json(progress.GetQueryStats(), json["stats"]);
             }
-            StreamJsonResponse(json);
+            StreamJsonResponse("Progress", std::move(json));
         }
     }
 
@@ -911,7 +1000,7 @@ private:
                 data.MutableResultSet()->set_truncated(true);
             }
             TotalRows += data.GetResultSet().rows_size();
-            if (Streaming) {
+            if (Streaming != EStreamingType::None) {
                 StreamJsonResponse(data);
             } else {
                 if (ResultSets.size() <= data.GetQueryResultIndex()) {
@@ -934,17 +1023,17 @@ private:
         // Check if we have a valid response or an error
         if (!GetOperationResponse->IsOk()) {
             NJson::TJsonValue json;
-            InitJsonResponse(json, "OperationResponse");
+            InitJsonResponse(json);
             AddOperationInfo(json);
             json["ready"] = false;
 
             if (GetOperationResponse->IsError()) {
-                CreateStandardErrorResponse(json, GetOperationResponse->GetError(), "OperationResponse");
+                CreateStandardErrorResponse(json, GetOperationResponse->GetError());
             } else {
-                CreateStandardErrorResponse(json, "Failed to get operation status", "OperationResponse");
+                CreateStandardErrorResponse(json, "Failed to get operation status");
             }
 
-            return ReplyWithJsonAndPassAway(json);
+            return ReplyWithJsonAndPassAway("OperationResponse", std::move(json));
         }
 
         // Now we know we have a valid response, safe to access
@@ -958,10 +1047,8 @@ private:
             }
         }
 
-        if (Streaming) {
+        if (Streaming != EStreamingType::None) {
             NJson::TJsonValue json;
-            NJson::TJsonValue& jsonMeta = json["meta"];
-            jsonMeta["event"] = "OperationResponse";
             json["id"] = OperationId->ToString();
             json["ready"] = GetOperationResponse->Get()->Ready;
             if (GetOperationResponse->Get()->Issues) {
@@ -970,7 +1057,7 @@ private:
                 Proto2Json(issueMessage, json["issues"]);
             }
             Proto2Json(metadata, json["metadata"]);
-            StreamJsonResponse(json);
+            StreamJsonResponse("OperationResponse", std::move(json));
         }
 
         if (GetOperationResponse->Get()->Ready) {
@@ -979,23 +1066,21 @@ private:
                 if (ExecutionId.empty()) {
                     // If we still don't have execution_id, there's an issue with the operation metadata
                     NJson::TJsonValue json;
-                    if (Streaming) {
-                        NJson::TJsonValue& jsonMeta = json["meta"];
-                        jsonMeta["event"] = "OperationResponse";
-                    } else {
+                    if (Streaming == EStreamingType::None) {
                         json["version"] = Viewer->GetCapabilityVersion("/viewer/query");
                     }
                     json["id"] = OperationId->ToString();
                     json["ready"] = true;
                     json["error"]["severity"] = NYql::TSeverityIds::S_ERROR;
                     json["error"]["message"] = "Failed to extract execution_id from operation metadata";
-                    return ReplyWithJsonAndPassAway(json);
+                    return ReplyWithJsonAndPassAway("OperationResponse", std::move(json));
                 }
 
                 Register(NKqp::CreateGetScriptExecutionResultActor(
                     SelfId(),
                     Database,
                     ExecutionId,
+                    GetUserSID(),
                     FetchResultSetIndex,
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows),
@@ -1003,14 +1088,14 @@ private:
                     Deadline));
             } else {
                 // Operation is ready but no result sets - reply with empty result for non-streaming
-                if (!Streaming) {
+                if (Streaming == EStreamingType::None) {
                     NJson::TJsonValue jsonResponse;
                     jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
                     jsonResponse["operation_id"] = OperationId->ToString();
                     if (!ExecutionId.empty()) {
                         jsonResponse["execution_id"] = ExecutionId;
                     }
-                    ReplyWithJsonAndPassAway(jsonResponse);
+                    ReplyWithJsonAndPassAway("OperationResponse", std::move(jsonResponse));
                 }
             }
         } else {
@@ -1030,7 +1115,7 @@ private:
                 ev->Get()->ResultSet->set_truncated(true);
             }
             TotalRows += ev->Get()->ResultSet->rows_size();
-            if (Streaming) {
+            if (Streaming != EStreamingType::None) {
                 StreamJsonResponse(*ev->Get(), FetchResultSetIndex);
             } else {
                 if (ResultSets.size() <= FetchResultSetIndex) {
@@ -1046,6 +1131,7 @@ private:
                     SelfId(),
                     Database,
                     ExecutionId,
+                    GetUserSID(),
                     FetchResultSetIndex,
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
@@ -1059,6 +1145,7 @@ private:
                     SelfId(),
                     Database,
                     ExecutionId,
+                    GetUserSID(),
                     FetchResultSetIndex,
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
@@ -1067,7 +1154,7 @@ private:
                 return;
             }
         }
-        if (Streaming) {
+        if (Streaming != EStreamingType::None) {
             FinishStreamAndPassAway();
         } else {
             // For non-streaming mode, return the results directly
@@ -1084,7 +1171,7 @@ private:
             if (ResultSets.size() > 0) {
                 RenderResultSetForSchema(jsonResponse, ResultSets);
             }
-            ReplyWithJsonAndPassAway(jsonResponse);
+            ReplyWithJsonAndPassAway("OperationResponse", std::move(jsonResponse));
         }
     }
 
@@ -1095,26 +1182,26 @@ private:
         InitJsonResponse(json);
 
         // For long queries (execute-long-query), include operation metadata with timeout error
-        if (Long && !Streaming) {
+        if (Long && Streaming != EStreamingType::None) {
             AddOperationInfo(json);
             // Add a note about being able to fetch results later
             json["timeout_info"] = "Query execution may still be running. Use fetch-long-query with the operation_id or execution_id to check status and retrieve results.";
         }
 
         CreateStandardErrorResponse(json, "Timeout executing query");
-        ReplyWithJsonAndPassAway(json);
+        ReplyWithJsonAndPassAway("Timeout", std::move(json), "timeout");
     }
 
     void ReplyWithError(const TString& error) {
         CancelQueryIfNeeded();
         NJson::TJsonValue json;
         CreateStandardErrorResponse(json, error);
-        ReplyWithJsonAndPassAway(json);
+        ReplyWithJsonAndPassAway("Error", std::move(json), error);
     }
 
     void CheckOperationStatus() {
         if (!GetOperationResponse.has_value() || GetOperationResponse->IsDone()) {
-            GetOperationResponse = MakeRequest<NKqp::TEvGetScriptExecutionOperationResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(Database, *OperationId));
+            GetOperationResponse = MakeRequest<NKqp::TEvGetScriptExecutionOperationResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(Database, *OperationId, GetUserSID()));
         }
     }
 
@@ -1183,7 +1270,7 @@ private:
                 }
             }
 
-            if (ResultSets.size() > 0 && !Streaming) {
+            if (ResultSets.size() > 0) {
                 RenderResultSetForSchema(jsonResponse, ResultSets);
             }
 
@@ -1205,7 +1292,10 @@ private:
         }
     }
 
-    void StreamJsonResponse(const NJson::TJsonValue& json) {
+    void StreamJsonResponse(const TString& event, NJson::TJsonValue&& json) {
+        if (Streaming == EStreamingType::MultiPart) {
+            json["meta"]["event"] = event;
+        }
         TStringStream content;
         NJson::WriteJson(&content, &json, {
             .DoubleNDigits = Proto2JsonConfig.DoubleNDigits,
@@ -1215,7 +1305,13 @@ private:
             .WriteNanAsString = Proto2JsonConfig.WriteNanAsString,
         });
         TStringBuilder data;
-        data << "--boundary\r\nContent-Type: application/json\r\nContent-Length: " << content.Size() << "\r\n\r\n" << content.Str() << "\r\n";
+        if (Streaming == EStreamingType::MultiPart) {
+            data << "--boundary\r\nContent-Type: application/json\r\nContent-Length: " << content.Size() << "\r\n\r\n" << content.Str() << "\r\n";
+        }
+        if (Streaming == EStreamingType::EventStream) {
+            data << "event: " << event << "\n";
+            data << "data: " << content.Str() << "\n\n";
+        }
         auto dataChunk = HttpResponse->CreateDataChunk(data);
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
         LastSendTime = TActivationContext::Now();
@@ -1224,7 +1320,6 @@ private:
     void StreamJsonResponse(const NKikimrKqp::TEvExecuterStreamData& data) {
         NJson::TJsonValue json;
         NJson::TJsonValue& jsonMeta = json["meta"];
-        jsonMeta["event"] = "StreamData";
         jsonMeta["result_index"] = data.GetQueryResultIndex();
         jsonMeta["seq_no"] = data.GetSeqNo();
         if (ResultSetHasColumns.size() <= data.GetQueryResultIndex()) {
@@ -1235,13 +1330,12 @@ private:
         } catch (const std::exception& ex) {
             return ReplyWithError(ex.what());
         }
-        StreamJsonResponse(json);
+        StreamJsonResponse("StreamData", std::move(json));
     }
 
     void StreamJsonResponse(const NKqp::TEvFetchScriptResultsResponse& data, ui32 resultSetIndex) {
         NJson::TJsonValue json;
         NJson::TJsonValue& jsonMeta = json["meta"];
-        jsonMeta["event"] = "StreamData";
         jsonMeta["result_index"] = resultSetIndex;
         jsonMeta["seq_no"] = FetchResultSeqNum++;
         if (ResultSetHasColumns.size() <= resultSetIndex) {
@@ -1252,22 +1346,32 @@ private:
         } catch (const std::exception& ex) {
             return ReplyWithError(ex.what());
         }
-        StreamJsonResponse(json);
+        StreamJsonResponse("StreamData", std::move(json));
     }
 
     void StreamEndOfStream() {
-        auto dataChunk = HttpResponse->CreateDataChunk("--boundary--\r\n");
-        dataChunk->SetEndOfData();
-        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+        if (Streaming == EStreamingType::MultiPart) {
+            auto dataChunk = HttpResponse->CreateDataChunk("--boundary--\r\n");
+            dataChunk->SetEndOfData();
+            Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+        }
+        if (Streaming == EStreamingType::EventStream) {
+            auto dataChunk = HttpResponse->CreateDataChunk();
+            Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+        }
         LastSendTime = TActivationContext::Now();
     }
 
     void SendKeepAlive() {
-        if (Streaming) {
-            NJson::TJsonValue json;
-            NJson::TJsonValue& jsonMeta = json["meta"];
-            jsonMeta["event"] = "KeepAlive";
-            StreamJsonResponse(json);
+        if (Streaming == EStreamingType::MultiPart) {
+            StreamJsonResponse("KeepAlive", {});
+        }
+        if (Streaming == EStreamingType::EventStream) {
+            TStringBuilder ping;
+            ping << ": ping - " << NActors::TActivationContext::Now().ToIsoStringLocal() << "\n\n";
+            auto dataChunk = HttpResponse->CreateDataChunk(ping);
+            Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+            LastSendTime = TActivationContext::Now();
         }
         if (SessionId) {
             PingSession();
@@ -1275,16 +1379,16 @@ private:
     }
 
     void FinishStreamAndPassAway(const TString& error = {}) {
-        if (Streaming) {
+        if (Streaming != EStreamingType::None) {
             StreamEndOfStream();
             HttpEvent.Reset(); // to avoid double reply
             TBase::ReplyAndPassAway(error);
         }
     }
 
-    void ReplyWithJsonAndPassAway(const NJson::TJsonValue& json, const TString& error = {}) {
-        if (Streaming) {
-            StreamJsonResponse(json);
+    void ReplyWithJsonAndPassAway(const TString& event, NJson::TJsonValue&& json, const TString& error = {}) {
+        if (Streaming != EStreamingType::None) {
+            StreamJsonResponse(event, std::move(json));
             FinishStreamAndPassAway(error);
         } else {
             TBase::ReplyAndPassAway(GetHTTPOKJSON(json), error);

@@ -102,6 +102,7 @@ struct TReadSessionEvent {
             virtual ~TMessageBase() = default;
 
             virtual const std::string& GetData() const;
+            virtual const std::string& GetBrokenData() const;
 
             virtual void Commit() = 0;
 
@@ -144,6 +145,8 @@ struct TReadSessionEvent {
             //! User data.
             //! Throws decompressor exception if decompression failed.
             const std::string& GetData() const override;
+            //! Throws exception if decompression succeeded.
+            const std::string& GetBrokenData() const override;
 
             //! Commits single message.
             void Commit() override;

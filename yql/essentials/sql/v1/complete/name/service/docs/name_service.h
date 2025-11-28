@@ -6,6 +6,6 @@
 
 namespace NSQLComplete {
 
-    INameService::TPtr MakeDocumentingNameService(IDocumentation::TPtr docs, INameService::TPtr origin);
+INameService::TPtr MakeDocumentingNameService(IDocumentation::TPtr docs, INameService::TPtr origin);
 
 } // namespace NSQLComplete

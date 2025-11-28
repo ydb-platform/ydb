@@ -47,7 +47,7 @@ public:
 
 public:
     STFUNC(Handler) {
-        switch (const ui32 etype = ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) {
             HFunc(NDq::TEvDqCompute::TEvChannelData, OnChannelData);
             HFunc(TEvReadyState, OnReadyState);
             hFunc(TEvMessageProcessed, OnMessageProcessed);
@@ -57,7 +57,7 @@ public:
     }
 
     STFUNC(ShutdownHandler) {
-        switch (const ui32 etype = ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvMessageProcessed, OnMessageProcessed);
             default:
                 TBase::ShutdownHandlerBase(ev);

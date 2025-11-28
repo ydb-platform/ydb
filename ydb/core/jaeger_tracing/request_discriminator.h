@@ -112,10 +112,15 @@ enum class ERequestType: size_t {
     TOPIC_DESCRIBECONSUMER,
     TOPIC_ALTERTOPIC,
     TOPIC_DROPTOPIC,
+    TOPIC_PROPOSE_TRANSACTION,
 
     // Bridge requests
     BRIDGE_GETCLUSTERSTATE,
     BRIDGE_UPDATECLUSTERSTATE,
+
+    // TestShard requests
+    TESTSHARD_CREATETESTSHARD,
+    TESTSHARD_DELETETESTSHARD,
 
     REQUEST_TYPES_CNT, // Add new types above this line
 };

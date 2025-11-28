@@ -3,15 +3,16 @@
 #include "rpc_operation_request_base.h"
 
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/tx/schemeshard/schemeshard_backup.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
-
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -36,6 +37,10 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return "[ForgetIndexBuild]";
         case TOperationId::SCRIPT_EXECUTION:
             return "[ForgetScriptExecution]";
+        case TOperationId::INCREMENTAL_BACKUP:
+            return "[ForgetIncrementalBackup]";
+        case TOperationId::RESTORE:
+            return "[ForgetBackupCollectionRestore]";
         default:
             return "[Untagged]";
         }
@@ -49,6 +54,10 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return new TEvImport::TEvForgetImportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::BUILD_INDEX:
             return new TEvIndexBuilder::TEvForgetRequest(TxId, GetDatabaseName(), RawOperationId);
+        case TOperationId::INCREMENTAL_BACKUP:
+            return new TEvBackup::TEvForgetIncrementalBackupRequest(TxId, GetDatabaseName(), RawOperationId);
+        case TOperationId::RESTORE:
+            return new TEvBackup::TEvForgetBackupCollectionRestoreRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
@@ -58,7 +67,9 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
         const NOperationId::TOperationId::EKind kind = OperationId.GetKind();
         return kind == TOperationId::EXPORT
             || kind == TOperationId::IMPORT
-            || kind == TOperationId::BUILD_INDEX;
+            || kind == TOperationId::BUILD_INDEX
+            || kind == TOperationId::INCREMENTAL_BACKUP
+            || kind == TOperationId::RESTORE;
     }
 
     void Handle(TEvExport::TEvForgetExportResponse::TPtr& ev) {
@@ -97,7 +108,25 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     }
 
     void SendForgetScriptExecutionOperation() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvForgetScriptExecutionOperation(GetDatabaseName(), OperationId));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvForgetScriptExecutionOperation(GetDatabaseName(), OperationId, GetUserSID(*Request)));
+    }
+
+    void Handle(TEvBackup::TEvForgetIncrementalBackupResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvBackup::TEvForgetIncrementalBackupResponse"
+            << ": record# " << record.ShortDebugString());
+
+        Reply(record.GetStatus(), record.GetIssues());
+    }
+
+    void Handle(TEvBackup::TEvForgetBackupCollectionRestoreResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvBackup::TEvForgetBackupCollectionRestoreResponse"
+            << ": record# " << record.ShortDebugString());
+
+        Reply(record.GetStatus(), record.GetIssues());
     }
 
 public:
@@ -113,6 +142,8 @@ public:
             case TOperationId::EXPORT:
             case TOperationId::IMPORT:
             case TOperationId::BUILD_INDEX:
+            case TOperationId::INCREMENTAL_BACKUP:
+            case TOperationId::RESTORE:
                 if (!TryGetId(OperationId, RawOperationId)) {
                     return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
                 }
@@ -140,6 +171,8 @@ public:
             hFunc(TEvImport::TEvForgetImportResponse, Handle);
             hFunc(TEvIndexBuilder::TEvForgetResponse, Handle);
             hFunc(NKqp::TEvForgetScriptExecutionOperationResponse, Handle);
+            hFunc(TEvBackup::TEvForgetIncrementalBackupResponse, Handle);
+            hFunc(TEvBackup::TEvForgetBackupCollectionRestoreResponse, Handle);
         default:
             return StateBase(ev);
         }

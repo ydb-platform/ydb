@@ -74,4 +74,4 @@ private:
     THolder<TImpl> Impl_;
 };
 
-}
+} // namespace NYql

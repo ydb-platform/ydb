@@ -49,7 +49,7 @@ Y_UNIT_TEST_LLVM(TestSimple) {
     UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
 }
-}
+} // Y_UNIT_TEST_SUITE(TMiniKQLWideStreamTest)
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

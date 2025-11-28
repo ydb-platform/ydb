@@ -24,7 +24,7 @@ namespace NMiniKQL {
 
 namespace {
 
-template<typename T>
+template <typename T>
 inline bool AggLess(T a, T b) {
     if constexpr (std::is_floating_point<T>::value) {
         if (std::isunordered(a, b)) {
@@ -44,7 +44,7 @@ inline T UpdateMinMax(T x, T y) {
     }
 }
 
-template<bool IsMin, typename T>
+template <bool IsMin, typename T>
 inline void UpdateMinMax(TMaybe<T>& state, bool& stateUpdated, T value) {
     if constexpr (IsMin) {
         if (!state || AggLess(value, *state)) {
@@ -59,7 +59,7 @@ inline void UpdateMinMax(TMaybe<T>& state, bool& stateUpdated, T value) {
     }
 }
 
-template<bool IsMin>
+template <bool IsMin>
 inline void UpdateMinMax(NYql::NUdf::IBlockItemComparator& comparator, TBlockItem& state, bool& stateUpdated, TBlockItem value) {
     if constexpr (IsMin) {
         if (!state || comparator.Less(value, state)) {
@@ -74,19 +74,19 @@ inline void UpdateMinMax(NYql::NUdf::IBlockItemComparator& comparator, TBlockIte
     }
 }
 
-template<typename TTag, typename TString, bool IsMin>
+template <typename TTag, typename TString, bool IsMin>
 class TMinMaxBlockStringAggregator;
 
-template<typename TTag, bool IsNullable, bool IsScalar, typename TIn, bool IsMin>
+template <typename TTag, bool IsNullable, bool IsScalar, typename TIn, bool IsMin>
 class TMinMaxBlockFixedAggregator;
 
-template<typename TTag, bool IsMin>
+template <typename TTag, bool IsMin>
 class TMinMaxBlockGenericAggregator;
 
 template <bool IsNullable, typename TIn, bool IsMin>
 struct TState;
 
-template<typename TIn, bool IsMin>
+template <typename TIn, bool IsMin>
 constexpr TIn InitialStateValue() {
     if constexpr (std::is_floating_point<TIn>::value) {
         static_assert(std::numeric_limits<TIn>::has_infinity && std::numeric_limits<TIn>::has_quiet_NaN);
@@ -127,9 +127,10 @@ struct TState<false, TIn, IsMin> {
 using TGenericState = NUdf::TUnboxedValuePod;
 
 template <bool IsNullable, typename TIn, bool IsMin>
-class TColumnBuilder : public IAggColumnBuilder {
+class TColumnBuilder: public IAggColumnBuilder {
     using TBuilder = typename NYql::NUdf::TFixedSizeArrayBuilder<TIn, IsNullable>;
     using TStateType = TState<IsNullable, TIn, IsMin>;
+
 public:
     TColumnBuilder(ui64 size, TType* type, TComputationContext& ctx)
         : Builder_(type, TTypeInfoHelper(), ctx.ArrowMemoryPool, size)
@@ -157,7 +158,7 @@ private:
     TComputationContext& Ctx_;
 };
 
-class TGenericColumnBuilder : public IAggColumnBuilder {
+class TGenericColumnBuilder: public IAggColumnBuilder {
 public:
     TGenericColumnBuilder(ui64 size, TType* columnType, TComputationContext& ctx)
         : Builder_(MakeArrayBuilder(TTypeInfoHelper(), columnType, ctx.ArrowMemoryPool, size, &ctx.Builder->GetPgBuilder()))
@@ -180,7 +181,7 @@ private:
 
 template <bool IsMin>
 void PushValueToState(TGenericState* typedState, const arrow::Datum& datum, ui64 row, IBlockReader& reader,
-    IBlockItemConverter& converter, NYql::NUdf::IBlockItemComparator& comparator, TComputationContext& ctx)
+                      IBlockItemConverter& converter, NYql::NUdf::IBlockItemComparator& comparator, TComputationContext& ctx)
 {
     TBlockItem stateItem;
     bool stateChanged = false;
@@ -208,8 +209,8 @@ void PushValueToState(TGenericState* typedState, const arrow::Datum& datum, ui64
     }
 }
 
-template<bool IsMin>
-class TMinMaxBlockGenericAggregator<TCombineAllTag, IsMin> : public TCombineAllTag::TBase {
+template <bool IsMin>
+class TMinMaxBlockGenericAggregator<TCombineAllTag, IsMin>: public TCombineAllTag::TBase {
 public:
     using TBase = TCombineAllTag::TBase;
 
@@ -224,7 +225,7 @@ public:
     }
 
     void InitState(void* state) final {
-        new(state) TGenericState();
+        new (state) TGenericState();
     }
 
     void DestroyState(void* state) noexcept final {
@@ -283,8 +284,8 @@ public:
         }
     }
 
-    NUdf::TUnboxedValue FinishOne(const void *state) final {
-        auto typedState = *static_cast<const TGenericState *>(state);
+    NUdf::TUnboxedValue FinishOne(const void* state) final {
+        auto typedState = *static_cast<const TGenericState*>(state);
         return typedState;
     }
 
@@ -296,8 +297,8 @@ private:
     const NYql::NUdf::IBlockItemComparator::TPtr Compare_;
 };
 
-template<bool IsMin>
-class TMinMaxBlockGenericAggregator<TCombineKeysTag, IsMin> : public TCombineKeysTag::TBase {
+template <bool IsMin>
+class TMinMaxBlockGenericAggregator<TCombineKeysTag, IsMin>: public TCombineKeysTag::TBase {
 public:
     using TBase = TCombineKeysTag::TBase;
 
@@ -312,7 +313,7 @@ public:
     }
 
     void InitKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
-        new(state) TGenericState();
+        new (state) TGenericState();
         UpdateKey(state, batchNum, columns, row);
     }
 
@@ -341,8 +342,8 @@ private:
     const NYql::NUdf::IBlockItemComparator::TPtr Compare_;
 };
 
-template<bool IsMin>
-class TMinMaxBlockGenericAggregator<TFinalizeKeysTag, IsMin> : public TFinalizeKeysTag::TBase {
+template <bool IsMin>
+class TMinMaxBlockGenericAggregator<TFinalizeKeysTag, IsMin>: public TFinalizeKeysTag::TBase {
 public:
     using TBase = TFinalizeKeysTag::TBase;
 
@@ -358,7 +359,7 @@ public:
     }
 
     void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
-        new(state) TGenericState();
+        new (state) TGenericState();
         UpdateState(state, batchNum, columns, row);
     }
 
@@ -416,7 +417,8 @@ private:
 
 template <typename TStringType, bool IsMin>
 void PushValueToState(TGenericState* typedState, const arrow::Datum& datum, ui64 row) {
-    using TOffset = typename TPrimitiveDataType<TStringType>::TResult::offset_type;;
+    using TOffset = typename TPrimitiveDataType<TStringType>::TResult::offset_type;
+    ;
 
     TMaybe<NUdf::TStringRef> currentState;
     if (*typedState) {
@@ -457,8 +459,8 @@ void PushValueToState(TGenericState* typedState, const arrow::Datum& datum, ui64
     }
 }
 
-template<typename TStringType, bool IsMin>
-class TMinMaxBlockStringAggregator<TCombineAllTag, TStringType, IsMin> : public TCombineAllTag::TBase {
+template <typename TStringType, bool IsMin>
+class TMinMaxBlockStringAggregator<TCombineAllTag, TStringType, IsMin>: public TCombineAllTag::TBase {
 public:
     using TBase = TCombineAllTag::TBase;
     using TOffset = typename TPrimitiveDataType<TStringType>::TResult::offset_type;
@@ -471,7 +473,7 @@ public:
     }
 
     void InitState(void* state) final {
-        new(state) TGenericState();
+        new (state) TGenericState();
     }
 
     void DestroyState(void* state) noexcept final {
@@ -560,13 +562,12 @@ public:
         return typedState;
     }
 
-
 private:
     const ui32 ArgColumn_;
 };
 
-template<typename TStringType, bool IsMin>
-class TMinMaxBlockStringAggregator<TCombineKeysTag, TStringType, IsMin> : public TCombineKeysTag::TBase {
+template <typename TStringType, bool IsMin>
+class TMinMaxBlockStringAggregator<TCombineKeysTag, TStringType, IsMin>: public TCombineKeysTag::TBase {
 public:
     using TBase = TCombineKeysTag::TBase;
 
@@ -578,7 +579,7 @@ public:
     }
 
     void InitKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
-        new(state) TGenericState();
+        new (state) TGenericState();
         UpdateKey(state, batchNum, columns, row);
     }
 
@@ -604,8 +605,8 @@ private:
     TType* const Type_;
 };
 
-template<typename TStringType, bool IsMin>
-class TMinMaxBlockStringAggregator<TFinalizeKeysTag, TStringType, IsMin> : public TFinalizeKeysTag::TBase {
+template <typename TStringType, bool IsMin>
+class TMinMaxBlockStringAggregator<TFinalizeKeysTag, TStringType, IsMin>: public TFinalizeKeysTag::TBase {
 public:
     using TBase = TFinalizeKeysTag::TBase;
 
@@ -617,7 +618,7 @@ public:
     }
 
     void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
-        new(state) TGenericState();
+        new (state) TGenericState();
         UpdateState(state, batchNum, columns, row);
     }
 
@@ -671,7 +672,7 @@ private:
 };
 
 template <bool IsNullable, bool IsScalar, typename TIn, bool IsMin>
-class TMinMaxBlockFixedAggregator<TCombineAllTag, IsNullable, IsScalar, TIn, IsMin> : public TCombineAllTag::TBase {
+class TMinMaxBlockFixedAggregator<TCombineAllTag, IsNullable, IsScalar, TIn, IsMin>: public TCombineAllTag::TBase {
 public:
     using TBase = TCombineAllTag::TBase;
     using TStateType = TState<IsNullable, TIn, IsMin>;
@@ -799,7 +800,7 @@ static void PushValueToState(TState<IsNullable, TIn, IsMin>* typedState, const a
             typedState->Value = TIn(Cast(datum.scalar_as<TInScalar>().value));
         }
     } else {
-        const auto &array = datum.array();
+        const auto& array = datum.array();
         auto ptr = array->GetValues<TIn>(1);
         if constexpr (IsNullable) {
             if (array->GetNullCount() == 0) {
@@ -819,7 +820,7 @@ static void PushValueToState(TState<IsNullable, TIn, IsMin>* typedState, const a
 }
 
 template <bool IsNullable, bool IsScalar, typename TIn, bool IsMin>
-class TMinMaxBlockFixedAggregator<TCombineKeysTag, IsNullable, IsScalar, TIn, IsMin> : public TCombineKeysTag::TBase {
+class TMinMaxBlockFixedAggregator<TCombineKeysTag, IsNullable, IsScalar, TIn, IsMin>: public TCombineKeysTag::TBase {
 public:
     using TBase = TCombineKeysTag::TBase;
     using TStateType = TState<IsNullable, TIn, IsMin>;
@@ -860,7 +861,7 @@ private:
 };
 
 template <bool IsNullable, bool IsScalar, typename TIn, bool IsMin>
-class TMinMaxBlockFixedAggregator<TFinalizeKeysTag, IsNullable, IsScalar, TIn, IsMin> : public TFinalizeKeysTag::TBase {
+class TMinMaxBlockFixedAggregator<TFinalizeKeysTag, IsNullable, IsScalar, TIn, IsMin>: public TFinalizeKeysTag::TBase {
 public:
     using TBase = TFinalizeKeysTag::TBase;
     using TStateType = TState<IsNullable, TIn, IsMin>;
@@ -939,8 +940,8 @@ private:
     TType* const Type_;
 };
 
-template<typename TTag, typename TStringType, bool IsMin>
-class TPreparedMinMaxBlockStringAggregator : public TTag::TPreparedAggregator {
+template <typename TTag, typename TStringType, bool IsMin>
+class TPreparedMinMaxBlockStringAggregator: public TTag::TPreparedAggregator {
 public:
     using TBase = typename TTag::TPreparedAggregator;
 
@@ -949,11 +950,13 @@ public:
         , Type_(type)
         , FilterColumn_(filterColumn)
         , ArgColumn_(argColumn)
-    {}
+    {
+    }
 
     std::unique_ptr<typename TTag::TAggregator> Make(TComputationContext& ctx) const final {
         return std::make_unique<TMinMaxBlockStringAggregator<TTag, TStringType, IsMin>>(Type_, FilterColumn_, ArgColumn_, ctx);
     }
+
 private:
     TType* const Type_;
     const std::optional<ui32> FilterColumn_;
@@ -961,7 +964,7 @@ private:
 };
 
 template <typename TTag, bool IsNullable, bool IsScalar, typename TIn, bool IsMin>
-class TPreparedMinMaxBlockFixedAggregator : public TTag::TPreparedAggregator {
+class TPreparedMinMaxBlockFixedAggregator: public TTag::TPreparedAggregator {
 public:
     using TBase = typename TTag::TPreparedAggregator;
     using TStateType = TState<IsNullable, TIn, IsMin>;
@@ -971,7 +974,8 @@ public:
         , Type_(type)
         , FilterColumn_(filterColumn)
         , ArgColumn_(argColumn)
-    {}
+    {
+    }
 
     std::unique_ptr<typename TTag::TAggregator> Make(TComputationContext& ctx) const final {
         return std::make_unique<TMinMaxBlockFixedAggregator<TTag, IsNullable, IsScalar, TIn, IsMin>>(Type_, FilterColumn_, ArgColumn_, ctx);
@@ -984,7 +988,7 @@ private:
 };
 
 template <typename TTag, bool IsMin>
-class TPreparedMinMaxBlockGenericAggregator : public TTag::TPreparedAggregator {
+class TPreparedMinMaxBlockGenericAggregator: public TTag::TPreparedAggregator {
 public:
     using TBase = typename TTag::TPreparedAggregator;
 
@@ -993,7 +997,8 @@ public:
         , Type_(type)
         , FilterColumn_(filterColumn)
         , ArgColumn_(argColumn)
-    {}
+    {
+    }
 
     std::unique_ptr<typename TTag::TAggregator> Make(TComputationContext& ctx) const final {
         return std::make_unique<TMinMaxBlockGenericAggregator<TTag, IsMin>>(Type_, FilterColumn_, ArgColumn_, ctx);
@@ -1005,7 +1010,7 @@ private:
     const ui32 ArgColumn_;
 };
 
-template<typename TTag, typename TIn, bool IsMin>
+template <typename TTag, typename TIn, bool IsMin>
 std::unique_ptr<typename TTag::TPreparedAggregator> PrepareMinMaxFixed(TType* type, bool isOptional, bool isScalar, std::optional<ui32> filterColumn, ui32 argColumn) {
     if (isScalar) {
         if (isOptional) {
@@ -1041,44 +1046,44 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareMinMax(TTupleType* tu
         return std::make_unique<TPreparedMinMaxBlockStringAggregator<TTag, TStringType, IsMin>>(argType, filterColumn, argColumn);
     }
     switch (slot) {
-    case NUdf::EDataSlot::Int8:
-        return PrepareMinMaxFixed<TTag, i8, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
-    case NUdf::EDataSlot::Bool:
-    case NUdf::EDataSlot::Uint8:
-        return PrepareMinMaxFixed<TTag, ui8, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
-    case NUdf::EDataSlot::Int16:
-        return PrepareMinMaxFixed<TTag, i16, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
-    case NUdf::EDataSlot::Uint16:
-    case NUdf::EDataSlot::Date:
-        return PrepareMinMaxFixed<TTag, ui16, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
-    case NUdf::EDataSlot::Int32:
-    case NUdf::EDataSlot::Date32:
-        return PrepareMinMaxFixed<TTag, i32, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
-    case NUdf::EDataSlot::Uint32:
-    case NUdf::EDataSlot::Datetime:
-        return PrepareMinMaxFixed<TTag, ui32, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
-    case NUdf::EDataSlot::Int64:
-    case NUdf::EDataSlot::Interval:
-    case NUdf::EDataSlot::Interval64:
-    case NUdf::EDataSlot::Timestamp64:
-    case NUdf::EDataSlot::Datetime64:
-        return PrepareMinMaxFixed<TTag, i64, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
-    case NUdf::EDataSlot::Uint64:
-    case NUdf::EDataSlot::Timestamp:
-        return PrepareMinMaxFixed<TTag, ui64, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
-    case NUdf::EDataSlot::Float:
-        return PrepareMinMaxFixed<TTag, float, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
-    case NUdf::EDataSlot::Double:
-        return PrepareMinMaxFixed<TTag, double, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
-    case NUdf::EDataSlot::Decimal:
-        return PrepareMinMaxFixed<TTag, NYql::NDecimal::TInt128, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
-    default:
-        throw yexception() << "Unsupported MIN/MAX input type";
+        case NUdf::EDataSlot::Int8:
+            return PrepareMinMaxFixed<TTag, i8, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+        case NUdf::EDataSlot::Bool:
+        case NUdf::EDataSlot::Uint8:
+            return PrepareMinMaxFixed<TTag, ui8, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+        case NUdf::EDataSlot::Int16:
+            return PrepareMinMaxFixed<TTag, i16, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+        case NUdf::EDataSlot::Uint16:
+        case NUdf::EDataSlot::Date:
+            return PrepareMinMaxFixed<TTag, ui16, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+        case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Date32:
+            return PrepareMinMaxFixed<TTag, i32, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+        case NUdf::EDataSlot::Uint32:
+        case NUdf::EDataSlot::Datetime:
+            return PrepareMinMaxFixed<TTag, ui32, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+        case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64:
+        case NUdf::EDataSlot::Timestamp64:
+        case NUdf::EDataSlot::Datetime64:
+            return PrepareMinMaxFixed<TTag, i64, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+        case NUdf::EDataSlot::Uint64:
+        case NUdf::EDataSlot::Timestamp:
+            return PrepareMinMaxFixed<TTag, ui64, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+        case NUdf::EDataSlot::Float:
+            return PrepareMinMaxFixed<TTag, float, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+        case NUdf::EDataSlot::Double:
+            return PrepareMinMaxFixed<TTag, double, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+        case NUdf::EDataSlot::Decimal:
+            return PrepareMinMaxFixed<TTag, NYql::NDecimal::TInt128, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+        default:
+            throw yexception() << "Unsupported MIN/MAX input type";
     }
 }
 
 template <bool IsMin>
-class TBlockMinMaxFactory : public IBlockAggregatorFactory {
+class TBlockMinMaxFactory: public IBlockAggregatorFactory {
 public:
     std::unique_ptr<TCombineAllTag::TPreparedAggregator> PrepareCombineAll(
         TTupleType* tupleType,
@@ -1120,5 +1125,5 @@ std::unique_ptr<IBlockAggregatorFactory> MakeBlockMaxFactory() {
     return std::make_unique<TBlockMinMaxFactory<false>>();
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -10,12 +10,14 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, RecordBatch);
 
     virtual bool DoCheckInteraction(
-        const ui64 selfTxId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& /*notifications*/) const override {
-        THashSet<ui64> txIds = context.GetAffectedTxIds(PathId, RecordBatch);
-        txIds.erase(selfTxId);
+        const ui64 selfLockId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& /*notifications*/) const override {
+        
+        THashSet<ui64> lockIdsToBreakOnCommit = context.GetAffectedLockIds(PathId, RecordBatch);
+        lockIdsToBreakOnCommit.erase(selfLockId);
         TTxConflicts result;
-        for (auto&& i : txIds) {
-            result.Add(selfTxId, i);
+        for (const auto& lockIdToBreak : lockIdsToBreakOnCommit) {
+            // when selfLockId commits, lockIdToBreak will get broken
+            result.Add(selfLockId, lockIdToBreak);
         }
         std::swap(result, conflicts);
         return true;

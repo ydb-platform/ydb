@@ -408,7 +408,7 @@ void S::RegisterMetadata(auto&& registrar)
 
 PHOENIX_DEFINE_TYPE(S);
 
-} // namespace NVersions
+} // namespace NInVersions
 
 TEST(TPhoenixTest, InVersion1)
 {
@@ -636,6 +636,83 @@ TEST(TPhoenixTest, CompatFieldSerializer)
     auto s = Deserialize<S>(buffer);
     EXPECT_EQ(s.A, 123);
     EXPECT_EQ(s.B, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NSchemaEvolution {
+
+struct S
+{
+    int A;
+    int C;
+
+    bool operator==(const S&) const = default;
+
+    PHOENIX_DECLARE_TYPE(S, 0x4910d939);
+};
+
+enum EVersion
+{
+    Initial = 1,
+    RemoveB = 2,
+    AddC = 3,
+};
+
+void S::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, A);
+
+    registrar.template VirtualField<2>("B", [] (TThis* /*this_*/, auto& context) {
+        Load<int>(context);
+    })
+        .BeforeVersion(RemoveB)();
+
+    PHOENIX_REGISTER_FIELD(3, C,
+        .SinceVersion(AddC)
+        .WhenMissing([] (TThis* this_, auto& /*context*/) {
+            this_->C = 777;
+        }));
+}
+
+PHOENIX_DEFINE_TYPE(S);
+
+} // NSchemaEvolution
+
+TEST(TPhoenixTest, AddFieldAfterDeletedField)
+{
+    using namespace NSchemaEvolution;
+    auto buffer = MakeBuffer([] (auto& context) {
+        Save<int>(context, 123);
+    });
+
+    auto removeBSchema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TString(R"""(
+        {
+            types = [
+                {
+                    name = S;
+                    tag = 1225840953u;
+                    fields = [
+                        {
+                            name = a;
+                            tag = 1u;
+                        };
+                        {
+                            name = b;
+                            tag = 2u;
+                        };
+                    ]
+                }
+            ];
+        }
+    )""")));
+
+    TLoadSessionGuard guard(removeBSchema);
+    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
+
+    auto s = Deserialize<S>(buffer, RemoveB);
+    EXPECT_EQ(s.A, 123);
+    EXPECT_EQ(s.C, 777);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1881,6 +1958,120 @@ TEST(TPhoenixTest, SeveralSpecializationsOfOneTemplate)
     auto tp2 = Deserialize<TDerivedFromTemplate>(Serialize(tp1));
     EXPECT_EQ(tp1, tp2);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NIntrusivePtrOnFinal {
+
+struct TSomeFinalStruct final
+    : public TPair<int, int>
+{
+    bool operator==(const TSomeFinalStruct&) const = default;
+
+    PHOENIX_DECLARE_TYPE(TSomeFinalStruct, 0x3b849252);
+};
+
+void TSomeFinalStruct::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TPair<int, int>>();
+}
+
+PHOENIX_DEFINE_TYPE(TSomeFinalStruct);
+
+TEST(TPhoenixTest, IntrusivePtrOnFinal)
+{
+    auto obj1 = New<TSomeFinalStruct>();
+    obj1->First = 5;
+    obj1->Second = 2;
+
+    auto obj2 = Deserialize<TIntrusivePtr<TSomeFinalStruct>>(Serialize(obj1));
+    EXPECT_EQ(*obj1, *obj2);
+}
+
+struct TFinalStructWithPtrs final
+{
+    TSomeFinalStruct Obj1;
+
+    TWeakPtr<TSomeFinalStruct> Weak1;
+    TIntrusivePtr<TSomeFinalStruct> Ptr1;
+
+    bool operator==(const TFinalStructWithPtrs& rhs) const
+    {
+        if (Obj1 != rhs.Obj1) {
+            return false;
+        }
+
+        if (Ptr1 != rhs.Ptr1 && (Ptr1 == nullptr || rhs.Ptr1 == nullptr || *Ptr1 != *rhs.Ptr1)) {
+            return false;
+        }
+
+        auto weak1 = Weak1.Lock();
+        auto rhsWeak1 = rhs.Weak1.Lock();
+
+        if (weak1 != rhsWeak1 && (weak1 == nullptr || rhsWeak1 == nullptr || *weak1 != *rhsWeak1)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    PHOENIX_DECLARE_TYPE(TFinalStructWithPtrs, 0x0dcf3aed);
+};
+
+void TFinalStructWithPtrs::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, Obj1);
+    PHOENIX_REGISTER_FIELD(2, Weak1);
+    PHOENIX_REGISTER_FIELD(3, Ptr1);
+}
+
+PHOENIX_DEFINE_TYPE(TFinalStructWithPtrs);
+
+TEST(TPhoenixTest, FinalStructWithNullPtrs)
+{
+    auto initial = New<TFinalStructWithPtrs>();
+    initial->Obj1.First = 3;
+    initial->Obj1.Second = 2;
+
+    auto result = Deserialize<TIntrusivePtr<TFinalStructWithPtrs>>(Serialize(initial));
+    EXPECT_EQ(*initial, *result);
+}
+
+TEST(TPhoenixTest, FinalStructWithNonNullPtrs)
+{
+    auto initial = New<TFinalStructWithPtrs>();
+    initial->Obj1.First = 5;
+    initial->Obj1.Second = 6;
+
+    auto ptr = New<TSomeFinalStruct>();
+    ptr->First = 10;
+    ptr->Second = 20;
+
+    initial->Ptr1 = ptr;
+    initial->Weak1 = ptr;
+
+    auto result = Deserialize<TIntrusivePtr<TFinalStructWithPtrs>>(Serialize(initial));
+    EXPECT_EQ(*initial, *result);
+}
+
+TEST(TPhoenixTest, FinalStructWithNullWeakAndNonNullStrong)
+{
+    auto initial = New<TFinalStructWithPtrs>();
+    initial->Obj1.First = 7;
+    initial->Obj1.Second = 8;
+
+    auto ptr = New<TSomeFinalStruct>();
+    ptr->First = 15;
+    ptr->Second = 25;
+
+    initial->Ptr1 = ptr;
+    initial->Weak1 = nullptr;
+
+    auto result = Deserialize<TIntrusivePtr<TFinalStructWithPtrs>>(Serialize(initial));
+    EXPECT_EQ(*initial, *result);
+}
+
+} // namespace NIntrusivePtrOnFinal
 
 ////////////////////////////////////////////////////////////////////////////////
 

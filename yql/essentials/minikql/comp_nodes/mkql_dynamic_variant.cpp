@@ -12,16 +12,17 @@ namespace NMiniKQL {
 namespace {
 
 template <typename TDerived>
-class TDynamicVariantBaseWrapper : public TMutableComputationNode<TDerived> {
+class TDynamicVariantBaseWrapper: public TMutableComputationNode<TDerived> {
 public:
     using TBase = TMutableComputationNode<TDerived>;
 
     TDynamicVariantBaseWrapper(TComputationMutables& mutables, IComputationNode* item,
-        IComputationNode* index)
+                               IComputationNode* index)
         : TBase(mutables)
         , Item(item)
         , Index(index)
-    {}
+    {
+    }
 
 private:
     void RegisterDependencies() const final {
@@ -34,15 +35,16 @@ protected:
     IComputationNode* const Index;
 };
 
-class TDynamicVariantTupleWrapper : public TDynamicVariantBaseWrapper<TDynamicVariantTupleWrapper> {
+class TDynamicVariantTupleWrapper: public TDynamicVariantBaseWrapper<TDynamicVariantTupleWrapper> {
 public:
     using TBase = TDynamicVariantBaseWrapper<TDynamicVariantTupleWrapper>;
 
     TDynamicVariantTupleWrapper(TComputationMutables& mutables, IComputationNode* item,
-        IComputationNode* index, TVariantType* varType)
+                                IComputationNode* index, TVariantType* varType)
         : TBase(mutables, item, index)
         , AltCounts(varType->GetAlternativesCount())
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto indexValue = Index->GetValue(ctx);
@@ -59,15 +61,16 @@ private:
     const ui32 AltCounts;
 };
 
-class TDynamicVariantStructWrapper : public TDynamicVariantBaseWrapper<TDynamicVariantStructWrapper> {
+class TDynamicVariantStructWrapper: public TDynamicVariantBaseWrapper<TDynamicVariantStructWrapper> {
 public:
     using TBase = TDynamicVariantBaseWrapper<TDynamicVariantStructWrapper>;
 
     TDynamicVariantStructWrapper(TComputationMutables& mutables, IComputationNode* item,
-        IComputationNode* index, TVariantType* varType)
+                                 IComputationNode* index, TVariantType* varType)
         : TBase(mutables, item, index)
         , Fields(MakeFields(varType))
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto indexValue = Index->GetValue(ctx);
@@ -101,7 +104,7 @@ private:
     const THashMap<TStringBuf, ui32> Fields;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapDynamicVariant(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arguments");
@@ -120,5 +123,5 @@ IComputationNode* WrapDynamicVariant(TCallable& callable, const TComputationNode
     return nullptr;
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

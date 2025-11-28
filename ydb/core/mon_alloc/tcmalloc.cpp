@@ -211,7 +211,8 @@ class TAllocationAnalyzer {
     bool Prepared = false;
 
 private:
-#if defined(USE_DWARF_BACKTRACE)
+// Using DWARF to resolve backtraces is expensive - i.e. the cloud disk I/O may block process for minutes, while loading debug sections.
+#if defined(USE_DWARF_BACKTRACE) && defined(PROFILE_MEMORY_ALLOCATIONS)
     void PrintBackTrace(IOutputStream& out, void* const* stack, size_t size, const char* sep) {
         // TODO: ignore symbol cache for now - because of inlines.
         if (auto error = NDwarf::ResolveBacktrace(TArrayRef<const void* const>(stack, size), [&](const NDwarf::TLineInfo& info) {
@@ -597,10 +598,10 @@ class TTcMallocMonitor : public IAllocMonitor {
         {}
 
         void Register(TIntrusivePtr<TControlBoard> icb) {
-            icb->RegisterSharedControl(ProfileSamplingRate, "TCMallocControls.ProfileSamplingRate");
-            icb->RegisterSharedControl(GuardedSamplingRate, "TCMallocControls.GuardedSamplingRate");
-            icb->RegisterSharedControl(PageCacheTargetSize, "TCMallocControls.PageCacheTargetSize");
-            icb->RegisterSharedControl(PageCacheReleaseRate, "TCMallocControls.PageCacheReleaseRate");
+            TControlBoard::RegisterSharedControl(ProfileSamplingRate, icb->TCMallocControls.ProfileSamplingRate);
+            TControlBoard::RegisterSharedControl(GuardedSamplingRate, icb->TCMallocControls.GuardedSamplingRate);
+            TControlBoard::RegisterSharedControl(PageCacheTargetSize, icb->TCMallocControls.PageCacheTargetSize);
+            TControlBoard::RegisterSharedControl(PageCacheReleaseRate, icb->TCMallocControls.PageCacheReleaseRate);
         }
     };
     TControls Controls;

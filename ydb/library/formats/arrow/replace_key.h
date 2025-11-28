@@ -3,11 +3,14 @@
 #include "permutations.h"
 
 #include "switch/compare.h"
+#include "switch/switch_type.h"
 
 #include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
+#include <library/cpp/string_utils/base64/base64.h>
+#include <util/digest/fnv.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
@@ -19,6 +22,10 @@ using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
 
 template <typename TArrayVecPtr>
 class TReplaceKeyTemplate {
+protected:
+    TArrayVecPtr Columns = nullptr;
+    ui64 Position = 0;
+
 public:
     static constexpr bool IsOwning = std::is_same_v<TArrayVecPtr, std::shared_ptr<TArrayVec>>;
 
@@ -60,6 +67,7 @@ public:
         }
         return result;
     }
+    TReplaceKeyTemplate() = default;
 
     TReplaceKeyTemplate(TArrayVecPtr columns, const ui64 position)
         : Columns(columns)
@@ -77,50 +85,32 @@ public:
 
     template <typename T>
     bool operator==(const TReplaceKeyTemplate<T>& key) const {
-        Y_ABORT_UNLESS(GetColumnsCount() == key.GetColumnsCount());
-
-        for (ui32 i = 0; i < GetColumnsCount(); ++i) {
-            auto cmp = CompareColumnValue(i, key, i);
-            if (std::is_neq(cmp)) {
-                return false;
-            }
-        }
-        return true;
+        return std::is_eq(Compare<false>(key));
     }
 
     template <typename T>
     std::partial_ordering operator<=>(const TReplaceKeyTemplate<T>& key) const {
-        Y_ABORT_UNLESS(GetColumnsCount() == key.GetColumnsCount());
-
-        for (ui32 i = 0; i < GetColumnsCount(); ++i) {
-            auto cmp = CompareColumnValue(i, key, i);
-            if (std::is_neq(cmp)) {
-                return cmp;
-            }
-        }
-        return std::partial_ordering::equivalent;
+        return Compare<false>(key);
     }
 
     template <typename T>
     std::partial_ordering CompareNotNull(const TReplaceKeyTemplate<T>& key) const {
-        Y_ABORT_UNLESS(GetColumnsCount() == key.GetColumnsCount());
-
-        for (ui32 i = 0; i < GetColumnsCount(); ++i) {
-            auto cmp = CompareColumnValueNotNull(i, key, i);
-            if (std::is_neq(cmp)) {
-                return cmp;
-            }
-        }
-        return std::partial_ordering::equivalent;
+        return Compare<true>(key);
     }
 
-    template <typename T>
-    std::partial_ordering ComparePartNotNull(const TReplaceKeyTemplate<T>& key, const ui32 size) const {
+    template <bool notNull, typename T>
+    std::partial_ordering Compare(const TReplaceKeyTemplate<T>& key) const {
+        Y_ABORT_UNLESS(GetColumnsCount() == key.GetColumnsCount());
+        return ComparePart<notNull>(key, GetColumnsCount());
+    }
+
+    template <bool notNull, typename T>
+    std::partial_ordering ComparePart(const TReplaceKeyTemplate<T>& key, const ui32 size) const {
         Y_ABORT_UNLESS(size <= key.GetColumnsCount());
         Y_ABORT_UNLESS(size <= GetColumnsCount());
 
         for (ui32 i = 0; i < size; ++i) {
-            auto cmp = CompareColumnValueNotNull(i, key, i);
+            const auto cmp = CompareColumnValue<notNull>(i, key, i);
             if (std::is_neq(cmp)) {
                 return cmp;
             }
@@ -128,16 +118,10 @@ public:
         return std::partial_ordering::equivalent;
     }
 
-    template <typename T>
-    std::partial_ordering CompareColumnValueNotNull(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
-        Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
-        return TComparator::TypedCompare<true>(Column(column), Position, key.Column(keyColumn), key.GetPosition());
-    }
-
-    template <typename T>
+    template <bool notNull, typename T>
     std::partial_ordering CompareColumnValue(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
         Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
-        return TComparator::TypedCompare<false>(Column(column), Position, key.Column(keyColumn), key.GetPosition());
+        return TComparator::TypedCompare<notNull>(Column(column), Position, key.Column(keyColumn), key.GetPosition());
     }
 
     ui64 GetColumnsCount() const {
@@ -225,7 +209,7 @@ public:
     }
 
     static std::shared_ptr<arrow::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key, int colNumber = 0) {
-        Y_DEBUG_ABORT_UNLESS(colNumber < key.Size());
+        Y_DEBUG_ABORT_UNLESS(colNumber < key.GetColumnsCount());
         auto& column = key.Column(colNumber);
         auto res = column.GetScalar(key.GetPosition());
         Y_ABORT_UNLESS(res.status().ok(), "%s", res.status().ToString().c_str());
@@ -236,10 +220,6 @@ public:
     const TArrayVecPtr& GetColumns() const {
         return Columns;
     }
-
-private:
-    TArrayVecPtr Columns = nullptr;
-    ui64 Position = 0;
 };
 
 class TReplaceKeyView;
@@ -270,6 +250,75 @@ public:
 
     TReplaceKeyView(const std::vector<std::shared_ptr<arrow::Array>>& columns, const ui64 position)
         : TBase(&columns, position) {
+    }
+
+    TReplaceKey GetToStore() const {
+        return TReplaceKey(std::make_shared<std::vector<std::shared_ptr<arrow::Array>>>(*GetColumns()), GetPosition());
+    }
+};
+
+class TReplaceKeyHashable: public TReplaceKeyTemplate<const TArrayVec*> {
+private:
+    using TBase = TReplaceKeyTemplate<const TArrayVec*>;
+    ui64 HashPrecalculated = 0;
+    const std::vector<arrow::Type::type>* Types = nullptr;
+
+    ui64 CalcHash() const {
+        size_t result = 0;
+        for (auto&& i : *Columns) {
+            AFL_VERIFY(NArrow::SwitchType(i->type_id(), [&](const auto& type) {
+                auto* arr = type.CastArray(i.get());
+                result = CombineHashes<size_t>(result, type.CalcHash(type.GetValue(*arr, Position)));
+                return true;
+            }));
+        }
+        return result;
+    }
+
+public:
+    ui64 GetHashPrecalculated() const {
+        return HashPrecalculated;
+    }
+
+    bool operator==(const TReplaceKeyHashable& key) const {
+        if (HashPrecalculated != key.HashPrecalculated) {
+            return false;
+        }
+        const ui32 count = Columns->size();
+        Y_ABORT_UNLESS(count == key.Columns->size());
+        for (ui32 i = 0; i < count; ++i) {
+            Y_DEBUG_ABORT_UNLESS(Column(i).type_id() == key.Column(i).type_id());
+            if (std::is_neq(TComparator::ConcreteTypedCompare<true>((*Types)[i], Column(i), Position, key.Column(i), key.GetPosition()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    explicit operator size_t() const {
+        return HashPrecalculated;
+    }
+
+    bool IsFinished() const {
+        return (*GetColumns()).front()->length() == GetPosition();
+    }
+
+    void Next() {
+        AFL_VERIFY(GetPosition() < (*GetColumns()).front()->length());
+        ++Position;
+        if (!IsFinished()) {
+            HashPrecalculated = CalcHash();
+        }
+    }
+
+    TReplaceKeyHashable() = default;
+
+    TReplaceKeyHashable(
+        const std::vector<std::shared_ptr<arrow::Array>>& columns, const ui64 position, const std::vector<arrow::Type::type>& types)
+        : TBase(&columns, position)
+        , HashPrecalculated(CalcHash())
+        , Types(&types) {
+        AFL_VERIFY(Types);
     }
 
     TReplaceKey GetToStore() const {
@@ -485,3 +534,13 @@ static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch) {
 }
 
 }   // namespace NKikimr::NArrow
+
+namespace std {
+template <>
+struct hash<NKikimr::NArrow::TReplaceKeyHashable> {
+    std::size_t operator()(const NKikimr::NArrow::TReplaceKeyHashable& obj) const {
+        return obj.GetHashPrecalculated();
+    }
+    hash() = default;
+};
+}   // namespace std

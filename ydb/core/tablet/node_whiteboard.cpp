@@ -1,32 +1,22 @@
-#include <cmath>
 #include <library/cpp/svnversion/svnversion.h>
-#include <util/system/info.h>
+#include <util/system/getpid.h>
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/util/cpuinfo.h>
 #include <ydb/core/util/tuples.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#include <util/string/split.h>
-#include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
+namespace NKikimr::NNodeWhiteboard {
 
 using namespace NActors;
-
-namespace NKikimr {
-namespace NNodeWhiteboard {
 
 class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService> {
     struct TEvPrivate {
         enum EEv {
             EvUpdateRuntimeStats = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvCleanupDeadTablets,
-            EvSendListNodes,
             EvEnd
         };
 
@@ -34,20 +24,19 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
 
         struct TEvUpdateRuntimeStats : TEventLocal<TEvUpdateRuntimeStats, EvUpdateRuntimeStats> {};
         struct TEvCleanupDeadTablets : TEventLocal<TEvCleanupDeadTablets, EvCleanupDeadTablets> {};
-        struct TEvSendListNodes : TEventLocal<TEvSendListNodes, EvSendListNodes> {};
     };
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::NODE_WHITEBOARD_SERVICE;
     }
 
-    void Bootstrap(const TActorContext &ctx) {
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletsGroup = GetServiceCounters(AppData(ctx)->Counters, "tablets");
+    void Bootstrap() {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletsGroup = GetServiceCounters(AppData()->Counters, "tablets");
         TIntrusivePtr<::NMonitoring::TDynamicCounters> introspectionGroup = tabletsGroup->GetSubgroup("type", "introspection");
         TabletIntrospectionData.Reset(NTracing::CreateTraceCollection(introspectionGroup));
 
         SystemStateInfo.SetHost(FQDNHostName());
-        if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.empty()) {
+        if (const TString& nodeName = AppData()->NodeName; !nodeName.empty()) {
             SystemStateInfo.SetNodeName(nodeName);
         }
         SystemStateInfo.SetNumberOfCpus(NSystemInfo::NumberOfCpus());
@@ -55,27 +44,26 @@ public:
         auto version = GetProgramRevision();
         if (!version.empty()) {
             SystemStateInfo.SetVersion(version);
-            TIntrusivePtr<NMonitoring::TDynamicCounters> utils = GetServiceCounters(AppData(ctx)->Counters, "utils");
+            TIntrusivePtr<NMonitoring::TDynamicCounters> utils = GetServiceCounters(AppData()->Counters, "utils");
             TIntrusivePtr<NMonitoring::TDynamicCounters> versionCounter = utils->GetSubgroup("revision", version);
             *versionCounter->GetCounter("version", false) = 1;
             TIntrusivePtr<NMonitoring::TDynamicCounters> nodeCounter = utils->GetSubgroup("NodeCount", version);
             *nodeCounter->GetCounter("NodeCount", false) = 1;
         }
 
-        SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
-        ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
+        SystemStateInfo.SetStartTime(TInstant::Now().MilliSeconds());
+        SystemStateInfo.SetPID(GetPID());
+        Send(SelfId(), new TEvPrivate::TEvUpdateRuntimeStats());
 
-        auto utils = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils");
-        UserTime = utils->GetCounter("Process/UserTime", true);
-        SysTime = utils->GetCounter("Process/SystemTime", true);
-        MinorPageFaults = utils->GetCounter("Process/MinorPageFaults", true);
-        MajorPageFaults = utils->GetCounter("Process/MajorPageFaults", true);
-        NumThreads = utils->GetCounter("Process/NumThreads", false);
+        auto utils = NKikimr::GetServiceCounters(AppData()->Counters, "utils");
+        auto grpc = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "grpc");
+        GrpcRequestBytes = grpc->GetSubgroup("subsystem", "serverStats")->GetCounter("requestBytes", true);
+        GrpcResponseBytes = grpc->GetSubgroup("subsystem", "serverStats")->GetCounter("responseBytes", true);
         auto group = utils->GetSubgroup("subsystem", "whiteboard");
         MaxClockSkewWithPeerUsCounter = group->GetCounter("MaxClockSkewWithPeerUs");
         MaxClockSkewPeerIdCounter = group->GetCounter("MaxClockSkewPeerId");
 
-        ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
+        Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
         Become(&TNodeWhiteboardService::StateFunc);
     }
 
@@ -86,30 +74,18 @@ protected:
     std::unordered_map<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, THash<TVDiskID>> VDiskStateInfo;
     std::unordered_map<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
 
-    bool IsBridgeCluster = false;
-    NKikimrWhiteboard::TBridgeInfo BridgeInfo;
-    NKikimrWhiteboard::TBridgeNodesInfo BridgeNodesInfo;
-    TInstant BridgeInfoChangeTime;
-    static constexpr TDuration SendListNodesPeriod = TDuration::Seconds(15);
-
-    i64 MaxClockSkewWithPeerUs;
-    ui32 MaxClockSkewPeerId;
-    float MaxNetworkUtilization = 0.0;
+    i64 MaxClockSkewWithPeerUs = 0;
+    ui32 MaxClockSkewPeerId = 0;
     ui64 SumNetworkWriteThroughput = 0;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
 
     NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
     NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr UserTime;
-    ui64 SavedUserTime = 0;
-    NMonitoring::TDynamicCounters::TCounterPtr SysTime;
-    ui64 SavedSysTime = 0;
-    NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaults;
-    ui64 SavedMinorPageFaults = 0;
-    NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaults;
-    ui64 SavedMajorPageFaults = 0;
-    NMonitoring::TDynamicCounters::TCounterPtr NumThreads;
+    NMonitoring::TDynamicCounters::TCounterPtr GrpcRequestBytes;
+    ui64 SavedGrpcRequestBytes = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr GrpcResponseBytes;
+    ui64 SavedGrpcResponseBytes = 0;
 
     TSystemThreadsMonitor ThreadsMonitor;
 
@@ -537,58 +513,66 @@ protected:
         SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
     }
 
-    STRICT_STFUNC(StateFunc,
-        HFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
-        HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
-        HFunc(TEvWhiteboard::TEvNodeStateUpdate, Handle);
-        HFunc(TEvWhiteboard::TEvNodeStateDelete, Handle);
-        HFunc(TEvWhiteboard::TEvNodeStateRequest, Handle);
-        HFunc(TEvWhiteboard::TEvPDiskStateUpdate, Handle);
-        HFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
-        HFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle);
-        HFunc(TEvWhiteboard::TEvVDiskStateUpdate, Handle);
-        HFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle);
-        HFunc(TEvWhiteboard::TEvVDiskStateDelete, Handle);
-        HFunc(TEvWhiteboard::TEvVDiskStateRequest, Handle);
-        HFunc(TEvWhiteboard::TEvVDiskDropDonors, Handle);
-        HFunc(TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
-        HFunc(TEvWhiteboard::TEvBSGroupStateDelete, Handle);
-        HFunc(TEvWhiteboard::TEvBSGroupStateRequest, Handle);
-        HFunc(TEvWhiteboard::TEvSystemStateUpdate, Handle);
-        HFunc(TEvWhiteboard::TEvMemoryStatsUpdate, Handle);
-        HFunc(TEvWhiteboard::TEvSystemStateAddEndpoint, Handle);
-        HFunc(TEvWhiteboard::TEvSystemStateAddRole, Handle);
-        HFunc(TEvWhiteboard::TEvSystemStateSetTenant, Handle);
-        HFunc(TEvWhiteboard::TEvSystemStateRemoveTenant, Handle);
-        HFunc(TEvWhiteboard::TEvSystemStateRequest, Handle);
-        hFunc(TEvWhiteboard::TEvIntrospectionData, Handle);
-        HFunc(TEvWhiteboard::TEvTabletLookupRequest, Handle);
-        HFunc(TEvWhiteboard::TEvTraceLookupRequest, Handle);
-        HFunc(TEvWhiteboard::TEvTraceRequest, Handle);
-        HFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
-        HFunc(TEvWhiteboard::TEvBridgeInfoUpdate, Handle);
-        HFunc(TEvInterconnect::TEvNodesInfo, Handle);
-        HFunc(TEvWhiteboard::TEvBridgeInfoRequest, Handle);
-        HFunc(TEvPrivate::TEvSendListNodes, Handle);
-        HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
-        HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
-    )
+    STATEFN(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
+            hFunc(TEvWhiteboard::TEvNodeStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvNodeStateDelete, Handle);
+            hFunc(TEvWhiteboard::TEvNodeStateRequest, Handle);
+            hFunc(TEvWhiteboard::TEvPDiskStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
+            hFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskStateDelete, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskStateRequest, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskDropDonors, Handle);
+            hFunc(TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvBSGroupStateDelete, Handle);
+            hFunc(TEvWhiteboard::TEvBSGroupStateRequest, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvMemoryStatsUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateAddEndpoint, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateAddRole, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateSetTenant, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateRemoveTenant, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateRequest, Handle);
+            hFunc(TEvWhiteboard::TEvIntrospectionData, Handle);
+            hFunc(TEvWhiteboard::TEvTabletLookupRequest, Handle);
+            hFunc(TEvWhiteboard::TEvTraceLookupRequest, Handle);
+            hFunc(TEvWhiteboard::TEvTraceRequest, Handle);
+            hFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
+            hFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
+            hFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
+        }
+    }
 
-    void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr& ev) {
         auto tabletId(std::make_pair(ev->Get()->Record.GetTabletId(), ev->Get()->Record.GetFollowerId()));
         auto& tabletStateInfo = TabletStateInfo[tabletId];
         if (ev->Get()->Record.HasGeneration() && tabletStateInfo.GetGeneration() > ev->Get()->Record.GetGeneration()) {
             return; // skip updates from previous generations
         }
         if (CheckedMerge(tabletStateInfo, ev->Get()->Record) >= 100) {
-            tabletStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+            tabletStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
         }
     }
 
-    void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr &ev, const TActorContext &ctx) {
+    bool ShouldReportClockSkew(const NKikimrWhiteboard::TNodeStateInfo& info) {
+        if (!info.GetSameScope()) {
+            return false;
+        }
+        if (!AppData()->BridgeModeEnabled) {
+            return true;
+        }
+        return SystemStateInfo.GetLocation().GetBridgePileName() == info.GetPeerBridgePileName();
+    }
+
+    void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr& ev) {
         auto& nodeStateInfo = NodeStateInfo[ev->Get()->Record.GetPeerName()];
         ui64 previousChangeTime = nodeStateInfo.GetChangeTime();
-        ui64 currentChangeTime = ctx.Now().MilliSeconds();
+        ui64 currentChangeTime = TActivationContext::Now().MilliSeconds();
         ui64 previousBytesWritten = nodeStateInfo.GetBytesWritten();
         ui64 currentBytesWritten = ev->Get()->Record.GetBytesWritten();
         if (previousChangeTime && previousBytesWritten < currentBytesWritten && previousChangeTime < currentChangeTime) {
@@ -596,58 +580,56 @@ protected:
         } else {
             nodeStateInfo.ClearWriteThroughput();
         }
-        if (ev->Get()->Record.GetSameScope()) {
+        if (ShouldReportClockSkew(ev->Get()->Record)) {
             i64 skew = ev->Get()->Record.GetClockSkewUs();
             if (abs(skew) > abs(MaxClockSkewWithPeerUs)) {
                 MaxClockSkewWithPeerUs = skew;
                 MaxClockSkewPeerId = ev->Get()->Record.GetPeerNodeId();
             }
         }
-        // TODO: need better way to calculate network utilization
-        MaxNetworkUtilization = std::max(MaxNetworkUtilization, ev->Get()->Record.GetUtilization());
         SumNetworkWriteThroughput += nodeStateInfo.GetWriteThroughput();
         nodeStateInfo.MergeFrom(ev->Get()->Record);
         nodeStateInfo.SetChangeTime(currentChangeTime);
     }
 
-    void Handle(TEvWhiteboard::TEvNodeStateDelete::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvNodeStateDelete::TPtr& ev) {
         auto& nodeStateInfo = NodeStateInfo[ev->Get()->Record.GetPeerName()];
         if (nodeStateInfo.HasConnected()) {
             nodeStateInfo.ClearConnected();
-            nodeStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+            nodeStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
         }
     }
 
-    void Handle(TEvWhiteboard::TEvPDiskStateUpdate::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvPDiskStateUpdate::TPtr& ev) {
         auto& pDiskStateInfo = PDiskStateInfo[ev->Get()->Record.GetPDiskId()];
         if (CheckedMerge(pDiskStateInfo, ev->Get()->Record) >= 100) {
-            pDiskStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+            pDiskStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
         }
         SetRole("Storage");
     }
 
-    void Handle(TEvWhiteboard::TEvVDiskStateUpdate::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvVDiskStateUpdate::TPtr& ev) {
         auto& record = ev->Get()->Record;
         const auto& key = VDiskIDFromVDiskID(record.GetVDiskId());
         if (ev->Get()->Initial) {
             auto& value = VDiskStateInfo[key];
             value = record;
-            value.SetChangeTime(ctx.Now().MilliSeconds());
+            value.SetChangeTime(TActivationContext::Now().MilliSeconds());
         } else if (const auto it = VDiskStateInfo.find(key); it != VDiskStateInfo.end() &&
                 it->second.GetInstanceGuid() == record.GetInstanceGuid()) {
             auto& value = it->second;
 
             if (CheckedMerge(value, record) >= 100) {
-                value.SetChangeTime(ctx.Now().MilliSeconds());
+                value.SetChangeTime(TActivationContext::Now().MilliSeconds());
             }
         }
     }
 
-    void Handle(TEvWhiteboard::TEvVDiskStateDelete::TPtr &ev, const TActorContext &) {
+    void Handle(TEvWhiteboard::TEvVDiskStateDelete::TPtr& ev) {
         VDiskStateInfo.erase(VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskId()));
     }
 
-    void Handle(TEvWhiteboard::TEvVDiskStateGenerationChange::TPtr &ev, const TActorContext &) {
+    void Handle(TEvWhiteboard::TEvVDiskStateGenerationChange::TPtr& ev) {
         auto *msg = ev->Get();
         if (const auto it = VDiskStateInfo.find(msg->VDiskId); it != VDiskStateInfo.end() &&
                 it->second.GetInstanceGuid() == msg->InstanceGuid) {
@@ -657,7 +639,7 @@ protected:
         }
     }
 
-    void Handle(TEvWhiteboard::TEvVDiskDropDonors::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvWhiteboard::TEvVDiskDropDonors::TPtr& ev) {
         auto& msg = *ev->Get();
         if (const auto it = VDiskStateInfo.find(msg.VDiskId); it != VDiskStateInfo.end() &&
                 it->second.GetInstanceGuid() == msg.InstanceGuid) {
@@ -682,12 +664,12 @@ protected:
             }
 
             if (change) {
-                value.SetChangeTime(ctx.Now().MilliSeconds());
+                value.SetChangeTime(TActivationContext::Now().MilliSeconds());
             }
         }
     }
 
-    void Handle(TEvWhiteboard::TEvBSGroupStateUpdate::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvBSGroupStateUpdate::TPtr& ev) {
         const auto& from = ev->Get()->Record;
         auto& to = BSGroupStateInfo[from.GetGroupID()];
         int modified = 0;
@@ -698,54 +680,22 @@ protected:
         }
         modified += CheckedMerge(to, from);
         if (modified >= 100) {
-            to.SetChangeTime(ctx.Now().MilliSeconds());
+            to.SetChangeTime(TActivationContext::Now().MilliSeconds());
         }
     }
 
-    void Handle(TEvWhiteboard::TEvBSGroupStateDelete::TPtr &ev, const TActorContext &) {
+    void Handle(TEvWhiteboard::TEvBSGroupStateDelete::TPtr& ev) {
         ui32 groupId = ev->Get()->Record.GetGroupID();
         BSGroupStateInfo.erase(groupId);
     }
 
-    void Handle(TEvWhiteboard::TEvBridgeInfoUpdate::TPtr &ev, const TActorContext &ctx) {
-        BridgeInfo.Swap(&ev->Get()->Record);
-        BridgeInfoChangeTime = ctx.Now();
-        if (!IsBridgeCluster) {
-            ctx.Send(SelfId(), new TEvPrivate::TEvSendListNodes);
-        }
-        IsBridgeCluster = true;
-    }
-
-    void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
-        NKikimrWhiteboard::TBridgeNodesInfo newInfo;
-        const auto& pileMap = ev->Get()->PileMap;
-        if (!pileMap) {
-            return;
-        }
-        for (const auto& pile : *pileMap) {
-            auto* pileInfo = newInfo.MutablePiles()->Add();
-            for (const auto nodeId : pile) {
-                pileInfo->MutableNodeIds()->Add(nodeId);
-            }
-        }
-        if (!google::protobuf::util::MessageDifferencer::Equals(newInfo, BridgeNodesInfo)) {
-            BridgeNodesInfo.Swap(&newInfo);
-            BridgeInfoChangeTime = ctx.Now();
-        }
-    }
-
-    void Handle(TEvPrivate::TEvSendListNodes::TPtr &, const TActorContext &ctx) {
-        ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes);
-        ctx.Schedule(SendListNodesPeriod, new TEvPrivate::TEvSendListNodes);
-    }
-
-    void Handle(TEvWhiteboard::TEvSystemStateUpdate::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvSystemStateUpdate::TPtr& ev) {
         if (CheckedMerge(SystemStateInfo, ev->Get()->Record)) {
-            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+            SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
         }
     }
 
-    void Handle(TEvWhiteboard::TEvMemoryStatsUpdate::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvMemoryStatsUpdate::TPtr& ev) {
         const auto& memoryStats = ev->Get()->Record;
 
         // Note: copy stats to sys info fields for backward compatibility
@@ -777,43 +727,43 @@ protected:
         // Note: there is no big reason (and an easy way) to compare the previous and the new memory stats
         // and allocated memory stat is expected to change every time
         // so always update change time unconditionally
-        SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+        SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
     }
 
-    void Handle(TEvWhiteboard::TEvSystemStateAddEndpoint::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvSystemStateAddEndpoint::TPtr& ev) {
         auto& endpoint = *SystemStateInfo.AddEndpoints();
         endpoint.SetName(ev->Get()->Name);
         endpoint.SetAddress(ev->Get()->Address);
         std::sort(SystemStateInfo.MutableEndpoints()->begin(), SystemStateInfo.MutableEndpoints()->end(), [](const auto& a, const auto& b) {
             return a.GetName() < b.GetName();
         });
-        SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+        SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
     }
 
-    void Handle(TEvWhiteboard::TEvSystemStateAddRole::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvSystemStateAddRole::TPtr& ev) {
         const auto& roles = SystemStateInfo.GetRoles();
         if (Find(roles, ev->Get()->Role) == roles.end()) {
             SystemStateInfo.AddRoles(ev->Get()->Role);
-            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+            SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
         }
     }
 
-    void Handle(TEvWhiteboard::TEvSystemStateSetTenant::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvSystemStateSetTenant::TPtr& ev) {
         const auto& tenants = SystemStateInfo.GetTenants();
         if (Find(tenants, ev->Get()->Tenant) == tenants.end()) {
             SystemStateInfo.ClearTenants();
             SystemStateInfo.AddTenants(ev->Get()->Tenant);
-            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+            SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
             SetRole("Tenant");
         }
     }
 
-    void Handle(TEvWhiteboard::TEvSystemStateRemoveTenant::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvSystemStateRemoveTenant::TPtr& ev) {
         auto& tenants = *SystemStateInfo.MutableTenants();
         auto itTenant = Find(tenants, ev->Get()->Tenant);
         if (itTenant != tenants.end()) {
             tenants.erase(itTenant);
-            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+            SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
         }
     }
 
@@ -898,8 +848,8 @@ protected:
         }
     }
 
-    static std::unordered_set<TTabletId> BuildIndex(const ::google::protobuf::RepeatedField<::NProtoBuf::uint64>& array) {
-        std::unordered_set<TTabletId> result;
+    static std::unordered_set<ui64> BuildIndex(const ::google::protobuf::RepeatedField<::NProtoBuf::uint64>& array) {
+        std::unordered_set<ui64> result;
         result.reserve(array.size());
         for (auto id : array) {
             result.insert(id);
@@ -907,7 +857,7 @@ protected:
         return result;
     }
 
-    void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr& ev) {
         auto now = TMonotonic::Now();
         const auto& request = ev->Get()->Record;
         auto matchesFilter = [
@@ -966,43 +916,33 @@ protected:
                 }
             }
         }
-        response->Record.set_responsetime(ctx.Now().MilliSeconds());
+        response->Record.set_responsetime(TActivationContext::Now().MilliSeconds());
         response->Record.set_processduration((TMonotonic::Now() - now).MicroSeconds());
-        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr& ev) {
         const auto& request = ev->Get()->Record;
-        ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;
+        auto matchesFilter = [
+            changedSince = request.has_changedsince() ? request.changedsince() : 0,
+            filterNodeId = BuildIndex(request.filternodeid())
+        ](const NKikimrWhiteboard::TNodeStateInfo& nodeStateInfo) {
+            return nodeStateInfo.changetime() >= changedSince
+                && (filterNodeId.empty() || filterNodeId.count(nodeStateInfo.peernodeid()));
+        };
         TAutoPtr<TEvWhiteboard::TEvNodeStateResponse> response = new TEvWhiteboard::TEvNodeStateResponse();
         auto& record = response->Record;
         for (const auto& pr : NodeStateInfo) {
-            if (pr.second.GetChangeTime() >= changedSince) {
-                NKikimrWhiteboard::TNodeStateInfo &nodeStateInfo = *record.AddNodeStateInfo();
+            if (matchesFilter(pr.second)) {
+                NKikimrWhiteboard::TNodeStateInfo& nodeStateInfo = *record.AddNodeStateInfo();
                 Copy(nodeStateInfo, pr.second, request);
             }
         }
-        response->Record.SetResponseTime(ctx.Now().MilliSeconds());
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        response->Record.SetResponseTime(TActivationContext::Now().MilliSeconds());
+        Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-//    void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev, const TActorContext &ctx) {
-//        TAutoPtr<TEvWhiteboard::TEvNodeStateResponse> response = new TEvWhiteboard::TEvNodeStateResponse();
-//        auto& record = response->Record;
-//        const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters = AppData(ctx)->Counters;
-//        TIntrusivePtr<::NMonitoring::TDynamicCounters> interconnectCounters = GetServiceCounters(counters, "interconnect");
-//        interconnectCounters->EnumerateSubgroups([&record, &interconnectCounters](const TString &name, const TString &value) -> void {
-//            NKikimrWhiteboard::TNodeStateInfo &nodeStateInfo = *record.AddNodeStateInfo();
-//            TIntrusivePtr<::NMonitoring::TDynamicCounters> peerCounters = interconnectCounters->GetSubgroup(name, value);
-//            ::NMonitoring::TDynamicCounters::TCounterPtr connectedCounter = peerCounters->GetCounter("Connected");
-//            nodeStateInfo.SetPeerName(value);
-//            nodeStateInfo.SetConnected(connectedCounter->Val());
-//        });
-//        response->Record.SetResponseTime(ctx.Now().MilliSeconds());
-//        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
-//    }
-
-    void Handle(TEvWhiteboard::TEvPDiskStateRequest::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvPDiskStateRequest::TPtr& ev) {
         const auto& request = ev->Get()->Record;
         ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;
         TAutoPtr<TEvWhiteboard::TEvPDiskStateResponse> response = new TEvWhiteboard::TEvPDiskStateResponse();
@@ -1013,11 +953,11 @@ protected:
                 Copy(pDiskStateInfo, pr.second, request);
             }
         }
-        response->Record.SetResponseTime(ctx.Now().MilliSeconds());
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        response->Record.SetResponseTime(TActivationContext::Now().MilliSeconds());
+        Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvPDiskStateDelete::TPtr &ev, const TActorContext &) {
+    void Handle(TEvWhiteboard::TEvPDiskStateDelete::TPtr& ev) {
         auto pdiskId = ev->Get()->Record.GetPDiskId();
 
         auto it = PDiskStateInfo.find(pdiskId);
@@ -1026,7 +966,7 @@ protected:
         }
     }
 
-    void Handle(TEvWhiteboard::TEvVDiskStateRequest::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvVDiskStateRequest::TPtr& ev) {
         const auto& request = ev->Get()->Record;
         ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;
         TAutoPtr<TEvWhiteboard::TEvVDiskStateResponse> response = new TEvWhiteboard::TEvVDiskStateResponse();
@@ -1037,11 +977,11 @@ protected:
                 Copy(vDiskStateInfo, pr.second, request);
             }
         }
-        response->Record.SetResponseTime(ctx.Now().MilliSeconds());
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        response->Record.SetResponseTime(TActivationContext::Now().MilliSeconds());
+        Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvBSGroupStateRequest::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvBSGroupStateRequest::TPtr& ev) {
         const auto& request = ev->Get()->Record;
         ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;
         TAutoPtr<TEvWhiteboard::TEvBSGroupStateResponse> response = new TEvWhiteboard::TEvBSGroupStateResponse();
@@ -1052,28 +992,11 @@ protected:
                 Copy(bSGroupStateInfo, pr.second, request);
             }
         }
-        response->Record.SetResponseTime(ctx.Now().MilliSeconds());
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        response->Record.SetResponseTime(TActivationContext::Now().MilliSeconds());
+        Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvBridgeInfoRequest::TPtr &ev, const TActorContext &ctx) {
-        const auto& request = ev->Get()->Record;
-        std::unique_ptr<TEvWhiteboard::TEvBridgeInfoResponse> response(new TEvWhiteboard::TEvBridgeInfoResponse);
-        auto& record = response->Record;
-
-        record.SetIsBridgeCluster(IsBridgeCluster);
-        if (IsBridgeCluster) {
-            ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;
-            if (BridgeInfoChangeTime.MilliSeconds() >= changedSince) {
-                record.MutableBridgeInfo()->CopyFrom(BridgeInfo);
-                record.MutableBridgeNodesInfo()->CopyFrom(BridgeNodesInfo);
-            }
-        }
-        record.SetResponseTime(ctx.Now().MilliSeconds());
-        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
-    }
-
-    void Handle(TEvWhiteboard::TEvSystemStateRequest::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvSystemStateRequest::TPtr& ev) {
         const auto& request = ev->Get()->Record;
         ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;
         TAutoPtr<TEvWhiteboard::TEvSystemStateResponse> response = new TEvWhiteboard::TEvSystemStateResponse();
@@ -1082,16 +1005,16 @@ protected:
             NKikimrWhiteboard::TSystemStateInfo &systemStateInfo = *record.AddSystemStateInfo();
             Copy(systemStateInfo, SystemStateInfo, request);
         }
-        response->Record.SetResponseTime(ctx.Now().MilliSeconds());
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        response->Record.SetResponseTime(TActivationContext::Now().MilliSeconds());
+        Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvIntrospectionData::TPtr &ev) {
+    void Handle(TEvWhiteboard::TEvIntrospectionData::TPtr& ev) {
         TEvWhiteboard::TEvIntrospectionData *msg = ev->Get();
         TabletIntrospectionData->AddTrace(msg->TabletId, msg->Trace.Release());
     }
 
-    void Handle(TEvWhiteboard::TEvTabletLookupRequest::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvTabletLookupRequest::TPtr& ev) {
         THolder<TEvWhiteboard::TEvTabletLookupResponse> response = MakeHolder<TEvWhiteboard::TEvTabletLookupResponse>();
         auto& record = response->Record;
         TVector<ui64> tabletIDs;
@@ -1099,10 +1022,10 @@ protected:
         for (auto id : tabletIDs) {
             record.AddTabletIDs(id);
         }
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvTraceLookupRequest::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvTraceLookupRequest::TPtr& ev) {
         ui64 tabletID = ev->Get()->Record.GetTabletID();
         THolder<TEvWhiteboard::TEvTraceLookupResponse> response = MakeHolder<TEvWhiteboard::TEvTraceLookupResponse>();
         auto& record = response->Record;
@@ -1111,10 +1034,10 @@ protected:
         for (auto& tabletTrace : tabletTraces) {
             TraceIDFromTraceID(tabletTrace, record.AddTraceIDs());
         }
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvTraceRequest::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvTraceRequest::TPtr& ev) {
         auto& requestRecord = ev->Get()->Record;
         ui64 tabletID = requestRecord.GetTabletID();
         NTracing::TTraceID traceID = NTracing::TraceIDFromTraceID(requestRecord.GetTraceID());
@@ -1123,7 +1046,7 @@ protected:
         auto& responseRecord = response->Record;
         auto trace = TabletIntrospectionData->GetTrace(tabletID, traceID);
         NTracing::TTraceInfo traceInfo = {
-            ctx.SelfID.NodeId(),
+            SelfId().NodeId(),
             tabletID,
             traceID,
             NTracing::TTimestampInfo(
@@ -1138,10 +1061,10 @@ protected:
             str << "Trace not found.";
         }
         responseRecord.SetTrace(str.Str());
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvSignalBodyRequest::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvSignalBodyRequest::TPtr& ev) {
         auto& requestRecord = ev->Get()->Record;
         ui64 tabletID = requestRecord.GetTabletID();
         NTracing::TTraceID traceID = NTracing::TraceIDFromTraceID(requestRecord.GetTraceID());
@@ -1163,7 +1086,7 @@ protected:
             str << "Trace not found.";
         }
         responseRecord.SetSignalBody(str.Str());
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
     static TVector<double> GetLoadAverage() {
@@ -1172,7 +1095,7 @@ protected:
         return loadAvg;
     }
 
-    void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr &, const TActorContext &ctx) {
+    void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr&) {
         static constexpr int UPDATE_PERIOD_SECONDS = 15;
         static constexpr TDuration UPDATE_PERIOD = TDuration::Seconds(UPDATE_PERIOD_SECONDS);
         auto now = TActivationContext::Now();
@@ -1198,10 +1121,6 @@ protected:
         }
 
         {
-            SystemStateInfo.SetNetworkUtilization(MaxNetworkUtilization);
-            MaxNetworkUtilization = 0;
-        }
-        {
             SystemStateInfo.SetNetworkWriteThroughput(SumNetworkWriteThroughput / UPDATE_PERIOD_SECONDS);
             SumNetworkWriteThroughput = 0;
         }
@@ -1219,14 +1138,25 @@ protected:
                 threadInfo->MutableStates()->emplace(state.first, state.second);
             }
         }
+        {
+            if (SavedGrpcRequestBytes || SavedGrpcResponseBytes) {
+                auto requestBytes = GrpcRequestBytes->Val() - SavedGrpcRequestBytes;
+                auto responseBytes = GrpcResponseBytes->Val() - SavedGrpcResponseBytes;
+                SystemStateInfo.SetGrpcRequestBytes(requestBytes / UPDATE_PERIOD_SECONDS);
+                SystemStateInfo.SetGrpcResponseBytes(responseBytes / UPDATE_PERIOD_SECONDS);
+            }
+            SavedGrpcRequestBytes = GrpcRequestBytes->Val();
+            SavedGrpcResponseBytes = GrpcResponseBytes->Val();
+        }
         UpdateSystemState();
-        ctx.Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());
+        Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());
     }
 
-    void Handle(TEvPrivate::TEvCleanupDeadTablets::TPtr &, const TActorContext &ctx) {
+    void Handle(TEvPrivate::TEvCleanupDeadTablets::TPtr&) {
         auto it = TabletStateInfo.begin();
-        ui64 deadDeadline = (ctx.Now() - TDuration::Minutes(10)).MilliSeconds();
-        ui64 deletedDeadline = (ctx.Now() - TDuration::Hours(1)).MilliSeconds();
+        auto now(TActivationContext::Now());
+        ui64 deadDeadline = (now - TDuration::Minutes(10)).MilliSeconds();
+        ui64 deletedDeadline = (now - TDuration::Hours(1)).MilliSeconds();
         while (it != TabletStateInfo.end()) {
             const auto& tabletInfo = it->second;
             NKikimrWhiteboard::TTabletStateInfo::ETabletState state = tabletInfo.GetState();
@@ -1250,7 +1180,7 @@ protected:
                 break;
             }
         }
-        ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
+        Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
     }
 };
 
@@ -1278,9 +1208,14 @@ template<typename TMessage>
     return defaultFields;
 }
 
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TTabletStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TNodeStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TVDiskStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TBSGroupStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>();
 IActor* CreateNodeWhiteboardService() {
     return new TNodeWhiteboardService();
 }
 
-} // NNodeWhiteboard
-} // NKikimr
+} // NKikimr::NNodeWhiteboard

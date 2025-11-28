@@ -2,12 +2,11 @@
 
 PY3_LIBRARY()
 
-VERSION(6.112.5)
+VERSION(6.148.2)
 
 LICENSE(MPL-2.0)
 
 PEERDIR(
-    contrib/python/attrs
     contrib/python/sortedcontainers
 )
 
@@ -55,7 +54,7 @@ PY_SRCS(
     hypothesis/internal/charmap.py
     hypothesis/internal/compat.py
     hypothesis/internal/conjecture/__init__.py
-    hypothesis/internal/conjecture/choicetree.py
+    hypothesis/internal/conjecture/choice.py
     hypothesis/internal/conjecture/data.py
     hypothesis/internal/conjecture/datatree.py
     hypothesis/internal/conjecture/dfa/__init__.py
@@ -65,9 +64,12 @@ PY_SRCS(
     hypothesis/internal/conjecture/junkdrawer.py
     hypothesis/internal/conjecture/optimiser.py
     hypothesis/internal/conjecture/pareto.py
+    hypothesis/internal/conjecture/provider_conformance.py
+    hypothesis/internal/conjecture/providers.py
     hypothesis/internal/conjecture/shrinker.py
     hypothesis/internal/conjecture/shrinking/__init__.py
     hypothesis/internal/conjecture/shrinking/bytes.py
+    hypothesis/internal/conjecture/shrinking/choicetree.py
     hypothesis/internal/conjecture/shrinking/collection.py
     hypothesis/internal/conjecture/shrinking/common.py
     hypothesis/internal/conjecture/shrinking/floats.py
@@ -75,6 +77,7 @@ PY_SRCS(
     hypothesis/internal/conjecture/shrinking/ordering.py
     hypothesis/internal/conjecture/shrinking/string.py
     hypothesis/internal/conjecture/utils.py
+    hypothesis/internal/constants_ast.py
     hypothesis/internal/coverage.py
     hypothesis/internal/detection.py
     hypothesis/internal/entropy.py
@@ -83,6 +86,7 @@ PY_SRCS(
     hypothesis/internal/floats.py
     hypothesis/internal/healthcheck.py
     hypothesis/internal/intervalsets.py
+    hypothesis/internal/lambda_sources.py
     hypothesis/internal/observability.py
     hypothesis/internal/reflection.py
     hypothesis/internal/scrutineer.py
@@ -117,6 +121,7 @@ PY_SRCS(
     hypothesis/utils/conventions.py
     hypothesis/utils/dynamicvariables.py
     hypothesis/utils/terminal.py
+    hypothesis/utils/threading.py
     hypothesis/vendor/__init__.py
     hypothesis/vendor/pretty.py
     hypothesis/version.py

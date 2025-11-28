@@ -1,5 +1,7 @@
 #include "purecalc_filter.h"
 
+#include <fmt/format.h>
+
 #include <ydb/core/fq/libs/actors/logging/log.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -10,23 +12,31 @@ namespace NFq::NRowDispatcher {
 
 namespace {
 
-constexpr const char* OFFSET_FIELD_NAME = "_offset";
+constexpr std::string_view FILTER_FIELD_NAME = "_filter";
+constexpr std::string_view OFFSET_FIELD_NAME = "_offset";
+constexpr std::string_view WATERMARK_FIELD_NAME = "_watermark";
 
-NYT::TNode CreateTypeNode(const TString& fieldType) {
-    return NYT::TNode::CreateList()
-        .Add("DataType")
-        .Add(fieldType);
+NYT::TNode CreateNamedNode(std::string_view name, NYT::TNode&& node) {
+    return NYT::TNode::CreateList().Add(NYT::TNode(name)).Add(std::move(node));
 }
 
-void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
-    node.Add(
-        NYT::TNode::CreateList()
-            .Add(fieldName)
-            .Add(CreateTypeNode(fieldType))
-    );
+NYT::TNode CreateTypeNode(NYT::TNode&& typeNode) {
+    return CreateNamedNode("DataType", std::move(typeNode));
 }
 
-void AddColumn(NYT::TNode& node, const TSchemaColumn& column) {
+NYT::TNode CreateOptionalTypeNode(NYT::TNode&& typeNode) {
+    return CreateNamedNode("OptionalType", std::move(typeNode));
+}
+
+NYT::TNode CreateStructTypeNode(NYT::TNode&& membersNode) {
+    return CreateNamedNode("StructType", std::move(membersNode));
+}
+
+NYT::TNode CreateFieldNode(std::string_view fieldName, NYT::TNode&& typeNode) {
+    return CreateNamedNode(fieldName, std::move(typeNode));
+}
+
+NYT::TNode CreateColumnNode(const TSchemaColumn& column) {
     TString parseTypeError;
     TStringOutput errorStream(parseTypeError);
     NYT::TNode parsedType;
@@ -34,36 +44,36 @@ void AddColumn(NYT::TNode& node, const TSchemaColumn& column) {
         throw yexception() << "Failed to parse column '" << column.Name << "' type yson " << column.TypeYson << ", error: " << parseTypeError;
     }
 
-    node.Add(
-        NYT::TNode::CreateList()
-            .Add(column.Name)
-            .Add(parsedType)
-    );
+    return CreateNamedNode(column.Name, std::move(parsedType));
 }
 
-NYT::TNode MakeInputSchema(const TVector<TSchemaColumn>& columns) {
-    auto structMembers = NYT::TNode::CreateList();
-    AddField(structMembers, OFFSET_FIELD_NAME, "Uint64");
-    for (const auto& column : columns) {
-        AddColumn(structMembers, column);
+NYT::TNode MakeInputSchema(IProcessedDataConsumer::TPtr consumer) {
+    auto membersNode = NYT::TNode::CreateList()
+        .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")));
+    for (const auto& column : consumer->GetColumns()) {
+        membersNode.Add(CreateColumnNode(column));
     }
-    return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
+    return CreateStructTypeNode(std::move(membersNode));
 }
 
-NYT::TNode MakeOutputSchema() {
-    auto structMembers = NYT::TNode::CreateList();
-    AddField(structMembers, OFFSET_FIELD_NAME, "Uint64");
-    return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
+NYT::TNode MakeOutputSchema(IProcessedDataConsumer::TPtr consumer) {
+    auto membersNode = NYT::TNode::CreateList()
+        .Add(CreateFieldNode(FILTER_FIELD_NAME, CreateTypeNode("Bool")))
+        .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")));
+    if (consumer->GetWatermarkExpr()) {
+        membersNode.Add(CreateFieldNode(WATERMARK_FIELD_NAME, CreateOptionalTypeNode(CreateTypeNode("Timestamp"))));
+    }
+    return CreateStructTypeNode(std::move(membersNode));
 }
 
 struct TInputType {
-    const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& Values;
-    const ui64 NumberRows;
+    const TVector<std::span<NYql::NUdf::TUnboxedValue>>& Values;
+    ui64 NumberRows;
 };
 
-class TFilterInputSpec : public NYql::NPureCalc::TInputSpecBase {
+class TInputSpec : public NYql::NPureCalc::TInputSpecBase {
 public:
-    explicit TFilterInputSpec(const NYT::TNode& schema)
+    explicit TInputSpec(const NYT::TNode& schema)
         : Schemas({schema})
     {}
 
@@ -76,16 +86,16 @@ private:
     const TVector<NYT::TNode> Schemas;
 };
 
-class TFilterInputConsumer : public NYql::NPureCalc::IConsumer<TInputType> {
+class TInputConsumer : public NYql::NPureCalc::IConsumer<TInputType> {
 public:
-    TFilterInputConsumer(const TFilterInputSpec& spec, NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
+    TInputConsumer(const TInputSpec& spec, NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
         : Worker(std::move(worker))
     {
         const NKikimr::NMiniKQL::TStructType* structType = Worker->GetInputType();
         const ui64 count = structType->GetMembersCount();
- 
+
         THashMap<TString, ui64> schemaPositions;
-        for (ui64 i = 0; i < count; ++i) { 
+        for (ui64 i = 0; i < count; ++i) {
             const auto name = structType->GetMemberName(i);
             if (name == OFFSET_FIELD_NAME) {
                 OffsetPosition = i;
@@ -107,7 +117,7 @@ public:
         }
     }
 
-    ~TFilterInputConsumer() override {
+    ~TInputConsumer() override {
         with_lock(Worker->GetScopedAlloc()) {
             Cache.Clear();
         }
@@ -134,8 +144,9 @@ public:
 
                 items[OffsetPosition] = NYql::NUdf::TUnboxedValuePod(rowId);
 
-                for (ui64 fieldId = 0; const auto column : input.Values) {
-                    items[FieldsPositions[fieldId++]] = column->at(rowId);
+                for (ui64 fieldId = 0; const auto& column : input.Values) {
+                    Y_DEBUG_ABORT_UNLESS(column.size() > rowId);
+                    items[FieldsPositions[fieldId++]] = column[rowId];
                 }
 
                 Worker->Push(std::move(result));
@@ -158,9 +169,9 @@ private:
     TVector<ui64> FieldsPositions;
 };
 
-class TFilterOutputSpec : public NYql::NPureCalc::TOutputSpecBase {
+class TOutputSpec : public NYql::NPureCalc::TOutputSpecBase {
 public:
-    explicit TFilterOutputSpec(const NYT::TNode& schema)
+    explicit TOutputSpec(const NYT::TNode& schema)
         : Schema(schema)
     {}
 
@@ -173,27 +184,31 @@ private:
     const NYT::TNode Schema;
 };
 
-class TFilterOutputConsumer : public NYql::NPureCalc::IConsumer<ui64> {
+class TOutputConsumer : public NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*> {
 public:
-    explicit TFilterOutputConsumer(IPurecalcFilterConsumer::TPtr consumer)
-        : Consumer(std::move(consumer))
+    explicit TOutputConsumer(IProcessedDataConsumer::TPtr consumer)
+        : Consumer_(std::move(consumer))
     {}
 
 public:
-    void OnObject(ui64 value) override {
-        Consumer->OnFilteredData(value);
+    void OnObject(const NYql::NUdf::TUnboxedValue* value) override {
+        Consumer_->OnData(value);
     }
 
     void OnFinish() override {
     }
 
 private:
-    const IPurecalcFilterConsumer::TPtr Consumer;
+    IProcessedDataConsumer::TPtr Consumer_;
 };
 
-class TFilterPushRelayImpl : public NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*> {
+class TPushRelayImpl : public NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*> {
 public:
-    TFilterPushRelayImpl(const TFilterOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<ui64>> underlying)
+    TPushRelayImpl(
+        const TOutputSpec& outputSpec,
+        NYql::NPureCalc::IPushStreamWorker* worker,
+        THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> underlying
+    )
         : Underlying(std::move(underlying))
         , Worker(worker)
     {
@@ -202,10 +217,8 @@ public:
 
 public:
     void OnObject(const NYql::NUdf::TUnboxedValue* value) override {
-        Y_ENSURE(value->GetListLength() == 1, "Unexpected output schema size");
-
         auto unguard = Unguard(Worker->GetScopedAlloc());
-        Underlying->OnObject(value->GetElement(0).Get<ui64>());
+        Underlying->OnObject(value);
     }
 
     void OnFinish() override {
@@ -214,7 +227,7 @@ public:
     }
 
 private:
-    const THolder<NYql::NPureCalc::IConsumer<ui64>> Underlying;
+    THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> Underlying;
     NYql::NPureCalc::IWorker* Worker;
 };
 
@@ -223,24 +236,28 @@ private:
 }  // namespace NFq::NRowDispatcher
 
 template <>
-struct NYql::NPureCalc::TInputSpecTraits<NFq::NRowDispatcher::TFilterInputSpec> {
-    static constexpr bool IsPartial = false;
-    static constexpr bool SupportPushStreamMode = true;
+struct NYql::NPureCalc::TInputSpecTraits<NFq::NRowDispatcher::TInputSpec> {
+    [[maybe_unused]] static constexpr bool IsPartial = false;
+    [[maybe_unused]] static constexpr bool SupportPushStreamMode = true;
 
     using TConsumerType = THolder<NYql::NPureCalc::IConsumer<NFq::NRowDispatcher::TInputType>>;
 
-    static TConsumerType MakeConsumer(const NFq::NRowDispatcher::TFilterInputSpec& spec, NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker) {
-        return MakeHolder<NFq::NRowDispatcher::TFilterInputConsumer>(spec, std::move(worker));
+    static TConsumerType MakeConsumer(const NFq::NRowDispatcher::TInputSpec& spec, NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker) {
+        return MakeHolder<NFq::NRowDispatcher::TInputConsumer>(spec, std::move(worker));
     }
 };
 
 template <>
-struct NYql::NPureCalc::TOutputSpecTraits<NFq::NRowDispatcher::TFilterOutputSpec> {
-    static const constexpr bool IsPartial = false;
-    static const constexpr bool SupportPushStreamMode = true;
+struct NYql::NPureCalc::TOutputSpecTraits<NFq::NRowDispatcher::TOutputSpec> {
+    [[maybe_unused]] static const constexpr bool IsPartial = false;
+    [[maybe_unused]] static const constexpr bool SupportPushStreamMode = true;
 
-    static void SetConsumerToWorker(const NFq::NRowDispatcher::TFilterOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<ui64>> consumer) {
-        worker->SetConsumer(MakeHolder<NFq::NRowDispatcher::TFilterPushRelayImpl>(outputSpec, worker, std::move(consumer)));
+    static void SetConsumerToWorker(
+        const NFq::NRowDispatcher::TOutputSpec& outputSpec,
+        NYql::NPureCalc::IPushStreamWorker* worker,
+        THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> consumer
+    ) {
+        worker->SetConsumer(MakeHolder<NFq::NRowDispatcher::TPushRelayImpl>(outputSpec, worker, std::move(consumer)));
     }
 };
 
@@ -248,99 +265,237 @@ namespace NFq::NRowDispatcher {
 
 namespace {
 
-class TProgramHolder : public IProgramHolder {
+class TProgramHolder final : public IProgramHolder {
 public:
     using TPtr = TIntrusivePtr<TProgramHolder>;
 
 public:
-    TProgramHolder(IPurecalcFilterConsumer::TPtr consumer, const TString& sql)
-        : Consumer(consumer)
-        , Sql(sql)
+    TProgramHolder(
+        IProcessedDataConsumer::TPtr consumer,
+        NYT::TNode inputSchema,
+        NYT::TNode outputSchema,
+        TString query
+    )
+        : Consumer_(std::move(consumer))
+        , InputSchema_(std::move(inputSchema))
+        , OutputSchema_(std::move(outputSchema))
+        , Query_(std::move(query))
     {}
 
     NYql::NPureCalc::IConsumer<TInputType>& GetConsumer() {
-        Y_ENSURE(InputConsumer, "Program is not compiled");
-        return *InputConsumer;
+        Y_ENSURE(InputConsumer_, "Program is not compiled");
+        return *InputConsumer_;
     }
 
 public:
     void CreateProgram(NYql::NPureCalc::IProgramFactoryPtr programFactory) override {
         // Program should be stateless because input values
         // allocated on another allocator and should be released
-        Program = programFactory->MakePushStreamProgram(
-            TFilterInputSpec(MakeInputSchema(Consumer->GetColumns())),
-            TFilterOutputSpec(MakeOutputSchema()),
-            Sql,
+        Program_ = programFactory->MakePushStreamProgram(
+            TInputSpec(InputSchema_),
+            TOutputSpec(OutputSchema_),
+            Query_,
             NYql::NPureCalc::ETranslationMode::SQL
         );
-        InputConsumer = Program->Apply(MakeHolder<TFilterOutputConsumer>(Consumer));
+        InputConsumer_ = Program_->Apply(MakeHolder<TOutputConsumer>(Consumer_));
+    }
+
+    TStringBuf GetQuery() const override {
+        return Query_;
     }
 
 private:
-    const IPurecalcFilterConsumer::TPtr Consumer;
-    const TString Sql;
+    IProcessedDataConsumer::TPtr Consumer_;
+    NYT::TNode InputSchema_;
+    NYT::TNode OutputSchema_;
+    TString Query_;
 
-    THolder<NYql::NPureCalc::TPushStreamProgram<TFilterInputSpec, TFilterOutputSpec>> Program;
-    THolder<NYql::NPureCalc::IConsumer<TInputType>> InputConsumer;
+    THolder<NYql::NPureCalc::TPushStreamProgram<TInputSpec, TOutputSpec>> Program_;
+    THolder<NYql::NPureCalc::IConsumer<TInputType>> InputConsumer_;
 };
 
-class TPurecalcFilter : public IPurecalcFilter {
+class TProgramCompileHandler final : public IProgramCompileHandler, public TNonCopyable {
 public:
-    TPurecalcFilter(IPurecalcFilterConsumer::TPtr consumer)
-        : Consumer(consumer)
-        , PurecalcSettings(consumer->GetPurecalcSettings())
-        , LogPrefix("TPurecalcFilter: ")
-        , ProgramHolder(MakeIntrusive<TProgramHolder>(consumer, GenerateSql()))
-    {}
-
-public:
-    void FilterData(const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) override {
-        LOG_ROW_DISPATCHER_TRACE("Do filtering for " << numberRows << " rows");
-        ProgramHolder->GetConsumer().OnObject({.Values = values, .NumberRows = numberRows});
+    TProgramCompileHandler(
+        IProcessedDataConsumer::TPtr consumer,
+        IProgramHolder::TPtr programHolder,
+        ui64 cookie,
+        NActors::TActorId compileServiceId,
+        NActors::TActorId owner,
+        NMonitoring::TDynamicCounterPtr counters
+    )
+        : IProgramCompileHandler(std::move(consumer), std::move(programHolder), cookie)
+        , CompileServiceId_(compileServiceId)
+        , Owner_(owner)
+        , InFlightCompileRequests_(counters->GetCounter("InFlightCompileRequests", false))
+        , CompileErrors_(counters->GetCounter("CompileErrors", true))
+    {
+        InFlightCompileRequests_->Inc();
     }
 
-    std::unique_ptr<TEvRowDispatcher::TEvPurecalcCompileRequest> GetCompileRequest() override {
-        Y_ENSURE(ProgramHolder, "Can not create compile request twice");
-        auto result = std::make_unique<TEvRowDispatcher::TEvPurecalcCompileRequest>(std::move(ProgramHolder), PurecalcSettings);
-        ProgramHolder = nullptr;
-        return result;
+    ~TProgramCompileHandler() {
+        InFlightCompileRequests_->Dec();
     }
 
-    void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr ev) override {
-        Y_ENSURE(!ProgramHolder, "Can not handle compile response twice");
+    void Compile() override {
+        LOG_ROW_DISPATCHER_TRACE("Send compile request with id " << Cookie_);
 
-        auto result = static_cast<TProgramHolder*>(ev->Get()->ProgramHolder.Release());
-        Y_ENSURE(result, "Unexpected compile response");
+        auto compileRequest = std::make_unique<TEvRowDispatcher::TEvPurecalcCompileRequest>(std::exchange(ProgramHolder_, nullptr), Consumer_->GetPurecalcSettings());
+        NActors::TActivationContext::ActorSystem()->Send(
+            new NActors::IEventHandle(
+                CompileServiceId_,
+                Owner_,
+                compileRequest.release(),
+                0,
+                Cookie_
+            )
+        );
+    }
 
-        ProgramHolder = TIntrusivePtr<TProgramHolder>(result);
+    void AbortCompilation() override {
+        LOG_ROW_DISPATCHER_TRACE("Send abort compile request with id " << Cookie_);
+        NActors::TActivationContext::ActorSystem()->Send(
+            new NActors::IEventHandle(
+                CompileServiceId_,
+                Owner_,
+                new TEvRowDispatcher::TEvPurecalcCompileAbort(),
+                0,
+                Cookie_
+            )
+        );
+    }
+
+    void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
+        ProgramHolder_ = ev->Get()->ProgramHolder.Release();
+        LOG_ROW_DISPATCHER_TRACE("Program compilation finished");
+    }
+
+    void OnCompileError(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
+        auto status = TStatus::Fail(ev->Get()->Status, std::move(ev->Get()->Issues));
+        LOG_ROW_DISPATCHER_ERROR("Program compilation error: " << status.GetErrorMessage());
+        CompileErrors_->Inc();
+        Consumer_->OnError(status.AddParentIssue("Failed to compile client program"));
     }
 
 private:
-    TString GenerateSql() {
-        TStringStream str;
-        str << "PRAGMA config.flags(\"LLVM\", \"" << (PurecalcSettings.EnabledLLVM ? "ON" : "OFF") << "\");\n";
-        str << "SELECT " << OFFSET_FIELD_NAME << " FROM Input " << Consumer->GetWhereFilter() << ";\n";
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    static constexpr std::string_view LogPrefix = "TProgramCompileHandler: ";
+    NActors::TActorId CompileServiceId_;
+    NActors::TActorId Owner_;
 
-        LOG_ROW_DISPATCHER_DEBUG("Generated sql:\n" << str.Str());
-        return str.Str();
-    }
-
-private:
-    const IPurecalcFilterConsumer::TPtr Consumer;
-    const TPurecalcCompileSettings PurecalcSettings;
-    const TString LogPrefix;
-
-    TProgramHolder::TPtr ProgramHolder;
+    NMonitoring::TDynamicCounters::TCounterPtr InFlightCompileRequests_;
+    NMonitoring::TDynamicCounters::TCounterPtr CompileErrors_;
 };
+
+class TProgramRunHandler final : public IProgramRunHandler, public TNonCopyable {
+public:
+    TProgramRunHandler(
+        IProcessedDataConsumer::TPtr consumer,
+        IProgramHolder::TPtr programHolder,
+        NMonitoring::TDynamicCounterPtr counters
+    )
+        : IProgramRunHandler(std::move(consumer), std::move(programHolder))
+        , ActiveFilters_(counters->GetCounter("ActiveFilters", false))
+    {
+        ActiveFilters_->Inc();
+    }
+
+    ~TProgramRunHandler() {
+        ActiveFilters_->Dec();
+    }
+
+    void ProcessData(const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) const override {
+        LOG_ROW_DISPATCHER_TRACE("ProcessData for " << numberRows << " rows");
+
+        if (!ProgramHolder_) {
+            LOG_ROW_DISPATCHER_TRACE("Add " << numberRows << " rows to client " << Consumer_->GetClientId() << " without processing");
+            for (ui64 rowId = 0; rowId < numberRows; ++rowId) {
+                NYql::NUdf::TUnboxedValue value = NYql::NUdf::TUnboxedValuePod{rowId};
+                Consumer_->OnData(&value);
+            }
+            return;
+        }
+
+        auto* programHolder = dynamic_cast<TProgramHolder*>(ProgramHolder_.Get());
+        Y_ENSURE(programHolder, "Expected TProgramHolder");
+        programHolder->GetConsumer().OnObject({.Values = values, .NumberRows = numberRows});
+    }
+
+private:
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    static constexpr std::string_view LogPrefix = "TProgramRunHandler: ";
+
+    NMonitoring::TDynamicCounters::TCounterPtr ActiveFilters_;
+};
+
+[[nodiscard]] TString GenerateSql(IProcessedDataConsumer::TPtr consumer) {
+    static constexpr std::string_view LogPrefix = "GenerateSql: ";
+
+    const auto& settings = consumer-> GetPurecalcSettings();
+    auto filterExpr = TStringBuf(consumer->GetFilterExpr());
+    const auto& watermarkExpr = consumer->GetWatermarkExpr();
+
+    if (!filterExpr && !watermarkExpr) {
+        LOG_ROW_DISPATCHER_TRACE("No sql was generated");
+        return {};
+    }
+
+    constexpr auto wherePrefix = "WHERE "sv;
+    if (filterExpr.starts_with(wherePrefix)) { // workaround for YQ-4827
+        filterExpr.remove_prefix(wherePrefix.size());
+    }
+
+    using namespace fmt::literals;
+    auto result = fmt::format(
+        R"sql(
+            PRAGMA config.flags("LLVM", "{enabled_llvm}");
+            SELECT COALESCE({filter_expr}, FALSE) AS {filter_field_name}, {offset_field_name}{watermark_expr} FROM Input;
+        )sql",
+        "enabled_llvm"_a = settings.EnabledLLVM ? "ON" : "OFF",
+        "filter_expr"_a = filterExpr ? filterExpr : "TRUE",
+        "filter_field_name"_a = FILTER_FIELD_NAME,
+        "offset_field_name"_a = OFFSET_FIELD_NAME,
+        "watermark_expr"_a = watermarkExpr ? static_cast<TString>(TStringBuilder() << ", (" << watermarkExpr << ") AS " << WATERMARK_FIELD_NAME) : ""
+    );
+
+    LOG_ROW_DISPATCHER_DEBUG("Generated sql:\n" << result);
+    return result;
+}
 
 }  // anonymous namespace
 
-TValueStatus<IPurecalcFilter::TPtr> CreatePurecalcFilter(IPurecalcFilterConsumer::TPtr consumer) {
-    try {
-        return IPurecalcFilter::TPtr(MakeIntrusive<TPurecalcFilter>(consumer));
-    } catch (...) {
-        return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to create purecalc filter with predicate '" << consumer->GetWhereFilter() << "', got unexpected exception: " << CurrentExceptionMessage());
+IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer) {
+    auto query = GenerateSql(consumer);
+
+    if (!query) {
+        return {};
     }
+
+    return MakeIntrusive<TProgramHolder>(
+        consumer,
+        MakeInputSchema(consumer),
+        MakeOutputSchema(consumer),
+        std::move(query)
+    );
+}
+
+IProgramCompileHandler::TPtr CreateProgramCompileHandler(
+    IProcessedDataConsumer::TPtr consumer,
+    IProgramHolder::TPtr programHolder,
+    ui64 cookie,
+    NActors::TActorId compileServiceId,
+    NActors::TActorId owner,
+    NMonitoring::TDynamicCounterPtr counters
+) {
+    return MakeIntrusive<TProgramCompileHandler>(std::move(consumer), std::move(programHolder), cookie, compileServiceId, owner, std::move(counters));
+}
+
+IProgramRunHandler::TPtr CreateProgramRunHandler(
+    IProcessedDataConsumer::TPtr consumer,
+    IProgramHolder::TPtr programHolder,
+    NMonitoring::TDynamicCounterPtr counters
+) {
+    return MakeIntrusive<TProgramRunHandler>(std::move(consumer), std::move(programHolder), std::move(counters));
 }
 
 }  // namespace NFq::NRowDispatcher

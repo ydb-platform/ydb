@@ -39,14 +39,14 @@ def get_fixturenames_closure_and_arg2fixturedefs(fm, parent_node, value) -> tupl
         )
         extra_fixturenames_func, arg2fixturedefs_func = [], {}
         if value._func is None:
-            extra_fixturenames_func, arg2fixturedefs_func = _getfixtureclosure(fm, parent_node, value.name)
+            extra_fixturenames_func, arg2fixturedefs_func = _getfixtureclosure(fm, parent_node, value.fixture_name)
         return [*extra_fixturenames_args, *extra_fixturenames_kwargs, *extra_fixturenames_func], {
             **arg2fixturedefs_args,
             **arg2fixturedefs_kwargs,
             **arg2fixturedefs_func,
         }
     if isinstance(value, LazyFixtureWrapper):
-        return _getfixtureclosure(fm, parent_node, value.name)
+        return _getfixtureclosure(fm, parent_node, value.fixture_name)
     extra_fixturenames, arg2fixturedefs = [], {}
     # we need to check exact type
     if type(value) is dict:

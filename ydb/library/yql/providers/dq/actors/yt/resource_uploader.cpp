@@ -70,7 +70,7 @@ private:
     }
 
     void Follower(STFUNC_SIG) {
-        switch (const ui32 etype = ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) {
             HFunc(TEvBecomeFollower, StartFollower)
             HFunc(TEvBecomeLeader, StartLeader)
 
@@ -95,7 +95,7 @@ private:
     }
 
     void UploadState(STFUNC_SIG) {
-        switch (const ui32 etype = ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) {
             HFunc(TEvBecomeFollower, StartFollower)
             HFunc(TEvWriteFileResponse, OnFileUploaded)
 

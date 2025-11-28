@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(FmrRawTableQueueTests) {
         auto queue = MakeIntrusive<TFmrRawTableQueue>(inputStreamsNum, queueSettings);
         char rowEnd = '|';  // Adding end symbol to row for splitting simplicity
 
-        auto threadPool = CreateThreadPool(3);
+        auto threadPool = CreateThreadPool(3, 100, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
         for (ui64 i = 0; i < inputStreamsNum; ++i) {
             // each thread writes repeatsNum copies of TableContent to queue
             threadPool->SafeAddFunc([queue, repeatsNum, i, rowEnd] {

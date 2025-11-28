@@ -4,8 +4,8 @@
 
 namespace NSQLComplete {
 
-    bool NoCaseCompare(const TString& lhs, const TString& rhs) {
-        return AsciiCompareIgnoreCase(lhs, rhs) < 0;
-    }
+bool NoCaseCompare(const TString& lhs, const TString& rhs) {
+    return AsciiCompareIgnoreCase(lhs, rhs) < 0;
+}
 
 } // namespace NSQLComplete

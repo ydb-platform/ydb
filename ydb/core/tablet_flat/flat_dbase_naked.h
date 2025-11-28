@@ -780,6 +780,17 @@ namespace NTable {
             Stats.MemTableBytes += wrap->GetMemSize();
         }
 
+        void DoLockRowTx(ui32 tid, ELockMode mode, TKeys key, ui64 txId)
+        {
+            auto &wrap = Touch(tid);
+
+            NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
+            NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
+            wrap->LockRowTx(mode, key, txId);
+            Stats.MemTableWaste += wrap->GetMemWaste();
+            Stats.MemTableBytes += wrap->GetMemSize();
+        }
+
         void DoFlush(ui32 tid, ui64 /* stamp */, TEpoch epoch)
         {
             auto on = Touch(tid)->Snapshot();

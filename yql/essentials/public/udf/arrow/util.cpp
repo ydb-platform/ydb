@@ -6,6 +6,7 @@
 #include <arrow/array/util.h>
 #include <arrow/chunked_array.h>
 #include <arrow/record_batch.h>
+#include <arrow/util/bitmap_ops.h>
 
 namespace NYql {
 namespace NUdf {
@@ -55,6 +56,15 @@ std::shared_ptr<arrow::Buffer> MakeDenseBitmapCopy(const ui8* src, size_t len, s
     return bitmap;
 }
 
+std::shared_ptr<arrow::Buffer> MakeDenseBitmapCopyIfOffsetDiffers(std::shared_ptr<arrow::Buffer> src, size_t len, size_t sourceOffset, size_t resultOffset, arrow::MemoryPool* pool) {
+    if ((sourceOffset == resultOffset) || !src) {
+        return src;
+    }
+    auto bitmap = AllocateBitmapWithReserve(len + resultOffset, pool);
+    arrow::internal::CopyBitmap(src->data(), sourceOffset, len, bitmap->mutable_data(), resultOffset);
+    return bitmap;
+}
+
 std::shared_ptr<arrow::Buffer> MakeDenseFalseBitmap(int64_t len, arrow::MemoryPool* pool) {
     auto bitmap = AllocateBitmapWithReserve(len, pool);
     std::memset(bitmap->mutable_data(), 0, bitmap->size());
@@ -91,18 +101,6 @@ std::shared_ptr<arrow::ArrayData> Chop(std::shared_ptr<arrow::ArrayData>& data, 
     auto first = DeepSlice(data, 0, len);
     data = DeepSlice(data, len, data->length - len);
     return first;
-}
-
-std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, bool isNestedOptional) {
-    Y_ENSURE(data.GetNullCount() == 0);
-    if (isNestedOptional) {
-        Y_ENSURE(data.buffers.size() == 1);
-        Y_ENSURE(data.child_data.size() == 1);
-        return data.child_data.front();
-    }
-    auto result = data.Copy();
-    result->buffers.front().reset();
-    return result;
 }
 
 void ForEachArrayData(const arrow::Datum& datum, const std::function<void(const std::shared_ptr<arrow::ArrayData>&)>& func) {
@@ -179,5 +177,5 @@ const TType* SkipTaggedType(const ITypeInfoHelper& typeInfoHelper, const TType* 
 
     return type;
 }
-}
-}
+} // namespace NUdf
+} // namespace NYql

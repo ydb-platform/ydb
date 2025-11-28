@@ -1,11 +1,13 @@
 #pragma once
 
-#include <yt/yt/core/misc/public.h>
-
 #include <yt/yt/client/object_client/public.h>
 
-#include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <yt/yt/core/misc/public.h>
+
+#include <library/cpp/yt/containers/non_empty.h>
+
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 namespace NYT::NChunkClient {
 
@@ -157,6 +159,8 @@ struct TWrittenChunkReplicasInfo;
 class TChunkReplica;
 using TChunkReplicaList = TCompactVector<TChunkReplica, TypicalReplicaCount>;
 using TChunkReplicaSlimList = TCompactVector<TChunkReplica, SlimTypicalReplicaCount>;
+
+using TPartitionTags = TNonEmpty<TCompactVector<int, 1>>;
 
 extern const std::string DefaultStoreAccountName;
 extern const std::string DefaultStoreMediumName;

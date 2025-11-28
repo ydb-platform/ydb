@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
@@ -23,7 +22,12 @@
 
 namespace NKikimrConfig {
     class TQueryServiceConfig;
-}
+    class TStreamingQueriesConfig_TExternalTopicsSettings;
+}  // namespace NKikimrConfig
+
+namespace NKqpProto {
+    class TKqpExternalSink;
+}  // namespace NKqpProto
 
 namespace NKikimr::NKqp {
 
@@ -33,8 +37,11 @@ namespace NKikimr::NKqp {
 
     NYql::IHTTPGateway::TPtr MakeHttpGateway(const NYql::THttpGatewayConfig& httpGatewayConfig, NMonitoring::TDynamicCounterPtr countersRoot);
 
-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const NYql::TPqGatewayConfig& pqGatewayConfig);
+    NYdb::NTopic::TTopicClientSettings MakeCommonTopicClientSettings(ui64 handlersExecutorThreadsNum, ui64 compressionExecutorThreadsNum);
 
+    std::shared_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr, const NKikimrConfig::TStreamingQueriesConfig_TExternalTopicsSettings& config);
+
+    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver);
 
     struct TKqpFederatedQuerySetup {
         NYql::IHTTPGateway::TPtr HttpGateway;
@@ -58,6 +65,7 @@ namespace NKikimr::NKqp {
 
     struct IKqpFederatedQuerySetupFactory {
         using TPtr = std::shared_ptr<IKqpFederatedQuerySetupFactory>;
+        virtual void Cleanup();
         virtual std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem* actorSystem) = 0;
         virtual ~IKqpFederatedQuerySetupFactory() = default;
     };
@@ -77,6 +85,8 @@ namespace NKikimr::NKqp {
             const NKikimrConfig::TAppConfig& appConfig);
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem* actorSystem) override;
+
+        void Cleanup() override;
 
     private:
         NYql::THttpGatewayConfig HttpGatewayConfig;
@@ -149,6 +159,11 @@ namespace NKikimr::NKqp {
                 DqTaskTransformFactory, PqGatewayConfig, PqGateway, ActorSystemPtr, Driver};
         }
 
+        void Cleanup() override {
+            HttpGateway.reset();
+            PqGateway.Reset();
+        }
+
     private:
         NYql::IHTTPGateway::TPtr HttpGateway;
         NYql::NConnector::IClient::TPtr ConnectorClient;
@@ -190,7 +205,10 @@ namespace NKikimr::NKqp {
 
     NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth = 90);
 
-    using TGetSchemeEntryResult = TMaybe<NYdb::NScheme::ESchemeEntryType>;
+    struct TGetSchemeEntryResult {
+        TMaybe<NYdb::NScheme::ESchemeEntryType> EntryType;
+        NYql::TIssues Issues;
+    };
 
     NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
@@ -199,5 +217,7 @@ namespace NKikimr::NKqp {
         bool useTls,
         const TString& structuredTokenJson,
         const TString& path);
+
+    std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks);
 
 }  // namespace NKikimr::NKqp

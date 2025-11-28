@@ -338,7 +338,8 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     auto headers = New<NHttp::THeaders>();
 
     headers->Add("Host", hostName);
-    headers->Add("User-Agent", TProcessState::Get()->ClientVersion);
+    // Explicitly call ConstRef until https://st.yandex-team.ru/IGNIETFERRO-2155 is fixed.
+    headers->Add("User-Agent", TProcessState::Get()->ClientVersion.ConstRef());
 
     if (!Token_.empty()) {
         headers->Add("Authorization", "OAuth " + Token_);

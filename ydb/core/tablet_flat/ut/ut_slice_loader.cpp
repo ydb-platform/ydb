@@ -20,7 +20,7 @@ namespace NTable {
 
 using namespace NTest;
 using TPageCollectionProtoHelper = NTabletFlatExecutor::TPageCollectionProtoHelper;
-using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+using TPageCollection = NTabletFlatExecutor::TPrivatePageCache::TPageCollection;
 
 namespace {
     NPage::TConf PageConf()
@@ -144,7 +144,7 @@ namespace {
         TCheckResult result;
 
         TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection = new TTestPartPageCollection(part, 0);
-        NTable::TLoader::TLoaderEnv env(new TCache(pageCollection));
+        NTable::TLoader::TLoaderEnv env(new TPageCollection(pageCollection));
         env.ProvidePart(part.Get());
         TKeysLoader loader(part.Get(), &env);
 

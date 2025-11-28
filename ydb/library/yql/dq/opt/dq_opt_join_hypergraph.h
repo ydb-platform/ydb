@@ -48,7 +48,7 @@ public:
             , RightJoinKeys(rightJoinKeys)
             , IsReversed(false)
         {
-            Y_ASSERT(LeftJoinKeys.size() == RightJoinKeys.size());
+            Y_ENSURE(LeftJoinKeys.size() == RightJoinKeys.size());
         }
 
         inline bool IsSimple() const {
@@ -269,6 +269,13 @@ public:
         }
     }
 
+    /*
+     * Updates the left and right node sets of an existing edge in the hypergraph saving its invariants.
+     *
+     * This method is typically used during join optimization when we need to expand
+     * the scope of a join edge to include additional nodes (e.g., when applying
+     * join hints or reordering operations).
+     */
     void UpdateEdgeSides(size_t idx, TNodeSet newLeft, TNodeSet newRight) {
         auto& edge = Edges_[idx];
 
@@ -474,19 +481,27 @@ private:
                     auto jNode = Graph_.GetNodesByRelNames({joinCondById[j].RelName});
 
                     if (auto* maybeEdge = Graph_.FindEdgeBetween(iNode, jNode)) {
-                        auto addUniqueKey = [](auto& vector, const auto& key) {
-                            if (std::find(vector.begin(), vector.end(), key) == vector.end()) {
-                                vector.push_back(key);
-                            }
+                        auto contains = [](auto& conditions, TJoinColumn& condition) {
+                            return std::find(conditions.begin(), conditions.end(), condition) != conditions.end();
                         };
 
-                        auto& revEdge = Graph_.GetEdge(maybeEdge->ReversedEdgeId);
-                        addUniqueKey(revEdge.LeftJoinKeys, joinCondById[j]);
-                        addUniqueKey(revEdge.RightJoinKeys, joinCondById[i]);
+                        THyperedge& revEdge = Graph_.GetEdge(maybeEdge->ReversedEdgeId);
+                        THyperedge& edge = Graph_.GetEdge(revEdge.ReversedEdgeId);
 
-                        auto& edge = Graph_.GetEdge(revEdge.ReversedEdgeId);
-                        addUniqueKey(edge.LeftJoinKeys, joinCondById[i]);
-                        addUniqueKey(edge.RightJoinKeys, joinCondById[j]);
+                        if (!contains(edge.LeftJoinKeys, joinCondById[i]) ||
+                            !contains(edge.RightJoinKeys, joinCondById[j])) {
+
+                            edge.LeftJoinKeys.push_back(joinCondById[i]);
+                            edge.RightJoinKeys.push_back(joinCondById[j]);
+
+                            revEdge.LeftJoinKeys.push_back(joinCondById[j]);
+                            revEdge.RightJoinKeys.push_back(joinCondById[i]);
+                        }
+
+                        Y_ENSURE(edge.LeftJoinKeys.size() == edge.RightJoinKeys.size());
+                        Y_ENSURE(revEdge.LeftJoinKeys.size() == revEdge.RightJoinKeys.size());
+
+                        Y_ENSURE(edge.LeftJoinKeys.size() == revEdge.RightJoinKeys.size());
                         continue;
                     }
 

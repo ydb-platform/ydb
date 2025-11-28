@@ -91,7 +91,7 @@ constexpr size_t GetSizeToAlloc(size_t size) {
         return 0;
     }
     return size + 2 * ALLOCATION_REDZONE_SIZE;
-#else // defined(_asan_enabled_) || defined(_msan_enabled_)
+#else  // defined(_asan_enabled_) || defined(_msan_enabled_)
     return size;
 #endif // defined(_asan_enabled_) || defined(_msan_enabled_)
 }
@@ -102,7 +102,7 @@ constexpr const void* GetOriginalAllocatedObject(const void* ptr, bool isZeroSiz
         return ptr;
     }
     return static_cast<const char*>(ptr) - ALLOCATION_REDZONE_SIZE;
-#else // defined(_asan_enabled_) || defined(_msan_enabled_)
+#else  // defined(_asan_enabled_) || defined(_msan_enabled_)
     Y_UNUSED(isZeroSize);
     return ptr;
 #endif // defined(_asan_enabled_) || defined(_msan_enabled_)
@@ -116,7 +116,7 @@ constexpr void* WrapPointerWithRedZones(void* ptr, size_t extendedSizeWithRedzon
     SanitizerMakeRegionInaccessible(ptr, extendedSizeWithRedzone);
     SanitizerMakeRegionAccessible(static_cast<char*>(ptr) + ALLOCATION_REDZONE_SIZE, extendedSizeWithRedzone - 2 * ALLOCATION_REDZONE_SIZE);
     return static_cast<char*>(ptr) + ALLOCATION_REDZONE_SIZE;
-#else // defined(_asan_enabled_) || defined(_msan_enabled_)
+#else  // defined(_asan_enabled_) || defined(_msan_enabled_)
     Y_UNUSED(extendedSizeWithRedzone);
     return ptr;
 #endif // defined(_asan_enabled_) || defined(_msan_enabled_)
@@ -130,7 +130,7 @@ constexpr const void* UnwrapPointerWithRedZones(const void* ptr, size_t size) {
     SanitizerMakeRegionInaccessible(static_cast<char*>(const_cast<void*>(ptr)) - ALLOCATION_REDZONE_SIZE,
                                     2 * ALLOCATION_REDZONE_SIZE + size);
     return static_cast<const char*>(ptr) - ALLOCATION_REDZONE_SIZE;
-#else // defined(_asan_enabled_) || defined(_msan_enabled_)
+#else  // defined(_asan_enabled_) || defined(_msan_enabled_)
     Y_UNUSED(size);
     return ptr;
 #endif // defined(_asan_enabled_) || defined(_msan_enabled_)

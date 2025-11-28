@@ -1,6 +1,10 @@
 #include "topic_workload_run_read.h"
 #include "topic_workload_defines.h"
 
+#include <ydb/library/backup/util.h>
+#include <util/stream/format.h>
+
+
 using namespace NYdb::NConsoleClient;
 
 TCommandWorkloadTopicRunRead::TCommandWorkloadTopicRunRead()
@@ -37,6 +41,12 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config)
     config.Opts->AddLongOption("no-consumer", "Read without consumer")
         .Hidden()
         .StoreTrue(&Scenario.ReadWithoutConsumer);
+    config.Opts->AddLongOption("no-commit", "Read without committing topic offsets")
+        .Hidden()
+        .StoreTrue(&Scenario.ReadWithoutCommit);
+    config.Opts->AddLongOption("restart-interval", "Recreate reader session period (ex. '100s', '3m')")
+        .Hidden()
+        .StoreMappedResult(&Scenario.RestartInterval, TDuration::Parse);
 
     // Specific params
     config.Opts->AddLongOption("consumer-prefix", "Use consumers with names '<consumer-prefix>-0' ... '<consumer-prefix>-<n-1>' where n is set in the '--consumers' option.")
@@ -48,7 +58,9 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config)
     config.Opts->AddLongOption('t', "threads", "Number of consumer threads.")
         .DefaultValue(1)
         .StoreResult(&Scenario.ConsumerThreadCount);
-
+    config.Opts->AddLongOption("max-memory-usage-per-consumer", "Max memory usage per consumer in bytes. Should be more than '1MiB'.")
+        .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
+        .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NYdb::SizeFromString);
     config.IsNetworkIntensive = true;
 }
 

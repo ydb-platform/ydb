@@ -1,5 +1,5 @@
 #include "mkql_coalesce.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
@@ -8,9 +8,10 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool Unpack>
-class TCoalesceWrapper : public TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> {
+template <bool Unpack>
+class TCoalesceWrapper: public TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> {
     typedef TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> TBaseComputation;
+
 public:
     TCoalesceWrapper(IComputationNode* left, IComputationNode* right, EValueRepresentation kind)
         : TBaseComputation(left, right, kind)
@@ -57,7 +58,7 @@ public:
 #endif
 };
 
-}
+} // namespace
 
 IComputationNode* WrapCoalesce(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -74,11 +75,12 @@ IComputationNode* WrapCoalesce(TCallable& callable, const TComputationNodeFactor
 
     const auto kind = GetValueRepresentation(callable.GetType()->GetReturnType());
 
-    if (isRightOptional)
+    if (isRightOptional) {
         return new TCoalesceWrapper<false>(LocateNode(ctx.NodeLocator, callable, 0), LocateNode(ctx.NodeLocator, callable, 1), kind);
-    else
+    } else {
         return new TCoalesceWrapper<true>(LocateNode(ctx.NodeLocator, callable, 0), LocateNode(ctx.NodeLocator, callable, 1), kind);
+    }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

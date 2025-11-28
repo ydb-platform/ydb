@@ -22,8 +22,7 @@ struct TQItemKey {
     size_t Hash() const {
         return CombineHashes(
             THash<TString>()(Component),
-            THash<TString>()(Label)
-        );
+            THash<TString>()(Label));
     }
 };
 
@@ -93,24 +92,39 @@ public:
 
 using IQStoragePtr = std::shared_ptr<IQStorage>;
 
+enum class EQPlayerCaptureMode {
+    None /* "none" */,
+    MetaOnly /* "meta" */,
+    Full /* "full" */,
+};
+
 class TQContext {
 public:
     TQContext()
-    {}
+    {
+    }
 
-    TQContext(IQReaderPtr reader)
-        : Reader_(reader)
-    {}
+    TQContext(IQReaderPtr reader, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
+        : CaptureMode_(captureMode)
+        , Reader_(reader)
+    {
+    }
 
-    TQContext(IQWriterPtr writer)
-        : Writer_(writer)
-    {}
+    TQContext(IQWriterPtr writer, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
+        : CaptureMode_(captureMode)
+        , Writer_(writer)
+    {
+    }
 
     TQContext(const TQContext&) = default;
     TQContext& operator=(const TQContext&) = default;
 
     operator bool() const {
         return CanRead() || CanWrite();
+    }
+
+    EQPlayerCaptureMode CaptureMode() const {
+        return CaptureMode_;
     }
 
     bool CanRead() const {
@@ -130,12 +144,14 @@ public:
     }
 
 private:
+    EQPlayerCaptureMode CaptureMode_ = EQPlayerCaptureMode::None;
+
     IQReaderPtr Reader_;
     IQWriterPtr Writer_;
 };
 
 IQWriterPtr MakeCloseAwareWriterDecorator(IQWriterPtr&& rhs);
-}
+} // namespace NYql
 
 template <>
 struct THash<NYql::TQItemKey> {

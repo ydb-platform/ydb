@@ -753,29 +753,31 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
         return false;
     }
 
-    TOperation::TPtr op = GetActiveOp(txId);
-    bool active = true;
-    if (!op) {
-        op = GetVolatileOp(txId);
-        active = false;
-    }
-    if (op) {
-        if (!op->GetStep() && !op->GetPredictedStep() && !active) {
+    TOperation::TPtr op = Self->TransQueue.FindTxInFly(txId);
+    Y_ENSURE(op);
+
+    bool isActive = op->IsCompleted() || op->IsExecuting() || op->IsWaitingDependencies();
+    bool isVolatile = op->HasVolatilePrepareFlag();
+
+    // Avoid persisting small readsets and keep them delayed in memory instead
+    // Note: readsets are usually 2 bytes with a single decision proto field
+    if (isActive || isVolatile || rs.Record.GetReadSet().size() <= 8) {
+        if (isVolatile && !op->GetStep() && !op->GetPredictedStep()) {
             op->SetPredictedStep(step);
             AddPredictedPlan(step, txId, ctx);
         }
-        // If input read sets are not loaded yet then
-        // it will be added at load.
+
         if (op->HasLoadedInRSFlag()) {
             op->AddInReadSet(rs.Record);
         } else {
             op->AddDelayedInReadSet(rs.Record);
         }
+
         if (ack) {
             op->AddDelayedAck(THolder(ack.Release()));
         }
 
-        if (active) {
+        if (isActive && !isVolatile) {
             AddCandidateOp(op);
             Self->PlanQueue.Progress(ctx);
         }
@@ -1182,6 +1184,19 @@ ui64 TPipeline::OutdatedCleanupStep() const
     return LastPlannedTx.Step;
 }
 
+ui64 TPipeline::AllowedDataStep() const
+{
+    ui64 latestStep = 0;
+    if (Self->MediatorTimeCastEntry) {
+        // This could be zero when still initializing
+        latestStep = Self->MediatorTimeCastEntry->GetLatestStep();
+    }
+
+    return Max(
+        LastPlannedTx.Step + 1,
+        latestStep ? latestStep + 1 : TAppData::TimeProvider->Now().MilliSeconds());
+}
+
 ui64 TPipeline::GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const
 {
     auto &plan = Self->TransQueue.GetPlan(kind);
@@ -1553,7 +1568,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         tx->SetGlobalWriterFlag();
     } else {
         Y_ENSURE(tx->IsReadTable() || tx->IsDataTx());
-        auto dataTx = tx->BuildDataTx(Self, txc, ctx);
+        auto dataTx = tx->BuildDataTx(Self, txc, ctx, true);
         if (dataTx->Ready() && (dataTx->ProgramSize() || dataTx->IsKqpDataTx()))
             dataTx->ExtractKeys(true);
 
@@ -1847,11 +1862,11 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
         }
 
         NWilson::TSpan unitSpan(TWilsonTablet::TabletDetailed, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
-        
+
         NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);
         op->AddExecutionTime(timer.GetTime());
-        
+
         if (unitSpan) {
             unitSpan.Attribute("Type", TypeName(unit))
                     .Attribute("Status", static_cast<int>(status))

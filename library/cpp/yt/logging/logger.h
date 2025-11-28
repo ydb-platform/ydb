@@ -149,10 +149,18 @@ TLoggingContext GetLoggingContext();
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Sets the minimum logging level for messages in current thread.
-// NB: In fiber environment, min log level is attached to a fiber,
-// so after context switch thread min log level might change.
+//! NB: In fiber environment, min log level is attached to a fiber,
+//! so after context switch thread min log level might change.
 void SetThreadMinLogLevel(ELogLevel minLogLevel);
 ELogLevel GetThreadMinLogLevel();
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Sets an extra tag for messages in current thread.
+//! NB: Same as above, in fiber environment messages tags
+//! are attached to a fiber.
+void SetThreadMessageTag(std::string messageTag);
+std::string& GetThreadMessageTag();
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -355,6 +363,7 @@ void LogStructuredEvent(
 
 #define YT_LOG_EVENT(logger, level, ...) \
     do { \
+         /* NOLINTBEGIN(bugprone-reserved-identifier, readability-identifier-naming) */ \
         const auto& logger__ = (logger)(); \
         auto level__ = (level); \
         auto location__ = __LOCATION__; \
@@ -389,6 +398,7 @@ void LogStructuredEvent(
             location__, \
             anchor__, \
             std::move(message__.MessageRef)); \
+        /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */ \
     } while (false)
 
 #define YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(logger, level, anchor, ...) \

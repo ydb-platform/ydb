@@ -12,7 +12,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 
-TEST(Profiler, SaveOptions)
+TEST(TProfilerTest, SaveOptions)
 {
     auto profiler = TProfiler(
         "my_prefix", "my_namespace", TTagSet{{{"my_tag", "my_tag_value"}}}, nullptr,
@@ -56,7 +56,7 @@ TEST(Profiler, SaveOptions)
     }
 
     {
-        auto newProfiler = profiler.WithPrefix("new_prefix");
+        auto newProfiler = profiler.WithPrefix("/new_prefix");
         ASSERT_EQ(TTesting::ReadOptions(newProfiler).TimeHistogramBounds.size(), 1u);
     }
     {

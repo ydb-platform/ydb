@@ -1,119 +1,212 @@
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
-#include <yql/essentials/utils/yql_panic.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <thread>
+#include <util/generic/overloaded.h>
+
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NDq {
 
 namespace {
 
-// We can't be sure that no extra watermarks were generated (we can't control LB receipt write time).
-// So, we will check only if there is at least one watermark before each specified position.
-template<typename T>
-void AssertDataWithWatermarks(
-    const std::vector<std::variant<T, TInstant>>& actual,
-    const std::vector<T>& expected,
-    const std::vector<ui32>& watermarkBeforePositions)
-{
-    auto expectedPos = 0U;
-    auto watermarksBeforeIter = watermarkBeforePositions.begin();
+constexpr auto DefaultWatermarkPeriod = TDuration::MilliSeconds(100);
+constexpr auto DefaultLateArrivalDelay = TDuration::MilliSeconds(10);
 
-    for (auto item : actual) {
-        if (std::holds_alternative<TInstant>(item)) {
-            if (watermarksBeforeIter != watermarkBeforePositions.end()) {
-                watermarksBeforeIter++;
-            }
-            continue;
-        } else {
-            UNIT_ASSERT_C(expectedPos < expected.size(), "Too many data items");
-            UNIT_ASSERT_C(
-                watermarksBeforeIter == watermarkBeforePositions.end() ||
-                *watermarksBeforeIter > expectedPos,
-                "Watermark before item on position " << expectedPos << " was expected");
-            UNIT_ASSERT_EQUAL(std::get<T>(item), expected.at(expectedPos));
-            expectedPos++;
+const TString Message0 = "value0";
+const TString Message1 = "value1";
+const TString Message2 = "value2";
+const TString Message3 = "value3";
+const TString Message4 = "value4";
+const TString Message5 = "value5";
+
+class TFixture : public TPqIoTestFixture {
+public:
+    void InitSource(NYql::NPq::NProto::TDqPqTopicSource&& settings) const {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            NPq::NProto::TDqReadTaskParams params;
+            auto* partitioningParams = params.MutablePartitioningParams();
+            partitioningParams->SetTopicPartitionsCount(1);
+            partitioningParams->SetEachTopicPartitionGroupId(0);
+            partitioningParams->SetDqPartitionsCount(1);
+
+            TPqGatewayServices pqServices(
+                Driver,
+                nullptr,
+                nullptr,
+                std::make_shared<TPqGatewayConfig>(),
+                nullptr
+            );
+
+            i64 freeSpace = 1_MB;
+
+            auto [dqAsyncInput, dqAsyncInputAsActor] = CreateDqPqReadActor(
+                std::move(settings),
+                0,
+                NYql::NDq::TCollectStatsLevel::None,
+                "query_1",
+                0,
+                {},
+                {params},
+                Driver,
+                nullptr,
+                actor.SelfId(),
+                actor.GetHolderFactory(),
+                MakeIntrusive<NMonitoring::TDynamicCounters>(),
+                CreatePqNativeGateway(std::move(pqServices)),
+                1,
+                freeSpace
+            );
+
+            actor.InitAsyncInput(dqAsyncInput, dqAsyncInputAsActor);
+        });
+    }
+
+    void InitSource(const TString& topic) const {
+        InitSource(BuildPqTopicSourceSettings(topic));
+    }
+
+    template<typename T>
+    void PQRead(
+        const std::vector<TWatermarkOr<T>>& expected,
+        TReadValueParser<T> parser = UVParser,
+        i64 eachReadFreeSpace = 1'000
+    ) const {
+        auto op = [](size_t init, const TWatermarkOr<T>& v) { return init + std::holds_alternative<T>(v); };
+        auto size = std::accumulate(expected.begin(), expected.end(), 0ull, op);
+        auto actual = SourceReadDataUntil<TString>(parser, size, eachReadFreeSpace);
+        AssertDataWithWatermarks(expected, actual);
+    }
+
+    // We can't be sure that no extra watermarks were generated (we can't control LB receipt write time).
+    // So, we will check only if there is at least one watermark before each specified position.
+    template<typename T>
+    void AssertDataWithWatermarks(
+        const std::vector<TWatermarkOr<T>>& expected,
+        const std::vector<TWatermarkOr<T>>& actual
+    ) const {
+        size_t expected_i = 0, actual_i = 0;
+        for (; expected_i < expected.size() && actual_i < actual.size(); ++expected_i, ++actual_i) {
+            std::visit(TOverloaded{
+                [&expected_i, &actual_i](const T& expected, const T& actual) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(expected, actual, "expected_i = " << expected_i << ", actual_i = " << actual_i);
+                },
+                [&expected_i](const T&, const TInstant&) {
+                    --expected_i;
+                },
+                [&actual_i](const TInstant&, const T&) {
+                    --actual_i;
+                },
+                [](TInstant, TInstant) {
+                },
+            }, expected[expected_i], actual[actual_i]);
+        }
+        for (; expected_i < expected.size(); ++expected_i) {
+            std::visit(TOverloaded{
+                [expected_i](const T&) {
+                    UNIT_FAIL("expected_i = " << expected_i);
+                },
+                [](TInstant) {
+                },
+            }, expected[expected_i]);
+        }
+        for (; actual_i < actual.size(); ++actual_i) {
+            std::visit(TOverloaded{
+                [actual_i](const T&) {
+                    UNIT_FAIL("actual_i = " << actual_i);
+                },
+                [](TInstant) {
+                },
+            }, actual[actual_i]);
         }
     }
-}
 
-constexpr auto defaultWatermarkPeriod = TDuration::MilliSeconds(100);
-constexpr auto defaultLateArrivalDelay = TDuration::MilliSeconds(1);
+    void WaitForNextWatermark() {
+        // We can't control write time in LB, so just sleep for watermarkPeriod to ensure the next written data
+        // will obtain write_time which will move watermark forward.
+        Sleep(DefaultLateArrivalDelay);
+    }
+};
 
-void WaitForNextWatermark(TDuration lateArrivalDelayMs = defaultLateArrivalDelay) {
-    // We can't control write time in LB, so just sleep for watermarkPeriod to ensure the next written data
-    // will obtain write_time which will move watermark forward.
-    Sleep(lateArrivalDelayMs);
-}
-
-}
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
-    Y_UNIT_TEST_F(TestReadFromTopic, TPqIoTestFixture) {
+    Y_UNIT_TEST_F(TestReadFromTopic, TFixture) {
         const TString topicName = "ReadFromTopic";
         PQCreateStream(topicName);
         InitSource(topicName);
 
         const std::vector<TString> data = { "1", "2", "3", "4" };
-        PQWrite(data, topicName);
+        auto messages = std::vector{Message0, Message1, Message2, Message3};
+        PQWrite(messages, topicName);
 
-        auto result = SourceReadDataUntil<TString>(UVParser, 4);
-        AssertDataWithWatermarks(result, data, {});
+        auto expected = std::vector{
+            TWatermarkOr<TString>{Message0},
+            TWatermarkOr<TString>{Message1},
+            TWatermarkOr<TString>{Message2},
+            TWatermarkOr<TString>{Message3},
+        };
+        PQRead(expected);
     }
 
-    Y_UNIT_TEST_F(TestReadFromTopicFromNow, TPqIoTestFixture) {
+    Y_UNIT_TEST_F(TestReadFromTopicFromNow, TFixture) {
         const TString topicName = "ReadFromTopicFromNow";
         PQCreateStream(topicName);
 
-        const std::vector<TString> oldData = { "-4", "-3", "-2", "-1", "0" };
-        PQWrite(oldData, topicName);
+        auto oldMessages = std::vector{Message0};
+        PQWrite(oldMessages, topicName);
 
-        InitSource(topicName);
+        auto settings = BuildPqTopicSourceSettings(topicName);
+        settings.mutable_disposition()->mutable_fresh()->CopyFrom(google::protobuf::Empty{});
+        InitSource(std::move(settings));
 
-        const std::vector<TString> data = { "1", "2", "3", "4" };
-        PQWrite(data, topicName);
+        auto messages = std::vector{Message1, Message2, Message3, Message4};
+        PQWrite(messages, topicName);
 
-        auto result = SourceReadDataUntil<TString>(UVParser, 4);
-        AssertDataWithWatermarks(result, data, {});
+        auto expected = std::vector{
+            TWatermarkOr<TString>{Message1},
+            TWatermarkOr<TString>{Message2},
+            TWatermarkOr<TString>{Message3},
+            TWatermarkOr<TString>{Message4},
+        };
+        PQRead(expected);
     }
 
-    Y_UNIT_TEST_F(ReadWithFreeSpace, TPqIoTestFixture) {
+    Y_UNIT_TEST_F(ReadWithFreeSpace, TFixture) {
         const TString topicName = "ReadWithFreeSpace";
         PQCreateStream(topicName);
         InitSource(topicName);
 
-        PQWrite({"data1", "data2", "data3"}, topicName);
+        auto messages = std::vector{Message0, Message1, Message2};
+        PQWrite(messages, topicName);
 
-        {
-            auto result = SourceReadDataUntil<TString>(UVParser, 1, 1);
-            std::vector<TString> expected {"data1"};
-            AssertDataWithWatermarks(result, expected, {});
-        }
+        auto expected = std::vector{TWatermarkOr<TString>{Message0}};
+        PQRead<TString>(expected, UVParser, 1);
 
-        UNIT_ASSERT_EQUAL(SourceRead<TString>(UVParser, 0).size(), 0);
-        UNIT_ASSERT_EQUAL(SourceRead<TString>(UVParser, -1).size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(0, SourceRead<TString>(UVParser, 0).size());
+        UNIT_ASSERT_VALUES_EQUAL(0, SourceRead<TString>(UVParser, -1).size());
     }
 
-    Y_UNIT_TEST_F(ReadNonExistentTopic, TPqIoTestFixture) {
+    Y_UNIT_TEST_F(ReadNonExistentTopic, TFixture) {
         const TString topicName = "NonExistentTopic";
         InitSource(topicName);
 
         TInstant deadline = Now() + TDuration::Seconds(5);
         auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
-        bool failured = false;
+        bool failed = false;
         while (Now() < deadline) {
             SourceRead<TString>(UVParser);
             if (future.HasValue()) {
                 auto message = future.GetValue().ToOneLineString();
                 UNIT_ASSERT_STRING_CONTAINS(message, "Error: ");
                 UNIT_ASSERT_STRING_CONTAINS(message, " \"NonExistentTopic\" ");
-                failured = true;
+                failed = true;
                 break;
             }
         }
-        UNIT_ASSERT_C(failured, "Failure timeout");
+        UNIT_ASSERT_C(failed, "Failure timeout");
     }
 
     Y_UNIT_TEST(TestSaveLoadPqRead) {
@@ -122,14 +215,14 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         PQCreateStream(topicName);
 
         {
-            TPqIoTestFixture setup1;
+            TFixture setup1;
             setup1.InitSource(topicName);
 
-            std::vector<TString> data {"data"};
-            PQWrite(data, topicName);
+            auto messages = std::vector{Message0};
+            PQWrite(messages, topicName);
 
-            auto result = setup1.SourceReadDataUntil<TString>(UVParser, 1);
-            AssertDataWithWatermarks(result, data, {});
+            auto expected = std::vector{TWatermarkOr<TString>{Message0}};
+            setup1.PQRead(expected);
 
             auto checkpoint = CreateCheckpoint();
             setup1.SaveSourceState(checkpoint, state);
@@ -138,36 +231,41 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
 
         TSourceState state2;
         {
-            TPqIoTestFixture setup2;
+            TFixture setup2;
             setup2.InitSource(topicName);
 
-            std::vector<TString> data {"data"};
-            PQWrite({"data"}, topicName);
+            auto messages = std::vector{Message1};
+            PQWrite(messages, topicName);
 
             setup2.LoadSource(state);
             Cerr << "State loaded" << Endl;
-            auto result = setup2.SourceReadDataUntil<TString>(UVParser, 1);
-            AssertDataWithWatermarks(result, data, {});
+            auto expected = std::vector{TWatermarkOr<TString>{Message1}};
+            setup2.PQRead(expected);
 
             auto checkpoint = CreateCheckpoint();
             setup2.SaveSourceState(checkpoint, state2);
 
-            PQWrite({"futherData"}, topicName);
+            PQWrite({Message2}, topicName);
+
+            // Wait for events to be written to topic
+            Sleep(TDuration::Seconds(10));
         }
 
         TSourceState state3;
         {
-            TPqIoTestFixture setup3;
+            TFixture setup3;
             setup3.InitSource(topicName);
             setup3.LoadSource(state2);
 
-            auto result = setup3.SourceReadDataUntil<TString>(UVParser, 1);
-            std::vector<TString> data {"futherData"};
-            AssertDataWithWatermarks(result, data, {});
+            auto expected = std::vector{TWatermarkOr<TString>{Message2}};
+            setup3.PQRead(expected);
 
-            // pq session is steel alive
+            // pq session is still alive
 
-            PQWrite({"yetAnotherData"}, topicName);
+            PQWrite({Message3}, topicName);
+
+            // Wait for events to be written to topic
+            Sleep(TDuration::Seconds(10));
 
             auto checkpoint = CreateCheckpoint();
             setup3.SaveSourceState(checkpoint, state3);
@@ -175,35 +273,39 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
 
         // Load the first state and check it.
         {
-            TPqIoTestFixture setup4;
+            TFixture setup4;
             setup4.InitSource(topicName);
             setup4.LoadSource(state);
 
-            auto result = setup4.SourceReadUntil<TString>(UVParser, 3);
-            std::vector<TString> data {"data", "futherData", "yetAnotherData"};
-            AssertDataWithWatermarks(result, data, {});
+            auto expected = std::vector{
+                TWatermarkOr<TString>{Message1},
+                TWatermarkOr<TString>{Message2},
+                TWatermarkOr<TString>{Message3},
+            };
+            setup4.PQRead(expected);
         }
 
         // Load graphState2 and check it (offsets were saved).
         {
-            TPqIoTestFixture setup5;
+            TFixture setup5;
             setup5.InitSource(topicName);
             setup5.LoadSource(state2);
 
-            auto result = setup5.SourceReadDataUntil<TString>(UVParser, 2);
-            std::vector<TString> data {"futherData", "yetAnotherData"};
-            AssertDataWithWatermarks(result, data, {});
+            auto expected = std::vector{
+                TWatermarkOr<TString>{Message2},
+                TWatermarkOr<TString>{Message3},
+            };
+            setup5.PQRead(expected);
         }
 
         // Load graphState3 and check it (other offsets).
         {
-            TPqIoTestFixture setup6;
+            TFixture setup6;
             setup6.InitSource(topicName);
             setup6.LoadSource(state3);
 
-            auto result = setup6.SourceReadDataUntil<TString>(UVParser, 1);
-            std::vector<TString> data {"yetAnotherData"};
-            AssertDataWithWatermarks(result, data, {});
+            auto expected = std::vector{TWatermarkOr<TString>{Message3}};
+            setup6.PQRead(expected);
         }
     }
 
@@ -213,7 +315,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         auto checkpoint = CreateCheckpoint();
 
         {
-            TPqIoTestFixture setup1;
+            TFixture setup1;
             setup1.InitSource(topicName);
             setup1.SaveSourceState(checkpoint, state);
         }
@@ -224,7 +326,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         state.Data.front().Blob = corruptedBlob;
 
         {
-            TPqIoTestFixture setup2;
+            TFixture setup2;
             setup2.InitSource(topicName);
             UNIT_ASSERT_EXCEPTION_CONTAINS(setup2.LoadSource(state), yexception, "Serialized state is corrupted");
         }
@@ -236,25 +338,25 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
 
         TSourceState state2;
         {
-            TPqIoTestFixture setup;
+            TFixture setup;
             setup.InitSource(topicName);
 
-            std::vector<TString> data {"data"};
-            PQWrite(data, topicName);
+            auto messages = std::vector{Message0};
+            PQWrite(messages, topicName);
 
-            auto result1 = setup.SourceReadDataUntil<TString>(UVParser, 1);
-            AssertDataWithWatermarks(result1, data, {});
+            auto expected = std::vector{TWatermarkOr<TString>{Message0}};
+            setup.PQRead(expected);
 
             TSourceState state1;
             auto checkpoint1 = CreateCheckpoint();
             setup.SaveSourceState(checkpoint1, state1);
             Cerr << "State saved" << Endl;
 
-            std::vector<TString> data2 {"data2"};
-            PQWrite(data2, topicName);
+            messages = {Message1};
+            PQWrite(messages, topicName);
 
-            auto result2 = setup.SourceReadDataUntil<TString>(UVParser, 1);
-            AssertDataWithWatermarks(result2, data2, {});
+            expected = {TWatermarkOr<TString>{Message1}};
+            setup.PQRead(expected);
 
             auto checkpoint2 = CreateCheckpoint();
             setup.SaveSourceState(checkpoint2, state2);
@@ -264,52 +366,70 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             state2.Data.push_back(state1.Data.front());
         }
 
-        TPqIoTestFixture setup2;
+        TFixture setup2;
         setup2.InitSource(topicName);
         setup2.LoadSource(state2); // Loads min offset
 
-        std::vector<TString> data3 {"data3"};
-        PQWrite(data3, topicName);
+        auto messages = std::vector{Message2};
+        PQWrite(messages, topicName);
 
-        auto result = setup2.SourceReadUntil<TString>(UVParser, 2);
-        std::vector<TString> dataResult {"data2", "data3"};
-        AssertDataWithWatermarks(result, dataResult, {});
+        auto expected = std::vector{
+            TWatermarkOr<TString>{Message1},
+            TWatermarkOr<TString>{Message2},
+        };
+        setup2.PQRead(expected);
     }
 
-    Y_UNIT_TEST_F(TestReadFromTopicFirstWatermark, TPqIoTestFixture) {
+    Y_UNIT_TEST_F(TestReadFromTopicFirstWatermark, TFixture) {
         const TString topicName = "ReadFromTopicFirstWatermark";
         PQCreateStream(topicName);
 
-        auto settings = BuildPqTopicSourceSettings(topicName, defaultWatermarkPeriod);
+        auto settings = BuildPqTopicSourceSettings(topicName, DefaultWatermarkPeriod);
         InitSource(std::move(settings));
 
-        const std::vector<TString> data = { "1", "2", "3", "4" };
-        PQWrite(data, topicName);
+        auto messages = std::vector{Message0, Message1, Message2, Message3};
+        PQWrite(messages, topicName);
 
-        auto result = SourceReadDataUntil<TString>(UVParser, 4);
-        AssertDataWithWatermarks(result, { "1", "2", "3", "4" }, {0});
+        auto expected = std::vector{
+            TWatermarkOr<TString>{Message0},
+            TWatermarkOr<TString>{TInstant::Zero()},
+            TWatermarkOr<TString>{Message1},
+            TWatermarkOr<TString>{Message2},
+            TWatermarkOr<TString>{Message3},
+        };
+        PQRead(expected);
     }
 
-    Y_UNIT_TEST_F(TestReadFromTopicWatermarks1, TPqIoTestFixture) {
+    Y_UNIT_TEST_F(TestReadFromTopicWatermarks1, TFixture) {
         const TString topicName = "ReadFromTopicWatermarks1";
         PQCreateStream(topicName);
 
-        auto settings = BuildPqTopicSourceSettings(topicName, defaultWatermarkPeriod, defaultLateArrivalDelay);
+        auto settings = BuildPqTopicSourceSettings(topicName, DefaultWatermarkPeriod, DefaultLateArrivalDelay);
         InitSource(std::move(settings));
 
-        const std::vector<TString> data1 = { "1", "2" };
-        PQWrite(data1, topicName);
+        auto messages = std::vector{Message0, Message1};
+        PQWrite(messages, topicName);
 
         WaitForNextWatermark();
-        const std::vector<TString> data2 = { "3", "4", "5" };
-        PQWrite(data2, topicName);
+        messages = {Message2, Message3, Message4};
+        PQWrite(messages, topicName);
 
         WaitForNextWatermark();
-        const std::vector<TString> data3 = { "6" };
-        PQWrite(data3, topicName);
+        messages = {Message5};
+        PQWrite(messages, topicName);
 
-        auto result = SourceReadDataUntil<TString>(UVParser, 6);
-        AssertDataWithWatermarks(result, {"1", "2", "3", "4", "5", "6"}, {0, 2, 5});
+        auto expected = std::vector{
+            TWatermarkOr<TString>{Message0},
+            TWatermarkOr<TString>{TInstant::Zero()},
+            TWatermarkOr<TString>{Message1},
+            TWatermarkOr<TString>{Message2},
+            TWatermarkOr<TString>{TInstant::Zero()},
+            TWatermarkOr<TString>{Message3},
+            TWatermarkOr<TString>{Message4},
+            TWatermarkOr<TString>{Message5},
+            TWatermarkOr<TString>{TInstant::Zero()},
+        };
+        PQRead(expected);
     }
 
     Y_UNIT_TEST(WatermarkCheckpointWithItemsInReadyBuffer) {
@@ -318,39 +438,46 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         TSourceState state;
 
         {
-            TPqIoTestFixture setup;
-            auto settings = BuildPqTopicSourceSettings(topicName, defaultWatermarkPeriod);
+            TFixture setup;
+            auto settings = BuildPqTopicSourceSettings(topicName, DefaultWatermarkPeriod);
             setup.InitSource(std::move(settings));
 
-            std::vector<TString> data1 {"1", "2"};
-            PQWrite(data1, topicName);
+            auto messages = std::vector{Message0, Message1};
+            PQWrite(messages, topicName);
 
-            auto result = setup.SourceReadDataUntil<TString>(UVParser, 2);
-            AssertDataWithWatermarks(result, data1, {0});
+            auto expected = std::vector{
+                TWatermarkOr<TString>{Message0},
+                TWatermarkOr<TString>{TInstant::Zero()},
+            };
+            setup.PQRead(expected);
 
-            WaitForNextWatermark();
-            std::vector<TString> data2 {"3", "4"};
-            PQWrite(data2, topicName);
+            setup.WaitForNextWatermark();
+            messages = {Message2, Message3};
+            PQWrite(messages, topicName);
 
             // read only watermark (1-st batch), items '3', '4' will stay in ready buffer inside Source actor
-            result = setup.SourceReadUntil<TString>(UVParser, 1);
-            AssertDataWithWatermarks(result, {}, {0});
+            expected = {TWatermarkOr<TString>{Message1}};
+            setup.PQRead(expected);
 
             auto checkpoint = CreateCheckpoint();
             setup.SaveSourceState(checkpoint, state);
             Cerr << "State saved" << Endl;
         }
-
         {
-            TPqIoTestFixture setup;
-            auto settings = BuildPqTopicSourceSettings(topicName, defaultWatermarkPeriod);
+            TFixture setup;
+            auto settings = BuildPqTopicSourceSettings(topicName, DefaultWatermarkPeriod);
             setup.InitSource(std::move(settings));
             setup.LoadSource(state);
 
-            auto result = setup.SourceReadDataUntil<TString>(UVParser, 2);
             // Since items '3', '4' weren't returned from source actor, they should be reread
-            AssertDataWithWatermarks(result, {"3", "4"}, {});
+            auto expected = std::vector{
+                TWatermarkOr<TString>{Message2},
+                TWatermarkOr<TString>{TInstant::Zero()},
+                TWatermarkOr<TString>{Message3},
+            };
+            setup.PQRead(expected);
         }
     }
 }
-} // NYql::NDq
+
+} // namespace NYql::NDq

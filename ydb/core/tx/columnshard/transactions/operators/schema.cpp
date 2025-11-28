@@ -140,7 +140,6 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             }
             auto txIdsToWait = owner.GetProgressTxController().GetTxs();  //TODO #8650 Get transaction for moving pathId only
             if (!txIdsToWait.empty()) {
-                //TODO persist txIdsToWait to recover on table init
                 AFL_VERIFY(!txIdsToWait.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIdsToWait));
                 WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
             }
@@ -161,6 +160,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
 NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) const {
     namespace NTypeIds = NScheme::NTypeIds;
     static const THashSet<NScheme::TTypeId> pkSupportedTypes = {
+        NTypeIds::Bool,
         NTypeIds::Timestamp,
         NTypeIds::Date32,
         NTypeIds::Datetime64,
@@ -268,8 +268,12 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
 
             AFL_VERIFY(owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false));
             AFL_VERIFY(!owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false));
-            //TODO recover txIdsToWait
-            //WaitOnPropose = std::make_shared<TWaitTransactions>(GetTxId(), txIds);
+            owner.TablesManager.MoveTablePropose(srcSchemeShardLocalPathId);
+            auto txIdsToWait = owner.GetProgressTxController().GetTxs();
+            AFL_VERIFY(txIdsToWait.erase(GetTxId()));
+            if (!txIdsToWait.empty()) {
+                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
+            }
         }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;

@@ -269,12 +269,14 @@ cdef class _Quoter:
 
 
 cdef class _Unquoter:
+    cdef str _ignore
     cdef str _unsafe
     cdef bint _qs
     cdef _Quoter _quoter
     cdef _Quoter _qs_quoter
 
-    def __init__(self, *, unsafe='', qs=False):
+    def __init__(self, *, ignore="", unsafe="", qs=False):
+        self._ignore = ignore
         self._unsafe = unsafe
         self._qs = qs
         self._quoter = _Quoter()
@@ -336,7 +338,7 @@ cdef class _Unquoter:
                     buflen = 0
                     if self._qs and unquoted in '+=&;':
                         ret.append(self._qs_quoter(unquoted))
-                    elif unquoted in self._unsafe:
+                    elif unquoted in self._unsafe or unquoted in self._ignore:
                         ret.append(self._quoter(unquoted))
                     else:
                         ret.append(unquoted)

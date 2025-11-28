@@ -126,6 +126,7 @@
 
 ====================COPYRIGHT====================
 //  Copyright Beman Dawes 2006
+//  Copyright Andrey Semashev 2025
 
 
 ====================COPYRIGHT====================

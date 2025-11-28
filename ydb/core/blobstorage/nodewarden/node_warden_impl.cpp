@@ -4,15 +4,18 @@
 #include "distconf.h"
 
 #include <google/protobuf/util/message_differencer.h>
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.h>
 #include <ydb/library/pdisk_io/file_params.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/protos/key.pb.h>
@@ -39,6 +42,10 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , FreshCompMaxInFlightReads(10, 1, 1000)
     , HullCompMaxInFlightWrites(10, 1, 1000)
     , HullCompMaxInFlightReads(20, 1, 1000)
+    , HullCompFullCompPeriodSec(0, 0, 7 * 24 * 60 * 60)
+    , HullCompThrottlerBytesRate(0, 0, 10'000'000'000) // 10 GB/s
+    , GarbageThresholdToRunFullCompactionPerMille(0, 0, 300)
+    , DefragThrottlerBytesRate(0, 0, 10'000'000'000) // 10 GB/s
     , ThrottlingDryRun(1, 0, 1)
     , ThrottlingMinLevel0SstCount(100, 1, 100000)
     , ThrottlingMaxLevel0SstCount(250, 1, 100000)
@@ -51,8 +58,11 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingMinLogChunkCount(100, 1, 100000)
     , ThrottlingMaxLogChunkCount(130, 1, 100000)
     , MaxInProgressSyncCount(0, 0, 1000)
-    , MaxCommonLogChunksHDD(200, 1, 1'000'000)
-    , MaxCommonLogChunksSSD(200, 1, 1'000'000)
+    , EnablePhantomFlagStorage(0, 0, 1)
+    , PhantomFlagStorageLimitPerVDiskBytes(10'000'000, 0, 100'000'000'000)
+    , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
+    , MaxCommonLogChunksSSD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
+    , CommonStaticLogChunks(NPDisk::CommonStaticLogChunks, 1, 1'000'000)
     , CostMetricsParametersByMedia({
         TCostMetricsParameters{200},
         TCostMetricsParameters{50},
@@ -115,6 +125,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(NPDisk::TEvSlayResult, Handle);
         hFunc(NPDisk::TEvShredPDiskResult, Handle);
         hFunc(NPDisk::TEvShredPDisk, Handle);
+        hFunc(NPDisk::TEvChangeExpectedSlotCountResult, Handle);
 
         hFunc(TEvRegisterPDiskLoadActor, Handle);
 
@@ -151,6 +162,7 @@ STATEFN(TNodeWarden::StateOnline) {
         // proxy requests for the NodeWhiteboard to prevent races
         hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
 
+        hFunc(TEvBlobStorage::TEvControllerConfigRequest, Handle);
         hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
 
         cFunc(TEvPrivate::EvReadCache, HandleReadCache);
@@ -167,6 +179,7 @@ STATEFN(TNodeWarden::StateOnline) {
         fFunc(TEvBlobStorage::EvNodeWardenUpdateCache, ForwardToDistributedConfigKeeper);
         fFunc(TEvBlobStorage::EvNodeWardenQueryCache, ForwardToDistributedConfigKeeper);
         fFunc(TEvBlobStorage::EvNodeWardenUnsubscribeFromCache, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer, ForwardToDistributedConfigKeeper);
 
         hFunc(TEvNodeWardenQueryBaseConfig, Handle);
         hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
@@ -180,7 +193,7 @@ STATEFN(TNodeWarden::StateOnline) {
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
-        hFunc(TEvNodeWardenManageSyncers, HandleManageSyncers);
+        hFunc(TEvNodeWardenNotifySyncerFinished, Handle);
 
         default:
             EnqueuePendingMessage(ev);
@@ -364,69 +377,77 @@ void TNodeWarden::Bootstrap() {
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
-        icb->RegisterLocalControl(EnablePutBatching, "BlobStorage_EnablePutBatching");
-        icb->RegisterLocalControl(EnableVPatch, "BlobStorage_EnableVPatch");
-        icb->RegisterSharedControl(EnableLocalSyncLogDataCutting, "VDiskControls.EnableLocalSyncLogDataCutting");
-        icb->RegisterSharedControl(EnableSyncLogChunkCompressionHDD, "VDiskControls.EnableSyncLogChunkCompressionHDD");
-        icb->RegisterSharedControl(EnableSyncLogChunkCompressionSSD, "VDiskControls.EnableSyncLogChunkCompressionSSD");
-        icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, "VDiskControls.MaxSyncLogChunksInFlightHDD");
-        icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
-        icb->RegisterSharedControl(DefaultHugeGarbagePerMille, "VDiskControls.DefaultHugeGarbagePerMille");
-        icb->RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, "VDiskControls.HugeDefragFreeSpaceBorderPerMille");
-        icb->RegisterSharedControl(MaxChunksToDefragInflight, "VDiskControls.MaxChunksToDefragInflight");
-        icb->RegisterSharedControl(FreshCompMaxInFlightWrites, "VDiskControls.FreshCompMaxInFlightWrites");
-        icb->RegisterSharedControl(FreshCompMaxInFlightReads, "VDiskControls.FreshCompMaxInFlightReads");
-        icb->RegisterSharedControl(HullCompMaxInFlightWrites, "VDiskControls.HullCompMaxInFlightWrites");
-        icb->RegisterSharedControl(HullCompMaxInFlightReads, "VDiskControls.HullCompMaxInFlightReads");
 
-        icb->RegisterSharedControl(ThrottlingDryRun, "VDiskControls.ThrottlingDryRun");
-        icb->RegisterSharedControl(ThrottlingMinLevel0SstCount, "VDiskControls.ThrottlingMinLevel0SstCount");
-        icb->RegisterSharedControl(ThrottlingMaxLevel0SstCount, "VDiskControls.ThrottlingMaxLevel0SstCount");
-        icb->RegisterSharedControl(ThrottlingMinInplacedSizeHDD, "VDiskControls.ThrottlingMinInplacedSizeHDD");
-        icb->RegisterSharedControl(ThrottlingMaxInplacedSizeHDD, "VDiskControls.ThrottlingMaxInplacedSizeHDD");
-        icb->RegisterSharedControl(ThrottlingMinInplacedSizeSSD, "VDiskControls.ThrottlingMinInplacedSizeSSD");
-        icb->RegisterSharedControl(ThrottlingMaxInplacedSizeSSD, "VDiskControls.ThrottlingMaxInplacedSizeSSD");
-        icb->RegisterSharedControl(ThrottlingMinOccupancyPerMille, "VDiskControls.ThrottlingMinOccupancyPerMille");
-        icb->RegisterSharedControl(ThrottlingMaxOccupancyPerMille, "VDiskControls.ThrottlingMaxOccupancyPerMille");
-        icb->RegisterSharedControl(ThrottlingMinLogChunkCount, "VDiskControls.ThrottlingMinLogChunkCount");
-        icb->RegisterSharedControl(ThrottlingMaxLogChunkCount, "VDiskControls.ThrottlingMaxLogChunkCount");
+        TControlBoard::RegisterLocalControl(EnablePutBatching, icb->BlobStorage.EnablePutBatching);
+        TControlBoard::RegisterLocalControl(EnableVPatch, icb->BlobStorage.EnableVPatch);
+        TControlBoard::RegisterSharedControl(EnableLocalSyncLogDataCutting, icb->VDiskControls.EnableLocalSyncLogDataCutting);
+        TControlBoard::RegisterSharedControl(EnableSyncLogChunkCompressionHDD, icb->VDiskControls.EnableSyncLogChunkCompressionHDD);
+        TControlBoard::RegisterSharedControl(EnableSyncLogChunkCompressionSSD, icb->VDiskControls.EnableSyncLogChunkCompressionSSD);
+        TControlBoard::RegisterSharedControl(MaxSyncLogChunksInFlightHDD, icb->VDiskControls.MaxSyncLogChunksInFlightHDD);
+        TControlBoard::RegisterSharedControl(MaxSyncLogChunksInFlightSSD, icb->VDiskControls.MaxSyncLogChunksInFlightSSD);
+        TControlBoard::RegisterSharedControl(DefaultHugeGarbagePerMille, icb->VDiskControls.DefaultHugeGarbagePerMille);
+        TControlBoard::RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, icb->VDiskControls.HugeDefragFreeSpaceBorderPerMille);
+        TControlBoard::RegisterSharedControl(MaxChunksToDefragInflight, icb->VDiskControls.MaxChunksToDefragInflight);
+        TControlBoard::RegisterSharedControl(FreshCompMaxInFlightWrites, icb->VDiskControls.FreshCompMaxInFlightWrites);
+        TControlBoard::RegisterSharedControl(FreshCompMaxInFlightReads, icb->VDiskControls.FreshCompMaxInFlightReads);
+        TControlBoard::RegisterSharedControl(HullCompMaxInFlightWrites, icb->VDiskControls.HullCompMaxInFlightWrites);
+        TControlBoard::RegisterSharedControl(HullCompMaxInFlightReads, icb->VDiskControls.HullCompMaxInFlightReads);
+        TControlBoard::RegisterSharedControl(HullCompFullCompPeriodSec, icb->VDiskControls.HullCompFullCompPeriodSec);
+        TControlBoard::RegisterSharedControl(HullCompThrottlerBytesRate, icb->VDiskControls.HullCompThrottlerBytesRate);
+        TControlBoard::RegisterSharedControl(GarbageThresholdToRunFullCompactionPerMille, icb->VDiskControls.GarbageThresholdToRunFullCompactionPerMille);
+        TControlBoard::RegisterSharedControl(DefragThrottlerBytesRate, icb->VDiskControls.DefragThrottlerBytesRate);
 
-        icb->RegisterSharedControl(MaxInProgressSyncCount, "VDiskControls.MaxInProgressSyncCount");
+        TControlBoard::RegisterSharedControl(ThrottlingDryRun, icb->VDiskControls.ThrottlingDryRun);
+        TControlBoard::RegisterSharedControl(ThrottlingMinLevel0SstCount, icb->VDiskControls.ThrottlingMinLevel0SstCount);
+        TControlBoard::RegisterSharedControl(ThrottlingMaxLevel0SstCount, icb->VDiskControls.ThrottlingMaxLevel0SstCount);
+        TControlBoard::RegisterSharedControl(ThrottlingMinInplacedSizeHDD, icb->VDiskControls.ThrottlingMinInplacedSizeHDD);
+        TControlBoard::RegisterSharedControl(ThrottlingMaxInplacedSizeHDD, icb->VDiskControls.ThrottlingMaxInplacedSizeHDD);
+        TControlBoard::RegisterSharedControl(ThrottlingMinInplacedSizeSSD, icb->VDiskControls.ThrottlingMinInplacedSizeSSD);
+        TControlBoard::RegisterSharedControl(ThrottlingMaxInplacedSizeSSD, icb->VDiskControls.ThrottlingMaxInplacedSizeSSD);
+        TControlBoard::RegisterSharedControl(ThrottlingMinOccupancyPerMille, icb->VDiskControls.ThrottlingMinOccupancyPerMille);
+        TControlBoard::RegisterSharedControl(ThrottlingMaxOccupancyPerMille, icb->VDiskControls.ThrottlingMaxOccupancyPerMille);
+        TControlBoard::RegisterSharedControl(ThrottlingMinLogChunkCount, icb->VDiskControls.ThrottlingMinLogChunkCount);
+        TControlBoard::RegisterSharedControl(ThrottlingMaxLogChunkCount, icb->VDiskControls.ThrottlingMaxLogChunkCount);
 
-        icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
-        icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
+        TControlBoard::RegisterSharedControl(MaxInProgressSyncCount, icb->VDiskControls.MaxInProgressSyncCount);
+        TControlBoard::RegisterSharedControl(EnablePhantomFlagStorage, icb->VDiskControls.EnablePhantomFlagStorage);
+        TControlBoard::RegisterSharedControl(PhantomFlagStorageLimitPerVDiskBytes, icb->VDiskControls.PhantomFlagStorageLimitPerVDiskBytes);
 
-        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
-                "VDiskControls.BurstThresholdNsHDD");
-        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_SSD].BurstThresholdNs,
-                "VDiskControls.BurstThresholdNsSSD");
-        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].BurstThresholdNs,
-                "VDiskControls.BurstThresholdNsNVME");
-        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].DiskTimeAvailableScale,
-                "VDiskControls.DiskTimeAvailableScaleHDD");
-        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_SSD].DiskTimeAvailableScale,
-                "VDiskControls.DiskTimeAvailableScaleSSD");
-        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
-                "VDiskControls.DiskTimeAvailableScaleNVME");
+        TControlBoard::RegisterSharedControl(MaxCommonLogChunksHDD, icb->PDiskControls.MaxCommonLogChunksHDD);
+        TControlBoard::RegisterSharedControl(MaxCommonLogChunksSSD, icb->PDiskControls.MaxCommonLogChunksSSD);
+        TControlBoard::RegisterSharedControl(CommonStaticLogChunks, icb->PDiskControls.CommonStaticLogChunks);
 
-        icb->RegisterSharedControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
-        icb->RegisterSharedControl(SlowDiskThresholdHDD, "DSProxyControls.SlowDiskThresholdHDD");
-        icb->RegisterSharedControl(SlowDiskThresholdSSD, "DSProxyControls.SlowDiskThresholdSSD");
+        TControlBoard::RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
+                icb->VDiskControls.BurstThresholdNsHDD);
+        TControlBoard::RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_SSD].BurstThresholdNs,
+                icb->VDiskControls.BurstThresholdNsSSD);
+        TControlBoard::RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].BurstThresholdNs,
+                icb->VDiskControls.BurstThresholdNsNVME);
+        TControlBoard::RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].DiskTimeAvailableScale,
+                icb->VDiskControls.DiskTimeAvailableScaleHDD);
+        TControlBoard::RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_SSD].DiskTimeAvailableScale,
+                icb->VDiskControls.DiskTimeAvailableScaleSSD);
+        TControlBoard::RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
+                icb->VDiskControls.DiskTimeAvailableScaleNVME);
 
-        icb->RegisterSharedControl(PredictedDelayMultiplier, "DSProxyControls.PredictedDelayMultiplier");
-        icb->RegisterSharedControl(PredictedDelayMultiplierHDD, "DSProxyControls.PredictedDelayMultiplierHDD");
-        icb->RegisterSharedControl(PredictedDelayMultiplierSSD, "DSProxyControls.PredictedDelayMultiplierSSD");
+        TControlBoard::RegisterSharedControl(SlowDiskThreshold, icb->DSProxyControls.SlowDiskThreshold);
+        TControlBoard::RegisterSharedControl(SlowDiskThresholdHDD, icb->DSProxyControls.SlowDiskThresholdHDD);
+        TControlBoard::RegisterSharedControl(SlowDiskThresholdSSD, icb->DSProxyControls.SlowDiskThresholdSSD);
 
-        icb->RegisterSharedControl(MaxNumOfSlowDisks, "DSProxyControls.MaxNumOfSlowDisks");
-        icb->RegisterSharedControl(MaxNumOfSlowDisksHDD, "DSProxyControls.MaxNumOfSlowDisksHDD");
-        icb->RegisterSharedControl(MaxNumOfSlowDisksSSD, "DSProxyControls.MaxNumOfSlowDisksSSD");
+        TControlBoard::RegisterSharedControl(PredictedDelayMultiplier, icb->DSProxyControls.PredictedDelayMultiplier);
+        TControlBoard::RegisterSharedControl(PredictedDelayMultiplierHDD, icb->DSProxyControls.PredictedDelayMultiplierHDD);
+        TControlBoard::RegisterSharedControl(PredictedDelayMultiplierSSD, icb->DSProxyControls.PredictedDelayMultiplierSSD);
 
-        icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
-        icb->RegisterSharedControl(ReportingControllerBucketSize, "DSProxyControls.RequestReportingSettings.BucketSize");
-        icb->RegisterSharedControl(ReportingControllerLeakDurationMs, "DSProxyControls.RequestReportingSettings.LeakDurationMs");
-        icb->RegisterSharedControl(ReportingControllerLeakRate, "DSProxyControls.RequestReportingSettings.LeakRate");
+        TControlBoard::RegisterSharedControl(MaxNumOfSlowDisks, icb->DSProxyControls.MaxNumOfSlowDisks);
+        TControlBoard::RegisterSharedControl(MaxNumOfSlowDisksHDD, icb->DSProxyControls.MaxNumOfSlowDisksHDD);
+        TControlBoard::RegisterSharedControl(MaxNumOfSlowDisksSSD, icb->DSProxyControls.MaxNumOfSlowDisksSSD);
 
-        icb->RegisterSharedControl(EnableDeepScrubbing, "VDiskControls.EnableDeepScrubbing");
+        TControlBoard::RegisterSharedControl(EnableDeepScrubbing, icb->VDiskControls.EnableDeepScrubbing);
+
+        TControlBoard::RegisterSharedControl(LongRequestThresholdMs, icb->DSProxyControls.LongRequestThresholdMs);
+        TControlBoard::RegisterSharedControl(ReportingControllerBucketSize, icb->DSProxyControls.RequestReportingSettings.BucketSize);
+        TControlBoard::RegisterSharedControl(ReportingControllerLeakDurationMs, icb->DSProxyControls.RequestReportingSettings.LeakDurationMs);
+        TControlBoard::RegisterSharedControl(ReportingControllerLeakRate, icb->DSProxyControls.RequestReportingSettings.LeakRate);
     }
 
     // start replication broker
@@ -451,6 +472,9 @@ void TNodeWarden::Bootstrap() {
 
     actorSystem->RegisterLocalService(MakeBlobStorageSyncBrokerID(), Register(
         CreateSyncBrokerActor(MaxInProgressSyncCount)));
+
+    // create bridge syncer rate quoter
+    SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig.GetBridgeSyncRateBytesPerSecond());
 
     // determine if we are running in 'mock' mode
     EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();
@@ -628,6 +652,16 @@ void TNodeWarden::Handle(NPDisk::TEvShredPDiskResult::TPtr ev) {
         ev->Get()->Status)));
 }
 
+void TNodeWarden::Handle(NPDisk::TEvChangeExpectedSlotCountResult::TPtr ev) {
+    const NPDisk::TEvChangeExpectedSlotCountResult &msg = *ev->Get();
+    STLOG(PRI_DEBUG, BS_NODE, NW108, "Handle(NPDisk::TEvChangeExpectedSlotCountResult)", (Msg, msg.ToString()));
+
+    // For now, just log the result. In the future, we might want to track this or take action based on the result.
+    if (msg.Status != NKikimrProto::OK) {
+        STLOG(PRI_ERROR, BS_NODE, NW109, "ChangeExpectedSlotCount failed", (Status, msg.Status), (ErrorReason, msg.ErrorReason));
+    }
+}
+
 void TNodeWarden::Handle(NPDisk::TEvShredPDisk::TPtr ev) {
     // the message has returned to sender -- PDisk was terminated before processing it; normally it must never happen,
     // because NodeWarden issues PoisonPill synchronously with removing PDisk from the LocalPDisks set
@@ -677,9 +711,14 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         return;
     }
 
+    auto escape = [&](auto& value) { return value ? std::make_optional('"' + EscapeC(*value) + '"') : std::nullopt; };
+
     STLOG(PRI_DEBUG, BS_NODE, NW63, "persisting new configurations",
-        (MainYaml, mainYaml), (MainYamlVersion, mainYamlVersion), (StorageYaml, storageYaml),
-        (StorageYamlVersion, storageYamlVersion), (YamlConfig, YamlConfig));
+        (MainYaml, escape(mainYaml)),
+        (MainYamlVersion, mainYamlVersion),
+        (StorageYaml, escape(storageYaml)),
+        (StorageYamlVersion, storageYamlVersion),
+        (YamlConfig, YamlConfig));
 
     const bool updateMain = mainYaml && (!YamlConfig || !YamlConfig->HasMainConfigVersion() ||
         YamlConfig->GetMainConfigVersion() < mainYamlVersion);
@@ -768,7 +807,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
             }
         }
 
-        return [this, saveCtx, success]() { 
+        return [this, saveCtx, success]() {
             if (success) {
                 if (!YamlConfig) {
                     YamlConfig.emplace();
@@ -786,7 +825,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
                 }
                 ConfigSaveTimer.Reset();
             } else {
-                TActivationContext::Schedule(TDuration::MilliSeconds(ConfigSaveTimer.NextBackoffMs()), new IEventHandle(
+                TActivationContext::Schedule(ConfigSaveTimer.Next(), new IEventHandle(
                     SelfId(), {}, new TEvPrivate::TEvRetrySaveConfig(std::move(saveCtx->MainYaml), saveCtx->MainYamlVersion,
                     std::move(saveCtx->StorageYaml), saveCtx->StorageYamlVersion), 0, ExpectedSaveConfigCookie));
             }
@@ -800,6 +839,8 @@ void TNodeWarden::Handle(TEvRegisterPDiskLoadActor::TPtr ev) {
 
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev) {
     auto& record = ev->Get()->Record;
+
+    STLOG(PRI_DEBUG, BS_NODE, NW52, "TEvControllerNodeServiceSetUpdate", (Record, record));
 
     if (record.HasAvailDomain() && record.GetAvailDomain() != AvailDomainId) {
         // AvailDomain may arrive unset
@@ -900,6 +941,10 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
             yaml.HasStorageConfigVersion() ? std::make_optional(yaml.GetStorageConfigVersion()) : std::nullopt);
 
         ExpectedSaveConfigCookie++;
+    }
+
+    if (record.GetUpdateSyncers()) {
+        ApplyWorkingSyncers(record);
     }
 }
 
@@ -1028,9 +1073,30 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvNotifyWardenPDiskRestarted::TPtr ev)
     OnPDiskRestartFinished(ev->Get()->PDiskId, ev->Get()->Status);
 }
 
+void TNodeWarden::Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr ev) {
+    const ui64 cookie = NextConfigCookie++;
+    UnfinishedRequests[cookie].CopyFrom(ev->Get()->Record);
+    ConfigInFlight.emplace(cookie, [this, cookie = cookie, origSender = ev->Sender, origCookie = ev->Cookie](
+            TEvBlobStorage::TEvControllerConfigResponse *ev) {
+        if (ev) {
+            Send(origSender, ev, 0, origCookie);
+            UnfinishedRequests.erase(cookie);
+        }
+    });
+    SendToController(std::unique_ptr<IEventBase>(ev->ReleaseBase().Release()), cookie);
+}
+
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
     if (auto nh = ConfigInFlight.extract(ev->Cookie)) {
         nh.mapped()(ev->Get());
+    }
+}
+
+void TNodeWarden::SendUnfinishedRequests() {
+    for (const auto& [cookie, record] : UnfinishedRequests) {
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        ev->Record.CopyFrom(record);
+        SendToController(std::move(ev), cookie);
     }
 }
 
@@ -1106,6 +1172,7 @@ void TNodeWarden::Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&) {
     STLOG(PRI_TRACE, BS_NODE, NW39, "Handle(TEvPrivate::TEvSendDiskMetrics)");
     SendDiskMetrics(true);
     ReportLatencies();
+    NotifySyncersProgress();
     Schedule(TDuration::Seconds(10), new TEvPrivate::TEvSendDiskMetrics());
 }
 
@@ -1352,9 +1419,13 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     } else {
         config->ClearSelfManagementConfig();
     }
-    
+
     const auto& bsFrom = appConfig.GetBlobStorageConfig();
     auto *bsTo = config->MutableBlobStorageConfig();
+
+    const auto hasStaticGroupInfo = [](const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
+        return ss.PDisksSize() && ss.VDisksSize() && ss.GroupsSize();
+    };
 
     if (bsFrom.HasServiceSet()) {
         const auto& ssFrom = bsFrom.GetServiceSet();
@@ -1371,10 +1442,6 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         } else {
             ssTo->ClearReplBrokerConfig();
         }
-
-        const auto hasStaticGroupInfo = [](const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
-            return ss.PDisksSize() && ss.VDisksSize() && ss.GroupsSize();
-        };
 
         // update static group information unless distconf is enabled
         if (!hasStaticGroupInfo(ssFrom) && config->GetSelfManagementConfig().GetEnabled()) {
@@ -1509,6 +1576,25 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         bsTo->ClearBscSettings();
     }
 
+    // copy PDiskConfig from DefineHostConfig/DefineBox if this section is managed automatically
+    if (!hasStaticGroupInfo(bsFrom.GetServiceSet()) && config->GetSelfManagementConfig().GetEnabled()) {
+        THashMap<std::tuple<ui32, TString>, NKikimrBlobStorage::TPDiskConfig> pdiskConfigs;
+        auto callback = [&](const auto& node, const auto& drive) {
+            if (drive.HasPDiskConfig()) {
+                pdiskConfigs.emplace(std::make_tuple(node.GetNodeId(), drive.GetPath()), drive.GetPDiskConfig());
+            }
+        };
+        EnumerateConfigDrives(*config, 0, callback, nullptr, true);
+        for (auto& pdisk : *bsTo->MutableServiceSet()->MutablePDisks()) {
+            const auto key = std::make_tuple(pdisk.GetNodeID(), pdisk.GetPath());
+            if (const auto it = pdiskConfigs.find(key); it != pdiskConfigs.end()) {
+                pdisk.MutablePDiskConfig()->CopyFrom(it->second);
+            } else {
+                pdisk.ClearPDiskConfig();
+            }
+        }
+    }
+
     // copy nameservice-related things
     if (!appConfig.HasNameserviceConfig()) {
         *errorReason = "origin config missing mandatory NameserviceConfig section";
@@ -1526,7 +1612,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 *errorReason = "missing pile name";
                 return false;
             }
-            const auto [it, inserted] = piles.try_emplace(p[i].GetName(), TBridgePileId::FromValue(i));
+            const auto [it, inserted] = piles.try_emplace(p[i].GetName(), TBridgePileId::FromPileIndex(i));
             if (!inserted) {
                 *errorReason = TStringBuilder() << "duplicate pile name " << p[i].GetName();
                 return false;
@@ -1574,12 +1660,8 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 
             auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
                 if (needMerge) {
-                    auto toInfo = BuildStateStorageInfo(*to);
-                    auto fromInfo = BuildStateStorageInfo(from);
-                    if (toInfo->RingGroups != fromInfo->RingGroups) {
-                        *errorReason = TStringBuilder() << entity << " NToSelect/rings differs"
-                            << " from# " << SingleLineProto(from)
-                            << " to# " << SingleLineProto(*to);
+                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, from, *to);
+                    if (!errorReason->empty()) {
                         return false;
                     }
                 }
@@ -1602,16 +1684,22 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                     break;
                 }
             }
+        }
 
 #define UPDATE_EXPLICIT_CONFIG(NAME) \
-            if (domains.HasExplicit##NAME##Config()) { \
-                config->Mutable##NAME##Config()->CopyFrom(domains.GetExplicit##NAME##Config()); \
-            }
-
-            UPDATE_EXPLICIT_CONFIG(StateStorage)
-            UPDATE_EXPLICIT_CONFIG(StateStorageBoard)
-            UPDATE_EXPLICIT_CONFIG(SchemeBoard)
+        if (domains.HasExplicit##NAME##Config()) { \
+            if (config->Has##NAME##Config()) { \
+                *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(#NAME, config->Get##NAME##Config(), domains.GetExplicit##NAME##Config()); \
+                if (!errorReason->empty()) { \
+                    return false; \
+                } \
+            } \
+            config->Mutable##NAME##Config()->CopyFrom(domains.GetExplicit##NAME##Config()); \
         }
+
+        UPDATE_EXPLICIT_CONFIG(StateStorage)
+        UPDATE_EXPLICIT_CONFIG(StateStorageBoard)
+        UPDATE_EXPLICIT_CONFIG(SchemeBoard)
     }
 
     return true;

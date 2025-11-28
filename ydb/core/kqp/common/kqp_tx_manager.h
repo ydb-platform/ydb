@@ -62,6 +62,7 @@ public:
 
     virtual EShardState GetState(ui64 shardId) const = 0;
     virtual void SetError(ui64 shardId) = 0;
+    virtual void SetError() = 0;
 
     virtual void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) = 0;
     virtual std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> GetPartitioning(const TTableId tableId) const = 0;
@@ -138,6 +139,10 @@ public:
     virtual TCommitInfo GetCommitInfo() = 0;
 
     virtual bool ConsumeCommitResult(ui64 shardId) = 0;
+
+    virtual const THashSet<ui64>& StartRollback() = 0;
+    virtual bool ConsumeRollbackResult(ui64 shardId) = 0;
+    virtual bool IsRollBack() const = 0;
 };
 
 using IKqpTransactionManagerPtr = std::shared_ptr<IKqpTransactionManager>;

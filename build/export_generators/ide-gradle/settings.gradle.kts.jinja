@@ -1,9 +1,54 @@
-{%- include "[generator]/common_dir.jinja" -%}
+pluginManagement {
+    val bucketUsername = settings.providers.gradleProperty("bucketUsername")
+        .orElse(settings.providers.environmentVariable("BUCKET_USERNAME")).get()
+    val bucketPassword = settings.providers.gradleProperty("bucketPassword")
+        .orElse(settings.providers.environmentVariable("BUCKET_PASSWORD")).get()
+    repositories {
+        maven {
+            name = "bucket"
+            url = uri("https://bucket.yandex-team.ru/v1/maven/gradle")
+            credentials {
+                username = bucketUsername
+                password = bucketPassword
+            }
+        }
+    }
+}
+
+dependencyResolutionManagement {
+    val bucketUsername = settings.providers.gradleProperty("bucketUsername")
+        .orElse(settings.providers.environmentVariable("BUCKET_USERNAME")).get()
+    val bucketPassword = settings.providers.gradleProperty("bucketPassword")
+        .orElse(settings.providers.environmentVariable("BUCKET_PASSWORD")).get()
+    repositories {
+        maven {
+            name = "bucket"
+            url = uri("https://bucket.yandex-team.ru/v1/maven/central")
+            credentials {
+                username = bucketUsername
+                password = bucketPassword
+            }
+        }
+    }
+}
+
+{%  include "[generator]/common_dir.jinja" -%}
 rootProject.name = "{{ project_name }}"
-{%  for subdir in subdirs -%}
+{%  if not common_dir_classpath -%}
+{%-     set dirnames = dirname(subdirs|reject('eq', project_dir)|reject('startsWith', project_dir + "/"), true) -%}
+{%-     if dirnames|length -%}
+{%          for dirname in dirnames -%}
+{%-             set arcadia_dirname = arcadia_root + "/" + dirname -%}
+{%-             set classpath = '":' + dirname|replace("/", ":") + '"' %}
+include({{ classpath }})
+project({{ classpath }}).projectDir = file("{{ arcadia_dirname }}")
+{%-         endfor %}
+{%      endif -%}
+{%- endif -%}
+{%- for subdir in subdirs -%}
 {%-     set arcadia_subdir = arcadia_root + "/" + subdir -%}
 {%-     if arcadia_subdir != project_root -%}
-{%-         set classpath = '":' + subdir | replace("/", ":") + '"' -%}
+{%-         set classpath = '":' + subdir|replace("/", ":") + '"' -%}
 {%-         include "[generator]/patch_classpath.jinja" %}
 include({{ classpath }})
 {%-         if not common_dir_classpath %}

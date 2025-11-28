@@ -2,6 +2,7 @@
 
 #include "yql_graph_transformer.h"
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
+#include <yql/essentials/core/layers/layers.h>
 
 #include <yql/essentials/public/udf/udf_validate.h>
 
@@ -162,6 +163,7 @@ public:
     virtual TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
         IOptimizationContext& optCtx) = 0;
+    virtual void RegisterWorldArg(const TExprNode::TPtr& arg, const TExprNode::TPtr& world) = 0;
 
     //-- execution
     virtual bool CanExecute(const TExprNode& node) = 0;
@@ -190,6 +192,12 @@ public:
     // ytflow
     virtual IYtflowIntegration* GetYtflowIntegration() = 0;
     virtual IYtflowOptimization* GetYtflowOptimization() = 0;
+
+    // layers
+    virtual NLayers::ILayersIntegrationPtr GetLayersIntegration() const = 0;
+
+    // query capture
+    virtual bool IsFullCaptureReady() = 0;
 };
 
 struct IPipelineConfigurator;

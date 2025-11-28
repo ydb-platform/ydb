@@ -4,8 +4,6 @@
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
-#include <algorithm>
-
 #define LOG_T(s) \
     LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
 #define LOG_D(s) \
@@ -21,75 +19,91 @@ namespace NYql::NDq {
 
 using namespace NActors;
 
-TDqComputeActorWatermarks::TDqComputeActorWatermarks(
-    const TString& logPrefix
-)
-    : LogPrefix(logPrefix) {
+TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TString& logPrefix)
+    : LogPrefix(logPrefix), Impl(logPrefix) {
 }
 
-void TDqComputeActorWatermarks::RegisterAsyncInput(ui64 inputId) {
-    AsyncInputsWatermarks[inputId] = Nothing();
+void TDqComputeActorWatermarks::RegisterInputChannel(ui64 inputId, TDuration idleTimeout, TInstant systemTime) {
+    RegisterInput(inputId, true, idleTimeout, systemTime);
 }
 
-void TDqComputeActorWatermarks::RegisterInputChannel(ui64 inputId) {
-    InputChannelsWatermarks[inputId] = Nothing();
+void TDqComputeActorWatermarks::RegisterAsyncInput(ui64 inputId, TDuration idleTimeout, TInstant systemTime) {
+    RegisterInput(inputId, false, idleTimeout, systemTime);
 }
 
-void TDqComputeActorWatermarks::RegisterOutputChannel(ui64 outputId) {
-    OutputChannelsWatermarks[outputId] = Nothing();
+void TDqComputeActorWatermarks::RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout, TInstant systemTime)
+{
+    LOG_D("Register " << (isChannel ? "channel" : "async input") << " " << inputId << ", idle timeout: " << idleTimeout);
+    auto registered = Impl.RegisterInput(std::make_pair(inputId, isChannel), systemTime, idleTimeout);
+    if (!registered) {
+        LOG_E("Repeated registration " << inputId <<" " << (isChannel ? "channel" : "async input"));
+    }
 }
 
-bool TDqComputeActorWatermarks::HasOutputChannels() const {
-    return !OutputChannelsWatermarks.empty();
+void TDqComputeActorWatermarks::UnregisterInputChannel(ui64 inputId) {
+    LOG_D("Unregister input channel " << inputId);
+    UnregisterInput(inputId, true);
 }
 
-bool TDqComputeActorWatermarks::NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark) {
-    LOG_T("Async input " << inputId << " notified about watermark " << watermark);
+void TDqComputeActorWatermarks::UnregisterAsyncInput(ui64 inputId) {
+    LOG_D("Unregister async input " << inputId);
+    UnregisterInput(inputId, false);
+}
 
-    auto& asyncInputWatermark = AsyncInputsWatermarks[inputId];
-    if (!asyncInputWatermark || *asyncInputWatermark < watermark) {
-        LOG_T("Async input " << inputId << " watermark was updated to " << watermark);
-        asyncInputWatermark = watermark;
-        RecalcPendingWatermark();
-        return true;
+void TDqComputeActorWatermarks::UnregisterInput(ui64 inputId, bool isChannel) {
+    auto result = Impl.UnregisterInput(std::make_pair(inputId, isChannel));
+    if (!result) {
+        LOG_E("Unregistered " << (isChannel ? "input channel" : "async input") << " " << inputId << " was not found");
+    }
+}
+
+bool TDqComputeActorWatermarks::NotifyInChannelWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime) {
+    return NotifyInputWatermarkReceived(inputId, true, watermark, systemTime);
+}
+
+bool TDqComputeActorWatermarks::NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime) {
+    return NotifyInputWatermarkReceived(inputId, false, watermark, systemTime);
+}
+
+bool TDqComputeActorWatermarks::NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark, TInstant systemTime) {
+    LOG_T((isChannel ? "Channel " : "Async input ") << inputId << " notified about watermark " << watermark);
+    if (MaxWatermark < watermark) {
+        MaxWatermark = watermark;
+    }
+    auto [nextWatermark, updated] = Impl.NotifyNewWatermark(std::make_pair(inputId, isChannel), watermark, systemTime);
+    if (nextWatermark) {
+        PendingWatermark = nextWatermark;
+    }
+    return updated;
+}
+
+bool TDqComputeActorWatermarks::NotifyWatermarkWasSent(TInstant watermark) {
+    auto logPrefix = [watermark] {
+        return TStringBuilder() << "Output notified about watermark '" << watermark << "'";
+    };
+
+    LOG_T(logPrefix());
+
+    if (watermark < PendingWatermark) {
+        LOG_D(logPrefix() << " before '" << PendingWatermark << "'");
+        return false;
     }
 
-    return false;
-}
-
-bool TDqComputeActorWatermarks::NotifyInChannelWatermarkReceived(ui64 inputId, TInstant watermark) {
-    LOG_T("Input channel " << inputId << " notified about watermark " << watermark);
-
-    auto& inputChannelWatermark = InputChannelsWatermarks[inputId];
-    if (!inputChannelWatermark || *inputChannelWatermark < watermark) {
-        LOG_T("Input channel " << inputId << " watermark was updated to " << watermark);
-        inputChannelWatermark = watermark;
-        RecalcPendingWatermark();
-        return true;
-    }
-
-    return false;
-}
-
-bool TDqComputeActorWatermarks::NotifyOutputChannelWatermarkSent(ui64 outputId, TInstant watermark) {
-    auto logPrefix = TStringBuilder() << "Output channel "
-        << outputId << " notified about watermark '" << watermark << "'";
-
-    LOG_T(logPrefix);
-
-    if (watermark <= LastWatermark) {
-        LOG_E(logPrefix << "' when LastWatermark was already forwarded to " << *LastWatermark);
+    if (watermark > PendingWatermark) {
+        LOG_E(logPrefix() << " when '" << PendingWatermark << "' was expected");
         // We will try to ignore this error, but something strange happened
+        return false;
     }
 
-    if (watermark != PendingWatermark) {
-        LOG_E(logPrefix << " when '" << PendingWatermark << "' was expected");
-        // We will try to ignore this error, but something strange happened
+    return true;
+}
+
+TMaybe<TInstant> TDqComputeActorWatermarks::HandleIdleness(TInstant systemTime) {
+    auto nextWatermark = Impl.HandleIdleness(systemTime);
+    if (nextWatermark) {
+        PendingWatermark = nextWatermark;
     }
-
-    OutputChannelsWatermarks[outputId] = watermark;
-
-    return MaybePopPendingWatermark();
+    return nextWatermark;
 }
 
 bool TDqComputeActorWatermarks::HasPendingWatermark() const {
@@ -100,61 +114,21 @@ TMaybe<TInstant> TDqComputeActorWatermarks::GetPendingWatermark() const {
     return PendingWatermark;
 }
 
-void TDqComputeActorWatermarks::RecalcPendingWatermark() {
-    if (AsyncInputsWatermarks.empty() && InputChannelsWatermarks.empty()) {
-        return;
-    }
-
-    auto newWatermark = TInstant::Max();
-    for (const auto& [_, watermark] : AsyncInputsWatermarks) {
-        if (!watermark) {
-            return;
-        }
-
-        newWatermark = std::min(newWatermark, *watermark);
-    }
-
-    for (const auto& [_, watermark] : InputChannelsWatermarks) {
-        if (!watermark) {
-            return;
-        }
-
-        newWatermark = std::min(newWatermark, *watermark);
-    }
-
-    if (!LastWatermark || newWatermark != LastWatermark) {
-        LOG_T("New pending watermark " << newWatermark);
-        PendingWatermark = newWatermark;
-    }
+TMaybe<TInstant> TDqComputeActorWatermarks::GetMaxWatermark() const {
+    return MaxWatermark;
 }
 
-bool TDqComputeActorWatermarks::MaybePopPendingWatermark() {
-    if (OutputChannelsWatermarks.empty()) {
-        return true;
-    }
-
-    if (!PendingWatermark) {
-        LOG_E("There is no pending watermark, but pop was called");
-        // We will try to ignore this error, but something strange happened
-        return true;
-    }
-
-    auto outWatermark = TInstant::Max();
-    for (const auto& [_, watermark] : OutputChannelsWatermarks) {
-        if (!watermark) {
-            return false;
+TMaybe<TInstant> TDqComputeActorWatermarks::PrepareIdlenessCheck() {
+    if (auto notifyTime = Impl.GetNextIdlenessCheckAt()) {
+        if (Impl.AddScheduledIdlenessCheck(*notifyTime)) {
+            return notifyTime;
         }
-
-        outWatermark = std::min(outWatermark, *watermark);
     }
+    return Nothing();
+}
 
-    if (outWatermark >= *PendingWatermark) {
-        LastWatermark = PendingWatermark;
-        PopPendingWatermark();
-        return true;
-    }
-
-    return false;
+bool TDqComputeActorWatermarks::ProcessIdlenessCheck(TInstant notifyTime) {
+    return Impl.RemoveExpiredIdlenessChecks(notifyTime);
 }
 
 void TDqComputeActorWatermarks::PopPendingWatermark() {
@@ -163,6 +137,7 @@ void TDqComputeActorWatermarks::PopPendingWatermark() {
 }
 
 void TDqComputeActorWatermarks::SetLogPrefix(const TString& logPrefix) {
+    Impl.SetLogPrefix(logPrefix);
     LogPrefix = logPrefix;
 }
 

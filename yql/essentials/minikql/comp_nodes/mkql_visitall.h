@@ -6,5 +6,5 @@ namespace NMiniKQL {
 
 IComputationNode* WrapVisitAll(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

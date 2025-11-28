@@ -1,3 +1,4 @@
+import errno
 import os
 import shutil
 import yatest.common
@@ -21,6 +22,25 @@ FIX_DIR_PREFIXES = {
     'DATA': yatest.common.data_path,
     'BINARY': yatest.common.binary_path,
 }
+
+
+def safe_symlink(src, dst):
+    """
+    If dst is an existing directory, creates a symlink inside it with the basename of src.
+    If dst is a file path (does not exist or is not a directory), creates the symlink at dst.
+    If the link already exists, does nothing.
+    """
+    # If dst is an existing directory, append basename of src
+    if os.path.isdir(dst):
+        link_path = os.path.join(dst, os.path.basename(src))
+    else:
+        link_path = dst
+
+    try:
+        os.symlink(src, link_path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
 
 
 class YQLRun(object):
@@ -85,8 +105,8 @@ class YQLRun(object):
 
     def yql_exec(self, program=None, program_file=None, files=None, urls=None,
                  run_sql=False, verbose=False, check_error=True, tables=None, pretty_plan=True,
-                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False, scan_udfs=True, langver=None):
-        del pretty_plan
+                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False, scan_udfs=True, langver=None, attrs={}):
+        del pretty_plan, attrs
 
         res_dir = self.res_dir
 
@@ -210,7 +230,7 @@ class YQLRun(object):
                     copy_dest = os.path.join(res_dir, f)
                     if not os.path.exists(os.path.dirname(copy_dest)):
                         os.makedirs(os.path.dirname(copy_dest))
-                    shutil.copy2(
+                    safe_symlink(
                         real_path,
                         copy_dest,
                     )
@@ -232,9 +252,9 @@ class YQLRun(object):
                     else:
                         copy_dest = res_dir
                         files[f] = os.path.basename(files[f])
-                    shutil.copy2(path_to_copy, copy_dest)
+                    safe_symlink(path_to_copy, copy_dest)
                 else:
-                    shutil.copy2(files[f], res_dir)
+                    safe_symlink(files[f], res_dir)
                     files[f] = os.path.basename(files[f])
             cmd += yql_utils.get_cmd_for_files('--file', files)
 
@@ -303,6 +323,7 @@ class YQLRun(object):
         if proc_result.exit_code != 0 and check_error:
             with open(err_file, 'r') as f:
                 err_file_text = f.read()
+            yql_utils.skip_on_ubsan_known_failure(err_file_text)
             assert 0, \
                 'Command\n%(command)s\n finished with exit code %(code)d, stderr:\n\n%(stderr)s\n\nerror file:\n%(err_file)s' % {
                     'command': cmd,

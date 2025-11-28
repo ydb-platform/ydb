@@ -3,9 +3,11 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 TEST_SRCS(
     test_pdisk_format_info.py
+    test_pdisk_slot_size_in_units.py
     test_replication.py
     test_self_heal.py
     test_tablet_channel_migration.py
+    test_vdisks.py
 )
 
 IF (SANITIZER_TYPE)

@@ -98,4 +98,4 @@ private:
     std::variant<NUdf::TUnboxedValue, NKikimr::NBinaryJson::TEntryCursor, NKikimr::NBinaryJson::TContainerCursor> Value_;
 };
 
-}
+} // namespace NYql::NJsonPath

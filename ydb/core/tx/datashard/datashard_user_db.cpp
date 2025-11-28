@@ -90,11 +90,11 @@ TArrayRef<const NIceDb::TUpdateOp> TDataShardUserDb::RemoveDefaultColumnsIfNeede
         // row not exist - no changes need
         return ops;
     }
-    
+
     //newOps is ops without last DefaultFilledColumnCount values
     auto newOps = TArrayRef<const NIceDb::TUpdateOp> (ops.begin(), ops.end() - DefaultFilledColumnCount);
-    
-    return newOps;  
+
+    return newOps;
 }
 
 
@@ -189,8 +189,12 @@ void TDataShardUserDb::InsertRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected InsertRow for an unknown table");
 
-    if (RowExists(tableId, key))
+    if (RowExists(tableId, key)) {
+        // Compatibility with old stats.
+        // We count read only if row exists.
+        IncreaseSelectCounters(key);
         throw TUniqueConstrainException();
+    }
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
 
@@ -205,11 +209,15 @@ void TDataShardUserDb::UpdateRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
-    if (!RowExists(tableId, key))
+    if (!RowExists(tableId, key)) {
+        // Compatibility with old stats.
+        // We count read only if row exists.
         return;
+    }
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
 
+    IncreaseSelectCounters(key);
     IncreaseUpdateCounters(key, ops);
 }
 
@@ -227,11 +235,11 @@ void TDataShardUserDb::IncrementRow(
     }
 
     auto currentRow = GetRowState(tableId, key, columns);
-    
+
     if (currentRow.Size() == 0) {
         return;
     }
-    
+
     TStackVec<NIceDb::TUpdateOp> newOps(ops.size());
 
     Y_ENSURE(currentRow.Size() == ops.size());
@@ -242,18 +250,19 @@ void TDataShardUserDb::IncrementRow(
 
     for (size_t i = 0; i < ops.size(); i++) {
         auto vtype = scheme.GetColumnInfo(tableInfo, ops[i].Tag)->PType.GetTypeId();
-       
+
         auto current = currentRow.Get(i);
         auto delta = ops[i].AsCell();
-        
+
         NFormats::AddTwoCells(incrementResults[i], current, delta, vtype);
-            
+
         TRawTypeValue rawTypeValue(incrementResults[i].Data(), incrementResults[i].Size(), vtype);
         newOps[i] = NIceDb::TUpdateOp(ops[i].Tag, ops[i].Op, rawTypeValue);
     }
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, newOps);
 
+    IncreaseSelectCounters(key);
     IncreaseUpdateCounters(key, ops);
 }
 
@@ -267,7 +276,7 @@ void TDataShardUserDb::EraseRow(
     UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, key, {});
 
     ui64 keyBytes = CalculateKeyBytes(key);
-    
+
     Counters.NEraseRow++;
     Counters.EraseRowBytes += keyBytes + 8;
 }
@@ -279,12 +288,12 @@ bool TDataShardUserDb::PrechargeRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected PrechargeRow for an unknown table");
 
-    return Db.Precharge(localTableId, key, key, {}, 0, Max<ui64>(), Max<ui64>());     
+    return Db.Precharge(localTableId, key, key, {}, 0, Max<ui64>(), Max<ui64>()).Ready;
 }
 
 void TDataShardUserDb::IncreaseUpdateCounters(
-    const TArrayRef<const TRawTypeValue> key, 
-    const TArrayRef<const NIceDb::TUpdateOp> ops) 
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops)
 {
     ui64 valueBytes = CalculateValueBytes(ops);
     ui64 keyBytes = CalculateKeyBytes(key);
@@ -293,12 +302,22 @@ void TDataShardUserDb::IncreaseUpdateCounters(
     Counters.UpdateRowBytes += keyBytes + valueBytes;
 }
 
+void TDataShardUserDb::IncreaseSelectCounters(
+    const TArrayRef<const TRawTypeValue> key) 
+{
+    ui64 keyBytes = CalculateKeyBytes(key);
+
+    Counters.NSelectRow++;
+    Counters.SelectRowRows++;
+    Counters.SelectRowBytes += keyBytes;
+}
+
 void TDataShardUserDb::UpsertRowInt(
     NTable::ERowOp rowOp,
     const TTableId& tableId,
     ui64 localTableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops) 
+    const TArrayRef<const NIceDb::TUpdateOp> ops)
 {
     TSmallVec<TCell> keyCells = ConvertTableKeys(key);
 

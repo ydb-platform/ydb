@@ -39,6 +39,13 @@ namespace NTable {
         Reset   = 3,    /* Reset cell or row to default */
     };
 
+    enum class ELockMode : ui8 {
+        None = 0,
+        Shared = 1,
+        Exclusive = 2,
+        Multi = 3,
+    };
+
     enum class ECellOp : ui8 { /* cell operation code */
         Empty   = 0,    /* Cell has no any valid state  */
         Set     = 1,    /* Set cell to exact value      */
@@ -74,12 +81,15 @@ namespace NTable {
     struct TSelectRowVersionResult {
         EReady Ready;
         TRowVersion RowVersion;
+        ELockMode LockMode = ELockMode::None;
+        ui64 LockTxId = 0;
 
-        TSelectRowVersionResult(EReady ready)
+        explicit TSelectRowVersionResult(EReady ready)
             : Ready(ready)
+            , RowVersion()
         { }
 
-        TSelectRowVersionResult(const TRowVersion& rowVersion)
+        explicit TSelectRowVersionResult(const TRowVersion& rowVersion)
             : Ready(EReady::Data)
             , RowVersion(rowVersion)
         { }
@@ -87,6 +97,40 @@ namespace NTable {
         explicit operator bool() const {
             return Ready == EReady::Data;
         }
+    };
+
+    /**
+     * The container for the results of the precharge operation.
+     */
+    struct TPrechargeResult {
+        /**
+         * If true, all the necessary pages are already in the cache.
+         */
+        bool Ready;
+
+        /**
+         * The total number of rows precharged.
+         *
+         * @warning The value in this field will be set to an accurate value
+         *          only if the Ready field is set to true.
+         *
+         * @warning The value in this field is meant to be used as an approximation
+         *          of the total size of all items placed into the cache.
+         *          It may not be very accurate in some cases.
+         */
+        ui64 ItemsPrecharged;
+
+        /**
+         * The total number of bytes precharged.
+         *
+         * @warning The value in this field will be set to an accurate value
+         *          only if the Ready field is set to true.
+         *
+         * @warning The value in this field is meant to be used as an approximation
+         *          of the total size of all items placed into the cache.
+         *          It may not be very accurate in some cases.
+         */
+        ui64 BytesPrecharged;
     };
 
 #pragma pack(push, 1)

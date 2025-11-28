@@ -22,6 +22,7 @@ namespace NKikimr::NBsController {
         void Start();
         void OnConfigCommit();
         void Stop();
+        void ProcessDryRunResponse(bool success, TString errorReason = {});
 
         void Handle(TEvBlobStorage::TEvControllerProposeConfigResponse::TPtr& ev);
         void Handle(TEvBlobStorage::TEvControllerConsoleCommitResponse::TPtr& ev);
@@ -55,9 +56,17 @@ namespace NKikimr::NBsController {
         std::optional<std::optional<TString>> PendingStorageYamlConfig;
         std::optional<ui64> ExpectedYamlConfigVersion;
 
+        struct TPendingCommitState {
+            std::optional<TYamlConfig> YamlConfig;
+            std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
+            std::optional<ui64> ExpectedStorageYamlConfigVersion;
+        };
+        std::optional<TPendingCommitState> PendingCommitState;
+
         void MakeCommitToConsole(TString& config, ui32 configVersion);
         void MakeGetBlock();
 
+        void CommitConfig();
         void IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus status,
             std::optional<TString> errorReason = std::nullopt, bool disabledConfigV2 = false);
     };

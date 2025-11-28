@@ -49,7 +49,7 @@ public:
     }
     virtual ui64 GetReserveMemorySize(
         const ui64 blobsSize, const ui64 rawSize, const std::optional<ui32> limit, const ui32 recordsCount) const override {
-        if (limit) {
+        if (limit && *limit < recordsCount) {
             return std::max<ui64>(blobsSize, rawSize * (1.0 * *limit) / recordsCount);
         } else {
             return std::max<ui64>(blobsSize, rawSize);
@@ -286,23 +286,23 @@ class TProcessorContext;
 
 class IResourcesAggregator {
 private:
-    virtual TConclusionStatus DoExecute(const std::vector<std::shared_ptr<TAccessorsCollection>>& sources,
-        const std::shared_ptr<TAccessorsCollection>& collectionResult) const = 0;
+    virtual TConclusionStatus DoExecute(
+        const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const = 0;
 
 public:
     virtual ~IResourcesAggregator() = default;
 
     [[nodiscard]] TConclusionStatus Execute(
-        const std::vector<std::shared_ptr<TAccessorsCollection>>& sources, const std::shared_ptr<TAccessorsCollection>& collectionResult) const {
-        return DoExecute(sources, collectionResult);
+        const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const {
+        return DoExecute(std::move(sources), collectionResult);
     }
 };
 
 class TCompositeResourcesAggregator: public IResourcesAggregator {
 private:
     std::vector<std::shared_ptr<IResourcesAggregator>> Aggregators;
-    virtual TConclusionStatus DoExecute(const std::vector<std::shared_ptr<TAccessorsCollection>>& sources,
-        const std::shared_ptr<TAccessorsCollection>& collectionResult) const override {
+    virtual TConclusionStatus DoExecute(
+        const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const override {
         for (auto&& i : Aggregators) {
             auto conclusion = i->Execute(sources, collectionResult);
             if (conclusion.IsFail()) {

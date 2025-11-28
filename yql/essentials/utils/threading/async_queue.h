@@ -33,7 +33,7 @@ public:
         {
             auto guard = TReadGuard(Lock_);
             if (MtpQueue_) {
-                return ::NThreading::Async(std::move(func), *MtpQueue_);
+                return ::NThreading::Async(std::forward<TCallable>(func), *MtpQueue_);
             }
         }
 
@@ -48,4 +48,4 @@ private:
     THolder<IThreadPool> MtpQueue_;
 };
 
-} // NYql
+} // namespace NYql

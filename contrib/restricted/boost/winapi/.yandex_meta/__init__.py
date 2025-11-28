@@ -12,7 +12,7 @@ def post_install(self):
 boost_winapi = NixSourceProject(
     nixattr="boost_winapi",
     arcdir=boost.make_arcdir("winapi"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

@@ -21,5 +21,5 @@ void TYsonResultWriter::OnStringScalar(TStringBuf value) {
     }
 }
 
-}
-}
+} // namespace NResult
+} // namespace NYql

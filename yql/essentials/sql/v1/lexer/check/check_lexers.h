@@ -6,4 +6,4 @@ namespace NSQLTranslationV1 {
 
 bool CheckLexers(NYql::TPosition pos, const TString& query, NYql::TIssues& issues);
 
-}
+} // namespace NSQLTranslationV1

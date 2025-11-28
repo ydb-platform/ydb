@@ -21,18 +21,18 @@ const TStatKey Hop_LateThrownEventsCount("MultiHop_LateThrownEventsCount", true)
 const TStatKey Hop_EmptyTimeCount("MultiHop_EmptyTimeCount", true);
 const TStatKey Hop_KeysCount("MultiHop_KeysCount", true);
 
-
 constexpr ui32 StateVersion = 1;
 
 using TEqualsFunc = std::function<bool(NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod)>;
 using THashFunc = std::function<NYql::NUdf::THashType(NUdf::TUnboxedValuePod)>;
 
-class TMultiHoppingCoreWrapper : public TStatefulSourceComputationNode<TMultiHoppingCoreWrapper, true> {
+class TMultiHoppingCoreWrapper: public TStatefulSourceComputationNode<TMultiHoppingCoreWrapper, true> {
     using TBaseComputation = TStatefulSourceComputationNode<TMultiHoppingCoreWrapper, true>;
+
 public:
     using TSelf = TMultiHoppingCoreWrapper;
 
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
@@ -60,7 +60,7 @@ public:
             , StatesMap(0, hash, equal)
             , Ctx(ctx)
         {
-            if (!watermarkMode && dataWatermarks) {
+            if (!WatermarkMode && dataWatermarks) {
                 DataWatermarkTracker.emplace(TWatermarkTracker(delayHopCount * hopTime, hopTime));
             }
         }
@@ -77,17 +77,19 @@ public:
 
         struct TKeyState {
             std::vector<TBucket, TMKQLAllocator<TBucket>> Buckets; // circular buffer
-            ui64 HopIndex; // Start index of current window
+            ui64 HopIndex;                                         // Start index of current window
 
             TKeyState(ui64 bucketsCount, ui64 hopIndex)
                 : Buckets(bucketsCount)
                 , HopIndex(hopIndex)
-            {}
+            {
+            }
 
             TKeyState(TKeyState&& state)
                 : Buckets(std::move(state.Buckets))
                 , HopIndex(state.HopIndex)
-            {}
+            {
+            }
         };
 
         ui32 GetTraverseCount() const override {
@@ -114,7 +116,7 @@ public:
                         Self->InSave->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
                         if (Self->StateType) {
                             out.WriteUnboxedValue(Self->StatePacker.RefMutableObject(Ctx, false, Self->StateType),
-                                          Self->OutSave->GetValue(Ctx));
+                                                  Self->OutSave->GetValue(Ctx));
                         }
                     }
                 }
@@ -170,7 +172,10 @@ public:
             return false;
         }
 
-        TInstant GetWatermark() {
+        TMaybe<TInstant> GetWatermark() {
+            if (!WatermarkMode) {
+                return Nothing();
+            }
             return Watermark.WatermarkIn;
         }
 
@@ -223,7 +228,9 @@ public:
                             return status;
                         }
                         PendingYield = true;
-                        CloseOldBuckets(GetWatermark().MicroSeconds(), newHopsStat);
+                        if (auto watermark = GetWatermark()) {
+                            CloseOldBuckets(watermark->MicroSeconds(), newHopsStat);
+                        }
                         if (!Ready.empty()) {
                             result = std::move(Ready.front());
                             Ready.pop_front();
@@ -246,18 +253,20 @@ public:
                 const auto ts = time.Get<ui64>();
                 const auto hopIndex = ts / HopTime;
 
-                auto& keyState = GetOrCreateKeyState(key, WatermarkMode ? GetWatermark().MicroSeconds() / HopTime : hopIndex);
+                const auto watermark = GetWatermark();
+                auto& keyState = GetOrCreateKeyState(key, watermark ? watermark->MicroSeconds() / HopTime : hopIndex);
                 if (hopIndex < keyState.HopIndex) {
                     ++LateEventsThrown;
                     continue;
                 }
-                if (WatermarkMode && (hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount)) {
-                    ++EarlyEventsThrown;
-                    continue;
-                }
 
-                // Overflow is not possible, because hopIndex is a product of a division
-                if (!WatermarkMode) {
+                if constexpr (false) { // TODO: if (WatermarkMode) {
+                    if (hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount) {
+                        ++EarlyEventsThrown;
+                        continue;
+                    }
+                } else {
+                    // Overflow is not possible, because hopIndex is a product of a division
                     auto closeBeforeIndex = Max<i64>(hopIndex + 1 - DelayHopCount - IntervalHopCount, 0);
                     CloseOldBucketsForKey(key, keyState, closeBeforeIndex, newHopsStat);
                 }
@@ -273,8 +282,7 @@ public:
                 }
 
                 if (DataWatermarkTracker) {
-                    const auto newWatermark = DataWatermarkTracker->HandleNextEventTime(ts);
-                    if (newWatermark && !WatermarkMode) {
+                    if (const auto newWatermark = DataWatermarkTracker->HandleNextEventTime(ts)) {
                         CloseOldBuckets(*newWatermark, newHopsStat);
                     }
                 }
@@ -289,8 +297,7 @@ public:
             const auto iter = StatesMap.try_emplace(
                 key,
                 IntervalHopCount + DelayHopCount,
-                keyHopIndex
-            );
+                keyHopIndex);
             if (iter.second) {
                 key.Ref();
             }
@@ -376,7 +383,7 @@ public:
             const auto watermarkIndex = watermarkTs / HopTime;
             EraseNodesIf(StatesMap, [&](auto& iter) {
                 auto& [key, val] = iter;
-                ui64 closeBeforeIndex = watermarkIndex + 1 - IntervalHopCount;
+                ui64 closeBeforeIndex = Max<i64>(watermarkIndex + 1 - IntervalHopCount, 0);
                 const auto keyStateBecameEmpty = CloseOldBucketsForKey(key, val, closeBeforeIndex, newHops);
                 if (keyStateBecameEmpty) {
                     key.UnRef();
@@ -395,7 +402,7 @@ public:
         }
 
         const NUdf::TUnboxedValue Stream;
-        const TSelf *const Self;
+        const TSelf* const Self;
 
         const ui64 HopTime;
         const ui64 IntervalHopCount;
@@ -409,7 +416,7 @@ public:
             THashFunc, TEqualsFunc,
             TMKQLAllocator<std::pair<const NUdf::TUnboxedValuePod, TKeyState>>>;
 
-        TStatesMap StatesMap; // Map of states for each key
+        TStatesMap StatesMap;                  // Map of states for each key
         std::deque<NUdf::TUnboxedValue> Ready; // buffer for fetching results
         bool Finished = false;
 
@@ -502,8 +509,7 @@ public:
             ctx,
             TValueHasher(KeyTypes, IsTuple, Hash.Get()),
             TValueEqual(KeyTypes, IsTuple, Equate.Get()),
-            Watermark
-        );
+            Watermark);
     }
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override {
@@ -589,7 +595,7 @@ private:
     NUdf::IHash::TPtr Hash;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx, TWatermark& watermark) {
     MKQL_ENSURE(callable.GetInputsCount() == 21, "Expected 21 args");
@@ -638,10 +644,10 @@ IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNo
     auto stateType = hasSaveLoad ? callable.GetInput(12).GetStaticType() : nullptr;
 
     return new TMultiHoppingCoreWrapper(ctx.Mutables,
-        stream, item, key, state, state2, time, inSave, inLoad, keyExtract,
-        outTime, outInit, outUpdate, outSave, outLoad, outMerge, outFinish,
-        hop, interval, delay, dataWatermarks, watermarkMode, keyType, stateType, watermark);
+                                        stream, item, key, state, state2, time, inSave, inLoad, keyExtract,
+                                        outTime, outInit, outUpdate, outSave, outLoad, outMerge, outFinish,
+                                        hop, interval, delay, dataWatermarks, watermarkMode, keyType, stateType, watermark);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

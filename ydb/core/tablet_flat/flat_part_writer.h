@@ -94,6 +94,7 @@ namespace NTable {
             KeyState.Written = 0;
             KeyState.Final = Final || (UnderlayMask && !UnderlayMask->HasKey(key));
             KeyState.DelayedErase = false;
+            KeyState.LockMode = ELockMode::None;
 
             if (SplitKeys && SplitKeys->ShouldSplit(key) && NextSliceFirstRowId != Max<TRowId>()) {
                 // Force a new slice on flush
@@ -107,6 +108,17 @@ namespace NTable {
                 Y_DEBUG_ABORT_UNLESS(!NextSliceForce);
                 Y_DEBUG_ABORT_UNLESS(NextSliceFirstRowId == Max<TRowId>());
             }
+        }
+
+        void AddKeyLock(ELockMode lockMode, ui64 lockTxId)
+        {
+            Y_ENSURE(KeyState.LockMode == ELockMode::None, "Cannot add multiple locks");
+            Y_ENSURE(KeyState.Written == 0, "Cannot add lock after committed versions");
+            Y_ENSURE(lockMode != ELockMode::None, "Cannot add lock with mode == None");
+            Y_ENSURE(lockTxId != 0, "Cannot add lock with txId == 0");
+
+            KeyState.LockMode = lockMode;
+            KeyState.LockTxId = lockTxId;
         }
 
         void AddKeyDelta(const TRowState& row, ui64 txId)
@@ -136,10 +148,16 @@ namespace NTable {
                 WriteRow(EraseRowState, KeyState.LastVersion, TRowVersion::Max());
                 KeyState.LastWritten = KeyState.LastVersion;
                 KeyState.DelayedErase = false;
-            } else if (KeyState.WrittenDeltas && !KeyState.Written) {
-                // We have written some deltas, but no committed versions
-                // We need to properly flush uncommitted deltas
-                FlushDeltaRows();
+            } else if (!KeyState.Written) {
+                if (KeyState.LockMode != ELockMode::None) {
+                    WriteDeltaRow(TRowState(), KeyState.LockTxId);
+                    Y_DEBUG_ABORT_UNLESS(KeyState.LockMode == ELockMode::None);
+                }
+                if (KeyState.WrittenDeltas) {
+                    // We have written some deltas, but no committed versions
+                    // We need to properly flush uncommitted deltas
+                    FlushDeltaRows();
+                }
             }
 
             return KeyState.Written + KeyState.WrittenDeltas;
@@ -186,7 +204,7 @@ namespace NTable {
                 auto& g = Groups[groupIdx];
                 // N.B. non-main groups have no key
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
-                g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId);
+                g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId, KeyState.LockMode, KeyState.LockTxId);
                 g.NextIndexSize = WriteFlatIndex ? g.FlatIndex.CalcSize(groupKey) : 0;
                 g.NextBTreeIndexSize = WriteBTreeIndex ? g.BTreeIndex.CalcSize(groupKey) : 0;
                 overheadBytes += (
@@ -204,6 +222,10 @@ namespace NTable {
                 }
             }
 
+            if (KeyState.LockMode != ELockMode::None && KeyState.LockTxId != txId) {
+                Current.TxIdStatsBuilder.AddRow(KeyState.LockTxId, sizeof(NPage::TDataPage::TLocked));
+                overheadBytes -= sizeof(NPage::TDataPage::TLocked);
+            }
             Current.TxIdStatsBuilder.AddRow(txId, overheadBytes);
             Current.DeltaRows += 1;
 
@@ -217,13 +239,18 @@ namespace NTable {
             FrameS.FlushRow();
             FrameL.FlushRow();
 
+            if (KeyState.LockMode != ELockMode::None) {
+                Current.RowLocks = true;
+            }
+
             for (size_t groupIdx : xrange(Groups.size())) {
                 auto& g = Groups[groupIdx];
                 // N.B. non-main groups have no key
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
-                g.Data.Add(g.NextDataSize, groupKey, row, *this, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId);
+                g.Data.Add(g.NextDataSize, groupKey, row, *this, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId, KeyState.LockMode, KeyState.LockTxId);
             }
 
+            KeyState.LockMode = ELockMode::None;
             ++KeyState.WrittenDeltas;
         }
 
@@ -252,7 +279,7 @@ namespace NTable {
                 auto& g = Groups[groupIdx];
                 // N.B. non-main groups have no key
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
-                g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, minVersion, maxVersion, /* txId */ 0);
+                g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, minVersion, maxVersion, /* txId */ 0, KeyState.LockMode, KeyState.LockTxId);
                 g.NextIndexSize = WriteFlatIndex ? g.FlatIndex.CalcSize(groupKey) : 0;
                 g.NextBTreeIndexSize = WriteBTreeIndex ? g.BTreeIndex.CalcSize(groupKey) : 0;
 
@@ -272,6 +299,11 @@ namespace NTable {
                 for (auto& g : Groups) {
                     g.NextDataSize.Overflow = false;
                 }
+            }
+
+            if (KeyState.LockMode != ELockMode::None) {
+                Current.TxIdStatsBuilder.AddRow(KeyState.LockTxId, sizeof(NPage::TDataPage::TLocked));
+                overheadBytes -= sizeof(NPage::TDataPage::TLocked);
             }
 
             Current.Rows += 1;
@@ -299,12 +331,22 @@ namespace NTable {
             FrameS.FlushRow();
             FrameL.FlushRow();
 
+            if (KeyState.LockMode != ELockMode::None) {
+                // This lock may end up as a lock-only delta in the future, make sure we account for version uncertainty
+                Y_DEBUG_ABORT_UNLESS(MinRowVersion == TRowVersion::Min());
+                Current.MinRowVersion = TRowVersion::Min();
+                Current.MaxRowVersion = TRowVersion::Max();
+                Current.Versioned = true;
+                Current.RowLocks = true;
+            }
+
             for (size_t groupIdx : xrange(Groups.size())) {
                 auto& g = Groups[groupIdx];
                 // N.B. non-main groups have no key
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
-                g.Data.Add(g.NextDataSize, groupKey, row, *this, KeyState.Final, minVersion, maxVersion, /* txId */ 0);
+                g.Data.Add(g.NextDataSize, groupKey, row, *this, KeyState.Final, minVersion, maxVersion, /* txId */ 0, KeyState.LockMode, KeyState.LockTxId);
             }
+            KeyState.LockMode = ELockMode::None;
 
             FinishMainKey(erased);
 
@@ -507,6 +549,21 @@ namespace NTable {
                 WriteStats.HiddenRows += Current.HiddenRows;
                 WriteStats.HiddenDrops += Current.HiddenDrops;
 
+                Current.BTreeGroupIndexes.clear();
+                Current.BTreeHistoricIndexes.clear();
+                if (WriteBTreeIndex) {
+                    Current.BTreeGroupIndexes.reserve(Groups.size());
+                    for (auto& g : Groups) {
+                        Current.BTreeGroupIndexes.push_back(g.BTreeIndex.Finish(Pager));
+                    }
+                    if (Current.HistoryWritten > 0) {
+                        Current.BTreeHistoricIndexes.reserve(Histories.size());
+                        for (auto& g : Histories) {
+                            Current.BTreeHistoricIndexes.push_back(g.BTreeIndex.Finish(Pager));
+                        }
+                    }
+                }
+
                 Current.FlatHistoricIndexes.clear();
                 Current.FlatGroupIndexes.clear();
                 Current.FlatIndex = Max<TPageId>();
@@ -526,21 +583,6 @@ namespace NTable {
                     }
 
                     Current.FlatIndex = WritePage(Groups[0].FlatIndex.Flush(), EPage::FlatIndex);
-                }
-                
-                Current.BTreeGroupIndexes.clear();
-                Current.BTreeHistoricIndexes.clear();
-                if (WriteBTreeIndex) {
-                    Current.BTreeGroupIndexes.reserve(Groups.size());
-                    for (auto& g : Groups) {
-                        Current.BTreeGroupIndexes.push_back(g.BTreeIndex.Finish(Pager));
-                    }
-                    if (Current.HistoryWritten > 0) {
-                        Current.BTreeHistoricIndexes.reserve(Histories.size());
-                        for (auto& g : Histories) {
-                            Current.BTreeHistoricIndexes.push_back(g.BTreeIndex.Finish(Pager));
-                        }
-                    }
                 }
 
                 Current.Large = WriteIf(FrameL.Make(), EPage::Frames);
@@ -630,6 +672,9 @@ namespace NTable {
 
                 if (Current.TxIdStatsBuilder)
                     head = Max(head, ui32(28) /* Uncommitted deltas present */);
+
+                if (Current.RowLocks)
+                    head = Max(head, ui32(29) /* Persistent row locks present */);
 
                 abi->SetTail(head);
                 abi->SetHead(ui32(NTable::ECompatibility::Edge));
@@ -1113,6 +1158,8 @@ namespace NTable {
             ui32 Written = 0;
             bool Final = false;
             bool DelayedErase = false;
+            ELockMode LockMode = ELockMode::None;
+            ui64 LockTxId = 0;
         };
 
         TKeyState KeyState;
@@ -1156,6 +1203,7 @@ namespace NTable {
             ui64 DeltaRows = 0;
 
             bool Versioned = false;
+            bool RowLocks = false;
         } Current;
 
         TIntrusivePtr<TSlices> Slices;

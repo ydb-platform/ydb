@@ -395,46 +395,27 @@ struct TEvControlPlaneProxy {
         TMaybe<FederatedQuery::BindingContent> OldBindingContent;
     };
 
-    struct TEvDeleteFolderResourcesResponse : NActors::TEventLocal<TEvDeleteFolderResourcesResponse, EvDeleteFolderResourcesResponse> {
-        static constexpr bool Auditable = false;
-        TEvDeleteFolderResourcesResponse(const Ydb::Operations::Operation& result, const TString& subjectType)
-            : Result(result)
-            , SubjectType(subjectType)
-        {
-        }
+    using TEvDeleteFolderResourcesResponse = TControlPlaneNonAuditableResponse<Ydb::Operations::Operation, EvDeleteFolderResourcesResponse>;
 
-        TEvDeleteFolderResourcesResponse(const NYql::TIssues& issues, const TString& subjectType)
-            : Issues(issues)
-            , SubjectType(subjectType)
-        {
-        }
-
-        Ydb::Operations::Operation Result;
-        NYql::TIssues Issues;
-        TString SubjectType;
-    };
     struct TEvDeleteFolderResourcesRequest : NActors::TEventLocal<TEvDeleteFolderResourcesRequest, EvDeleteFolderResourcesRequest> {
-
         TEvDeleteFolderResourcesRequest(const TString& scope,
-                                 const TString& folderId,
-                                 const TString& user,
-                                 const TString& token,
-                                 const TVector<TString>& permissions,
-                                 TMaybe<TQuotaMap> quotas     = Nothing(),
-                                 TTenantInfo::TPtr tenantInfo = nullptr)
+                                        const TString& user,
+                                        const TString& token,
+                                        const TVector<TString>& permissions,
+                                        TMaybe<TQuotaMap> quotas = Nothing(),
+                                        TTenantInfo::TPtr tenantInfo = nullptr)
             : Scope(scope)
-            , FolderId(folderId)
             , User(user)
             , Token(token)
             , Permissions(permissions)
             , Quotas(std::move(quotas))
             , TenantInfo(tenantInfo)
             , ComputeYDBOperationWasPerformed(false)
-            , ControlPlaneYDBOperationWasPerformed(false) { }
+            , ControlPlaneYDBOperationWasPerformed(false)
+        {}
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + FolderId.size()
                     + Scope.size()
                     + User.size()
                     + Token.size()
@@ -456,11 +437,10 @@ struct TEvControlPlaneProxy {
         std::shared_ptr<NYdb::NTable::TTableClient> YDBClient;
         TMaybe<FederatedQuery::Internal::ComputeDatabaseInternal> ComputeDatabase;
         bool RequestValidationPassed = false;
+        google::protobuf::Empty Request;
     };
-
-
 };
 
 NActors::TActorId ControlPlaneProxyActorId();
 
-}
+} // namespace NFq

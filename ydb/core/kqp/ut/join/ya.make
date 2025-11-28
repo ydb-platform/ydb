@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(200)
 
-IF (WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -20,10 +20,14 @@ ENDIF()
 
 SRCS(
     kqp_block_hash_join_ut.cpp
+    kqp_complex_join_query_ut.cpp
     kqp_flip_join_ut.cpp
     kqp_index_lookup_join_ut.cpp
     kqp_join_ut.cpp
     kqp_join_order_ut.cpp
+    kqp_join_topology_generator.cpp
+    kqp_join_topology_ut.cpp
+    kqp_benches_ut.cpp
 )
 
 PEERDIR(

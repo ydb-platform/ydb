@@ -910,7 +910,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
         // compare expected and actual children lists
         for (const auto& cname : children) {
-            bool res = actualChildren.count(cname);
+            bool res = actualChildren.contains(cname);
             UNIT_ASSERT_C(res, "Child not found: " + cname);
         }
     }
@@ -926,7 +926,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(Ls) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false));
+        TServer cleverServer = TServer(TServerSettings(port).SetEnableRealSystemViewPaths(true));
 
         TFlatMsgBusClient annoyingClient(port);
         annoyingClient.InitRoot();
@@ -937,20 +937,20 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TestLsUknownPath(annoyingClient, "//");
 
         TestLsSuccess(annoyingClient, "/", {"dc-1"});
-        TestLsSuccess(annoyingClient, "/dc-1", {});
+        TestLsSuccess(annoyingClient, "/dc-1", {".sys"});
         TestLsUknownPath(annoyingClient, "/dc-11");
         TestLsUknownPath(annoyingClient, "/dc-2");
 
         annoyingClient.MkDir("/dc-1", "Berkanavt");
         TestLsSuccess(annoyingClient, "/", {"dc-1"});
-        TestLsSuccess(annoyingClient, "/dc-1", {"Berkanavt"});
+        TestLsSuccess(annoyingClient, "/dc-1", {".sys", "Berkanavt"});
         TestLsSuccess(annoyingClient, "/dc-1/Berkanavt", {});
         annoyingClient.MkDir("/dc-1", "Berkanavt");
-        TestLsSuccess(annoyingClient, "/dc-1", {"Berkanavt"});
+        TestLsSuccess(annoyingClient, "/dc-1", {".sys", "Berkanavt"});
 
         TestLsUknownPath(annoyingClient, "/dc-1/arcadia");
         annoyingClient.MkDir("/dc-1", "arcadia");
-        TestLsSuccess(annoyingClient, "/dc-1", {"Berkanavt", "arcadia"});
+        TestLsSuccess(annoyingClient, "/dc-1", {".sys", "Berkanavt", "arcadia"});
         TestLsSuccess(annoyingClient, "/dc-1/arcadia", {});
     }
 
@@ -1019,7 +1019,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(PathSorting) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false));
+        TServer cleverServer = TServer(TServerSettings(port).SetEnableRealSystemViewPaths(true));
 
         TFlatMsgBusClient annoyingClient(port);
 
@@ -1030,7 +1030,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.MkDir("/dc-1", "Dir4");
         annoyingClient.MkDir("/dc-1", "Dir2");
         annoyingClient.MkDir("/dc-1", "A");
-        TestLsSuccess(annoyingClient, "/dc-1", {"A", "B", "Dir1", "Dir2", "Dir3", "Dir4"});
+        TestLsSuccess(annoyingClient, "/dc-1", {".sys", "A", "B", "Dir1", "Dir2", "Dir3", "Dir4"});
     }
 
     void TestLsPathIdSuccess(TFlatMsgBusClient& annoyingClient, ui64 schemeshardId, ui64 pathId, const TString& selfName, const TVector<TString>& children) {
@@ -1049,7 +1049,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
         // compare expected and actual children lists
         for (const auto& cname : children) {
-            bool res = actualChildren.count(cname);
+            bool res = actualChildren.contains(cname);
             UNIT_ASSERT_C(res, "Child not found: " + cname);
         }
     }
@@ -1065,7 +1065,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(LsPathId) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false));
+        TServer cleverServer = TServer(TServerSettings(port));
 
         TFlatMsgBusClient annoyingClient(port);
 
@@ -1073,14 +1073,14 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui64 schemeshardId = res->Record.GetPathDescription().GetChildren(0).GetSchemeshardId();
 
         annoyingClient.InitRoot();
-        TestLsPathIdSuccess(annoyingClient, schemeshardId, 1, "dc-1", {});
+        TestLsPathIdSuccess(annoyingClient, schemeshardId, 1, "dc-1", {".sys"});
         TestLsUknownPathId(annoyingClient, schemeshardId, 2);
         annoyingClient.MkDir("/dc-1", "Berkanavt");
-        TestLsPathIdSuccess(annoyingClient, schemeshardId, 1, "dc-1", {"Berkanavt"});
+        TestLsPathIdSuccess(annoyingClient, schemeshardId, 1, "dc-1", {".sys", "Berkanavt"});
         TestLsPathIdSuccess(annoyingClient, schemeshardId, 2, "Berkanavt", {});
         TestLsUknownPathId(annoyingClient, schemeshardId, 3);
         annoyingClient.MkDir("/dc-1", "arcadia");
-        TestLsPathIdSuccess(annoyingClient, schemeshardId, 1, "dc-1", {"Berkanavt", "arcadia"});
+        TestLsPathIdSuccess(annoyingClient, schemeshardId, 1, "dc-1", {".sys", "Berkanavt", "arcadia"});
         TestLsPathIdSuccess(annoyingClient, schemeshardId, 3, "arcadia", {});
     }
 
@@ -2627,7 +2627,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        cleverServer.GetRuntime()->GetAppData()
+            .DataShardConfig.SetStatsReportIntervalSeconds(0);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 //        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
@@ -2800,7 +2801,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 4);
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        cleverServer.GetRuntime()->GetAppData()
+            .DataShardConfig.SetStatsReportIntervalSeconds(0);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 //        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
@@ -2906,7 +2908,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TVector<ui64> initialPartitions = annoyingClient.GetTablePartitions("/dc-1/Dir/T1");
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        cleverServer.GetRuntime()->GetAppData()
+            .DataShardConfig.SetStatsReportIntervalSeconds(0);
         NDataShard::gDbStatsDataSizeResolution = 80000;
 
         TString bigValue(100*1024, '0');

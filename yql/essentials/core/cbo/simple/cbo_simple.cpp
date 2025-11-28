@@ -7,9 +7,9 @@ namespace NYql {
 
 namespace {
 
-class TSimpleOptimizerFactory : public IOptimizerFactory {
+class TSimpleOptimizerFactory: public IOptimizerFactory {
 public:
-    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TNativeSettings& settings) const override {
+    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TCBOSettings& settings) const override {
         Y_UNUSED(pctx);
         Y_UNUSED(ctx);
         Y_UNUSED(settings);
@@ -22,7 +22,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 IOptimizerFactory::TPtr MakeSimpleCBOOptimizerFactory() {
     return std::make_shared<TSimpleOptimizerFactory>();

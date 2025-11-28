@@ -30,7 +30,7 @@ void FillSettings(NSQLTranslation::TTranslationSettings& settings, const TOption
     settings.Flags = TranslationFlags();
 }
 
-}
+} // namespace
 
 bool CheckProgram(const TString& program, const TOptions& options, TIssues& errors) {
     TMaybe<TIssue> verIssue;
@@ -53,8 +53,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     NSQLTranslation::TTranslators translators(
         nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator()
-    );
+        NSQLTranslationPG::MakeTranslator());
 
     TAstParseResult astRes;
     if (options.IsSql) {
@@ -133,5 +132,5 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     return true;
 }
 
-}
-}
+} // namespace NFastCheck
+} // namespace NYql

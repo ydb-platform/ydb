@@ -59,6 +59,7 @@ private:
     bool RestoreData = true;
     bool RestoreIndexes = true;
     bool RestoreACL = true;
+    bool ReplaceSysACL = true;
     bool SkipDocumentTables = false;
     bool SavePartialResult = false;
     bool Replace = false;
@@ -71,6 +72,7 @@ private:
     ui32 InFlight;
     bool UseBulkUpsert = false;
     bool UseImportData = false;
+    ui32 Retries;
 };
 
 class TCommandCopy : public TTableCommand {
@@ -85,8 +87,9 @@ private:
     struct TItemFields {
         TString Source;
         TString Destination;
+        bool OmitIndexes = false;
     };
-    DEFINE_PARSEABLE_STRUCT(TItem, TItemFields, Source, Destination);
+    DEFINE_PARSEABLE_STRUCT(TItem, TItemFields, Source, Destination, OmitIndexes);
 
     TVector<TItem> Items;
     TString DatabaseName;

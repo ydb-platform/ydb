@@ -6,13 +6,13 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NYql {
-    namespace NPureCalc {
-        /**
-         * A transformer which removes unwanted columns from output.
-         *
-         * @param columns remove all columns that are not in this set.
-         * @return a graph transformer for filtering output.
-         */
-        TAutoPtr<IGraphTransformer> MakeOutputColumnsFilter(const TMaybe<THashSet<TString>>& columns);
-    }
-}
+namespace NPureCalc {
+/**
+ * A transformer which removes unwanted columns from output.
+ *
+ * @param columns remove all columns that are not in this set.
+ * @return a graph transformer for filtering output.
+ */
+TAutoPtr<IGraphTransformer> MakeOutputColumnsFilter(const TMaybe<THashSet<TString>>& columns);
+} // namespace NPureCalc
+} // namespace NYql

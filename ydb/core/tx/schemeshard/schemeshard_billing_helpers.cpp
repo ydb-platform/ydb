@@ -44,14 +44,6 @@ TMeteringStats& operator -= (TMeteringStats& value, const TMeteringStats& other)
     return value;
 }
 
-void TMeteringStatsHelper::TryFixOldFormat(TMeteringStats& value) {
-    // old format: assign upload to read
-    if (value.GetReadRows() == 0 && value.GetUploadRows() != 0) {
-        value.SetReadRows(value.GetUploadRows());
-        value.SetReadBytes(value.GetUploadBytes());
-    }
-}
-
 TMeteringStats TMeteringStatsHelper::ZeroValue() {
     // this method the only purpose is to beautifully print zero stats instead of empty protobuf or with missing fields
     TMeteringStats value;
@@ -96,7 +88,8 @@ ui64 TRUCalculator::CPU(ui64 сpuTimeUs) {
 
 ui64 TRUCalculator::Calculate(const TMeteringStats& stats, TString& explain) {
     // The cost of building an index is the sum of the cost of ReadTable from the source table and BulkUpsert to the index table.
-    // https://yandex.cloud/en-ru/docs/ydb/pricing/ru-special#secondary-index
+    // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+    // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#build-index
 
     // To evaluate the YDB API request cost, the CPU cost and the I/O cost are calculated. A maximum from the calculated values is selected.
     // https://yandex.cloud/en-ru/docs/ydb/pricing/ru-yql
@@ -109,7 +102,9 @@ ui64 TRUCalculator::Calculate(const TMeteringStats& stats, TString& explain) {
         << ", BulkUpsert: " << bulkUpsert
         << ", CPU: " << cpu;
 
-    return Max(readTable + bulkUpsert, cpu);
+    // CPU usage is intentionally excluded to simplify the documentation
+    // as I/O operations are typically much more resource-intensive than CPU processing
+    return readTable + bulkUpsert;
 }
 
 }

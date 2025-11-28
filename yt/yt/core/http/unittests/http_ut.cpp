@@ -25,6 +25,7 @@
 #include <yt/yt/core/rpc/public.h>
 
 #include <yt/yt/core/concurrency/async_stream.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 #include <yt/yt/core/concurrency/poller.h>
 #include <yt/yt/core/concurrency/scheduler.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
@@ -650,7 +651,6 @@ private:
 
             auto clientConfig = New<NHttps::TClientConfig>();
             clientConfig->Credentials = New<NHttps::TClientCredentialsConfig>();
-            clientConfig->Credentials->InsecureSkipVerify = false;
             clientConfig->Credentials->CertificateAuthority = CreateTestKeyBlob("ca.pem");
             SetupClient(clientConfig);
             Client = NHttps::CreateClient(clientConfig, Poller);
@@ -685,7 +685,6 @@ TEST_P(THttpServerTest, CertificateValidation)
 
     auto clientConfig = New<NHttps::TClientConfig>();
     clientConfig->Credentials = New<NHttps::TClientCredentialsConfig>();
-    clientConfig->Credentials->InsecureSkipVerify = false;
     auto client = NHttps::CreateClient(clientConfig, Poller);
 
     auto result = WaitFor(client->Get(TestUrl + "/ok"));
@@ -705,6 +704,15 @@ TEST_P(THttpServerTest, SimpleRequest)
     Server->Start();
 
     auto rsp = WaitFor(Client->Get(TestUrl + "/ok")).ValueOrThrow();
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
+}
+
+TEST_P(THttpServerTest, EmptyPath)
+{
+    Server->AddHandler("/", New<TOKHttpHandler>());
+    Server->Start();
+
+    auto rsp = WaitFor(Client->Get(TestUrl)).ValueOrThrow();
     ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
 }
 

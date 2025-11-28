@@ -285,7 +285,7 @@ class TestCredentials(object):
         assert request_kwargs["body"] is not None
         body_tuples = urllib.parse.parse_qsl(request_kwargs["body"])
         assert len(body_tuples) == len(request_data.keys())
-        for (k, v) in body_tuples:
+        for k, v in body_tuples:
             assert v.decode("utf-8") == request_data[k.decode("utf-8")]
 
     @classmethod
@@ -384,7 +384,9 @@ class TestCredentials(object):
                 "Content-Type": "application/json",
                 "authorization": "Bearer {}".format(token_response["access_token"]),
                 "x-goog-api-client": metrics_header_value,
-                "x-allowed-locations": "0x0",
+                # TODO(negarb): Uncomment and update when trust boundary is supported
+                # for external account credentials.
+                # "x-allowed-locations": "0x0",
             }
             impersonation_request_data = {
                 "delegates": None,
@@ -505,6 +507,7 @@ class TestCredentials(object):
             quota_project_id=QUOTA_PROJECT_ID,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
+            trust_boundary=None,
         )
 
     @mock.patch.object(identity_pool.Credentials, "__init__", return_value=None)
@@ -534,6 +537,7 @@ class TestCredentials(object):
             quota_project_id=None,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
+            trust_boundary=None,
         )
 
     @mock.patch.object(identity_pool.Credentials, "__init__", return_value=None)
@@ -565,6 +569,7 @@ class TestCredentials(object):
             quota_project_id=None,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
+            trust_boundary=None,
         )
 
     @mock.patch.object(identity_pool.Credentials, "__init__", return_value=None)
@@ -595,6 +600,7 @@ class TestCredentials(object):
             quota_project_id=None,
             workforce_pool_user_project=WORKFORCE_POOL_USER_PROJECT,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
+            trust_boundary=None,
         )
 
     @mock.patch.object(identity_pool.Credentials, "__init__", return_value=None)
@@ -631,6 +637,7 @@ class TestCredentials(object):
             quota_project_id=QUOTA_PROJECT_ID,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
+            trust_boundary=None,
         )
 
     @mock.patch.object(identity_pool.Credentials, "__init__", return_value=None)
@@ -661,6 +668,7 @@ class TestCredentials(object):
             quota_project_id=None,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
+            trust_boundary=None,
         )
 
     @mock.patch.object(identity_pool.Credentials, "__init__", return_value=None)
@@ -692,6 +700,7 @@ class TestCredentials(object):
             quota_project_id=None,
             workforce_pool_user_project=WORKFORCE_POOL_USER_PROJECT,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
+            trust_boundary=None,
         )
 
     def test_constructor_nonworkforce_with_workforce_pool_user_project(self):

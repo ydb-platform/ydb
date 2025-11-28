@@ -16,7 +16,7 @@ def post_install(self):
 
 
 libtiff = CMakeNinjaNixProject(
-    owners=["g:cpp-contrib", "g:images"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/libtiff",
     nixattr="libtiff",
     build_targets=["tiff", "tiffxx"],

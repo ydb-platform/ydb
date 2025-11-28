@@ -27,14 +27,21 @@ bool ShouldThrow(EUnrecognizedStrategy strategy)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target) const
+TYsonStructMeta::TYsonStructMeta(const NYT::TSourceLocation& sourceLocation, const std::function<IMapNodePtr()>& defaultStructNodeGetter)
+    : SourceLocation_(sourceLocation)
+    , StructType_(nullptr)
+    , MetaUnrecognizedStrategy_()
+    , DefaultStructNodeGetter_(defaultStructNodeGetter)
+{ }
+
+void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target, bool dontSetLiteMembers) const
 {
     if (auto* bitmap = target->GetSetFieldsBitmap()) {
         bitmap->Initialize(ssize(Parameters_));
     }
 
     for (const auto& [_, parameter] : SortedParameters_) {
-        parameter->SetDefaultsInitialized(target);
+        parameter->SetDefaultsInitialized(target, dontSetLiteMembers);
     }
 
     for (const auto& preprocessor : Preprocessors_) {
@@ -207,20 +214,14 @@ void TYsonStructMeta::LoadStruct(
         };
     };
 
-    THashMap<TStringBuf, IYsonStructParameter*> keyToParameter;
-    THashSet<IYsonStructParameter*> pendingParameters;
-    for (const auto& [key, parameter] : SortedParameters_) {
-        EmplaceOrCrash(keyToParameter, key, parameter.Get());
-        for (const auto& alias : parameter->GetAliases()) {
-            EmplaceOrCrash(keyToParameter, alias, parameter.Get());
-        }
-        InsertOrCrash(pendingParameters, parameter.Get());
-    }
+    i64 pendingParameterCount = SortedParameters_.size();
+    TCompactBitmap foundParameters;
+    foundParameters.Initialize(pendingParameterCount);
 
     THashMap<std::string, std::string> aliasedData;
 
     auto processPossibleAlias = [&] (
-        IYsonStructParameter* parameter,
+        const IYsonStructParameterPtr& parameter,
         TStringBuf key,
         NYson::TYsonPullParserCursor* cursor)
     {
@@ -272,28 +273,33 @@ void TYsonStructMeta::LoadStruct(
 
     cursor->ParseMap([&] (NYson::TYsonPullParserCursor* cursor) {
         auto key = ExtractTo<std::string>(cursor);
-        auto it = keyToParameter.find(key);
-        if (it == keyToParameter.end()) {
+        auto it = RegisteredParametersIndexes_.find(key);
+        if (it == RegisteredParametersIndexes_.end()) {
             processUnrecognized(key, cursor);
             return;
         }
 
-        auto* parameter = it->second;
+        i64 parameterIndex = it->second;
+        auto& parameter = SortedParameters_[parameterIndex].second;
         if (parameter->GetAliases().empty()) {
             parameter->Load(target, cursor, createLoadOptions(key));
         } else {
             processPossibleAlias(parameter, key, cursor);
         }
-        // NB: Key may be missing in case of aliasing.
-        pendingParameters.erase(parameter);
+
+        if (!foundParameters[parameterIndex]) {
+            pendingParameterCount--;
+            foundParameters.Set(parameterIndex);
+        }
     });
 
-    auto sortedPendingParameters = std::vector(pendingParameters.begin(), pendingParameters.end());
-    Sort(sortedPendingParameters, [] (const auto* lhs, const auto* rhs) {
-        return lhs->GetKey() < rhs->GetKey();
-    });
-    for (const auto parameter : sortedPendingParameters) {
-        parameter->Load(target, /*cursor*/ nullptr, createLoadOptions(parameter->GetKey()));
+    if (pendingParameterCount > 0) {
+        for (i64 i = 0; i < std::ssize(SortedParameters_); ++i) {
+            if (!foundParameters[i]) {
+                const auto& [_, parameter] = SortedParameters_[i];
+                parameter->Load(target, /*cursor*/ nullptr, createLoadOptions(parameter->GetKey()));
+            }
+        }
     }
 
     if (postprocess) {
@@ -317,7 +323,8 @@ IMapNodePtr TYsonStructMeta::GetRecursiveUnrecognized(const TYsonStructBase* tar
 
 void TYsonStructMeta::RegisterParameter(std::string key, IYsonStructParameterPtr parameter)
 {
-    YT_VERIFY(Parameters_.template emplace(std::move(key), std::move(parameter)).second);
+    InitialOrderParameters_.emplace_back(key, parameter);
+    YT_VERIFY(Parameters_.template try_emplace(std::move(key), std::move(parameter)).second, key);
 }
 
 void TYsonStructMeta::RegisterPreprocessor(std::function<void(TYsonStructBase*)> preprocessor)
@@ -335,22 +342,27 @@ void TYsonStructMeta::SetUnrecognizedStrategy(EUnrecognizedStrategy strategy)
     MetaUnrecognizedStrategy_ = strategy;
 }
 
-void TYsonStructMeta::WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const
+void TYsonStructMeta::WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
 {
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("type_name").Value("struct")
-            .Item("members").DoListFor(Parameters_, [&] (auto fluent, const auto& pair) {
-                fluent.Item()
-                    .BeginMap()
-                        .Item("name").Value(pair.first)
-                        .Item("type").Do([&] (auto fluent) {
-                            pair.second->WriteSchema(target, fluent.GetConsumer());
-                        })
-                        .DoIf(pair.second->IsRequired(), [] (auto fluent) {
-                            fluent.Item("required").Value(true);
-                        })
-                    .EndMap();
+            .DoIf(options.AddCppTypeNames, [&] (auto fluent) {
+                YT_VERIFY(StructType_);
+                fluent.Item("cpp_type_name").Value(TypeName(*StructType_));
+            })
+            .DoIf(options.AddSourceLocation && SourceLocation_.IsValid(), [&] (auto fluent) {
+                fluent.Item("source_location_file_name").Value(SourceLocation_.GetFileName());
+                fluent.Item("source_location_line").Value(i64{SourceLocation_.GetLine()});
+            })
+            .Item("members").DoListFor(InitialOrderParameters_, [&] (auto fluent, const auto& pair) {
+                const auto& [key, parameter] = pair;
+                auto defaultValueGetter = [&] {
+                    return DefaultStructNodeGetter_()->FindChild(key);
+                };
+                fluent.Item().Do([&] (auto fluent) {
+                    parameter->WriteMemberSchema(fluent.GetConsumer(), defaultValueGetter, options);
+                });
             })
         .EndMap();
 }
@@ -374,6 +386,14 @@ void TYsonStructMeta::FinishInitialization(const std::type_info& structType)
         [] (const auto& lhs, const auto& rhs) {
             return lhs.first < rhs.first;
         });
+
+    for (i64 i = 0; i < std::ssize(SortedParameters_); ++i) {
+        const auto& [name, parameter] = SortedParameters_[i];
+        RegisteredParametersIndexes_.emplace(name, i);
+        for (const auto& alias : parameter->GetAliases()) {
+            RegisteredParametersIndexes_.emplace(alias, i);
+        }
+    }
 }
 
 bool TYsonStructMeta::CompareStructs(

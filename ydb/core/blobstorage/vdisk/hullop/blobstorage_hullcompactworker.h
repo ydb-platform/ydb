@@ -77,8 +77,9 @@ namespace NKikimr {
             }
 
         public:
-            TDeferredItemQueue(const TString& prefix, TRopeArena& arena, TBlobStorageGroupType gtype, bool addHeader)
-                : TDeferredItemQueueBase<TDeferredItemQueue>(prefix, arena, gtype, addHeader)
+            TDeferredItemQueue(const TString& prefix, TRopeArena& arena, TBlobStorageGroupType gtype,
+                    EBlobHeaderMode blobHeaderMode)
+                : TDeferredItemQueueBase<TDeferredItemQueue>(prefix, arena, gtype, blobHeaderMode)
             {}
         };
 
@@ -182,6 +183,10 @@ namespace NKikimr {
 
         // pointer to an atomic variable contaning number of in flight writes
         TAtomic *WritesInFlight;
+
+        // max inflight request to pdisk
+        ui32 MaxInFlightWrites;
+        ui32 MaxInFlightReads;
 
         struct TBatcherPayload {
             ui64 Id = 0;
@@ -304,13 +309,13 @@ namespace NKikimr {
             , LastLsn(lastLsn)
             , It(it)
             , IsFresh(isFresh)
-            , IndexMerger(GType, HullCtx->AddHeader)
+            , IndexMerger(GType, HullCtx->VCfg->BlobHeaderMode)
             , ReadBatcher(HullCtx->VCtx->VDiskLogPrefix,
                     PDiskCtx->Dsk->ReadBlockSize,
                     PDiskCtx->Dsk->SeekTimeUs * PDiskCtx->Dsk->ReadSpeedBps / 1000000,
                     HullCtx->HullCompReadBatchEfficiencyThreshold)
             , Arena(&TRopeArenaBackend::Allocate)
-            , DeferredItems(HullCtx->VCtx->VDiskLogPrefix, Arena, HullCtx->VCtx->Top->GType, HullCtx->AddHeader)
+            , DeferredItems(HullCtx->VCtx->VDiskLogPrefix, Arena, HullCtx->VCtx->Top->GType, HullCtx->VCfg->BlobHeaderMode)
             , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
             , PartitionKey(partitionKey)
@@ -325,6 +330,9 @@ namespace NKikimr {
                 ReadsInFlight = &LevelIndex->HullCompReadsInFlight;
                 WritesInFlight = &LevelIndex->HullCompWritesInFlight;
             }
+
+            MaxInFlightWrites = GetMaxInFlightWrites();
+            MaxInFlightReads = GetMaxInFlightReads();
         }
 
         void Prepare(THandoffMapPtr hmp, TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriers,
@@ -425,7 +433,7 @@ namespace NKikimr {
                             Y_VERIFY_S(!WriterPtr->GetPendingMessage(), HullCtx->VCtx->VDiskLogPrefix);
                             WriterPtr.reset();
                         } else {
-                            Y_VERIFY_S(InFlightWrites == GetMaxInFlightWrites(), HullCtx->VCtx->VDiskLogPrefix);
+                            Y_VERIFY_S(InFlightWrites == MaxInFlightWrites, HullCtx->VCtx->VDiskLogPrefix);
                             return false;
                         }
                         break;
@@ -637,7 +645,7 @@ namespace NKikimr {
                 WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
                     ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, (ui32)PDiskCtx->Dsk->ChunkSize,
                     PDiskCtx->Dsk->AppendBlockSize, (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(),
-                    false, ReservedChunks, Arena, HullCtx->AddHeader);
+                    false, ReservedChunks, Arena, HullCtx->VCfg->BlobHeaderMode);
 
                 WriterHasPendingOperations = false;
             }
@@ -672,7 +680,8 @@ namespace NKikimr {
                         Y_VERIFY_S(writtenLocation == preallocatedLocation, HullCtx->VCtx->VDiskLogPrefix);
                     }
                 } else {
-                    Y_VERIFY_S(collectTask.BlobMerger.Empty(), HullCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(collectTask.BlobMerger.ContainsMetadataPartsOnly() || collectTask.BlobMerger.Empty(),
+                        HullCtx->VCtx->VDiskLogPrefix);
                     Y_VERIFY_S(collectTask.Reads.empty(), HullCtx->VCtx->VDiskLogPrefix);
                 }
 
@@ -703,7 +712,7 @@ namespace NKikimr {
         bool FlushSST() {
             // try to flush some more data; if the flush fails, it means that we have reached in flight write limit and
             // there is nothing to do here now, so we return
-            if (!WriterPtr->FlushNext(FirstLsn, LastLsn, GetMaxInFlightWrites() - InFlightWrites)) {
+            if (!WriterPtr->FlushNext(FirstLsn, LastLsn, MaxInFlightWrites - InFlightWrites)) {
                 return false;
             }
 
@@ -718,12 +727,12 @@ namespace NKikimr {
         void ProcessPendingMessages(TVector<std::unique_ptr<IEventBase>>& msgsForYard) {
             // ensure that we have writer
             Y_VERIFY_S(WriterPtr, HullCtx->VCtx->VDiskLogPrefix);
-            Y_VERIFY_S(GetMaxInFlightWrites(), HullCtx->VCtx->VDiskLogPrefix);
-            Y_VERIFY_S(GetMaxInFlightReads(), HullCtx->VCtx->VDiskLogPrefix);
+            Y_VERIFY_S(MaxInFlightWrites, HullCtx->VCtx->VDiskLogPrefix);
+            Y_VERIFY_S(MaxInFlightReads, HullCtx->VCtx->VDiskLogPrefix);
 
             // send new messages until we reach in flight limit
             std::unique_ptr<NPDisk::TEvChunkWrite> msg;
-            while (InFlightWrites < GetMaxInFlightWrites() && (msg = GetPendingWriteMessage())) {
+            while (InFlightWrites < MaxInFlightWrites && (msg = GetPendingWriteMessage())) {
                 HullCtx->VCtx->CountCompactionCost(*msg);
                 Statistics.Update(msg.get());
                 msgsForYard.push_back(std::move(msg));
@@ -732,7 +741,7 @@ namespace NKikimr {
             }
 
             std::unique_ptr<NPDisk::TEvChunkRead> readMsg;
-            while (InFlightReads < GetMaxInFlightReads() && (readMsg = ReadBatcher.GetPendingMessage(
+            while (InFlightReads < MaxInFlightReads && (readMsg = ReadBatcher.GetPendingMessage(
                             PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp))) {
                 HullCtx->VCtx->CountCompactionCost(*readMsg);
                 Statistics.Update(readMsg.get());

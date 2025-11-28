@@ -18,6 +18,7 @@
 - source_filter: "^contrib/libs/libpq/src"
   includes:
   - arpa/inet.h:   contrib/libs/libpq/src/include/port/win32/arpa/inet.h
+  - dlfcn.h:       contrib/libs/libpq/src/include/port/win32/dlfcn.h
   - netdb.h:       contrib/libs/libpq/src/include/port/win32/netdb.h
   - netinet/in.h:  contrib/libs/libpq/src/include/port/win32/netinet/in.h
   - netinet/tcp.h: contrib/libs/libpq/src/include/port/win32/netinet/tcp.h
@@ -64,10 +65,10 @@
   - utime.h:       yql/essentials/parser/pg_wrapper/postgresql/src/include/port/win32_msvc/utime.h
   - dl.h
 
-- source_filter: "^contrib/libs/libx264"
+- source_filter: "^contrib/restricted/libx264"
   includes:
-  - inttypes.h:    contrib/libs/libx264/extras/inttypes.h
-  - stdint.h:      contrib/libs/libx264/extras/stdint.h
+  - inttypes.h:    contrib/restricted/libx264/extras/inttypes.h
+  - stdint.h:      contrib/restricted/libx264/extras/stdint.h
 
 - source_filter: "^contrib/tools/bison/"
   includes:
@@ -110,5 +111,5 @@
   - gdk-pixbuf/gdk-pixbuf.h
 
 - includes:
-    - sys/queue.h:   contrib/libs/libc_compat/include/windows/sys/queue.h
+    - sys/queue.h:   contrib/libs/libc_compat/queue/sys/queue.h
     - sys/uio.h:     contrib/libs/libc_compat/include/windows/sys/uio.h

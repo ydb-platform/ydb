@@ -42,23 +42,40 @@ struct TRobinHoodMapImplBase
         bool isNew = false;
         auto ptr = map.Insert(key, isNew);
         if (isNew) {
-            *(V*)map.GetMutablePayload(ptr) = delta;
+            auto* payloadPtr = map.GetMutablePayloadPtr(ptr);
+            WriteUnaligned<V>(payloadPtr, delta);
             map.CheckGrow();
         } else {
-            *(V*)map.GetMutablePayload(ptr) += delta;
+            auto* payloadPtr = map.GetMutablePayloadPtr(ptr);
+            auto newValue =
+                ReadUnaligned<V>(payloadPtr);
+            newValue += delta;
+            WriteUnaligned<V>(payloadPtr, newValue);
         }
+    }
+
+    static void AggregateByExistingKey(TMapType& map, const K& key, const V& delta)
+    {
+        auto existingPtr = map.Lookup(key);
+        if (existingPtr == nullptr) {
+            return;
+        }
+        auto* payloadPtr = map.GetMutablePayloadPtr(existingPtr);
+        auto newValue =
+            ReadUnaligned<V>(payloadPtr);
+        newValue += delta;
+        WriteUnaligned<V>(payloadPtr, newValue);
     }
 
     template<typename Callback>
     static void IteratePairs(const TMapType& map, Callback&& callback)
     {
-        // TODO: GetPayload and IsValid should be const
         for (const char* iter = map.Begin(); iter != map.End(); map.Advance(iter)) {
-            if (!const_cast<TMapType&>(map).IsValid(iter)) {
+            if (!map.IsValid(iter)) {
                 continue;
             }
-            const auto& key = map.GetKey(iter);
-            const auto& value = *(V*)(const_cast<TMapType&>(map)).GetPayload(iter);
+            const auto& key = map.GetKeyValue(iter);
+            const auto& value = ReadUnaligned<V>(map.GetPayloadPtr(iter));
             callback(key, value);
         }
     }
@@ -106,6 +123,12 @@ struct TRobinHoodMapImpl<std::string, V>
     {
         NYql::NUdf::TUnboxedValuePod ub = NYql::NUdf::TUnboxedValuePod::Embedded(NYql::NUdf::TStringRef(key));
         TRealBase::AggregateByKey(map, ub, delta);
+    }
+
+    static void AggregateByExistingKey(TMapType& map, const std::string& key, const V& delta)
+    {
+        NYql::NUdf::TUnboxedValuePod ub = NYql::NUdf::TUnboxedValuePod::Embedded(NYql::NUdf::TStringRef(key));
+        TRealBase::AggregateByExistingKey(map, ub, delta);
     }
 
     template<typename Callback>

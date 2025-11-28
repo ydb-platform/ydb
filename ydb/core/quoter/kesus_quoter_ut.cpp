@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(QuoterWithKesusTest) {
         setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, TKesusQuoterTestSetup::DEFAULT_KESUS_RESOURCE);
 
         setup.GetClient().DeleteKesus(TKesusQuoterTestSetup::DEFAULT_KESUS_PARENT_PATH, TKesusQuoterTestSetup::DEFAULT_KESUS_NAME);
-        Sleep(TDuration::MilliSeconds(500)); // Wait for pipe disconnection, reconnection and passing info that old kesus was destroyed
+        Sleep(TDuration::MilliSeconds(2000)); // Wait for pipe disconnection, reconnection and passing info that old kesus was destroyed
         setup.GetClient().RefreshPathCache(setup.GetServer().GetRuntime(), TKesusQuoterTestSetup::DEFAULT_KESUS_PATH);
 
         setup.CreateDefaultKesusAndResource();

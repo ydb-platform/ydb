@@ -38,7 +38,6 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::DoubleNode ||
         type == EObjectType::BooleanNode ||
         type == EObjectType::MapNode ||
-        type == EObjectType::ListNode ||
         type == EObjectType::File ||
         type == EObjectType::Table ||
         type == EObjectType::ReplicatedTable ||
@@ -53,11 +52,16 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::OverreplicatedChunkMap ||
         type == EObjectType::UnderreplicatedChunkMap ||
         type == EObjectType::DataMissingChunkMap ||
+        type == EObjectType::DataMissingChunksSampleMap ||
         type == EObjectType::ParityMissingChunkMap ||
+        type == EObjectType::ParityMissingChunksSampleMap ||
         type == EObjectType::OldestPartMissingChunkMap ||
+        type == EObjectType::OldestPartMissingChunksSampleMap ||
         type == EObjectType::QuorumMissingChunkMap ||
+        type == EObjectType::QuorumMissingChunksSampleMap ||
         type == EObjectType::UnsafelyPlacedChunkMap ||
         type == EObjectType::InconsistentlyPlacedChunkMap ||
+        type == EObjectType::InconsistentlyPlacedChunksSampleMap ||
         type == EObjectType::UnexpectedOverreplicatedChunkMap ||
         type == EObjectType::ReplicaTemporarilyUnavailableChunkMap ||
         type == EObjectType::ForeignChunkMap ||
@@ -155,7 +159,6 @@ bool IsUserType(EObjectType type)
         type == EObjectType::DoubleNode ||
         type == EObjectType::BooleanNode ||
         type == EObjectType::MapNode ||
-        type == EObjectType::ListNode ||
         type == EObjectType::File ||
         type == EObjectType::Table ||
         type == EObjectType::ReplicatedTable ||
@@ -170,8 +173,7 @@ bool IsUserType(EObjectType type)
         type == EObjectType::SchedulerPool ||
         type == EObjectType::SchedulerPoolTree ||
         type == EObjectType::ChaosReplicatedTable ||
-        type == EObjectType::HunkStorage ||
-        type == EObjectType::SecondaryIndex;
+        type == EObjectType::HunkStorage;
 }
 
 bool IsSchemafulType(EObjectType type)
@@ -320,8 +322,7 @@ bool IsCompositeNodeType(EObjectType type)
         type == EObjectType::MapNode ||
         type == EObjectType::Scion ||
         type == EObjectType::PortalExit ||
-        type == EObjectType::SysNode ||
-        type == EObjectType::ListNode;
+        type == EObjectType::SysNode;
 }
 
 bool IsLinkType(EObjectType type)
@@ -363,4 +364,3 @@ bool IsGlobalCellId(TCellId cellId)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NObjectClient
-

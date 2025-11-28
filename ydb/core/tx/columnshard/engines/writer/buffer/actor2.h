@@ -18,20 +18,22 @@ private:
     const TInternalPathId PathId;
     const ui64 SchemaVersion;
     const NEvWrite::EModificationType ModificationType;
+    const bool IsBulk;
 
 public:
-    TAggregationId(const TInternalPathId pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType)
+    TAggregationId(const TInternalPathId pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType, bool isBulk)
         : PathId(pathId)
         , SchemaVersion(schemaVersion)
-        , ModificationType(mType) {
+        , ModificationType(mType)
+        , IsBulk(isBulk) {
     }
 
     bool operator==(const TAggregationId& item) const {
-        return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType;
+        return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType && IsBulk == item.IsBulk;
     }
 
     operator size_t() const {
-        return CombineHashes<ui64>(CombineHashes<ui64>(PathId.GetRawValue(), SchemaVersion), (ui64)ModificationType);
+        return CombineHashes<ui64>(CombineHashes<ui64>(CombineHashes<ui64>(PathId.GetRawValue(), SchemaVersion), (ui64)ModificationType), ui64(IsBulk));
     }
 };
 

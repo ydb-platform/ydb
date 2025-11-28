@@ -2,12 +2,11 @@
 
 PY2_LIBRARY()
 
-VERSION(1.9.0)
+VERSION(1.10.1)
 
 LICENSE(BSD-3-Clause)
 
 PEERDIR(
-    contrib/python/setuptools
     contrib/python/six
 )
 
@@ -36,6 +35,7 @@ PY_SRCS(
     hamcrest/core/description.py
     hamcrest/core/helpers/__init__.py
     hamcrest/core/helpers/hasmethod.py
+    hamcrest/core/helpers/ismock.py
     hamcrest/core/helpers/wrap_matcher.py
     hamcrest/core/matcher.py
     hamcrest/core/selfdescribing.py

@@ -29,4 +29,4 @@ TVariablesMap DictToVariables(const NUdf::TUnboxedValue& dict) {
     return variables;
 }
 
-}
+} // namespace NYql::NJsonPath

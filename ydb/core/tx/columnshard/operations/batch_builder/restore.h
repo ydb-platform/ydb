@@ -14,9 +14,9 @@ private:
     using TBase = NDataReader::IRestoreTask;
     NEvWrite::TWriteData WriteData;
     std::shared_ptr<IMerger> Merger;
-    const TSnapshot Snapshot;
     NArrow::TContainerWithIndexes<arrow::RecordBatch> IncomingData;
     const TWritingContext Context;
+    bool ReadOnlyConflicts;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const override;
 
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) override;
@@ -28,11 +28,15 @@ public:
     virtual bool IsActive() const override {
         return Context.IsActive();
     }
+    
+    virtual TString GetErrorMessage() const override {
+        return Context.GetErrorMessage();
+    }
 
     virtual TDuration GetTimeout() const override;
 
-    TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger, const TSnapshot actualSnapshot,
-        const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context);
+    TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
+        const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context, const bool readOnlyConflicts);
 };
 
 }   // namespace NKikimr::NOlap

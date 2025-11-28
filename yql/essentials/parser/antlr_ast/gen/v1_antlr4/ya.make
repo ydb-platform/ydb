@@ -1,6 +1,6 @@
 LIBRARY()
 
-SET(SQL_GRAMMAR ${ARCADIA_BUILD_ROOT}/${MODDIR}/SQLv1Antlr4.g)
+SET(SQL_GRAMMAR ${BINDIR}/SQLv1Antlr4.g)
 
 IF(EXPORT_CMAKE)
     MANUAL_GENERATION(${SQL_GRAMMAR})
@@ -14,34 +14,22 @@ ENDIF()
 
 COPY_FILE(
     ${ARCADIA_ROOT}/yql/essentials/parser/antlr_ast/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg
-    ${ARCADIA_BUILD_ROOT}/${MODDIR}/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg
+    ${BINDIR}/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg
 )
 
 COPY_FILE(
     ${ARCADIA_ROOT}/yql/essentials/parser/antlr_ast/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg
-    ${ARCADIA_BUILD_ROOT}/${MODDIR}/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg
+    ${BINDIR}/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg
 )
 
-RUN_ANTLR4(
+RUN_ANTLR4_CPP(
     ${SQL_GRAMMAR}
-    -no-listener
-    -visitor
+    VISITOR
     -package NALADefaultAntlr4
-    -lib .
+    -lib ${BINDIR}
     IN 
-        ${SQL_GRAMMAR} 
-        ${ARCADIA_BUILD_ROOT}/${MODDIR}/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg
-        ${ARCADIA_BUILD_ROOT}/${MODDIR}/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg
-    OUT SQLv1Antlr4Parser.cpp SQLv1Antlr4Parser.h
-        SQLv1Antlr4Lexer.cpp SQLv1Antlr4Lexer.h
-        SQLv1Antlr4Visitor.cpp SQLv1Antlr4Visitor.h 
-        SQLv1Antlr4BaseVisitor.cpp SQLv1Antlr4BaseVisitor.h
-    OUTPUT_INCLUDES contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h
-    CWD ${ARCADIA_BUILD_ROOT}/${MODDIR}
-)
-
-PEERDIR(
-    contrib/libs/antlr4_cpp_runtime
+        ${BINDIR}/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg
+        ${BINDIR}/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg
 )
 
 END()

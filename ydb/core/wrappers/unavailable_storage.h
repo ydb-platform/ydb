@@ -13,7 +13,7 @@ private:
     template <class TResponse, class TRequestPtr>
     void ExecuteImpl(TRequestPtr& ev) const {
         const Aws::S3::S3Error error = Aws::S3::S3Error(
-            Aws::Client::AWSError<Aws::Client::CoreErrors>(Aws::Client::CoreErrors::SERVICE_UNAVAILABLE, Exception, Reason, false));
+            Aws::Client::AWSError<Aws::Client::CoreErrors>(Aws::Client::CoreErrors::SERVICE_UNAVAILABLE, Exception, Reason, true));
         std::unique_ptr<TResponse> response;
         constexpr bool hasKey = requires(const TRequestPtr& r) { r->Get()->GetRequest().GetKey(); };
         constexpr bool hasRange = std::is_same_v<TResponse, TEvGetObjectResponse>;

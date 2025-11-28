@@ -46,7 +46,6 @@ extern void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitOperationJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitQueryJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitSchemeJsonHandlers(TJsonHandlers& jsonHandlers);
-extern void InitStorageJsonHandlers(TJsonHandlers& jsonHandlers);
 
 class TViewer : public TActorBootstrapped<TViewer>, public IViewer {
 public:
@@ -133,21 +132,21 @@ public:
                 .RelPath = "healthcheck",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = false,
+                .UseAuth = false, // auth is checked inside handler
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
-                .AllowedSIDs = databaseAllowedSIDs,
+                .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "pdisk",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
-                .AllowedSIDs = monitoringAllowedSIDs,
+                .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "operation",
@@ -188,7 +187,6 @@ public:
             InitViewerJsonHandlers(JsonHandlers);
             InitPDiskJsonHandlers(JsonHandlers);
             InitVDiskJsonHandlers(JsonHandlers);
-            InitStorageJsonHandlers(JsonHandlers);
             InitOperationJsonHandlers(JsonHandlers);
             InitQueryJsonHandlers(JsonHandlers);
             InitSchemeJsonHandlers(JsonHandlers);
@@ -251,6 +249,17 @@ public:
         return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
     }
 
+    bool CheckAccessMonitoring(const TRequestState& request) override {
+        auto userTokenObject = request.GetUserTokenObject();
+        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
+                return true;
+            }
+        }
+        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs())
+            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+    }
+
     bool CheckAccessViewer(const TRequestState& request) override {
         auto userTokenObject = request.GetUserTokenObject();
         if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
@@ -291,6 +300,7 @@ public:
             }
             if (was_groups >= max_groups) {
                 result << "...";
+                break;
             }
             if (IsStaticGroup(group)) {
                 result << "static ";
@@ -302,15 +312,14 @@ public:
         return result;
     }
 
-    void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) override {
+    void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, const TRequestState& request, TString& bscError, bool& forceRetryPossible) override {
         forceRetryPossible = false;
-        if (response.GroupsGetDisintegratedByExpectedStatusSize()) {
-            bscError = TStringBuilder() << "Calling this operation could cause " << GetGroupList(response.GetGroupsGetDisintegratedByExpectedStatus()) << " to go into a dead state";
-        } else if (response.GroupsGetDisintegratedSize()) {
-            bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(response.GetGroupsGetDisintegrated()) << " to go into a dead state";
+        if (response.GroupsGetDisintegratedSize()) {
+            bscError = TStringBuilder() << "Running this operation will cause " << GetGroupList(response.GetGroupsGetDisintegrated()) << " to become unavailable";
+            forceRetryPossible = CheckAccessAdministration(request);
         } else if (response.GroupsGetDegradedSize()) {
-            bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(response.GetGroupsGetDegraded()) << " to go into a degraded state";
-            forceRetryPossible = true;
+            bscError = TStringBuilder() << "Running this operation will cause " << GetGroupList(response.GetGroupsGetDegraded()) << " to enter a critical state, one step away from becoming unavailable";
+            forceRetryPossible = CheckAccessMonitoring(request);
         } else if (response.StatusSize()) {
             const auto& lastStatus = response.GetStatus(response.StatusSize() - 1);
             TVector<ui32> groups;
@@ -320,10 +329,11 @@ public:
                 }
             }
             if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayGetDegraded) {
-                bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(groups) << " to go into a degraded state";
-                forceRetryPossible = true;
+                bscError = TStringBuilder() << "Running this operation will cause " << GetGroupList(groups) << " to enter a critical state, one step away from becoming unavailable";
+                forceRetryPossible = CheckAccessMonitoring(request);
             } else if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData) {
-                bscError = TStringBuilder() << "Calling this operation may result in data loss for " << GetGroupList(groups);
+                bscError = TStringBuilder() << "Running this operation will cause " << GetGroupList(groups) << " to become unavailable";
+                forceRetryPossible = CheckAccessAdministration(request);
             } else if (lastStatus.GetErrorDescription().find("failed to allocate group: no group options") != TString::npos) {
                 bscError = "Failed to allocate group";
             }
@@ -973,6 +983,7 @@ NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo:
     case NKikimrWhiteboard::TTabletStateInfo::Lock:
     case NKikimrWhiteboard::TTabletStateInfo::RebuildGraph:
     case NKikimrWhiteboard::TTabletStateInfo::ResolveLeader:
+    case NKikimrWhiteboard::TTabletStateInfo::Terminating:
         flag = NKikimrViewer::EFlag::Yellow;
         break;
     case NKikimrWhiteboard::TTabletStateInfo::Deleted:

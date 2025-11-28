@@ -28,7 +28,7 @@ class TUserDirectory;
 
 YT_DEFINE_ERROR_ENUM(
     ((PrerequisiteCheckFailed)                   (1000))
-    ((InvalidObjectLifeStage)                    (1001))
+    ((InactiveObjectLifeStage)                   (1001))
     ((CrossCellAdditionalPath)                   (1002))
     ((CrossCellRevisionPrerequisitePath)         (1003))
     ((ForwardedRequestFailed)                    (1004))
@@ -72,7 +72,7 @@ using NElection::NullCellId;
 
 //! Identifies a particular cell of YT cluster.
 //! Must be globally unique to prevent object ids from colliding.
-YT_DEFINE_STRONG_TYPEDEF(TCellTag, ui16)
+YT_DEFINE_STRONG_TYPEDEF(TCellTag, ui16);
 
 //! The minimum valid cell tag.
 constexpr auto MinValidCellTag = TCellTag(0x0001);
@@ -155,11 +155,16 @@ DEFINE_ENUM(EObjectType,
     ((OverreplicatedChunkMap)                       (404))
     ((UnderreplicatedChunkMap)                      (405))
     ((DataMissingChunkMap)                          (419))
+    ((DataMissingChunksSampleMap)                   (466))
     ((ParityMissingChunkMap)                        (420))
+    ((ParityMissingChunksSampleMap)                 (467))
     ((OldestPartMissingChunkMap)                    (428))
+    ((OldestPartMissingChunksSampleMap)             (468))
     ((QuorumMissingChunkMap)                        (424))
+    ((QuorumMissingChunksSampleMap)                 (469))
     ((UnsafelyPlacedChunkMap)                       (120))
     ((InconsistentlyPlacedChunkMap)                 (160))
+    ((InconsistentlyPlacedChunksSampleMap)          (470))
     ((UnexpectedOverreplicatedChunkMap)             (434))
     ((ReplicaTemporarilyUnavailableChunkMap)        (436))
     ((ForeignChunkMap)                              (122))
@@ -218,7 +223,7 @@ DEFINE_ENUM(EObjectType,
     ((Uint64Node)                                   (306))
     ((DoubleNode)                                   (302))
     ((MapNode)                                      (303))
-    ((ListNode)                                     (304))
+    ((DeprecatedListNode)                           (304))
     ((BooleanNode)                                  (305))
 
     // Dynamic nodes

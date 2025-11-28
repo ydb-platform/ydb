@@ -1,7 +1,7 @@
 # Примеры чтения и записи по Kafka API
 <!-- markdownlint-disable blanks-around-fences -->
 
-В этой статье приведены примеры чтения и записи в [топики](../../concepts/topic.md) с использованием Kafka API.
+В этой статье приведены примеры чтения и записи в [топики](../../concepts/datamodel/topic.md) с использованием Kafka API.
 
 Перед выполнением примеров:
 
@@ -19,16 +19,7 @@
 
 ### Чтение
 
-При чтении отличительной особенностью Kafka API являются:
-
-- отсутствие поддержки опции [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs);
-- только одна стратегия назначения партиция - roundrobin;
-- отсутствие возможности читать без предварительно созданной группы читателей.
-
-Поэтому в конфигурации читателя всегда нужно указывать **имя группы читателей** и параметры:
-
-- `check.crcs=false`
-- `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
+При чтении отличительной особенностью Kafka API является отсутствие поддержки опции [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs). Поэтому в конфигурации читателя всегда нужно указывать параметр: `check.crcs=false`.
 
 Ниже даны примеры чтения по Kafka протоколу для разных приложений, языков программирования и фреймворков подключения без аутентификации.
 Примеры того, как настроить аутентификацию, смотри в разделе [Примеры с аутентификацией](#authentication-examples)
@@ -51,15 +42,11 @@
 
 - Spark
 
-  {% include [index.md](_includes/spark-constraints.md) %}
-
   {% include [index.md](_includes/java/kafka-api-spark-read-no-auth.md) %}
 
   {% include [index.md](_includes/spark-version-notice.md) %}
 
 - Flink
-
-  {% include [index.md](_includes/flink-constraints.md) %}
 
   {% include [index.md](_includes/java/kafka-api-flink-read-no-auth.md) %}
 
@@ -67,30 +54,7 @@
 
 {% endlist %}
 
-#### Частые проблемы и их решение
-
-##### Ошибка Unexpected error in join group response
-
-Полный текст ошибки:
-
-```txt
-Unexpected error in join group response: This most likely occurs because of a request being malformed by the client library or the message was sent to an incompatible broker. See the broker logs for more details.
-```
-
-Скорее всего проблема в том, что не указано имя читателя или указанное имя читателя не существует в кластере YDB.
-
-Решение: создайте читателя с помощью [CLI](../ydb-cli/topic-consumer-add) или [SDK](../ydb-sdk/topic#alter-topic)
-
 ### Запись
-
-{% note info %}
-
-Сейчас не поддержана запись по Kafka API с использованием Kafka транзакций. Транзакции доступны только при использовании
-[YDB Topic API](../ydb-sdk/topic.md#write-tx).
-
-В остальном запись в Apache Kafka и в YDB Topics через Kafka API ничем не отличается.
-
-{% endnote %}
 
 {% list tabs %}
 
@@ -110,15 +74,11 @@ Unexpected error in join group response: This most likely occurs because of a re
 
 - Spark
 
-  {% include [index.md](_includes/spark-constraints.md) %}
-
   {% include [index.md](_includes/java/kafka-api-spark-write-no-auth.md) %}
 
   {% include [index.md](_includes/spark-version-notice.md) %}
 
 - Flink
-
-  {% include [index.md](_includes/flink-constraints.md) %}
 
   {% include [index.md](_includes/java/kafka-api-flink-write-no-auth.md) %}
 

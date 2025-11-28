@@ -27,6 +27,7 @@ YT_DEFINE_GLOBAL(const NProfiling::TProfiler, GrpcServerProfiler, "/grpc/server"
 ////////////////////////////////////////////////////////////////////////////////
 
 YT_DEFINE_GLOBAL(const NLogging::TLogger, GrpcLogger, "Grpc");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, GrpcInternalLogger, "GrpcInternal");
 
 ////////////////////////////////////////////////////////////////////////////////
 

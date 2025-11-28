@@ -26,23 +26,6 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
-namespace {
-
-bool IsStreamLookup(const TCoEquiJoinTuple& joinTuple) {
-    for (const auto& outer: joinTuple.Options()) {
-        for (const auto& inner: outer.Cast<TExprList>()) {
-            if (auto maybeForceStreamLookupOption = inner.Maybe<TCoAtom>()) {
-                if (maybeForceStreamLookupOption.Cast().StringValue() == "forceStreamLookup") {
-                    return true;
-                } 
-            }
-        }
-    }
-    return false;
-}
-
-}
-
 /**
  * DQ Specific cost function and join applicability cost function
 */
@@ -223,81 +206,8 @@ protected:
         return node;
     }
 
-    TDqLookupSourceWrap LookupSourceFromSource(TDqSourceWrap source, TExprContext& ctx) {
-        return Build<TDqLookupSourceWrap>(ctx, source.Pos())
-                .Input(source.Input())
-                .DataSource(source.DataSource())
-                .RowType(source.RowType())
-                .Settings(source.Settings())
-            .Done();
-    }
-
-    TDqLookupSourceWrap LookupSourceFromRead(TDqReadWrap read, TExprContext& ctx){ //temp replace with yt source
-        IDqOptimization* dqOptimization = GetDqOptCallback(read.Input());
-        YQL_ENSURE(dqOptimization);
-        auto lookupSourceWrap = dqOptimization->RewriteLookupRead(read.Input().Ptr(), ctx);
-        YQL_ENSURE(lookupSourceWrap, "Lookup read is not supported");
-        return TDqLookupSourceWrap(lookupSourceWrap);
-    }
-
-    // Recursively walk join tree and replace right-side of StreamLookupJoin
-    ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEquiJoinTuple& joinTuple, std::vector<TExprNode::TPtr>& args, TExprContext& ctx, bool& changed) {
-        // recursion depth O(args.size())
-        Y_ENSURE(idx < args.size());
-        // handle left side
-        if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
-            idx = RewriteStreamJoinTuple(idx, equiJoin, joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), args, ctx, changed);
-        } else {
-            ++idx;
-        }
-        // handle right side
-        if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
-            return RewriteStreamJoinTuple(idx, equiJoin, joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), args, ctx, changed);
-        }
-        Y_ENSURE(idx < args.size());
-        if (!IsStreamLookup(joinTuple)) {
-            return idx + 1;
-        }
-        auto right = equiJoin.Arg(idx).Cast<TCoEquiJoinInput>();
-        auto rightList = right.List();
-        if (auto maybeExtractMembers = rightList.Maybe<TCoExtractMembers>()) {
-            rightList = maybeExtractMembers.Cast().Input();
-        }
-        TExprNode::TPtr lookupSourceWrap;
-        if (auto maybeSource = rightList.Maybe<TDqSourceWrap>()) {
-            lookupSourceWrap = LookupSourceFromSource(maybeSource.Cast(), ctx).Ptr();
-        } else if (auto maybeRead = rightList.Maybe<TDqReadWrap>()) {
-            lookupSourceWrap = LookupSourceFromRead(maybeRead.Cast(), ctx).Ptr();
-        } else {
-            return idx + 1;
-        }
-        changed = true;
-        args[idx] =
-            Build<TCoEquiJoinInput>(ctx, joinTuple.Pos())
-                .List(lookupSourceWrap)
-                .Scope(right.Scope())
-            .Done().Ptr();
-        return idx + 1;
-    }
-
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
-        const auto equiJoin = node.Cast<TCoEquiJoin>();
-        auto argCount = equiJoin.ArgCount();
-        const auto joinTuple = equiJoin.Arg(argCount - 2).Cast<TCoEquiJoinTuple>();
-        std::vector<TExprNode::TPtr> args(argCount);
-        bool changed = false;
-        auto rightIdx = RewriteStreamJoinTuple(0u, equiJoin, joinTuple, args, ctx, changed);
-        Y_ENSURE(rightIdx + 2 == argCount);
-        if (!changed) {
-            return node;
-        }
-        // fill copies of remaining args
-        for (ui32 i = 0; i < argCount; ++i) {
-            if (!args[i]) {
-                args[i] = equiJoin.Arg(i).Ptr();
-            }
-        }
-        return Build<TCoEquiJoin>(ctx, node.Pos()).Add(std::move(args)).Done();
+        return DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx);
     }
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
@@ -444,16 +354,6 @@ private:
         YQL_ENSURE(
             AllOf(aggregateHandlers, [](const auto& t){ return !t.DistinctName(); }),
             "Distinct is not supported for aggregation with hop");
-    }
-
-    IDqOptimization* GetDqOptCallback(const TExprBase& providerRead) const {
-        if (providerRead.Ref().ChildrenSize() > 1 && TCoDataSource::Match(providerRead.Ref().Child(1))) {
-            auto dataSourceName = providerRead.Ref().Child(1)->Child(0)->Content();
-            auto datasource = TypesCtx.DataSourceMap.FindPtr(dataSourceName);
-            YQL_ENSURE(datasource);
-            return (*datasource)->GetDqOptimization();
-        }
-        return nullptr;
     }
 
 private:

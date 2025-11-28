@@ -9,14 +9,14 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 """
---------------------
-hypothesis[dateutil]
---------------------
-
 This module provides :pypi:`dateutil <python-dateutil>` timezones.
 
 You can use this strategy to make :func:`~hypothesis.strategies.datetimes`
 and :func:`~hypothesis.strategies.times` produce timezone-aware values.
+
+.. tip::
+    Consider using the stdlib :mod:`zoneinfo` module, via
+    :func:`st.timezones() <hypothesis.strategies.timezones>`.
 """
 
 import datetime as dt

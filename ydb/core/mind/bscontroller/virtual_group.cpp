@@ -70,7 +70,7 @@ namespace NKikimr::NBsController {
         auto *group = Groups.ConstructInplaceNewEntry(TGroupId::FromValue(groupId.GetRaw()), TGroupId::FromValue(groupId.GetRaw()), 0u, 0u,
             TBlobStorageGroupType::ErasureNone, 0u, NKikimrBlobStorage::TVDiskKind::Default,
             pool.EncryptionMode.GetOrElse(TBlobStorageGroupInfo::EEM_NONE), TBlobStorageGroupInfo::ELCP_INITIAL,
-            TString(), TString(), 0u, 0u, false, false, 0u, std::nullopt, storagePoolId, 0u, 0u, 0u);
+            TString(), TString(), 0u, 0u, false, false, 0u, TBridgePileId(), storagePoolId, 0u, 0u, 0u);
 
         // bind group to storage pool
         ++pool.NumGroups;
@@ -107,8 +107,8 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDecommitGroups& cmd, TStatus& /*status*/) {
-        if (cmd.GetHiveDesignatorCase() == NKikimrBlobStorage::TDecommitGroups::HIVEDESIGNATOR_NOT_SET) {
-            throw TExError() << "TDecommitGroups.HiveId/Database is not specified";
+        if (!cmd.HasDatabase()) {
+            throw TExError() << "TDecommitGroups.Database is not specified, but it is mandatory";
         }
 
         for (const ui32 groupId : cmd.GetGroupIds()) {
@@ -116,12 +116,8 @@ namespace NKikimr::NBsController {
             if (!group) {
                 throw TExGroupNotFound(groupId);
             } else if (group->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
-                if (cmd.HasHiveId() && group->HiveId && *group->HiveId != cmd.GetHiveId()) {
-                    throw TExError() << "different hive specified for decommitting group" << TErrorParams::GroupId(groupId);
-                } else if (cmd.HasDatabase() && group->Database && *group->Database != cmd.GetDatabase()) {
+                if (group->Database != cmd.GetDatabase()) {
                     throw TExError() << "different database specified for decommitting group" << TErrorParams::GroupId(groupId);
-                } else if (cmd.HasHiveId() != group->HiveId.Defined() && cmd.HasDatabase() != group->Database.Defined()) {
-                    throw TExError() << "different hive designator specified for decommitting group" << TErrorParams::GroupId(groupId);
                 }
                 // group is already being decommitted -- make this operation idempotent
                 continue;
@@ -131,8 +127,7 @@ namespace NKikimr::NBsController {
 
             group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::PENDING;
             group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::NEW;
-            group->HiveId = cmd.HasHiveId() ? MakeMaybe(cmd.GetHiveId()) : Nothing();
-            group->Database = cmd.HasDatabase() ? MakeMaybe(cmd.GetDatabase()) : Nothing();
+            group->Database = cmd.GetDatabase();
             group->NeedAlter = true;
             GroupFailureModelChanged.insert(group->ID);
             group->CalculateGroupStatus();
@@ -212,6 +207,52 @@ namespace NKikimr::NBsController {
             group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::DELETING;
             group->NeedAlter = true;
         }
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReconfigureVirtualGroup& cmd,
+            TStatus& /*status*/) {
+        if (!cmd.GetName()) {
+            throw TExError() << "TReconfigureVirtualGroup.Name must be set and be nonempty";
+        }
+
+        std::optional<TGroupId> groupId;
+        Groups.ForEach([&](TGroupId key, const TGroupInfo& value) {
+            if (value.VirtualGroupName == cmd.GetName()) {
+                if (groupId) {
+                    throw TExError() << "Duplicate virtual group name";
+                }
+                groupId.emplace(key);
+            }
+        });
+        if (!groupId) {
+            throw TExError() << "Virtual group not found by designated name";
+        }
+
+        TGroupInfo *group = Groups.FindForUpdate(*groupId);
+        if (!group->BlobDepotConfig) {
+            Y_DEBUG_ABORT(); // this should never happen
+            throw TExError() << "Virtual group does not contain BlobDepotConfig";
+        }
+
+        // parse current config
+        NKikimrBlobDepot::TBlobDepotConfig config;
+        bool success = config.ParseFromString(*group->BlobDepotConfig);
+        if (!success) {
+            Y_DEBUG_ABORT();
+            throw TExError() << "Failed to parse BlobDepotConfig";
+        }
+
+        // update fields in current config
+        if (cmd.HasS3BackendSettings()) {
+            config.MutableS3BackendSettings()->CopyFrom(cmd.GetS3BackendSettings());
+        }
+
+        // overwrite the config
+        success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());
+        Y_ABORT_UNLESS(success);
+
+        // start altering machinery
+        group->NeedAlter = true;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -428,16 +469,19 @@ namespace NKikimr::NBsController {
         ui64 RootHiveId = 0;
         bool TenantHiveInvalidated = false;
         bool TenantHiveInvalidateInProgress = false;
+        bool IsDecommittingGroup = false;
 
         void HiveCreate(TGroupInfo *group) {
             auto& config = GetConfig(group);
+            IsDecommittingGroup = config.GetIsDecommittingGroup();
+
             if (config.HasTabletId()) {
                 ConfigureBlobDepot();
             } else if (!group->HiveId) {
                 HiveResolve(group);
             } else if (TenantHiveInvalidateInProgress && TenantHivePipeId) {
                 // tenant hive storage pool invalidation still in progress, wait
-            } else if (config.GetIsDecommittingGroup() && config.HasTenantHiveId() && !TenantHiveInvalidated) {
+            } else if (IsDecommittingGroup && config.HasTenantHiveId() && !TenantHiveInvalidated) {
                 TenantHivePipeId = Register(NTabletPipe::CreateClient(SelfId(), config.GetTenantHiveId(),
                     NTabletPipe::TClientRetryPolicy::WithRetries()));
                 HiveInvalidateGroups(TenantHivePipeId, group);
@@ -445,7 +489,7 @@ namespace NKikimr::NBsController {
             } else if (!HivePipeId) {
                 Y_ABORT_UNLESS(group->HiveId);
                 HivePipeId = Register(NTabletPipe::CreateClient(SelfId(), *group->HiveId, NTabletPipe::TClientRetryPolicy::WithRetries()));
-                if (config.GetIsDecommittingGroup()) {
+                if (IsDecommittingGroup) {
                     HiveInvalidateGroups(HivePipeId, group);
                 }
             } else {
@@ -457,10 +501,11 @@ namespace NKikimr::NBsController {
             Y_ABORT_UNLESS(group->Database);
             Y_ABORT_UNLESS(!group->HiveId);
             const TString& database = *group->Database;
+            TString domainPath;
 
             const auto& domainsInfo = AppData()->DomainsInfo;
             if (const auto& domain = domainsInfo->Domain) {
-                const TString domainPath = TStringBuilder() << '/' << domain->Name;
+                domainPath = TStringBuilder() << '/' << domain->Name;
                 if (database == domainPath || database.StartsWith(TStringBuilder() << domainPath << '/')) {
                     RootHiveId = domainsInfo->GetHive();
                     if (RootHiveId == TDomainsInfo::BadTabletId) {
@@ -470,6 +515,8 @@ namespace NKikimr::NBsController {
             }
 
             auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            req->DatabaseName = domainPath;
+
             auto& item = req->ResultSet.emplace_back();
             item.Path = NKikimr::SplitPath(database);
             item.RedirectRequired = false;
@@ -487,7 +534,10 @@ namespace NKikimr::NBsController {
                 (Result, response.ToString(*AppData()->TypeRegistry)));
 
             if (item.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok || !domainInfo || !item.DomainDescription) {
-                return CreateFailed(TStringBuilder() << "failed to resolve Hive -- erroneous reply from SchemeCache or not a domain");
+                return CreateFailed(TStringBuilder() << "failed to resolve Hive -- erroneous reply from SchemeCache or not a domain"
+                    << " Response# " << response.ToString(*AppData()->TypeRegistry)
+                    << " DomainInfo# " << static_cast<bool>(domainInfo)
+                    << " DomainDescription# " << static_cast<bool>(item.DomainDescription));
             } else if (const auto& params = domainInfo->Params; !params.HasHive() && !RootHiveId) {
                 return CreateFailed("failed to resolve Hive -- no Hive in SchemeCache reply");
             } else {
@@ -517,7 +567,7 @@ namespace NKikimr::NBsController {
                     }
                 }
 
-                const ui64 hiveId = params.HasHive() ? params.GetHive() : RootHiveId;
+                const ui64 hiveId = params.HasHive() && !IsDecommittingGroup ? params.GetHive() : RootHiveId;
                 if (!hiveId) {
                     return CreateFailed("failed to resolve Hive -- Hive is zero");
                 }
@@ -803,7 +853,7 @@ namespace NKikimr::NBsController {
             if (Expired()) {
                 return PassAway();
             }
-            switch (const ui32 type = ev->GetTypeRewrite()) {
+            switch ([[maybe_unused]] const ui32 type = ev->GetTypeRewrite()) {
                 cFunc(TEvents::TSystem::Poison, PassAway);
                 cFunc(TEvents::TSystem::Bootstrap, Bootstrap);
                 hFunc(TEvTabletPipe::TEvClientConnected, Handle);

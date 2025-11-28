@@ -1130,7 +1130,6 @@ public:
         SessionCtx->SetDatabaseId(Gateway->GetDatabaseId());
         SessionCtx->SetCluster(cluster);
         if (tempTablesState) {
-            SessionCtx->SetSessionId(tempTablesState->SessionId);
             SessionCtx->SetTempTables(std::move(tempTablesState));
         }
 
@@ -1461,6 +1460,13 @@ private:
         if (settings.IsInternalCall) {
             SessionCtx->Query().IsInternalCall = *settings.IsInternalCall;
         }
+        if (settings.RuntimeParameterSizeLimitSatisfied) {
+            SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
+        }
+
+        if (settings.RuntimeParameterSizeLimit) {
+            SessionCtx->Query().RuntimeParameterSizeLimit = settings.RuntimeParameterSizeLimit;
+        }
 
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
@@ -1495,6 +1501,12 @@ private:
         if (settings.IsInternalCall) {
             SessionCtx->Query().IsInternalCall = *settings.IsInternalCall;
         }
+        if (settings.RuntimeParameterSizeLimitSatisfied) {
+            SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
+        }
+        if (settings.RuntimeParameterSizeLimit) {
+            SessionCtx->Query().RuntimeParameterSizeLimit = settings.RuntimeParameterSizeLimit;
+        }
 
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, queryAst.Text, SessionCtx->Config().BindingsMode, GUCSettings);
@@ -1524,6 +1536,13 @@ private:
         if (settings.ConcurrentResults) {
             YQL_ENSURE(*settings.ConcurrentResults || queryType == EKikimrQueryType::Query);
             SessionCtx->Query().ConcurrentResults = *settings.ConcurrentResults;
+        }
+        if (settings.RuntimeParameterSizeLimitSatisfied) {
+            SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
+        }
+
+        if (settings.RuntimeParameterSizeLimit) {
+            SessionCtx->Query().RuntimeParameterSizeLimit = settings.RuntimeParameterSizeLimit;
         }
 
         TMaybe<TSqlVersion> sqlVersion = settings.SyntaxVersion;
@@ -1577,7 +1596,7 @@ private:
             return nullptr;
         }
 
-        if (!CheckRewrite(compileResult.QueryExpr, ctx)) {
+        if (!CheckRewrite(compileResult.QueryExpr, Config->EnableDataShardCreateTableAs, ctx)) {
             return nullptr;
         }
 
@@ -1768,13 +1787,23 @@ private:
     }
 
     void InitS3Provider(EKikimrQueryType queryType) {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::S3ProviderName))) {
+            return;
+        }
+
         auto state = MakeIntrusive<NYql::TS3State>();
+
+        auto& configuration = *state->Configuration;
+        if (const auto requestContext = SessionCtx->GetUserRequestContext(); requestContext && requestContext->IsStreamingQuery) {
+            configuration.DisablePragma(configuration.UseRuntimeListing, false, "Runtime listing is not supported for streaming queries, pragma value was ignored");
+        }
+        configuration.WriteThroughDqIntegration = true;
+        configuration.AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
+        configuration.Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
+
         state->Types = TypesCtx.Get();
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
-        state->Configuration->WriteThroughDqIntegration = true;
-        state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
-        state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
         state->Gateway = FederatedQuerySetup->HttpGateway;
         state->GatewayRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         state->ExecutorPoolId = AppData()->UserPoolId;
@@ -1788,6 +1817,10 @@ private:
     }
 
     void InitGenericProvider() {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::GenericProviderName))) {
+            return;
+        }
+
         if (!FederatedQuerySetup->ConnectorClient) {
             return;
         }
@@ -1805,7 +1838,11 @@ private:
         TypesCtx->AddDataSink(NYql::GenericProviderName, NYql::CreateGenericDataSink(state));
     }
 
-   auto InitYtProvider() {
+    void InitYtProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::YtProviderName))) {
+            return;
+        }
+
         TString userName = CreateGuidAsString();
         if (SessionCtx->GetUserToken() && SessionCtx->GetUserToken()->GetUserSID()) {
             userName = SessionCtx->GetUserToken()->GetUserSID();
@@ -1827,9 +1864,9 @@ private:
         TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
         TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
 
-        return [ytGateway = FederatedQuerySetup->YtGateway, sessionId]() {
+        finalizers.emplace_back([ytGateway = FederatedQuerySetup->YtGateway, sessionId]() {
             return ytGateway->CloseSession(NYql::IYtGateway::TCloseSessionOptions(sessionId));
-        };
+        });
     }
 
     void InitPgProvider() {
@@ -1841,8 +1878,14 @@ private:
     }
 
     void InitSolomonProvider() {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::SolomonProviderName))) {
+            return;
+        }
+
         auto solomonState = MakeIntrusive<TSolomonState>();
 
+        solomonState->SupportRtmrMode = false;
+        solomonState->WriteThroughDqIntegration = true;
         solomonState->Types = TypesCtx.Get();
         solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
         solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
@@ -1854,24 +1897,29 @@ private:
         TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));
     }
 
-    auto InitPqProvider() {
+    void InitPqProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
+            return;
+        }
+
         TString sessionId = CreateGuidAsString();
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
+        state->AllowTransparentSystemColumns = false;
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
         state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
-        state->Gateway = FederatedQuerySetup->PqGateway;;
+        state->Gateway = FederatedQuerySetup->PqGateway;
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
 
-        return [pqGateway = FederatedQuerySetup->PqGateway, sessionId]() {
+        finalizers.emplace_back([pqGateway = FederatedQuerySetup->PqGateway, sessionId]() {
             return pqGateway->CloseSession(sessionId);
-        };
+        });
     }
 
     void Init(EKikimrQueryType queryType) {
@@ -1907,24 +1955,21 @@ private:
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->EnableNewRBO;
 
-        bool addExternalDataSources = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
-            || (queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming) && AppData()->FeatureFlags.GetEnableExternalDataSources();
+        bool addExternalDataSources = (queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
+            || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming) && AppData()->FeatureFlags.GetEnableExternalDataSources();
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
 
             TVector<std::function<TFuture<void>()>> finalizers;
             if (FederatedQuerySetup->YtGateway) {
-                auto ytFinalizer = InitYtProvider();
-                finalizers.push_back(ytFinalizer);
-                
+                InitYtProvider(finalizers);
             }
             if (FederatedQuerySetup->SolomonGateway) {
                 InitSolomonProvider();
             }
             if (FederatedQuerySetup->PqGateway) {
-                auto pqFinalizer = InitPqProvider();
-                finalizers.push_back(pqFinalizer);
+                InitPqProvider(finalizers);
             }
 
             if (!finalizers.empty()) {
@@ -1936,6 +1981,7 @@ private:
                     return WaitAll(futures);
                 };
             }
+            TypesCtx->StreamLookupJoin = true;
         }
 
         InitPgProvider();
@@ -1960,6 +2006,7 @@ private:
         const TGatewaysConfig* gatewaysConfig = nullptr; // TODO: can we get real gatewaysConfig here?
         auto allowSettings = [](TStringBuf settingName) {
             return settingName == "OrderedColumns"
+                || settingName == "DeriveColumnOrder"
                 || settingName == "DisableOrderedColumns"
                 || settingName == "Warning"
                 || settingName == "UseBlocks"

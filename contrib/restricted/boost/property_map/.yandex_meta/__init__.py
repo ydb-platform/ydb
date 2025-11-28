@@ -9,7 +9,7 @@ def post_install(self):
 boost_property_map = NixSourceProject(
     nixattr="boost_property_map",
     arcdir=boost.make_arcdir("property_map"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

@@ -9,6 +9,7 @@ namespace NKikimr {
         const TIntrusivePtr<TVDiskContext> VCtx;
         const TString& LogPrefix;
         const TPDiskCtxPtr PDiskCtx;
+        const TIntrusivePtr<TVDiskConfig> VCfg;
         const TInstant Deadline;
         std::vector<TEvRecoverBlobResult::TItem> Items;
         const bool WriteRestoredParts;
@@ -96,12 +97,13 @@ namespace NKikimr {
     public:
         TRestoreCorruptedBlobActor(TActorId skeletonId, TEvRestoreCorruptedBlob::TPtr& ev,
                 TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TVDiskContext> vctx,
-                TPDiskCtxPtr pdiskCtx)
+                TPDiskCtxPtr pdiskCtx, TIntrusivePtr<TVDiskConfig> vcfg)
             : SkeletonId(skeletonId)
             , Info(std::move(info))
             , VCtx(std::move(vctx))
             , LogPrefix(VCtx->VDiskLogPrefix)
             , PDiskCtx(std::move(pdiskCtx))
+            , VCfg(std::move(vcfg))
             , Deadline(ev->Get()->Deadline)
             , WriteRestoredParts(ev->Get()->WriteRestoredParts)
             , ReportNonrestoredParts(ev->Get()->ReportNonrestoredParts)
@@ -259,7 +261,7 @@ namespace NKikimr {
                 Y_VERIFY_S(buffer.size() == Info->Type.PartSize(blobId), VCtx->VDiskLogPrefix);
                 Y_VERIFY_S(WriteRestoredParts, VCtx->VDiskLogPrefix);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, buffer, vdiskId, true, &index, Deadline,
-                    NKikimrBlobStorage::EPutHandleClass::AsyncBlob);
+                    NKikimrBlobStorage::EPutHandleClass::AsyncBlob, VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER);
                 ev->RewriteBlob = true;
                 Send(SkeletonId, ev.release());
                 ++WritesPending;
@@ -343,8 +345,9 @@ namespace NKikimr {
 
     IActor *CreateRestoreCorruptedBlobActor(TActorId skeletonId, TEvRestoreCorruptedBlob::TPtr& ev,
             TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TVDiskContext> vctx,
-            TPDiskCtxPtr pdiskCtx) {
-        return new TRestoreCorruptedBlobActor(skeletonId, ev, std::move(info), std::move(vctx), std::move(pdiskCtx));
+            TPDiskCtxPtr pdiskCtx, TIntrusivePtr<TVDiskConfig> vcfg) {
+        return new TRestoreCorruptedBlobActor(skeletonId, ev, std::move(info), std::move(vctx), std::move(pdiskCtx),
+            std::move(vcfg));
     }
 
 } // NKikimr

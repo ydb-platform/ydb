@@ -59,7 +59,13 @@ public:
     virtual std::shared_ptr<arrow::ArrayData> LoadArray(NYql::TChunkedBuffer& src, ui64 blockLen, TMaybe<size_t> offset) = 0;
 };
 
-std::unique_ptr<IBlockSerializer> MakeBlockSerializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type, const TBlockSerializerParams& params);
-std::unique_ptr<IBlockDeserializer> MakeBlockDeserializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type, const TBlockSerializerParams& params);
+std::unique_ptr<IBlockSerializer> MakeBlockSerializer(
+    const NYql::NUdf::ITypeInfoHelper& typeInfoHelper,
+    const NYql::NUdf::TType* type,
+    const TBlockSerializerParams& params);
+std::unique_ptr<IBlockDeserializer> MakeBlockDeserializer(
+    const NYql::NUdf::ITypeInfoHelper& typeInfoHelper,
+    const NYql::NUdf::TType* type,
+    const TBlockSerializerParams& params);
 
-}
+} // namespace NKikimr::NMiniKQL

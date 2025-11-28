@@ -25,9 +25,14 @@ bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
 }
 
 bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
-    for (auto& x : DataSources) {
-        if (!x->Initialize(ctx)) {
+    THashMap<TString, NLayers::ILayersIntegrationPtr> layersIntegrations;
+
+    for (auto& [name, source] : DataSourceMap) {
+        if (!source->Initialize(ctx)) {
             return false;
+        }
+        if (auto layersIntegration = source->GetLayersIntegration()) {
+            layersIntegrations[name] = layersIntegration;
         }
     }
 
@@ -40,7 +45,10 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     Y_ENSURE(UserDataStorage);
     UserDataStorage->FillUserDataUrls();
 
+    DisableConstraintCheck.emplace(TUniqueConstraintNode::Name());
+    DisableConstraintCheck.emplace(TDistinctConstraintNode::Name());
 
+    LayersRegistry = NLayers::MakeLayersRegistry(RemoteLayerProviderByName, std::move(layersIntegrations));
     return true;
 }
 
@@ -56,6 +64,7 @@ void TTypeAnnotationContext::Reset() {
     StatisticsMap.clear();
     NoBlockRewriteCallableStats.clear();
     NoBlockRewriteTypeStats.clear();
+    LayersRegistry->ClearLayers();
 }
 
 void TTypeAnnotationContext::IncNoBlockCallable(TStringBuf callableName) {
@@ -459,7 +468,7 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
         }
     }
 
-    return AddFromMemory(fullName, moduleName, isYql || isYqls, body, ctx, syntaxVersion, packageVersion, pos);
+    return AddFromMemory(fullName, moduleName, IsSExpr(isYql, isYqls, body), body, ctx, syntaxVersion, packageVersion, pos);
 }
 
 bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) {
@@ -488,7 +497,23 @@ bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString&
         }
     }
 
-    return AddFromMemory(fullName, moduleName, isYql || isYqls, body, ctx, syntaxVersion, packageVersion, pos, exports, imports);
+    return AddFromMemory(fullName, moduleName, IsSExpr(isYql, isYqls, body), body, ctx, syntaxVersion, packageVersion, pos, exports, imports);
+}
+
+bool TModuleResolver::IsSExpr(bool isYql, bool isYqls, const TString& body) const {
+    if (isYqls) {
+        return true;
+    }
+
+    if (!isYql) {
+        return false;
+    }
+
+    if (UseCanonicalLibrarySuffix_) {
+        return body.StartsWith('(');
+    } else {
+        return true;
+    }
 }
 
 bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& moduleName, bool sExpr, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, std::vector<TString>* exports, std::vector<TString>* imports) {

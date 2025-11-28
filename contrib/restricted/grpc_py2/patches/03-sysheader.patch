@@ -1,0 +1,181 @@
+diff --git a/include/grpcpp/grpcpp.h b/include/grpcpp/grpcpp.h
+index aa8a242..39b7296 100644
+--- a/include/grpcpp/grpcpp.h
++++ b/include/grpcpp/grpcpp.h
+@ -19,6 +19,11 @@
+ #ifndef GRPCPP_SERVER_H
+ #define GRPCPP_SERVER_H
+
++#if defined(__GNUC__)
++#pragma GCC system_header
++#endif
++
++
+ #include <list>
+ #include <memory>
+ #include <vector>
+diff --git a/include/grpcpp/impl/codegen/async_stream.h b/include/grpcpp/impl/codegen/async_stream.h
+index bfb2df4..4d66ec9 100644
+--- a/include/grpcpp/impl/codegen/async_stream.h
++++ b/include/grpcpp/impl/codegen/async_stream.h
+@ -18,6 +18,10 @@
+ #ifndef GRPCPP_IMPL_CODEGEN_ASYNC_STREAM_H
+ #define GRPCPP_IMPL_CODEGEN_ASYNC_STREAM_H
+
++#if defined(__GNUC__)
++#pragma GCC system_header
++#endif
++
+ #include <grpcpp/impl/codegen/call.h>
+ #include <grpcpp/impl/codegen/channel_interface.h>
+ #include <grpcpp/impl/codegen/core_codegen_interface.h>
+diff --git a/include/grpcpp/impl/codegen/call_op_set.h b/include/grpcpp/impl/codegen/call_op_set.h
+index 4ca87a9..7c03e09 100644
+--- a/include/grpcpp/impl/codegen/call_op_set.h
++++ b/include/grpcpp/impl/codegen/call_op_set.h
+@@ -16,6 +16,10 @@
+ //
+ //
+ 
++#if defined(__GNUC__)
++#pragma GCC system_header
++#endif
++
+ #ifndef GRPCPP_IMPL_CODEGEN_CALL_OP_SET_H
+ #define GRPCPP_IMPL_CODEGEN_CALL_OP_SET_H
+ 
+diff --git a/include/grpcpp/impl/codegen/callback_common.h b/include/grpcpp/impl/codegen/callback_common.h
+index a3c8c41..77f9c24 100644
+--- a/include/grpcpp/impl/codegen/callback_common.h
++++ b/include/grpcpp/impl/codegen/callback_common.h
+@@ -16,6 +16,10 @@
+ //
+ //
+ 
++#if defined(__GNUC__)
++#pragma GCC system_header
++#endif
++
+ #ifndef GRPCPP_IMPL_CODEGEN_CALLBACK_COMMON_H
+ #define GRPCPP_IMPL_CODEGEN_CALLBACK_COMMON_H
+ 
+diff --git a/include/grpcpp/impl/codegen/channel_interface.h b/include/grpcpp/impl/codegen/channel_interface.h
+index 5353f5f..03fbda0 100644
+--- a/include/grpcpp/impl/codegen/channel_interface.h
++++ b/include/grpcpp/impl/codegen/channel_interface.h
+@@ -16,6 +16,10 @@
+ //
+ //
+ 
++#if defined(__GNUC__)
++#pragma GCC system_header
++#endif
++
+ #ifndef GRPCPP_IMPL_CODEGEN_CHANNEL_INTERFACE_H
+ #define GRPCPP_IMPL_CODEGEN_CHANNEL_INTERFACE_H
+ 
+diff --git a/include/grpcpp/impl/codegen/interceptor_common.h b/include/grpcpp/impl/codegen/interceptor_common.h
+index 8ed8423..0ca3fc7 100644
+--- a/include/grpcpp/impl/codegen/interceptor_common.h
++++ b/include/grpcpp/impl/codegen/interceptor_common.h
+@@ -16,6 +16,10 @@
+ //
+ //
+ 
++#if defined(__GNUC__)
++#pragma GCC system_header
++#endif
++
+ #ifndef GRPCPP_IMPL_CODEGEN_INTERCEPTOR_COMMON_H
+ #define GRPCPP_IMPL_CODEGEN_INTERCEPTOR_COMMON_H
+ 
+diff --git a/include/grpcpp/impl/codegen/time.h b/include/grpcpp/impl/codegen/time.h
+index c32f254..46a4ccf 100644
+--- a/include/grpcpp/impl/codegen/time.h
++++ b/include/grpcpp/impl/codegen/time.h
+@@ -19,6 +19,10 @@
+ #ifndef GRPCPP_IMPL_CODEGEN_TIME_H
+ #define GRPCPP_IMPL_CODEGEN_TIME_H
+ 
++#if defined(__GNUC__)
++#pragma GCC system_header
++#endif
++
+ // IWYU pragma: private
+
+ /// TODO(chengyuc): Remove this file after solving compatibility.
+diff --git a/include/grpcpp/impl/server_builder_plugin.h b/include/grpcpp/impl/server_builder_plugin.h
+index 39450b4..e0db479 100644
+--- a/include/grpcpp/impl/server_builder_plugin.h
++++ b/
+@@ -19,6 +19,10 @@
+ #ifndef GRPCPP_IMPL_SERVER_BUILDER_PLUGIN_H
+ #define GRPCPP_IMPL_SERVER_BUILDER_PLUGIN_H
+ 
++#if defined(__GNUC__)
++#pragma GCC system_header
++#endif
++
+ #include <memory>
+ 
+ #include <grpcpp/support/channel_arguments.h>
+diff --git a/include/grpcpp/security/credentials.h b/include/grpcpp/security/credentials.h
+index d8c9e04..eeecb6a 100644
+--- a/include/grpcpp/security/credentials.h
++++ b/include/grpcpp/security/credentials.h
+@@ -19,6 +19,10 @@
+ #ifndef GRPCPP_SECURITY_CREDENTIALS_H
+ #define GRPCPP_SECURITY_CREDENTIALS_H
+
++#if defined(__GNUC__)
++#pragma GCC system_header
++#endif
++
+ #include <map>
+ #include <memory>
+ #include <vector>
+diff --git a/include/grpcpp/server.h b/include/grpcpp/server.h
+index 885bd8d..fedfe08 100644
+--- a/include/grpcpp/server.h
++++ b/include/grpcpp/server.h
+@@ -19,6 +19,10 @@
+ #ifndef GRPCPP_SERVER_H
+ #define GRPCPP_SERVER_H
+ 
++#if defined(__GNUC__)
++#pragma GCC system_header
++#endif
++
+ #include <grpc/support/port_platform.h>
+ 
+ #include <list>
+diff --git a/include/grpcpp/support/channel_arguments.h b/include/grpcpp/support/channel_arguments.h
+index 217929d..01861c9 100644
+--- a/include/grpcpp/support/channel_arguments.h
++++ b/include/grpcpp/support/channel_arguments.h
+@@ -19,6 +19,10 @@
+ #ifndef GRPCPP_SUPPORT_CHANNEL_ARGUMENTS_H
+ #define GRPCPP_SUPPORT_CHANNEL_ARGUMENTS_H
+ 
++#if defined(__GNUC__)
++#pragma GCC system_header
++#endif
++
+ #include <list>
+ #include <vector>
+
+diff --git a/src/compiler/cpp_generator.cc b/src/compiler/cpp_generator.cc
+index b004687..d30d830 100644
+--- a/src/compiler/cpp_generator.cc
++++ b/src/compiler/cpp_generator.cc
+@@ -108,6 +108,10 @@ grpc::string GetHeaderPrologue(grpc_generator::File* file,
+     printer->Print(vars, "#ifndef GRPC_$filename_identifier$__INCLUDED\n");
+     printer->Print(vars, "#define GRPC_$filename_identifier$__INCLUDED\n");
+     printer->Print(vars, "\n");
++    printer->Print(vars, "#if defined(__GNUC__)\n");
++    printer->Print(vars, "#pragma GCC system_header\n");
++    printer->Print(vars, "#endif\n");
++    printer->Print(vars, "\n");
+     printer->Print(vars, "#include \"$filename_base$$message_header_ext$\"\n");
+     printer->Print(vars, file->additional_headers().c_str());
+     printer->Print(vars, "\n");

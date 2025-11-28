@@ -25,7 +25,7 @@ namespace NYT::NYTProf {
 struct TProfileLocation
 {
     size_t Tid = 0;
-    TString ThreadName;
+    std::string ThreadName;
     std::vector<std::pair<std::string, std::variant<std::string, i64>>> Tags;
     std::vector<ui64> Backtrace;
 

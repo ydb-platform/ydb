@@ -32,6 +32,8 @@ struct TDummyTopic {
 // Dummy Pq gateway for tests.
 class TDummyPqGateway : public IPqGateway {
 public:
+    explicit TDummyPqGateway(bool skipDatabasePrefix = false);
+
     TDummyPqGateway& AddDummyTopic(const TDummyTopic& topic);
     ~TDummyPqGateway() {}
 
@@ -76,14 +78,19 @@ public:
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override;
 
     using TClusterNPath = std::pair<TString, TString>;
+
+private:
+    TString CanonizeCluster(const TString& cluster, const TString& database) const;
+
 private:
     mutable TMutex Mutex;
+    const bool SkipDatabasePrefix = false;
     THashMap<TClusterNPath, TDummyTopic> Topics;
 
     THashSet<TString> OpenedSessions;
 };
 
-IPqGateway::TPtr CreatePqFileGateway();
+IPqGateway::TPtr CreatePqFileGateway(bool skipDatabasePrefix = false);
 
 IPqGatewayFactory::TPtr CreatePqFileGatewayFactory(const TDummyPqGateway::TPtr pqFileGateway);
 

@@ -3,6 +3,8 @@
 #include "topic_workload_params.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
+#include <ydb/library/backup/util.h>
+#include <util/stream/format.h>
 
 using namespace NYdb::NConsoleClient;
 
@@ -81,6 +83,15 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
     config.Opts->AddLongOption("no-consumer", "Read without consumer")
         .Hidden()
         .StoreTrue(&Scenario.ReadWithoutConsumer);
+    config.Opts->AddLongOption("key-prefix", "Generate keys with this prefix. Put pair '__key':'{key-prefix}.{key-index}' in the message metadata.")
+        .Optional()
+        .Hidden()
+        .StoreResult(&Scenario.KeyPrefix);
+    config.Opts->AddLongOption("key-count", "The number of different keys to generate. The --key-prefix parameter must be set.")
+        .Optional()
+        .Hidden()
+        .DefaultValue(1)
+        .StoreResult(&Scenario.KeyCount);
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 
@@ -104,7 +115,12 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .DefaultValue(false)
         .Hidden()
         .StoreTrue(&Scenario.UseTableSelect);
-
+    config.Opts->AddLongOption("max-memory-usage-per-consumer", "Max memory usage per consumer in bytes. Should be more than '1MiB'.")
+        .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
+        .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NYdb::SizeFromString);
+    config.Opts->AddLongOption("max-memory-usage-per-producer", "Max memory usage per producer in bytes.")
+        .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
+        .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NYdb::SizeFromString);
     config.IsNetworkIntensive = true;
 }
 
@@ -114,6 +130,7 @@ void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
 
     Scenario.EnsurePercentileIsValid();
     Scenario.EnsureWarmupSecIsValid();
+    Scenario.EnsureRatesIsValid();
 }
 
 int TCommandWorkloadTopicRunFull::Run(TConfig& config)

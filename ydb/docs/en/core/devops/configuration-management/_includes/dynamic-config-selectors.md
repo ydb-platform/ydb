@@ -131,7 +131,7 @@ selector:
     - value3
 ```
 
-## Additional YAML Tags
+## Additional YAML Tags {#additional-yaml-tags}
 
 Tags are necessary for partial or complete reuse of configurations from previous selectors. They allow you to merge, extend, delete, and override parameters set in previous selectors and the main configuration.
 

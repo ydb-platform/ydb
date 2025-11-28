@@ -12,21 +12,24 @@ namespace NKikimr::NBsController {
             const NKikimrBlobStorage::TConfigRequest Cmd;
             const bool SelfHeal;
             const bool GroupLayoutSanitizer;
+            std::optional<THostRecordMap> EnforceHostRecords;
             THolder<TEvBlobStorage::TEvControllerConfigResponse> Ev;
             NKikimrBlobStorage::TConfigResponse *Response;
             std::optional<TConfigState> State;
             bool Success = true;
+            bool RollbackSuccess = false;
             TString Error;
 
         public:
             TTxConfigCmd(const NKikimrBlobStorage::TConfigRequest &cmd, const TActorId &notifyId, ui64 cookie,
-                    bool selfHeal, bool groupLayoutSanitizer, TBlobStorageController *controller)
+                    bool selfHeal, bool groupLayoutSanitizer, std::optional<THostRecordMap> enforceHostRecords, TBlobStorageController *controller)
                 : TTransactionBase(controller)
                 , NotifyId(notifyId)
                 , Cookie(cookie)
                 , Cmd(cmd)
                 , SelfHeal(selfHeal)
                 , GroupLayoutSanitizer(groupLayoutSanitizer)
+                , EnforceHostRecords(std::move(enforceHostRecords))
                 , Ev(new TEvBlobStorage::TEvControllerConfigResponse())
                 , Response(Ev->Record.MutableResponse())
             {}
@@ -52,6 +55,7 @@ namespace NKikimr::NBsController {
 
             void Finish() {
                 Response->SetSuccess(Success);
+                Response->SetRollbackSuccess(RollbackSuccess);
                 if (!Success) {
                     Response->SetErrorDescription(Error);
                 }
@@ -180,7 +184,13 @@ namespace NKikimr::NBsController {
                     Response->MutableStatus()->RemoveLast();
                 }
 
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
+                const auto& hostRecords = EnforceHostRecords ? *EnforceHostRecords : Self->HostRecords;
+                std::optional<NKikimrBlobStorage::TStorageConfig> storageConfig;
+                if (Cmd.HasStorageConfig() && Self->SelfManagementEnabled) {
+                    Cmd.GetStorageConfig().UnpackTo(&storageConfig.emplace());
+                }
+                State.emplace(*Self, hostRecords, TActivationContext::Now(), TActivationContext::Monotonic(),
+                    storageConfig ? &storageConfig.value() : nullptr);
                 State->CheckConsistency();
 
                 TString m;
@@ -244,6 +254,7 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(SanitizeGroup, SANITIZE_GROUP)
                             MAP_TIMING(CancelVirtualGroup, CANCEL_VIRTUAL_GROUP)
                             MAP_TIMING(ChangeGroupSizeInUnits, CHANGE_GROUP_SIZE_IN_UNITS)
+                            MAP_TIMING(ReconfigureVirtualGroup, RECONFIGURE_VIRTUAL_GROUP)
 
                             default:
                                 break;
@@ -256,6 +267,7 @@ namespace NKikimr::NBsController {
 
                 if (Success && Cmd.GetRollback()) {
                     Success = false;
+                    RollbackSuccess = true;
                     Error = "transaction rollback";
                 }
 
@@ -301,18 +313,22 @@ namespace NKikimr::NBsController {
             }
 
             void LogCommand(TTransactionContext& txc, TDuration executionTime) {
+                ui64 operationLogIndex = Self->NextOperationLogIndex;
                 // update operation log for write transaction
                 NIceDb::TNiceDb db(txc.DB);
                 TString requestBuffer, responseBuffer;
                 Y_PROTOBUF_SUPPRESS_NODISCARD Cmd.SerializeToString(&requestBuffer);
                 Y_PROTOBUF_SUPPRESS_NODISCARD Response->SerializeToString(&responseBuffer);
-                db.Table<Schema::OperationLog>().Key(Self->NextOperationLogIndex).Update(
+                db.Table<Schema::OperationLog>().Key(operationLogIndex).Update(
                     NIceDb::TUpdate<Schema::OperationLog::Timestamp>(TActivationContext::Now()),
                     NIceDb::TUpdate<Schema::OperationLog::Request>(requestBuffer),
                     NIceDb::TUpdate<Schema::OperationLog::Response>(responseBuffer),
                     NIceDb::TUpdate<Schema::OperationLog::ExecutionTime>(executionTime));
                 db.Table<Schema::State>().Key(true).Update(
                     NIceDb::TUpdate<Schema::State::NextOperationLogIndex>(++Self->NextOperationLogIndex));
+
+                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA10, "Finished processing command", (Request, Cmd.DebugString()),
+                        (Response, Response->DebugString()), (ExecutionTime, executionTime), (OperationLogIndex, operationLogIndex));
             }
 
             void ExecuteStep(TConfigState& state, const NKikimrBlobStorage::TConfigRequest::TCommand& cmd,
@@ -358,6 +374,8 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(StopPDisk)
                     HANDLE_COMMAND(GetInterfaceVersion)
                     HANDLE_COMMAND(MovePDisk)
+                    HANDLE_COMMAND(UpdateBridgeGroupInfo)
+                    HANDLE_COMMAND(ReconfigureVirtualGroup)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:
@@ -401,7 +419,7 @@ namespace NKikimr::NBsController {
             NKikimrBlobStorage::TEvControllerConfigRequest& record(ev->Get()->Record);
             const NKikimrBlobStorage::TConfigRequest& request = record.GetRequest();
             STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCC01, "Execute TEvControllerConfigRequest", (Request, request));
-            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer, this));
+            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer, ev->Get()->EnforceHostRecords, this));
         }
 
 } // NKikimr::NBsController

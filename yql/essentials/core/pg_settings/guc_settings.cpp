@@ -1,14 +1,13 @@
 #include "guc_settings.h"
 #include <library/cpp/json/json_reader.h>
 
-TGUCSettings::TGUCSettings(const TString &serialized) {
+TGUCSettings::TGUCSettings(const TString& serialized) {
     if (!serialized.empty()) {
         NJson::TJsonValue gucJson;
         Y_ENSURE(NJson::ReadJsonTree(serialized, &gucJson), "Error parsing GUCSettings");
         this->ImportFromJson(gucJson);
     }
 }
-
 
 void TGUCSettings::Setup(const std::unordered_map<std::string, std::string>& runtimeSettings) {
     RollbackSettings_ = runtimeSettings;
@@ -91,8 +90,8 @@ TString TGUCSettings::SerializeToString() const {
 
 bool TGUCSettings::operator==(const TGUCSettings& other) const {
     return Settings_ == other.Settings_ &&
-        RollbackSettings_ == other.RollbackSettings_ &&
-        SessionSettings_ == other.SessionSettings_;
+           RollbackSettings_ == other.RollbackSettings_ &&
+           SessionSettings_ == other.SessionSettings_;
 }
 
 template <>
@@ -121,5 +120,5 @@ size_t TGUCSettings::GetHash() const noexcept {
     hash = CombineHashes(THash<decltype(Settings_)>()(Settings_), hash);
     hash = CombineHashes(THash<decltype(RollbackSettings_)>()(RollbackSettings_), hash);
     hash = CombineHashes(THash<decltype(SessionSettings_)>()(SessionSettings_), hash);
-    return  hash;
+    return hash;
 }

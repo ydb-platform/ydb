@@ -8,34 +8,40 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> // for TEvConfigureProxy
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h> // for TEvNodeConfigInvokeOnRootResult
 
 namespace NKikimr::NBridge {
 
     class TSyncerActor : public TActorBootstrapped<TSyncerActor> {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
-        TBridgePileId TargetPileId;
-        TBridgePileId SourcePileId;
-        const TGroupId GroupId;
-        TGroupId SourceGroupId;
-        TGroupId TargetGroupId;
-        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
-        TBridgeInfo::TPtr BridgeInfo;
+        const TGroupId SourceGroupId;
+        const TGroupId TargetGroupId;
+        std::shared_ptr<TSyncerDataStats> SyncerDataStats;
+        ui32 SourceGroupGeneration;
+        ui32 TargetGroupGeneration;
         TString LogId;
+        NKikimrBridge::TGroupState::EStage Stage;
+        bool Finished = false;
+        ui32 Step = 0;
+        std::deque<TLogoBlobID> RestoreQueue;
+        TReplQuoter::TPtr SyncRateQuoter;
+        const TBlobStorageGroupType SourceGroupType;
 
     public:
-        TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TBridgePileId targetPileId, TGroupId groupId);
+        TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
+            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter,
+            TBlobStorageGroupType sourceGroupType);
 
         void Bootstrap();
+        void BeginNextStep();
         void PassAway() override;
-
-        void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev);
 
         void Terminate(std::optional<TString> errorReason);
 
         STFUNC(StateFunc);
 
-        void Handle(TEvNodeWardenStorageConfig::TPtr ev);
+        void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
+        void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Main sync logic
@@ -47,24 +53,33 @@ namespace NKikimr::NBridge {
         const ui32 MaxQueriesInFlight = 16;
         ui32 QueriesInFlight = 0;
         THashMap<ui64, TQueryPayload> Payloads;
-        std::deque<std::unique_ptr<IEventHandle>> PendingQueries;
+        std::deque<std::tuple<std::unique_ptr<IEventHandle>, TMonotonic>> PendingQueries;
         ui64 NextCookie = 1;
 
         bool Errors = false;
 
-        void InitiateSync();
         void DoMergeLoop();
 
-        template<typename T, typename TCallback>
-        bool DoMergeEntities(std::deque<T>& source, std::deque<T>& target, bool sourceFinished, bool targetFinished,
-            TCallback&& merge);
+        void CheckIfDone();
 
-        void IssueQuery(bool toTargetGroup, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {});
+        template<typename T, typename TCallback, typename TKey>
+        bool DoMergeEntities(std::deque<T>& source, std::deque<T>& target, bool sourceFinished, bool targetFinished,
+            TCallback&& merge, std::optional<TKey>& lastMerged);
+
+        void IssueQuery(bool toTargetGroup, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {},
+            ui64 quoterBytes = 0);
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
         TQueryPayload OnQueryFinished(ui64 cookie, bool success);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Blob restoration
+
+        static constexpr ui32 MaxDataPerIndexQuery = 10_MB;
+
+        void ProcessRestoreQueue();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Per-group assimilation status
@@ -82,8 +97,12 @@ namespace NKikimr::NBridge {
             bool BlobsFinished = false;
         };
         std::array<TAssimilateState, 2> GroupAssimilateState; // indexed by toTargetGroup
-        TAssimilateState *TargetState = nullptr;
-        TAssimilateState *SourceState = nullptr;
+        TAssimilateState& SourceState = GroupAssimilateState[0];
+        TAssimilateState& TargetState = GroupAssimilateState[1];
+
+        std::optional<std::tuple<ui64>> LastMergedBlocks;
+        std::optional<std::tuple<ui64, ui8>> LastMergedBarriers;
+        std::optional<std::tuple<TLogoBlobID>> LastMergedBlobs;
 
         void IssueAssimilateRequest(bool toTargetGroup);
         void Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev);

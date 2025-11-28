@@ -9,7 +9,7 @@ def post_install(self):
 boost_unordered = NixSourceProject(
     nixattr="boost_unordered",
     arcdir="contrib/restricted/boost/unordered",
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

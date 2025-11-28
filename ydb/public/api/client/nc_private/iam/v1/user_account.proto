@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package nebius.iam.v1;
 
-import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+//import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
 import "ydb/public/api/client/nc_private/common/v1/metadata.proto";
 import "ydb/public/api/client/nc_private/annotations.proto";
 
@@ -22,8 +22,8 @@ message UserAccount {
   option (resource_behavior) = UNNAMED;
   // option (resource) = "useraccount"; // This option conflicts with other options by its number
 
-  common.v1.ResourceMetadata metadata = 1 [(buf.validate.field).required = true];
-  UserAccountSpec spec = 2 [(buf.validate.field).required = true];
+  common.v1.ResourceMetadata metadata = 1; // [(buf.validate.field).required = true];
+  UserAccountSpec spec = 2; // [(buf.validate.field).required = true];
   UserAccountStatus status = 3 [(field_behavior) = OUTPUT_ONLY];
 }
 
@@ -59,13 +59,13 @@ message UserClaims {
   string preferred_username = 7 [(sensitive) = true];
   string picture = 9 [(sensitive) = true];
   string email = 11 [
-    (buf.validate.field) = {
-      cel: {
-        id: "string.email",
-        message: "value must be a valid email address",
-        expression: "this == \'\' || this.isEmail()"
-      }
-    },
+  //   (buf.validate.field) = {
+  //     cel: {
+  //       id: "string.email",
+  //       message: "value must be a valid email address",
+  //       expression: "this == \'\' || this.isEmail()"
+  //     }
+  //   },
     (sensitive) = true
   ];
   bool email_verified = 12;

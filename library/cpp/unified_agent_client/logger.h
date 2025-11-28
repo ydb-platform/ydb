@@ -12,6 +12,7 @@
 #include <util/system/file.h>
 
 #include <atomic>
+#include <format>
 
 #define YLOG(logPriority, message, logger)                                        \
     do {                                                                          \
@@ -52,6 +53,8 @@ namespace NUnifiedAgent {
     class TLogger {
     public:
         TLogger(TLog& log, TFMaybe<size_t> rateLimitBytes);
+
+        void AddLog(TLog& log);
 
         void StartTracing(ELogPriority logPriority) noexcept;
 
@@ -118,6 +121,7 @@ namespace NUnifiedAgent {
         NMonitoring::TDeprecatedCounter* DroppedBytes;
         const THolder<TThrottlerWithLock> Throttler;
         TAdaptiveLock Lock;
+        TVector<TLog> AdditionalLogs;
     };
 
     class TScopeLogger {

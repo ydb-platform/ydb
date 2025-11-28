@@ -57,6 +57,12 @@
 #define OS_FREEBSD 0
 #endif
 
+#ifdef __EMSCRIPTEN__
+#define OS_EMSCRIPTEN 1
+#else
+#define OS_EMSCRIPTEN 0
+#endif
+
 namespace highwayhash {
 
 #define CHECK(condition)                                       \
@@ -103,6 +109,7 @@ void RaiseThreadPriority() {
   // lead to 2-3x runtime and higher variability!
 #elif OS_FREEBSD
 #elif OS_MAC
+#elif OS_EMSCRIPTEN
 #else
 #error "port"
 #endif
@@ -167,6 +174,7 @@ void SetThreadAffinity(ThreadAffinity* affinity) {
                                      sizeof(cpuset_t), &affinity->set);
   CHECK(err == 0);
 #elif OS_MAC
+#elif OS_EMSCRIPTEN
 #else
 #error "port"
 #endif
@@ -195,6 +203,7 @@ std::vector<int> AvailableCPUs() {
     }
   }
 #elif OS_MAC
+#elif OS_EMSCRIPTEN
 #else
 #error "port"
 #endif
@@ -212,6 +221,7 @@ void PinThreadToCPU(const int cpu) {
   CPU_ZERO(&affinity.set);
   CPU_SET(cpu, &affinity.set);
 #elif OS_MAC
+#elif OS_EMSCRIPTEN
 #else
 #error "port"
 #endif

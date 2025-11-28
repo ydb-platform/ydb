@@ -30,12 +30,6 @@ NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFli
 void TInFlightReadsTracker::AddToInFlightRequest(
     const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* /*index*/) {
     AFL_VERIFY(RequestsMeta.emplace(cookie, readMetaBase).second);
-
-    auto readMeta = std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase);
-
-    if (!readMeta) {
-        return;
-    }
 }
 
 namespace {
@@ -62,7 +56,7 @@ private:
 public:
     TTransactionSavePersistentSnapshots(
         NColumnShard::TColumnShard* self, std::set<NOlap::TSnapshot>&& saveSnapshots, std::set<NOlap::TSnapshot>&& removeSnapshots)
-        : TBase(self)
+        : TBase(self, "save_persistent_snapshots")
         , SaveSnapshots(std::move(saveSnapshots))
         , RemoveSnapshots(std::move(removeSnapshots)) {
         AFL_VERIFY(SaveSnapshots.size() || RemoveSnapshots.size());

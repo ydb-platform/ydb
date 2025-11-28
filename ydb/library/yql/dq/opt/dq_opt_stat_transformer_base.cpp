@@ -14,12 +14,14 @@ TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(
     TTypeAnnotationContext* typeCtx,
     const IProviderContext& ctx,
     const TOptimizerHints& hints,
-    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
+    const bool useFSMForSortElimination
 )
     : TypeCtx(typeCtx)
     , Pctx(ctx)
     , Hints(hints)
     , ShufflingOrderingsByJoinLabels(shufflingOrderingsByJoinLabels)
+    , UseFSMForSortElimination(useFSMForSortElimination)
 { }
 
 void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
@@ -78,8 +80,9 @@ IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::
         },
         [&](const TExprNode::TPtr& input) {
             AfterLambdas(input, ctx) || AfterLambdasSpecific(input, ctx);
-
-            PropogateTableAliasesFromChildren(input, TypeCtx);
+            if (UseFSMForSortElimination) {
+                PropogateTableAliasesFromChildren(input, TypeCtx);
+            }
 
             return true;
         });

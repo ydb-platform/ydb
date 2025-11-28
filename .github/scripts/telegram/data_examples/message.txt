@@ -1,0 +1,131 @@
+
+🔒 **CLOSED ISSUES**
+─────────────────────────────
+
+✅ **Closed** https://github.com/ydb-platform/ydb/issues/21591
+   📝 **Unmuted tests:**
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[11]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[12]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[14]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[15]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[17]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[4]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[6]`
+
+✅ **Closed** https://github.com/ydb-platform/ydb/issues/22871
+   📝 **Unmuted tests:**
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[10]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[13]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[16]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[18]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[19]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[1]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[20]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[21]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[22]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[2]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[3]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[7]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[8]`
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[9]`
+
+✅ **Closed** https://github.com/ydb-platform/ydb/issues/23878
+   📝 **Unmuted tests:**
+   • `ydb/tests/compatibility/s3_backups/test_export_import_s3.py.TestExportImportS3.test_tables[mixed_main_and_prestable-25-2]`
+   • `ydb/tests/compatibility/s3_backups/test_export_import_s3.py.TestExportImportS3.test_tables[mixed_prestable-25-3_and_prestable-25-2]`
+
+✅ **Closed** https://github.com/ydb-platform/ydb/issues/23928
+   📝 **Unmuted tests:**
+   • `ydb/core/tablet_flat/ut/Vacuum.StartVacuumWithFollowers`
+
+✅ **Closed** https://github.com/ydb-platform/ydb/issues/23972
+   📝 **Unmuted tests:**
+   • `ydb/tests/datashard/async_replication/test_async_replication.py.TestAsyncReplication.test_async_replication[table_index_4__SYNC-pk_types0-all_types0-index0---SYNC]`
+
+─────────────────────────────
+
+🔓 **PARTIALLY UNMUTED ISSUES**
+─────────────────────────────
+
+⚠️ **Partially unmuted** https://github.com/ydb-platform/ydb/issues/21765
+   📝 **Unmuted tests:**
+   • `ydb/tests/functional/tpc/large/test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[5]`
+
+⚠️ **Partially unmuted** https://github.com/ydb-platform/ydb/issues/23874
+   📝 **Unmuted tests:**
+   • `ydb/tests/functional/tpc/large/py3test.[test_tpcds.py] chunk`
+   • `ydb/tests/functional/tpc/large/test_tpcds.py.TestTpcdsS0_1.test_tpcds[39]`
+   • `ydb/tests/functional/tpc/large/test_tpcds.py.TestTpcdsS0_1.test_tpcds[43]`
+   • `ydb/tests/functional/tpc/large/test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[20]`
+   • `ydb/tests/functional/tpc/large/test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[22]`
+   • `ydb/tests/functional/tpc/large/test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[33]`
+   • `ydb/tests/functional/tpc/large/test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[72]`
+
+⚠️ **Partially unmuted** https://github.com/ydb-platform/ydb/issues/23877
+   📝 **Unmuted tests:**
+   • `ydb/tests/compatibility/test_compatibility.py.TestCompatibility.test_simple[restart_main_to_main-row]`
+   • `ydb/tests/compatibility/test_compatibility.py.TestCompatibility.test_simple[restart_prestable-25-2_to_main-row]`
+   • `ydb/tests/compatibility/test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_prestable-25-2_to_main]`
+   • `ydb/tests/compatibility/test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_prestable-25-2_to_prestable-25-3]`
+   • `ydb/tests/compatibility/test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-25-1-4_to_prestable-25-2]`
+   • `ydb/tests/compatibility/test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_prestable-25-2_to_main]`
+   • `ydb/tests/compatibility/test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_stable-25-1-4_to_prestable-25-2]`
+   • `ydb/tests/compatibility/test_simple_reader.py.TestSimpleReaderMixedCluster.test_simple_reader_mixed_cluster[mixed_prestable-25-3_and_prestable-25-2]`
+   • `ydb/tests/compatibility/test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_prestable-25-2_to_main]`
+   • `ydb/tests/compatibility/test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_prestable-25-2_to_prestable-25-3]`
+   • `ydb/tests/compatibility/test_stress.py.TestStress.test_log[mixed_main_and_prestable-25-2-column]`
+   • `ydb/tests/compatibility/test_stress.py.TestStress.test_tpch1[mixed_main_and_prestable-25-2-column-date64]`
+   • `ydb/tests/compatibility/test_stress.py.TestStress.test_tpch1[mixed_main_and_prestable-25-2-column]`
+   • `ydb/tests/compatibility/test_stress.py.TestStress.test_tpch1[mixed_main_and_prestable-25-2-row]`
+   • `ydb/tests/compatibility/test_stress.py.TestStress.test_tpch1[mixed_prestable-25-3_and_prestable-25-2-column-date64]`
+   • `ydb/tests/compatibility/test_stress.py.TestStress.test_tpch1[mixed_prestable-25-3_and_prestable-25-2-column]`
+   • `ydb/tests/compatibility/test_system_views.py.TestSystemViewsRegistry.test_domain_sys_dir[restart_main_to_prestable-25-2]`
+   • `ydb/tests/compatibility/test_system_views.py.TestSystemViewsRollingUpgrade.test_path_resolving[rolling_prestable-25-2_to_main]`
+   • `ydb/tests/compatibility/test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_schema_changes_during_rolling_upgrade[rolling_prestable-25-2_to_main]`
+   • `ydb/tests/compatibility/test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_table_operations_during_rolling_upgrade[rolling_prestable-25-2_to_main]`
+   • `ydb/tests/compatibility/test_topic.py.TestTopicRollingUpdate.test_write_and_read[rolling_prestable-25-2_to_main]`
+
+─────────────────────────────
+
+🆕 **CREATED ISSUES**
+─────────────────────────────
+
+👥 **TEAM** @ydb-platform/Unknown
+   https://github.com/orgs/ydb-platform/teams/Unknown
+   ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+   🎯 https://github.com/ydb-platform/ydb/issues/24322 - `Mute ydb/tests/functional/restarts/test_restarts.py.TestRestartSingleBlock42.test_restart_single_node_is_ok in main`
+
+
+👥 **TEAM** @ydb-platform/appteam
+   https://github.com/orgs/ydb-platform/teams/appteam
+   ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+   🎯 https://github.com/ydb-platform/ydb/issues/24315 - `Mute ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut/TxUsage.Transactions_Conflict_On_SeqNo_Table in main`
+   🎯 https://github.com/ydb-platform/ydb/issues/24317 - `Mute ydb/public/sdk/cpp/tests/integration/sessions_pool/YdbSdkSessionsPool1Session.CustomPlan/0 in main`
+
+
+👥 **TEAM** @ydb-platform/engineering
+   https://github.com/orgs/ydb-platform/teams/engineering
+   ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+   🎯 https://github.com/ydb-platform/ydb/issues/24318 - `Mute ydb/tests/compatibility 40 tests in main`
+   🎯 https://github.com/ydb-platform/ydb/issues/24319 - `Mute ydb/tests/compatibility 13 tests in main`
+   🎯 https://github.com/ydb-platform/ydb/issues/24320 - `Mute ydb/tests/compatibility/s3_backups 9 tests in main`
+   🎯 https://github.com/ydb-platform/ydb/issues/24321 - `Mute ydb/tests/compatibility/olap 7 tests in main`
+
+
+👥 **TEAM** @ydb-platform/fq
+   https://github.com/orgs/ydb-platform/teams/fq
+   ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+   🎯 https://github.com/ydb-platform/ydb/issues/24313 - `Mute ydb/tests/fq/pq_async_io/ut/TDqPqReadActorTest.LoadCorruptedState in main`
+   🎯 https://github.com/ydb-platform/ydb/issues/24314 - `Mute ydb/core/fq/libs/row_dispatcher/format_handler/ut 2 tests in main`
+
+
+👥 **TEAM** @ydb-platform/qp
+   https://github.com/orgs/ydb-platform/teams/qp
+   ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+   🎯 https://github.com/ydb-platform/ydb/issues/24312 - `Mute ydb/core/kqp/ut/service/KqpService.CloseSessionsWithLoad in main`
+
+
+👥 **TEAM** @ydb-platform/system-infra
+   https://github.com/orgs/ydb-platform/teams/system-infra
+   ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+   🎯 https://github.com/ydb-platform/ydb/issues/24316 - `Mute ydb/core/tx/schemeshard/ut_vector_index_build_reboots/VectorIndexBuildTestReboots.BaseCase+Prefixed[PipeResets] in main`

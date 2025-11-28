@@ -1,6 +1,6 @@
 #include "table_index.h"
 
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
 namespace NKikimr::NTableIndex {
@@ -40,11 +40,11 @@ bool ContainsSystemColumn(const auto& columns) {
 
 const TString ImplTables[] = {
     ImplTable,
-    NTableVectorKmeansTreeIndex::LevelTable,
-    NTableVectorKmeansTreeIndex::PostingTable,
-    NTableVectorKmeansTreeIndex::PrefixTable,
-    TString{NTableVectorKmeansTreeIndex::PostingTable} + NTableVectorKmeansTreeIndex::BuildSuffix0,
-    TString{NTableVectorKmeansTreeIndex::PostingTable} + NTableVectorKmeansTreeIndex::BuildSuffix1,
+    NKMeans::LevelTable,
+    NKMeans::PostingTable,
+    NKMeans::PrefixTable,
+    TString{NKMeans::PostingTable} + NKMeans::BuildSuffix0,
+    TString{NKMeans::PostingTable} + NKMeans::BuildSuffix1,
 };
 
 constexpr std::string_view GlobalSecondaryImplTables[] = {
@@ -53,22 +53,49 @@ constexpr std::string_view GlobalSecondaryImplTables[] = {
 static_assert(std::is_sorted(std::begin(GlobalSecondaryImplTables), std::end(GlobalSecondaryImplTables)));
 
 constexpr std::string_view GlobalKMeansTreeImplTables[] = {
-    NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable,
+    NKMeans::LevelTable, NKMeans::PostingTable,
 };
 static_assert(std::is_sorted(std::begin(GlobalKMeansTreeImplTables), std::end(GlobalKMeansTreeImplTables)));
 
 constexpr std::string_view PrefixedGlobalKMeansTreeImplTables[] = {
-    NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable, NTableVectorKmeansTreeIndex::PrefixTable,
+    NKMeans::LevelTable, NKMeans::PostingTable, NKMeans::PrefixTable,
 };
 static_assert(std::is_sorted(std::begin(PrefixedGlobalKMeansTreeImplTables), std::end(PrefixedGlobalKMeansTreeImplTables)));
 
+constexpr std::string_view GlobalFulltextImplTables[] = {
+    ImplTable,
+};
+static_assert(std::is_sorted(std::begin(GlobalFulltextImplTables), std::end(GlobalFulltextImplTables)));
+
+bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
+    switch (indexType) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            return true;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            return false;
+        default:
+            Y_ENSURE(false, InvalidIndexType(indexType));
+    }
 }
 
-TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index) {
+}
+
+TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index) {
     TTableColumns result;
 
-    const bool isSecondaryIndex = type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
-    std::for_each(index.KeyColumns.begin(), index.KeyColumns.end() - (isSecondaryIndex ? 0 : 1), [&] (const auto& ik) {
+    const bool isSecondaryIndex = IsSecondaryIndex(indexType);
+
+    auto takeKeyColumns = index.KeyColumns.size();
+    if (!isSecondaryIndex) { // vector and fulltext indexes have special embedding and text key columns
+        Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltext);
+        takeKeyColumns--;
+    }
+
+    std::for_each(index.KeyColumns.begin(), index.KeyColumns.begin() + takeKeyColumns, [&] (const auto& ik) {
         result.Keys.push_back(ik);
         result.Columns.emplace(ik);
     });
@@ -84,6 +111,18 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const T
     }
 
     return result;
+}
+
+NKikimrSchemeOp::EIndexType GetIndexType(NKikimrSchemeOp::TIndexCreationConfig indexCreation) {
+    // TODO: always provide EIndexTypeGlobal value instead of null
+    // TODO: do not cast unknown index types to EIndexTypeGlobal (proto2 specific)
+    return indexCreation.HasType()
+        ? indexCreation.GetType()
+        : NKikimrSchemeOp::EIndexTypeGlobal;
+}
+
+TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType) {
+    return TStringBuilder() << "Invalid index type " << static_cast<int>(indexType);
 }
 
 bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain) {
@@ -128,7 +167,7 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
         return false;
     }
 
-    const bool isSecondaryIndex = indexType != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+    const bool isSecondaryIndex = IsSecondaryIndex(indexType);
 
     if (index.KeyColumns.size() < 1) {
         explain = "should be at least single index key column";
@@ -158,7 +197,9 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     if (isSecondaryIndex) {
         tmp.insert(index.KeyColumns.begin(), index.KeyColumns.end());
     } else {
-        // Vector indexes allow to add all columns both to index & data
+        // Vector and fulltext indexes allow to add all columns both to index & data
+        Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltext);
     }
     if (const auto* broken = IsContains(index.DataColumns, tmp, true)) {
         explain = TStringBuilder()
@@ -168,15 +209,37 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     return true;
 }
 
+bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType) {
+    switch (indexType) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            return true;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            return false;
+        default:
+            Y_DEBUG_ABORT_S(InvalidIndexType(indexType));
+            return false;
+    }
+}
+
 std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys) {
-    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        if (indexKeys.size() == 1) {
-            return GlobalKMeansTreeImplTables;
-        } else {
-            return PrefixedGlobalKMeansTreeImplTables;
-        }
-    } else {
-        return GlobalSecondaryImplTables;
+    switch (indexType) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            return GlobalSecondaryImplTables;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            if (indexKeys.size() == 1) {
+                return GlobalKMeansTreeImplTables;
+            } else {
+                return PrefixedGlobalKMeansTreeImplTables;
+            }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            return GlobalFulltextImplTables;
+        default:
+            Y_ENSURE(false, InvalidIndexType(indexType));
     }
 }
 
@@ -186,20 +249,26 @@ bool IsImplTable(std::string_view tableName) {
 
 bool IsBuildImplTable(std::string_view tableName) {
     // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
-    return tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix0)
-        || tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix1);
+    return tableName.ends_with(NKMeans::BuildSuffix0)
+        || tableName.ends_with(NKMeans::BuildSuffix1);
 }
 
-static constexpr TClusterId PostingParentFlag = (1ull << 63ull);
+namespace NKMeans {
+
+bool HasPostingParentFlag(TClusterId parent) {
+    return bool(parent & PostingParentFlag);
+}
 
 // Note: if cluster id is too big, something is wrong with cluster enumeration
 void EnsureNoPostingParentFlag(TClusterId parent) {
-    Y_ENSURE((parent & PostingParentFlag) == 0);
+    Y_ENSURE(!HasPostingParentFlag(parent));
 }
 
 TClusterId SetPostingParentFlag(TClusterId parent) {
     EnsureNoPostingParentFlag(parent);
     return (parent | PostingParentFlag);
+}
+
 }
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record) {

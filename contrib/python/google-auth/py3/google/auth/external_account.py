@@ -36,6 +36,7 @@ import io
 import json
 import re
 
+from google.auth import _constants
 from google.auth import _helpers
 from google.auth import credentials
 from google.auth import exceptions
@@ -59,18 +60,18 @@ _DEFAULT_TOKEN_URL = "https://sts.{universe_domain}/v1/token"
 @dataclass
 class SupplierContext:
     """A context class that contains information about the requested third party credential that is passed
-        to AWS security credential and subject token suppliers.
+    to AWS security credential and subject token suppliers.
 
-        Attributes:
-            subject_token_type (str): The requested subject token type based on the Oauth2.0 token exchange spec.
-                Expected values include::
+    Attributes:
+        subject_token_type (str): The requested subject token type based on the Oauth2.0 token exchange spec.
+            Expected values include::
 
-                    “urn:ietf:params:oauth:token-type:jwt”
-                    “urn:ietf:params:oauth:token-type:id-token”
-                    “urn:ietf:params:oauth:token-type:saml2”
-                    “urn:ietf:params:aws:token-type:aws4_request”
+                “urn:ietf:params:oauth:token-type:jwt”
+                “urn:ietf:params:oauth:token-type:id-token”
+                “urn:ietf:params:oauth:token-type:saml2”
+                “urn:ietf:params:aws:token-type:aws4_request”
 
-            audience (str): The requested audience for the subject token.
+        audience (str): The requested audience for the subject token.
     """
 
     subject_token_type: str
@@ -81,6 +82,7 @@ class Credentials(
     credentials.Scoped,
     credentials.CredentialsWithQuotaProject,
     credentials.CredentialsWithTokenUri,
+    credentials.CredentialsWithTrustBoundary,
     metaclass=abc.ABCMeta,
 ):
     """Base class for all external account credentials.
@@ -89,7 +91,14 @@ class Credentials(
     credentials for Google access token and authorizing requests to Google APIs.
     The base class implements the common logic for exchanging external account
     credentials for Google access tokens.
-    """
+
+    **IMPORTANT**:
+    This class does not validate the credential configuration. A security
+    risk occurs when a credential configuration configured with malicious urls
+    is used.
+    When the credential configuration is accepted from an
+    untrusted source, you should validate it before using.
+    Refer https://cloud.google.com/docs/authentication/external/externally-sourced-credentials for more details."""
 
     def __init__(
         self,
@@ -166,10 +175,7 @@ class Credentials(
         self._scopes = scopes
         self._default_scopes = default_scopes
         self._workforce_pool_user_project = workforce_pool_user_project
-        self._trust_boundary = {
-            "locations": [],
-            "encoded_locations": "0x0",
-        }  # expose a placeholder trust boundary value.
+        self._trust_boundary = trust_boundary
 
         if self._client_id:
             self._client_auth = utils.ClientAuthentication(
@@ -235,6 +241,7 @@ class Credentials(
             "scopes": self._scopes,
             "default_scopes": self._default_scopes,
             "universe_domain": self._universe_domain,
+            "trust_boundary": self._trust_boundary,
         }
         if not self.is_workforce_pool:
             args.pop("workforce_pool_user_project")
@@ -405,8 +412,23 @@ class Credentials(
 
         return None
 
-    @_helpers.copy_docstring(credentials.Credentials)
     def refresh(self, request):
+        """Refreshes the access token.
+
+        For impersonated credentials, this method will refresh the underlying
+        source credentials and the impersonated credentials. For non-impersonated
+        credentials, it will refresh the access token and the trust boundary.
+        """
+        self._refresh_token(request)
+        # If we are impersonating, the trust boundary is handled by the
+        # impersonated credentials object. We need to get it from there.
+        if self._service_account_impersonation_url:
+            self._trust_boundary = self._impersonated_credentials._trust_boundary
+        else:
+            # Otherwise, refresh the trust boundary for the external account.
+            self._refresh_trust_boundary(request)
+
+    def _refresh_token(self, request):
         scopes = self._scopes if self._scopes is not None else self._default_scopes
 
         # Inject client certificate into request.
@@ -456,6 +478,40 @@ class Credentials(
 
             self.expiry = now + lifetime
 
+    def _build_trust_boundary_lookup_url(self):
+        """Builds and returns the URL for the trust boundary lookup API."""
+        url = None
+        # Try to parse as a workload identity pool.
+        # Audience format: //iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL_ID/providers/PROVIDER_ID
+        workload_match = re.search(
+            r"projects/([^/]+)/locations/global/workloadIdentityPools/([^/]+)",
+            self._audience,
+        )
+        if workload_match:
+            project_number, pool_id = workload_match.groups()
+            url = _constants._WORKLOAD_IDENTITY_POOL_TRUST_BOUNDARY_LOOKUP_ENDPOINT.format(
+                universe_domain=self._universe_domain,
+                project_number=project_number,
+                pool_id=pool_id,
+            )
+        else:
+            # If that fails, try to parse as a workforce pool.
+            # Audience format: //iam.googleapis.com/locations/global/workforcePools/POOL_ID/providers/PROVIDER_ID
+            workforce_match = re.search(
+                r"locations/[^/]+/workforcePools/([^/]+)", self._audience
+            )
+            if workforce_match:
+                pool_id = workforce_match.groups()[0]
+                url = _constants._WORKFORCE_POOL_TRUST_BOUNDARY_LOOKUP_ENDPOINT.format(
+                    universe_domain=self._universe_domain, pool_id=pool_id
+                )
+
+        if url:
+            return url
+        else:
+            # If both fail, the audience format is invalid.
+            raise exceptions.InvalidValue("Invalid audience format.")
+
     def _make_copy(self):
         kwargs = self._constructor_args()
         new_cred = self.__class__(**kwargs)
@@ -480,6 +536,12 @@ class Credentials(
     def with_universe_domain(self, universe_domain):
         cred = self._make_copy()
         cred._universe_domain = universe_domain
+        return cred
+
+    @_helpers.copy_docstring(credentials.CredentialsWithTrustBoundary)
+    def with_trust_boundary(self, trust_boundary):
+        cred = self._make_copy()
+        cred._trust_boundary = trust_boundary
         return cred
 
     def _should_initialize_impersonated_credentials(self):
@@ -530,6 +592,7 @@ class Credentials(
             lifetime=self._service_account_impersonation_options.get(
                 "token_lifetime_seconds"
             ),
+            trust_boundary=self._trust_boundary,
         )
 
     def _create_default_metrics_options(self):
@@ -576,6 +639,14 @@ class Credentials(
     def from_info(cls, info, **kwargs):
         """Creates a Credentials instance from parsed external account info.
 
+        **IMPORTANT**:
+        This method does not validate the credential configuration. A security
+        risk occurs when a credential configuration configured with malicious urls
+        is used.
+        When the credential configuration is accepted from an
+        untrusted source, you should validate it before using with this method.
+        Refer https://cloud.google.com/docs/authentication/external/externally-sourced-credentials for more details.
+
         Args:
             info (Mapping[str, str]): The external account info in Google
                 format.
@@ -608,12 +679,21 @@ class Credentials(
             universe_domain=info.get(
                 "universe_domain", credentials.DEFAULT_UNIVERSE_DOMAIN
             ),
+            trust_boundary=info.get("trust_boundary"),
             **kwargs
         )
 
     @classmethod
     def from_file(cls, filename, **kwargs):
         """Creates a Credentials instance from an external account json file.
+
+        **IMPORTANT**:
+        This method does not validate the credential configuration. A security
+        risk occurs when a credential configuration configured with malicious urls
+        is used.
+        When the credential configuration is accepted from an
+        untrusted source, you should validate it before using with this method.
+        Refer https://cloud.google.com/docs/authentication/external/externally-sourced-credentials for more details.
 
         Args:
             filename (str): The path to the external account json file.

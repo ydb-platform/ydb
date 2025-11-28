@@ -49,7 +49,6 @@ private:
 
     YDB_ACCESSOR(EModificationType, ModificationType, EModificationType::Replace);
     YDB_READONLY(TMonotonic, WriteStartInstant, TMonotonic::Now());
-    std::optional<ui64> LockId;
     const std::shared_ptr<TWriteFlowCounters> Counters;
     mutable NOlap::NCounters::TStateSignalsOperator<NEvWrite::EWriteStage>::TGuard StateGuard;
 
@@ -64,18 +63,6 @@ public:
         }
     }
 
-    void SetLockId(const ui64 lockId) {
-        LockId = lockId;
-    }
-
-    ui64 GetLockIdVerified() const {
-        AFL_VERIFY(LockId);
-        return *LockId;
-    }
-
-    std::optional<ui64> GetLockIdOptional() const {
-        return LockId;
-    }
 
     bool IsGuaranteeWriter() const {
         switch (ModificationType) {

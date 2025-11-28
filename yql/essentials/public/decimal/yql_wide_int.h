@@ -13,7 +13,7 @@ typedef __int128 i128_t;
 typedef unsigned __int128 ui128_t;
 #endif
 
-template<typename TOneHalf, typename TSignedPart = std::make_signed_t<TOneHalf>, typename TUnsignedPart = std::make_unsigned_t<TOneHalf>>
+template <typename TOneHalf, typename TSignedPart = std::make_signed_t<TOneHalf>, typename TUnsignedPart = std::make_unsigned_t<TOneHalf>>
 class TWide {
 private:
     using THalf = TOneHalf;
@@ -41,17 +41,17 @@ private:
         return h & mask;
     }
 
-    template<typename T>
+    template <typename T>
     constexpr std::enable_if_t<sizeof(T) <= sizeof(THalf), T> CastImpl() const {
         return static_cast<T>(Lo_);
     }
 
-    template<typename T>
+    template <typename T>
     constexpr std::enable_if_t<sizeof(T) == sizeof(THalf) << 1U, T> CastImpl() const {
         return *reinterpret_cast<const T*>(this);
     }
 
-    template<typename T>
+    template <typename T>
     constexpr std::enable_if_t<sizeof(THalf) << 1U < sizeof(T), T> CastImpl() const {
         return (T(std::make_unsigned_t<T>(Hi_) << PartBitSize)) | Lo_;
     }
@@ -67,8 +67,9 @@ private:
     using TUnsigned = TWide<TUnsignedPart, TSignedPart, TUnsignedPart>;
 
     using TSibling = std::conditional_t<std::is_same<THalf, TPart>::value,
-        TWide<TSignedPart, TSignedPart, TUnsignedPart>, TWide<TUnsignedPart, TSignedPart, TUnsignedPart>>;
+                                        TWide<TSignedPart, TSignedPart, TUnsignedPart>, TWide<TUnsignedPart, TSignedPart, TUnsignedPart>>;
     friend TSibling;
+
 public:
     constexpr TWide() = default;
     constexpr TWide(const TWide& rhs) = default;
@@ -78,28 +79,38 @@ public:
     constexpr TWide& operator=(TWide&& rhs) = default;
 
     constexpr TWide(const TSibling& rhs)
-        : Lo_(rhs.Lo_), Hi_(rhs.Hi_)
-    {}
+        : Lo_(rhs.Lo_)
+        , Hi_(rhs.Hi_)
+    {
+    }
 
-    template<typename U, typename L>
+    template <typename U, typename L>
     constexpr TWide(const U upper_rhs, const L lower_rhs)
-        : Lo_(lower_rhs), Hi_(upper_rhs)
-    {}
+        : Lo_(lower_rhs)
+        , Hi_(upper_rhs)
+    {
+    }
 
     template <typename T, std::enable_if_t<std::is_integral<T>::value && sizeof(THalf) < sizeof(T), size_t> Shift = PartBitSize>
     constexpr TWide(const T rhs)
-        : Lo_(rhs), Hi_(rhs >> Shift)
-    {}
+        : Lo_(rhs)
+        , Hi_(rhs >> Shift)
+    {
+    }
 
     template <typename T, std::enable_if_t<std::is_integral<T>::value && sizeof(T) <= sizeof(THalf), bool> Signed = std::is_signed<T>::value>
     constexpr TWide(const T rhs)
-        : Lo_(rhs), Hi_(Signed && rhs < 0 ? ~0 : 0)
-    {}
+        : Lo_(rhs)
+        , Hi_(Signed && rhs < 0 ? ~0 : 0)
+    {
+    }
 
     template <typename T, typename TArg = std::enable_if_t<std::is_class<T>::value && std::is_same<T, THalf>::value, THalf>>
     constexpr explicit TWide(const T& rhs)
-        : Lo_(rhs), Hi_(TIsSigned::value && rhs < 0 ? ~0 : 0)
-    {}
+        : Lo_(rhs)
+        , Hi_(TIsSigned::value && rhs < 0 ? ~0 : 0)
+    {
+    }
 
     template <typename T, std::enable_if_t<std::is_integral<T>::value && sizeof(THalf) < sizeof(T), size_t> Shift = PartBitSize>
     constexpr TWide& operator=(const T rhs) {
@@ -115,19 +126,41 @@ public:
         return *this;
     }
 
-    constexpr explicit operator bool() const { return bool(Hi_) || bool(Lo_); }
+    constexpr explicit operator bool() const {
+        return bool(Hi_) || bool(Lo_);
+    }
 
-    constexpr explicit operator i8()   const { return CastImpl<i8>(); }
-    constexpr explicit operator ui8()  const { return CastImpl<ui8>(); }
-    constexpr explicit operator i16()  const { return CastImpl<i16>(); }
-    constexpr explicit operator ui16() const { return CastImpl<ui16>(); }
-    constexpr explicit operator i32()  const { return CastImpl<i32>(); }
-    constexpr explicit operator ui32() const { return CastImpl<ui32>(); }
-    constexpr explicit operator i64()  const { return CastImpl<i64>(); }
-    constexpr explicit operator ui64() const { return CastImpl<ui64>(); }
+    constexpr explicit operator i8() const {
+        return CastImpl<i8>();
+    }
+    constexpr explicit operator ui8() const {
+        return CastImpl<ui8>();
+    }
+    constexpr explicit operator i16() const {
+        return CastImpl<i16>();
+    }
+    constexpr explicit operator ui16() const {
+        return CastImpl<ui16>();
+    }
+    constexpr explicit operator i32() const {
+        return CastImpl<i32>();
+    }
+    constexpr explicit operator ui32() const {
+        return CastImpl<ui32>();
+    }
+    constexpr explicit operator i64() const {
+        return CastImpl<i64>();
+    }
+    constexpr explicit operator ui64() const {
+        return CastImpl<ui64>();
+    }
 #ifndef _win_
-    constexpr explicit operator i128_t()  const { return CastImpl<i128_t>(); }
-    constexpr explicit operator ui128_t() const { return CastImpl<ui128_t>(); }
+    constexpr explicit operator i128_t() const {
+        return CastImpl<i128_t>();
+    }
+    constexpr explicit operator ui128_t() const {
+        return CastImpl<ui128_t>();
+    }
 #endif
     constexpr explicit operator float() const {
         return TIsSigned::value && Hi_ < 0 ? -float(-*this) : std::fma(float(Hi_), std::exp2(float(PartBitSize)), float(Lo_));
@@ -147,18 +180,23 @@ public:
 
     constexpr TWide operator-() const {
         const auto sign = THalf(1) << PartBitSize - 1U;
-        if (TIsSigned::value && !Lo_ && Hi_ == sign)
+        if (TIsSigned::value && !Lo_ && Hi_ == sign) {
             return *this;
+        }
         return ++~*this;
     }
 
     constexpr TWide& operator++() {
-        if (!++Lo_) ++Hi_;
+        if (!++Lo_) {
+            ++Hi_;
+        }
         return *this;
     }
 
     constexpr TWide& operator--() {
-        if (!Lo_--) --Hi_;
+        if (!Lo_--) {
+            --Hi_;
+        }
         return *this;
     }
 
@@ -196,7 +234,9 @@ public:
         const auto l = Lo_;
         Lo_ += rhs.Lo_;
         Hi_ += rhs.Hi_;
-        if (l > Lo_) ++Hi_;
+        if (l > Lo_) {
+            ++Hi_;
+        }
         return *this;
     }
 
@@ -204,7 +244,9 @@ public:
         const auto l = Lo_;
         Lo_ -= rhs.Lo_;
         Hi_ -= rhs.Hi_;
-        if (l < Lo_) --Hi_;
+        if (l < Lo_) {
+            --Hi_;
+        }
         return *this;
     }
 
@@ -238,30 +280,70 @@ public:
         return *this;
     }
 
-    constexpr TWide& operator*=(const TWide& rhs) { return *this = Mul(*this, rhs); }
-    constexpr TWide& operator/=(const TWide& rhs) { return *this = DivMod(*this, rhs).first; }
-    constexpr TWide& operator%=(const TWide& rhs) { return *this = DivMod(*this, rhs).second; }
+    constexpr TWide& operator*=(const TWide& rhs) {
+        return *this = Mul(*this, rhs);
+    }
+    constexpr TWide& operator/=(const TWide& rhs) {
+        return *this = DivMod(*this, rhs).first;
+    }
+    constexpr TWide& operator%=(const TWide& rhs) {
+        return *this = DivMod(*this, rhs).second;
+    }
 
-    constexpr TWide operator&(const TWide& rhs) const { return TWide(*this) &= rhs; }
-    constexpr TWide operator|(const TWide& rhs) const { return TWide(*this) |= rhs; }
-    constexpr TWide operator^(const TWide& rhs) const { return TWide(*this) ^= rhs; }
-    constexpr TWide operator+(const TWide& rhs) const { return TWide(*this) += rhs; }
-    constexpr TWide operator-(const TWide& rhs) const { return TWide(*this) -= rhs; }
-    constexpr TWide operator*(const TWide& rhs) const { return Mul(*this, rhs); }
-    constexpr TWide operator/(const TWide& rhs) const { return DivMod(*this, rhs).first; }
-    constexpr TWide operator%(const TWide& rhs) const { return DivMod(*this, rhs).second; }
-    constexpr TWide operator<<(const TWide& rhs) const { return TWide(*this) <<= rhs; }
-    constexpr TWide operator>>(const TWide& rhs) const { return TWide(*this) >>= rhs; }
+    constexpr TWide operator&(const TWide& rhs) const {
+        return TWide(*this) &= rhs;
+    }
+    constexpr TWide operator|(const TWide& rhs) const {
+        return TWide(*this) |= rhs;
+    }
+    constexpr TWide operator^(const TWide& rhs) const {
+        return TWide(*this) ^= rhs;
+    }
+    constexpr TWide operator+(const TWide& rhs) const {
+        return TWide(*this) += rhs;
+    }
+    constexpr TWide operator-(const TWide& rhs) const {
+        return TWide(*this) -= rhs;
+    }
+    constexpr TWide operator*(const TWide& rhs) const {
+        return Mul(*this, rhs);
+    }
+    constexpr TWide operator/(const TWide& rhs) const {
+        return DivMod(*this, rhs).first;
+    }
+    constexpr TWide operator%(const TWide& rhs) const {
+        return DivMod(*this, rhs).second;
+    }
+    constexpr TWide operator<<(const TWide& rhs) const {
+        return TWide(*this) <<= rhs;
+    }
+    constexpr TWide operator>>(const TWide& rhs) const {
+        return TWide(*this) >>= rhs;
+    }
 
     template <typename T>
-    constexpr std::enable_if_t<std::is_integral<T>::value, T> operator&(const T rhs) const { return T(*this) & rhs; }
+    constexpr std::enable_if_t<std::is_integral<T>::value, T> operator&(const T rhs) const {
+        return T(*this) & rhs;
+    }
 
-    constexpr bool operator==(const TWide& rhs) const { return std::tie(Hi_, Lo_) == std::tie(rhs.Hi_, rhs.Lo_); }
-    constexpr bool operator!=(const TWide& rhs) const { return std::tie(Hi_, Lo_) != std::tie(rhs.Hi_, rhs.Lo_); }
-    constexpr bool operator>=(const TWide& rhs) const { return std::tie(Hi_, Lo_) >= std::tie(rhs.Hi_, rhs.Lo_); }
-    constexpr bool operator<=(const TWide& rhs) const { return std::tie(Hi_, Lo_) <= std::tie(rhs.Hi_, rhs.Lo_); }
-    constexpr bool operator>(const TWide& rhs) const  { return std::tie(Hi_, Lo_) > std::tie(rhs.Hi_, rhs.Lo_); }
-    constexpr bool operator<(const TWide& rhs) const  { return std::tie(Hi_, Lo_) < std::tie(rhs.Hi_, rhs.Lo_); }
+    constexpr bool operator==(const TWide& rhs) const {
+        return std::tie(Hi_, Lo_) == std::tie(rhs.Hi_, rhs.Lo_);
+    }
+    constexpr bool operator!=(const TWide& rhs) const {
+        return std::tie(Hi_, Lo_) != std::tie(rhs.Hi_, rhs.Lo_);
+    }
+    constexpr bool operator>=(const TWide& rhs) const {
+        return std::tie(Hi_, Lo_) >= std::tie(rhs.Hi_, rhs.Lo_);
+    }
+    constexpr bool operator<=(const TWide& rhs) const {
+        return std::tie(Hi_, Lo_) <= std::tie(rhs.Hi_, rhs.Lo_);
+    }
+    constexpr bool operator>(const TWide& rhs) const {
+        return std::tie(Hi_, Lo_) > std::tie(rhs.Hi_, rhs.Lo_);
+    }
+    constexpr bool operator<(const TWide& rhs) const {
+        return std::tie(Hi_, Lo_) < std::tie(rhs.Hi_, rhs.Lo_);
+    }
 
 private:
     static constexpr TWide Mul(const TWide& lhs, const TWide& rhs) {
@@ -274,14 +356,9 @@ private:
         const TPart prod3[] = {TPart(lq[0] * rq[3]), TPart(lq[1] * rq[2]), TPart(lq[2] * rq[1]), TPart(lq[3] * rq[0])};
 
         const TPart fourthQ = GetLowerQuarter(prod0[0]);
-        const TPart thirdQ = GetUpperQuarter(prod0[0])
-            + GetLowerQuarter(prod1[0]) + GetLowerQuarter(prod1[1]);
-        const TPart secondQ = GetUpperQuarter(thirdQ)
-            + GetUpperQuarter(prod1[0]) + GetUpperQuarter(prod1[1])
-            + GetLowerQuarter(prod2[0]) + GetLowerQuarter(prod2[1]) + GetLowerQuarter(prod2[2]);
-        const TPart firstQ = GetUpperQuarter(secondQ)
-            + GetUpperQuarter(prod2[0]) + GetUpperQuarter(prod2[1]) + GetUpperQuarter(prod2[2])
-            + GetLowerQuarter(prod3[0]) + GetLowerQuarter(prod3[1]) + GetLowerQuarter(prod3[2]) + GetLowerQuarter(prod3[3]);
+        const TPart thirdQ = GetUpperQuarter(prod0[0]) + GetLowerQuarter(prod1[0]) + GetLowerQuarter(prod1[1]);
+        const TPart secondQ = GetUpperQuarter(thirdQ) + GetUpperQuarter(prod1[0]) + GetUpperQuarter(prod1[1]) + GetLowerQuarter(prod2[0]) + GetLowerQuarter(prod2[1]) + GetLowerQuarter(prod2[2]);
+        const TPart firstQ = GetUpperQuarter(secondQ) + GetUpperQuarter(prod2[0]) + GetUpperQuarter(prod2[1]) + GetUpperQuarter(prod2[2]) + GetLowerQuarter(prod3[0]) + GetLowerQuarter(prod3[1]) + GetLowerQuarter(prod3[2]) + GetLowerQuarter(prod3[3]);
 
         return TWide((firstQ << QuarterBitSize) | GetLowerQuarter(secondQ), (thirdQ << QuarterBitSize) | fourthQ);
     }
@@ -308,37 +385,93 @@ private:
             }
         }
 
-        if (nl) mod = -mod;
-        if (nr != nl) div = -div;
+        if (nl) {
+            mod = -mod;
+        }
+        if (nr != nl) {
+            div = -div;
+        }
 
         return {div, mod};
     }
 };
 
-template<typename T> struct THalfOf;
-template<> struct THalfOf<i16>  { typedef i8 Type; };
-template<> struct THalfOf<ui16> { typedef ui8 Type; };
-template<> struct THalfOf<i32>  { typedef i16 Type; };
-template<> struct THalfOf<ui32> { typedef ui16 Type; };
-template<> struct THalfOf<i64>  { typedef i32 Type; };
-template<> struct THalfOf<ui64> { typedef ui32 Type; };
+template <typename T>
+struct THalfOf;
+template <>
+struct THalfOf<i16> {
+    typedef i8 Type;
+};
+template <>
+struct THalfOf<ui16> {
+    typedef ui8 Type;
+};
+template <>
+struct THalfOf<i32> {
+    typedef i16 Type;
+};
+template <>
+struct THalfOf<ui32> {
+    typedef ui16 Type;
+};
+template <>
+struct THalfOf<i64> {
+    typedef i32 Type;
+};
+template <>
+struct THalfOf<ui64> {
+    typedef ui32 Type;
+};
 #ifndef _win_
-template<> struct THalfOf<i128_t> { typedef i64 Type; };
-template<> struct THalfOf<ui128_t> { typedef ui64 Type; };
+template <>
+struct THalfOf<i128_t> {
+    typedef i64 Type;
+};
+template <>
+struct THalfOf<ui128_t> {
+    typedef ui64 Type;
+};
 #endif
-template<typename T> struct THalfOf {};
+template <typename T>
+struct THalfOf {};
 
-template<typename T> struct TPairOf;
-template<> struct TPairOf<i8>   { typedef i16 Type; };
-template<> struct TPairOf<ui8>  { typedef ui16 Type; };
-template<> struct TPairOf<i16>  { typedef i32 Type; };
-template<> struct TPairOf<ui16> { typedef ui32 Type; };
-template<> struct TPairOf<i32>  { typedef i64 Type; };
-template<> struct TPairOf<ui32> { typedef ui64 Type; };
+template <typename T>
+struct TPairOf;
+template <>
+struct TPairOf<i8> {
+    typedef i16 Type;
+};
+template <>
+struct TPairOf<ui8> {
+    typedef ui16 Type;
+};
+template <>
+struct TPairOf<i16> {
+    typedef i32 Type;
+};
+template <>
+struct TPairOf<ui16> {
+    typedef ui32 Type;
+};
+template <>
+struct TPairOf<i32> {
+    typedef i64 Type;
+};
+template <>
+struct TPairOf<ui32> {
+    typedef ui64 Type;
+};
 #ifndef _win_
-template<> struct TPairOf<i64>  { typedef i128_t Type; };
-template<> struct TPairOf<ui64> { typedef ui128_t Type; };
+template <>
+struct TPairOf<i64> {
+    typedef i128_t Type;
+};
+template <>
+struct TPairOf<ui64> {
+    typedef ui128_t Type;
+};
 #endif
-template<typename T> struct TPairOf {};
+template <typename T>
+struct TPairOf {};
 
-}
+} // namespace NYql

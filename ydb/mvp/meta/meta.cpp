@@ -19,6 +19,7 @@
 #define MLOG_D(stream) LOG_DEBUG_S((NMVP::InstanceMVP->ActorSystem), EService::MVP, stream)
 
 using namespace NMVP;
+using namespace NActors;
 
 NHttp::TCachePolicy GetIncomingMetaCachePolicy(const NHttp::THttpRequest* request) {
     NHttp::TCachePolicy policy;
@@ -26,7 +27,7 @@ NHttp::TCachePolicy GetIncomingMetaCachePolicy(const NHttp::THttpRequest* reques
         return policy;
     }
     TStringBuf url(request->URL);
-    if (url.starts_with("/meta/cp_databases")) {
+    if (!TMVP::DbUserTokenSource && url.starts_with("/meta/cp_databases")) {
         policy.TimeToExpire = TDuration::Days(3);
         policy.TimeToRefresh = TDuration::Seconds(60);
         policy.KeepOnError = true;

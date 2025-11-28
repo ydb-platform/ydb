@@ -12,6 +12,8 @@
 
 namespace {
 
+using namespace NActors;
+
 template <typename HttpType>
 void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
     request->EnsureEnoughSpaceAvailable(data.size());

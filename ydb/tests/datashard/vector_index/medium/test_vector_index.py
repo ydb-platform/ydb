@@ -182,36 +182,18 @@ class TestVectorIndex(VectorBase):
             rows.reverse()
         count = 0
         for data_type in all_types.keys():
-            if (
-                data_type != "Date32"
-                and data_type != "Datetime64"
-                and data_type != "Timestamp64"
-                and data_type != 'Interval64'
-                and data_type != 'String'
-            ):
+            if data_type != 'String':
                 for i in range(len(rows)):
                     dml.assert_type(all_types, data_type, i + 1, rows[i][count])
                 count += 1
         for data_type in pk_types.keys():
-            if (
-                data_type != "Date32"
-                and data_type != "Datetime64"
-                and data_type != "Timestamp64"
-                and data_type != 'Interval64'
-            ):
-                for i in range(len(rows)):
-                    dml.assert_type(pk_types, data_type, i + 1, rows[i][count])
-                count += 1
+            for i in range(len(rows)):
+                dml.assert_type(pk_types, data_type, i + 1, rows[i][count])
+            count += 1
         for data_type in index.keys():
-            if (
-                data_type != "Date32"
-                and data_type != "Datetime64"
-                and data_type != "Timestamp64"
-                and data_type != 'Interval64'
-            ):
-                for i in range(len(rows)):
-                    dml.assert_type(index, data_type, i + 1, rows[i][count])
-                count += 1
+            for i in range(len(rows)):
+                dml.assert_type(index, data_type, i + 1, rows[i][count])
+            count += 1
         if ttl != "":
             for i in range(len(rows)):
                 dml.assert_type(ttl_types, ttl, i + 1, rows[i][count])
@@ -389,34 +371,16 @@ class TestVectorIndex(VectorBase):
                 rows.reverse()
             count = 0
             for data_type in all_types.keys():
-                if (
-                    data_type != "Date32"
-                    and data_type != "Datetime64"
-                    and data_type != "Timestamp64"
-                    and data_type != 'Interval64'
-                    and data_type != 'String'
-                ):
+                if data_type != 'String':
                     for j in range(len(rows)):
                         dml.assert_type(all_types, data_type, i + j * 5, rows[j][count])
                     count += 1
             for data_type in pk_types.keys():
-                if (
-                    data_type != "Date32"
-                    and data_type != "Datetime64"
-                    and data_type != "Timestamp64"
-                    and data_type != 'Interval64'
-                ):
-                    for j in range(len(rows)):
-                        dml.assert_type(pk_types, data_type, i + j * 5, rows[j][count])
-                    count += 1
+                for j in range(len(rows)):
+                    dml.assert_type(pk_types, data_type, i + j * 5, rows[j][count])
+                count += 1
             for data_type in index.keys():
-                if (
-                    data_type != "Date32"
-                    and data_type != "Datetime64"
-                    and data_type != "Timestamp64"
-                    and data_type != 'Interval64'
-                    and data_type != 'String'
-                ):
+                if data_type != 'String':
                     for j in range(len(rows)):
                         dml.assert_type(index, data_type, i + j * 5, rows[j][count])
                     count += 1

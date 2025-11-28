@@ -2,7 +2,7 @@
 
 #include "partition_chooser_impl__abstract_chooser_actor.h"
 
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 namespace NKikimr::NPQ::NPartitionChooser {
 

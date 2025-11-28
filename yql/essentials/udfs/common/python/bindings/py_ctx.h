@@ -79,7 +79,7 @@ struct TPyContext: public TSimpleRefCount<TPyContext> {
     }
 
     void Cleanup() {
-        for (auto& o: CleanupList) {
+        for (auto& o : CleanupList) {
             o.Cleanup();
         }
         CleanupList.Clear();
@@ -91,7 +91,7 @@ struct TPyContext: public TSimpleRefCount<TPyContext> {
 };
 
 struct TPyCastContext: public TSimpleRefCount<TPyCastContext> {
-    const NKikimr::NUdf::IValueBuilder *const ValueBuilder;
+    const NKikimr::NUdf::IValueBuilder* const ValueBuilder;
     const TPyContext::TPtr PyCtx;
     std::unordered_map<const NKikimr::NUdf::TType*, TPyObjectPtr> StructTypes;
     bool LazyInputObjects = true;
@@ -103,9 +103,9 @@ struct TPyCastContext: public TSimpleRefCount<TPyCastContext> {
     THolder<IMemoryLock> MemoryLock;
 
     TPyCastContext(
-            const NKikimr::NUdf::IValueBuilder* builder,
-            TPyContext::TPtr pyCtx,
-            THolder<IMemoryLock> memoryLock = {});
+        const NKikimr::NUdf::IValueBuilder* builder,
+        TPyContext::TPtr pyCtx,
+        THolder<IMemoryLock> memoryLock = {});
 
     ~TPyCastContext();
 
@@ -117,4 +117,4 @@ struct TPyCastContext: public TSimpleRefCount<TPyCastContext> {
 
 using TPyCastContextPtr = TPyCastContext::TPtr;
 
-} // namspace NPython
+} // namespace NPython

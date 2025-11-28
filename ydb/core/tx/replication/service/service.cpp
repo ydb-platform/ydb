@@ -99,8 +99,8 @@ public:
         return it->second;
     }
 
-    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor) {
-        auto res = Workers.emplace(id, ops->Register(actor));
+    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId) {
+        auto res = Workers.emplace(id, ops->Register(actor, TMailboxType::HTSwap, poolId));
         Y_ABORT_UNLESS(res.second);
 
         const auto actorId = res.first->second;
@@ -296,7 +296,7 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
     bool EnableSsl() const {
         return std::get<2>(*this);
     }
- 
+
     const TString& CaCert() const {
         return std::get<3>(*this);
     }
@@ -312,6 +312,8 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
             return TConnectionParams(endpoint, database, ssl, caCert, params.GetStaticCredentials().GetUser());
         case NKikimrReplication::TConnectionParams::kOAuthToken:
             return TConnectionParams(endpoint, database, ssl, caCert, params.GetOAuthToken().GetToken());
+        case NKikimrReplication::TConnectionParams::kIamCredentials:
+            return TConnectionParams(endpoint, database, ssl, caCert, params.GetIamCredentials().GetServiceAccountId());
         default:
             Y_ABORT("Unexpected credentials");
         }
@@ -401,6 +403,9 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         case NKikimrReplication::TConnectionParams::kOAuthToken:
             ydbProxy = GetOrCreateYdbProxy(database, TConnectionParams::FromProto(params), params.GetOAuthToken().GetToken());
             break;
+        case NKikimrReplication::TConnectionParams::kIamCredentials:
+            ydbProxy = GetOrCreateYdbProxy(database, TConnectionParams::FromProto(params), params.GetIamCredentials());
+            break;
         default:
             Y_ABORT("Unexpected credentials");
         }
@@ -420,18 +425,20 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     static std::function<IActor*(void)> WriterFn(
+            const TString& database,
             const NKikimrReplication::TLocalTableWriterSettings& writerSettings,
             const NKikimrReplication::TConsistencySettings& consistencySettings)
     {
         const auto mode = consistencySettings.HasGlobal()
             ? EWriteMode::Consistent
             : EWriteMode::Simple;
-        return [tablePathId = TPathId::FromProto(writerSettings.GetPathId()), mode]() {
-            return CreateLocalTableWriter(tablePathId, mode);
+        return [database, tablePathId = TPathId::FromProto(writerSettings.GetPathId()), mode]() {
+            return CreateLocalTableWriter(database, tablePathId, mode);
         };
     }
 
     std::function<IActor*(void)> TransferWriterFn(
+            const TString& database,
             const NKikimrReplication::TTransferWriterSettings& writerSettings,
             const ITransferWriterFactory* transferWriterFactory)
     {
@@ -447,9 +454,11 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             compilationService = *CompilationService,
             batchingSettings = writerSettings.GetBatching(),
             transferWriterFactory = transferWriterFactory,
-            runAsUser = writerSettings.GetRunAsUser()
+            runAsUser = writerSettings.GetRunAsUser(),
+            directoryPath = writerSettings.GetDirectoryPath(),
+            database = database
         ]() {
-            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings, runAsUser});
+            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings, runAsUser, directoryPath, database});
         };
     }
 
@@ -490,11 +499,12 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
         bool autoCommit = true;
+        ui32 poolId = AppData()->UserPoolId;
         std::function<IActor*(void)> writerFn;
         if (cmd.HasLocalTableWriter()) {
             const auto& writerSettings = cmd.GetLocalTableWriter();
             const auto& consistencySettings = cmd.GetConsistencySettings();
-            writerFn = WriterFn(writerSettings, consistencySettings);
+            writerFn = WriterFn(cmd.GetDatabase(), writerSettings, consistencySettings);
         } else if (cmd.HasTransferWriter()) {
             const auto& writerSettings = cmd.GetTransferWriter();
             const auto* transferWriterFactory = AppData()->TransferWriterFactory.get();
@@ -503,12 +513,13 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                 return;
             }
             autoCommit = false;
-            writerFn = TransferWriterFn(writerSettings, transferWriterFactory);
+            poolId = AppData()->BatchPoolId;
+            writerFn = TransferWriterFn(cmd.GetDatabase(), writerSettings, transferWriterFactory);
         } else {
             Y_ABORT("Unsupported");
         }
         const auto actorId = session.RegisterWorker(this, id,
-            CreateWorker(SelfId(), ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit), std::move(writerFn)));
+            CreateWorker(SelfId(), ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit), std::move(writerFn)), poolId);
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 

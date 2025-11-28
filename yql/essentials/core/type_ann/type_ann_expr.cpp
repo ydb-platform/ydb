@@ -308,6 +308,7 @@ private:
                     ctx.MakeType<TTupleExprType>(children));
                 CheckExpected(*input, ctx);
                 CalculateWorld(*input);
+                input->UpdateSideEffectsFromChildren();
                 return TStatus::Ok;
             }
 
@@ -371,6 +372,7 @@ private:
                 if (input->GetTypeAnn()) {
                     CheckExpected(*input, ctx);
                     CalculateWorld(*input);
+                    input->UpdateSideEffectsFromChildren();
                 }
 
                 return TStatus::Ok;
@@ -421,6 +423,7 @@ private:
                 }
 
                 FunctionStack_.MarkUsed();
+                input->UpdateSideEffectsFromChildren();
                 auto cyclesBefore = PrintCallableTimes ? GetCycleCount() : 0;
                 auto status = CallableTransformer_->Transform(input, output, ctx);
                 auto cyclesAfter = PrintCallableTimes ? GetCycleCount() : 0;
@@ -445,6 +448,9 @@ private:
                     input->SetState(TExprNode::EState::TypeComplete);
                     CheckExpected(*input, ctx);
                     CalculateWorld(*input);
+                    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+                        input->SetSideEffects(ESideEffects::None);
+                    }
                 }
                 else if (status == TStatus::Async) {
                     CallableInputs_.push_back(input);
@@ -622,14 +628,22 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
     transformers.push_back(TTransformStage(
         CreateFunctorTransformer(
             [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            return ValidateProviders(input, output, ctx, typeAnnotationContext);
-        }),
+                return ValidateProviders(input, output, ctx, typeAnnotationContext);
+            }
+        ),
         "ValidateProviders",
         issueCode));
-
     transformers.push_back(TTransformStage(
         CreateConfigureTransformer(typeAnnotationContext),
         "Configure",
+        issueCode));
+    transformers.push_back(TTransformStage(
+        CreateFunctorTransformer(
+            [&typeAnnotationContext](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                return ExpandSeq(input, output, ctx, typeAnnotationContext);
+            }
+        ),
+        "ExpandSeq",
         issueCode));
 
     // NOTE: add fake EvaluateExpression step to break infinite loop

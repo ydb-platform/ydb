@@ -20,9 +20,6 @@ class TestZipBomb(object):
             extra_feature_flags={'enable_write_portions_on_insert': True},
             static_pdisk_size=10 * 1024 * 1024,
             dynamic_pdisk_size=5 * 1024 * 1024,
-            memory_controller_config={
-                "column_tables_read_execution_limit_bytes": 10 * 1024 * 1024 * 1024  # original limit for this test
-            }
         ))
         cls.cluster.start()
 

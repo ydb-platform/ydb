@@ -1,0 +1,8 @@
+items:
+  - name: Quick start
+    href: olap_quickstart.md
+  - name: Dataset import
+    href: datasets/index.md
+    include:
+      mode: link
+      path: datasets/toc_p.yaml

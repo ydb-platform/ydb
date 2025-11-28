@@ -9,9 +9,14 @@ TEST_SRCS(
     test_state_storage_workload.py
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:32 cpu:4)
 
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(IAM_TOKEN="")

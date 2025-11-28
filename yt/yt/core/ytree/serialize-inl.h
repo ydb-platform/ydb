@@ -24,13 +24,13 @@ namespace NYT::NYTree {
 
 namespace NDetail {
 
-// all
-inline bool CanOmitValue(const void* /*parameter*/, const void* /*defaultValue*/)
+// All types. Return false_type to indicate at compile time that the result is always false.
+inline std::false_type CanOmitValue(const void* /*parameter*/, const void* /*defaultValue*/)
 {
-    return false;
+    return {};
 }
 
-// TIntrusivePtr
+// TIntrusivePtr.
 template <class T>
 bool CanOmitValue(const TIntrusivePtr<T>* parameter, const TIntrusivePtr<T>* defaultValue)
 {
@@ -43,9 +43,21 @@ bool CanOmitValue(const TIntrusivePtr<T>* parameter, const TIntrusivePtr<T>* def
     return false;
 }
 
-// std::optional
+// std::optional.
 template <class T>
 bool CanOmitValue(const std::optional<T>* parameter, const std::optional<T>* defaultValue)
+{
+    if (!defaultValue) {
+        return !*parameter;
+    }
+    if (!*parameter && !*defaultValue) {
+        return true;
+    }
+    return false;
+}
+
+// TYsonString.
+inline bool CanOmitValue(const NYson::TYsonString* parameter, const NYson::TYsonString* defaultValue)
 {
     if (!defaultValue) {
         return !*parameter;
@@ -465,7 +477,7 @@ void Serialize(const TEnumIndexedArray<E, T, Min, Max>& vector, NYson::IYsonCons
             continue;
         }
         const auto& value = vector[key];
-        if (!NDetail::CanOmitValue(&value, nullptr)) {
+        if (!NDetail::CanOmitValue(&value, static_cast<T*>(nullptr))) {
             consumer->OnKeyedItem(FormatEnum(key));
             Serialize(value, consumer);
         }

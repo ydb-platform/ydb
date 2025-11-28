@@ -102,6 +102,7 @@ NApi::ITransactionPtr TTransactionalCommandBase<
         NApi::TTransactionAttachOptions options;
         options.Ping = this->Options.Ping;
         options.PingAncestors = this->Options.PingAncestors;
+        options.PingerAddress = context->Request().UserRemoteAddress;
         transaction = context->GetClient()->AttachTransaction(transactionId, options);
     }
 
@@ -428,7 +429,7 @@ void TSelectRowsCommandBase<
         })
         .Optional(/*init*/ false);
 
-    registrar.template ParameterWithUniversalAccessor<int>(
+    registrar.template ParameterWithUniversalAccessor<std::optional<int>>(
         "expression_builder_version",
         [] (TThis* command) -> auto& {
             return command->Options.ExpressionBuilderVersion;

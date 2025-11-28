@@ -106,6 +106,8 @@ private:
             WaitingResolveReply = true;
         } else {
             TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+            request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
+
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Path = std::move(path);
             if (entry.Path.empty()) {
@@ -259,7 +261,7 @@ private:
         KeyRange.Reset(new TKeyDesc(entry.TableId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, columns));
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
-
+        request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
         request->ResultSet.emplace_back(std::move(KeyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));

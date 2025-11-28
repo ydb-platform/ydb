@@ -23,11 +23,43 @@ TCommitOffsetActor::TCommitOffsetActor(
     , NewSchemeCache(newSchemeCache)
     , AuthInitActor()
     , Counters(counters)
-    , TopicsHandler(topicsHandler)
+    , TopicsHandler(std::make_unique<NPersQueue::TTopicsListController>(topicsHandler))
 {
     Y_ASSERT(request);
 }
 
+TCommitOffsetActor::TCommitOffsetActor(
+        NKikimr::NGRpcService::IRequestOpCtx * ctx, const NPersQueue::TTopicsListController& topicsHandler,
+        const TActorId& schemeCache, const TActorId& newSchemeCache,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
+)
+    : TBase(ctx)
+    , SchemeCache(schemeCache)
+    , NewSchemeCache(newSchemeCache)
+    , AuthInitActor()
+    , Counters(counters)
+    , TopicsHandler(std::make_unique<NPersQueue::TTopicsListController>(topicsHandler))
+{
+    Y_ASSERT(ctx);
+}
+
+TCommitOffsetActor::TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
+    : TBase(ctx)
+    , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
+    , NewSchemeCache(MakeSchemeCacheID())
+    , AuthInitActor()
+    , Counters(nullptr)
+{
+}
+
+TCommitOffsetActor::TCommitOffsetActor(NGRpcService::TEvCommitOffsetRequest* request)
+    : TBase(request)
+    , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
+    , NewSchemeCache(MakeSchemeCacheID())
+    , AuthInitActor()
+    , Counters(nullptr)
+{
+}
 
 TCommitOffsetActor::~TCommitOffsetActor() = default;
 
@@ -40,6 +72,15 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     Y_ABORT_UNLESS(request);
     ClientId = NPersQueue::ConvertNewConsumerName(request->consumer(), ctx);
     PartitionId = request->Getpartition_id();
+
+    if (TopicsHandler == nullptr) {
+        TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
+            NKikimrPQ::TPQConfig(), ""
+        );
+        TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
+                TopicConverterFactory
+        );
+    }
 
     TIntrusivePtr<NACLib::TUserToken> token;
     if (Request_->GetSerializedToken().empty()) {
@@ -59,7 +100,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     }
     topicsToResolve.insert(request->path());
 
-    auto topicsList = TopicsHandler.GetReadTopicsList(
+    auto topicsList = TopicsHandler->GetReadTopicsList(
             topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString())
     );
     if (!topicsList.IsValid) {
@@ -71,7 +112,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
 
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
             ctx, ctx.SelfID, ClientId, 0, TString("read_info:") + Request().GetPeerName(),
-            SchemeCache, NewSchemeCache, Counters, token, topicsList, TopicsHandler.GetLocalCluster()
+            SchemeCache, NewSchemeCache, Counters, token, topicsList, TopicsHandler->GetLocalCluster()
     ));
 }
 

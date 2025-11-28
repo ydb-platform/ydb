@@ -7,4 +7,4 @@ TString NormalizeName(TStringBuf name) {
     return NYql::NormalizeName(name);
 }
 
-}
+} // namespace NSQLTranslationPG

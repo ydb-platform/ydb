@@ -561,6 +561,12 @@ void TConfigsProvider::ProcessScheduledUpdates(const TActorContext &ctx)
     *Counters.InflightConfigUpdates = InflightUpdates.size();
 }
 
+void TConfigsProvider::RemoveSubscription(const TActorId& subscriber) {
+    InMemoryIndex.RemoveSubscription(subscriber);
+    ScheduledUpdates.erase(subscriber);
+    InflightUpdates.erase(subscriber);
+}
+
 void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,
                                          const TActorContext &ctx)
 {
@@ -829,7 +835,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
             return;
         }
 
-        InMemoryIndex.RemoveSubscription(subscriber);
+        RemoveSubscription(subscriber);
         Send(existing->Worker, new TEvents::TEvPoisonPill());
     }
 
@@ -886,8 +892,9 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionCanceled::TPtr &e
 
     Y_ABORT_UNLESS(subscription->Worker);
 
-    InMemoryIndex.RemoveSubscription(subscriber);
+    RemoveSubscription(subscriber);
     Send(subscription->Worker, new TEvents::TEvPoisonPill());
+    ProcessScheduledUpdates(ctx);
 }
 
 void TConfigsProvider::Handle(TEvPrivate::TEvWorkerDisconnected::TPtr &ev, const TActorContext &ctx)
@@ -895,9 +902,7 @@ void TConfigsProvider::Handle(TEvPrivate::TEvWorkerDisconnected::TPtr &ev, const
     auto subscription = ev->Get()->Subscription;
     auto existing = InMemoryIndex.GetSubscription(subscription->Subscriber);
     if (existing == subscription) {
-        InMemoryIndex.RemoveSubscription(subscription->Subscriber);
-        ScheduledUpdates.erase(subscription->Subscriber);
-        InflightUpdates.erase(subscription->Subscriber);
+        RemoveSubscription(subscription->Subscriber);
 
         Send(subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionCanceled(subscription->Generation));
 

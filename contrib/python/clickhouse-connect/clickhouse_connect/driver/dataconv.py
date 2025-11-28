@@ -1,9 +1,11 @@
 import array
+
 from datetime import datetime, date, tzinfo
 from ipaddress import IPv4Address
 from typing import Sequence, Optional, Any
 from uuid import UUID, SafeUUID
 
+from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import int_size
 from clickhouse_connect.driver.errors import NONE_IN_NULLABLE_COLUMN
 from clickhouse_connect.driver.types import ByteSource
@@ -29,7 +31,7 @@ def read_ipv4_col(source: ByteSource, num_rows: int):
 def read_datetime_col(source: ByteSource, num_rows: int, tz_info: Optional[tzinfo]):
     src_array = source.read_array('I', num_rows)
     if tz_info is None:
-        fts = datetime.utcfromtimestamp
+        fts = tzutil.utcfromtimestamp
         return [fts(ts) for ts in src_array]
     fts = datetime.fromtimestamp
     return [fts(ts, tz_info) for ts in src_array]

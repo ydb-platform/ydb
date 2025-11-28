@@ -9,9 +9,15 @@ WITHOUT_LICENSE_TEXTS()
 NO_PYTHON_INCLUDES()
 
 IF (USE_ARCADIA_PYTHON)
-    ADDINCL(
-        GLOBAL contrib/libs/python/Include
-    )
+    IF (USE_PYTHON3_PREV)
+        ADDINCL(
+            GLOBAL contrib/libs/python/Include_prev
+        )
+    ELSE()
+        ADDINCL(
+            GLOBAL contrib/libs/python/Include
+        )
+    ENDIF()
 
     PEERDIR(
         library/python/symbols/module
@@ -35,11 +41,26 @@ IF (USE_ARCADIA_PYTHON)
         CFLAGS(
             GLOBAL -DUSE_PYTHON3
         )
+        
         PEERDIR(
-            contrib/tools/python3/lib2
-            contrib/tools/python3
             library/python/runtime_py3
         )
+
+        IF (USE_PYTHON3_PREV)
+            PEERDIR(
+                contrib/tools/python3_prev/lib2
+                contrib/tools/python3_prev
+            )
+
+            CFLAGS(
+                GLOBAL -DUSE_PYTHON3_PREV
+            )
+        ELSE()
+            PEERDIR(
+                contrib/tools/python3/lib2
+                contrib/tools/python3
+            )
+        ENDIF()
     ENDIF()
 ELSE()
     IF (USE_SYSTEM_PYTHON)

@@ -85,7 +85,7 @@ class PublicReaderSettings:
         )
 
     def _retry_settings(self) -> RetrySettings:
-        return RetrySettings(idempotent=True)
+        return RetrySettings(idempotent=True, retry_cancelled=True)
 
 
 class RetryPolicy:

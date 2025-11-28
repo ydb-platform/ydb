@@ -29,12 +29,12 @@ int main(int, char**) {
     auto arg = pgmBuilder.Arg(argType);
     auto prefixNode = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(prefix);
     auto concat = pgmBuilder.Concat(prefixNode, arg);
-    auto pgm = pgmBuilder.NewList(argType, { prefixNode, prefixNode, concat, concat });
+    auto pgm = pgmBuilder.NewList(argType, {prefixNode, prefixNode, concat, concat});
     TExploringNodeVisitor explorer;
     explorer.Walk(pgm.GetNode(), env);
     TComputationPatternOpts opts(alloc.Ref(), env, GetBuiltinFactory(),
-        functionRegistry.Get(), NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, "OFF", EGraphPerProcess::Multi);
-    auto pattern = MakeComputationPattern(explorer, pgm, { arg.GetNode(), pgm.GetNode() }, opts);
+                                 functionRegistry.Get(), NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, "OFF", EGraphPerProcess::Multi);
+    auto pattern = MakeComputationPattern(explorer, pgm, {arg.GetNode(), pgm.GetNode()}, opts);
 
     TSimpleTimer timer;
     TVector<THolder<TThread>> threads;

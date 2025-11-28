@@ -16,7 +16,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-#include <ydb/library/actors/interconnect/interconnect_impl.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
@@ -652,16 +651,16 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             promise.GetFuture().GetValueSync();
         };
 
-        const auto& dedicatedTennant = ydb->GetSettings().GetDedicatedTenantName();
-        checkCache(dedicatedTennant, dedicatedTennant, 2);
+        const auto& dedicatedTenant = ydb->GetSettings().GetDedicatedTenantName();
+        checkCache(dedicatedTenant, dedicatedTenant, ydb->GetDedicatedTenantInfo().NodeIdx);
 
-        const auto& sharedTennant = ydb->GetSettings().GetSharedTenantName();
-        checkCache(sharedTennant, sharedTennant, 1);
+        const auto& sharedTenant = ydb->GetSettings().GetSharedTenantName();
+        checkCache(sharedTenant, sharedTenant, ydb->GetSharedTenantInfo().NodeIdx);
 
-        const auto& serverlessTennant = ydb->GetSettings().GetServerlessTenantName();
-        const auto serverlessTenantPathId = ydb->GetServerlessTenantPathId();
-        checkCache(serverlessTennant, TStringBuilder() << ":" << serverlessTenantPathId << ":" << serverlessTennant, 1);
+        const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
+        const auto& serverlessInfo = ydb->GetServerlessTenantInfo();
+        checkCache(serverlessTenant, TStringBuilder() << ":" << serverlessInfo.PathId << ":" << serverlessTenant, serverlessInfo.NodeIdx);
     }
 
-} // namspace NKqp
+} // namespace NKqp
 } // namespace NKikimr

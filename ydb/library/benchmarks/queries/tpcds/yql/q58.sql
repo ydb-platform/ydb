@@ -43,11 +43,11 @@ $ws_items =
 -- start query 1 in stream 0 using template query58.tpl and seed 1819994127
   select  ss_items.item_id
        ,ss_item_rev
-       ,ss_item_rev/((ss_item_rev+cs_item_rev+ws_item_rev)/3) * 100 ss_dev
+       ,$upscale(ss_item_rev)/$upscale((ss_item_rev+cs_item_rev+ws_item_rev)/3) * 100 ss_dev
        ,cs_item_rev
-       ,cs_item_rev/((ss_item_rev+cs_item_rev+ws_item_rev)/3) * 100 cs_dev
+       ,$upscale(cs_item_rev)/$upscale((ss_item_rev+cs_item_rev+ws_item_rev)/3) * 100 cs_dev
        ,ws_item_rev
-       ,ws_item_rev/((ss_item_rev+cs_item_rev+ws_item_rev)/3) * 100 ws_dev
+       ,$upscale(ws_item_rev)/$upscale((ss_item_rev+cs_item_rev+ws_item_rev)/3) * 100 ws_dev
        ,(ss_item_rev+cs_item_rev+ws_item_rev)/3 average
  from $ss_items ss_items cross join $cs_items cs_items cross join $ws_items ws_items
  where ss_items.item_id=cs_items.item_id

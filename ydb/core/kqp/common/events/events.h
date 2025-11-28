@@ -51,6 +51,18 @@ struct TEvKqp {
 
     using TEvQueryResponse = NPrivateEvents::TEvQueryResponse;
 
+    struct TEvListQueryCacheQueriesRequest: public TEventPB<
+        TEvListQueryCacheQueriesRequest,
+        NKikimrKqp::TEvListCompileCacheQueriesRequest,
+        TKqpEvents::EvListCompileCacheQueriesRequest>
+    {};
+
+    struct TEvListQueryCacheQueriesResponse: public TEventPB<
+        TEvListQueryCacheQueriesResponse,
+        NKikimrKqp::TEvListCompileCacheQueriesResponse,
+        TKqpEvents::EvListCompileCacheQueriesResponse>
+    {};
+
     struct TEvListSessionsRequest: public TEventPB<TEvListSessionsRequest, NKikimrKqp::TEvListSessionsRequest,
         TKqpEvents::EvListSessionsRequest>
     {};
@@ -122,6 +134,13 @@ struct TEvKqp {
         TDuration ResultsTtl;
         TDuration ProgressStatsPeriod;
         std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> RetryMapping;
+        bool SaveQueryPhysicalGraph = false;
+        std::optional<NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
+        std::optional<TString> ExecutionId;
+        bool DisableDefaultTimeout = false;
+        i64 Generation = 1;
+        TString CheckpointId;
+        TString StreamingQueryPath;
     };
 
     struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {

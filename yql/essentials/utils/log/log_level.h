@@ -5,7 +5,6 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
 
-
 namespace NYql {
 namespace NLog {
 
@@ -19,7 +18,10 @@ enum class ELevel {
     TRACE = TLOG_RESOURCES,
 };
 
-struct ELevelHelpers {
+class TLevelHelpers {
+public:
+    TLevelHelpers() = delete;
+
     static constexpr bool Lte(ELevel l1, ELevel l2) {
         return ToInt(l1) <= ToInt(l2);
     }
@@ -38,61 +40,90 @@ struct ELevelHelpers {
 
     static ELevel FromInt(int level) {
         switch (level) {
-        case TLOG_EMERG:
-        case TLOG_ALERT:
-        case TLOG_CRIT: return ELevel::FATAL;
+            case TLOG_EMERG:
+            case TLOG_ALERT:
+            case TLOG_CRIT:
+                return ELevel::FATAL;
 
-        case TLOG_ERR: return ELevel::ERROR;
-        case TLOG_WARNING: return ELevel::WARN;
+            case TLOG_ERR:
+                return ELevel::ERROR;
+            case TLOG_WARNING:
+                return ELevel::WARN;
 
-        case TLOG_NOTICE:
-        case TLOG_INFO: return ELevel::INFO;
+            case TLOG_NOTICE:
+            case TLOG_INFO:
+                return ELevel::INFO;
 
-        case TLOG_DEBUG: return ELevel::DEBUG;
-        case TLOG_RESOURCES: return ELevel::TRACE;
+            case TLOG_DEBUG:
+                return ELevel::DEBUG;
+            case TLOG_RESOURCES:
+                return ELevel::TRACE;
 
-        default:
-            return ELevel::INFO;
+            default:
+                return ELevel::INFO;
         }
     }
 
     static TStringBuf ToString(ELevel level) {
         // aligned 5-letters string
         switch (level) {
-        case ELevel::FATAL: return TStringBuf("FATAL");
-        case ELevel::ERROR: return TStringBuf("ERROR");
-        case ELevel::WARN:  return TStringBuf("WARN ");
-        case ELevel::NOTICE:return TStringBuf("NOTE ");
-        case ELevel::INFO:  return TStringBuf("INFO ");
-        case ELevel::DEBUG: return TStringBuf("DEBUG");
-        case ELevel::TRACE: return TStringBuf("TRACE");
+            case ELevel::FATAL:
+                return TStringBuf("FATAL");
+            case ELevel::ERROR:
+                return TStringBuf("ERROR");
+            case ELevel::WARN:
+                return TStringBuf("WARN ");
+            case ELevel::NOTICE:
+                return TStringBuf("NOTE ");
+            case ELevel::INFO:
+                return TStringBuf("INFO ");
+            case ELevel::DEBUG:
+                return TStringBuf("DEBUG");
+            case ELevel::TRACE:
+                return TStringBuf("TRACE");
         }
         ythrow yexception() << "unknown log level: " << ToInt(level);
     }
 
     static ELevel FromString(TStringBuf str) {
         // aligned 5-letters string
-        if (str == TStringBuf("FATAL")) return ELevel::FATAL;
-        if (str == TStringBuf("ERROR")) return ELevel::ERROR;
-        if (str == TStringBuf("WARN ")) return ELevel::WARN;
-        if (str == TStringBuf("NOTE ")) return ELevel::NOTICE;
-        if (str == TStringBuf("INFO ")) return ELevel::INFO;
-        if (str == TStringBuf("DEBUG")) return ELevel::DEBUG;
-        if (str == TStringBuf("TRACE")) return ELevel::TRACE;
+        if (str == TStringBuf("FATAL")) {
+            return ELevel::FATAL;
+        }
+        if (str == TStringBuf("ERROR")) {
+            return ELevel::ERROR;
+        }
+        if (str == TStringBuf("WARN ")) {
+            return ELevel::WARN;
+        }
+        if (str == TStringBuf("NOTE ")) {
+            return ELevel::NOTICE;
+        }
+        if (str == TStringBuf("INFO ")) {
+            return ELevel::INFO;
+        }
+        if (str == TStringBuf("DEBUG")) {
+            return ELevel::DEBUG;
+        }
+        if (str == TStringBuf("TRACE")) {
+            return ELevel::TRACE;
+        }
         ythrow yexception() << "unknown log level: " << str;
     }
 
     template <typename TFunctor>
     static void ForEach(TFunctor&& f) {
-        static const int minValue = ToInt(ELevel::FATAL);
-        static const int maxValue = ToInt(ELevel::TRACE);
+        static const int MinValue = ToInt(ELevel::FATAL);
+        static const int MaxValue = ToInt(ELevel::TRACE);
 
-        for (int l = minValue; l <= maxValue; l++) {
+        for (int l = MinValue; l <= MaxValue; l++) {
             f(FromInt(l));
         }
     }
 };
 
+// TODO(YQL-20086): Migrate YDB to TLevelHelpers
+using ELevelHelpers = TLevelHelpers;
 
-} // namspace NLog
-} // namspace NYql
+} // namespace NLog
+} // namespace NYql

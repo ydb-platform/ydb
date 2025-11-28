@@ -103,11 +103,12 @@ bool TProtoBuilder::WriteData(NYql::NDq::TDqSerializedBatch&& data, const std::f
     TMemoryUsageInfo memInfo("ProtoBuilder");
     THolderFactory holderFactory(Alloc.Ref(), memInfo);
     const auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-    NDq::TDqDataSerializer dataSerializer(TypeEnv, holderFactory, transportVersion);
+
+    NDq::TDqDataSerializer dataDeserializer(TypeEnv, holderFactory, transportVersion, NDq::FromProto(data.Proto.GetValuePackerVersion()));
 
     YQL_ENSURE(!ResultType->IsMulti());
     TUnboxedValueBatch buffer(ResultType);
-    dataSerializer.Deserialize(std::move(data), ResultType, buffer);
+    dataDeserializer.Deserialize(std::move(data), ResultType, buffer);
 
     return buffer.ForEachRow([&func](const auto& value) {
         return func(value);
@@ -121,13 +122,12 @@ bool TProtoBuilder::WriteData(TVector<NYql::NDq::TDqSerializedBatch>&& rows, con
     TMemoryUsageInfo memInfo("ProtoBuilder");
     THolderFactory holderFactory(Alloc.Ref(), memInfo);
     const auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-    NDq::TDqDataSerializer dataSerializer(TypeEnv, holderFactory, transportVersion);
-
     YQL_ENSURE(!ResultType->IsMulti());
 
     for (auto& part : rows) {
         TUnboxedValueBatch buffer(ResultType);
-        dataSerializer.Deserialize(std::move(part), ResultType, buffer);
+        NDq::TDqDataSerializer dataDeserializer(TypeEnv, holderFactory, transportVersion, NDq::FromProto(part.Proto.GetValuePackerVersion()));
+        dataDeserializer.Deserialize(std::move(part), ResultType, buffer);
         if (!buffer.ForEachRow([&func](const auto& value) { return func(value); })) {
             return false;
         }

@@ -11,7 +11,7 @@ if sys.implementation.name != "cpython":
 
 if not NO_EXTENSIONS:  # pragma: no branch
     try:
-        from ._quoting_c import _Quoter, _Unquoter  # type: ignore[assignment]
+        from ._quoting_c import _Quoter, _Unquoter
     except ImportError:  # pragma: no cover
         from ._quoting_py import _Quoter, _Unquoter  # type: ignore[assignment]
 else:

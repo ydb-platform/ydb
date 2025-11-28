@@ -23,6 +23,8 @@
 #include <yql/essentials/utils/yql_paths.h>
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 
+#include <yql/essentials/utils/checkpoint_map.h>
+
 #include <util/generic/xrange.h>
 #include <util/generic/scope.h>
 #include <util/string/ascii.h>
@@ -421,13 +423,9 @@ TExprNode::TPtr ExpandReplicateScalars(const TExprNode::TPtr& node, TExprContext
     }
 
     return ctx.Builder(node->Pos())
-        .Callable("FromFlow")
-            .Callable(0, "WideMap")
-                .Callable(0, "ToFlow")
-                    .Add(0, node->HeadPtr())
-                .Seal()
-                .Add(1, ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), std::move(args)), std::move(bodyItems)))
-            .Seal()
+        .Callable("WideMap")
+            .Add(0, node->HeadPtr())
+            .Add(1, ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), std::move(args)), std::move(bodyItems)))
         .Seal()
         .Build();
 }
@@ -588,27 +586,27 @@ std::vector<std::tuple<TExprNode::TPtr, bool, TExprNode::TPtr>> GetRenames(const
         if (const auto it = renames.find(name); renames.cend() != it) {
             const auto& source = it->second.front()->Content();
             if (const auto& part = CutAlias(lAlias, source)) {
-                if (const auto itemType = lType->FindItemType(*part))
+                if (/* const auto itemType = */ lType->FindItemType(*part))
                     result.emplace_back(ctx.NewAtom(join.Pos(), *part), true, std::move(it->second.back()));
             } else if (const auto& part = CutAlias(rAlias, source)) {
-                if (const auto itemType = rType->FindItemType(*part))
+                if (/* const auto itemType = */ rType->FindItemType(*part))
                     result.emplace_back(ctx.NewAtom(join.Pos(), *part), false, std::move(it->second.back()));
-            } else if (const auto itemType = lType->FindItemType(source)) {
+            } else if (/* const auto itemType = */ lType->FindItemType(source)) {
                 result.emplace_back(std::move(it->second.front()), true, std::move(it->second.back()));
-            } else if (const auto itemType = rType->FindItemType(source)) {
+            } else if (/* const auto itemType = */ rType->FindItemType(source)) {
                 result.emplace_back(std::move(it->second.front()), false, std::move(it->second.back()));
             }
         } else {
             auto pass = ctx.NewAtom(join.Pos(), name);
             if (const auto& part = CutAlias(lAlias, name)) {
-                if (const auto itemType = lType->FindItemType(*part))
+                if (/* const auto itemType = */ lType->FindItemType(*part))
                     result.emplace_back(ctx.NewAtom(join.Pos(), *part), true, std::move(pass));
             } else if (const auto& part = CutAlias(rAlias, name)) {
-                if (const auto itemType = rType->FindItemType(*part))
+                if (/* const auto itemType = */ rType->FindItemType(*part))
                     result.emplace_back(ctx.NewAtom(join.Pos(), *part), false, std::move(pass));
-            } else if (const auto itemType = lType->FindItemType(name)) {
+            } else if (/* const auto itemType = */ lType->FindItemType(name)) {
                 result.emplace_back(pass, true, pass);
-            } else if (const auto itemType = rType->FindItemType(name)) {
+            } else if (/* const auto itemType = */ rType->FindItemType(name)) {
                 result.emplace_back(pass, false, pass);
             }
         }
@@ -2498,7 +2496,7 @@ TExprNode::TPtr TryExpandFlatMapOverTableSource(const TExprNode::TPtr& node, TEx
 }
 
 template <bool Ordered>
-TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (auto res = TryExpandFlatMapOverTableSource(node, ctx)) {
         return res;
     }
@@ -2594,7 +2592,7 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
             .Build();
     }
 
-    if (node->Head().IsCallable("NarrowMap")) {
+    if (node->Head().IsCallable("NarrowMap") && CanFuseLambdas(*node->Child(1), *node->Head().Child(1), types)) {
         return FuseNarrowMap<true>(*node, ctx);
     }
 
@@ -2607,10 +2605,16 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 template<bool Ordered>
-TExprNode::TPtr OptimizeMultiMap(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr OptimizeMultiMap(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap")) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1), types)) {
+            return node;
+        }
         return FuseNarrowMap<false>(*node, ctx);
     } else if (input.IsCallable({"MultiMap", "OrderedMultiMap", "NarrowMultiMap"})) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1), types)) {
+            return node;
+        }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
         return ctx.NewCallable(node->Pos(), Ordered || input.IsCallable("NarrowMultiMap") ? input.Content() : node->Content(), {input.HeadPtr(), ctx.FuseLambdas(node->Tail(), input.Tail())});
     }
@@ -3409,7 +3413,7 @@ TExprNode::TPtr ExpandMinMax(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 template <bool Ordered>
-TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     const auto& arg = node->Tail().Head().Head();
     if (!arg.IsUsedInDependsOn() && ETypeAnnotationKind::Optional == node->GetTypeAnn()->GetKind()) {
         YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over Optional";
@@ -3443,7 +3447,7 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     if (node->Head().IsCallable("NarrowMap")) {
-        if (!arg.IsUsedInDependsOn()) {
+        if (!arg.IsUsedInDependsOn() && CanFuseLambdas(*node->Child(1), *node->Head().Child(1), types)) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << node->Head().Content();
             const auto width = node->Head().Tail().Head().ChildrenSize();
             auto lambda = ctx.Builder(node->Pos())
@@ -3461,8 +3465,8 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
         }
     }
 
-    if (1U == node->Head().UseCount() && !arg.IsUsedInDependsOn()) {
-        if (node->Head().IsCallable({"Map", "OrderedMap"})) {
+    if (node->Head().IsCallable({"Map", "OrderedMap"})) {
+        if (1U == node->Head().UseCount() && !arg.IsUsedInDependsOn() && CanFuseLambdas(*node->Child(1), *node->Head().Child(1), types)) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " over " << node->Head().Content();
             auto lambda = ctx.Builder(node->Pos())
                     .Lambda()
@@ -3957,8 +3961,11 @@ bool IsSimpleExpand(const TExprNode& out, const TExprNode& arg) {
     return &out == &arg;
 }
 
-TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (const auto& input = node->Head(); input.IsCallable({"Map", "OrderedMap"})) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1), types)) {
+            return node;
+        }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
         auto lambda = ctx.Builder(node->Pos())
             .Lambda()
@@ -4032,8 +4039,10 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
     }
 
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap")) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1), types)) {
+            return node;
+        }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
-
         if (input.Tail().Tail().IsCallable("AsStruct")) {
             auto apply = ApplyNarrowMap(input.Tail(), ctx);
             TLieralStructsCacheMap membersMap; // TODO: move to context.
@@ -5451,10 +5460,7 @@ TExprNode::TPtr DropUnusedStateFromUpdate(const TExprNode& lambda, const std::ve
 }
 
 TExprNode::TPtr MakeWideMapForDropUnused(TExprNode::TPtr&& input, const std::vector<ui32>& unused, TExprContext& ctx) {
-    const bool isFlow = input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
     const auto width = GetStreamOrFlowElementsCount(input->GetTypeAnn());
-    input = isFlow ? std::move(input) : ctx.NewCallable(input->Pos(), "ToFlow", {std::move(input)});
-
     auto result = ctx.Builder(input->Pos())
         .Callable("WideMap")
             .Add(0, std::move(input))
@@ -5469,8 +5475,6 @@ TExprNode::TPtr MakeWideMapForDropUnused(TExprNode::TPtr&& input, const std::vec
                 })
             .Seal()
         .Seal().Build();
-    auto pos = result->Pos();
-    result = isFlow ? result : ctx.NewCallable(pos, "FromFlow", {std::move(result)});
     return result;
 }
 
@@ -6071,18 +6075,20 @@ private:
 };
 
 class TBlockRewriter {
+    using TRewritesMap = TCheckpointHashMap<const TExprNode*, TExprNode::TPtr>;
+
 public:
     TBlockRewriter(TExprContext& ctx, TTypeAnnotationContext& types)
         : Ctx_(ctx)
         , Types_(types)
-        , OnUnsupportedTypeCallback_(std::bind(&TBlockRewriter::OnUnsupportedTypeCallback, this, std::placeholders::_1)){
+        , OnUnsupportedTypeCallback_(std::bind(&TBlockRewriter::OnUnsupportedTypeCallback, this, std::placeholders::_1))
+    {
     }
 
     bool CollectBlockRewrites(TTypeAnnotationNode::TConstSpanType inputTypes, bool keepInputColumns, const TExprNode::TPtr& lambda,
                               ui32& newNodes, TNodeMap<size_t>& rewritePositions,
                               TExprNode::TPtr& blockLambda, TExprNode::TPtr& restLambda) {
         newNodes = 0;
-        YQL_ENSURE(VisitedNodesForRewriteCollect_.size() == 0, "CollectBlockRewrites must be called exactly once.");
         YQL_ENSURE(lambda && lambda->IsLambda());
 
         if (!Types_.ArrowResolver) {
@@ -6097,19 +6103,20 @@ public:
 
         TExprNode::TListType blockArgs = CreateArgs(lambda->Head().ChildrenSize() + 1, lambda->Pos());
 
-        TNodeOnNodeOwnedMap rewrites;
+        TRewritesMap rewrites;
         RewriteLambdaArguments(rewrites, blockArgs, lambda);
         const auto [lazyNonStrict, nonStrict] = CollectLazyNonStrictNodes(lambda);
 
         // clang-format off
+        auto stopPredicate = MakeBlockRewriteStopPredicate(lambda, /*skipAnyLambdaArguments=*/true, /*skipAllInternalLambdas=*/true);
         VisitExpr(lambda,
             [&](const TExprNode::TPtr& node) {
-                bool shouldContinue = !MakeBlockRewriteStopPredicate(lambda, /*skipAnyLambdaArguments=*/true, /*skipAllInternalLambdas=*/true)(node);
+                bool shouldContinue = !stopPredicate(node);
                 return shouldContinue;
             }, [&rewrites, &lazyNonStrict, &nonStrict, this](const TExprNode::TPtr& node) {
                 FigureOutRewriteForEachNode(node, rewrites, lazyNonStrict, nonStrict);
                 return true;
-            }, VisitedNodesForRewriteCollect_);
+            });
         // clang-format on
 
         // calculate extra columns
@@ -6150,18 +6157,16 @@ private:
         return TStringBuilder() << "Node: " << node->Content() << ", id: " << node->UniqueId() << ". ";
     }
 
-    ui32 CollectRewritedNodesCount(const TExprNode::TPtr& lambda, TNodeOnNodeOwnedMap& rewrites) {
+    ui32 CollectRewritedNodesCount(const TExprNode::TPtr& lambda, TRewritesMap& rewrites) {
         ui64 result = 0;
+        auto stopPredicate = MakeBlockRewriteStopPredicate(lambda, /*skipAnyLambdaArguments=*/true, /*skipAllInternalLambdas=*/false);
         VisitExpr(lambda, [&](const TExprNode::TPtr& node) {
-            if (NodesForbiddenForRewriting_.contains(node.Get())) {
-                return false;
-            }
             auto rewrite = rewrites.find(node.Get());
             if (rewrite == rewrites.end()) {
                 return true;
             }
             auto [fromRewrite, toRewrite] = *rewrite;
-            auto shouldStop = MakeBlockRewriteStopPredicate(lambda, /*skipAnyLambdaArguments=*/true, /*skipAllInternalLambdas=*/false)(node);
+            auto shouldStop = stopPredicate(node);
             if (shouldStop) {
                 return false;
             }
@@ -6178,7 +6183,7 @@ private:
         std::visit([this](const auto& value) { this->Types_.IncNoBlockType(value); }, typeKindOrSlot);
     };
 
-    TMaybe<std::tuple<TExprNode::TListType, TExprNode::TListType, TExprNode::TPtr>> GetBlockArgsForIfPresent(TIfPresentCallableView ifPresentView, const TNodeOnNodeOwnedMap& rewrites) {
+    TMaybe<std::tuple<TExprNode::TListType, TExprNode::TListType, TExprNode::TPtr>> GetBlockArgsForIfPresent(TIfPresentCallableView ifPresentView, const TRewritesMap& rewrites) {
         TExprNode::TListType resultUnwrappedArgs, resultExistsArgs;
         for (size_t i = 0; i < ifPresentView.ArgsSize(); ++i) {
             auto rewrited = GetBlockFuncArg(ifPresentView.Arg(i), rewrites);
@@ -6203,58 +6208,48 @@ private:
     }
 
     // Rewrite if present via BlockIf + BlockExists + BlockValidUnwrap.
-    void RewriteIfPresent(TIfPresentCallableView ifPresentView, TNodeOnNodeOwnedMap& rewrites, const TNodeSet& nonStrictNodes) {
+    TExprNode::TPtr RewriteIfPresent(TIfPresentCallableView ifPresentView, TRewritesMap& rewrites, const TNodeSet& nonStrictNodes) {
         // Block Coalesce and block exists between two scalars are available only since 63 version.
         if constexpr (NKikimr::NMiniKQL::RuntimeVersion < 63U) {
-            return;
-        }
-        if (NodesForbiddenForRewriting_.contains(ifPresentView.Lambda().Get())) {
-            YQL_CLOG(TRACE, CorePeepHole) << Log(ifPresentView.Lambda().Get()) << "If present lambda explictly marked as forbidden to rewrite";
-            return;
+            return nullptr;
         }
         // Check that lambda return type is valid.
         if (!IsSupportedAsBlockType(ifPresentView.Lambda()->Pos(), *ifPresentView.Lambda()->GetTypeAnn(), Ctx_, Types_, true)) {
             YQL_CLOG(TRACE, CorePeepHole) << Log(ifPresentView.Lambda().Get()) << "Lambda return type is not supported";
-            return;
+            return nullptr;
         }
 
+        TCheckpointGuard guard(rewrites);
         TExprNode::TListType blockArgs = CreateArgs(ifPresentView.ArgsSize(), ifPresentView.Lambda()->Pos());
         RewriteLambdaArguments(rewrites, blockArgs, ifPresentView.Lambda());
-        Y_DEFER {
-            for (ui32 i = 0; i < ifPresentView.Lambda()->Head().ChildrenSize(); ++i) {
-                rewrites.erase(ifPresentView.Lambda()->Head().Child(i));
-            }
-        };
         auto wrapResult = GetBlockArgsForIfPresent(ifPresentView, rewrites);
         if (!wrapResult) {
             YQL_CLOG(TRACE, CorePeepHole) << Log(ifPresentView.Lambda().Get()) << "Cannot rewrite if present since args are not rewrited";
-            return;
+            return nullptr;
         }
 
-        // Allow enter lambda for if present.
-        VisitedNodesForRewriteCollect_.erase(ifPresentView.Lambda().Get());
-
         // clang-format off
+        auto stopPredicate = MakeBlockRewriteStopPredicate(ifPresentView.Lambda(), /*skipAnyLambdaArguments=*/true, /*skipAllInternalLambdas=*/true);
         VisitExpr(ifPresentView.Lambda(),
                 [&](const TExprNode::TPtr& node) {
-                    bool result = !MakeBlockRewriteStopPredicate(ifPresentView.Lambda(), /*skipAnyLambdaArguments=*/true, /*skipAllInternalLambdas=*/true)(node);
+                    bool result = !stopPredicate(node);
                     return result;
                 },
                 [&rewrites, &nonStrictNodes, this](const TExprNode::TPtr& node) {
                     FigureOutRewriteForEachNode(node, rewrites, nonStrictNodes, nonStrictNodes);
                     return true;
-                }, VisitedNodesForRewriteCollect_);
+                });
         // clang-format on
 
         if (rewrites.find(ifPresentView.LambdaBody().Get()) == rewrites.end()) {
-            NodesForbiddenForRewriting_.insert(ifPresentView.Lambda().Get());
             YQL_CLOG(TRACE, CorePeepHole) << Log(ifPresentView.OriginalNode()) << "Cannot rewrite if present since lambda is not rewrited";
-            return;
+            return nullptr;
         }
+        YQL_CLOG(TRACE, CorePeepHole) << Log(ifPresentView.OriginalNode()) << "If present successfully rewrited";
 
         auto [blockUnwrappedArgs, blockExistsArgs, blockMissingValue] = *wrapResult;
 
-        auto blockLambda = Ctx_.NewLambda(ifPresentView.Lambda()->Pos(), Ctx_.NewArguments(ifPresentView.Lambda()->Pos(), std::move(blockArgs)), {rewrites[ifPresentView.LambdaBody().Get()]});
+        auto blockLambda = Ctx_.NewLambda(ifPresentView.Lambda()->Pos(), Ctx_.NewArguments(ifPresentView.Lambda()->Pos(), std::move(blockArgs)), {rewrites.Get(ifPresentView.LambdaBody().Get())});
 
         // clang-format off
         auto calledLambda = Ctx_.Builder(ifPresentView.OriginalNode()->Pos())
@@ -6274,7 +6269,7 @@ private:
                 .Build();
         // clang-format on
 
-        rewrites[ifPresentView.OriginalNode().Get()] = resultLambda;
+        return resultLambda;
     }
 
     bool IsInputTypesAreSupportedByBlocks(TTypeAnnotationNode::TConstSpanType inputTypes, TPositionHandle pos) {
@@ -6303,13 +6298,13 @@ private:
         return blockArgs;
     }
 
-    void RewriteLambdaArguments(TNodeOnNodeOwnedMap& rewrites, TExprNode::TListType& blockArgs, TExprNode::TPtr lambda) {
+    void RewriteLambdaArguments(TRewritesMap& rewrites, TExprNode::TListType& blockArgs, TExprNode::TPtr lambda) {
         for (ui32 i = 0; i < lambda->Head().ChildrenSize(); ++i) {
-            rewrites[lambda->Head().Child(i)] = blockArgs[i];
+            rewrites.Set(lambda->Head().Child(i), blockArgs[i]);
         }
     }
 
-    TExprNode::TPtr GetBlockFuncArg(TExprNode::TPtr node, const TNodeOnNodeOwnedMap& rewrites) {
+    TExprNode::TPtr GetBlockFuncArg(TExprNode::TPtr node, const TRewritesMap& rewrites) {
         if (!node->GetTypeAnn()->IsComputable()) {
             return node;
         } else if (node->IsComplete() && IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), Ctx_, Types_, true)) {
@@ -6320,7 +6315,7 @@ private:
         return nullptr;
     }
 
-    void FigureOutRewriteForEachNode(const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& rewrites, const TNodeSet& nodesToSkip, const TNodeSet& nonStrictNodes) {
+    void FigureOutRewriteForEachNode(const TExprNode::TPtr& node, TRewritesMap& rewrites, const TNodeSet& nodesToSkip, const TNodeSet& nonStrictNodes) {
         YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Rewriting node";
         Y_DEFER {
             YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Stop rewriting node";
@@ -6357,7 +6352,9 @@ private:
 
         if (node->IsCallable("IfPresent")) {
             YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Rewriting if present";
-            RewriteIfPresent(TIfPresentCallableView(node), rewrites, nonStrictNodes);
+            if (auto rewritedIfPresent = RewriteIfPresent(TIfPresentCallableView(node), rewrites, nonStrictNodes)) {
+                rewrites.Set(node.Get(), rewritedIfPresent);
+            }
             return;
         }
 
@@ -6427,9 +6424,9 @@ private:
             const TString blockFuncName = rewriteAsIs ? ToString(node->Content()) : (TString("Block") + (node->IsList() ? "AsTuple" : node->Content()));
             if (node->IsCallable({"And", "Or", "Xor"}) && funcArgs.size() > 2) {
                 // Split original argument list by pairs (since the order is not important balanced tree is used)
-                rewrites[node.Get()] = SplitByPairs(node->Pos(), blockFuncName, funcArgs, 0, funcArgs.size(), Ctx_);
+                rewrites.Set(node.Get(), SplitByPairs(node->Pos(), blockFuncName, funcArgs, 0, funcArgs.size(), Ctx_));
             } else {
-                rewrites[node.Get()] = Ctx_.NewCallable(node->Pos(), blockFuncName, std::move(funcArgs));
+                rewrites.Set(node.Get(), Ctx_.NewCallable(node->Pos(), blockFuncName, std::move(funcArgs)));
             }
             return;
         }
@@ -6545,11 +6542,11 @@ private:
             }
         }
 
-        rewrites[node.Get()] = Ctx_.NewCallable(node->Pos(), isUdf ? "Apply" : "BlockFunc", std::move(funcArgs));
+        rewrites.Set(node.Get(), Ctx_.NewCallable(node->Pos(), isUdf ? "Apply" : "BlockFunc", std::move(funcArgs)));
         return;
     }
 
-    void EnsureSameElements(const TExprNode::TPtr& lambda, const TNodeOnNodeOwnedMap& rewrites, const TExprNode::TListType& blockArgs) {
+    void EnsureSameElements(const TExprNode::TPtr& lambda, const TRewritesMap& rewrites, const TExprNode::TListType& blockArgs) {
         for (ui32 i = 0; i < lambda->Head().ChildrenSize(); ++i) {
             auto originalArg = lambda->Head().Child(i);
             auto it = rewrites.find(originalArg);
@@ -6570,21 +6567,18 @@ private:
         return originalColumnsArgs;
     }
 
-    TNodeOnNodeOwnedMap RewriteLambdaBodyWithBlocksAsPossible(const TExprNode::TPtr& lambda, TNodeOnNodeOwnedMap& rewrites, TExprNode::TListType& roots, TExprNode::TListType& lambdaArgs, TNodeMap<size_t>& rewritePositions) {
+    TNodeOnNodeOwnedMap RewriteLambdaBodyWithBlocksAsPossible(const TExprNode::TPtr& lambda, TRewritesMap& rewrites, TExprNode::TListType& roots, TExprNode::TListType& lambdaArgs, TNodeMap<size_t>& rewritePositions) {
         TNodeOnNodeOwnedMap subgraphToBlockArgsReplaces;
         for (ui32 i = 1; i < lambda->ChildrenSize(); ++i) {
             if (lambda->ChildPtr(i)->IsComplete()) {
                 auto resolveStatus = Types_.ArrowResolver->AreTypesSupported(Ctx_.GetPosition(lambda->Pos()), {lambda->ChildPtr(i)->GetTypeAnn()}, Ctx_);
                 YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
                 if (resolveStatus == IArrowResolver::OK) {
-                    rewrites[lambda->Child(i)] = Ctx_.NewCallable(lambda->Pos(), "AsScalar", {lambda->ChildPtr(i)});
+                    rewrites.Set(lambda->Child(i), Ctx_.NewCallable(lambda->Pos(), "AsScalar", {lambda->ChildPtr(i)}));
                 }
             }
 
             VisitExpr(lambda->ChildPtr(i), [&](const TExprNode::TPtr& node) {
-                if (NodesForbiddenForRewriting_.contains(node.Get())) {
-                    return false;
-                }
                 auto it = rewrites.find(node.Get());
                 if (it != rewrites.end()) {
                     auto& blockedRewrite = it->second;
@@ -6619,8 +6613,6 @@ private:
     TExprContext& Ctx_;
     TTypeAnnotationContext& Types_;
     IArrowResolver::TUnsupportedTypeCallback OnUnsupportedTypeCallback_;
-    TNodeSet VisitedNodesForRewriteCollect_;
-    TNodeSet NodesForbiddenForRewriting_;
     TString LogPrefix_;
 };
 
@@ -6653,24 +6645,20 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
         if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx, types)) {
             const auto& wideFromBlocks = input.Head();
             // Technically, the code below rewrites the following sequence
-            // (WideMap (ToFlow (WideFromBlocks (FromFlow (<input>)))))
-            // into (ToFlow (WideFromBlocks (FromFlow (WideMap (<input>)).
+            // (WideMap (ToFlow (WideFromBlocks (<input>))))
+            // into (ToFlow (WideFromBlocks (WideMap (<input>).
             // Hence, the logging is left intact.
             YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << wideFromBlocks.Content() << " with " << node->Content();
             // If tail is FromFlow, its input is WideFlow and can be
             // used intact; Otherwise the input is WideStream, so the
             // new input should be converted to WideFlow.
             const auto tail = wideFromBlocks.HeadPtr();
-            const auto flowInput = tail->IsCallable("FromFlow") ? tail->HeadPtr()
-                                 : ctx.NewCallable(tail->Pos(), "ToFlow", { tail });
             return ctx.Builder(node->Pos())
                 .Callable("ToFlow")
                     .Callable(0, "WideFromBlocks")
-                        .Callable(0, "FromFlow")
-                            .Callable(0, "WideMap")
-                                .Add(0, flowInput)
-                                .Add(1, newLambda)
-                            .Seal()
+                        .Callable(0, "WideMap")
+                            .Add(0, tail)
+                            .Add(1, newLambda)
                         .Seal()
                     .Seal()
                 .Seal()
@@ -6682,7 +6670,7 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
         return node;
     }
 
-    auto multiInputType = input.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+    auto* multiInputType = GetWideFlowOrStreamComponents(*input.GetTypeAnn());
     ui32 newNodes;
     TNodeMap<size_t> rewritePositions;
     TExprNode::TPtr blockLambda;
@@ -6690,6 +6678,8 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
     bool keepInputColumns = false;
     if (!TBlockRewriter(ctx, types).CollectBlockRewrites(multiInputType->GetItems(), keepInputColumns, lambda, newNodes, rewritePositions, blockLambda, restLambda)) {
         return node;
+    } else {
+        MKQL_ENSURE(input.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow, "Only flow WideMap node can be rewritten to blocks.");
     }
 
     if (!newNodes) {
@@ -6701,17 +6691,13 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
     auto ret = ctx.Builder(node->Pos())
         .Callable("ToFlow")
             .Callable(0, "WideFromBlocks")
-                .Callable(0, "FromFlow")
-                    .Callable(0, "WideMap")
-                        .Callable(0, "ToFlow")
-                            .Callable(0, "WideToBlocks")
-                                .Callable(0, "FromFlow")
-                                    .Add(0, node->HeadPtr())
-                                .Seal()
-                            .Seal()
+                .Callable(0, "WideMap")
+                    .Callable(0, "WideToBlocks")
+                        .Callable(0, "FromFlow")
+                            .Add(0, node->HeadPtr())
                         .Seal()
-                        .Add(1, blockLambda)
                     .Seal()
+                    .Add(1, blockLambda)
                 .Seal()
             .Seal()
         .Seal()
@@ -6745,11 +6731,9 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
 
     auto blockMapped = ctx.Builder(node->Pos())
         .Callable("WideMap")
-            .Callable(0, "ToFlow")
-                .Callable(0, "WideToBlocks")
-                    .Callable(0, "FromFlow")
-                        .Add(0, node->HeadPtr())
-                    .Seal()
+            .Callable(0, "WideToBlocks")
+                .Callable(0, "FromFlow")
+                    .Add(0, node->HeadPtr())
                 .Seal()
             .Seal()
             .Add(1, blockLambda)
@@ -6760,23 +6744,17 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
         // lambda is block-friendly
         YQL_ENSURE(it->second == multiInputType->GetSize(), "Block filter column must follow original input columns");
         auto result = ctx.Builder(node->Pos())
-            .Callable("ToFlow")
-                .Callable(0, "BlockCompress")
-                    .Callable(0, "FromFlow")
-                        .Add(0, blockMapped)
-                    .Seal()
-                    .Atom(1, it->second)
-                .Seal()
+            .Callable("BlockCompress")
+                .Add(0, blockMapped)
+                .Atom(1, it->second)
             .Seal()
             .Build();
 
         if (node->ChildrenSize() == 3) {
             result = ctx.Builder(node->Pos())
-                .Callable("ToFlow")
-                    .Callable(0, "WideTakeBlocks")
-                        .Add(0, ctx.NewCallable(node->Pos(), "FromFlow", {result}))
-                        .Add(1, node->ChildPtr(2))
-                    .Seal()
+                .Callable("WideTakeBlocks")
+                    .Add(0, result)
+                    .Add(1, node->ChildPtr(2))
                 .Seal()
                 .Build();
         }
@@ -6786,9 +6764,7 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
         return ctx.Builder(node->Pos())
             .Callable("ToFlow")
                 .Callable(0, "WideFromBlocks")
-                    .Callable(0, "FromFlow")
-                        .Add(0, result)
-                    .Seal()
+                    .Add(0, result)
                 .Seal()
             .Seal()
             .Build();
@@ -6801,9 +6777,7 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
         .Callable("WideFilter")
             .Callable(0, "ToFlow")
                 .Callable(0, "WideFromBlocks")
-                    .Callable(0, "FromFlow")
-                        .Add(0, blockMapped)
-                    .Seal()
+                    .Add(0, blockMapped)
                 .Seal()
             .Seal()
             .Add(1, restLambda)
@@ -7055,9 +7029,8 @@ TExprNode::TPtr OptimizeBlockMerge(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TExprNode::TPtr SwapReplicateScalarsWithWideMap(const TExprNode::TPtr& wideMap, TExprContext& ctx) {
-    const auto& child = wideMap->Head();
-    YQL_ENSURE(wideMap->IsCallable("WideMap") && child.IsCallable("ToFlow") && child.Head().IsCallable("ReplicateScalars"));
-    const auto& input = child.Head();
+    const auto& input = wideMap->Head();
+    YQL_ENSURE(wideMap->IsCallable("WideMap") && input.IsCallable("ReplicateScalars"));
     auto inputTypes = input.GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
     YQL_ENSURE(inputTypes.size() > 0);
 
@@ -7120,30 +7093,30 @@ TExprNode::TPtr SwapReplicateScalarsWithWideMap(const TExprNode::TPtr& wideMap, 
     }
 
     return ctx.Builder(wideMap->Pos())
-        .Callable("ToFlow")
-            .Callable(0, "ReplicateScalars")
-                .Callable(0, "FromFlow")
-                    .Callable(0, "WideMap")
-                        .Callable(0, "ToFlow")
-                            .Add(0, input.HeadPtr())
-                        .Seal()
-                        .Add(1, ctx.DeepCopyLambda(lambda))
-                    .Seal()
-                .Seal()
-                .Add(1, ctx.NewList(input.Pos(), std::move(replicatedOutputIndexes)))
+        .Callable("ReplicateScalars")
+            .Callable(0, "WideMap")
+                .Add(0, input.HeadPtr())
+                .Add(1, ctx.DeepCopyLambda(lambda))
             .Seal()
+            .Add(1, ctx.NewList(input.Pos(), std::move(replicatedOutputIndexes)))
         .Seal()
         .Build();
 }
 
-TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (const auto& input = node->Head(); input.IsCallable("ExpandMap")) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1), types)) {
+            return node;
+        }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
         auto lambda = ctx.FuseLambdas(node->Tail(), input.Tail());
         return ctx.NewCallable(node->Pos(),
             node->Content().starts_with("Narrow") ? TString("Ordered") += node->Content().substr(6U, 16U) : input.Content(),
             {input.HeadPtr(), std::move(lambda)});
     } else if (input.IsCallable("WideMap") && !node->IsCallable("NarrowFlatMap")) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1), types)) {
+            return node;
+        }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
         auto lambda = ctx.FuseLambdas(node->Tail(), input.Tail());
         return ctx.ChangeChildren(*node, {input.HeadPtr(), std::move(lambda)});
@@ -7171,6 +7144,7 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();
         } else if (input.IsCallable("ToFlow") && input.Head().IsCallable("BlockCompress")) {
+            // This branch is accessible for NarrowMap/ExpandMap callable optimization since they accept flow type.
             auto& blockCompress = input.Head();
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << blockCompress.Content() << " with " << unused.size() << " unused fields.";
             const auto index = FromString<ui32>(blockCompress.Tail().Content());
@@ -7185,7 +7159,22 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Seal()
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();
+        } else if (input.IsCallable("BlockCompress")) {
+            // This branch is accessible for WideMap callable optimization since it accepts stream type.
+            auto& blockCompress = input;
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << blockCompress.Content() << " with " << unused.size() << " unused fields.";
+            const auto index = FromString<ui32>(blockCompress.Tail().Content());
+            const auto delta = std::distance(unused.cbegin(), std::find_if(unused.cbegin(), unused.cend(), std::bind(std::less<ui32>(), index, std::placeholders::_1)));
+            return ctx.Builder(node->Pos())
+                .Callable(node->Content())
+                    .Callable(0, blockCompress.Content())
+                        .Add(0, MakeWideMapForDropUnused(blockCompress.HeadPtr(), unused, ctx))
+                        .Atom(1, index - delta)
+                    .Seal()
+                    .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
+                .Seal().Build();
         } else if (input.IsCallable("ToFlow") && input.Head().IsCallable("WideToBlocks")) {
+            // This branch is accessible for NarrowMap/ExpandMap callable optimization since they accept flow type.
             auto actualUnused = unused;
             if (actualUnused.back() + 1U == node->Tail().Head().ChildrenSize())
                 actualUnused.pop_back();
@@ -7226,7 +7215,48 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Seal()
                     .Build();
             }
+        } else if (input.IsCallable("WideToBlocks")) {
+            // This branch is accessible for WideMap callable optimization since it accepts stream type.
+            auto actualUnused = unused;
+            if (actualUnused.back() + 1U == node->Tail().Head().ChildrenSize())
+                actualUnused.pop_back();
+            if (!actualUnused.empty()) {
+                const auto& wideToBlocks = input;
+                YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << wideToBlocks.Content() << " with " << actualUnused.size() << " unused fields.";
+                auto tail = wideToBlocks.HeadPtr();
+                const auto width = tail->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetSize();
+                // Note: Here we wrap WideMap with ToFlow/FromFlow
+                // since we allow stream version of WideMap only for Block types.
+                return ctx.Builder(node->Pos())
+                    .Callable(node->Content())
+                        .Callable(0, "WideToBlocks")
+                            .Callable(0, "FromFlow")
+                                .Callable(0, "WideMap")
+                                    .Callable(0, "ToFlow")
+                                        .Add(0, std::move(tail))
+                                    .Seal()
+                                    .Lambda(1)
+                                        .Params("items", width)
+                                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                            for (auto i = 0U, j = 0U; i < width; ++i) {
+                                                if (unused.cend() == std::find(unused.cbegin(), unused.cend(), i))
+                                                    parent.Arg(j++, "items", i);
+                                            }
+                                            return parent;
+                                        })
+                                    .Seal()
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                        .Add(1, DropUnusedArgs(node->Tail(), actualUnused, ctx))
+                    .Seal()
+                    .Build();
+            }
         } else if (input.IsCallable("ToFlow") && input.Head().IsCallable({"WideFromBlocks", "WideTakeBlocks", "WideSkipBlocks"})) {
+            // When Wide{Take,Skip}Blocks are optmized, the acceptable map types are NarrowMap/ExpandMap.
+            // When WideFromBlocks is optimized, the acceptable map types are NarrowMap/ExpandMap/WideMap.
+            // Using flow version of WideMap over WideFromBlocks ensures compliance with the following invariant:
+            // WideMap over stream type used <--> WideMap input types are block types.
             auto& inputHead = input.Head();
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << inputHead.Content() << " with " << unused.size() << " unused fields.";
             auto rewritedInputHead = ctx.ChangeChild(inputHead, 0U, MakeWideMapForDropUnused(inputHead.HeadPtr(), unused, ctx));
@@ -7235,6 +7265,16 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Callable(0,"ToFlow")
                         .Add(0, rewritedInputHead)
                     .Seal()
+                    .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
+                .Seal()
+                .Build();
+        } else if (input.IsCallable({"WideTakeBlocks", "WideSkipBlocks"})) {
+            // This branch is accessible for WideMap callable optimization since it accepts stream type.
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unused.size() << " unused fields.";
+            auto rewritedInputHead = ctx.ChangeChild(input, 0U, MakeWideMapForDropUnused(input.HeadPtr(), unused, ctx));
+            return ctx.Builder(node->Pos())
+                .Callable(node->Content())
+                    .Add(0, rewritedInputHead)
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal()
                 .Build();
@@ -7276,8 +7316,8 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Add(0, ctx.ChangeChildren(input, std::move(children)))
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();
-        } else if (node->IsCallable("WideMap") && input.IsCallable("ToFlow") && input.Head().IsCallable("ReplicateScalars")) {
-            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Head().Content();
+        } else if (node->IsCallable("WideMap") && input.IsCallable("ReplicateScalars")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content();
             return SwapReplicateScalarsWithWideMap(node, ctx);
         }
     }
@@ -7285,7 +7325,7 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
     return node;
 }
 
-TExprNode::TPtr OptimizeNarrowFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr OptimizeNarrowFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     const auto& lambda = node->Tail();
     const auto& body = lambda.Tail();
 
@@ -7351,11 +7391,18 @@ TExprNode::TPtr OptimizeNarrowFlatMap(const TExprNode::TPtr& node, TExprContext&
         }
     }
 
-    return OptimizeWideMaps(node, ctx);
+    return OptimizeWideMaps(node, ctx, types);
 }
 
-TExprNode::TPtr  OptimizeSqueezeToDict(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr OptimizeSqueezeToDict(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap")) {
+        if (!CanFuseLambdas(*node->Child(1), input.Tail(), types)) {
+            return node;
+        }
+        if (!CanFuseLambdas(*node->Child(2), input.Tail(), types)) {
+            return node;
+        }
+
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
         return ctx.NewCallable(node->Pos(), "NarrowSqueezeToDict", {
             input.HeadPtr(),
@@ -9242,15 +9289,18 @@ struct TPeepHoleRules {
     };
 
     const TPeepHoleOptimizerMap SimplifyStageRules = {
-        {"Map", &OptimizeMap<false>},
-        {"OrderedMap", &OptimizeMap<true>},
-        {"FlatMap", &ExpandFlatMap<false>},
-        {"OrderedFlatMap", &ExpandFlatMap<true>},
         {"ListIf", &ExpandContainerIf<false, true>},
         {"OptionalIf", &ExpandContainerIf<false, false>},
         {"FlatListIf", &ExpandContainerIf<true, true>},
         {"FlatOptionalIf", &ExpandContainerIf<true, false>},
         {"IfPresent", &OptimizeIfPresent<false>}
+    };
+
+    const TExtPeepHoleOptimizerMap SimplifyStageExtRules = {
+        {"Map", &OptimizeMap<false>},
+        {"OrderedMap", &OptimizeMap<true>},
+        {"FlatMap", &ExpandFlatMap<false>},
+        {"OrderedFlatMap", &ExpandFlatMap<true>},
     };
 
     const TPeepHoleOptimizerMap FinalStageRules = {
@@ -9282,9 +9332,6 @@ struct TPeepHoleRules {
         {"LMap", &ExpandLMapOrShuffleByKeys},
         {"OrderedLMap", &ExpandLMapOrShuffleByKeys},
         {"ShuffleByKeys", &ExpandLMapOrShuffleByKeys},
-        {"ExpandMap", &OptimizeExpandMap},
-        {"MultiMap", &OptimizeMultiMap<false>},
-        {"OrderedMultiMap", &OptimizeMultiMap<true>},
         {"Nth", &OptimizeNth},
         {"Member", &OptimizeMember},
         {"Condense1", &OptimizeCondense1},
@@ -9298,11 +9345,6 @@ struct TPeepHoleRules {
         {"GraceSelfJoinCore", &OptimizeGraceSelfJoinCore},
         {"CommonJoinCore", &OptimizeCommonJoinCore},
         {"BuildTablePath", &DoBuildTablePath},
-        {"SqueezeToDict", &OptimizeSqueezeToDict},
-        {"NarrowFlatMap", &OptimizeNarrowFlatMap},
-        {"NarrowMultiMap", &OptimizeWideMaps},
-        {"WideMap", &OptimizeWideMaps},
-        {"NarrowMap", &OptimizeWideMaps},
         {"Unordered", &DropAssume},
         {"AssumeUnique", &DropAssume},
         {"AssumeDistinct", &DropAssume},
@@ -9320,6 +9362,14 @@ struct TPeepHoleRules {
 
     const TExtPeepHoleOptimizerMap FinalStageExtRules = {
         {"Exists", &OptimizeExists},
+        {"ExpandMap", &OptimizeExpandMap},
+        {"NarrowFlatMap", &OptimizeNarrowFlatMap},
+        {"NarrowMultiMap", &OptimizeWideMaps},
+        {"WideMap", &OptimizeWideMaps},
+        {"NarrowMap", &OptimizeWideMaps},
+        {"MultiMap", &OptimizeMultiMap<false>},
+        {"OrderedMultiMap", &OptimizeMultiMap<true>},
+        {"SqueezeToDict", &OptimizeSqueezeToDict},
     };
 
     const TExtPeepHoleOptimizerMap FinalStageNonDetRules = {
@@ -9427,7 +9477,7 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
             [&types, hasNonDeterministicFunctions, withFinalRules = peepholeSettings.WithFinalStageRules,
             withNonDeterministicRules = peepholeSettings.WithNonDeterministicRules](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 auto stageRules = TPeepHoleRules::Instance().SimplifyStageRules;
-                auto extStageRules = TExtPeepHoleOptimizerMap{};
+                auto extStageRules = TPeepHoleRules::Instance().SimplifyStageExtRules;
                 if (withFinalRules) {
                     const auto& finalRules = TPeepHoleRules::Instance().FinalStageRules;
                     stageRules.insert(finalRules.begin(), finalRules.end());

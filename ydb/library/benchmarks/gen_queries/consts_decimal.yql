@@ -7,6 +7,7 @@ $z0_9 = cast("0.9" as decimal(7,2));
 $z0_99 = cast("0.99" as decimal(7,2));
 $z1_49 = cast("1.49" as decimal(7,2));
 
+$z0_35_9 = cast(0 as decimal(35,9));
 $z0_35 = cast(0 as decimal(35,2));
 $z0_1_35 = cast("0.1" as decimal(35,2));
 $z1_2_35 = cast("1.2" as decimal(35,2));

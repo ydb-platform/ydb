@@ -23,6 +23,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_base.cpp
+    ut_counters.cpp
     ut_info_types.cpp
     ut_table_decimal_types.cpp
     ut_table_pg_types.cpp

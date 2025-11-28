@@ -8,9 +8,9 @@
 namespace NYql::NDq {
 
     void RegisterGenericProviderFactories(TDqAsyncIoFactory& factory,
-                                          ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+                                          ISecuredServiceAccountCredentialsFactory::TPtr securedServiceAccountCredentialsFactory,
                                           NYql::NConnector::IClient::TPtr genericClient) {
-        auto readActorFactory = [credentialsFactory, genericClient](
+        auto readActorFactory = [securedServiceAccountCredentialsFactory, genericClient](
                                     Generic::TSource&& settings,
                                     IDqAsyncIoFactory::TSourceArguments&& args) {
             return CreateGenericReadActor(
@@ -23,14 +23,14 @@ namespace NYql::NDq {
                 args.TaskParams,
                 args.ReadRanges,
                 args.ComputeActorId,
-                credentialsFactory,
+                securedServiceAccountCredentialsFactory,
                 args.HolderFactory);
         };
 
-        auto lookupActorFactory = [credentialsFactory, genericClient](Generic::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
+        auto lookupActorFactory = [securedServiceAccountCredentialsFactory, genericClient](Generic::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
             return CreateGenericLookupActor(
                 genericClient,
-                credentialsFactory,
+                securedServiceAccountCredentialsFactory,
                 std::move(args.ParentId),
                 std::move(args.TaskCounters),
                 std::move(args.Alloc),
@@ -40,7 +40,9 @@ namespace NYql::NDq {
                 args.PayloadType,
                 args.TypeEnv,
                 args.HolderFactory,
-                args.MaxKeysInRequest);
+                args.MaxKeysInRequest,
+                args.SecureParams
+            );
         };
 
         for (auto& name : {

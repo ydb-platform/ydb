@@ -16,6 +16,10 @@ YT_DEFINE_STRONG_TYPEDEF(TOperationId, TGuid);
 
 extern const TOperationId NullOperationId;
 
+YT_DEFINE_STRONG_TYPEDEF(TJobTraceId, TGuid);
+
+extern const TJobTraceId NullJobTraceId;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // NB: Please keep the range of values small as this type
@@ -72,6 +76,21 @@ DEFINE_ENUM(EJobState,
     ((Lost)       (7))
     // Initial state of newly created job.
     ((None)       (8))
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_ENUM(EJobTraceEventType,
+    (TraceStarted)
+    (TraceFinished)
+    (TraceDropped)
+);
+
+DEFINE_ENUM(EJobTraceState,
+    (Started)
+    (Finished)
+    (Dropped)
+    (Orphaned)
 );
 
 ////////////////////////////////////////////////////////////////////////////////

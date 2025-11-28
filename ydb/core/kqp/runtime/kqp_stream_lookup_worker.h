@@ -18,6 +18,7 @@ struct TLookupSettings {
     ui32 AllowNullKeysPrefixSize;
     bool KeepRowsOrder;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
+    std::unique_ptr<NKikimrKqp::TReadVectorTopK> VectorTopK;
 
     std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
     std::vector<TSysTables::TTableColumnInfo*> LookupKeyColumns;
@@ -59,7 +60,7 @@ public:
 
 public:
     TKqpStreamLookupWorker(TLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
-        const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc);
+        const NMiniKQL::THolderFactory& holderFactory);
 
     virtual ~TKqpStreamLookupWorker();
 
@@ -78,21 +79,25 @@ public:
     virtual TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) = 0;
     virtual TReadResultStats ReadAllResult(std::function<void(TConstArrayRef<TCell>)> reader) = 0;
     virtual bool AllRowsProcessed() = 0;
+    virtual bool HasPendingResults() = 0;
     virtual void ResetRowsProcessing(ui64 readId) = 0;
-    virtual bool IsOverloaded() = 0;
+    virtual std::optional<TString> IsOverloaded(size_t maxRowsProcessing) = 0;
 
 protected:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
-    const NYql::NDqProto::TTaskInput& InputDesc;
     const TLookupSettings Settings;
 
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
+    ui64 taskId,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
     const NYql::NDqProto::TTaskInput& inputDesc);
+
+std::unique_ptr<TKqpStreamLookupWorker> CreateLookupWorker(TLookupSettings&& settings,
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory);
 
 } // namespace NKqp
 } // namespace NKikimr

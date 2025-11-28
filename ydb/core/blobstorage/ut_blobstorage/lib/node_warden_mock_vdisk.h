@@ -62,7 +62,7 @@ public:
             }
             Send(ev->Sender, response.release(), 0, ev->Cookie);
         } else {
-            Send(ev->Sender, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::ERROR, record.GetVDiskID()), 0, ev->Cookie);
+            Send(ev->Sender, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::ERROR, VDiskIDFromVDiskID(record.GetVDiskID())), 0, ev->Cookie);
         }
     }
 

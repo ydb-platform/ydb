@@ -2,14 +2,13 @@
 #include "yql_s3_write_actor.h"
 #include "yql_s3_applicator_actor.h"
 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+
 #include <util/system/platform.h>
 #if defined(_linux_) || defined(_darwin_)
 #include "yql_s3_read_actor.h"
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/registerFormats.h>
 #endif
-
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-
 
 namespace NYql::NDq {
 

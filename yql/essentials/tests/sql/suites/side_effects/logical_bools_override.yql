@@ -1,0 +1,2 @@
+select WithSideEffectsMode((not WithSideEffects(x)),'None')
+    and false from (select Ensure(false, false) as x)

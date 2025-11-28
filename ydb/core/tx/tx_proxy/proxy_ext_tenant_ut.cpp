@@ -230,7 +230,7 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
             NTestLs::IsUnavailable(ls);  // extsubdomain is not ready yet
 
             ls = env.GetClient().Ls("/dc-1");
-            NTestLs::ChildrenCount(ls, 1);
+            NTestLs::ChildrenCount(ls, 2);
             NTestLs::HasChild(ls, "USER_0", NKikimrSchemeOp::EPathTypeExtSubDomain);
         }
 
@@ -278,7 +278,7 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
 
 
             ls = env.GetClient().Ls("/dc-1");
-            NTestLs::ChildrenCount(ls, 1);
+            NTestLs::ChildrenCount(ls, 2);
             NTestLs::HasChild(ls, "USER_0", NKikimrSchemeOp::EPathTypeExtSubDomain);
         }
 
@@ -495,7 +495,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
             NTestLs::IsUnavailable(ls);  // extsubdomain is not ready yet
 
             ls = env.GetClient().Ls("/dc-1");
-            NTestLs::ChildrenCount(ls, 1);
+            NTestLs::ChildrenCount(ls, 2);
             NTestLs::HasChild(ls, "USER_0", NKikimrSchemeOp::EPathTypeExtSubDomain);
         }
 

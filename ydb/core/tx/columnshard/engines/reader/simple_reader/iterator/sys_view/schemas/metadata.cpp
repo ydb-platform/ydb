@@ -11,10 +11,10 @@ TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptio
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const NColumnShard::IResolveWriteIdToLockId& /*resolver*/, const bool isPlain) const {
+    const NReader::TReadDescription& readDescription, const bool isPlain) const {
     AFL_VERIFY(!isPlain);
     return std::make_unique<TConstructor>(
-        context.GetEngine(), readDescription.GetTabletId(), readDescription.PKRangesFilter, readDescription.IsReverseSort());
+        context.GetEngine(), readDescription.GetTabletId(), readDescription.PKRangesFilter, readDescription.GetSorting());
 }
 
 std::shared_ptr<ISnapshotSchema> TAccessor::GetSnapshotSchemaOptional(

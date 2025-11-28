@@ -1,8 +1,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers/helpers.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_coordination_v1.grpc.pb.h>
@@ -1341,7 +1341,7 @@ private:
                 return;
             }
 
-            if (auto* op = FindSentRequest<TPingOp>(SessionSelfPingReqId)) {
+            if (FindSentRequest<TPingOp>(SessionSelfPingReqId)) {
                 // We have an active request which has not been answered yet
                 // Cancel everything, it's a timeout :(
                 SessionSelfPingContext.reset();

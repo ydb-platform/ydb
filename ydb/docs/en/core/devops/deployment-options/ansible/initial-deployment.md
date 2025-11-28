@@ -10,7 +10,7 @@ This guide outlines the process of deploying a {{ ydb-short-name }} cluster on a
 
 The recommended setup to get started is 3 servers with 3 disk drives for user data each. For reliability purposes, each server should have as independent infrastructure as possible: they'd better be each in a separate datacenter or availability zone, or at least in different server racks.
 
-For large-scale setups, it is recommended to use at least 9 servers for highly available clusters (`mirror-3-dc`) or 8 servers for single-datacenter clusters (`block-4-2`). In these cases, servers can have only one disk drive for user data each, but they'd better have an additional small drive for the operating system. You can learn about redundancy models available in {{ ydb-short-name }} from the [{#T}](../../../concepts/topology.md) article. During operation, the cluster can be [expanded](../../../maintenance/manual/cluster_expansion.md) without suspending user access to the databases.
+For large-scale setups, it is recommended to use at least 9 servers for highly available clusters (`mirror-3-dc`) or 8 servers for single-datacenter clusters (`block-4-2`). In these cases, servers can have only one disk drive for user data each, but they'd better have an additional small drive for the operating system. You can learn about redundancy models available in {{ ydb-short-name }} from the [{#T}](../../../concepts/topology.md) article. During operation, the cluster can be [expanded](../../configuration-management/configuration-v2/cluster-expansion.md) without suspending user access to the databases.
 
 {% note info %}
 
@@ -87,7 +87,7 @@ Refer to [Ansible Installation Guide](https://docs.ansible.com/ansible/latest/in
   collections:
     - name: git+https://github.com/ydb-platform/ydb-ansible
       type: git
-      version: main
+      version: latest
   EOF
   $ ansible-galaxy install -r requirements.yaml
   ```
@@ -95,7 +95,7 @@ Refer to [Ansible Installation Guide](https://docs.ansible.com/ansible/latest/in
 - One-time
 
   ```bash
-  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git
+  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
   ```
 
 {% endlist %}
@@ -116,7 +116,6 @@ inventory = ./inventory
 pipelining = True
 private_role_vars = True
 timeout = 5
-vault_password_file = ./ansible_vault_password_file
 verbosity = 1
 log_path = ./ydb.log
 
@@ -420,9 +419,9 @@ all:
         ydb_password: <password>
 ```
 
-Encrypt this file using the command `ansible-vault encrypt inventory/99-inventory-vault.yaml`. This would require you to either manually enter the encryption password (which can be different) or have `vault_password_file` Ansible setting configured. See [Ansible Vault documentation](https://docs.ansible.com/ansible/latest/vault_guide/index.html) for more details on how this works.
+Encrypt this file using the command `ansible-vault encrypt inventory/99-inventory-vault.yaml`. It would require you to manually enter the encryption password, which is independent from the `ydb_password` setting value and better be different. Alternatively, you can save the encryption password to a separate file and configure the `vault_password_file` Ansible setting with the file path. See [Ansible Vault documentation](https://docs.ansible.com/ansible/latest/vault_guide/index.html) for more details on how this works.
 
-### Prepare the YDB Configuration File {#ydb-config-prepare}
+### Prepare the {{ ydb-short-name }} Configuration File {#ydb-config-prepare}
 
 ## Deploying the {{ ydb-short-name }} Cluster
 

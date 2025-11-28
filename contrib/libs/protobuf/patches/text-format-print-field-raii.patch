@@ -3,11 +3,11 @@
 @@ -47,6 +47,7 @@
  #include <vector>
 
- #include "y_absl/container/btree_set.h"
-+#include "y_absl/memory/memory.h"
- #include "y_absl/strings/ascii.h"
- #include "y_absl/strings/escaping.h"
- #include "y_absl/strings/numbers.h"
+ #include "absl/container/btree_set.h"
++#include "absl/memory/memory.h"
+ #include "absl/strings/ascii.h"
+ #include "absl/strings/escaping.h"
+ #include "absl/strings/numbers.h"
 @@ -2341,32 +2342,38 @@
  };
 
@@ -71,7 +71,7 @@
 -      CopyKey(iter.GetKey(), map_entry_message, map_entry_desc->field(0));
 -      CopyValue(iter.GetValueRef(), map_entry_message,
 +      std::unique_ptr<Message> map_entry_message =
-+          y_absl::WrapUnique(prototype->New());
++          absl::WrapUnique(prototype->New());
 +      CopyKey(iter.GetKey(), map_entry_message.get(), map_entry_desc->field(0));
 +      CopyValue(iter.GetValueRef(), map_entry_message.get(),
                  map_entry_desc->field(1));

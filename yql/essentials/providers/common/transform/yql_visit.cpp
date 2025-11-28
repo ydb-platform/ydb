@@ -7,7 +7,7 @@
 namespace NYql {
 
 void TVisitorTransformerBase::AddHandler(std::initializer_list<TStringBuf> names, THandler handler) {
-    for (auto name: names) {
+    for (auto name : names) {
         YQL_ENSURE(Handlers_.emplace(name, handler).second, "Duplicate handler for " << name);
     }
 }
@@ -26,4 +26,4 @@ IGraphTransformer::TStatus TVisitorTransformerBase::DoTransform(TExprNode::TPtr 
     return TStatus::Ok;
 }
 
-}
+} // namespace NYql

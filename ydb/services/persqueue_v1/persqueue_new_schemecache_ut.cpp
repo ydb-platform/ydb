@@ -5,7 +5,7 @@
 #include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
 
 #include <ydb/core/testlib/test_pq_client.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
@@ -518,12 +518,11 @@ namespace NKikimr::NPersQueueTests {
                                       "api.grpc.topic.stream_read.messages",
                                       "topic.read.bytes",
                                       "topic.read.messages",
-                                      "topic.compaction.lag_milliseconds_max",
-                                      "topic.compaction.unprocessed_bytes_max",
-                                      "topic.compaction.unprocessed_count_max",
+                                      "topic.partition.blobs.compaction_lag_milliseconds_max",
+                                      "topic.partition.blobs.uncompacted_bytes_max",
+                                      "topic.partition.blobs.uncompacted_count_max",
                                   },
-                                  topicName, "", "", ""
-                                  );
+                                  topicName, "", "", "");
 
                     checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
                                   {
@@ -731,12 +730,11 @@ namespace NKikimr::NPersQueueTests {
                                       "api.grpc.topic.stream_read.messages",
                                       "topic.read.bytes",
                                       "topic.read.messages",
-                                      "topic.compaction.lag_milliseconds_max",
-                                      "topic.compaction.unprocessed_bytes_max",
-                                      "topic.compaction.unprocessed_count_max",
+                                      "topic.partition.blobs.compaction_lag_milliseconds_max",
+                                      "topic.partition.blobs.uncompacted_bytes_max",
+                                      "topic.partition.blobs.uncompacted_count_max",
                                   },
-                                  topicName, "", "", ""
-                                  );
+                                  topicName, "", "", "");
 
                     checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
                                   {

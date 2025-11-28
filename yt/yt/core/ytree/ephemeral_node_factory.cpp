@@ -89,7 +89,12 @@ public:
 
 protected:
     // TSupportsAttributes members
-    IAttributeDictionary* GetCustomAttributes() override
+    const IAttributeDictionary& CustomAttributes() const override
+    {
+        return Attributes();
+    }
+
+    IAttributeDictionary* MutableCustomAttributesOrNull() override
     {
         return MutableAttributes();
     }
@@ -228,7 +233,7 @@ public:
 
     bool RemoveChild(const std::string& key) override
     {
-        auto it = KeyToChild_.find(TString(key));
+        auto it = KeyToChild_.find(key);
         if (it == KeyToChild_.end()) {
             return false;
         }
@@ -278,7 +283,7 @@ public:
         YT_VERIFY(ChildToKey_.emplace(newChild, key).second);
     }
 
-    std::optional<std::string> FindChildKey(const IConstNodePtr& child) override
+    std::optional<std::string> FindChildKey(const IConstNodePtr& child) const override
     {
         YT_ASSERT(child);
 
@@ -287,8 +292,8 @@ public:
     }
 
 private:
-    THashMap<TString, INodePtr> KeyToChild_;
-    THashMap<INodePtr, TString> ChildToKey_;
+    THashMap<std::string, INodePtr> KeyToChild_;
+    THashMap<INodePtr, std::string> ChildToKey_;
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {
@@ -406,7 +411,7 @@ public:
         YT_VERIFY(RemoveChild(index));
     }
 
-    std::optional<int> FindChildIndex(const IConstNodePtr& child) override
+    std::optional<int> FindChildIndex(const IConstNodePtr& child) const override
     {
         YT_ASSERT(child);
 
@@ -518,4 +523,3 @@ INodeFactory* GetEphemeralNodeFactory(bool shouldHideAttributes)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYTree
-

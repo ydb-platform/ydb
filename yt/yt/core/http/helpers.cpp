@@ -37,30 +37,63 @@ using namespace NHeaders;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FillYTError(const THeadersPtr& headers, const TError& error)
+void FillYTErrorResponse(
+    const THeadersPtr& headers,
+    const TError& error)
 {
-    TString errorJson;
-    TStringOutput errorJsonOutput(errorJson);
-    auto jsonWriter = CreateJsonConsumer(&errorJsonOutput);
-    Serialize(error, jsonWriter.get());
-    jsonWriter->Flush();
-
-    headers->Add(XYTErrorHeaderName, errorJson);
     headers->Add(XYTResponseCodeHeaderName, ToString(static_cast<int>(error.GetCode())));
     headers->Add(XYTResponseMessageHeaderName, EscapeHeaderValue(error.GetMessage()));
 }
 
-void FillYTErrorHeaders(const IResponseWriterPtr& rsp, const TError& error)
+void FillYTError(
+    const THeadersPtr& headers,
+    const TError& error)
+{
+    TString errorString;
+    TStringOutput errorStringOutput(errorString);
+
+    auto consumer = CreateJsonConsumer(&errorStringOutput);
+
+    Serialize(error, consumer.get());
+    consumer->Flush();
+
+    headers->Add(XYTErrorHeaderName, errorString);
+    headers->Add(XYTErrorContentTypeHeaderName, ApplicationJsonContentType);
+
+    FillYTErrorResponse(headers, error);
+}
+
+void FillYTErrorHeaders(
+    const IResponseWriterPtr& rsp,
+    const TError& error)
 {
     FillYTError(rsp->GetHeaders(), error);
 }
 
-void FillYTErrorTrailers(const IResponseWriterPtr& rsp, const TError& error)
+void FillYTErrorTrailers(
+    const IResponseWriterPtr& rsp,
+    const TError& error)
 {
     FillYTError(rsp->GetTrailers(), error);
 }
 
-TError ParseYTError(const IResponsePtr& rsp, bool fromTrailers)
+void FillYTErrorResponseHeaders(
+    const IResponseWriterPtr& rsp,
+    const TError& error)
+{
+    FillYTErrorResponse(rsp->GetHeaders(), error);
+}
+
+void FillYTErrorResponseTrailers(
+    const IResponseWriterPtr& rsp,
+    const TError& error)
+{
+    FillYTErrorResponse(rsp->GetTrailers(), error);
+}
+
+TError ParseYTError(
+    const IResponsePtr& rsp,
+    bool fromTrailers)
 {
     std::string source;
     const std::string* errorHeader;
@@ -74,20 +107,22 @@ TError ParseYTError(const IResponsePtr& rsp, bool fromTrailers)
         errorHeader = rsp->GetHeaders()->Find(XYTErrorHeaderName);
     }
 
-    TString errorJson;
+    TString errorString;
     if (errorHeader) {
-        errorJson = *errorHeader;
+        errorString = *errorHeader;
     } else {
         static const std::string BodySource("body");
         source = BodySource;
-        errorJson = ToString(rsp->ReadAll());
+        errorString = ToString(rsp->ReadAll());
     }
 
-    TStringInput errorJsonInput(errorJson);
+    TStringInput errorStringInput(errorString);
+
     std::unique_ptr<IBuildingYsonConsumer<TError>> buildingConsumer;
     CreateBuildingYsonConsumer(&buildingConsumer, EYsonType::Node);
+
     try {
-        ParseJson(&errorJsonInput, buildingConsumer.get());
+        ParseJson(&errorStringInput, buildingConsumer.get());
     } catch (const std::exception& ex) {
         return TError("Failed to parse error from response")
             << TErrorAttribute("source", source)
@@ -128,7 +163,7 @@ private:
     const IHttpHandlerPtr Underlying_;
 };
 
-IHttpHandlerPtr WrapYTException(IHttpHandlerPtr underlying)
+IHttpHandlerPtr CreateErrorWrappingHttpHandler(IHttpHandlerPtr underlying)
 {
     return New<TErrorWrappingHttpHandler>(std::move(underlying));
 }
@@ -153,6 +188,7 @@ static const auto HeadersWhitelist = JoinSeq(", ", std::vector<std::string>{
     "X-YT-Output-Format",
     "X-YT-Output-Format0",
     "X-YT-Output-Format-0",
+    "X-YT-Error-Format",
     "X-YT-Header-Format",
     "X-YT-Suppress-Redirect",
     "X-YT-Omit-Trailers",
@@ -299,7 +335,13 @@ std::optional<std::string> FindHeader(const IRequestPtr& req, TStringBuf headerN
 
 std::optional<std::string> FindBalancerRequestId(const IRequestPtr& req)
 {
-    return FindHeader(req, "X-Req-Id");
+    if (auto result = FindHeader(req, "X-Req-Id")) {
+        return *result;
+    }
+    if (auto result = FindHeader(req, "X-Request-Id")) {
+        return *result;
+    }
+    return std::nullopt;
 }
 
 std::optional<std::string> FindBalancerRealIP(const IRequestPtr& req)
@@ -329,7 +371,7 @@ void SetUserAgent(const THeadersPtr& headers, const std::string& value)
 
 void ReplyJson(const IResponseWriterPtr& rsp, std::function<void(NYson::IYsonConsumer*)> producer)
 {
-    rsp->GetHeaders()->Set(ContentTypeHeaderName, "application/json");
+    rsp->GetHeaders()->Set(ContentTypeHeaderName, ApplicationJsonContentType);
 
     TBufferOutput out;
 

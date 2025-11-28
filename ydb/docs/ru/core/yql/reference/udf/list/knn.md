@@ -65,9 +65,22 @@ Knn::ToBinaryStringBit(List<Int8>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 ```
 
+#### Формат сериализации {#functions-convert-format}
+
+Функции сериализации векторных данных преобразуют массив элементов в байтовую строку следующего формата:
+
+- **Основная часть** — непрерывный массив элементов ([knn-serializer.h](https://github.com/ydb-platform/ydb/blob/0b506f56e399e0b4e6a6a4267799da68a3164bf7/ydb/library/yql/udfs/common/knn/knn-serializer.h#L19))
+- **Тип** — 1 байт в конце строки, обозначающий тип данных ([knn-defines.h](https://github.com/ydb-platform/ydb/blob/24026648dd7463d58e1470aa8981b17677116e7c/ydb/library/yql/udfs/common/knn/knn-defines.h#L5)):  
+  `1` — `Float` (4 байта на элемент);  
+  `2` — `Uint8` (1 байт на элемент);
+  `3` — `Int8` (1 байт на элемент);
+  `10` — `Bit` (1 бит на элемент).  
+
+Например, вектор из 5 элементов типа `Float` сериализуется в строку длиной 21 байт: 4 байта × 5 элементов (основная часть) + 1 байт (тип) = 21 байт.
+
 #### Детали имплементации {#functions-convert-details}
 
-`ToBinaryStringBit` преобразует в `1` все координаты которые больше `0`, остальные координаты преобразуются в `0`.
+`ToBinaryStringBit` преобразует в `1` все координаты, которые больше `0`. Остальные координаты преобразуются в `0`.
 
 ### Функции расстояния и сходства {#functions-distance}
 

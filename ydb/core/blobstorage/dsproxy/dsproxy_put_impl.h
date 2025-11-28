@@ -128,7 +128,7 @@ public:
         , History(Info)
     {
         BlobMap.emplace(ev->Id, Blobs.size());
-        Blobs.emplace_back(ev->Id, TRope(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
+        Blobs.emplace_back(ev->Id, std::move(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
             ev->IssueKeepFlag, ev->IgnoreBlock, std::move(ev->ExtraBlockChecks), true, std::move(ev->ExecutionRelay),
             ev->Deadline);
 
@@ -160,7 +160,7 @@ public:
             Y_ABORT_UNLESS(msg.HandleClass == putHandleClass);
             Y_ABORT_UNLESS(msg.Tactic == tactic);
             BlobMap.emplace(msg.Id, Blobs.size());
-            Blobs.emplace_back(msg.Id, TRope(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
+            Blobs.emplace_back(msg.Id, std::move(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
                 std::move(msg.Orbit), msg.IssueKeepFlag, msg.IgnoreBlock, std::move(msg.ExtraBlockChecks), false,
                 std::move(msg.ExecutionRelay), msg.Deadline);
 
@@ -238,11 +238,15 @@ public:
             auto [begin, end] = puts.equal_range(it->first);
             Y_ABORT_UNLESS(it == begin);
 
+            const TVDiskID vdiskId = Info->GetVDiskId(it->first);
+            const bool checksumming = Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
+                TGroupQueues::TVDisk::TQueues::VDiskQueueId(Blackboard.PutHandleClass));
+
             if (std::next(it) == end) { // TEvVPut
                 auto [orderNumber, ptr] = *it++;
                 TBlobInfo& blob = Blobs[ptr->BlobIdx];
-                auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(ptr->Id, ptr->Buffer, Info->GetVDiskId(orderNumber),
-                    false, nullptr, blob.Deadline, Blackboard.PutHandleClass);
+                auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(ptr->Id, ptr->Buffer, vdiskId, false, nullptr,
+                    blob.Deadline, Blackboard.PutHandleClass, checksumming);
 
                 auto& record = ev->Record;
                 for (const auto& [tabletId, generation] : blob.ExtraBlockChecks) {
@@ -267,8 +271,8 @@ public:
                     auto [orderNumber, ptr] = *temp;
                     deadline = Max(deadline, Blobs[ptr->BlobIdx].Deadline);
                 }
-                auto ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(Info->GetVDiskId(it->first), deadline,
-                    Blackboard.PutHandleClass, false);
+                auto ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, deadline, Blackboard.PutHandleClass,
+                    false);
 
                 ui8 firstPartId = it->second->Id.PartId();
                 ui8 orderNumber = it->first;
@@ -276,7 +280,7 @@ public:
                     auto [orderNumber, ptr] = *it++;
                     TBlobInfo& blob = Blobs[ptr->BlobIdx];
                     ev->AddVPut(ptr->Id, TRcBuf(ptr->Buffer), nullptr, blob.IssueKeepFlag, blob.IgnoreBlock,
-                        &blob.ExtraBlockChecks, blob.Span.GetTraceId());
+                        &blob.ExtraBlockChecks, blob.Span.GetTraceId(), checksumming);
                     HandoffPartsSent += ptr->IsHandoff;
                 }
                 History.AddVPutToWaitingList(firstPartId, ev->Record.ItemsSize(), orderNumber);

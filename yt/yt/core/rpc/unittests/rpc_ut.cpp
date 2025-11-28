@@ -1,5 +1,7 @@
 #include <yt/yt/core/rpc/unittests/lib/common.h>
 
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
 #include <random>
 
 namespace NYT::NRpc {
@@ -95,6 +97,47 @@ TYPED_TEST(TRpcTest, RetryingSend)
     WaitForPredicate([&channel] {
         return channel->GetRefCount() == 1;
     });
+}
+
+TYPED_TEST(TRpcTest, TestingDelayLite)
+{
+    auto startTime = TInstant::Now();
+
+    for (int i = 0; i < 5; ++i) {
+        TTestProxy proxy(this->CreateChannel());
+        auto req = proxy.DelayedCall();
+        auto rspOrError = req->Invoke().Get();
+        EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
+
+        // Do not run the test for a long time if sufficient delay has already been observed.
+        if (TInstant::Now() - startTime > TDuration::Seconds(1)) {
+            break;
+        }
+    }
+
+    auto elapsed = TInstant::Now() - startTime;
+    EXPECT_GT(elapsed, TDuration::MilliSeconds(500));
+}
+
+TYPED_TEST(TRpcTest, TestingDelayHeavy)
+{
+    auto startTime = TInstant::Now();
+
+    for (int i = 0; i < 5; ++i) {
+        TTestProxy proxy(this->CreateChannel());
+        auto req = proxy.DelayedCall();
+        req->SetRequestHeavy(true);
+        auto rspOrError = req->Invoke().Get();
+        EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
+
+        // Do not run the test for a long time if sufficient delay has already been observed.
+        if (TInstant::Now() - startTime > TDuration::Seconds(1)) {
+            break;
+        }
+    }
+
+    auto elapsed = TInstant::Now() - startTime;
+    EXPECT_GT(elapsed, TDuration::MilliSeconds(500));
 }
 
 TYPED_TEST(TRpcTest, UserTag)
@@ -391,7 +434,7 @@ TYPED_TEST(TNotGrpcTest, LaggyStreamingRequest)
 
     WaitFor(req->GetRequestAttachmentsStream()->Close())
         .ThrowOnError();
-    WaitFor(ExpectEndOfStream(req->GetResponseAttachmentsStream()))
+    WaitFor(CheckEndOfStream(req->GetResponseAttachmentsStream()))
         .ThrowOnError();
     WaitFor(invokeResult)
         .ThrowOnError();
@@ -632,7 +675,7 @@ TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
                 methods = {
                     RequestBytesThrottledCall = {
                         request_bytes_throttler = {
-                            limit = 100000;
+                            limit = 150000;
                         }
                     }
                 }
@@ -641,6 +684,8 @@ TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
     })");
     auto config = ConvertTo<TServerConfigPtr>(TYsonString(configText));
     this->GetServer()->Configure(config);
+
+    Sleep(TDuration::MilliSeconds(100));
 
     TTestProxy proxy(this->CreateChannel());
 
@@ -879,7 +924,7 @@ TYPED_TEST(TNotGrpcTest, MemoryTrackingMultipleConcurrent)
         futures.push_back(req->Invoke().AsVoid());
     }
 
-    Sleep(TDuration::MilliSeconds(100));
+    Sleep(TDuration::MilliSeconds(500));
 
     if (TypeParam::MemoryUsageTrackingEnabled) {
         auto rpcUsage = memoryUsageTracker->GetUsed();
@@ -1036,6 +1081,14 @@ TYPED_TEST(TRpcTest, ConnectionLost)
         .ThrowOnError();
 }
 
+TYPED_TEST(TRpcTest, ManuallyCanceledByServer)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.ManuallyCanceledByServer();
+    auto rspOrError = req->Invoke().Get();
+    EXPECT_EQ(NYT::EErrorCode::Canceled, rspOrError.GetCode());
+}
+
 TYPED_TEST(TNotGrpcTest, ProtocolVersionMismatch)
 {
     TTestIncorrectProtocolVersionProxy proxy(this->CreateChannel());
@@ -1155,6 +1208,7 @@ protected:
     TAttachmentsInputStreamPtr CreateStream(std::optional<TDuration> timeout = {})
     {
         return New<TAttachmentsInputStream>(
+            TRequestId(),
             BIND([=] {}),
             nullptr,
             timeout);
@@ -1292,6 +1346,7 @@ protected:
     {
         PullCallbackCounter_ = 0;
         return New<TAttachmentsOutputStream>(
+            TRequestId(),
             NCompression::ECodec::None,
             nullptr,
             BIND([this] {

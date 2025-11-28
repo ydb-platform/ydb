@@ -1,4 +1,5 @@
 PROTO_LIBRARY(api-protos)
+PROTOC_FATAL_WARNINGS()
 
 MAVEN_GROUP_ID(com.yandex.ydb)
 
@@ -20,10 +21,12 @@ SRCS(
     draft/ydb_object_storage.proto
     draft/ydb_replication.proto
     draft/ydb_tablet.proto
+    draft/ydb_test_shard.proto
     draft/ydb_view.proto
     draft/ymq.proto
     persqueue_error_codes_v1.proto
     ydb_auth.proto
+    ydb_bridge_common.proto
     ydb_clickhouse_internal.proto
     ydb_cms.proto
     ydb_common.proto

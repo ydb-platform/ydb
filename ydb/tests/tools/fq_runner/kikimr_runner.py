@@ -363,15 +363,15 @@ class BaseTenant(abc.ABC):
         return self.get_checkpoint_coordinator_metric(query_id, "CompletedCheckpoints",
                                                       expect_counters_exist=expect_counters_exist)
 
-    def wait_completed_checkpoints(self, query_id, checkpoints_count,
+    def wait_completed_checkpoints(self, query_id, expected,
                                    timeout=plain_or_under_sanitizer_wrapper(30, 150),
                                    expect_counters_exist=False):
         deadline = time.time() + timeout
         while True:
             completed = self.get_completed_checkpoints(query_id, expect_counters_exist=expect_counters_exist)
-            if completed >= checkpoints_count:
+            if completed >= expected:
                 break
-            assert time.time() < deadline, "Wait zero checkpoint failed, actual completed: " + str(completed)
+            assert time.time() < deadline, "Wait checkpoint failed, actual current: " + str(completed) + ", expected " + str(expected)
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
     def wait_zero_checkpoint(self, query_id, timeout=plain_or_under_sanitizer_wrapper(30, 150),
@@ -537,6 +537,7 @@ class YqTenant(BaseTenant):
             'max_session_used_memory': 1000000,
             'without_consumer': True}
         fq_config['row_dispatcher']['coordinator'] = {'coordination_node_path': "row_dispatcher"}
+        fq_config['row_dispatcher']['coordinator']['rebalancing_timeout_sec'] = 30
         fq_config['row_dispatcher']['coordinator']['database'] = {}
         self.fill_storage_config(fq_config['row_dispatcher']['coordinator']['database'],
                                  "RowDispatcher_" + self.uuid)
@@ -706,6 +707,8 @@ class StreamingOverKikimr(object):
                         ydb.Column('subject_id', ydb.OptionalType(ydb.DataType.String))
                     ).with_column(
                         ydb.Column('vtenant', ydb.OptionalType(ydb.DataType.String))
+                    ).with_column(
+                        ydb.Column('node', ydb.OptionalType(ydb.DataType.String))
                     ).with_primary_keys('subject_type', 'subject_id')
                 )
 
@@ -718,9 +721,9 @@ class StreamingOverKikimr(object):
             for vtenant, tenant in _tenant_mapping.items():
                 query = query + """UPSERT INTO tenants (tenant, vtenant, common, state, state_time) values("{}", "{}", true, 0, CurrentUtcTimestamp());
                 """.format(tenant, vtenant)
-            for cloud, vtenant in configuration.cloud_mapping.items():
-                query = query + """UPSERT INTO mappings (subject_type, subject_id, vtenant) values ("cloud", "{}", "{}");
-                """.format(cloud, vtenant)
+            for cloud, vtenant_with_node in configuration.cloud_mapping.items():
+                query = query + """UPSERT INTO mappings (subject_type, subject_id, vtenant, node) values ("cloud", "{}", "{}", {});
+                """.format(cloud, vtenant_with_node[0], ("\"" + vtenant_with_node[1] + "\"") if vtenant_with_node[1] is not None else 'NULL')
             self.exec_db_statement(query)
             self.control_plane.fq_config['control_plane_storage']['use_db_mapping'] = True
 

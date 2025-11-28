@@ -1,13 +1,13 @@
 self: super: with self; {
   boost_thread = stdenv.mkDerivation rec {
     pname = "boost_thread";
-    version = "1.88.0";
+    version = "1.89.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";
       repo = "thread";
       rev = "boost-${version}";
-      hash = "sha256-H9iOI5SHWv893L/opKS9eDQNpzSkwnx4CW51b+ilOGM=";
+      hash = "sha256-vkLjfL6x4jwnBDIpcRA9ZOIz9058Tx0Z7u7kw67wihY=";
     };
   };
 }

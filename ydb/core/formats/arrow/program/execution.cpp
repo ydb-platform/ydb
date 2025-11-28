@@ -17,10 +17,10 @@ void TSimpleDataSource::DoAssembleAccessor(const TProcessorContext& context, con
     const auto cData = it->second;
     Info.erase(it);
     if (itBlob->second.empty()) {
-        context.GetResources()->AddVerified(
+        context.MutableResources().AddVerified(
             columnId, std::make_shared<NAccessor::TTrivialArray>(NArrow::TThreadSimpleArraysCache::GetNull(cData.GetColumnType(), 0)), true);
     } else {
-        context.GetResources()->AddVerified(
+        context.MutableResources().AddVerified(
             columnId, NAccessor::NPlain::TConstructor().DeserializeFromString(itBlob->second, cData).DetachResult(), true);
     }
 }

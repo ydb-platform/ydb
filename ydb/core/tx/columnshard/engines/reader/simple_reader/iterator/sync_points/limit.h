@@ -59,7 +59,8 @@ private:
             , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
             , Delta(Reverse ? -1 : 1) {
             AFL_VERIFY(Source);
-            auto batch = Source->GetAs<IDataSource>()->GetStart().GetValue().ToBatch();
+            AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion)("type", Source->GetType());
+            auto batch = Source->GetAs<TPortionDataSource>()->GetStart().GetValue().ToBatch();
             SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse);
         }
 
@@ -116,10 +117,16 @@ private:
     };
 
     std::vector<TSourceIterator> Iterators;
+    std::vector<ui64> DebugOrder;
+
+    virtual bool IsFinished() const override {
+        return FetchedCount >= Limit || TBase::IsFinished();
+    }
 
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
-        AFL_VERIFY(FetchedCount < Limit);
+        AFL_VERIFY(FetchedCount < Limit)("fetched", FetchedCount)("limit", Limit);
         Iterators.emplace_back(TSourceIterator(source));
+        DebugOrder.emplace_back(source->GetSourceId());
         std::push_heap(Iterators.begin(), Iterators.end());
         return TBase::OnAddSource(source);
     }

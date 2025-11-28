@@ -53,6 +53,7 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, _EnablePrecompute);
     REGISTER_SETTING(*this, EnableDqReplicate);
     REGISTER_SETTING(*this, WatermarksMode);
+    REGISTER_SETTING(*this, WatermarksIdleTimeoutMs);
     REGISTER_SETTING(*this, WatermarksGranularityMs);
     REGISTER_SETTING(*this, WatermarksLateArrivalDelayMs);
     REGISTER_SETTING(*this, WatermarksEnableIdlePartitions);
@@ -92,6 +93,10 @@ TDqConfiguration::TDqConfiguration() {
                 EnableDqReplicate = true;
             }
         });
+    REGISTER_SETTING(*this, ValuePackerVersion).Parser([](const TString& v) {
+            return FromString<TDqSettings::EValuePackerVersion>(v);
+        });
+
     REGISTER_SETTING(*this, DisableLLVMForBlockStages);
     REGISTER_SETTING(*this, SplitStageOnDqReplicate)
         .ValueSetter([this](const TString&, bool value) {

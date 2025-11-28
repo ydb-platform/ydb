@@ -100,7 +100,7 @@ public:
         if (node.IsCallable(TCoDataSource::CallableName())) {
             if (node.Child(0)->Content() == SolomonProviderName) {
                 auto clusterName = node.Child(1)->Content();
-                if (!State_->Gateway->HasCluster(clusterName)) {
+                if (clusterName != NCommon::ALL_CLUSTERS && !State_->Gateway->HasCluster(clusterName)) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() <<
                         "Unknown cluster name: " << clusterName));
                     return false;

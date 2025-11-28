@@ -67,7 +67,7 @@ generally do their best to write you a useful test.  You can also use
     Legal questions?  While the ghostwriter fragments and logic is under the
     MPL-2.0 license like the rest of Hypothesis, the *output* from the ghostwriter
     is made available under the `Creative Commons Zero (CC0)
-    <https://creativecommons.org/share-your-work/public-domain/cc0/>`__
+    <https://creativecommons.org/public-domain/cc0/>`__
     public domain dedication, so you can use it without any restrictions.
 """
 
@@ -82,27 +82,17 @@ import sys
 import types
 import warnings
 from collections import OrderedDict, defaultdict
+from collections.abc import Callable, Iterable, Mapping
 from itertools import permutations, zip_longest
 from keyword import iskeyword as _iskeyword
 from string import ascii_lowercase
 from textwrap import dedent, indent
+from types import EllipsisType
 from typing import (
-    TYPE_CHECKING,
     Any,
-    Callable,
-    DefaultDict,
-    Dict,
     ForwardRef,
-    Iterable,
-    List,
-    Mapping,
     NamedTuple,
-    Optional,
-    Set,
-    Tuple,
-    Type,
     TypeVar,
-    Union,
     get_args,
     get_origin,
 )
@@ -128,14 +118,6 @@ from hypothesis.strategies._internal.strategies import (
 )
 from hypothesis.strategies._internal.types import _global_type_lookup, is_generic_type
 
-if sys.version_info >= (3, 10):
-    from types import EllipsisType as EllipsisType
-elif TYPE_CHECKING:
-    from builtins import ellipsis as EllipsisType
-else:
-    EllipsisType = type(Ellipsis)
-
-
 IMPORT_SECTION = """
 # This test code was written by the `hypothesis.extra.ghostwriter` module
 # and is provided under the Creative Commons Zero public domain dedication.
@@ -156,8 +138,8 @@ except {exceptions}:
     reject()
 """.strip()
 
-Except = Union[Type[Exception], Tuple[Type[Exception], ...]]
-ImportSet = Set[Union[str, Tuple[str, str]]]
+Except = type[Exception] | tuple[type[Exception], ...]
+ImportSet = set[str | tuple[str, str]]
 _quietly_settings = settings(
     database=None,
     deadline=None,
@@ -166,7 +148,7 @@ _quietly_settings = settings(
 )
 
 
-def _dedupe_exceptions(exc: Tuple[Type[Exception], ...]) -> Tuple[Type[Exception], ...]:
+def _dedupe_exceptions(exc: tuple[type[Exception], ...]) -> tuple[type[Exception], ...]:
     # This is reminiscent of de-duplication logic I wrote for flake8-bugbear,
     # but with access to the actual objects we can just check for subclasses.
     # This lets us print e.g. `Exception` instead of `(Exception, OSError)`.
@@ -177,7 +159,7 @@ def _dedupe_exceptions(exc: Tuple[Type[Exception], ...]) -> Tuple[Type[Exception
     return tuple(sorted(uniques, key=lambda e: e.__name__))
 
 
-def _check_except(except_: Except) -> Tuple[Type[Exception], ...]:
+def _check_except(except_: Except) -> tuple[type[Exception], ...]:
     if isinstance(except_, tuple):
         for i, e in enumerate(except_):
             if not isinstance(e, type) or not issubclass(e, Exception):
@@ -194,7 +176,7 @@ def _check_except(except_: Except) -> Tuple[Type[Exception], ...]:
     return (except_,)
 
 
-def _exception_string(except_: Tuple[Type[Exception], ...]) -> Tuple[ImportSet, str]:
+def _exception_string(except_: tuple[type[Exception], ...]) -> tuple[ImportSet, str]:
     if not except_:
         return set(), ""
     exceptions = []
@@ -215,7 +197,7 @@ def _check_style(style: str) -> None:
         raise InvalidArgument(f"Valid styles are 'pytest' or 'unittest', got {style!r}")
 
 
-def _exceptions_from_docstring(doc: str) -> Tuple[Type[Exception], ...]:
+def _exceptions_from_docstring(doc: str) -> tuple[type[Exception], ...]:
     """Return a tuple of exceptions that the docstring says may be raised.
 
     Note that we ignore non-builtin exception types for simplicity, as this is
@@ -233,7 +215,7 @@ def _exceptions_from_docstring(doc: str) -> Tuple[Type[Exception], ...]:
     return tuple(_dedupe_exceptions(tuple(raises)))
 
 
-def _type_from_doc_fragment(token: str) -> Optional[type]:
+def _type_from_doc_fragment(token: str) -> type | None:
     # Special cases for "integer" and for numpy array-like and dtype
     if token == "integer":
         return int
@@ -250,7 +232,7 @@ def _type_from_doc_fragment(token: str) -> Optional[type]:
         if elems is None and elem_token.endswith("s"):
             elems = _type_from_doc_fragment(elem_token[:-1])
         if elems is not None and coll_token in ("list", "sequence", "collection"):
-            return List[elems]  # type: ignore
+            return list[elems]  # type: ignore
         # This might be e.g. "array-like of float"; arrays is better than nothing
         # even if we can't conveniently pass a generic type around.
         return _type_from_doc_fragment(coll_token)
@@ -282,17 +264,13 @@ def _strategy_for(param: inspect.Parameter, docstring: str) -> st.SearchStrategy
         if match is None:
             continue
         doc_type = match.group(1)
-        if doc_type.endswith(", optional"):
-            # Convention to describe "argument may be omitted"
-            doc_type = doc_type[: -len(", optional")]
-        doc_type = doc_type.strip("}{")
+        doc_type = doc_type.removesuffix(", optional").strip("}{")
         elements = []
         types = []
         for token in re.split(r",? +or +| *, *", doc_type):
             for prefix in ("default ", "python "):
-                # `str or None, default "auto"`; `python int or numpy.int64`
-                if token.startswith(prefix):
-                    token = token[len(prefix) :]
+                # e.g. `str or None, default "auto"` or `python int or numpy.int64`
+                token = token.removeprefix(prefix)
             if not token:
                 continue
             try:
@@ -452,7 +430,7 @@ def _guess_strategy_by_argname(name: str) -> st.SearchStrategy:
     return st.nothing()
 
 
-def _get_params_builtin_fn(func: Callable) -> List[inspect.Parameter]:
+def _get_params_builtin_fn(func: Callable) -> list[inspect.Parameter]:
     if (
         isinstance(func, (types.BuiltinFunctionType, types.BuiltinMethodType))
         and hasattr(func, "__doc__")
@@ -484,7 +462,7 @@ def _get_params_builtin_fn(func: Callable) -> List[inspect.Parameter]:
     return []
 
 
-def _get_params_ufunc(func: Callable) -> List[inspect.Parameter]:
+def _get_params_ufunc(func: Callable) -> list[inspect.Parameter]:
     if _is_probably_ufunc(func):
         # `inspect.signature` results vary for ufunc objects, but we can work out
         # what the required parameters would look like if it was reliable.
@@ -499,7 +477,7 @@ def _get_params_ufunc(func: Callable) -> List[inspect.Parameter]:
     return []
 
 
-def _get_params(func: Callable) -> Dict[str, inspect.Parameter]:
+def _get_params(func: Callable) -> dict[str, inspect.Parameter]:
     """Get non-vararg parameters of `func` as an ordered dict."""
     try:
         params = list(get_signature(func).parameters.values())
@@ -523,7 +501,7 @@ def _get_params(func: Callable) -> Dict[str, inspect.Parameter]:
 
 def _params_to_dict(
     params: Iterable[inspect.Parameter],
-) -> Dict[str, inspect.Parameter]:
+) -> dict[str, inspect.Parameter]:
     var_param_kinds = (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
     return OrderedDict((p.name, p) for p in params if p.kind not in var_param_kinds)
 
@@ -549,7 +527,7 @@ def _with_any_registered():
 
 def _get_strategies(
     *funcs: Callable, pass_result_to_next_func: bool = False
-) -> Dict[str, st.SearchStrategy]:
+) -> dict[str, st.SearchStrategy]:
     """Return a dict of strategies for the union of arguments to `funcs`.
 
     If `pass_result_to_next_func` is True, assume that the result of each function
@@ -559,7 +537,7 @@ def _get_strategies(
     This dict is used to construct our call to the `@given(...)` decorator.
     """
     assert funcs, "Must pass at least one function"
-    given_strategies: Dict[str, st.SearchStrategy] = {}
+    given_strategies: dict[str, st.SearchStrategy] = {}
     for i, f in enumerate(funcs):
         params = _get_params(f)
         if pass_result_to_next_func and i >= 1:
@@ -636,8 +614,6 @@ def _imports_for_strategy(strategy):
             for imp in _imports_for_object(_strip_typevars(arg))
         }
         if re.match(r"from_(type|regex)\(", repr(strategy)):
-            if repr(strategy).startswith("from_type("):
-                return {module for module, _ in imports}
             return imports
         elif _get_module(strategy.function).startswith("hypothesis.extra."):
             module = _get_module(strategy.function).replace("._array_helpers", ".numpy")
@@ -657,7 +633,7 @@ def _imports_for_strategy(strategy):
         for f in strategy.flat_conditions:
             imports |= _imports_for_object(f)
     if isinstance(strategy, FlatMapStrategy):
-        imports |= _imports_for_strategy(strategy.flatmapped_strategy)
+        imports |= _imports_for_strategy(strategy.base)
         imports |= _imports_for_object(strategy.expand)
 
     # recurse through one_of to handle e.g. from_type(Optional[Foo])
@@ -705,9 +681,11 @@ def _valid_syntax_repr(strategy):
                     elems.append(s)
                     seen.add(repr(s))
             strategy = st.one_of(elems or st.nothing())
-        # Trivial special case because the wrapped repr for text() is terrible.
+        # hardcode some special cases for nicer reprs
         if strategy == st.text().wrapped_strategy:
             return set(), "text()"
+        if strategy == st.from_type(type):
+            return set(), "from_type(type)"
         # Remove any typevars; we don't exploit them so they're just clutter here
         if (
             isinstance(strategy, LazyStrategy)
@@ -738,7 +716,7 @@ def _valid_syntax_repr(strategy):
 
 # When we ghostwrite for a module, we want to treat that as the __module__ for
 # each function, rather than whichever internal file it was actually defined in.
-KNOWN_FUNCTION_LOCATIONS: Dict[object, str] = {}
+KNOWN_FUNCTION_LOCATIONS: dict[object, str] = {}
 
 
 def _get_module_helper(obj):
@@ -835,13 +813,13 @@ def _make_test_body(
     *funcs: Callable,
     ghost: str,
     test_body: str,
-    except_: Tuple[Type[Exception], ...],
+    except_: tuple[type[Exception], ...],
     assertions: str = "",
     style: str,
-    given_strategies: Optional[Mapping[str, Union[str, st.SearchStrategy]]] = None,
-    imports: Optional[ImportSet] = None,
+    given_strategies: Mapping[str, str | st.SearchStrategy] | None = None,
+    imports: ImportSet | None = None,
     annotate: bool,
-) -> Tuple[ImportSet, str]:
+) -> tuple[ImportSet, str]:
     # A set of modules to import - we might add to this later.  The import code
     # is written later, so we can have one import section for multiple magic()
     # test functions.
@@ -902,7 +880,7 @@ def _make_test_body(
 def _annotate_args(
     argnames: Iterable[str], funcs: Iterable[Callable], imports: ImportSet
 ) -> Iterable[str]:
-    arg_parameters: DefaultDict[str, Set[Any]] = defaultdict(set)
+    arg_parameters: defaultdict[str, set[Any]] = defaultdict(set)
     for func in funcs:
         try:
             params = tuple(get_signature(func, eval_str=True).parameters.values())
@@ -925,12 +903,12 @@ def _annotate_args(
 
 class _AnnotationData(NamedTuple):
     type_name: str
-    imports: Set[str]
+    imports: set[str]
 
 
 def _parameters_to_annotation_name(
-    parameters: Optional[Iterable[Any]], imports: ImportSet
-) -> Optional[str]:
+    parameters: Iterable[Any] | None, imports: ImportSet
+) -> str | None:
     if parameters is None:
         return None
     annotations = tuple(
@@ -952,9 +930,9 @@ def _parameters_to_annotation_name(
 
 
 def _join_generics(
-    origin_type_data: Optional[Tuple[str, Set[str]]],
-    annotations: Iterable[Optional[_AnnotationData]],
-) -> Optional[_AnnotationData]:
+    origin_type_data: tuple[str, set[str]] | None,
+    annotations: Iterable[_AnnotationData | None],
+) -> _AnnotationData | None:
     if origin_type_data is None:
         return None
 
@@ -978,10 +956,10 @@ def _join_generics(
 
 
 def _join_argument_annotations(
-    annotations: Iterable[Optional[_AnnotationData]],
-) -> Optional[Tuple[List[str], Set[str]]]:
-    imports: Set[str] = set()
-    arg_types: List[str] = []
+    annotations: Iterable[_AnnotationData | None],
+) -> tuple[list[str], set[str]] | None:
+    imports: set[str] = set()
+    arg_types: list[str] = []
 
     for annotation in annotations:
         if annotation is None:
@@ -992,15 +970,28 @@ def _join_argument_annotations(
     return arg_types, imports
 
 
-def _parameter_to_annotation(parameter: Any) -> Optional[_AnnotationData]:
+def _parameter_to_annotation(parameter: Any) -> _AnnotationData | None:
     # if a ForwardRef could not be resolved
     if isinstance(parameter, str):
         return None
 
     if isinstance(parameter, ForwardRef):
-        forwarded_value = parameter.__forward_value__
-        if forwarded_value is None:
-            return None
+        if sys.version_info[:2] < (3, 14):
+            forwarded_value = parameter.__forward_value__
+            if forwarded_value is None:
+                return None
+        else:
+            # ForwardRef.__forward_value__ was removed in 3.14 in favor of
+            # ForwardRef.evaluate(). See also PEP 649, PEP 749, and
+            # typing.evaluate_forward_ref.
+            #
+            # .evaluate() with Format.VALUE (the default) throws if the name
+            # could not be resolved.
+            # https://docs.python.org/3.14/library/annotationlib.html#annotationlib.ForwardRef.evaluate
+            try:
+                forwarded_value = parameter.evaluate()
+            except Exception:
+                return None
         return _parameter_to_annotation(forwarded_value)
 
     # the arguments of Callable are in a list
@@ -1045,7 +1036,7 @@ def _parameter_to_annotation(parameter: Any) -> Optional[_AnnotationData]:
         arg_types = ()
 
     # typing types get translated to classes that don't support generics
-    origin_annotation: Optional[_AnnotationData]
+    origin_annotation: _AnnotationData | None
     if type_name.startswith("typing."):
         try:
             new_type_name = type_name[: type_name.index("[")]
@@ -1100,13 +1091,21 @@ def _make_test(imports: ImportSet, body: str) -> str:
         header += "# TODO: replace st.nothing() with an appropriate strategy\n\n"
     elif nothings >= 1:
         header += "# TODO: replace st.nothing() with appropriate strategies\n\n"
-    return black.format_str(header + body, mode=black.FileMode())
+    return black.format_str(header + body, mode=black.Mode())
 
 
 def _is_probably_ufunc(obj):
     # See https://numpy.org/doc/stable/reference/ufuncs.html - there doesn't seem
     # to be an upstream function to detect this, so we just guess.
-    has_attributes = "nin nout nargs ntypes types identity signature".split()
+    has_attributes = [
+        "nin",
+        "nout",
+        "nargs",
+        "ntypes",
+        "types",
+        "identity",
+        "signature",
+    ]
     return callable(obj) and all(hasattr(obj, name) for name in has_attributes)
 
 
@@ -1137,10 +1136,10 @@ ROUNDTRIP_PAIRS = (
 )
 
 
-def _get_testable_functions(thing: object) -> Dict[str, Callable]:
+def _get_testable_functions(thing: object) -> dict[str, Callable]:
     by_name = {}
     if callable(thing):
-        funcs: List[Optional[Any]] = [thing]
+        funcs: list[Any | None] = [thing]
     elif isinstance(thing, types.ModuleType):
         if hasattr(thing, "__all__"):
             funcs = [getattr(thing, name, None) for name in thing.__all__]
@@ -1192,10 +1191,10 @@ def _get_testable_functions(thing: object) -> Dict[str, Callable]:
 
 
 def magic(
-    *modules_or_functions: Union[Callable, types.ModuleType],
+    *modules_or_functions: Callable | types.ModuleType,
     except_: Except = (),
     style: str = "pytest",
-    annotate: Optional[bool] = None,
+    annotate: bool | None = None,
 ) -> str:
     """Guess which ghostwriters to use, for a module or collection of functions.
 
@@ -1228,7 +1227,7 @@ def magic(
             for k in sorted(sys.modules, key=len):
                 if (
                     k.startswith(f"{thing.__name__}.")
-                    and "._" not in k[len(thing.__name__) :]
+                    and "._" not in k.removeprefix(thing.__name__)
                     and not k.startswith(tuple(f"{m}." for m in mods))
                     and _get_testable_functions(sys.modules[k])
                 ):
@@ -1353,7 +1352,7 @@ def fuzz(
     *,
     except_: Except = (),
     style: str = "pytest",
-    annotate: Optional[bool] = None,
+    annotate: bool | None = None,
 ) -> str:
     """Write source code for a property-based test of ``func``.
 
@@ -1417,7 +1416,7 @@ def idempotent(
     *,
     except_: Except = (),
     style: str = "pytest",
-    annotate: Optional[bool] = None,
+    annotate: bool | None = None,
 ) -> str:
     """Write source code for a property-based test of ``func``.
 
@@ -1500,7 +1499,7 @@ def roundtrip(
     *funcs: Callable,
     except_: Except = (),
     style: str = "pytest",
-    annotate: Optional[bool] = None,
+    annotate: bool | None = None,
 ) -> str:
     """Write source code for a property-based test of ``funcs``.
 
@@ -1542,7 +1541,7 @@ def _make_equiv_body(funcs, except_, style, annotate):
     var_names = _get_varnames(funcs)
     test_lines = [
         _write_call(f, assign=vname, except_=except_)
-        for vname, f in zip(var_names, funcs)
+        for vname, f in zip(var_names, funcs, strict=True)
     ]
     assertions = "\n".join(
         _assert_eq(style, var_names[0], vname) for vname in var_names[1:]
@@ -1587,7 +1586,7 @@ def _make_equiv_errors_body(funcs, except_, style, annotate):
     catch = f"except {suppress}:\n    reject()\n" if suppress else ""
     test_lines = [EQUIV_FIRST_BLOCK.format(indent(first_call, prefix="    "), catch)]
 
-    for vname, f in zip(var_names[1:], rest):
+    for vname, f in zip(var_names[1:], rest, strict=True):
         if style == "pytest":
             ctx = "pytest.raises"
             extra_imports.add("pytest")
@@ -1618,7 +1617,7 @@ def equivalent(
     allow_same_errors: bool = False,
     except_: Except = (),
     style: str = "pytest",
-    annotate: Optional[bool] = None,
+    annotate: bool | None = None,
 ) -> str:
     """Write source code for a property-based test of ``funcs``.
 
@@ -1666,11 +1665,11 @@ def binary_operation(
     *,
     associative: bool = True,
     commutative: bool = True,
-    identity: Union[X, EllipsisType, None] = ...,
-    distributes_over: Optional[Callable[[X, X], X]] = None,
+    identity: X | EllipsisType | None = ...,
+    distributes_over: Callable[[X, X], X] | None = None,
     except_: Except = (),
     style: str = "pytest",
-    annotate: Optional[bool] = None,
+    annotate: bool | None = None,
 ) -> str:
     """Write property tests for the binary operation ``func``.
 
@@ -1733,12 +1732,12 @@ def _make_binop_body(
     *,
     associative: bool = True,
     commutative: bool = True,
-    identity: Union[X, EllipsisType, None] = ...,
-    distributes_over: Optional[Callable[[X, X], X]] = None,
-    except_: Tuple[Type[Exception], ...],
+    identity: X | EllipsisType | None = ...,
+    distributes_over: Callable[[X, X], X] | None = None,
+    except_: tuple[type[Exception], ...],
     style: str,
     annotate: bool,
-) -> Tuple[ImportSet, str]:
+) -> tuple[ImportSet, str]:
     strategies = _get_strategies(func)
     operands, b = (strategies.pop(p) for p in list(_get_params(func))[:2])
     if repr(operands) != repr(b):
@@ -1752,7 +1751,7 @@ def _make_binop_body(
         sub_property: str,
         args: str,
         body: str,
-        right: Optional[str] = None,
+        right: str | None = None,
     ) -> None:
         if right is None:
             assertions = ""
@@ -1851,7 +1850,8 @@ def _make_binop_body(
         ]
         maker(do.__name__ + "_distributes_over", "abc", "\n".join(dist_parts))
 
-    _, operands_repr = _valid_syntax_repr(operands)
+    operands_imports, operands_repr = _valid_syntax_repr(operands)
+    all_imports.update(operands_imports)
     operands_repr = _st_strategy_names(operands_repr)
     classdef = ""
     if style == "unittest":
@@ -1867,7 +1867,7 @@ def ufunc(
     *,
     except_: Except = (),
     style: str = "pytest",
-    annotate: Optional[bool] = None,
+    annotate: bool | None = None,
 ) -> str:
     """Write a property-based test for the :doc:`array ufunc <numpy:reference/ufuncs>` ``func``.
 

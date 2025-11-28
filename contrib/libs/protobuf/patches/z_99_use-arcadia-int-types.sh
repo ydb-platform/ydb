@@ -15,7 +15,6 @@ def fix_line(l):
     l = l.replace('uint64_t', 'arc_ui64').replace('int64_t', 'arc_i64')
     l = l.replace('uint32_t', 'arc_ui32').replace('int32_t', 'arc_i32')
 
-    l = l.replace('"third_party/absl/', '"y_absl/')
     l = l.replace('"absl/', '"y_absl/')
     l = l.replace('absl::', 'y_absl::')
     l = l.replace('ABSL_', 'Y_ABSL_')

@@ -15,6 +15,7 @@ PEERDIR(
 
 IF(PYTHON2)
     PEERDIR(
+        library/python/strings
         contrib/deprecated/python/enum34
     )
 ENDIF()

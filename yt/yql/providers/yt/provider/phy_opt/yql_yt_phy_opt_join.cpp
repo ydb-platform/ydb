@@ -188,6 +188,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
                             .Columns<TCoVoid>().Build()
                             .Ranges<TCoVoid>().Build()
                             .Stat<TCoVoid>().Build()
+                            .QLFilter<TCoVoid>().Build()
                         .Build()
                     .Build()
                     .Settings()
@@ -428,7 +429,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AddPruneKeys(TExprBase 
             MakePruneKeysExtractorLambda(node.Ref(), columns, ctx),
             isOrdered,
             cluster,
-            ctx.NewWorld(section.Pos()),
+            equiJoin.World().Ptr(),
             Build<TYtSectionList>(ctx, section.Pos())
                 .Add(inputSection)
                 .Done(),
@@ -445,6 +446,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AddPruneKeys(TExprBase 
                     .Columns<TCoVoid>().Build()
                     .Ranges<TCoVoid>().Build()
                     .Stat<TCoVoid>().Build()
+                    .QLFilter<TCoVoid>().Build()
                 .Build()
             .Build()
             .Settings(section.Settings())

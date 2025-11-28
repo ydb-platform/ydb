@@ -1,5 +1,5 @@
 #include "mkql_dictitems.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -10,13 +10,14 @@ namespace NMiniKQL {
 
 namespace {
 
-class TDictItemsWrapper : public TCustomValueCodegeneratorNode<TDictItemsWrapper> {
+class TDictItemsWrapper: public TCustomValueCodegeneratorNode<TDictItemsWrapper> {
     typedef TCustomValueCodegeneratorNode<TDictItemsWrapper> TBaseComputation;
+
 public:
     using TSelf = TDictItemsWrapper;
 
 #ifndef MKQL_DISABLE_CODEGEN
-    class TCodegenValue : public TComputationValue<TCodegenValue> {
+    class TCodegenValue: public TComputationValue<TCodegenValue> {
     public:
         using TNextPtr = TCodegenIterator::TNextPtr;
 
@@ -25,7 +26,8 @@ public:
             , NextFunc(next)
             , Ctx(ctx)
             , Dict(std::move(dict))
-        {}
+        {
+        }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
@@ -50,12 +52,12 @@ public:
     };
 #endif
 
-    class TValue : public TComputationValue<TValue> {
+    class TValue: public TComputationValue<TValue> {
     public:
-        class TIterator : public TComputationValue<TIterator> {
+        class TIterator: public TComputationValue<TIterator> {
         public:
             TIterator(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& inner,
-                TComputationContext& compCtx, const TSelf* self)
+                      TComputationContext& compCtx, const TSelf* self)
                 : TComputationValue<TIterator>(memInfo)
                 , Inner(std::move(inner))
                 , CompCtx(compCtx)
@@ -66,8 +68,9 @@ public:
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
                 NUdf::TUnboxedValue key, payload;
-                if (!Inner.NextPair(key, payload))
+                if (!Inner.NextPair(key, payload)) {
                     return false;
+                }
 
                 NUdf::TUnboxedValue* items = nullptr;
                 value = Self->ResPair.NewArray(CompCtx, 2, items);
@@ -122,12 +125,14 @@ public:
         : TBaseComputation(mutables)
         , Dict(dict)
         , ResPair(mutables)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
-        if (ctx.ExecuteLLVM && Next)
+        if (ctx.ExecuteLLVM && Next) {
             return ctx.HolderFactory.Create<TCodegenValue>(Next, &ctx, Dict->GetValue(ctx));
+        }
 #endif
         return ctx.HolderFactory.Create<TValue>(Dict->GetValue(ctx), ctx, this);
     }
@@ -144,8 +149,9 @@ private:
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (NextFunc)
+        if (NextFunc) {
             Next = reinterpret_cast<TNextPtr>(codegen.GetPointerToFunction(NextFunc));
+        }
     }
 
     Function* GenerateNext(NYql::NCodegen::ICodegen& codegen) const {
@@ -153,8 +159,9 @@ private:
         auto& context = codegen.GetContext();
 
         const auto& name = TBaseComputation::MakeName("Next");
-        if (const auto f = module.getFunction(name.c_str()))
+        if (const auto f = module.getFunction(name.c_str())) {
             return f;
+        }
 
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
@@ -223,12 +230,13 @@ private:
 };
 
 template <bool KeysOrPayloads>
-class TDictHalfsWrapper : public TMutableComputationNode<TDictHalfsWrapper<KeysOrPayloads>> {
+class TDictHalfsWrapper: public TMutableComputationNode<TDictHalfsWrapper<KeysOrPayloads>> {
     typedef TMutableComputationNode<TDictHalfsWrapper<KeysOrPayloads>> TBaseComputation;
+
 public:
     using TSelf = TDictHalfsWrapper<KeysOrPayloads>;
 
-    class TValue : public TComputationValue<TValue> {
+    class TValue: public TComputationValue<TValue> {
     public:
         TValue(
             TMemoryUsageInfo* memInfo,
@@ -236,7 +244,8 @@ public:
             TComputationContext&, const TSelf*)
             : TComputationValue<TValue>(memInfo)
             , Dict(std::move(dict))
-        {}
+        {
+        }
 
     private:
         ui64 GetListLength() const final {
@@ -259,8 +268,10 @@ public:
     };
 
     TDictHalfsWrapper(TComputationMutables& mutables, IComputationNode* dict)
-        : TBaseComputation(mutables), Dict(dict)
-    {}
+        : TBaseComputation(mutables)
+        , Dict(dict)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TValue>(Dict->GetValue(ctx), ctx, this);
@@ -274,7 +285,7 @@ private:
     IComputationNode* const Dict;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapDictItems(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected one arg");
@@ -294,5 +305,5 @@ IComputationNode* WrapDictPayloads(TCallable& callable, const TComputationNodeFa
     return new TDictHalfsWrapper<false>(ctx.Mutables, node);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

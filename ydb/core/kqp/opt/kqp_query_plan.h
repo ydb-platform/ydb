@@ -37,6 +37,7 @@ enum class EPlanTableWriteType {
  * table accesses is stored in top-level TKqpPhyQuery.QueryPlan.
  */
 void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes::TKqpPhysicalQuery& query,
+    const NYql::NNodes::TKqpPhysicalQuery& peepHoleOptimizedQuery,
     TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& database,
     const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config,
     NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx);

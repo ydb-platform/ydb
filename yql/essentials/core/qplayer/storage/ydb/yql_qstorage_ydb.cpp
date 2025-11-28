@@ -18,9 +18,9 @@ constexpr ui32 DefaultRetriesCount = 20;
 
 NYdb::TDriver MakeDriver(const TYdbQStorageSettings& settings) {
     auto driverConfig = NYdb::TDriverConfig()
-        .SetEndpoint(settings.Endpoint)
-        .SetDatabase(settings.Database)
-        .SetAuthToken(settings.Token);
+                            .SetEndpoint(settings.Endpoint)
+                            .SetDatabase(settings.Database)
+                            .SetAuthToken(settings.Token);
     NYdb::TDriver driver(driverConfig);
     return driver;
 }
@@ -38,7 +38,7 @@ void ProcessString(const TString& str, ui64& totalBytes, ui64& checksum) {
     totalBytes += length;
 }
 
-class TWriter : public IQWriter {
+class TWriter: public IQWriter {
 public:
     TWriter(const TYdbQStorageSettings& settings, const TString& operationId, const TQWriterSettings& writerSettings)
         : Settings_(settings)
@@ -46,7 +46,8 @@ public:
         , Storage_(MakeMemoryQStorage())
         , Writer_(Storage_->MakeWriter("", writerSettings))
         , WrittenAt_(writerSettings.WrittenAt.GetOrElse(Now()))
-    {}
+    {
+    }
 
     NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) final {
         return Writer_->Put(key, value);
@@ -111,20 +112,29 @@ private:
                 }
             }
 
+            // clang-format off
             rows->AddListItem()
                 .BeginStruct()
-                .AddMember("operation_id").OptionalString(FullOperationId_)
-                .AddMember("written_at").OptionalTimestamp(WrittenAt_)
-                .AddMember("item_index").OptionalUint32(totalItems - 1)
-                .AddMember("part").OptionalUint32(currentPart)
-                .AddMember("component").String(currentPart ? "" : currentItem.Key.Component)
-                .AddMember("label").String(currentPart ? "" : currentItem.Key.Label)
-                .AddMember("data").String(data)
+                    .AddMember("operation_id")
+                        .OptionalString(FullOperationId_)
+                    .AddMember("written_at")
+                        .OptionalTimestamp(WrittenAt_)
+                    .AddMember("item_index")
+                        .OptionalUint32(totalItems - 1)
+                    .AddMember("part")
+                        .OptionalUint32(currentPart)
+                    .AddMember("component")
+                        .String(currentPart ? "" : currentItem.Key.Component)
+                    .AddMember("label")
+                        .String(currentPart ? "" : currentItem.Key.Label)
+                    .AddMember("data")
+                        .String(data)
                 .EndStruct();
+            // clang-format on
 
             currentBatchSize += FullOperationId_.size() + sizeof(ui64) +
-                sizeof(ui32) + currentItem.Key.Component.size() +
-                currentItem.Key.Label.size() + data.size();
+                                sizeof(ui32) + currentItem.Key.Component.size() +
+                                currentItem.Key.Label.size() + data.size();
             if (currentBatchSize >= maxBatchSize) {
                 FlushBatch(rows, tableClient);
                 currentBatchSize = 0;
@@ -145,8 +155,8 @@ private:
 
         NYdb::NTable::TRetryOperationSettings writeRetrySettings;
         writeRetrySettings
-                .Idempotent(true)
-                .MaxRetries(GetRetriesCount());
+            .Idempotent(true)
+            .MaxRetries(GetRetriesCount());
 
         ThrowOnError(tableClient.RetryOperationSync([table, params = paramsBuilder.Build()](NYdb::NTable::TSession session) {
             auto query = Sprintf(R"(
@@ -162,8 +172,9 @@ private:
             )", table.c_str());
 
             return session.ExecuteDataQuery(query,
-                NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW())
-                    .CommitTx(), params).GetValueSync();
+                                            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW())
+                                                .CommitTx(), params)
+                .GetValueSync();
         }, writeRetrySettings));
 
         driver.Stop(true);
@@ -210,7 +221,7 @@ private:
     const TInstant WrittenAt_;
 };
 
-class TStorage : public IQStorage {
+class TStorage: public IQStorage {
 public:
     TStorage(const TYdbQStorageSettings& settings)
         : Settings_(settings)
@@ -239,7 +250,7 @@ private:
         auto driver = MakeDriver(Settings_);
         NYdb::NTable::TTableClient tableClient(driver);
 
-        auto operationsTable  = Settings_.TablesPrefix + "operations";
+        auto operationsTable = Settings_.TablesPrefix + "operations";
         auto fullOperationId = Settings_.OperationIdPrefix + operationId;
 
         NYdb::NTable::TRetryOperationSettings readRetrySettings;
@@ -261,8 +272,9 @@ private:
             )", operationsTable.c_str());
 
             auto r = session.ExecuteDataQuery(query,
-                NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW())
-                    .CommitTx(), params).GetValueSync();
+                                              NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW())
+                                                  .CommitTx(), params)
+                         .GetValueSync();
             if (r.IsSuccess()) {
                 res = r.GetResultSet(0);
             }
@@ -288,35 +300,43 @@ private:
 
         const auto maxBatchSize = Settings_.MaxBatchSize.GetOrElse(DefaultMaxBatchSize);
         auto rtResult = tableClient.RetryOperationSync([&tableIter, maxBatchSize, blobTable,
-            fullOperationId, writtenAt, loadedTotalItems](NYdb::NTable::TSession session) {
+                                                        fullOperationId, writtenAt, loadedTotalItems](NYdb::NTable::TSession session) {
+            // clang-format off
             auto key1 = NYdb::TValueBuilder()
-                .BeginTuple()
-                    .AddElement().OptionalString(fullOperationId)
-                    .AddElement().OptionalTimestamp(writtenAt)
-                    .AddElement().OptionalUint32(0)
-                .EndTuple()
-                .Build();
+                            .BeginTuple()
+                                .AddElement()
+                                    .OptionalString(fullOperationId)
+                                .AddElement()
+                                    .OptionalTimestamp(writtenAt)
+                                .AddElement()
+                                    .OptionalUint32(0)
+                            .EndTuple()
+                            .Build();
             auto key2 = NYdb::TValueBuilder()
-                .BeginTuple()
-                    .AddElement().OptionalString(fullOperationId)
-                    .AddElement().OptionalTimestamp(writtenAt)
-                    .AddElement().OptionalUint32(loadedTotalItems)
-                .EndTuple()
-                .Build();
+                            .BeginTuple()
+                                .AddElement()
+                                    .OptionalString(fullOperationId)
+                                .AddElement()
+                                    .OptionalTimestamp(writtenAt)
+                                .AddElement()
+                                    .OptionalUint32(loadedTotalItems)
+                            .EndTuple()
+                            .Build();
+            // clang-format on
             auto from = NYdb::NTable::TKeyBound::Inclusive(key1);
             auto to = NYdb::NTable::TKeyBound::Exclusive(key2);
             auto settings = NYdb::NTable::TReadTableSettings()
-                .BatchLimitBytes(maxBatchSize)
-                .Ordered(true)
-                .From(from)
-                .To(to)
-                .AppendColumns("operation_id")
-                .AppendColumns("written_at")
-                .AppendColumns("item_index")
-                .AppendColumns("part")
-                .AppendColumns("component")
-                .AppendColumns("label")
-                .AppendColumns("data");
+                                .BatchLimitBytes(maxBatchSize)
+                                .Ordered(true)
+                                .From(from)
+                                .To(to)
+                                .AppendColumns("operation_id")
+                                .AppendColumns("written_at")
+                                .AppendColumns("item_index")
+                                .AppendColumns("part")
+                                .AppendColumns("component")
+                                .AppendColumns("label")
+                                .AppendColumns("data");
             auto res = session.ReadTable(blobTable, settings).GetValueSync();
             if (res.IsSuccess()) {
                 tableIter = res;
@@ -391,10 +411,10 @@ private:
     const TYdbQStorageSettings Settings_;
 };
 
-}
+} // namespace
 
 IQStoragePtr MakeYdbQStorage(const TYdbQStorageSettings& settings) {
     return std::make_shared<TStorage>(settings);
 }
 
-}
+} // namespace NYql

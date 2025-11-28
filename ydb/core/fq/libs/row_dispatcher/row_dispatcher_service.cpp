@@ -10,27 +10,31 @@ using namespace NActors;
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewRowDispatcherService(
-    const NConfig::TRowDispatcherConfig& config,
+    const TRowDispatcherSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
+    NYdb::TDriver driver,
     NActors::TMon* monitoring,
-    ::NMonitoring::TDynamicCounterPtr countersRoot)
+    ::NMonitoring::TDynamicCounterPtr countersRoot,
+    NActors::TActorId nodesManagerId)
 {
     return NewRowDispatcher(
         config,
         credentialsProviderFactory,
-        yqSharedResources,
         credentialsFactory,
         tenant,
         NFq::NRowDispatcher::CreateActorFactory(),
+        functionRegistry,
         counters,
         countersRoot,
         pqGateway,
-        monitoring);
+        driver,
+        monitoring,
+        nodesManagerId);
 }
 
 } // namespace NFq

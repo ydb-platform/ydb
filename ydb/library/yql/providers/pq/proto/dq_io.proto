@@ -23,6 +23,7 @@ message TWatermarks {
     uint64 GranularityUs = 2;
     uint64 LateArrivalDelayUs = 3;
     bool IdlePartitionsEnabled = 4;
+    optional uint64 IdleTimeoutUs = 5;
 }
 
 message TDqPqFederatedCluster {
@@ -88,6 +89,10 @@ message TDqPqTopicSource {
     repeated TDqPqFederatedCluster FederatedClusters = 21;
     StreamingDisposition Disposition = 22;
     repeated TTaskSensorLabel TaskSensorLabel = 23;
+    string WatermarkExpr = 24;
+    repeated uint64 NodeIds = 25;
+    bool UseActorSystemThreadsInTopicClient = 26;
+    bool SkipJsonErrors = 27;
 }
 
 message TDqPqTopicSink {
@@ -98,4 +103,5 @@ message TDqPqTopicSink {
     bool UseSsl = 5;
     bool AddBearerToToken = 6;
     EClusterType ClusterType = 7;
+    bool UseActorSystemThreadsInTopicClient = 8;
 }

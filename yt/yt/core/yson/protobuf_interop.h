@@ -9,6 +9,7 @@
 #include <yt/yt/core/ypath/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+#include <yt/yt/core/ytree/yson_schema_options.h>
 
 #include <library/cpp/yt/misc/variant.h>
 
@@ -143,9 +144,6 @@ template <CProtobufElement TElementType>
 const TElementType& GetProtobufElementOrThrow(const TProtobufElement& element);
 
 ////////////////////////////////////////////////////////////////////////////////
-
-constexpr int UnknownYsonFieldNumber = 3005;
-
 
 //! Creates a YSON consumer that converts IYsonConsumer calls into
 //! a byte sequence in protobuf wire format.
@@ -287,7 +285,7 @@ void SetProtobufInteropConfig(TProtobufInteropConfigPtr config);
 
 //! Returns type v3 schema for protobuf message type.
 //! Note: Recursive types (message has field with self type) are not supported.
-void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer);
+void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer, const NYTree::TYsonStructWriteSchemaOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

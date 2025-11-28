@@ -94,7 +94,7 @@ public:
     struct TQpS {
         int State;
     };
-    static bool IsRtsState(TQpS state);
+    static bool IsRtsState(TQpS state) noexcept;
     struct TQpErr {
         int Err;
     };

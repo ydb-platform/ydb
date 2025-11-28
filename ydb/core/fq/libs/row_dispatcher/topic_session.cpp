@@ -801,7 +801,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             ActorContext(),
             config,
             handlerSettings,
-            {.CountersRoot = CountersRoot, .CountersSubgroup = Metrics.PartitionGroup}
+            {.CountersRoot = CountersRoot, .ReadGroupSubgroup = Metrics.ReadGroup, .CountersSubgroup = Metrics.PartitionGroup}
         )).first;
     }
 

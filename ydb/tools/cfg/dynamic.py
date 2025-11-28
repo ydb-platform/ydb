@@ -175,6 +175,29 @@ class DynamicConfigGenerator(object):
     def cms_init_cmd(self):
         return self.__cms_init_cmds()
 
+    def _get_infer_settings_for_drive(self, drive_type):
+        infer_settings = self._cluster_details.infer_pdisk_slot_count
+        if infer_settings is None:
+            return None, None
+
+        unit_size = None
+        max_slots = None
+
+        # Determine the settings based on drive type
+        drive_type_upper = str(drive_type).upper()
+        if drive_type_upper == 'SSD':
+            ssd_and_nvme_settings = infer_settings.get('ssd_and_nvme')
+            if ssd_and_nvme_settings:
+                unit_size = ssd_and_nvme_settings.get('unit_size')
+                max_slots = ssd_and_nvme_settings.get('max_slots')
+        elif drive_type_upper == 'ROT':
+            rot_settings = infer_settings.get('rot')
+            if rot_settings:
+                unit_size = rot_settings.get('unit_size')
+                max_slots = rot_settings.get('max_slots')
+
+        return unit_size, max_slots
+
     def define_box_and_storage_pools_request(self):
         request = bs_config.TConfigRequest()
         box_id = 1
@@ -182,7 +205,7 @@ class DynamicConfigGenerator(object):
         host_config_id_iter = itertools.count(start=1)
         at_least_one_host_config_defined = False
 
-        def add_drive(array, drive):
+        def add_drive(array, drive, unit_size=None, slot_count_max=None):
             kwargs = dict(
                 Path=drive.path,
                 SharedWithOs=drive.shared_with_os,
@@ -192,6 +215,10 @@ class DynamicConfigGenerator(object):
             if drive.expected_slot_count is not None:
                 pc = pdisk_config.TPDiskConfig(ExpectedSlotCount=drive.expected_slot_count)
                 kwargs.update(PDiskConfig=pc)
+            if unit_size is not None:
+                kwargs.update(InferPDiskSlotCountFromUnitSize=unit_size)
+            if slot_count_max is not None:
+                kwargs.update(InferPDiskSlotCountMax=slot_count_max)
             array.add(**kwargs)
 
         for host_config in self._cluster_details.host_configs:
@@ -201,7 +228,21 @@ class DynamicConfigGenerator(object):
             cmd.DefineHostConfig.ItemConfigGeneration = host_config.generation
             drives_to_config_id[host_config.drives] = host_config.host_config_id
             for drive in host_config.drives:
-                add_drive(cmd.DefineHostConfig.Drive, drive)
+                unit_size = None
+                if host_config.infer_pdisk_slot_count_from_unit_size is not None:
+                    if drive.type == "ROT":
+                        unit_size = host_config.infer_pdisk_slot_count_from_unit_size.get("rot")
+                    elif drive.type in ("SSD", "NVME"):
+                        unit_size = host_config.infer_pdisk_slot_count_from_unit_size.get("ssd")
+
+                slot_count_max = None
+                if host_config.infer_pdisk_slot_count_max is not None:
+                    if drive.type == "ROT":
+                        slot_count_max = host_config.infer_pdisk_slot_count_max.get("rot")
+                    elif drive.type in ("SSD", "NVME"):
+                        slot_count_max = host_config.infer_pdisk_slot_count_max.get("ssd")
+
+                add_drive(cmd.DefineHostConfig.Drive, drive, unit_size, slot_count_max)
 
         for host in self._cluster_details.hosts:
             if host.drives in drives_to_config_id:

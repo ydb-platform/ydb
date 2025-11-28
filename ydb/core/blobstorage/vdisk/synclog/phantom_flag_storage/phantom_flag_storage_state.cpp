@@ -6,18 +6,25 @@ namespace NKikimr {
 
 namespace NSyncLog {
 
-TPhantomFlagStorageState::TPhantomFlagStorageState(const TBlobStorageGroupType& gtype)
-    : GType(gtype)
+TPhantomFlagStorageState::TPhantomFlagStorageState(TIntrusivePtr<TSyncLogCtx> slCtx)
+    : SlCtx(slCtx)
+    , GType(slCtx->VCtx->Top->GType)
     , Thresholds(GType)
 {}
 
-void TPhantomFlagStorageState::Activate() {
+void TPhantomFlagStorageState::StartBuilding() {
     Active = true;
+    Building = true;
 }
 
 void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit) {
     AdjustSize(sizeLimit);
-    if (blobRec->Ingress.IsDoNotKeep(GType) && Thresholds.IsBehindThreshold(blobRec->LogoBlobID())) {
+    if (!Active) {
+        return;
+    }
+
+    if (blobRec->Ingress.IsDoNotKeep(GType) &&
+            (Building || Thresholds.IsBehindThresholdOnUnsynced(blobRec->LogoBlobID(), SyncedMask))) {
         AddFlag(*blobRec);
     }
 }
@@ -33,7 +40,13 @@ void TPhantomFlagStorageState::ProcessBarrierRecordFromNeighbour(ui32 orderNumbe
     }
 }
 
-void TPhantomFlagStorageState::AddFlags(TPhantomFlags flags, ui64 sizeLimit) {
+void TPhantomFlagStorageState::FinishBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds,
+        ui64 sizeLimit) {
+    if (!Active) {
+        // PhantomFlagStorage was deactivated while building, do nothing
+        return;
+    }
+
     AdjustSize(sizeLimit);
     for (const TLogoBlobRec& rec : flags) {
         bool added = AddFlag(rec);
@@ -41,11 +54,15 @@ void TPhantomFlagStorageState::AddFlags(TPhantomFlags flags, ui64 sizeLimit) {
             break;
         }
     }
+    Thresholds.Merge(std::move(thresholds));
+
+    Building = false;
 }
 
 void TPhantomFlagStorageState::Deactivate() {
     StoredFlags.clear();
     Active = false;
+    Building = false;
 }
 
 TPhantomFlagStorageSnapshot TPhantomFlagStorageState::GetSnapshot() const {
@@ -57,6 +74,10 @@ bool TPhantomFlagStorageState::IsActive() const {
 }
 
 void TPhantomFlagStorageState::ProcessLocalSyncData(ui32 orderNumber, const TString& data) {
+    if (!Active) {
+        return;
+    }
+
     auto blobHandler = [&] (const NSyncLog::TLogoBlobRec* rec) {
         ProcessBlobRecordFromNeighbour(orderNumber, rec);
     };
@@ -103,6 +124,10 @@ bool TPhantomFlagStorageState::AddFlag(const TLogoBlobRec& blobRec) {
         return true;
     }
     return false;
+}
+
+void TPhantomFlagStorageState::UpdateSyncedMask(TSyncedMask newSyncedMask) {
+    SyncedMask = newSyncedMask;
 }
 
 } // namespace NSyncLog

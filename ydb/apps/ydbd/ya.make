@@ -23,8 +23,6 @@ IF (OS_WINDOWS)
 ENDIF()
 
 SRCS(
-    export.cpp
-    export.h
     main.cpp
 )
 

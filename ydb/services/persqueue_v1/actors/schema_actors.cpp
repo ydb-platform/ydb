@@ -151,6 +151,11 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                 rr->add_supported_codecs((Ydb::PersQueue::V1::Codec) (codec + 1));
             }
             rr->set_important(consumer.GetImportant());
+            if (consumer.HasAvailabilityPeriodMs()) {
+                TDuration availabilityPeriod = TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
+                rr->mutable_availability_period()->set_seconds(availabilityPeriod.Seconds());
+                rr->mutable_availability_period()->set_nanos(availabilityPeriod.NanoSecondsOfSecond());
+            }
 
             if (consumer.HasServiceType()) {
                 rr->set_service_type(consumer.GetServiceType());

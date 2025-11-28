@@ -1,0 +1,15 @@
+items:
+  - name: Data Ingestion
+    href: ingest.md
+  - name: Data Storage
+    href: store.md
+  - name: Query Execution
+    href: execution.md
+  - name: Federated queries
+    href: federated.md
+  - name: Data transformation and preparation (ETL/ELT)
+    href: etl.md
+  - name: BI analytics and data visualization
+    href: bi.md
+  - name: Machine Learning
+    href: ml.md

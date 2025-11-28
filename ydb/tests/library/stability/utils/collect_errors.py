@@ -118,7 +118,7 @@ class ErrorsCollector:
                     slot = f"{core.get('slot', '')}@{h}"
                     core_hashes.setdefault(slot, [])
                     v2_info = (core.get('core_id', ''), core.get('core_hash', ''), 'v2')
-                    if v2_info[0] is None and v2_info[1] is None or v2_info[0] == 0 and v2_info[1] == 0:
+                    if (v2_info[0] is None and v2_info[1] is None) or (v2_info[0] == 0 and v2_info[1] == 0):
                         v3_info = (core.get('core_uuid_v3', ''), core.get('core_hash_v3', ''), 'v3')
                         core_hashes[slot].append(v3_info)
                     else:

@@ -322,7 +322,7 @@ class ParallelWorkloadTestBase:
                 failed_iterations = []
                 successful_iterations = []
                 for workload_name, workload_run_info in result.stress_util_runs.items():
-                    if workload_run_info.get_successful_runs == 0:
+                    if workload_run_info.get_successful_runs() == 0:
                         failed_iterations.append({
                             'iteration': workload_name,
                             'error': "All runs on all nodes have failed",

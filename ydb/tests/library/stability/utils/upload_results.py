@@ -143,7 +143,7 @@ def _upload_results(
     if coredump_count > 0:
         aggregated_errors.append(f'Collected coredumps: {coredump_count}')
     if had_oom:
-        aggregated_errors.append('OOM occured')
+        aggregated_errors.append('OOM occurred')
 
     for error_summary, detailed_info in verify_errors.items():
         aggregated_errors.append(f'VERIFY {error_summary} appeared on')

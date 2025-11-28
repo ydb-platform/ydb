@@ -247,20 +247,27 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     Y_UNIT_TEST(JsonPathTrie) {
         TVector<TString> testPaths = {"$.a.b", "$.b", "$.c.d"};
         TVector<std::shared_ptr<IChunkedArray>> testAccessors;
+        TVector<ui64> testCookies;
         NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
 
-        for (const auto& path : testPaths) {
-            testAccessors.emplace_back(TTrivialArray::BuildEmpty(std::make_shared<arrow::BinaryType>()));
-            UNIT_ASSERT(jsonPathAccessorTrie.Insert(path, testAccessors.back()).IsSuccess());
+        {
+            ui64 testCookie = 0;
+            for (const auto& path : testPaths) {
+                testAccessors.emplace_back(TTrivialArray::BuildEmpty(std::make_shared<arrow::BinaryType>()));
+                testCookies.emplace_back(testCookie++);
+                UNIT_ASSERT(jsonPathAccessorTrie.Insert(path, testAccessors.back(), testCookies.back()).IsSuccess());
+            }
         }
 
         {
             for (decltype(testPaths)::size_type i = 0; i < testPaths.size(); ++i) {
                 auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(testPaths[i]);
                 UNIT_ASSERT_C(jsonPathAccessorResult.IsSuccess(), testPaths[i] + " error: " + jsonPathAccessorResult.GetErrorMessage());
-                UNIT_ASSERT(jsonPathAccessorResult->IsValid());
-                UNIT_ASSERT_VALUES_EQUAL(testAccessors[i].get(), jsonPathAccessorResult->GetChunkedArrayAccessor().get());
-                UNIT_ASSERT_VALUES_EQUAL(TString{}, jsonPathAccessorResult->GetRemainingPath());
+                auto jsonPathAccessor = jsonPathAccessorResult.DetachResult();
+                UNIT_ASSERT(jsonPathAccessor->IsValid());
+                UNIT_ASSERT_VALUES_EQUAL(testAccessors[i].get(), jsonPathAccessor->GetChunkedArrayAccessor().get());
+                UNIT_ASSERT_VALUES_EQUAL(testCookies[i], jsonPathAccessor->GetCookie());
+                UNIT_ASSERT_VALUES_EQUAL(TString{}, jsonPathAccessor->GetRemainingPath());
             }
         }
 
@@ -269,9 +276,11 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             for (const auto& path : testShortPaths) {
                 auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(path);
                 UNIT_ASSERT_C(jsonPathAccessorResult.IsSuccess(), path + " error: " + jsonPathAccessorResult.GetErrorMessage());
-                UNIT_ASSERT(!jsonPathAccessorResult->IsValid());
-                UNIT_ASSERT_VALUES_EQUAL(nullptr, jsonPathAccessorResult->GetChunkedArrayAccessor().get());
-                UNIT_ASSERT_VALUES_EQUAL(TString{}, jsonPathAccessorResult->GetRemainingPath());
+                auto jsonPathAccessor = jsonPathAccessorResult.DetachResult();
+                UNIT_ASSERT(!jsonPathAccessor->IsValid());
+                UNIT_ASSERT_VALUES_EQUAL(nullptr, jsonPathAccessor->GetChunkedArrayAccessor().get());
+                UNIT_ASSERT_VALUES_EQUAL(std::optional<ui64>{}, jsonPathAccessor->GetCookie());
+                UNIT_ASSERT_VALUES_EQUAL(TString{}, jsonPathAccessor->GetRemainingPath());
             }
         }
 
@@ -281,9 +290,11 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             for (decltype(testPaths)::size_type i = 0; i < testPaths.size(); ++i) {
                 auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(testLongPaths[i]);
                 UNIT_ASSERT_C(jsonPathAccessorResult.IsSuccess(), testPaths[i] + " error: " + jsonPathAccessorResult.GetErrorMessage());
-                UNIT_ASSERT(jsonPathAccessorResult->IsValid());
-                UNIT_ASSERT_VALUES_EQUAL(testAccessors[i].get(), jsonPathAccessorResult->GetChunkedArrayAccessor().get());
-                UNIT_ASSERT_VALUES_EQUAL(testLongRemainingPaths[i], jsonPathAccessorResult->GetRemainingPath());
+                auto jsonPathAccessor = jsonPathAccessorResult.DetachResult();
+                UNIT_ASSERT(jsonPathAccessor->IsValid());
+                UNIT_ASSERT_VALUES_EQUAL(testAccessors[i].get(), jsonPathAccessor->GetChunkedArrayAccessor().get());
+                UNIT_ASSERT_VALUES_EQUAL(testCookies[i], jsonPathAccessor->GetCookie());
+                UNIT_ASSERT_VALUES_EQUAL(testLongRemainingPaths[i], jsonPathAccessor->GetRemainingPath());
             }
         }
 
@@ -308,10 +319,11 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     void CheckValueByPath(const NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie& jsonPathAccessorTrie, TStringBuf path, std::optional<TStringBuf> expected) {
         auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(path);
         UNIT_ASSERT_C(jsonPathAccessorResult.IsSuccess(), TString(path) + " error: " + jsonPathAccessorResult.GetErrorMessage());
-        UNIT_ASSERT(jsonPathAccessorResult->IsValid());
+        auto jsonPathAccessor = jsonPathAccessorResult.DetachResult();
+        UNIT_ASSERT(jsonPathAccessor->IsValid());
 
         int callsCount = 0;
-        jsonPathAccessorResult->VisitValues([&](const std::optional<TStringBuf>& value) {
+        jsonPathAccessor->VisitValues([&](const std::optional<TStringBuf>& value) {
             UNIT_ASSERT_VALUES_EQUAL_C(expected, value, TString(path));
             callsCount++;
             UNIT_ASSERT_VALUES_EQUAL(1, callsCount);

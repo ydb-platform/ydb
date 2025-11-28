@@ -121,11 +121,7 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
     return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, Settings, recordsCount)));
 }
 
-std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key, bool isArray) {
-    if (isArray) {
-        return Sprintf("%.*s%.*s", currentPrefix.size(), currentPrefix.data(), key.size(), key.data());
-    }
-
+std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {
     const auto escapedKey = EscapeC(key);
     if (currentPrefix.size()) {
         return Sprintf("%.*s.\"%.*s\"", currentPrefix.size(), currentPrefix.data(), escapedKey.size(), escapedKey.data());
@@ -134,21 +130,21 @@ std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key, bo
     return Sprintf("\"%.*s\"", escapedKey.size(), escapedKey.data());
 }
 
-TStringBuf TDataBuilder::AddKeyOwn(const TStringBuf currentPrefix, std::string&& key, bool isArray) {
+TStringBuf TDataBuilder::AddKeyOwn(const TStringBuf currentPrefix, std::string&& key) {
     auto it = StorageHash.find(TStorageAddress(currentPrefix, TStringBuf(key.data(), key.size())));
     if (it == StorageHash.end()) {
         Storage.emplace_back(std::move(key));
         TStringBuf sbKey(Storage.back().data(), Storage.back().size());
-        it = StorageHash.emplace(TStorageAddress(currentPrefix, sbKey), BuildString(currentPrefix, sbKey, isArray)).first;
+        it = StorageHash.emplace(TStorageAddress(currentPrefix, sbKey), BuildString(currentPrefix, sbKey)).first;
     }
     return TStringBuf(it->second.data(), it->second.size());
 }
 
-TStringBuf TDataBuilder::AddKey(const TStringBuf currentPrefix, const TStringBuf key, bool isArray) {
+TStringBuf TDataBuilder::AddKey(const TStringBuf currentPrefix, const TStringBuf key) {
     TStorageAddress keyAddress(currentPrefix, key);
     auto it = StorageHash.find(keyAddress);
     if (it == StorageHash.end()) {
-        it = StorageHash.emplace(keyAddress, BuildString(currentPrefix, key, isArray)).first;
+        it = StorageHash.emplace(keyAddress, BuildString(currentPrefix, key)).first;
     }
     return TStringBuf(it->second.data(), it->second.size());
 }

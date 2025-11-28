@@ -7,6 +7,7 @@
 
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/common/container.h>
@@ -111,9 +112,9 @@ public:
         return nullptr;
     }
 
-    std::shared_ptr<IChunkedArray> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
+    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
         auto accResult = ColumnsData.GetPathAccessor(svPath);
-        if (accResult) {
+        if (accResult.IsFail() || accResult.GetResult()->IsValid()) {
             return accResult;
         }
         return OthersData.GetPathAccessor(svPath, recordsCount);

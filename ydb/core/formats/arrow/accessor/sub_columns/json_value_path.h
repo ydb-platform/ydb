@@ -34,31 +34,37 @@ TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonP
 class TJsonPathAccessor {
     YDB_READONLY_DEF(std::shared_ptr<IChunkedArray>, ChunkedArrayAccessor);
     YDB_READONLY_DEF(TString, RemainingPath);
+    YDB_READONLY_DEF(std::optional<ui64>, Cookie);
     NYql::NJsonPath::TJsonPathPtr RemainingPathPtr;
 
 public:
     using TValuesVisitor = std::function<void(const std::optional<TStringBuf>& value)>;
 
-    TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath);
+    TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, const std::optional<ui64>& cookie = std::nullopt);
 
     void VisitValues(const TValuesVisitor& visitor) const;
 
     bool IsValid() const {
-        return ChunkedArrayAccessor != nullptr;
+        return ChunkedArrayAccessor != nullptr || Cookie.has_value();
+    }
+
+    ui64 GetRecordsCount() const {
+        return ChunkedArrayAccessor ? ChunkedArrayAccessor->GetRecordsCount() : 0;
     }
 };
 
 class TJsonPathAccessorTrie {
     struct TrieNode {
         TMap<TString, std::unique_ptr<TrieNode>> Children;
-        std::shared_ptr<IChunkedArray> accessor;
+        std::shared_ptr<IChunkedArray> Accessor;
+        std::optional<ui64> Cookie;
     };
 
-    TrieNode root;
+    TrieNode Root;
 
 public:
-    TConclusionStatus Insert(TJsonPathBuf jsonPath, std::shared_ptr<IChunkedArray> accessor);
-    TConclusion<TJsonPathAccessor> GetAccessor(TJsonPathBuf jsonPath) const;
+    TConclusionStatus Insert(TJsonPathBuf jsonPath, std::shared_ptr<IChunkedArray> accessor, const std::optional<ui64>& cookie = std::nullopt);
+    TConclusion<std::shared_ptr<TJsonPathAccessor>> GetAccessor(TJsonPathBuf jsonPath) const;
 };
 
 } // namespace NKikimr::NArrow::NAccessor::NSubColumns

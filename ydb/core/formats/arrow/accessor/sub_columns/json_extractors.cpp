@@ -14,7 +14,7 @@ TConclusionStatus TArrayExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<
     ui32 idx = 0;
     while (Iterator.HasNext()) {
         auto value = Iterator.Next();
-        const TStringBuf key = dataBuilder.AddKeyOwn(GetPrefix(), "[" + std::to_string(idx++) + "]", /*isArray=*/ true);
+        const TStringBuf key = dataBuilder.AddKeyOwn(GetPrefix(), "[" + std::to_string(idx++) + "]");
         auto conclusion = AddDataToBuilder(dataBuilder, iterators, key, value);
         if (conclusion.IsFail()) {
             return conclusion;
@@ -47,13 +47,14 @@ TConclusionStatus IJsonObjectExtractor::AddDataToBuilder(TDataBuilder& dataBuild
         auto container = value.GetContainer();
         if (FirstLevelOnly || container.GetType() == NBinaryJson::EContainerType::Array) {
             res = NBinaryJson::SerializeToBinaryJson(value);
-        // TODO: add support for arrays if needed
-        // } else if (container.GetType() == NBinaryJson::EContainerType::Array) {
-        //     iterators.emplace_back(std::make_unique<TArrayExtractor>(container.GetArrayIterator(), key));
-        //     addRes = false;
         } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
-            iterators.emplace_back(std::make_unique<TKVExtractor>(container.GetObjectIterator(), key));
-            addRes = false;
+            auto containerIt = container.GetObjectIterator();
+            if (!containerIt.HasNext()) {
+                res = NBinaryJson::SerializeToBinaryJson("{}");
+            } else {
+                iterators.emplace_back(std::make_unique<TKVExtractor>(containerIt, key));
+                addRes = false;
+            }
         } else {
             return TConclusionStatus::Fail("unexpected top value scalar in container iterator");
         }

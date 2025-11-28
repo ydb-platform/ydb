@@ -269,13 +269,13 @@ await transaction.CommitAsync();
 
 В таком случае обработка ошибок ([Transaction Lock Invalidated](https://ydb.tech/docs/ru/troubleshooting/performance/queries/transaction-lock-invalidation)) становится заботой пользователя. YDB может откратить транзакцию в случае инвалидации MVC локов.
 
-{# endnote }
+{% endnote %}
 
 {% note info %}
 
 Это допустимый и рекомендуемый для длительных чтений. Используйте транзакции чтения в режиме [snapshot read-only](../../../concepts/transactions.md#modes). Такие транзакции дают консистентный срез, не берут блокировки записи и минимизируют конфликты.
 
-{# endnote %}
+{% endnote %}
 
 Есть две сигнатуры этого метода с единственным параметром уровня изоляции:
 

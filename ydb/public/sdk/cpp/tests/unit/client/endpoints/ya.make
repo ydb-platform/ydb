@@ -14,6 +14,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/logger
     ydb/public/sdk/cpp/src/client/impl/endpoints
 )
 

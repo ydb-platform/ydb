@@ -4,6 +4,7 @@
 
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
 
+class TLog;
 
 namespace NYdb::inline Dev {
 
@@ -104,7 +105,7 @@ private:
 public:
     using TKeepAliveCmd = std::function<void(TKqpSessionCommon* s)>;
     using TDeletePredicate = std::function<bool(TKqpSessionCommon* s, size_t sessionsCount)>;
-    TSessionPool(std::uint32_t maxActiveSessions);
+    TSessionPool(std::uint32_t maxActiveSessions, const TLog& log);
 
     // Extracts session from pool or creates new one ising given ctx
     void GetSession(std::unique_ptr<IGetSessionCtx> ctx);
@@ -146,6 +147,7 @@ private:
     NSdkStats::TSessionCounter InPoolSessionsCounter_;
     NSdkStats::TSessionCounter SessionWaiterCounter_;
     NSdkStats::TAtomicCounter<::NMonitoring::TRate> FakeSessionsCounter_;
+    const TLog& Log_;
 };
 
 }

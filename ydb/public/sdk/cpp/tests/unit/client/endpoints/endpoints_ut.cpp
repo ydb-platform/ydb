@@ -1,5 +1,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/endpoints/endpoints.h>
 
+#include <library/cpp/logger/log.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/threading/future/core/future.h>
@@ -110,12 +112,14 @@ Y_UNIT_TEST_SUITE(CheckUtils) {
 Y_UNIT_TEST_SUITE(EndpointElector) {
 
     Y_UNIT_TEST(Empty) {
-        TEndpointElectorSafe elector;
+        TLog log;
+        TEndpointElectorSafe elector(log);
         UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey()).Endpoint, "");
     }
 
     Y_UNIT_TEST(GetEndpoint) {
-        TEndpointElectorSafe elector;
+        TLog log;
+        TEndpointElectorSafe elector(log);
         elector.SetNewState(std::vector<TEndpointRecord>{{"Two", 0, "", 2}, {"One", 0, "", 1}});
         UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("One", 0), true).Endpoint, "One");
         UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("Two", 0), true).Endpoint, "Two");
@@ -126,7 +130,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
     }
 
     Y_UNIT_TEST(DiffOnRemove) {
-        TEndpointElectorSafe elector;
+        TLog log;
+        TEndpointElectorSafe elector(log);
         auto removed = elector.SetNewState(std::vector<TEndpointRecord>{{"Two", 2}, {"One", 1}});
         UNIT_ASSERT_VALUES_EQUAL(removed.size(), 0);
         removed = elector.SetNewState(std::vector<TEndpointRecord>{{"One", 1}});
@@ -135,7 +140,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
     }
 
     Y_UNIT_TEST(Pessimization) {
-        TEndpointElectorSafe elector;
+        TLog log;
+        TEndpointElectorSafe elector(log);
         elector.SetNewState(std::vector<TEndpointRecord>{{"Two", 2}, {"One", 1}});
         UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 0);
         elector.PessimizeEndpoint("One");
@@ -145,7 +151,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
     }
 
     Y_UNIT_TEST(Election) {
-        TEndpointElectorSafe elector;
+        TLog log;
+        TEndpointElectorSafe elector(log);
         elector.SetNewState(std::vector<TEndpointRecord>{{"Two", 2}, {"One_A", 1}, {"Three", 3}, {"One_B", 1}});
         std::unordered_set<std::string> endpoints;
         // Just to make sure no possible to get more than expected
@@ -165,7 +172,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
     }
 
     Y_UNIT_TEST(EndpointAssociationTwoThreadsNoRace) {
-        TEndpointElectorSafe elector;
+        TLog log;
+        TEndpointElectorSafe elector(log);
 
         TDiscoveryEmulator emulator(elector, 10000);
 
@@ -193,7 +201,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
     }
 
     Y_UNIT_TEST(EndpointAssiciationSingleThread) {
-        TEndpointElectorSafe elector;
+        TLog log;
+        TEndpointElectorSafe elector(log);
         elector.SetNewState(std::vector<TEndpointRecord>{{"Two", 2, "", 2}, {"One_A", 10, "", 10}, {"Three", 3, "", 3}, {"One_B", 4, "", 4}});
 
         auto obj1 = std::make_unique<TTestObj>();

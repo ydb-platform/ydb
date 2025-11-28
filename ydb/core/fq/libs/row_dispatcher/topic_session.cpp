@@ -797,11 +797,19 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto formatIt = FormatHandlers.find(handlerSettings);
     if (formatIt == FormatHandlers.end()) {
         auto config = CreateFormatHandlerConfig(Config, FunctionRegistry, CompileServiceActorId, source.GetSkipJsonErrors());
+
+        auto readGroupSubgroup = Counters;
+        for (const auto& sensor : ev->Get()->Record.GetSource().GetTaskSensorLabel()) {
+            readGroupSubgroup = readGroupSubgroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+        }
+        readGroupSubgroup = readGroupSubgroup->GetSubgroup("topic", SanitizeLabel(TopicPath));
+        readGroupSubgroup = readGroupSubgroup->GetSubgroup("read_group", SanitizeLabel(ReadGroup));
+
         formatIt = FormatHandlers.emplace(handlerSettings, CreateTopicFormatHandler(
             ActorContext(),
             config,
             handlerSettings,
-            {.CountersRoot = CountersRoot, .ReadGroupSubgroup = Metrics.ReadGroup, .CountersSubgroup = Metrics.PartitionGroup}
+            {.CountersRoot = CountersRoot, .ReadGroupSubgroup = readGroupSubgroup, .CountersSubgroup = Metrics.PartitionGroup}
         )).first;
     }
 

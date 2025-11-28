@@ -27,14 +27,14 @@ namespace {
 
 struct TTopicSessionMetrics {
     void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, const TString& readGroupName, ui32 partitionId, bool enableStreamingQueriesCounters) {
-        auto readGroup = counters;
+        ReadGroup = counters;
         PartitionGroup = counters;
         if (enableStreamingQueriesCounters) {
             const auto topicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
-            readGroup = topicGroup->GetSubgroup("read_group", SanitizeLabel(readGroupName));
-            PartitionGroup = readGroup->GetSubgroup("partition", ToString(partitionId));
+            ReadGroup = topicGroup->GetSubgroup("read_group", SanitizeLabel(readGroupName));
+            PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
         }
-        AllSessionsDataRate = readGroup->GetCounter("AllSessionsDataRate", true);
+        AllSessionsDataRate = ReadGroup->GetCounter("AllSessionsDataRate", true);
         InFlyAsyncInputData = PartitionGroup->GetCounter("InFlyAsyncInputData");
         InFlySubscribe = PartitionGroup->GetCounter("InFlySubscribe");
         ReconnectRate = PartitionGroup->GetCounter("ReconnectRate", true);
@@ -44,6 +44,7 @@ struct TTopicSessionMetrics {
         QueuedBytes = PartitionGroup->GetCounter("QueuedBytes");
     }
     ::NMonitoring::TDynamicCounterPtr PartitionGroup;
+    ::NMonitoring::TDynamicCounterPtr ReadGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;

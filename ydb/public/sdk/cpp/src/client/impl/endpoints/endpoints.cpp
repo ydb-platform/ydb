@@ -206,7 +206,6 @@ void TEndpointElectorSafe::PessimizeEndpoint(const std::string& endpoint) {
     }
     Sort(Records_.begin(), Records_.end());
     BestK_ = GetBestK(Records_);
-    
     LOG_LAZY(Log_, TLOG_INFO,
         TStringBuilder() << "[Driver] Endpoint pessimized: endpoint=" << endpoint
             << ", active_endpoints=" << activeCount);

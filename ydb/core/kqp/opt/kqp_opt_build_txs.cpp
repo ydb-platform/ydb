@@ -378,20 +378,26 @@ private:
             return parameter;
         };
 
+        // Helper to collect TKqpTxResultBinding nodes and replace them with parameters
         TNodeOnNodeOwnedMap sourceReplaceMap;
+        auto collectBindings = [&](const TExprNode::TPtr& root) {
+            VisitExpr(root,
+                [&](const TExprNode::TPtr& node) {
+                    TExprBase expr(node);
+                    if (auto binding = expr.Maybe<TKqpTxResultBinding>()) {
+                        sourceReplaceMap.emplace(node.Get(), makeParameterBinding(binding.Cast(), node->Pos()).Ptr());
+                    }
+                    return true;
+                });
+        };
+
         for (ui32 i = 0; i < stage.Inputs().Size(); ++i) {
             const auto& input = stage.Inputs().Item(i);
             const auto& inputArg = stage.Program().Args().Arg(i);
 
+            // Scan inputs that may contain TKqpTxResultBinding
             if (input.Maybe<TDqSource>() || input.Maybe<TKqpCnStreamLookup>()) {
-                VisitExpr(input.Ptr(),
-                    [&](const TExprNode::TPtr& node) {
-                        TExprBase expr(node);
-                        if (auto binding = expr.Maybe<TKqpTxResultBinding>()) {
-                            sourceReplaceMap.emplace(node.Get(), makeParameterBinding(binding.Cast(), node->Pos()).Ptr());
-                        }
-                        return true;
-                    });
+                collectBindings(input.Ptr());
             }
 
             auto maybeBinding = input.Maybe<TKqpTxResultBinding>();
@@ -407,15 +413,8 @@ private:
             argsMap.emplace(inputArg.Raw(), makeParameterBinding(maybeBinding.Cast(), input.Pos()).Ptr());
         }
 
-        // Also scan the program body for TKqpTxResultBinding (for VectorTopK precompute settings)
-        VisitExpr(stage.Program().Body().Ptr(),
-            [&](const TExprNode::TPtr& node) {
-                TExprBase expr(node);
-                if (auto binding = expr.Maybe<TKqpTxResultBinding>()) {
-                    sourceReplaceMap.emplace(node.Get(), makeParameterBinding(binding.Cast(), node->Pos()).Ptr());
-                }
-                return true;
-            });
+        // Scan program body for TKqpTxResultBinding (e.g. in TKqpReadTableRanges VectorTopK settings)
+        collectBindings(stage.Program().Body().Ptr());
 
         auto inputs = Build<TExprList>(ctx, stage.Pos())
             .Add(newInputs)
@@ -473,45 +472,38 @@ private:
 
 TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
     TVector<TDqPhyPrecompute> result;
+
+    // Helper to collect precomputes from an expression tree
+    auto collectPrecomputes = [&result](const TExprNode::TPtr& root, bool checkConnections = false) {
+        VisitExpr(root,
+            [&](const TExprNode::TPtr& ptr) {
+                TExprBase node(ptr);
+                if (auto maybePrecompute = node.Maybe<TDqPhyPrecompute>()) {
+                    result.push_back(maybePrecompute.Cast());
+                    return false;
+                }
+                if (checkConnections) {
+                    if (auto maybeConnection = node.Maybe<TDqConnection>()) {
+                        YQL_ENSURE(false, "unexpected connection in source");
+                    }
+                }
+                return true;
+            });
+    };
+
+    // Scan stage inputs for precomputes
     for (const auto& input : stage.Inputs()) {
         if (auto maybePrecompute = input.Maybe<TDqPhyPrecompute>()) {
             result.push_back(maybePrecompute.Cast());
         } else if (auto maybeSource = input.Maybe<TDqSource>()) {
-            VisitExpr(maybeSource.Cast().Ptr(),
-                  [&] (const TExprNode::TPtr& ptr) {
-                    TExprBase node(ptr);
-                    if (auto maybePrecompute = node.Maybe<TDqPhyPrecompute>()) {
-                        result.push_back(maybePrecompute.Cast());
-                        return false;
-                    }
-                    if (auto maybeConnection = node.Maybe<TDqConnection>()) {
-                        YQL_ENSURE(false, "unexpected connection in source");
-                    }
-                    return true;
-                  });
+            collectPrecomputes(maybeSource.Cast().Ptr(), /* checkConnections */ true);
         } else if (auto maybeStreamLookup = input.Maybe<TKqpCnStreamLookup>()) {
-            VisitExpr(maybeStreamLookup.Cast().Settings().Ptr(),
-                  [&] (const TExprNode::TPtr& ptr) {
-                    TExprBase node(ptr);
-                    if (auto maybePrecompute = node.Maybe<TDqPhyPrecompute>()) {
-                        result.push_back(maybePrecompute.Cast());
-                        return false;
-                    }
-                    return true;
-                  });
+            collectPrecomputes(maybeStreamLookup.Cast().Settings().Ptr());
         }
     }
 
-    // Also scan the program body for precomputes in read settings (for VectorTopK pushdown)
-    VisitExpr(stage.Program().Body().Ptr(),
-          [&] (const TExprNode::TPtr& ptr) {
-            TExprBase node(ptr);
-            if (auto maybePrecompute = node.Maybe<TDqPhyPrecompute>()) {
-                result.push_back(maybePrecompute.Cast());
-                return false;
-            }
-            return true;
-          });
+    // Scan program body for precomputes (e.g. in TKqpReadTableRanges VectorTopK settings)
+    collectPrecomputes(stage.Program().Body().Ptr());
 
     return result;
 }

@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
@@ -65,13 +64,6 @@ void SetVectorTopKTarget(NKqpProto::TKqpPhyValue* targetProto, const TExprNode::
         literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
     } else if (expr.Maybe<TCoParameter>()) {
         targetProto->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
-    } else if (auto maybeBinding = expr.Maybe<TKqpTxResultBinding>()) {
-        // TKqpTxResultBinding should have been replaced with TCoParameter by kqp_opt_build_txs,
-        // but handle it defensively by constructing the expected parameter name
-        auto binding = maybeBinding.Cast();
-        TString paramName = TStringBuilder() << ParamNamePrefix
-            << "tx_result_binding_" << binding.TxIndex().Value() << "_" << binding.ResultIndex().Value();
-        targetProto->MutableParamValue()->SetParamName(paramName);
     } else {
         YQL_ENSURE(false, "Unexpected VectorTopKTarget callable " << expr.Ref().Content());
     }
@@ -87,13 +79,6 @@ void SetVectorTopKLimit(NKqpProto::TKqpPhyValue* limitProto, const TExprNode::TP
         literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
     } else if (expr.Maybe<TCoParameter>()) {
         limitProto->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
-    } else if (auto maybeBinding = expr.Maybe<TKqpTxResultBinding>()) {
-        // TKqpTxResultBinding should have been replaced with TCoParameter by kqp_opt_build_txs,
-        // but handle it defensively by constructing the expected parameter name
-        auto binding = maybeBinding.Cast();
-        TString paramName = TStringBuilder() << ParamNamePrefix
-            << "tx_result_binding_" << binding.TxIndex().Value() << "_" << binding.ResultIndex().Value();
-        limitProto->MutableParamValue()->SetParamName(paramName);
     } else {
         YQL_ENSURE(false, "Unexpected VectorTopKLimit callable " << expr.Ref().Content());
     }

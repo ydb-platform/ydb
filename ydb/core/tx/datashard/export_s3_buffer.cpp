@@ -6,6 +6,8 @@
 #include "type_serialization.h"
 
 #include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -439,7 +441,10 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
 
     const auto& scanSettings = Task.GetScanSettings();
     const ui64 maxRows = scanSettings.GetRowsBatchSize() ? scanSettings.GetRowsBatchSize() : Max<ui64>();
-    const ui64 maxBytes = scanSettings.GetBytesBatchSize();
+
+    const ui64 configMaxBytes = AppData()->DataShardConfig.GetBackupBytesBatchSize();
+    const ui64 maxBytes = scanSettings.HasBytesBatchSize() ? scanSettings.GetBytesBatchSize() : configMaxBytes;
+
     const ui64 minBytes = Task.GetS3Settings().GetLimits().GetMinWriteBatchSize();
 
     TS3ExportBufferSettings bufferSettings;

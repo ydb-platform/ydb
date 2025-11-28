@@ -16,7 +16,7 @@ TPhantomFlagThresholds::TTabletChannel TPhantomFlagThresholds::MakeTabletChannel
 }
 
 inline ui64 TPhantomFlagThresholds::THasher::operator()(const TTabletChannel& x) const {
-    return std::hash<ui64>{}((x.first << sizeof(x.second)) & x.second);
+    return std::hash<ui64>{}((x.first << 8) | x.second);
 }
 
 TPhantomFlagThresholds::TTabletThresholds::TTabletThresholds() {
@@ -58,6 +58,7 @@ void TPhantomFlagThresholds::TTabletThresholds::Merge(TBlobStorageGroupType grou
     for (ui32 orderNumber = 0; orderNumber < groupType.BlobSubgroupSize(); ++orderNumber) {
         if (other.Thresholds[orderNumber] &&
                 (!Thresholds[orderNumber] || *Thresholds[orderNumber] < *other.Thresholds[orderNumber])) {
+            DisksWithThreshold += !Thresholds[orderNumber];
             Thresholds[orderNumber] = other.Thresholds[orderNumber];
         }
     }

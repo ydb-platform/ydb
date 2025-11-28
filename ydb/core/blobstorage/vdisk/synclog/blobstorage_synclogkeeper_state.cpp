@@ -52,7 +52,8 @@ namespace NKikimr {
             SyncedLsns.resize(SlCtx->VCtx->Top->GetTotalVDisksNum());
             ui32 selfOrderNum = SlCtx->VCtx->Top->GetOrderNumber(SlCtx->VCtx->ShortSelfVDisk);
             SyncedLsns[selfOrderNum] = Max<ui64>();
-            SyncedMask.set();
+            SyncedMask.reset();
+            SyncedMask.set(selfOrderNum, true);
         }
 
         // Calculate first lsn in recovery log we must keep

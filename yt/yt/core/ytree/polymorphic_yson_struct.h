@@ -157,6 +157,7 @@ concept CPolymorphicEnumMapping = NDetail::IsMapping<T>;
 template <CPolymorphicEnumMapping TMapping>
 class TPolymorphicYsonStruct
 {
+public:
     // TODO(arkady-e1ppa): Support non refcounted hierarchies
     // e.g. shared_ptr<TYsonStructLite> or shared_ptr<TExternalizedYsonStruct>.
     // TODO(arkady-e1ppa): Support lookup by enum instead of concrete type.
@@ -166,8 +167,9 @@ class TPolymorphicYsonStruct
     // hierarchy.
     using TKey = typename TMapping::TKey;
     using TBase = typename TMapping::TBaseClass;
+    template <TKey key>
+    using TEnumToDerived = typename TMapping::template TDerivedToEnum<key>;
 
-public:
     using TImplementsYsonStructField = void;
 
     TPolymorphicYsonStruct();
@@ -215,6 +217,10 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+    requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
+void TraverseYsonStruct(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path);
 
 template <class T>
     requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>

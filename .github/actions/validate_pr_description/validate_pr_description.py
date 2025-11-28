@@ -408,7 +408,6 @@ def validate_pr():
     
     # Validate PR description
     is_valid, txt = validate_pr_description_from_file(
-        sys.argv[1] if len(sys.argv) > 1 else None,
         description=pr_body
     )
     

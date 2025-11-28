@@ -55,6 +55,8 @@ private:
 
     TBucket CurrentBucket;
     std::optional<TBucket> PendingBucket;
+
+    ui64 NextMessageIdDeduplicatorWAL = 0;
 };
 
 } // namespace NKikimr::NPQ

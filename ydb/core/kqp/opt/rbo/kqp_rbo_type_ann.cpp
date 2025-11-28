@@ -262,8 +262,11 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
             if (aggFunction == "count") {
                 aggFieldType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64);
             } else if (aggFunction == "sum") {
-                            Y_ENSURE(GetSumResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx.ExprCtx),
+                Y_ENSURE(GetSumResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx.ExprCtx),
                          "Unsupported type for sum aggregation function");
+            } else if (aggFunction == "avg") {
+                Y_ENSURE(GetAvgResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx.ExprCtx),
+                         "Unsupported type for avg aggregation function");
             }
             newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(colName, aggFieldType));
         } else if (keyColumns.contains(itemName)) {

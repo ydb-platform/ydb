@@ -60,9 +60,13 @@ bool IsAggregation(TExprNode::TPtr node) { return node->IsCallable("PgAgg"); }
 
 void CollectAggregationsImpl(TExprNode::TPtr node, TVector<TExprNode::TPtr>& aggregations) {
     if (IsAggregation(node)) {
-        Y_ENSURE(node->ChildrenSize() == 3, "Invalid children size for PgAgg");
-        // This error should be checked in compiler front-end.
-        Y_ENSURE(!IsAggregation(node->ChildPtr(2)), "Nested aggregation is not supported, aka f(g(a))");
+        if (node->ChildrenSize() == 2) {
+            Y_ENSURE(node->ChildPtr(0)->Content() == "count", "Unsupported aggregation function for *");
+        } else {
+            Y_ENSURE(node->ChildrenSize() == 3, "Invalid children size for PgAgg");
+            // This error should be checked in compiler front-end.
+            Y_ENSURE(!IsAggregation(node->ChildPtr(2)), "Nested aggregation is not supported, aka f(g(a))");
+        }
         if (!!GetSetting(*node->Child(1), "distinct")) {
             Y_ENSURE(!IsExpression(node->ChildPtr(2)), "Nested distinct on expression is not supported, aka f(distinct a x b)");
         }
@@ -659,32 +663,62 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
             //
             if (auto aggregations = CollectAggregations(lambda.Body().Ptr()); !aggregations.empty()) {
                 for (const auto& aggregation : aggregations) {
-                    auto aggInput = aggregation->ChildPtr(2);
+                    const TString aggFuncName = TString(aggregation->ChildPtr(0)->Content());
                     TInfoUnit aggColName;
                     TExprNode::TPtr exprBody;
 
-                    if (IsExpression(aggInput)) {
-                        // Aggregation on expression f(a x b).
-                        // We pull expression outside a given aggregation and rename result of a given expression with unique name
-                        // to later process result with aggregate function.
-                        // For example: f(a x b) => map((a x b) -> c) -> f(c)
-                        exprBody = ctx.NewCallable(aggInput->Pos(), "FromPg", {aggInput});
-                        aggColName = TInfoUnit(GenerateUniqueColumnName("expr"));
-                    } else {
-                        // Pure aggregation f(a).
-                        // Here we want to get just a column name for aggregation.
-                        // For example: f(a) -> map(a -> a) -> f(a).
-                        // This is needed to simplify logic for translation from PgSelect to KqpOp.
-                        Y_ENSURE(aggInput->IsCallable("ToPg") && aggInput->ChildPtr(0)->IsCallable("Member"), "PgAgg not a member");
-                        auto member = TCoMember(aggInput->ChildPtr(0));
-                        exprBody = member.Ptr();
-                        // f(a), g(a) => map(a -> a, a -> b) -> f(a), g(b)
-                        TString colName = member.Name().StringValue();
-                        if (aggregationUniqueColNames.contains(colName)) {
-                            colName = GenerateUniqueColumnName("expr");
+                    // Aggregation with column specified.
+                    if (aggregation->ChildrenSize() == 3) {
+                        auto aggInput = aggregation->ChildPtr(2);
+                        if (IsExpression(aggInput)) {
+                            // Aggregation on expression f(a x b).
+                            // We pull expression outside a given aggregation and rename result of a given expression with unique name
+                            // to later process result with aggregate function.
+                            // For example: f(a x b) => map((a x b) -> c) -> f(c)
+                            exprBody = ctx.NewCallable(aggInput->Pos(), "FromPg", {aggInput});
+                            aggColName = TInfoUnit(GenerateUniqueColumnName("expr"));
+                        } else {
+                            // Pure aggregation f(a).
+                            // Here we want to get just a column name for aggregation.
+                            // For example: f(a) -> map(a -> a) -> f(a).
+                            // This is needed to simplify logic for translation from PgSelect to KqpOp.
+                            Y_ENSURE(aggInput->IsCallable("ToPg") && aggInput->ChildPtr(0)->IsCallable("Member"), "PgAgg not a member");
+                            auto member = TCoMember(aggInput->ChildPtr(0));
+                            exprBody = member.Ptr();
+                            // f(a), g(a) => map(a -> a, a -> b) -> f(a), g(b)
+                            TString colName = member.Name().StringValue();
+                            if (aggregationUniqueColNames.contains(colName)) {
+                                colName = GenerateUniqueColumnName("expr");
+                            }
+                            aggregationUniqueColNames.insert(colName);
+                            aggColName = TInfoUnit(colName);
                         }
-                        aggregationUniqueColNames.insert(colName);
-                        aggColName = TInfoUnit(colName);
+                    } else {
+                        // count(*)
+                        Y_ENSURE(aggFuncName == "count", "Invalid agg function for *");
+                        aggColName = TInfoUnit(GenerateUniqueColumnName("asterisks"));
+                        // Input of aggregate is empty - count(*).
+                        // Here we create a new column with non optional type,
+                        // because aggregation for optional and non optional is different.
+                        // count(*) counts nulls, count(a) does not.
+                        // clang-format off
+                        exprBody = Build<TCoAddMember>(ctx, node->Pos())
+                            .Struct(lambda.Args().Arg(0))
+                            .Name<TCoAtom>()
+                                .Value(aggColName.GetFullName())
+                            .Build()
+                            .Item<TCoUint64>()
+                                .Literal().Build("1")
+                            .Build()
+                        .Done().Ptr();
+
+                        exprBody = Build<TCoMember>(ctx, node->Pos())
+                            .Struct(exprBody)
+                            .Name<TCoAtom>()
+                                .Value(aggColName.GetFullName())
+                            .Build()
+                        .Done().Ptr();
+                        // clang-format on
                     }
 
                     // clang-format off
@@ -709,7 +743,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                         distinctPreAggregate = true;
                     }
 
-                    const TString aggFuncName = TString(aggregation->ChildPtr(0)->Content());
                     // Build an aggregation traits.
                     auto aggregationTraits =
                         BuildAggregationTraits(aggColName.GetFullName(), aggFuncName, ctx, node->Pos());

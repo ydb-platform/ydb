@@ -786,6 +786,22 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
                 select sum(t1.b) as sumb from t1 group by t1.b order by sumb;
+            )",
+            // count(*)
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select count(*), sum(t1.a) as result from t1 order by result;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select count(*) as result from t1 order by result;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select t1.b, count(*) from t1 group by t1.b order by t1.b;
             )"
         };
 
@@ -815,6 +831,9 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             R"([["1.6"]])",
             R"([["2";"2"];["2";"2"]])",
             R"([["2"];["6"]])",
+            R"([["5";"10"]])",
+            R"([["5"]])",
+            R"([["1";"2"];["2";"3"]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

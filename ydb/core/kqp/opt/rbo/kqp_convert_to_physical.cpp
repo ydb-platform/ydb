@@ -36,6 +36,9 @@ TString GetValidJoinKind(const TString& joinKind) {
 }
 
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx, bool removeAliases = false) {
+    // FIXME: This is not always correct, for example:
+    // lambda($arg) { $val = expr($arg); return member($val `name)}
+    // will replace only member arg but leave expr with free arg.
     if (input->IsCallable("Member")) {
         auto member = TCoMember(input);
         auto memberName = member.Name();
@@ -1264,7 +1267,16 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                 TMaybeNode<TCoLambda> mapLambda;
 
                 if (std::holds_alternative<TExprNode::TPtr>(mapElement.second)) {
-                    mapLambda = TCoLambda(std::get<TExprNode::TPtr>(mapElement.second));
+                    auto lambda = TCoLambda(std::get<TExprNode::TPtr>(mapElement.second));
+                    // clang-format off
+                    mapLambda = Build<TCoLambda>(ctx, op->Pos)
+                        .Args({arg})
+                        .Body<TExprApplier>()
+                            .Apply(lambda.Body())
+                            .With(TExprBase(lambda.Args().Arg(0)), TExprBase(arg))
+                        .Build()
+                    .Done();
+                    // clang-format on
                 } else {
                     auto var = std::get<TInfoUnit>(mapElement.second);
 
@@ -1286,7 +1298,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                 .Done();
                 // clang-format on
 
-                tuple = TCoNameValueTuple(ReplaceArg(tuple.Ptr(), arg, ctx));
                 items.push_back(tuple);
             }
 

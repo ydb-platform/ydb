@@ -36,6 +36,9 @@ TString GetValidJoinKind(const TString& joinKind) {
 }
 
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx, bool removeAliases = false) {
+    // FIXME: This is not always correct, for example:
+    // lambda($arg) { $val = expr($arg); return member($val `name)}
+    // will replace only member arg but leave expr with free arg.
     if (input->IsCallable("Member")) {
         auto member = TCoMember(input);
         auto memberName = member.Name();
@@ -470,7 +473,29 @@ TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer & enforcer, TExp
     // clang-format on
 }
 
-TExprNode::TPtr BuildAvgAggregateInitialState(TExprNode::TPtr asStruct, const TString &colName, TExprContext& ctx, TPositionHandle pos) {
+TExprNode::TPtr BuildCountAggregationInitialStateForOptionalType(TExprNode::TPtr asStruct, const TString& colName, TExprContext& ctx,
+                                                                 TPositionHandle pos) {
+    // clang-format off
+    return ctx.Builder(pos)
+        .Callable("AggrCountInit")
+            .Callable(0, "Member")
+                .Add(0, asStruct)
+                .Atom(1, colName)
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildCountAggregationInitialState(TExprContext& ctx, TPositionHandle pos) {
+    // clang-format off
+    return ctx.Builder(pos)
+        .Callable("Uint64")
+            .Atom(0, "1")
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildAvgAggregationInitialState(TExprNode::TPtr asStruct, const TString& colName, TExprContext& ctx, TPositionHandle pos) {
     // clang-format off
     return ctx.Builder(pos)
         .List()
@@ -521,6 +546,37 @@ TExprNode::TPtr BuildAvgAggregationInitialStateForOptionalType(TExprNode::TPtr a
                         .Seal()
                     .Seal()
                 .Seal()
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildCountAggregationUpdateStateForOptionalType(TExprNode::TPtr asStructStateColumns, TExprNode::TPtr asStructInputColumns,
+                                                                const TString& stateColumn, const TString& columnName, TExprContext& ctx,
+                                                                TPositionHandle pos) {
+    // clang-format off
+    return ctx.Builder(pos)
+        .Callable("AggrCountUpdate")
+            .Callable(0, "Member")
+                .Add(0, asStructInputColumns)
+                .Atom(1, columnName)
+            .Seal()
+            .Callable(1, "Member")
+                .Add(0, asStructStateColumns)
+                .Atom(1, stateColumn)
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildCountAggregationUpdateState(TExprNode::TPtr asStructStateColumns, const TString& stateColumn, TExprContext& ctx,
+                                                 TPositionHandle pos) {
+    // clang-format off
+    return ctx.Builder(pos)
+        .Callable("Inc")
+            .Callable(0, "Member")
+                .Add(0, asStructStateColumns)
+                .Atom(1, stateColumn)
             .Seal()
         .Seal().Build();
     // clang-format on
@@ -747,15 +803,12 @@ TExprNode::TPtr BuildInitHandlerLambda(const TVector<TString>& keyFields, const 
 
         TExprNode::TPtr initState;
         if (aggFunction == "count") {
-            // clang-format off
-            initState = ctx.Builder(pos)
-                .Callable("Uint64")
-                    .Atom(0, "1")
-                .Seal().Build();
-            // clang-format on
+            initState = isOptional ? BuildCountAggregationInitialStateForOptionalType(asStruct, aggName, ctx, pos)
+                                   : BuildCountAggregationInitialState(ctx, pos);
+
         } else if (aggFunction == "avg") {
             initState = isOptional ? BuildAvgAggregationInitialStateForOptionalType(asStruct, aggName, ctx, pos)
-                                   : BuildAvgAggregateInitialState(asStruct, aggName, ctx, pos);
+                                   : BuildAvgAggregationInitialState(asStruct, aggName, ctx, pos);
         } else {
             // clang-format off
             initState = ctx.Builder(pos)
@@ -831,18 +884,12 @@ TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, cons
         const auto &columnName = aggField.AggFieldName;
         const auto &stateName = aggField.StateFieldName;
         const bool isOptional = aggField.IsOptional;
-
         TExprNode::TPtr aggFunc;
+
         if (aggFunction == "count") {
-            // clang-format off
-            aggFunc = ctx.Builder(pos)
-                .Callable("Inc")
-                    .Callable(0, "Member")
-                        .Add(0, asStructStateColumns)
-                        .Atom(1, stateName)
-                    .Seal()
-                .Seal().Build();
-            // clang-format on
+            aggFunc = isOptional ? BuildCountAggregationUpdateStateForOptionalType(asStructStateColumns, asStructInputColumns, stateName,
+                                                                                   columnName, ctx, pos)
+                                 : BuildCountAggregationUpdateState(asStructStateColumns, stateName, ctx, pos);
         } else if (aggFunction == "distinct") {
             // clang-format off
             aggFunc = ctx.Builder(pos)
@@ -1264,7 +1311,16 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                 TMaybeNode<TCoLambda> mapLambda;
 
                 if (std::holds_alternative<TExprNode::TPtr>(mapElement.second)) {
-                    mapLambda = TCoLambda(std::get<TExprNode::TPtr>(mapElement.second));
+                    auto lambda = TCoLambda(std::get<TExprNode::TPtr>(mapElement.second));
+                    // clang-format off
+                    mapLambda = Build<TCoLambda>(ctx, op->Pos)
+                        .Args({arg})
+                        .Body<TExprApplier>()
+                            .Apply(lambda.Body())
+                            .With(TExprBase(lambda.Args().Arg(0)), TExprBase(arg))
+                        .Build()
+                    .Done();
+                    // clang-format on
                 } else {
                     auto var = std::get<TInfoUnit>(mapElement.second);
 
@@ -1286,7 +1342,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                 .Done();
                 // clang-format on
 
-                tuple = TCoNameValueTuple(ReplaceArg(tuple.Ptr(), arg, ctx));
                 items.push_back(tuple);
             }
 

@@ -60,10 +60,18 @@ def create_or_update_comment(pr_number, message, workflow_run_url):
     
     if comment:
         print(f"::notice::Updating existing comment id={comment.id}")
-        comment.edit(full_body)
+        try:
+            comment.edit(full_body)
+        except Exception as e:
+            print(f"::error::Failed to update comment id={comment.id}: {e}", file=sys.stderr)
+            raise
     else:
         print(f"::notice::Creating new comment")
-        pr.create_issue_comment(full_body)
+        try:
+            pr.create_issue_comment(full_body)
+        except Exception as e:
+            print(f"::error::Failed to create new comment: {e}", file=sys.stderr)
+            raise
 
 def format_start_message(build_preset, test_size, test_targets):
     """Format message for test run start."""
@@ -152,7 +160,9 @@ if __name__ == "__main__":
             raise ValueError("TEST_STATUS environment variable is not set")
         
         # Read summary from summary_text.txt in workspace
-        workspace = os.environ.get("GITHUB_WORKSPACE", os.getcwd())
+        workspace = os.environ.get("GITHUB_WORKSPACE")
+        if not workspace:
+            raise ValueError("GITHUB_WORKSPACE environment variable is not set")
         summary_text_path = os.path.join(workspace, "summary_text.txt")
         
         summary_content = ""

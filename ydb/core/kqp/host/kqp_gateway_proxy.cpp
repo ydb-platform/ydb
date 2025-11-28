@@ -1,5 +1,7 @@
 #include "kqp_host_impl.h"
 
+#include <ydb/core/formats/arrow/serializer/parsing.h>
+#include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -510,23 +512,24 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         }
 
         if (columnIt->second.Compression) {
+            auto serializer = columnDesc.MutableSerializer();
+            TString algoName;
             if (columnIt->second.Compression->Algorithm) {
                 NKikimrSchemeOp::EColumnCodec codec;
-                auto algoName = columnIt->second.Compression->Algorithm.GetRef();
-                auto codecName = to_lower(algoName);
-                if (codecName == "off") {
+                algoName = to_lower(columnIt->second.Compression->Algorithm.GetRef());
+                if (algoName == "off") {
                     codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
-                } else if (codecName == "zstd") {
+                } else if (algoName == "zstd") {
                     codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
-                } else if (codecName == "lz4") {
+                } else if (algoName == "lz4") {
                     codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
                 } else {
                     code = Ydb::StatusIds::BAD_REQUEST;
                     error = TStringBuilder() << "Unknown compression algorithm '" << algoName << "' for a column " << name;
                     return false;
                 }
-                columnDesc.MutableSerializer()->SetClassName("ARROW_SERIALIZER");
-                columnDesc.MutableSerializer()->MutableArrowCompression()->SetCodec(codec);
+                serializer->SetClassName("ARROW_SERIALIZER");
+                serializer->MutableArrowCompression()->SetCodec(codec);
             }
             if (columnIt->second.Compression->Level) {
                 const auto level = *columnIt->second.Compression->Level;
@@ -534,8 +537,17 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
                     error = TStringBuilder() << "Compression level " << level <<" for a column `" << name << "` specified without an algorithm";
                     return false;
                 }
-                // TODO: more checks for level applicability
-                columnDesc.MutableSerializer()->MutableArrowCompression()->SetLevel(level);
+
+                const auto codec = NArrow::CompressionFromProto(columnDesc.GetSerializer().GetArrowCompression().GetCodec());
+
+                if (!NArrow::SupportsCompressionLevel(codec.value())) {
+                    error = TStringBuilder()
+                        << "Column `" << name << "`: algorithm `" << algoName
+                        << "` does not support compression level";
+                    return false;
+                }
+
+                serializer->MutableArrowCompression()->SetLevel(level);
             }
         }
     }

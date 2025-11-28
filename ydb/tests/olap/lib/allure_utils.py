@@ -20,6 +20,8 @@ class NodeErrors:
         self.sanitizer_errors: int = 0
         self.sanitizer_output: str = None
         self.was_oom: bool = False
+        self.oom_events: int = 0
+        self.oom_output: str = None
         self.message: str = message
 
 
@@ -67,7 +69,7 @@ def _set_node_errors(node_errors: list[NodeErrors]) -> str:
     for node in node_errors:
         problems = ''
         if node.was_oom:
-            host_errors[node.node.host]['oom'] = 'OOM'
+            host_errors[node.node.host]['oom'] = f'OOM: {node.oom_events}'
         if node.verifies:
             host_errors[node.node.host]['verify'] = f'VERIFIES: {node.verifies}'
         if node.sanitizer_errors and node.node.host not in reported_sanitizer:
@@ -99,6 +101,35 @@ def _produce_verify_report(verify_errors) -> str:
             html += f'<tr bgcolor="{'  # 90EE90' if triggered_times == 0 else '#FA8072'}"><td>{host}</td><td>{triggered_times}</td></tr>'
         html += f'</table><br/><code>{''.join(verify_info['full_trace']).replace('\n', '<br/>')}</code></details>'
     return html
+
+
+def _produce_oom_report(node_errors: list[NodeErrors]) -> str:
+    if not node_errors or len(node_errors) == 0:
+        return ''
+    html = '<h4>OOM (Out of Memory) Events</h4>'
+
+    reported_hosts = set()
+
+    for node_error in node_errors:
+        host = node_error.node.host
+        if host not in reported_hosts and node_error.oom_output is not None:
+            html += f'<details style="margin-bottom: 15px"><summary style="display: list-item">OOM events on {host} ({node_error.oom_events} events)</summary>'
+            html += f'<code>{node_error.oom_output.replace('\n', "<br/>")}</code></details>'
+            reported_hosts.add(host)
+    return html
+
+
+def _attach_oom_outputs(node_errors: list[NodeErrors]):
+    """Прикрепляет полные OOM логи как attachments, аналогично sanitizer."""
+    if not node_errors or len(node_errors) == 0:
+        return
+
+    reported_hosts = set()
+    for node_error in node_errors:
+        host = node_error.node.host
+        if host not in reported_hosts and node_error.oom_output:
+            allure.attach(node_error.oom_output, f"OOM output for {host}", allure.attachment_type.TEXT)
+            reported_hosts.add(host)
 
 
 def _produce_sanitizer_report(node_errors: list[NodeErrors]) -> str:
@@ -880,8 +911,10 @@ def allure_test_description(
     html += _produce_verify_report(verify_errors)
     logs_in_html = external_param_is_true('save_san_logs_in_html')
     if logs_in_html:
+        html += _produce_oom_report(node_errors)
         html += _produce_sanitizer_report(node_errors)
     else:
+        _attach_oom_outputs(node_errors)
         _attach_sanitizer_outputs(node_errors)
     html += '\n'.join([f'<div>\n{b}\n</div>\n\n' for b in addition_blocks])
 
@@ -964,8 +997,10 @@ def parallel_allure_test_description(
     html += _produce_verify_report(verify_errors)
     logs_in_html = external_param_is_true('save_san_logs_in_html')
     if logs_in_html:
+        html += _produce_oom_report(node_errors)
         html += _produce_sanitizer_report(node_errors)
     else:
+        _attach_oom_outputs(node_errors)
         _attach_sanitizer_outputs(node_errors)
     html += '\n'.join([f'<div>\n{b}\n</div>\n\n' for b in addition_blocks])
 

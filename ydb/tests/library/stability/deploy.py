@@ -686,11 +686,11 @@ class StressUtilDeployer:
             if enable_nemesis:
                 if error_count == 0:
                     # Complete success
-                    self._nemesis_started = True
+                    self.nemesis_started = True
                     nemesis_log.append("Nemesis service started successfully on all hosts")
                 elif error_count < len(unique_hosts):
                     # Partial success - create ClusterCheck record with warning
-                    self._nemesis_started = True  # Consider nemesis as partially working
+                    self.nemesis_started = True  # Consider nemesis as partially working
                     nemesis_log.append(f"Nemesis service started partially: {success_count}/{len(unique_hosts)} hosts")
 
                     cluster_issue = create_cluster_issue(
@@ -709,10 +709,10 @@ class StressUtilDeployer:
                     )
                 else:
                     # Complete failure - already handled in except block above via raise Exception
-                    self._nemesis_started = False
+                    self.nemesis_started = False
                     nemesis_log.append("Nemesis service failed to start on all hosts")
             else:
-                self._nemesis_started = False
+                self.nemesis_started = False
                 nemesis_log.append("Nemesis service stopped successfully")
 
             # Add summary log to Allure

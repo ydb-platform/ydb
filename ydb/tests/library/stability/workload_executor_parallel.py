@@ -22,7 +22,6 @@ class ParallelWorkloadTestBase:
         "/tmp/stress_binaries/"  # Path for deploying binary files
     )
     timeout: float = 1800.0  # Default timeout
-    _nemesis_started: bool = False  # Flag to track nemesis startup
     cluster_path: str = str(
         get_external_param(
             "cluster_path",

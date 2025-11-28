@@ -801,15 +801,17 @@ protected:
                 }
                 case NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN: {
                     if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
-                        LOG_W("Received NODE_SHUTTING_DOWN but feature flag is disabled, treating as internal error");
-                        ReplyErrorAndDie("feature flag is disabled: EnableShuttingDownNodeState");
+                        LOG_D("Received NODE_SHUTTING_DOWN but feature flag EnableShuttingDownNodeState is disabled");
+                        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, 
+                                "Compute node is unavailable"));
                         break;
                     }
                     LOG_D("Received NODE_SHUTTING_DOWN, retry tasks locally");
                     if (ev->Sender.NodeId() == SelfId().NodeId()) {
                         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, 
                             MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, TStringBuilder() <<
-                        "All compute nodes are shutting down"));
+                        "Compute node is shutting down and is not available"));
                         break;
                     }
 

@@ -804,10 +804,7 @@ namespace NKikimr {
 
         void FillGroupMapperError(NKikimrBlobStorage::TGroupMapperError& groupMapperErrorProto, const TGroupMapperError& error) {
             auto fillStats = [](NKikimrBlobStorage::TGroupMapperError::TStats& statsProto, const TGroupMapperError::TStats& stats) {
-                auto* examplePdiskId = statsProto.MutableExamplePDiskId();
-                examplePdiskId->SetNodeId(stats.ExamplePDiskId.NodeId);
-                examplePdiskId->SetPDiskId(stats.ExamplePDiskId.PDiskId);
-
+                statsProto.SetDomain(stats.Domain);
                 statsProto.SetAllSlotsAreOccupied(stats.AllSlotsAreOccupied);
                 statsProto.SetNotEnoughSpace(stats.NotEnoughSpace);
                 statsProto.SetNotAcceptingNewSlots(stats.NotAcceptingNewSlots);
@@ -819,6 +816,9 @@ namespace NKikimr {
                 auto* domainStatsProto = groupMapperErrorProto.AddMatchingDomainsStats();
                 fillStats(*domainStatsProto, domainStat);
             }
+            groupMapperErrorProto.SetMissingFailRealmsCount(error.MissingFailRealmsCount);
+            groupMapperErrorProto.SetFailRealmsWithMissingDomainsCount(error.FailRealmsWithMissingDomainsCount);
+            groupMapperErrorProto.SetDomainsWithMissingDisksCount(error.DomainsWithMissingDisksCount);
         }
 
         void TBlobStorageController::FitGroupsForUserConfig(TConfigState& state, ui32 availabilityDomainId,

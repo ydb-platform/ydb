@@ -68,7 +68,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             indexTableCount = (withRelevance ? 4 : 1);
             break;
         }
-        default:
+        case NKikimrSchemeOp::EIndexTypeInvalid:
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
@@ -234,7 +234,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             }
             break;
         }
-        default:
+        case NKikimrSchemeOp::EIndexTypeInvalid:
             Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDesc.GetType()));
             break;
     }

@@ -63,7 +63,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 indexTableCount = (withRelevance ? 4 : 1);
                 break;
             }
-            default:
+            case NKikimrSchemeOp::EIndexTypeInvalid:
                 Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(desc.GetType()));
                 break;
         }
@@ -184,7 +184,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
             }
-            default:
+            case NKikimrSchemeOp::EIndexTypeInvalid:
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDescription.GetType()))};
         }
 
@@ -400,7 +400,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
             }
-            default:
+            case NKikimrSchemeOp::EIndexTypeInvalid:
                 Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDescription.GetType()));
                 break;
         }

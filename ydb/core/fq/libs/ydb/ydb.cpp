@@ -305,12 +305,13 @@ TFuture<TStatus> CreateTable(
 TFuture<TStatus> CreateTable(
     const IYdbConnection::TPtr& ydbConnection,
     const TString& name,
-    TTableDescription&& description)
+    TTableDescription&& description,
+    const NACLib::TDiffACL& acl)
 {
     auto tablePath = JoinPath(ydbConnection->GetTablePathPrefixWithoutDb(), name.c_str());
     return ydbConnection->GetTableClient()->RetryOperation(
-        [db = ydbConnection->GetDb(), tablePath = std::move(tablePath), description = std::move(description)] (ISession::TPtr session) mutable {
-            return session->CreateTable(db, tablePath, TTableDescription(description));
+        [db = ydbConnection->GetDb(), tablePath = std::move(tablePath), description = std::move(description), acl = acl] (ISession::TPtr session) mutable {
+            return session->CreateTable(db, tablePath, TTableDescription(description), acl);
         });
 }
 

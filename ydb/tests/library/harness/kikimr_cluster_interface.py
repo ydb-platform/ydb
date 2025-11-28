@@ -26,6 +26,7 @@ class KiKiMRClusterInterface(object):
         self.__client = None
         self.__kv_client = None
         self.__scheme_client = None
+        self.__config_client = None
         self.__clients = None
         self.__monitors = None
         self.__ready_timeout_seconds = 60

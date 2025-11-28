@@ -3261,6 +3261,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_expr-flatmap_by_map_lazy_list_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-flatten_member_non_literal_tuple]": [
+        {
+            "checksum": "2902d719293c14a51d3a810619a09dad",
+            "size": 1298,
+            "uri": "https://{canondata_backend}/1946324/73b7dfadbd3036fb53e44405be42ef42e12e7f5a/resource.tar.gz#test_sql2yql.test_expr-flatten_member_non_literal_tuple_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-formattypediff]": [
         {
             "checksum": "78f276308861fae15da2a3c4ee186c3a",
@@ -11574,6 +11581,11 @@
     "test_sql_format.test[expr-flatmap_by_map_lazy_list]": [
         {
             "uri": "file://test_sql_format.test_expr-flatmap_by_map_lazy_list_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-flatten_member_non_literal_tuple]": [
+        {
+            "uri": "file://test_sql_format.test_expr-flatten_member_non_literal_tuple_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-formattypediff]": [

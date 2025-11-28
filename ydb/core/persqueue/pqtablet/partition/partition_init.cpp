@@ -36,10 +36,10 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitMetaStep>(this));
     Steps.push_back(MakeHolder<TInitInfoRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
-    Steps.push_back(MakeHolder<TDeleteKeysStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
     Steps.push_back(MakeHolder<TInitEndWriteTimestampStep>(this));
     Steps.push_back(MakeHolder<TInitMessageDeduplicatorStep>(this));
+    Steps.push_back(MakeHolder<TDeleteKeysStep>(this));
     Steps.push_back(MakeHolder<TInitFieldsStep>(this));
 
     CurrentStep = Steps.begin();
@@ -512,15 +512,15 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             FillBlobsMetaData(ctx);
             FormHeadAndProceed();
 
-            AFL_ENSURE(!GetContext().StartOffset || *GetContext().StartOffset >= Partition()->GetStartOffset())
-                ("d", "StartOffset from meta and blobs are different")
-                ("l", *GetContext().StartOffset)
-                ("r", Partition()->GetStartOffset());
+            // AFL_ENSURE(!GetContext().StartOffset || *GetContext().StartOffset >= Partition()->GetStartOffset())
+            //     ("d", "StartOffset from meta and blobs are different")
+            //     ("l", *GetContext().StartOffset)
+            //     ("r", Partition()->GetStartOffset());
 
-            AFL_ENSURE(!GetContext().EndOffset || *GetContext().EndOffset == Partition()->GetEndOffset())
-                ("d", "EndOffset from meta and blobs are different")
-                ("l", *GetContext().EndOffset)
-                ("r", Partition()->GetEndOffset());
+            // AFL_ENSURE(!GetContext().EndOffset || *GetContext().EndOffset == Partition()->GetEndOffset())
+            //     ("d", "EndOffset from meta and blobs are different")
+            //     ("l", *GetContext().EndOffset)
+            //     ("r", Partition()->GetEndOffset());
 
             Done(ctx);
             break;

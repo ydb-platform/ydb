@@ -4733,7 +4733,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(
                 result.GetIssues().ToString(),
-                "Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes.",
+                "Read from column-oriented tables is not supported in Online Read-Only or Stale Read-Only transaction modes.",
                 result.GetIssues().ToString());
         }
 
@@ -4744,7 +4744,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(
                 result.GetIssues().ToString(),
-                "Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes.",
+                "Read from column-oriented tables is not supported in Online Read-Only or Stale Read-Only transaction modes.",
                 result.GetIssues().ToString());
         }
     }

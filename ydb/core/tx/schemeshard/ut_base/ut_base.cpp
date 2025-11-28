@@ -11835,7 +11835,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCopyTable(runtime, ++txId, "/MyRoot", "SystemColumnInCopyAllowed", "/MyRoot/SystemColumnAllowed");
     }
 
-    Y_UNIT_TEST_FLAG(CopyTableAccessToPrivatePaths , EnableAccessToIndexImplTables) {
+    Y_UNIT_TEST_FLAG(CopyTableAccessToPrivatePaths, EnableAccessToIndexImplTables) {
         // Test copy behavior for all path types: table, index, indexImplTable, changefeed, streamImpl
         // Only indexImplTable behavior changes based on EnableAccessToIndexImplTables flag.
         TTestBasicRuntime runtime;

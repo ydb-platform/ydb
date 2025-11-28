@@ -852,7 +852,7 @@ protected:
                                 "Compute node is unavailable"));
                         break;
                     }
-
+                    LOG_D("Received NODE_SHUTTING_DOWN, retry tasks locally");
                     if (ev->Sender.NodeId() == SelfId().NodeId()) {
                         LOG_W("[SHUTDOWN] Cannot retry: sender is local node"
                             << ", senderNode: " << ev->Sender.NodeId()

@@ -84,9 +84,7 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true]
-ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
 ydb/tests/olap py3test.[*/*] chunk
-ydb/tests/olap test_cs_many_updates.py.TestCSManyUpdates.test_many_updates[bulk_upsert]
 ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_workload[2-2]
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap zip_bomb.py.TestZipBomb.test

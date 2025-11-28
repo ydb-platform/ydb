@@ -848,7 +848,11 @@ protected:
                     if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
                         LOG_D("Received NODE_SHUTTING_DOWN but feature flag EnableShuttingDownNodeState is disabled");
                         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+<<<<<<< HEAD
                             YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+=======
+                            YqlIssue({}, NYql::TIssuesIds::SHARD_NOT_AVAILABLE, 
+>>>>>>> c92427a22e7 (change error code)
                                 "Compute node is unavailable"));
                         break;
                     }

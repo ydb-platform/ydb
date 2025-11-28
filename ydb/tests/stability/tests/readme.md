@@ -165,27 +165,6 @@ sequenceDiagram
     T->>T: create_parallel_allure_report()
 ```
 
-## Test Execution Flow
-
-```mermaid
-graph TD
-    A[Test Start] --> B[Phase 1: Preparation]
-    B --> C[Deploy Binaries]
-    C --> D[Cluster Health Check]
-    D --> E[Phase 2: Execution]
-    E --> F[Start Nemesis<br/>after 15s]
-    E --> G[Parallel Workload<br/>Execution]
-    F --> H[Phase 3: Results]
-    G --> H
-    H --> I[Collect Diagnostics]
-    I --> J[Upload Results]
-    J --> K[Generate Allure Report]
-    K --> L[Final Status Check]
-    L --> M{Success?}
-    M -->|Yes| N[Test Passed]
-    M -->|No| O[Test Failed/Broken]
-```
-
 ## Test Event Reporting
 
 ### When `test_event_report` is Generated

@@ -140,8 +140,15 @@ private:
             // misc
             hFunc(TEvents::TEvWakeup, HandleShuttingDown);
             hFunc(TEvents::TEvPoison, HandleShuttingDown);
+            hFunc(NMon::TEvHttpInfo, HandleShuttingDown);
+            hFunc(TEvents::TEvUndelivered, HandleWork);
+
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::TEvConsole::TEvConfigNotificationRequest);
+            
             default: {
-                Y_ABORT("Unexpected event 0x%x for TKqpNodeService in ShutdownState", ev->GetTypeRewrite());
+                LOG_W("Ignoring unexpected event 0x%x (" << ev->GetTypeName() 
+                      << ") during graceful shutdown, sender: " << ev->Sender);
             }
         }
     }
@@ -437,6 +444,24 @@ private:
     }
     void HandleShuttingDown(TEvents::TEvPoison::TPtr&) {
         PassAway();
+    }
+
+    void HandleShuttingDown(NMon::TEvHttpInfo::TPtr& ev) {
+        TStringStream str;
+        HTML(str) {
+            PRE() {
+                str << "This node is in graceful shutdown mode and will not accept new requests." << Endl;
+                str << "Current config:" << Endl;
+                str << Config.DebugString() << Endl;
+                str << Endl;
+
+                str << "Active Transactions:" << Endl;
+                State_->DumpInfo(str);
+                str << Endl;
+            }
+        }
+
+        Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
 private:
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {

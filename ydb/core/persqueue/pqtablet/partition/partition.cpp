@@ -4149,17 +4149,6 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
     ctx.Schedule(UPDATE_AVAIL_SIZE_INTERVAL, new TEvPQ::TEvUpdateAvailableSize());
 }
 
-void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo) {
-    for (auto it = BlobEncoder.HeadKeys.rbegin(); it != BlobEncoder.HeadKeys.rend(); ++it) {
-        if (it->Key.GetOffset() > offset || it->Key.GetOffset() == offset && it->Key.GetPartNo() >= partNo) {
-            // The repackaged blocks will be deleted after writing.
-            DefferedKeysForDeletion.push_back(std::move(it->BlobKeyToken));
-        } else {
-            break;
-        }
-    }
-}
-
 ui32 TPartition::NextChannel(bool isHead, ui32 blobSize) {
 
     if (isHead) {

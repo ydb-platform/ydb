@@ -13,20 +13,19 @@ private:
     class TFinishedDataSource {
     private:
         YDB_READONLY(ui32, RecordsCount, 0);
-        YDB_READONLY(ui32, SourceId, 0);
         YDB_READONLY(ui32, SourceIdx, 0);
 
     public:
         TFinishedDataSource(const std::shared_ptr<IDataSource>& source)
             : RecordsCount(source->GetResultRecordsCount())
-            , SourceId(source->GetSourceId())
-            , SourceIdx(source->GetSourceIdx()) {
+            , SourceIdx(source->GetSourceIdx())
+        {
         }
 
         TFinishedDataSource(const std::shared_ptr<IDataSource>& source, const ui32 partSize)
             : RecordsCount(partSize)
-            , SourceId(source->GetSourceId())
-            , SourceIdx(source->GetSourceIdx()) {
+            , SourceIdx(source->GetSourceIdx())
+        {
             AFL_VERIFY(partSize < source->GetResultRecordsCount());
         }
     };
@@ -46,7 +45,7 @@ private:
 
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(
         const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
-        return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceId(), readyRecords);
+        return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceIdx(), readyRecords);
     }
     virtual void DoClear() override {
         Cleared = true;

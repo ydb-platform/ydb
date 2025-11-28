@@ -24,7 +24,7 @@ public:
     };
 
     TMessageIdDeduplicator(TIntrusivePtr<ITimeProvider> timeProvider = CreateDefaultTimeProvider(), TDuration deduplicationWindow = TDuration::Minutes(5));
-    ~TMessageIdDeduplicator() = default;
+    ~TMessageIdDeduplicator();
 
     TDuration GetDeduplicationWindow() const;
     TInstant GetExpirationTime() const;

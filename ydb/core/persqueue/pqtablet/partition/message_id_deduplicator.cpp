@@ -12,7 +12,7 @@ namespace {
 
 constexpr TDuration BucketSize = TDuration::MilliSeconds(100);
 
-TInstant trim(TInstant value) {
+TInstant Trim(TInstant value) {
     return TInstant::MilliSeconds(value.MilliSeconds() / BucketSize.MilliSeconds() * BucketSize.MilliSeconds() + BucketSize.MilliSeconds());
 }
 
@@ -24,12 +24,14 @@ TMessageIdDeduplicator::TMessageIdDeduplicator(TIntrusivePtr<ITimeProvider> time
 {
 }
 
+TMessageIdDeduplicator::~TMessageIdDeduplicator() = default;
+
 TDuration TMessageIdDeduplicator::GetDeduplicationWindow() const {
     return DeduplicationWindow;
 }
 
 TInstant TMessageIdDeduplicator::GetExpirationTime() const {
-    return trim(TimeProvider->Now()) + DeduplicationWindow;
+    return Trim(TimeProvider->Now()) + DeduplicationWindow;
 }
 
 std::optional<ui64> TMessageIdDeduplicator::AddMessage(const TString& deduplicationId, const ui64 offset) {
@@ -38,7 +40,7 @@ std::optional<ui64> TMessageIdDeduplicator::AddMessage(const TString& deduplicat
         return it->second;
     }
 
-    const auto now = trim(TimeProvider->Now());
+    const auto now = Trim(TimeProvider->Now());
     const auto expirationTime = now + DeduplicationWindow;
 
     if (!CurrentBucket.StartTime) {

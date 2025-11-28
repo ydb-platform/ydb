@@ -1409,6 +1409,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
 
     tx->State = ECommitState::Committed;
     tx->ExplicitMessageGroups = std::move(ev->ExplicitMessageGroups);
+    tx->SerializedTx = std::move(ev->SerializedTx);
 
     if (!tx->ChangeConfig && !tx->ProposeConfig) {
         tx->CommitSpan = std::move(ev->Span);
@@ -1454,9 +1455,13 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxRollback> ev, c
         txIter = TransactionsInflight.find(ev->TxId);
         PQ_ENSURE(!txIter.IsEnd());
     }
-    PQ_ENSURE(txIter->second->State == ECommitState::Pending);
+    auto& tx = txIter->second;
 
-    txIter->second->State = ECommitState::Aborted;
+    PQ_ENSURE(tx->State == ECommitState::Pending);
+
+    tx->State = ECommitState::Aborted;
+    tx->SerializedTx = std::move(ev->SerializedTx);
+
     ProcessTxsAndUserActs(ctx);
 }
 
@@ -2839,13 +2844,32 @@ bool TPartition::HasPendingCommitsOrPendingWrites() const
     return !UserActionAndTxPendingCommit.empty() || !UserActionAndTxPendingWrite.empty();
 }
 
+void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
+{
+    if (!tx.SerializedTx.Defined()) {
+        return;
+    }
+
+    PQ_ENSURE(PersistRequest);
+    TMaybe<ui64> txId = tx.GetTxId();
+    PQ_ENSURE(txId.Defined());
+
+    TString value;
+    PQ_ENSURE(tx.SerializedTx->SerializeToString(&value));
+
+    auto command = PersistRequest->Record.AddCmdWrite();
+    command->SetKey(GetTxKey(*txId));
+    command->SetValue(value);
+    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+}
+
 bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t,
                                              TEvKeyValue::TEvRequest*)
 {
     auto span = t->CommitSpan.CreateChild(TWilsonTopic::TopicTopLevel,
                                           "Topic.Partition.Process",
                                           NWilson::EFlags::AUTO_END);
-
+    TryAddCmdWriteForTransaction(*t);
     if (t->ProposeTransaction) {
         ExecImmediateTx(*t);
         return true;

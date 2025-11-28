@@ -127,6 +127,8 @@ struct TTransaction {
 
     TInstant WriteInfoResponseTimestamp;
     TInstant CalcPredicateTimestamp;
+
+    TMaybe<NKikimrPQ::TTransaction> SerializedTx;
 };
 class TPartitionCompaction;
 
@@ -1266,6 +1268,8 @@ private:
     TMessageIdDeduplicator MessageIdDeduplicator;
     bool AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
     std::optional<ui64> DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset);
+
+    void TryAddCmdWriteForTransaction(const TTransaction& tx);
 };
 
 inline ui64 TPartition::GetStartOffset() const {

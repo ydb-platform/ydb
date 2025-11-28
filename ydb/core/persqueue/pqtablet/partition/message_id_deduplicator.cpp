@@ -163,6 +163,10 @@ TString MakeDeduplicatorWALKey(ui32 partitionId, const TInstant& expirationTime)
 }
 
 void TPartition::AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request) {
+    if (MirroringEnabled(Config) || Partition.IsSupportivePartition()) {
+        return;
+    }
+
     MessageIdDeduplicator.Compact();
 
     NKikimrPQ::TMessageDeduplicationIdWAL wal;

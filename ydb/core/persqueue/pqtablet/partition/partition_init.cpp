@@ -864,7 +864,7 @@ TInitMessageDeduplicatorStep::TInitMessageDeduplicatorStep(TInitializer* initial
 }
 
 void TInitMessageDeduplicatorStep::Execute(const TActorContext &ctx) {
-    if (Partition()->Partition.IsSupportivePartition()) {
+    if (MirroringEnabled(Partition()->Config) || Partition()->Partition.IsSupportivePartition()) {
         return Done(ctx);
     }
     auto firstKey = MakeDeduplicatorWALKey(Partition()->Partition.OriginalPartitionId, TInstant::Now() - Partition()->MessageIdDeduplicator.GetDeduplicationWindow());

@@ -53,6 +53,47 @@ class TBackupPathTestFixture : public TS3BackupTestFixture {
 };
 
 Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
+    Y_UNIT_TEST_TWIN(OnlyExportWholeDatabase, IsOlap) {
+        // Export without source path: source path == database root
+        NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix");
+        auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+        WaitOpSuccess(res);
+
+        ValidateS3FileList({
+            "/test_bucket/Prefix/metadata.json",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/metadata.json",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/scheme.pb",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/permissions.pb",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/data_00.csv",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/metadata.json",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/scheme.pb",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/permissions.pb",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/data_00.csv",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv",
+
+            "/test_bucket/Prefix/metadata.json.sha256",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/metadata.json.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/scheme.pb.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/permissions.pb.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/data_00.csv.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/metadata.json.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/scheme.pb.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/permissions.pb.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/data_00.csv.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
+        });
+    }
+
     Y_UNIT_TEST_TWIN(ExportWholeDatabase, IsOlap) {
         // Export without source path: source path == database root
         if (IsOlap) {
@@ -1216,7 +1257,7 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
         }
 
         using namespace fmt::literals;
-        
+
         // Make tables for parallel export
         auto createSchemaResult = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
             CREATE TABLE `/Root/Table0` (

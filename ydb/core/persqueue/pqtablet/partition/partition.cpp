@@ -2569,11 +2569,14 @@ void TPartition::RunPersist() {
             EndProcessWrites(PersistRequest.Get(), ctx);
         }
         EndHandleRequests(PersistRequest.Get(), ctx);
-        //haveChanges = true;
     }
 
     if (TryAddDeleteHeadKeysToPersistRequest()) {
         haveChanges = true;
+    }
+
+    if (Compacter) {
+        Compacter->TryCompactionIfPossible();
     }
 
     if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
@@ -2582,15 +2585,12 @@ void TPartition::RunPersist() {
         TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
         PartitionQuotaWaitTimeForCurrentBlob = TDuration::Zero();
         WritesTotal.Inc();
-        AddMetaKey(PersistRequest.Get());
         HaveWriteMsg = true;
 
+        AddMetaKey(PersistRequest.Get());
         AddCmdWriteTxMeta(PersistRequest->Record);
         AddCmdWriteUserInfos(PersistRequest->Record);
         AddCmdWriteConfig(PersistRequest->Record);
-    }
-    if (Compacter) {
-        Compacter->TryCompactionIfPossible();
     }
 
     if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {

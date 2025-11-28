@@ -145,8 +145,10 @@ def generate_test_table(pr_number: int, base_ref: str, app_domain: str) -> str:
     """Generate test execution table with buttons for different build presets and test sizes."""
     domain = normalize_app_domain(app_domain)
     base_url = f"https://{domain}/workflow/trigger"
-    owner = "ydb-platform"
-    repo = "ydb"
+    repo_env = os.environ.get("GITHUB_REPOSITORY")
+    if not repo_env or "/" not in repo_env:
+        raise ValueError("GITHUB_REPOSITORY environment variable is not set or malformed (expected 'owner/repo')")
+    owner, repo = repo_env.split("/", 1)
     workflow_id = "run_tests.yml"
     return_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
     
@@ -193,8 +195,10 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
     """Generate backport execution table with buttons for different branches."""
     domain = normalize_app_domain(app_domain)
     base_url = f"https://{domain}/workflow/trigger"
-    owner = "ydb-platform"
-    repo = "ydb"
+    repo_env = os.environ.get("GITHUB_REPOSITORY")
+    if not repo_env or "/" not in repo_env:
+        raise ValueError("GITHUB_REPOSITORY environment variable is not set or malformed (expected 'owner/repo')")
+    owner, repo = repo_env.split("/", 1)
     workflow_id = "cherry_pick_v2.yml"  # Workflow file name
     return_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
     
@@ -333,20 +337,24 @@ def ensure_tables_in_pr_body(pr_body: str, pr_number: int, base_ref: str, app_do
 
 def update_pr_body(pr_number: int, new_body: str) -> None:
     """Update PR body via GitHub API. Raises exception on error."""
-    github_token = os.environ.get("GITHUB_TOKEN")
-    github_repo = os.environ.get("GITHUB_REPOSITORY")
-    
-    if not github_token:
-        raise ValueError("GITHUB_TOKEN environment variable is not set")
-    
-    if not github_repo:
-        raise ValueError("GITHUB_REPOSITORY environment variable is not set")
-    
-    gh = Github(auth=GithubAuth.Token(github_token))
-    repo = gh.get_repo(github_repo)
-    pr = repo.get_pull(pr_number)
-    pr.edit(body=new_body)
-    print(f"::notice::Updated PR #{pr_number} body with test and backport tables")
+    try:
+        github_token = os.environ.get("GITHUB_TOKEN")
+        github_repo = os.environ.get("GITHUB_REPOSITORY")
+        
+        if not github_token:
+            raise ValueError("GITHUB_TOKEN environment variable is not set")
+        
+        if not github_repo:
+            raise ValueError("GITHUB_REPOSITORY environment variable is not set")
+        
+        gh = Github(auth=GithubAuth.Token(github_token))
+        repo = gh.get_repo(github_repo)
+        pr = repo.get_pull(pr_number)
+        pr.edit(body=new_body)
+        print(f"::notice::Updated PR #{pr_number} body with test and backport tables")
+    except Exception as e:
+        print(f"::error::Failed to update PR #{pr_number} body: {e}")
+        raise
 
 def validate_pr_description_from_file(file_path=None, description=None) -> Tuple[bool, str]:
     try:

@@ -1,39 +1,36 @@
 #pragma once
 
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <variant>
 
 namespace NKikimr::NSchemeShard {
 
+template <typename TItem>
+TString GetItemSource(const TItem& item);
+
+template <>
+inline TString GetItemSource(const Ydb::Import::ImportFromS3Settings::Item& item) {
+    return item.source_prefix();
+}
+
+template <>
+inline TString GetItemSource(const Ydb::Import::ImportFromFsSettings::Item& item) {
+    return item.source_path();
+}
+
 template <typename TSettings>
-struct TItemSourcePathGetter;
-
-template <>
-struct TItemSourcePathGetter<Ydb::Import::ImportFromS3Settings> {
-    static TString Get(const Ydb::Import::ImportFromS3Settings& settings, size_t i) {
-        if (i < ui32(settings.items_size())) {
-            return settings.items(i).source_prefix();
-        }
-        return {};
+inline TString GetItemSource(const TSettings& settings, size_t i) {
+    if (i < ui32(settings.items_size())) {
+        return GetItemSource(settings.items(i));
     }
-};
-
-template <>
-struct TItemSourcePathGetter<Ydb::Import::ImportFromFsSettings> {
-    static TString Get(const Ydb::Import::ImportFromFsSettings& settings, size_t i) {
-        if (i < ui32(settings.items_size())) {
-            return settings.items(i).source_path();
-        }
-        return {};
-    }
-};
-
+    return {};
+}
 
 template <typename TVariant, typename TFunc>
 auto VisitSettings(const TVariant& settings, TFunc&& func) {
     return std::visit(std::forward<TFunc>(func), settings);
 }
-
 
 template <typename TSettings>
 TSettings ParseSettings(const TString& serializedSettings) {

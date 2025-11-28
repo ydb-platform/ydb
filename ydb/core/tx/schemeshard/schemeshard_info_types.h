@@ -3113,7 +3113,21 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+private:
+    template <typename TSettingsPB>
+    static TString SerializeSettings(const TSettingsPB& settings) {
+        TString serialized;
+        Y_ABORT_UNLESS(settings.SerializeToString(&serialized));
+        return serialized;
+    }
+
+    template <typename TFunc>
+    auto Visit(TFunc&& func) const {
+        return VisitSettings(Settings, std::forward<TFunc>(func));
+    }
+
 public:
+
     TString GetItemSrcPrefix(size_t i) const {
         if (i < Items.size() && Items[i].SrcPrefix) {
             return Items[i].SrcPrefix;
@@ -3121,9 +3135,9 @@ public:
 
         // Backward compatibility.
         // But there can be no paths in settings at all.
-        return VisitSettings([i](const auto& settings) -> TString {
-            using T = std::decay_t<decltype(settings)>;
-            return TItemSourcePathGetter<T>::Get(settings, i);
+        return Visit([i](const auto& settings) -> TString {
+            // using T = std::decay_t<decltype(settings)>;
+            return GetItemSource(settings, i);
         });
     }
 
@@ -3139,13 +3153,13 @@ public:
 
     // Getters for common settings fields
     bool GetNoAcl() const {
-        return VisitSettings([](const auto& settings) {
+        return Visit([](const auto& settings) {
             return settings.no_acl();
         });
     }
 
     bool GetSkipChecksumValidation() const {
-        return VisitSettings([](const auto& settings) {
+        return Visit([](const auto& settings) {
             return settings.skip_checksum_validation();
         });
     }
@@ -3195,19 +3209,6 @@ public:
         , DomainPathId(domainPathId)
         , PeerName(peerName)
     {
-    }
-
-private:
-    template <typename TSettingsPB>
-    static TString SerializeSettings(const TSettingsPB& settings) {
-        TString serialized;
-        Y_PROTOBUF_SUPPRESS_NODISCARD settings.SerializeToString(&serialized);
-        return serialized;
-    }
-
-    template <typename TFunc>
-    auto VisitSettings(TFunc&& func) const {
-        return NImportHelpers::VisitSettings(Settings, std::forward<TFunc>(func));
     }
 
 public:

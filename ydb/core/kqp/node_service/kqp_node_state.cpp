@@ -112,7 +112,7 @@ std::vector<TNodeRequest::TTaskInfo> TNodeState::GetTasksByTxId(ui64 txId) const
     return tasks;
 }
 
-void TNodeState::DumpInfo(TStringStream& str) const {
+void TNodeState::DumpInfo(TStringStream& str, ui32 nodeId) const {
     HTML(str) {
         for (const auto& bucket : Buckets) {
             TReadGuard guard(bucket.Mutex);
@@ -124,7 +124,15 @@ void TNodeState::DumpInfo(TStringStream& str) const {
             for (const auto& [txId, requests] : byTx) {
                 str << "    Requests:" << Endl;
                 for (auto& [requester, request] : requests) {
-                    str << "      Requester: " << requester << Endl;
+                    str << "      Requester: ";
+                    if (requester.NodeId() == nodeId) {
+                        HREF("?ex=" + ToString(requester))  {
+                            str << requester;
+                        }
+                    } else {
+                        str << requester;
+                    }
+                    str << Endl;
                     str << "        StartTime: " << request->StartTime << Endl;
                     str << "        Deadline: " << request->Deadline << Endl;
                     str << "        In-fly tasks:" << Endl;
@@ -155,6 +163,19 @@ bool TNodeState::FindCaId(const TString& caId, TActorId& id) const {
                     id = *actorId;
                     return true;
                 }
+            }
+        }
+    }
+    return false;
+}
+
+bool TNodeState::FindExId(const TString& exId, ui32 nodeId, TActorId& id) const {
+    for (const auto& bucket : Buckets) {
+        TReadGuard guard(bucket.Mutex);
+        for (const auto& [_, request] : bucket.Requests) {
+            if (ToString(request.ExecuterId) == exId && request.ExecuterId.NodeId() == nodeId) {
+                id = request.ExecuterId;
+                return true;
             }
         }
     }

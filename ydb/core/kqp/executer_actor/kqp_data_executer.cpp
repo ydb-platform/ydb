@@ -1147,6 +1147,7 @@ private:
                 hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+                hFunc(NActors::NMon::TEvHttpInfo, HandleHttpInfo)
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
             }

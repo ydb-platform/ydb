@@ -645,6 +645,56 @@ protected:
         static_cast<TDerived*>(this)->CheckExecutionComplete();
     }
 
+    void HandleHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {
+        TStringStream str;
+        HTML(str) {
+            PRE() {
+                str << "KQP Executer" << Endl;
+
+                TABLE_SORTABLE_CLASS ("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "TxId";}
+                            TABLEH() {str << "StageId";}
+                            TABLEH() {str << "TaskId";}
+                            TABLEH() {str << "NodeId";}
+                            TABLEH() {str << "ActorId";}
+                            TABLEH() {str << "Completed";}
+                        }
+                    }
+                    TABLEBODY() {
+                        for (const auto& task : TasksGraph.GetTasks()) {
+                            TABLER() {
+                                TABLED() {str << task.StageId.TxId;}
+                                TABLED() {str << task.StageId.StageId;}
+                                TABLED() {str << task.Id;}
+                                TABLED() {str << task.Meta.NodeId;}
+                                TABLED() {
+                                    if (task.ComputeActorId) {
+                                        if (task.ComputeActorId.NodeId() == SelfId().NodeId()) {
+                                            HREF("/actors/kqp_node?ca=" + ToString(task.ComputeActorId))  {
+                                                str << task.ComputeActorId;
+                                            }
+                                        } else {
+                                            str << task.ComputeActorId;
+                                        }
+                                    } else {
+                                        str << "N/A";
+                                    }
+                                    str << Endl;
+                                }
+                                TABLED() {str << task.Meta.Completed;}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        this->Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+    }
+
+
     STATEFN(ReadyState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpExecuter::TEvTxRequest, HandleReady);

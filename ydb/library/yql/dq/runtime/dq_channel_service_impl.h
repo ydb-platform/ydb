@@ -213,6 +213,9 @@ public:
     void BindStorage(std::shared_ptr<TLocalBuffer>& self, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler();
 
+    void NotifyInput();
+    void NotifyOutput();
+
     std::shared_ptr<TLocalBufferRegistry> Registry;
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
@@ -269,7 +272,7 @@ public:
     {}
     void PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void AddPopChunk(ui64 bytes, ui64 rows);
-    void UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    bool UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     bool CheckGenMajor(ui64 genMajor, const TString& errorMessage);
     /* bool PushToWaitQueue(TDataChunk&& data); */
     bool IsFlushed();

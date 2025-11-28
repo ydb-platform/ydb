@@ -150,7 +150,7 @@ protected:
                     TABLEHEAD() {
                         TABLER() {
                             TABLEH() {str << "ChannelId";}
-                            TABLEH() {str << "HasPeer";}
+                            TABLEH() {str << "PeerActorId";}
                             TABLEH() {str << "Empty";}
                             TABLEH() {str << "Finished";}
                         }
@@ -159,7 +159,7 @@ protected:
                         for (auto& [channelId, info] : TBase::InputChannelsMap) {
                             TABLER() {
                                 TABLED() {str << channelId;}
-                                TABLED() {str << info.HasPeer;}
+                                TABLED() {str << (info.HasPeer ? ToString(info.PeerId) : "N/A");}
                                 TABLED() {str << (info.Channel ? ToString(info.Channel->Empty()) : "nullptr");}
                                 TABLED() {str << (info.Channel ? ToString(info.Channel->IsFinished()) : "nullptr");}
                             }

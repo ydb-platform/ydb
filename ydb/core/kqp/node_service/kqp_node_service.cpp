@@ -508,9 +508,16 @@ private:
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev) {
 
         const TCgiParameters &cgi = ev->Get()->Request.GetParams();
-        auto caId = cgi.Get("ca");
         TActorId id;
+
+        auto caId = cgi.Get("ca");
         if (caId && State_->FindCaId(caId, id)) {
+            TActivationContext::Send(ev->Forward(id));
+            return;
+        }
+
+        auto exId = cgi.Get("ex");
+        if (exId && State_->FindExId(exId, SelfId().NodeId(), id)) {
             TActivationContext::Send(ev->Forward(id));
             return;
         }
@@ -523,7 +530,7 @@ private:
                 str << Endl;
 
                 str << Endl << "Transactions:" << Endl;
-                State_->DumpInfo(str);
+                State_->DumpInfo(str, SelfId().NodeId());
             }
         }
 

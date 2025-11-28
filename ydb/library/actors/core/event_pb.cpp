@@ -338,22 +338,22 @@ namespace NActors {
         return true;
     }
 
-    std::optional<TRope> SerializeToRopeImpl(const google::protobuf::MessageLite& msg, const TVector<TRope>& payload, NInterconnect::NRdma::IMemPool* pool) {
+    std::optional<TRope> SerializeToRopeImpl(const google::protobuf::MessageLite& msg, const TVector<TRope>& payload, IRcBufAllocator* allocator) {
         TRope result;
         auto sz = CalculateSerializedHeaderSizeImpl(payload);
         if (sz) {
-            std::optional<TRcBuf> headerBuf = pool->AllocRcBuf(sz, NInterconnect::NRdma::IMemPool::EMPTY);
+            TRcBuf headerBuf = allocator->AllocRcBuf(sz, 0, 0);
             if (!headerBuf) {
                 return {};
             }
-            char* data = headerBuf->GetDataMut();
+            char* data = headerBuf.GetDataMut();
             auto append = [&data](const char *p, size_t len) {
                 std::memcpy(data, p, len);
                 data += len;
                 return true;
             };
             SerializeHeaderCommon(payload, append);
-            result.Insert(result.End(), std::move(headerBuf.value()));
+            result.Insert(result.End(), std::move(headerBuf));
 
             auto appendRope = [&](TRope rope) {
                 result.Insert(result.End(), std::move(rope));
@@ -364,13 +364,13 @@ namespace NActors {
 
         {
             ui32 size = msg.ByteSizeLong();
-            std::optional<TRcBuf> recordsSerializedBuf = pool->AllocRcBuf(size, NInterconnect::NRdma::IMemPool::EMPTY);
+            TRcBuf recordsSerializedBuf = allocator->AllocRcBuf(size, 0, 0);
             if (!recordsSerializedBuf) {
                 return {};
             }
-            bool serializationDone = msg.SerializePartialToArray(recordsSerializedBuf->GetDataMut(), size);
+            bool serializationDone = msg.SerializePartialToArray(recordsSerializedBuf.GetDataMut(), size);
             Y_ABORT_UNLESS(serializationDone);
-            result.Insert(result.End(), std::move(recordsSerializedBuf.value()));
+            result.Insert(result.End(), std::move(recordsSerializedBuf));
         }
 
         return result;
@@ -470,14 +470,14 @@ namespace NActors {
                     for (const TRope& rope : payload) {
                         headerLen += SerializeNumber(rope.size(), temp);
                     }
-                    info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true, true});
+                    info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true, false});
                     for (const TRope& rope : payload) {
                         info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false, IsRdma(rope)});
                     }
                 }
 
                 const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
-                info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true, true}); // protobuf itself
+                info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true, false}); // protobuf itself
 
 #ifndef NDEBUG
                 size_t total = 0;

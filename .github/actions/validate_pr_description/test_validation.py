@@ -220,7 +220,7 @@ def main():
             try:
                 from github import Github, Auth as GithubAuth
                 gh = Github(auth=GithubAuth.Token(github_token))
-                repo = gh.get_repo("ydb-platform/ydb")
+                repo = gh.get_repo(os.environ.get("GITHUB_REPOSITORY"))
                 pr = repo.get_pull(pr_number)
                 pr_body = pr.body or ""
                 base_ref = pr.base.ref

@@ -137,7 +137,8 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
             const TTxId& txId,
             ui64 taskId,
             const ::NMonitoring::TDynamicCounterPtr& counters,
-            const NPq::NProto::TDqPqTopicSource& sourceParams)
+            const NPq::NProto::TDqPqTopicSource& sourceParams,
+            bool enableStreamingQueriesCounters)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
             if (counters) {
@@ -145,12 +146,13 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
             } else {
                 SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             }
-            for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
-                SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
-            }
+
             auto source = SubGroup;
             auto task = SubGroup;
-            if (NKikimr::AppData() && NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
+            if (enableStreamingQueriesCounters) {
+                for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+                    SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+                }
                 source = source->GetSubgroup("tx_id", TxId);
                 task = source->GetSubgroup("task_id", ToString(taskId));
             }
@@ -213,10 +215,11 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway,
-        ui32 topicPartitionsCount)
+        ui32 topicPartitionsCount,
+        bool enableStreamingQueriesCounters)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
-        , Metrics(txId, taskId, counters, SourceParams)
+        , Metrics(txId, taskId, counters, SourceParams, enableStreamingQueriesCounters)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
         , Driver(std::move(driver))
@@ -938,6 +941,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqGateway::TPtr pqGateway,
     ui32 topicPartitionsCount,
+    bool enableStreamingQueriesCounters,
     i64 bufferSize
     )
 {
@@ -959,15 +963,16 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         counters,
         bufferSize,
         pqGateway,
-        topicPartitionsCount
+        topicPartitionsCount,
+        enableStreamingQueriesCounters
     );
 
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod, enableStreamingQueriesCounters](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -1001,6 +1006,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 counters ? counters : args.TaskCounters,
                 pqGateway,
                 topicPartitionsCount,
+                enableStreamingQueriesCounters,
                 PQReadDefaultFreeSpace);
         }
 
@@ -1020,7 +1026,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             args.HolderFactory,
             counters ? counters : args.TaskCounters,
             PQReadDefaultFreeSpace,
-            pqGateway);
+            pqGateway,
+            enableStreamingQueriesCounters);
     });
 
 }

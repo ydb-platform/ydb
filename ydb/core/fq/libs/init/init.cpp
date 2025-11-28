@@ -259,7 +259,7 @@ void Init(
         );
         auto pqGateway = pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : NYql::CreatePqNativeGateway(std::move(pqServices));
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, 
-            yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), commonConfig.GetPqReconnectPeriod());
+            yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), commonConfig.GetPqReconnectPeriod(), true);
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"), protoConfig.GetGateways().GetS3().GetAllowLocalFiles());
@@ -267,7 +267,7 @@ void Init(
             httpGateway, s3HttpRetryPolicy);
 
         RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, connectorClient);
-        RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, yqCounters->GetSubgroup("subsystem", "DqSinkTracker"));
+        RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, yqCounters->GetSubgroup("subsystem", "DqSinkTracker"), true);
         RegisterDQSolomonWriteActorFactory(*asyncIoFactory, credentialsFactory);
         RegisterDQSolomonReadActorFactory(*asyncIoFactory, credentialsFactory);
     }

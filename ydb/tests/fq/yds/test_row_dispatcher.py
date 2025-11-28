@@ -37,7 +37,7 @@ class Param(object):
 @pytest.fixture
 def kikimr(request):
     kikimr_conf = StreamingOverKikimrConfig(
-        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(COMPUTE_NODE_COUNT, extra_feature_flags={"enable_streaming_queries_counters": True})}
+        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(COMPUTE_NODE_COUNT)}
     )
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.compute_plane.fq_config['row_dispatcher']['enabled'] = True

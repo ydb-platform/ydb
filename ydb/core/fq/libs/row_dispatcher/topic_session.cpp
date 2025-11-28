@@ -27,11 +27,10 @@ namespace {
 
 struct TTopicSessionMetrics {
     void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, const TString& readGroupName, ui32 partitionId, bool enableStreamingQueriesCounters) {
-        const auto topicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
-
-        auto readGroup = topicGroup;
-        PartitionGroup = topicGroup;
+        auto readGroup = counters;
+        PartitionGroup = counters;
         if (enableStreamingQueriesCounters) {
+            const auto topicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
             readGroup = topicGroup->GetSubgroup("read_group", SanitizeLabel(readGroupName));
             PartitionGroup = readGroup->GetSubgroup("partition", ToString(partitionId));
         }
@@ -123,11 +122,12 @@ private:
                 InitialOffset = *offset;
             }
             Y_UNUSED(TDuration::TryParse(ev->Get()->Record.GetSource().GetReconnectPeriod(), ReconnectPeriod));
-            for (const auto& sensor : ev->Get()->Record.GetSource().GetTaskSensorLabel()) {
-                Counters = Counters->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
-            }
+
             auto readSubGroup = Counters;
             if (enableStreamingQueriesCounters) {
+                for (const auto& sensor : ev->Get()->Record.GetSource().GetTaskSensorLabel()) {
+                    Counters = Counters->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+                }
                 readSubGroup = readSubGroup->GetSubgroup("query_id", QueryId);
                 readSubGroup = readSubGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
             }

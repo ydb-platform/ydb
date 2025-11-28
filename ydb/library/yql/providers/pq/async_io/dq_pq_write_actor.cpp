@@ -105,7 +105,7 @@ TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
 
 class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqComputeActorAsyncOutput, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     struct TMetrics {
-        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
+        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
             if (Counters) {
@@ -114,7 +114,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
                 SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             }
             auto task = SubGroup;
-            if (NKikimr::AppData() && NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
+            if (enableStreamingQueriesCounters) {
                 auto sink = SubGroup->GetSubgroup("tx_id", TxId);
                 task = sink->GetSubgroup("task_id", ToString(taskId));
             }
@@ -163,11 +163,12 @@ public:
         IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 freeSpace,
-        const IPqGateway::TPtr& pqGateway)
+        const IPqGateway::TPtr& pqGateway,
+        bool enableStreamingQueriesCounters)
         : TActor<TDqPqWriteActor>(&TDqPqWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
-        , Metrics(txId, taskId, counters)
+        , Metrics(txId, taskId, counters, enableStreamingQueriesCounters)
         , SinkParams(std::move(sinkParams))
         , Driver(std::move(driver))
         , CredentialsProviderFactory(credentialsProviderFactory)
@@ -548,6 +549,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqGateway::TPtr pqGateway,
+    bool enableStreamingQueriesCounters,
     i64 freeSpace)
 {
     const TString& tokenName = settings.GetToken().GetName();
@@ -565,13 +567,14 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
         callbacks,
         counters,
         freeSpace,
-        pqGateway);
+        pqGateway,
+        enableStreamingQueriesCounters);
     return {actor, actor};
 }
 
-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters) {
+void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters) {
     factory.RegisterSink<NPq::NProto::TDqPqTopicSink>("PqSink",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, enableStreamingQueriesCounters](
             NPq::NProto::TDqPqTopicSink&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
@@ -592,7 +595,8 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
                 credentialsFactory,
                 args.Callback,
                 counters ? counters : args.TaskCounters,
-                pqGateway
+                pqGateway,
+                enableStreamingQueriesCounters
             );
         });
 }

@@ -80,7 +80,7 @@ There are three rules that determine the YDB type sent for a parameter:
 | Uint64                      | ulong         | byte, ushort, uint                    | Uint64            | UInt64                                                       |
 | Float                       | float         |                                       | Float             | Single                                                       |
 | Double                      | double        | float                                 | Double            | Double                                                       |
-| Decimal (precision, scale)  | decimal       |                                       | Decimal           | Decimal, Currency                                            | 
+| Decimal (precision, scale)  | decimal       |                                       | Decimal           | Decimal, Currency                                            |
 | Bytes (synonym of `String`) | byte[]        |                                       | Bytes             | Binary                                                       |
 | Text (synonym of `Utf8`)    | string        |                                       | Text              | String, AnsiString, AnsiStringFixedLength, StringFixedLength |
 | Json                        | string        |                                       | Json              |                                                              |

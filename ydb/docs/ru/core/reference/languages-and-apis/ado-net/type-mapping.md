@@ -80,7 +80,7 @@ await new YdbCommand(ydbConnection)
 | Uint64                       | ulong        | byte, ushort, uint                      | Uint64            | UInt64                                                       |
 | Float                        | float        |                                         | Float             | Single                                                       |
 | Double                       | double       | float                                   | Double            | Double                                                       |
-| Decimal (precision, scale)   | decimal      |                                         | Decimal           | Decimal, Currency                                            | 
+| Decimal (precision, scale)   | decimal      |                                         | Decimal           | Decimal, Currency                                            |
 | Bytes (синоним `String`)     | byte[]       |                                         | Bytes             | Binary                                                       |
 | Text (синоним `Utf8`)        | string       |                                         | Text              | String, AnsiString, AnsiStringFixedLength, StringFixedLength |
 | Json                         | string       |                                         | Json              |                                                              |

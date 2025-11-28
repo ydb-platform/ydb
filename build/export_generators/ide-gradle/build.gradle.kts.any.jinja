@@ -2,13 +2,8 @@
 {#- Include macroses.jinja then include use_macroses.jinja not work! -#}
 {#- That is why all common macroses here -#}
 
-{%- macro PatchRootCommon(path, use_output_root) -%}
+{%- macro PatchRootCommon(path, out_root) -%}
 {#- Replace (export_root / curdir) => (BINDIR), (export_root) ==> (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
-{%-     if use_output_root -%}
-{%-         set out_root = "$output_root" -%}
-{%-     else -%}
-{%-         set out_root = "$arcadia_root" -%}
-{%-     endif -%}
 "{{ path|replace(export_root + "/" + curdir, "$projectBuildDir")|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, out_root)|replace(output_root, out_root) }}"
 {%- endmacro -%}
 
@@ -16,7 +11,7 @@
 "{{ path|replace(export_root + "/" + curdir, "$projectCodegenDir/" + varprefix + "." + output)|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
 {%- endmacro -%}
 
-{%- macro PatchRoots(arg, depend = false, output = "") -%}
+{%- macro PatchRoots(arg, depend = false, output = "", force_output_root = false) -%}
 {#- Always replace (arcadia_root) === (SOURCE_ROOT in ymake) to $arcadia_root in Gradle -#}
 {%-     if depend -%}
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to $arcadia_root in Gradle, because prebuilt tools in arcadia, not in build_root -#}
@@ -41,17 +36,19 @@
 {%-             if output != "_" -%}
 {{ PatchRootCodegen(path, output) }}
 {%-             else -%}
-{{ PatchRootCommon(path, true) }}
+{{ PatchRootCommon(path, "$output_root") }}
 {%-             endif -%}
 {%-         else -%}
 {%-             if output != "_" -%}
 {{ PatchRootCodegen(arg, output) }}
 {%-             else -%}
-{{ PatchRootCommon(arg, true) }}
+{{ PatchRootCommon(arg, "$output_root") }}
 {%-             endif -%}
 {%-         endif -%}
+{%-     elif force_output_root -%}
+{{ PatchRootCommon(arg, "$output_root") }}
 {%-     else -%}
-{{ PatchRootCommon(arg, false) }}
+{{ PatchRootCommon(arg, "$arcadia_root") }}
 {%-     endif -%}
 {%- endmacro -%}
 
@@ -67,7 +64,7 @@
 {%-             if output != "" and output != "_" -%}
 {{ PatchRootCodegen(arg, output) }}
 {%-             else -%}
-{{ PatchRootCommon(arg, true) }}
+{{ PatchRootCommon(arg, "$output_root") }}
 {%-             endif -%}
 {%-         endif -%}
 {%-     endmacro -%}

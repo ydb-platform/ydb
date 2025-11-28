@@ -25,6 +25,7 @@ public:
     }
 
     TNodeResult BuildSourceOrNode(const TRule_expr& node);
+    TNodeResult Build(const TRule_tuple_or_expr& node);
     TNodeResult Build(const TRule_expr& node);
     TNodeResult Build(const TRule_lambda_or_parameter& node);
     TSourcePtr BuildSource(const TRule_select_or_expr& node);
@@ -38,8 +39,8 @@ public:
         MaybeUnnamedSmartParenOnTop_ = false;
     }
 
-    void ProduceYqlColumnRef() {
-        IsYqlColumnRefProduced_ = true;
+    void ProduceYqlSelect() {
+        IsYqlSelectProduced_ = true;
     }
 
     TMaybe<TExprOrIdent> LiteralExpr(const TRule_literal_value& node);
@@ -54,7 +55,7 @@ private:
     TNodeResult LambdaRule(const TRule_lambda& rule);
     TNodePtr CastRule(const TRule_cast_expr& rule);
     TNodePtr BitCastRule(const TRule_bitcast_expr& rule);
-    TNodePtr ExistsRule(const TRule_exists_expr& rule);
+    TNodeResult ExistsRule(const TRule_exists_expr& rule);
     TNodePtr CaseRule(const TRule_case_expr& rule);
 
     TSQLResult<TExprOrIdent> AtomExpr(const TRule_atom_expr& node, const TTrailingQuestions& tail);
@@ -95,6 +96,10 @@ private:
     TNodeResult SubExpr(const TRule_con_subexpr& node, const TTrailingQuestions& tail);
 
     TNodeResult SubExpr(const TRule_xor_subexpr& node, const TTrailingQuestions& tail);
+    TNodeResult YqlXorSubExpr(
+        TNodePtr lhs,
+        const TRule_cond_expr::TAlt2& alt,
+        const TTrailingQuestions& tail);
 
     TNodeResult SubExpr(const TRule_mul_subexpr& node, const TTrailingQuestions& tail);
 
@@ -150,7 +155,7 @@ private:
     ESmartParenthesis SmartParenthesisMode_ = ESmartParenthesis::Default;
     bool MaybeUnnamedSmartParenOnTop_ = true;
     bool IsSourceAllowed_ = true;
-    bool IsYqlColumnRefProduced_ = false;
+    bool IsYqlSelectProduced_ = false;
 
     THashMap<TString, TNodePtr> ExprShortcuts_;
 };

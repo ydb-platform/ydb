@@ -714,9 +714,15 @@ public:
         }
     }
 
+    void Push(TInstant watermark) override {
+        Y_UNUSED(watermark);
+        ythrow yexception() << "unimplemented";
+    }
+
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override {
         Y_UNUSED(batch);
+        Y_UNUSED(watermark);
         ythrow yexception() << "unimplemented";
     }
 
@@ -881,8 +887,13 @@ public:
         Push(std::move(serialized), space);
     }
 
+    void Push(TInstant watermark) override {
+        Y_UNUSED(watermark);
+        ythrow yexception() << "unimplemented";
+    }
+
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& /* watermark */) override {
         Y_UNUSED(batch);
         ythrow yexception() << "unimplemented";
     }

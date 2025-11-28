@@ -88,6 +88,10 @@ namespace NKikimr::NBlobDepot {
             return false; // no such key existed and will not be created as it hits the barrier
         }
 
+        Y_DEFER {
+            Self->JsonHandler.Invalidate();
+        };
+
         const auto [it, inserted] = Data.try_emplace(std::move(key), std::forward<TArgs>(args)...);
         {
             auto& [key, value] = *it;

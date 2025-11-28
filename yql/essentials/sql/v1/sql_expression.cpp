@@ -1,9 +1,10 @@
 #include "sql_expression.h"
 
+#include "select_yql.h"
+#include "sql_select_yql.h"
 #include "sql_call_expr.h"
 #include "sql_select.h"
 #include "sql_values.h"
-#include "antlr_token.h"
 
 #include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
 #include <yql/essentials/utils/utf8.h>
@@ -12,6 +13,8 @@
 #include <util/string/ascii.h>
 #include <util/string/hex.h>
 #include <util/generic/scope.h>
+
+#include "antlr_token.h"
 
 namespace NSQLTranslationV1 {
 
@@ -35,6 +38,10 @@ TNodeResult TSqlExpression::BuildSourceOrNode(const TRule_expr& node) {
         case TRule_expr::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
+}
+
+TNodeResult TSqlExpression::Build(const TRule_tuple_or_expr& node) {
+    return TupleOrExpr(node);
 }
 
 TNodeResult TSqlExpression::Build(const TRule_expr& node) {
@@ -1115,7 +1122,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
         }
 
         TNodePtr id;
-        if (IsYqlColumnRefProduced_) {
+        if (IsYqlSelectProduced_) {
             id = BuildYqlColumnRef(Ctx_.Pos());
         } else if (columnOrType) {
             id = BuildColumnOrType(Ctx_.Pos());
@@ -1360,7 +1367,11 @@ TNodePtr TSqlExpression::BitCastRule(const TRule_bitcast_expr& rule) {
     return new TCallNodeImpl(pos, "BitCast", {exprNode, type});
 }
 
-TNodePtr TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
+TNodeResult TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
+    if (IsYqlSelectProduced_) {
+        return BuildYqlExists(Ctx_, Mode_, rule);
+    }
+
     Ctx_.IncrementMonCounter("sql_features", "Exists");
 
     TPosition pos;
@@ -1385,11 +1396,12 @@ TNodePtr TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
 
     if (!source) {
         Ctx_.IncrementMonCounter("sql_errors", "BadSource");
-        return nullptr;
+        return std::unexpected(ESQLError::Basic);
     }
+
     const bool checkExist = true;
     auto select = BuildSourceNode(Ctx_.Pos(), source, checkExist, Ctx_.Settings.EmitReadsForExists);
-    return BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "ListHasItems", {select});
+    return Wrap(BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "ListHasItems", {select}));
 }
 
 TNodePtr TSqlExpression::CaseRule(const TRule_case_expr& rule) {
@@ -1485,7 +1497,11 @@ TSQLResult<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, c
             result.Expr = CastRule(node.GetAlt_atom_expr4().GetRule_cast_expr1());
             break;
         case TRule_atom_expr::kAltAtomExpr5:
-            result.Expr = ExistsRule(node.GetAlt_atom_expr5().GetRule_exists_expr1());
+            if (auto expected = ExistsRule(node.GetAlt_atom_expr5().GetRule_exists_expr1())) {
+                result.Expr = std::move(*expected);
+            } else {
+                return std::unexpected(expected.error());
+            }
             break;
         case TRule_atom_expr::kAltAtomExpr6:
             result.Expr = CaseRule(node.GetAlt_atom_expr6().GetRule_case_expr1());
@@ -1548,7 +1564,6 @@ TSQLResult<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& no
     //   | cast_expr
     //   | case_expr
     //   | an_id_or_type NAMESPACE (id_or_type | STRING_VALUE)
-    //   | LPAREN select_stmt RPAREN
     //   | value_constructor
     //   | bitcast_expr
     //   | list_literal
@@ -2005,6 +2020,11 @@ TNodeResult TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTraili
             case TRule_cond_expr::kAltCondExpr2: {
                 // | NOT? IN COMPACT? in_expr
                 auto altInExpr = cond.GetAlt_cond_expr2();
+
+                if (IsYqlSelectProduced_) {
+                    return YqlXorSubExpr(std::move(*res), altInExpr, tail);
+                }
+
                 const bool notIn = altInExpr.HasBlock1();
                 auto hints = BuildTuple(pos, {});
                 bool isCompact = altInExpr.HasBlock3();
@@ -2115,6 +2135,45 @@ TNodeResult TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTraili
         }
     }
     return res;
+}
+
+TNodeResult TSqlExpression::YqlXorSubExpr(
+    TNodePtr lhs,
+    const TRule_cond_expr::TAlt2& alt,
+    const TTrailingQuestions& tail)
+{
+    YQL_ENSURE(IsYqlSelectProduced_, "YqlSelect expected");
+
+    TMaybe<TPosition> negation;
+    if (alt.HasBlock1()) {
+        Token(alt.GetBlock1().GetToken1());
+        negation = Ctx_.Pos();
+    }
+
+    Token(alt.GetToken2());
+
+    if (alt.HasBlock3()) {
+        Token(alt.GetBlock3().GetToken1());
+        return YqlSelectUnsupported(Ctx_, "COMPACT");
+    }
+
+    TNodeResult rhs = [&]() {
+        TSqlExpression expr(Ctx_, Mode_);
+        expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::InStatement);
+        expr.ProduceYqlSelect();
+
+        return expr.UnaryExpr(alt.GetRule_in_expr4().GetRule_in_unary_subexpr1(), tail);
+    }();
+
+    if (!rhs) {
+        return std::unexpected(rhs.error());
+    }
+
+    TNodePtr expr = BuildYqlInSubquery(std::move(*rhs), std::move(lhs));
+    if (negation) {
+        expr = expr->ApplyUnaryOp(Ctx_, *negation, "Not");
+    }
+    return Wrap(expr);
 }
 
 TNodePtr TSqlExpression::BinOperList(const TString& opName, TVector<TNodePtr>::const_iterator begin, TVector<TNodePtr>::const_iterator end) const {
@@ -2477,7 +2536,9 @@ TSourcePtr TSqlExpression::LangVersionedSubSelect(TSourcePtr source) {
 }
 
 TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
-    // TODO(YQL-20436): emit YqlSubLink here
+    if (IsYqlSelectProduced_) {
+        return BuildYqlSelectSubExpr(Ctx_, Mode_, node, Ctx_.GetColumnReferenceState());
+    }
 
     TNodeResult result = std::unexpected(ESQLError::Basic);
     if (IsOnlySubExpr(node)) {

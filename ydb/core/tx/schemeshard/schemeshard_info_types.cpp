@@ -1915,6 +1915,52 @@ void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsag
     UpdatedStats.insert(datashardIdx);
 }
 
+void TTableInfo::UpdateShardStatsForFollower(
+    ui64 followerId,
+    const TShardIdx& shardIdx,
+    const TPartitionStats& newStats
+) {
+    Stats.UpdateShardStatsForFollower(followerId, shardIdx, newStats);
+}
+
+void TTableAggregatedStats::UpdateShardStatsForFollower(
+    ui64 /* followerId */,
+    const TShardIdx& shardIdx,
+    const TPartitionStats& newStats
+) {
+    // Find the statistics record for the given partition
+    const auto statsIt = PartitionStats.find(shardIdx);
+
+    if (statsIt == PartitionStats.end()) {
+        return;
+    }
+
+    TPartitionStats& oldStats = statsIt->second;
+
+    // Ignore messages coming from older generations of the given partition
+    //
+    // NOTE: Each EvPeriodicTableStats message contains two fields, which help
+    //       identify and filter old/stale messages: the generation and the round.
+    //       The generation is updated every time the partition is relocated
+    //       (comes from the state storage) and the round is incremented for
+    //       every message sent (comes from the DataShard actor memory).
+    //       Comparing the round requires keeping track of the round field
+    //       received from every follower. This is both too hard and too expensive.
+    //       For the purposes of tracking statistics from followers, it is sufficient
+    //       to compare only the generation (and ignore the round) - it is compared
+    //       to the generation that came from the most recent EvPeriodicTableStats
+    //       message from the leader for the given partition.
+    if (newStats.SeqNo.Generation < oldStats.SeqNo.Generation) {
+        return;
+    }
+
+    // Update only the top CPU usage and ignore the rest of the statistics
+    //
+    // NOTE: See the comment for the TPartitionStats.TopCpuUsage field
+    //       for the reasons why this is sufficient
+    oldStats.TopCpuUsage.Update(newStats.TopCpuUsage); // The left is new stats now!
+}
+
 void TAggregatedStats::UpdateTableStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {
     auto& tableStats = TableStats[pathId];
     tableStats.PartitionStats[shardIdx]; // insert if none
@@ -2028,7 +2074,8 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 
     // Check if we can try merging by load
     TDuration minUptime = TDuration::Seconds(splitSettings.MergeByLoadMinUptimeSec);
-    if (!canMerge && IsMergeByLoadEnabled(mainTableForIndex) && stats->StartTime && stats->StartTime + minUptime < now) {
+    bool canMergeByLoad = IsMergeByLoadEnabled(mainTableForIndex);
+    if (!canMerge && canMergeByLoad && stats->StartTime && stats->StartTime + minUptime < now) {
         reason = "merge by load";
         canMerge = true;
     }
@@ -2041,13 +2088,12 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
         return false;
     }
 
-    // Check that total load doesn't exceed the limits
-    float shardLoad = stats->GetCurrentRawCpuUsage() * 0.000001;
-    if (IsMergeByLoadEnabled(mainTableForIndex)) {
-        // Calculate shard load based on historical data
-        TDuration loadDuration = TDuration::Seconds(splitSettings.MergeByLoadMinLowLoadDurationSec);
-        shardLoad = 0.01 * stats->GetLatestMaxCpuUsagePercent(now - loadDuration);
+    // Calculate shard load based on historical data
+    const TDuration loadDuration = TDuration::Seconds(splitSettings.MergeByLoadMinLowLoadDurationSec);
+    const float shardLoad = 0.01 * stats->GetLatestMaxCpuUsagePercent(now - loadDuration);
 
+    // Check that total load doesn't exceed the limits
+    if (canMergeByLoad) {
         if (shardLoad + totalLoad > cpuUsageThreshold)
             return false;
 
@@ -2146,10 +2192,12 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
 }
 
 bool TTableInfo::CheckSplitByLoad(
-        const TSplitSettings& splitSettings, TShardIdx shardIdx,
-        ui64 dataSize, ui64 rowCount,
-        const TTableInfo* mainTableForIndex, TString& reason) const
-{
+    const TSplitSettings& splitSettings,
+    const TShardIdx& shardIdx,
+    ui64 currentCpuUsage,
+    const TTableInfo* mainTableForIndex,
+    TString& reason
+) const {
     // Don't split/merge backup tables
     if (IsBackup) {
         reason = "IsBackup";
@@ -2209,29 +2257,29 @@ bool TTableInfo::CheckSplitByLoad(
     //       operations (which reduce the expected partition count).
     const ui64 effectiveShardCount = Max(ExpectedPartitionCount, Stats.PartitionStats.size());
 
-    if (rowCount < MIN_ROWS_FOR_SPLIT_BY_LOAD ||
-        dataSize < MIN_SIZE_FOR_SPLIT_BY_LOAD ||
+    if (stats->RowCount < MIN_ROWS_FOR_SPLIT_BY_LOAD ||
+        stats->DataSize < MIN_SIZE_FOR_SPLIT_BY_LOAD ||
         effectiveShardCount >= maxShards ||
-        stats->GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
+        currentCpuUsage < cpuUsageThreshold * 1000000)
     {
         reason = TStringBuilder() << "ConditionsNotMet"
-            << " rowCount: " << rowCount << " minRowCount: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
-            << " shardSize: " << dataSize << " minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
+            << " rowCount: " << stats->RowCount << " minRowCount: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
+            << " shardSize: " << stats->DataSize << " minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
             << " shardCount: " << Stats.PartitionStats.size()
             << " expectedShardCount: " << ExpectedPartitionCount << " maxShardCount: " << maxShards
-            << " cpuUsage: " << stats->GetCurrentRawCpuUsage() << " cpuUsageThreshold: " << cpuUsageThreshold * 1000000;
+            << " cpuUsage: " << currentCpuUsage << " cpuUsageThreshold: " << cpuUsageThreshold * 1000000;
         return false;
     }
 
     reason = TStringBuilder() << "split by load ("
-        << "rowCount: " << rowCount << ", "
+        << "rowCount: " << stats->RowCount << ", "
         << "minRowCount: " << MIN_ROWS_FOR_SPLIT_BY_LOAD << ", "
-        << "shardSize: " << dataSize << ", "
+        << "shardSize: " << stats->DataSize << ", "
         << "minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD << ", "
         << "shardCount: " << Stats.PartitionStats.size() << ", "
         << "expectedShardCount: " << ExpectedPartitionCount << ", "
         << "maxShardCount: " << maxShards << ", "
-        << "cpuUsage: " << stats->GetCurrentRawCpuUsage() << ", "
+        << "cpuUsage: " << currentCpuUsage << ", "
         << "cpuUsageThreshold: " << cpuUsageThreshold * 1000000 << ")";
 
     return true;

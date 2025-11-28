@@ -9,6 +9,8 @@
 
 #include <yt/yt/client/controller_agent/public.h>
 
+#include <yt/yt/client/security_client/public.h>
+
 namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -329,6 +331,11 @@ struct TDumpJobProxyLogOptions
     : public TTimeoutOptions
 { };
 
+struct TCheckOperationPermissionOptions
+    : public TTimeoutOptions
+    , public TMasterReadOptions
+{ };
+
 struct TGetOperationOptions
     : public TTimeoutOptions
     , public TMasterReadOptions
@@ -345,6 +352,13 @@ struct TGetJobOptions
 {
     std::optional<THashSet<TString>> Attributes;
 };
+
+struct TCheckOperationPermissionResult
+{
+    NSecurityClient::ESecurityAction Action;
+};
+
+void Serialize(const TCheckOperationPermissionResult& result, NYson::IYsonConsumer* consumer);
 
 struct TOperation
 {
@@ -624,6 +638,12 @@ struct IOperationClient
 
     virtual TFuture<TListOperationsResult> ListOperations(
         const TListOperationsOptions& options = {}) = 0;
+
+    virtual TFuture<TCheckOperationPermissionResult> CheckOperationPermission(
+        const std::string& user,
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NYTree::EPermission permission,
+        const TCheckOperationPermissionOptions& options = {}) = 0;
 
     virtual TFuture<TListJobsResult> ListJobs(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,

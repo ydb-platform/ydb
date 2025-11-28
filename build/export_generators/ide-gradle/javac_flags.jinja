@@ -20,7 +20,7 @@ tasks.{{ task }}.configure {
 {%-         if compiler_jvm_flags|length %}
     options.isFork = true
     options.forkOptions.jvmArgs = listOf(
-{%-             for compiler_jvm_flag in compiler_jvm_flags %}
+{%-             for compiler_jvm_flag in compiler_jvm_flags|unique %}
         "{{ compiler_jvm_flag|replace("-J", "") }}",
 {%-             endfor %}
     )
@@ -33,7 +33,7 @@ tasks.{{ task }}.configure {
 {%-             if ep_checks|length %}
     options.errorprone.checks.set(
         mapOf(
-{%-                 for ep_check in ep_checks -%}
+{%-                 for ep_check in ep_checks|unique -%}
 {%-                     set key_and_value = split(ep_check|replace('-Xep:', ''), ':', 2) %}
             "{{ key_and_value[0] }}" to CheckSeverity.{{ key_and_value[1] }},
 {%-                 endfor %}
@@ -41,14 +41,14 @@ tasks.{{ task }}.configure {
     )
 {%              endif -%}
 {%-             if ep_checkopts|length -%}
-{%-                 for ep_checkopt in ep_checkopts -%}
+{%-                 for ep_checkopt in ep_checkopts|unique -%}
 {#-                 TODO Support NullAway -#}
 {%-                     set key_and_value = split(ep_check|replace('-XepOpt:', '')|replace('NullAway:', ''), '=', 2) %}
             options.errorprone.option("{{ key_and_value[0] }}", "{{ key_and_value[1] }}")
 {%-                 endfor -%}
 {%-             endif -%}
 {%-             if ep_props|length -%}
-{%-                 for ep_prop in ep_props -%}
+{%-                 for ep_prop in ep_props|unique -%}
 {%-                     set ep_prop = ep_prop|replace('-Xep', '') -%}
 {%-                     if ep_prop == 'DisableAllChecks' %}
     options.errorprone.disableAllChecks.set(true)

@@ -11,6 +11,17 @@ namespace NKikimr {
 namespace NKqp {
 
 /**
+ * Removed identity map
+ */
+
+ class TRemoveIdenityMapRule : public ISimplifiedRule {
+  public:
+    TRemoveIdenityMapRule() : ISimplifiedRule("Remove identity map", ERuleProperties::RequireParents) {}
+
+    virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Analyzes filter expressions, finds potential join conditions and if they are in the form of
  * expressions (i.e. not just equalities of columns) - creates expressions to generate new columns,
  * rewrites the filter to use these columns and create a map operator below filter that generates these columns
@@ -66,6 +77,8 @@ class TAssignStagesRule : public IRule {
 
 extern TRuleBasedStage RuleStage1;
 extern TRuleBasedStage RuleStage2;
+extern TRuleBasedStage RuleStage3;
+
 
 /**
  * Separate global stage to remove extra renames and project out unneeded columns

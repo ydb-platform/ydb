@@ -451,4 +451,6 @@ message TTableServiceConfig {
     optional EBackportMode BackportMode = 108 [ default = Released, (InvalidateCompileCache) = true];
 
     optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
+    
+    optional bool EnableWatermarks = 110 [default = false, (InvalidateCompileCache) = true];
 };

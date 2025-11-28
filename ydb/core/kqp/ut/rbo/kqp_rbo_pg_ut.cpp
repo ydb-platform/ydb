@@ -1104,11 +1104,9 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
     }
 
-    void AliasesRenamesTest(bool newRbo) {
+    Y_UNIT_TEST(AliasesRenames) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
-        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
-
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1164,11 +1162,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([["0";"0"];["0";"1"];["1";"0"];["1";"1"];["2";"0"];["2";"1"]])");
-    }
-
-    Y_UNIT_TEST(AliasesRenames) {
-        AliasesRenamesTest(true);
-        AliasesRenamesTest(false);
     }
 
     Y_UNIT_TEST(Bench_Select) {

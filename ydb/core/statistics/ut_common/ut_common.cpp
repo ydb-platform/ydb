@@ -268,7 +268,7 @@ void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TStrin
     ExecuteYqlScript(env, replace);
 }
 
-void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
+void CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
     int shardCount)
 {
     auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
@@ -287,6 +287,15 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
         );
     )", fullTableName.c_str(), shardCount));
     runtime.SimulateSleep(TDuration::Seconds(1));
+}
+
+void PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
+    int shardCount)
+{
+    CreateColumnTable(env, databaseName, tableName, shardCount);
+
+    auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
+    auto& runtime = *env.GetServer().GetRuntime();
 
     ExecuteYqlScript(env, Sprintf(R"(
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_key, TYPE=COUNT_MIN_SKETCH,
@@ -358,11 +367,11 @@ std::vector<TTableInfo> GatherColumnTablesInfo(TTestEnv& env, const TString& ful
     return ret;
 }
 
-TDatabaseInfo CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
+TDatabaseInfo PrepareDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
     auto fullDbName = CreateDatabase(env, "Database");
 
     for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
-        CreateColumnStoreTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
+        PrepareColumnTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
     }
 
     return {
@@ -371,12 +380,12 @@ TDatabaseInfo CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shar
     };
 }
 
-TDatabaseInfo CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
+TDatabaseInfo PrepareServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
     auto fullServerlessDbName = CreateDatabase(env, "Shared", 1, true);
     auto fullDbName = CreateServerlessDatabase(env, "Database", "/Root/Shared");
 
     for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
-        CreateColumnStoreTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
+        PrepareColumnTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
     }
 
     return {
@@ -436,7 +445,7 @@ void ValidateCountMinDatashard(TTestActorRuntime& runtime, TPathId pathId) {
     }
 }
 
-void ValidateCountMinDatashardAbsense(TTestActorRuntime& runtime, TPathId pathId) {
+void ValidateCountMinAbsence(TTestActorRuntime& runtime, TPathId pathId) {
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
 
     NStat::TRequest req;
@@ -473,18 +482,24 @@ void TAnalyzedTable::ToProto(NKikimrStat::TTable& tableProto) const {
     tableProto.MutableColumnTags()->Add(ColumnTags.begin(), ColumnTags.end());
 }
 
-std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const std::vector<TAnalyzedTable>& tables, const TString operationId) {
+std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(
+        const std::vector<TAnalyzedTable>& tables,
+        const TString operationId, TString databaseName) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
     NKikimrStat::TEvAnalyze& record = ev->Record;
     record.SetOperationId(operationId);
+    record.SetDatabase(std::move(databaseName));
     record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
     for (const TAnalyzedTable& table : tables)
         table.ToProto(*record.AddTables());
     return ev;
 }
 
-void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& tables, const TString operationId) {
-    auto ev = MakeAnalyzeRequest(tables, operationId);
+void Analyze(
+        TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& tables,
+        const TString operationId, TString databaseName,
+        NKikimrStat::TEvAnalyzeResponse::EStatus expectedStatus) {
+    auto ev = MakeAnalyzeRequest(tables, operationId, databaseName);
 
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(saTabletId, sender, ev.release());
@@ -492,7 +507,7 @@ void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAna
 
     const auto& record = evResponse->Get()->Record;
     UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), operationId);
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), expectedStatus);
 }
 
 void AnalyzeShard(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {

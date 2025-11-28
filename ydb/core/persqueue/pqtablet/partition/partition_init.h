@@ -158,6 +158,14 @@ private:
     TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult> Ranges;
 };
 
+class TInitMessageDeduplicatorStep: public TBaseKVStep {
+public:
+    TInitMessageDeduplicatorStep(TInitializer* initializer);
+
+    void Execute(const TActorContext& ctx) override;
+    void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
+};
+
 class TInitDataStep: public TBaseKVStep {
 public:
     TInitDataStep(TInitializer* initializer);

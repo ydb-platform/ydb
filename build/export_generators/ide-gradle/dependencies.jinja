@@ -14,7 +14,7 @@
 {#-                 Has handmade AP, put all APs as jars in one list #}
     {{ func }}(files(listOf(
 {%-                 for annotation_processor in nolomboks %}
-        {{ PatchRoots(annotation_processor) }},
+        {{ PatchRoots(output_root + "/" + annotation_processor, false, "", true) }},
 {%-                 endfor %}
     )))
 {%-             else -%}
@@ -121,8 +121,8 @@
 
 dependencies {
 {%- if errorprones|length -%}
-{%-     for errorprone in errorprones -%}
-{%-         set errorprone_version = errorprone.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
+{%-     for errorprone in errorprones|map(attribute='jar')|unique -%}
+{%-         set errorprone_version = errorprone|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
 {%-         set errorprone_parts = split(errorprone_version, '/', 2) %}
     errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
 {%-     endfor -%}

@@ -36,6 +36,13 @@ void TPhantomFlagThresholds::TNeighbourThresholds::AddHardBarrier(ui64 tabletId,
     }
 }
 
+ui64 TPhantomFlagThresholds::TNeighbourThresholds::EstimatedMemoryConsumption() const {
+    ui64 res = sizeof(TabletThresholds);
+    std::for_each(TabletThresholds.begin(), TabletThresholds.end(),
+            [&](const auto& x) { res += sizeof(x.first) + x.second.EstimatedMemoryConsumption(); } );
+    return res;
+}
+
 void TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::AddBlob(const TLogoBlobID& blob) {
     TGenStep& current = ChannelThresholds[blob.Channel()];
     current = std::max(current, MakeGenStep(blob));
@@ -62,6 +69,12 @@ bool TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::IsBehindTh
 
 bool TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::IsEmpty() const {
     return ChannelThresholds.empty();
+}
+
+ui64 TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::EstimatedMemoryConsumption() const {
+    ui64 res = sizeof(ChannelThresholds);
+    res += ChannelThresholds.bucket_count() * sizeof(decltype(ChannelThresholds)::value_type);
+    return res;
 }
 
 TPhantomFlagThresholds::TPhantomFlagThresholds(const TBlobStorageGroupType& gtype)
@@ -93,6 +106,14 @@ TPhantomFlags TPhantomFlagThresholds::Sift(const TPhantomFlags& flags) {
     TPhantomFlags res;
     std::copy_if(flags.begin(), flags.end(), std::back_inserter(res),
             [&](const TLogoBlobRec& rec) { return IsBehindThreshold(rec.LogoBlobID()); });
+    return res;
+}
+
+ui64 TPhantomFlagThresholds::EstimatedMemoryConsumption() const {
+    ui64 res = sizeof(GType);
+    res += sizeof(NeighbourThresholds);
+    std::for_each(NeighbourThresholds.begin(), NeighbourThresholds.end(),
+            [&](const auto& x) { res += x.EstimatedMemoryConsumption(); } );
     return res;
 }
 

@@ -182,6 +182,80 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
     }
 
 
+    Y_UNIT_TEST(TopicWithKeepMessageOrder) {
+        auto setup = CreateSetup();
+        auto& runtime = setup->GetRuntime();
+
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, true);
+
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Messages = {
+                {
+                    .Index = 0,
+                    .MessageBody = "message_body_1",
+                    .MessageGroupId = "message_group_id_1",
+                    .MessageDeduplicationId = "deduplication-id-1"
+                },
+                {
+                    .Index = 1,
+                    .MessageBody = "message_body_2",
+                    .MessageGroupId = "message_group_id_1",
+                    .MessageDeduplicationId = "deduplication-id-2"
+                },
+                {
+                    .Index = 2,
+                    .MessageBody = "message_body_3",
+                    .MessageGroupId = "message_group_id_2",
+                    .MessageDeduplicationId = "deduplication-id-3"
+                }
+            }
+        });
+
+        {
+            auto response = GetWriteResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 3);
+        }
+
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(3),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+            .UncompressMessages = true
+        });
+
+        {
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "message_body_1");
+        }
+
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(3),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+            .UncompressMessages = true
+        });
+
+        {
+            // message with offset 1 has been skipped because his message group equals message groups of the first message
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 2);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "message_body_3");
+        }
+    }
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

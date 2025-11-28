@@ -3,8 +3,6 @@
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/statistics/service/service.h>
 
-#include <util/string/vector.h>
-
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyzeShardRequest : public TTxBase {
@@ -22,8 +20,8 @@ struct TStatisticsAggregator::TTxAnalyzeShardRequest : public TTxBase {
         record.SetOperationId(operationId);
         auto& table = *record.MutableTable();
         operationTable.PathId.ToProto(table.MutablePathId());
-        TVector<ui32> columnTags = Scan<ui32>(SplitString(operationTable.ColumnTags, ","));
-        table.MutableColumnTags()->Add(columnTags.begin(), columnTags.end());
+        table.MutableColumnTags()->Add(
+            operationTable.ColumnTags.begin(), operationTable.ColumnTags.end());
         return request;
     }
 

@@ -53,11 +53,11 @@ namespace {
     }
 
     template <typename EProgress, typename TMetadata>
-    TString PrintProgress(const TMetadata& metadata) {
+    TString PrintProgress(const TMetadata& metadata, auto&& detailedPrintOn) {
         TStringBuilder result;
 
         result << metadata.Progress;
-        if (metadata.Progress != EProgress::TransferData) {
+        if (!detailedPrintOn(metadata)) {
             return result;
         }
 
@@ -80,6 +80,21 @@ namespace {
         result << " (" << FloatToString(percentage, PREC_POINT_DIGITS, 2) + "%)";
 
         return result;
+    }
+
+    template <typename EProgress, typename TMetadata>
+    TString PrintProgress(const TMetadata& metadata) {
+        return PrintProgress<EProgress>(metadata, [](const TMetadata& metadata) {
+            return metadata.Progress == EProgress::TransferData;
+        });
+    }
+
+    template <>
+    TString PrintProgress<NImport::EImportProgress>(const NImport::TImportFromS3Response::TMetadata& metadata) {
+        return PrintProgress<NImport::EImportProgress>(metadata, [](const NImport::TImportFromS3Response::TMetadata& metadata) {
+            return metadata.Progress == NImport::EImportProgress::TransferData ||
+                   metadata.Progress == NImport::EImportProgress::BuildIndexes;
+        });
     }
 
     /// YT

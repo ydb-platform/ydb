@@ -2594,7 +2594,10 @@ void TPartition::RunPersist() {
     if (Compacter) {
         Compacter->TryCompactionIfPossible();
     }
+
     if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
+        AddMessageDeduplicatorKeys(PersistRequest.Get());
+
         // Apply counters
         for (const auto& writeInfo : WriteInfosApplied) {
             // writeTimeLag

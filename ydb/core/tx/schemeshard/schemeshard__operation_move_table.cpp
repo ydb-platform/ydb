@@ -564,7 +564,7 @@ public:
         context.OnComplete.Send(ackTo, std::move(event));
         return false;
     }
-    
+
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         return HandleReplyImpl(ev, context);
     }
@@ -677,6 +677,7 @@ public:
         {
             if (!srcPath->IsTable() && !srcPath->IsColumnTable()) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables");
+                return result;
             }
             TPath::TChecker checks = srcPath.Check();
             checks

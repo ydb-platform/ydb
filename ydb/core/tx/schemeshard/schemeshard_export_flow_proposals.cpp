@@ -55,7 +55,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
 
     for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
         const auto& item = exportInfo.Items.at(itemIdx);
-        if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
+        if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable && item.SourcePathType != NKikimrSchemeOp::EPathTypeColumnTable) {
             continue;
         }
 
@@ -159,21 +159,21 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     auto propose = MakeModifySchemeTransaction(ss, txId, exportInfo);
     auto& record = propose->Record;
 
+    const TPath sourcePath = TPath::Init(exportInfo.Items[itemIdx].SourcePathId, ss);
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpBackup);
     modifyScheme.SetInternal(true);
 
     const TPath exportPath = TPath::Init(exportInfo.ExportPathId, ss);
-    const TString& exportPathName = exportPath.PathString();
+    const TString& exportPathName = sourcePath->IsColumnTable() ? sourcePath.Parent().PathString() : exportPath.PathString();
     modifyScheme.SetWorkingDir(exportPathName);
 
     auto& task = *modifyScheme.MutableBackup();
-    task.SetTableName(ToString(itemIdx));
+    task.SetTableName(sourcePath->IsColumnTable() ? sourcePath->Name : ToString(itemIdx));
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));
 
-    const TPath sourcePath = TPath::Init(exportInfo.Items[itemIdx].SourcePathId, ss);
     const TPath exportItemPath = exportPath.Child(ToString(itemIdx));
-    if (sourcePath.IsResolved() && exportItemPath.IsResolved()) {
+    if (sourcePath.IsResolved() && (sourcePath->IsColumnTable() || exportItemPath.IsResolved())) {
         auto sourceDescription = GetTableDescription(ss, sourcePath.Base()->PathId);
         if (sourceDescription.HasTable()) {
             FillSetValForSequences(

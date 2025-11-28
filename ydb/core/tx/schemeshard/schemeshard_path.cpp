@@ -967,6 +967,7 @@ const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) con
     // which does not support the YQL export process. Otherwise, they will be considered as tables,
     // and we might cause the process to be aborted.
     if (Path.Base()->IsTable()
+        || (Path.Base()->IsColumnTable() && AppData()->FeatureFlags.GetEnableColumnTablesBackup())
         || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
         || Path.Base()->IsPQGroup()
     )  {

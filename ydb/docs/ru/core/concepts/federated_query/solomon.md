@@ -38,7 +38,7 @@ HAVING sum(value) > 0;
 
 ### 1. Создание секрета с токеном
 
-Аутентификация в Solomon выполняется с помощью токена. В случае облачных инсталляций это OAuth-токен, в случае облачных – IAM токен. 
+Аутентификация в Solomon выполняется с помощью токена. В случае внутренних инсталляций это OAuth-токен, в случае облачных – IAM токен. 
 
 Создайте секрет, содержащий этот токен:
 
@@ -75,7 +75,7 @@ CREATE EXTERNAL DATA SOURCE <source_name> WITH (
 #### Доступные инсталляции Solomon
 
 | Инсталляция | `LOCATION` | `GRPC_LOCATION` | Обязательные параметры |
-| :--- | :--- | :--- | :--- | :--- |
+| :--- | :--- | :--- | :--- |
 | **Monium Metrics Production** | `solomon.yandex.net` | `solomon.yandex.net` | - |
 | **Monium Metrics Prestable** | `solomon-prestable.yandex.net` | `solomon-pre.yandex.net:443` | - |
 | **Monium Metrics Testing** | `solomon-test.yandex.net` | `solomon-test.yandex.net:443` | - |
@@ -103,7 +103,7 @@ CREATE EXTERNAL DATA SOURCE solomon_cloud_prod WITH (
     LOCATION="solomon.cloud.yandex-team.ru",
     GRPC_LOCATION="monitoring.private-api.cloud.yandex.net:443",
 
-    PROJECT="<b1g918jf99v96n47o7u6>", -- Cloud ID
+    PROJECT="b1g918jf99v96n47o7u6", -- Cloud ID
     CLUSTER="b1gaud5b392mmmeolb0k", -- Folder ID
 
     AUTH_METHOD="TOKEN",
@@ -139,7 +139,7 @@ WITH (
 
 {% note tip %}
 
-Запрос к Solomon (содержимое параметров `selectors` или `program`) можно скопировать из веб-интерфейса Solomon. Постройте нужный график в UI, нажмите на три точки справа от запроса, выберите "скорпировать как текст".
+Запрос к Solomon (содержимое параметров `selectors` или `program`) можно скопировать из веб-интерфейса Solomon. Постройте нужный график в UI, нажмите на три точки справа от запроса, выберите "скопировать как текст".
 
 {% endnote %}
 

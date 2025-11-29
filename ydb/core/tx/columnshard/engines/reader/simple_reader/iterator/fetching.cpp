@@ -262,7 +262,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
     auto* sSource = source->MutableAs<IDataSource>();
     for (auto&& i : source->GetStageResult().GetPagesToResultVerified()) {
         if (sSource->GetIsStartedByCursor() && !context->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
-                                                  source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
+                                                  source->GetSourceIdx(), i.GetIndexStart(), i.GetRecordsCount())) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep_SKIP_CURSOR")("source_id", source->GetSourceId());
             source->MutableStageResult().ExtractPageForResult();
             continue;

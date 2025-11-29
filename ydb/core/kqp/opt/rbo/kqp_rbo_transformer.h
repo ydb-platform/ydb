@@ -32,7 +32,7 @@ class TKqpRewriteSelectTransformer : public TSyncTransformerBase {
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
-                                                          TTypeAnnotationContext &typeCtx);
+                                                             TTypeAnnotationContext &typeCtx);
 
 class TKqpNewRBOTransformer : public TSyncTransformerBase {
   public:
@@ -82,7 +82,7 @@ class TKqpRBOCleanupTransformer : public TSyncTransformerBase {
 
 TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext &typeCtx);
 
-TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, bool pgSyntax=false);
+TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, const TKqpOptimizeContext& kqpCtx, bool pgSyntax=false);
 
 } // namespace NKqp
 } // namespace NKikimr

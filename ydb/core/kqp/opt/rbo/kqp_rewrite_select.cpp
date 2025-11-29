@@ -380,7 +380,29 @@ TExprNode::TPtr BuildSort(TExprNode::TPtr input, TExprNode::TPtr sort, TExprCont
         .Input(input)
         .SortExpressions().Add(sortElements).Build()
         .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr GetTableSourceType(const NYql::TKikimrTableDescription& desc, TExprContext& ctx, TPositionHandle pos) {
+    TString source;
+    switch (desc.Metadata->Kind) {
+        case NYql::EKikimrTableKind::Datashard:
+        case NYql::EKikimrTableKind::SysView:
+            source = "Row";
+            break;
+        case NYql::EKikimrTableKind::Olap:
+            source = "Column";
+            break;
+        default:
+            Y_ENSURE(false, "Unexpected table kind: " << (ui32)desc.Metadata->Kind);
+            break;
+    }
+
     // clang-format off
+    return Build<TCoAtom>(ctx, pos)
+        .Value(source)
+    .Done().Ptr();
+    // clang-format on
 }
 
 } // namespace
@@ -388,7 +410,7 @@ TExprNode::TPtr BuildSort(TExprNode::TPtr input, TExprNode::TPtr sort, TExprCont
 namespace NKikimr {
 namespace NKqp {
 
-TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, bool pgSyntax) {
+TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, const TKqpOptimizeContext& kqpCtx, bool pgSyntax) {
     Y_UNUSED(typeCtx);
     Y_UNUSED(pgSyntax);
 
@@ -451,15 +473,16 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                     .Done().Ptr();
                     // clang-format on
                 }
-
                 else {
                     auto readExpr = TKqlReadTableRanges(childExpr);
+                    const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readExpr.Table().Path());
 
                     // clang-format off
                     fromExpr = Build<TKqpOpRead>(ctx, node->Pos())
                         .Table(readExpr.Table())
                         .Alias(alias)
                         .Columns(readExpr.Columns())
+                        .SourceType(GetTableSourceType(tableDesc, ctx, node->Pos()))
                     .Done().Ptr();
                     // clang-format on
                 }

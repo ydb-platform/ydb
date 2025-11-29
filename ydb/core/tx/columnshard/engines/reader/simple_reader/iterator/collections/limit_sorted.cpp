@@ -27,7 +27,7 @@ std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoTryExtractNext
         NextSource = std::move(localNext);
         AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() == FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())(
                                                   "fetching", FetchingInFlightSources.size());
-        AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceId()).second);
+        AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceIdx()).second);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoTryExtractNext")("source_id", result->GetSourceId());
         return result;
     }
@@ -41,7 +41,7 @@ void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon:
     }
     AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() == FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())(
                                               "fetching", FetchingInFlightSources.size());
-    AFL_VERIFY(FetchingInFlightSources.erase(source->GetSourceId()) || Cleared || Aborted)("source_id", source->GetSourceId());
+    AFL_VERIFY(FetchingInFlightSources.erase(source->GetSourceIdx()) || Cleared || Aborted)("source_idx", source->GetSourceIdx());
 }
 
 TScanWithLimitCollection::TScanWithLimitCollection(

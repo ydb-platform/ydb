@@ -18,7 +18,7 @@ private:
     bool SourceIdxInitialized = false;
 
     virtual ui64 DoGetEntityId() const override {
-        return SourceId;
+        return GetSourceIdx();
     }
     virtual ui64 DoGetEntityRecordsCount() const override {
         return 0;

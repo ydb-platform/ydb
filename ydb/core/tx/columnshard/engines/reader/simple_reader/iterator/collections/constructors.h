@@ -15,18 +15,18 @@ namespace NKikimr::NOlap::NReader::NSimple {
 class TSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
     TCompareKeyForScanSequence Start;
-    YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
     ui32 RecordsCount = 0;
     bool IsStartedByCursorFlag = false;
+    std::optional<ui32> SourceIdx;
 
     virtual ui64 DoGetEntityId() const override {
-        return SourceId;
+        AFL_VERIFY(SourceIdx);
+        return *SourceIdx;
     }
     virtual ui64 DoGetEntityRecordsCount() const override {
         return RecordsCount;
     }
-    std::optional<ui32> SourceIdx;
 
 public:
     void SetIndex(const ui32 index) {
@@ -44,15 +44,12 @@ public:
         return Start;
     }
 
-    TSourceConstructor(
-        const std::shared_ptr<TPortionInfo>&& portion, 
-        const NReader::ERequestSorting sorting
-    ) : Start(TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
-                    sorting == NReader::ERequestSorting::DESC),
-              portion->GetPortionId())
-        , SourceId(portion->GetPortionId())
+    TSourceConstructor(const std::shared_ptr<TPortionInfo>&& portion, const NReader::ERequestSorting sorting)
+        : Start(TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
+                    sorting == NReader::ERequestSorting::DESC), portion->GetPortionId())
         , Portion(std::move(portion))
-        , RecordsCount(portion->GetRecordsCount()) {
+        , RecordsCount(portion->GetRecordsCount())
+    {
     }
 
     class TComparator {

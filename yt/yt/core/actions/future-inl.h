@@ -1140,13 +1140,6 @@ void TFutureBase<T>::Unsubscribe(TFutureCallbackCookie cookie) const
 }
 
 template <class T>
-void TFutureBase<T>::SubscribeUnique(TCallback<void(TErrorOr<T>&&)> handler) const
-{
-    YT_ASSERT(Impl_);
-    Impl_->SubscribeUnique(std::move(handler));
-}
-
-template <class T>
 bool TFutureBase<T>::Cancel(const TError& error) const
 {
     YT_ASSERT(Impl_);

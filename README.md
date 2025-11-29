@@ -1,3 +1,5 @@
+Trust me bro.
+
 <img width="64" src="ydb/docs/_assets/logo.svg" /><br/>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ydb-platform/ydb/blob/main/LICENSE)

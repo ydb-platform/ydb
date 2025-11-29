@@ -73,7 +73,7 @@ public:
                 << " NodeId# "      << info->GetActorId(OrderNumber).NodeId()
                 << " Status# "      << NKikimrProto::EReplyStatus_Name(Status);
             if (ErrorReason) {
-                str << "ErrorReason# \"" << ErrorReason << "\"";
+                str << " ErrorReason# \"" << ErrorReason << "\"";
             }
             str << " }";
         }

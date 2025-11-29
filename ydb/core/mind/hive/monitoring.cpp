@@ -2937,11 +2937,9 @@ public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
     TTabletId TabletId = 0;
-    TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
     TVector<ui32> TabletChannels;
     ui32 GroupId = 0;
     TVector<ui32> ForcedGroupIds;
-    int TabletPercent = 100;
     TString Error;
     bool Wait = true;
     bool Async = false;
@@ -2952,12 +2950,9 @@ public:
         , Source(source)
     {
         TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
-        TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(Event->Cgi().Get("type"), TabletType);
         TabletChannels = Scan<ui32>(SplitString(Event->Cgi().Get("channel"), ","));
-        TabletPercent = FromStringWithDefault<int>(Event->Cgi().Get("percent"), TabletPercent);
         GroupId = FromStringWithDefault(Event->Cgi().Get("group"), GroupId);
         ForcedGroupIds = Scan<ui32>(SplitString(Event->Cgi().Get("forcedGroup"), ","));
-        TabletPercent = std::min(std::abs(TabletPercent), 100);
         Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
         Async = FromStringWithDefault(Event->Cgi().Get("async"), Async);
     }
@@ -2995,26 +2990,13 @@ public:
         }
         TVector<TLeaderTabletInfo*> tablets;
         if (TabletId != 0) {
-            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
+            auto* tablet = Self->FindTablet(TabletId);
             if (tablet != nullptr) {
                 tablets.push_back(tablet);
+            } else {
+                Error = "no such tablet";
+                return true;
             }
-        } else if (TabletType != TTabletTypes::TypeInvalid) {
-            for (auto& pr : Self->Tablets) {
-                if (pr.second.Type == TabletType) {
-                    tablets.push_back(&pr.second);
-                }
-            }
-        } else {
-            for (auto& pr : Self->Tablets) {
-                tablets.push_back(&pr.second);
-            }
-        }
-        if (TabletPercent != 100) {
-            std::sort(tablets.begin(), tablets.end(), [this](TLeaderTabletInfo* a, TLeaderTabletInfo* b) -> bool {
-                return GetMaxTimestamp(a) < GetMaxTimestamp(b);
-            });
-            tablets.resize(tablets.size() * TabletPercent / 100);
         }
         TVector<THolder<TEvHive::TEvReassignTablet>> operations;
         TActorId waitActorId;

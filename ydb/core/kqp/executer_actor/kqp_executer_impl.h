@@ -800,12 +800,25 @@ protected:
                     break;
                 }
                 case NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN: {
-                    for (auto& task : record.GetNotStartedTasks()) {
-                        if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN
-                              and ev->Sender.NodeId() != SelfId().NodeId()) {
-                            Planner->SendStartKqpTasksRequest(task.GetRequestId(), MakeKqpNodeServiceID(SelfId().NodeId()));
-                        }
+                    if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
+                        LOG_D("Received NODE_SHUTTING_DOWN but feature flag EnableShuttingDownNodeState is disabled");
+                        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                            YqlIssue({}, NYql::TIssuesIds::SHARD_NOT_AVAILABLE, 
+                                "Compute node is unavailable"));
+                        break;
                     }
+                    LOG_D("Received NODE_SHUTTING_DOWN, retry tasks locally");
+                    if (ev->Sender.NodeId() == SelfId().NodeId()) {
+                        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, 
+                            MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, TStringBuilder() <<
+                        "Compute node is shutting down and is not available"));
+                        break;
+                    }
+
+                    ui32 requestId = record.GetNotStartedTasks(0).GetRequestId();
+                    
+                    auto targetNode = MakeKqpNodeServiceID(SelfId().NodeId());
+                    Planner->SendStartKqpTasksRequest(requestId, targetNode);
                     break;
                 }
                 case NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR: {

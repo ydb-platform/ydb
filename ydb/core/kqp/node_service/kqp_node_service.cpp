@@ -127,7 +127,7 @@ private:
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
             default: {
-                Y_ABORT("Unexpected event 0x%x for TKqpNodeService", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TKqpNodeService in WorkState", ev->GetTypeRewrite());
             }
         }
     }
@@ -135,8 +135,20 @@ private:
     STATEFN(ShuttingDownState) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleShuttingDown);
+            hFunc(TEvKqpNode::TEvCancelKqpTasksRequest , HandleWork);
+
+            // misc
+            hFunc(TEvents::TEvWakeup, HandleShuttingDown);
+            hFunc(TEvents::TEvPoison, HandleShuttingDown);
+            hFunc(NMon::TEvHttpInfo, HandleShuttingDown);
+            hFunc(TEvents::TEvUndelivered, HandleWork);
+
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::TEvConsole::TEvConfigNotificationRequest);
+            
             default: {
-                LOG_D("Unexpected event" << ev->GetTypeName() << " for TKqpNodeService");
+                LOG_W("Ignoring unexpected event 0x%x (" << ev->GetTypeName() 
+                      << ") during graceful shutdown, sender: " << ev->Sender);
             }
         }
     }
@@ -203,13 +215,35 @@ private:
         }
 
         if (State_->HasRequest(txId)) {
-            LOG_E("TxId: " << txId << ", requester: " << requester << ", request already exists");
-            co_return ReplyError(txId, request.ExecuterId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, ev->Cookie);
+            auto existingTaskIds = State_->GetTaskIdsByTxId(txId);
+
+            bool hasOverlap = false;
+            TVector<ui64> overlappingTasks;
+            for (const auto& dqTask : msg.GetTasks()) {
+                if (existingTaskIds.contains(dqTask.GetId())) {
+                    hasOverlap = true;
+                    overlappingTasks.push_back(dqTask.GetId());
+                }
+            }
+            
+            if (hasOverlap) {
+                LOG_E("TxId: " << txId << ", requester: " << requester 
+                      << ", REJECTING retry: overlapping tasks found: [" << JoinSeq(", ", overlappingTasks) << "]");
+                co_return ReplyError(txId, executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, ev->Cookie);
+            } else {
+                LOG_D("TxId: " << txId << ", requester: " << requester 
+                      << ", ALLOWING retry: no overlapping tasks, will add as separate request");
+            }
         }
 
+        TVector<ui64> requestTaskIds;
         for (const auto& dqTask : msg.GetTasks()) {
             request.Tasks.emplace(dqTask.GetId(), std::nullopt);
+            requestTaskIds.push_back(dqTask.GetId());
         }
+        
+        LOG_D("TxId: " << txId << ", requester: " << requester 
+              << ", try to add request to State with tasks: [" << JoinSeq(", ", requestTaskIds) << "]");
         State_->AddRequest(std::move(request));
 
         NRm::EKqpMemoryPool memoryPool;
@@ -379,7 +413,14 @@ private:
     }
 
     void HandleWork(TEvKqp::TEvInitiateShutdownRequest::TPtr& ev) {
-        LOG_I("Prepare to shutdown: do not acccept any messages from this time");
+        if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
+            LOG_I("Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request");
+            return;
+        }
+        
+        LOG_I("Prepare to shutdown: do not accept any messages from this time"
+            << ", sender: " << ev->Sender
+            << ", self: " << SelfId());
         ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
         Become(&TKqpNodeService::ShuttingDownState);
     }
@@ -392,6 +433,35 @@ private:
         } else {
             HandleWork(ev);
         }
+    }
+
+    void HandleShuttingDown(TEvents::TEvWakeup::TPtr&) {
+        LOG_D("Received TEvWakeup in ShuttingDownState, not rescheduling timer");
+        auto expiredRequests = State_->ClearExpiredRequests();
+        for (auto& txId : expiredRequests) {
+            TerminateTx(txId, "reached execution deadline during shutdown", NYql::NDqProto::StatusIds::TIMEOUT);
+        }
+    }
+    void HandleShuttingDown(TEvents::TEvPoison::TPtr&) {
+        PassAway();
+    }
+
+    void HandleShuttingDown(NMon::TEvHttpInfo::TPtr& ev) {
+        TStringStream str;
+        HTML(str) {
+            PRE() {
+                str << "This node is in graceful shutdown mode and will not accept new requests." << Endl;
+                str << "Current config:" << Endl;
+                str << Config.DebugString() << Endl;
+                str << Endl;
+
+                str << "Active Transactions:" << Endl;
+                State_->DumpInfo(str);
+                str << Endl;
+            }
+        }
+
+        Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
 private:
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {

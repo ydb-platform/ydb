@@ -981,12 +981,23 @@ namespace NKikimr::NBsController {
             it->second.SpaceAvailable += increment;
         }
 
-        TGroupMapperError BuildGroupMappingError(const TGroup& group, const TDiskManager& diskManager) const {
+        TGroupMapperError BuildGroupMappingError(const TDiskManager& diskManager) const {
             ui32 failRealmsNeeded = Geom.GetNumFailRealms();
             ui32 failDomainsPerRealmNeeded = Geom.GetNumFailDomainsPerFailRealm();
             ui32 disksPerDomainNeeded = Geom.GetNumVDisksPerFailDomain();
             
-            auto getLocation = [](int v, const TNodeLocation& location) {
+            auto keyName = [](TNodeLocation::TKeys::E k) -> TString {
+                switch (k) {
+                    case TNodeLocation::TKeys::BridgePileName: return "BridgePileName";
+                    case TNodeLocation::TKeys::DataCenter:     return "DataCenter";
+                    case TNodeLocation::TKeys::Module:         return "Module";
+                    case TNodeLocation::TKeys::Rack:           return "Rack";
+                    case TNodeLocation::TKeys::Unit:           return "Unit";
+                }
+                return "Unknown";
+            };
+
+            auto levelToKey = [](int v) {
                 constexpr TNodeLocation::TKeys::E Keys[] = {
                     TNodeLocation::TKeys::BridgePileName,
                     TNodeLocation::TKeys::DataCenter,
@@ -995,21 +1006,24 @@ namespace NKikimr::NBsController {
                     TNodeLocation::TKeys::Unit,
                 };
 
-                auto it = std::upper_bound(std::begin(Keys), std::end(Keys), v,
-                                        [](int v, TNodeLocation::TKeys::E e) {
-                                            return v < static_cast<int>(e);
+                auto it = std::lower_bound(std::begin(Keys), std::end(Keys), v,
+                                        [](TNodeLocation::TKeys::E e, int v) {
+                                            return static_cast<int>(e) < v;
                                         });
 
-                TNodeLocation::TKeys::E k;
-
                 if (it == std::begin(Keys)) {
-                    k = Keys[0];
-                } else {
-                    k = *(--it);
+                    return Keys[0];
                 }
 
-                return location.ToStringUpTo(k);
+                if (it == std::end(Keys) || *it >= v) {
+                    --it;
+                }
+
+                return *it;
             };
+
+            auto realmKey = levelToKey(Geom.GetRealmLevelEnd());
+            auto domainKey = levelToKey(Geom.GetDomainLevelEnd());
 
             TGroupMapperError err;
             TStringStream s;
@@ -1035,7 +1049,7 @@ namespace NKikimr::NBsController {
 
                 s << "{[(";
                 TPDiskLayoutPosition prevPosition = PDiskByPosition.front().first;
-                domainStats.Domain = getLocation(Geom.GetDomainLevelEnd(), PDiskByPosition.front().second->Location);
+                domainStats.Domain = PDiskByPosition.front().second->Location.ToStringUpTo(domainKey);
                 const char *space = "";
 
                 for (const auto& [position, pdisk] : PDiskByPosition) {
@@ -1071,7 +1085,7 @@ namespace NKikimr::NBsController {
                         if (!domainAlreadyOccupied) {
                             matchingDomainsStats.push_back(domainStats);
                             domainStats = TGroupMapperError::TStats();
-                            domainStats.Domain = getLocation(Geom.GetDomainLevelEnd(), pdisk->Location);
+                            domainStats.Domain = pdisk->Location.ToStringUpTo(domainKey);
                         }
                         domainAlreadyOccupied = false;
                     }
@@ -1158,7 +1172,9 @@ namespace NKikimr::NBsController {
             err.MissingFailRealmsCount = missingFailRealmsCount;
             err.FailRealmsWithMissingDomainsCount = failRealmsWithMissingDomainsCount;
             err.DomainsWithMissingDisksCount = domainsWithMissingDisksCount;
-            
+
+            err.RealmLocationKey = keyName(realmKey);
+            err.DomainLocationKey = keyName(domainKey);
 
             return std::move(err);
         }
@@ -1243,7 +1259,7 @@ namespace NKikimr::NBsController {
                 allocator.Decompose(*result, groupDefinition);
                 return true;
             } else {
-                error = BuildGroupMappingError(group, allocator);
+                error = BuildGroupMappingError(allocator);
                 return false;
             }
         }

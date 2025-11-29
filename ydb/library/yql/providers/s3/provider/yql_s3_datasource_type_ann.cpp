@@ -633,7 +633,7 @@ public:
             bool hasDateTimeFormatName = false;
             bool hasTimestampFormat = false;
             bool hasTimestampFormatName = false;
-            auto validator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
+            auto commonValidator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
                 if (name != "partitionedby"sv && name != "directories"sv && setting.ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
                         TStringBuilder() << "Expected single value setting for " << name << ", but got " << setting.ChildrenSize() - 1));
@@ -785,26 +785,63 @@ public:
                     return true;
                 }
 
-                YQL_ENSURE(name == "projection"sv);
-                haveProjection = true;
-                if (!EnsureAtom(setting.Tail(), ctx)) {
-                    return false;
+                if (name == "projection"sv) {
+                    haveProjection = true;
+                    TStringBuf projection;
+                    if (!ExtractSettingValue(setting.Tail(), "projection"sv, format, {}, ctx, projection)) {
+                        return false;
+                    }
+                    if (projection.empty()) {
+                        return false;
+                    }
+                    return true;
                 }
 
-                if (setting.Tail().Content().empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expecting non-empty projection setting"));
-                    return false;
+                if (name == "storage.location.template"sv) {
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "storage.location.template"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
                 }
 
-                return true;
+                if (name == "projection.enabled"sv) {
+                    haveProjection = true;
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "projection.enabled"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
+                }
+
+                if (name.StartsWith("projection.")) {
+                    return true;
+                }
+
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder{} << "Unknown setting: `" << name << "`"));
+                return false;
             };
-            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
-                                     { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv, "constraints"sv,
-                                        "data.datetime.formatname"sv, "data.datetime.format"sv, "data.timestamp.formatname"sv, "data.timestamp.format"sv, "data.date.format"sv,
-                                        "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv, "pathpattern"sv, "pathpatternvariant"sv }, validator, ctx))
-            {
+            
+            if (!EnsureTuple(*input->Child(TS3Object::idx_Settings), ctx)) {
                 return TStatus::Error;
             }
+
+            for (auto& setting : input->Child(TS3Object::idx_Settings)->ChildrenList()) {
+                if (!EnsureTupleMinSize(*setting, 1, ctx)) {
+                    return TStatus::Error;
+                }
+
+                if (!EnsureAtom(setting->Head(), ctx)) {
+                    return TStatus::Error;
+                }
+
+                const TStringBuf name = setting->Head().Content();
+
+                if (!commonValidator(name, *setting, ctx)) {
+                    return TStatus::Error;
+                }
+            }
+            
             if (haveProjection && !havePartitionedBy) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Object::idx_Settings)->Pos()), "Missing partitioned_by setting for projection"));
                 return TStatus::Error;

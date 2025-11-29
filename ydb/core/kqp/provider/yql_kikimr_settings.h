@@ -216,6 +216,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableTempTablesForUser = false;
     bool EnableOlapPushdownAggregate = false;
     bool EnableOrderOptimizaionFSM = false;
+    bool EnableBuildAggregationResultStages = false;
 
     bool EnableTopSortSelectIndex = true;
     bool EnablePointPredicateSortAutoSelectIndex = true;

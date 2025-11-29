@@ -658,7 +658,7 @@ TFuture<void> TClientResponse::Deserialize(TSharedRefArray responseMessage) noex
         return VoidFuture;
     } else {
         return AsyncDecompressAttachments(compressedAttachments, attachmentCodecId)
-            .ApplyUnique(BIND([this, this_ = MakeStrong(this)] (std::vector<TSharedRef>&& decompressedAttachments) {
+            .AsUnique().Apply(BIND([this, this_ = MakeStrong(this)] (std::vector<TSharedRef>&& decompressedAttachments) {
                 Attachments_ = std::move(decompressedAttachments);
                 auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
                 for (auto& attachment : Attachments_) {

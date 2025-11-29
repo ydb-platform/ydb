@@ -362,7 +362,7 @@ public:
             }
         }
         if (!Inputs_[inputIdx]) {
-            CreateInputStream(Settings_->Requests[inputIdx]).SubscribeUnique(BIND([self = Self_, inputIdx] (NYT::TErrorOr<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& stream) {
+            CreateInputStream(Settings_->Requests[inputIdx]).AsUnique().Subscribe(BIND([self = Self_, inputIdx] (NYT::TErrorOr<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& stream) {
                 self->Pool_->GetInvoker()->Invoke(BIND([inputIdx, self, stream = std::move(stream)]() mutable {
                     try {
                         self->Inputs_[inputIdx] = std::move(stream.ValueOrThrow());
@@ -375,7 +375,7 @@ public:
             }));
             return;
         }
-        Inputs_[inputIdx]->Read().SubscribeUnique(BIND([inputIdx = inputIdx, self = Self_](NYT::TErrorOr<NYT::TSharedRef>&& res) {
+        Inputs_[inputIdx]->Read().AsUnique().Subscribe(BIND([inputIdx = inputIdx, self = Self_](NYT::TErrorOr<NYT::TSharedRef>&& res) {
             self->Pool_->GetInvoker()->Invoke(BIND([inputIdx, self, res = std::move(res)]() mutable {
                 try {
                     self->Accept(inputIdx, std::move(res));

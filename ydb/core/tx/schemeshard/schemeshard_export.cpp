@@ -140,6 +140,10 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
         exprt.MutableExportToS3Settings()->clear_access_key();
         exprt.MutableExportToS3Settings()->clear_secret_key();
         break;
+
+    case TExportInfo::EKind::FS:
+        Y_ABORT_UNLESS(exprt.MutableExportToFsSettings()->ParseFromString(exportInfo.Settings));
+        break;
     }
 }
 

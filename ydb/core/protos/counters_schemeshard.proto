@@ -270,6 +270,8 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateStreamingQuery = 210 [(CounterOpts) = {Name: "InFlightOps/CreateStreamingQuery"}];
     COUNTER_IN_FLIGHT_OPS_TxDropStreamingQuery = 211   [(CounterOpts) = {Name: "InFlightOps/DropStreamingQuery"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterStreamingQuery = 212  [(CounterOpts) = {Name: "InFlightOps/AlterStreamingQuery"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxTruncateTable = 213 [(CounterOpts) = {Name: "InFlightOps/TruncateTable"}];
 }
 
 enum ECumulativeCounters {
@@ -440,6 +442,8 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateStreamingQuery = 130 [(CounterOpts) = {Name: "FinishedOps/CreateStreamingQuery"}];
     COUNTER_FINISHED_OPS_TxDropStreamingQuery = 131   [(CounterOpts) = {Name: "FinishedOps/DropStreamingQuery"}];
     COUNTER_FINISHED_OPS_TxAlterStreamingQuery = 132  [(CounterOpts) = {Name: "FinishedOps/AlterStreamingQuery"}];
+
+    COUNTER_FINISHED_OPS_TxTruncateTable = 133 [(CounterOpts) = {Name: "FinishedOps/TruncateTable"}];
 }
 
 enum EPercentileCounters {

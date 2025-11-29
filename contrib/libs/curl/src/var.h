@@ -25,19 +25,23 @@
  ***************************************************************************/
 
 #include "tool_getparam.h"
+#include "dynbuf.h"
 
-struct tool_var {
-  struct tool_var *next;
+struct var {
+  struct var *next;
+  const char *name;
   const char *content;
   size_t clen; /* content length */
-  char name[1]; /* allocated as part of the struct */
 };
 
-ParameterError setvariable(const char *input);
-ParameterError varexpand(const char *line, struct dynbuf *out,
+struct GlobalConfig;
+
+ParameterError setvariable(struct GlobalConfig *global, const char *input);
+ParameterError varexpand(struct GlobalConfig *global,
+                         const char *line, struct curlx_dynbuf *out,
                          bool *replaced);
 
 /* free everything */
-void varcleanup(void);
+void varcleanup(struct GlobalConfig *global);
 
 #endif /* HEADER_CURL_VAR_H */

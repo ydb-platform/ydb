@@ -2363,6 +2363,10 @@ protected:
             if (leftPath.Ranges().Raw() != rightPath.Ranges().Raw()) {
                 return node;
             }
+
+            if (leftPath.QLFilter().Raw() != rightPath.QLFilter().Raw()) {
+                return node;
+            }
         }
 
         TYtTableBaseInfo::TPtr tableInfo = GetInputTableInfos(leftInput.Cast()).front();

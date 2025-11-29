@@ -1295,5 +1295,57 @@ TPasstroughtMap MergePasstroughtMaps(const TPasstroughtMap& lhs, const TPasstrou
 void ApplyChanges(const NUdf::TUnboxedValue& value, NUdf::IApplyContext& applyCtx);
 void CleanupCurrentContext();
 
+template <typename T>
+class TBoxedData: public NUdf::TBoxedValue {
+public:
+    template <typename... Args>
+    TBoxedData(Args&&... args)
+        : Data_(std::forward<Args>(args)...)
+    {
+    }
+
+    T& Get() {
+        return Data_;
+    }
+
+    const T& Get() const {
+        return Data_;
+    }
+
+private:
+    T Data_;
+};
+
+template <typename T>
+class TMutableDataOnContext: private TNonCopyable {
+public:
+    TMutableDataOnContext(TComputationMutables& mutables)
+        : Index_(mutables.CurValueIndex++)
+    {
+    }
+
+    bool Empty(TComputationContext& ctx) const {
+        return ctx.MutableValues[Index_].IsInvalid();
+    }
+
+    T& Get(TComputationContext& ctx) const {
+        MKQL_ENSURE(!Empty(ctx), "Value not created");
+        auto& val = ctx.MutableValues[Index_];
+        return static_cast<TBoxedData<T>*>(val.AsBoxed().Get())->Get();
+    }
+
+    template <typename... Args>
+    T& GetOrCreate(TComputationContext& ctx, Args&&... args) const {
+        auto& val = ctx.MutableValues[Index_];
+        if (val.IsInvalid()) {
+            val = NUdf::TUnboxedValuePod(new TBoxedData<T>(std::forward<Args>(args)...));
+        }
+        return static_cast<TBoxedData<T>*>(val.AsBoxed().Get())->Get();
+    }
+
+private:
+    const ui32 Index_;
+};
+
 } // namespace NMiniKQL
 } // namespace NKikimr

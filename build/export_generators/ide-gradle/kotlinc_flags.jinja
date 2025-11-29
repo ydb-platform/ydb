@@ -46,14 +46,14 @@ fun encodeAPOptions(options: Map<String, String>): String {
 {%-         set all_kapt_opts = all_targets|selectattr('kapt')|map(attribute='kapt')|selectattr('opts')|map(attribute='opts')|sum -%}
 {%-         set opts_correctErrorTypes = all_kapt_opts|select('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:correctErrorTypes=') -%}
 {%-         set opts_verbose = all_kapt_opts|select('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:verbose=') -%}
-{%-         set all_annotation_processors = all_targets|selectattr('use_annotation_processor')|map(attribute='use_annotation_processor')|sum -%}
-{%-         if all_kapt_processors|length or opts_correctErrorTypes|length or opts_verbose|length or all_kapt_ap_opts|length or all_annotation_processors|length -%}
+{%-         set has_annotation_processors = all_targets|selectattr('use_annotation_processor')|map(attribute='use_annotation_processor')|sum|length or all_targets|selectattr('use_annotation_processors')|map(attribute='use_annotation_processors')|sum|length -%}
+{%-         if all_kapt_processors|length or opts_correctErrorTypes|length or opts_verbose|length or all_kapt_ap_opts|length or has_annotation_processors -%}
 
 kapt {
 {%-             if all_kapt_processors|length %}
     annotationProcessors({%- for processor in all_kapt_processors -%}"{{ processor }}"{%- if not loop.last -%}, {%- endif -%}{%- endfor -%})
 {%-             endif -%}
-{%-             if all_annotation_processors|length %}
+{%-             if has_annotation_processors %}
     keepJavacAnnotationProcessors = true
 {%-             endif -%}
 {%-             if opts_correctErrorTypes|length -%}

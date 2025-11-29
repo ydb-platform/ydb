@@ -71,16 +71,17 @@ typedef enum {
 #define SETCHARSET_OK     1
 #define SETCHARSET_FAIL   0
 
-static int parsekeyword(const unsigned char **pattern, unsigned char *charset)
+static int parsekeyword(unsigned char **pattern, unsigned char *charset)
 {
   parsekey_state state = CURLFNM_PKW_INIT;
-  char keyword[10] = { 0 };
-  size_t i;
-  const unsigned char *p = *pattern;
+#define KEYLEN 10
+  char keyword[KEYLEN] = { 0 };
+  int i;
+  unsigned char *p = *pattern;
   bool found = FALSE;
   for(i = 0; !found; i++) {
-    char c = (char)*p++;
-    if(i >= sizeof(keyword))
+    char c = *p++;
+    if(i >= KEYLEN)
       return SETCHARSET_FAIL;
     switch(state) {
     case CURLFNM_PKW_INIT:
@@ -139,9 +140,9 @@ static char_class charclass(unsigned char c)
 }
 
 /* Include a character or a range in set. */
-static void setcharorrange(const unsigned char **pp, unsigned char *charset)
+static void setcharorrange(unsigned char **pp, unsigned char *charset)
 {
-  const unsigned char *p = (*pp)++;
+  unsigned char *p = (*pp)++;
   unsigned char c = *p++;
 
   charset[c] = 1;
@@ -160,8 +161,8 @@ static void setcharorrange(const unsigned char **pp, unsigned char *charset)
   }
 }
 
-/* returns 1 (TRUE) if pattern is OK, 0 if is bad ("p" is pattern pointer) */
-static int setcharset(const unsigned char **p, unsigned char *charset)
+/* returns 1 (true) if pattern is OK, 0 if is bad ("p" is pattern pointer) */
+static int setcharset(unsigned char **p, unsigned char *charset)
 {
   setcharset_state state = CURLFNM_SCHS_DEFAULT;
   bool something_found = FALSE;
@@ -184,7 +185,7 @@ static int setcharset(const unsigned char **p, unsigned char *charset)
         (*p)++;
       }
       else if(c == '[') {
-        const unsigned char *pp = *p + 1;
+        unsigned char *pp = *p + 1;
 
         if(*pp++ == ':' && parsekeyword(&pp, charset))
           *p = pp;
@@ -256,12 +257,12 @@ fail:
 static int loop(const unsigned char *pattern, const unsigned char *string,
                 int maxstars)
 {
-  const unsigned char *p = (const unsigned char *)pattern;
-  const unsigned char *s = (const unsigned char *)string;
+  unsigned char *p = (unsigned char *)pattern;
+  unsigned char *s = (unsigned char *)string;
   unsigned char charset[CURLFNM_CHSET_SIZE] = { 0 };
 
   for(;;) {
-    const unsigned char *pp;
+    unsigned char *pp;
 
     switch(*p) {
     case '*':
@@ -292,7 +293,7 @@ static int loop(const unsigned char *pattern, const unsigned char *string,
       p++;
       break;
     case '\0':
-      return *s ? CURL_FNMATCH_NOMATCH : CURL_FNMATCH_MATCH;
+      return *s? CURL_FNMATCH_NOMATCH: CURL_FNMATCH_MATCH;
     case '\\':
       if(p[1])
         p++;
@@ -302,7 +303,7 @@ static int loop(const unsigned char *pattern, const unsigned char *string,
     case '[':
       pp = p + 1; /* Copy in case of syntax error in set. */
       if(setcharset(&pp, charset)) {
-        bool found = FALSE;
+        int found = FALSE;
         if(!*s)
           return CURL_FNMATCH_NOMATCH;
         if(charset[(unsigned int)*s])
@@ -318,7 +319,7 @@ static int loop(const unsigned char *pattern, const unsigned char *string,
         else if(charset[CURLFNM_PRINT])
           found = ISPRINT(*s);
         else if(charset[CURLFNM_SPACE])
-          found = ISBLANK(*s);
+          found = ISSPACE(*s);
         else if(charset[CURLFNM_UPPER])
           found = ISUPPER(*s);
         else if(charset[CURLFNM_LOWER])
@@ -358,8 +359,7 @@ int Curl_fnmatch(void *ptr, const char *pattern, const char *string)
   if(!pattern || !string) {
     return CURL_FNMATCH_FAIL;
   }
-  return loop((const unsigned char *)pattern,
-              (const unsigned char *)string, 2);
+  return loop((unsigned char *)pattern, (unsigned char *)string, 2);
 }
 #else
 #include <fnmatch.h>

@@ -144,7 +144,7 @@ private:
             }
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(tableInfo->Cluster).GetOrElse(false);
             const auto enableDynamicStoreRead = State_->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
-            if ((info.Ranges || tableInfo->Meta->IsDynamic) && !canUseYtPartitioningApi) {
+            if ((info.Ranges || info.QLFilter || tableInfo->Meta->IsDynamic) && !canUseYtPartitioningApi) {
                 return false;
             }
             if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {

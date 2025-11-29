@@ -37,7 +37,7 @@
 #include "strdup.h"
 #include "url.h"
 #include "escape.h"
-#include "curlx/warnless.h"
+#include "warnless.h"
 #include "curl_printf.h"
 #include "curl_memory.h"
 #include "multiif.h"
@@ -46,58 +46,16 @@
 /* The last #include file should be: */
 #include "memdebug.h"
 
-/* first byte is command.
-   second byte is for flags. */
-#define MQTT_MSG_CONNECT    0x10
-/* #define MQTT_MSG_CONNACK    0x20 */
-#define MQTT_MSG_PUBLISH    0x30
-#define MQTT_MSG_SUBSCRIBE  0x82
-#define MQTT_MSG_SUBACK     0x90
+#define MQTT_MSG_CONNECT   0x10
+#define MQTT_MSG_CONNACK   0x20
+#define MQTT_MSG_PUBLISH   0x30
+#define MQTT_MSG_SUBSCRIBE 0x82
+#define MQTT_MSG_SUBACK    0x90
 #define MQTT_MSG_DISCONNECT 0xe0
-#define MQTT_MSG_PINGREQ    0xC0
-#define MQTT_MSG_PINGRESP   0xD0
 
 #define MQTT_CONNACK_LEN 2
 #define MQTT_SUBACK_LEN 3
 #define MQTT_CLIENTID_LEN 12 /* "curl0123abcd" */
-
-/* meta key for storing protocol meta at easy handle */
-#define CURL_META_MQTT_EASY   "meta:proto:mqtt:easy"
-/* meta key for storing protocol meta at connection */
-#define CURL_META_MQTT_CONN   "meta:proto:mqtt:conn"
-
-enum mqttstate {
-  MQTT_FIRST,             /* 0 */
-  MQTT_REMAINING_LENGTH,  /* 1 */
-  MQTT_CONNACK,           /* 2 */
-  MQTT_SUBACK,            /* 3 */
-  MQTT_SUBACK_COMING,     /* 4 - the SUBACK remainder */
-  MQTT_PUBWAIT,    /* 5 - wait for publish */
-  MQTT_PUB_REMAIN,  /* 6 - wait for the remainder of the publish */
-
-  MQTT_NOSTATE /* 7 - never used an actual state */
-};
-
-struct mqtt_conn {
-  enum mqttstate state;
-  enum mqttstate nextstate; /* switch to this after remaining length is
-                               done */
-  unsigned int packetid;
-};
-
-/* protocol-specific transfer-related data */
-struct MQTT {
-  struct dynbuf sendbuf;
-  /* when receiving */
-  struct dynbuf recvbuf;
-  size_t npacket; /* byte counter */
-  size_t remaining_length;
-  unsigned char pkt_hd[4]; /* for decoding the arriving packet length */
-  struct curltime lastTime; /* last time we sent or received data */
-  unsigned char firstbyte;
-  BIT(pingsent); /* 1 while we wait for ping response */
-};
-
 
 /*
  * Forward declarations.
@@ -107,8 +65,8 @@ static CURLcode mqtt_do(struct Curl_easy *data, bool *done);
 static CURLcode mqtt_done(struct Curl_easy *data,
                           CURLcode status, bool premature);
 static CURLcode mqtt_doing(struct Curl_easy *data, bool *done);
-static CURLcode mqtt_pollset(struct Curl_easy *data,
-                             struct easy_pollset *ps);
+static int mqtt_getsock(struct Curl_easy *data, struct connectdata *conn,
+                        curl_socket_t *sock);
 static CURLcode mqtt_setup_conn(struct Curl_easy *data,
                                 struct connectdata *conn);
 
@@ -117,7 +75,7 @@ static CURLcode mqtt_setup_conn(struct Curl_easy *data,
  */
 
 const struct Curl_handler Curl_handler_mqtt = {
-  "mqtt",                             /* scheme */
+  "MQTT",                             /* scheme */
   mqtt_setup_conn,                    /* setup_connection */
   mqtt_do,                            /* do_it */
   mqtt_done,                          /* done */
@@ -125,111 +83,85 @@ const struct Curl_handler Curl_handler_mqtt = {
   ZERO_NULL,                          /* connect_it */
   ZERO_NULL,                          /* connecting */
   mqtt_doing,                         /* doing */
-  ZERO_NULL,                          /* proto_pollset */
-  mqtt_pollset,                       /* doing_pollset */
-  ZERO_NULL,                          /* domore_pollset */
-  ZERO_NULL,                          /* perform_pollset */
+  ZERO_NULL,                          /* proto_getsock */
+  mqtt_getsock,                       /* doing_getsock */
+  ZERO_NULL,                          /* domore_getsock */
+  ZERO_NULL,                          /* perform_getsock */
   ZERO_NULL,                          /* disconnect */
-  ZERO_NULL,                          /* write_resp */
-  ZERO_NULL,                          /* write_resp_hd */
+  ZERO_NULL,                          /* readwrite */
   ZERO_NULL,                          /* connection_check */
   ZERO_NULL,                          /* attach connection */
-  ZERO_NULL,                          /* follow */
   PORT_MQTT,                          /* defport */
   CURLPROTO_MQTT,                     /* protocol */
   CURLPROTO_MQTT,                     /* family */
   PROTOPT_NONE                        /* flags */
 };
 
-static void mqtt_easy_dtor(void *key, size_t klen, void *entry)
-{
-  struct MQTT *mq = entry;
-  (void)key;
-  (void)klen;
-  curlx_dyn_free(&mq->sendbuf);
-  curlx_dyn_free(&mq->recvbuf);
-  free(mq);
-}
-
-static void mqtt_conn_dtor(void *key, size_t klen, void *entry)
-{
-  (void)key;
-  (void)klen;
-  free(entry);
-}
-
 static CURLcode mqtt_setup_conn(struct Curl_easy *data,
                                 struct connectdata *conn)
 {
-  /* setup MQTT specific meta data at easy handle and connection */
-  struct mqtt_conn *mqtt;
+  /* allocate the HTTP-specific struct for the Curl_easy, only to survive
+     during this request */
   struct MQTT *mq;
-
-  mqtt = calloc(1, sizeof(*mqtt));
-  if(!mqtt ||
-     Curl_conn_meta_set(conn, CURL_META_MQTT_CONN, mqtt, mqtt_conn_dtor))
-    return CURLE_OUT_OF_MEMORY;
+  (void)conn;
+  DEBUGASSERT(data->req.p.mqtt == NULL);
 
   mq = calloc(1, sizeof(struct MQTT));
   if(!mq)
     return CURLE_OUT_OF_MEMORY;
-  curlx_dyn_init(&mq->recvbuf, DYN_MQTT_RECV);
-  curlx_dyn_init(&mq->sendbuf, DYN_MQTT_SEND);
-  if(Curl_meta_set(data, CURL_META_MQTT_EASY, mq, mqtt_easy_dtor))
-    return CURLE_OUT_OF_MEMORY;
+  Curl_dyn_init(&mq->recvbuf, DYN_MQTT_RECV);
+  data->req.p.mqtt = mq;
   return CURLE_OK;
 }
 
 static CURLcode mqtt_send(struct Curl_easy *data,
-                          const char *buf, size_t len)
+                          char *buf, size_t len)
 {
-  size_t n;
-  CURLcode result;
-  struct MQTT *mq = Curl_meta_get(data, CURL_META_MQTT_EASY);
-
-  if(!mq)
-    return CURLE_FAILED_INIT;
-
-  result = Curl_xfer_send(data, buf, len, FALSE, &n);
+  CURLcode result = CURLE_OK;
+  struct MQTT *mq = data->req.p.mqtt;
+  ssize_t n;
+  result = Curl_nwrite(data, FIRSTSOCKET, buf, len, &n);
   if(result)
     return result;
-  mq->lastTime = curlx_now();
   Curl_debug(data, CURLINFO_HEADER_OUT, buf, (size_t)n);
-  if(len != n) {
+  if(len != (size_t)n) {
     size_t nsend = len - n;
-    if(curlx_dyn_len(&mq->sendbuf)) {
-      DEBUGASSERT(curlx_dyn_len(&mq->sendbuf) >= nsend);
-      result = curlx_dyn_tail(&mq->sendbuf, nsend); /* keep this much */
-    }
-    else {
-      result = curlx_dyn_addn(&mq->sendbuf, &buf[n], nsend);
-    }
+    char *sendleftovers = Curl_memdup(&buf[n], nsend);
+    if(!sendleftovers)
+      return CURLE_OUT_OF_MEMORY;
+    mq->sendleftovers = sendleftovers;
+    mq->nsend = nsend;
   }
-  else
-    curlx_dyn_reset(&mq->sendbuf);
+  else {
+    mq->sendleftovers = NULL;
+    mq->nsend = 0;
+  }
   return result;
 }
 
 /* Generic function called by the multi interface to figure out what socket(s)
    to wait for and for what actions during the DOING and PROTOCONNECT
    states */
-static CURLcode mqtt_pollset(struct Curl_easy *data,
-                             struct easy_pollset *ps)
+static int mqtt_getsock(struct Curl_easy *data,
+                        struct connectdata *conn,
+                        curl_socket_t *sock)
 {
-  return Curl_pollset_add_in(data, ps, data->conn->sock[FIRSTSOCKET]);
+  (void)data;
+  sock[0] = conn->sock[FIRSTSOCKET];
+  return GETSOCK_READSOCK(FIRSTSOCKET);
 }
 
 static int mqtt_encode_len(char *buf, size_t len)
 {
+  unsigned char encoded;
   int i;
 
-  for(i = 0; (len > 0) && (i < 4); i++) {
-    unsigned char encoded;
+  for(i = 0; (len > 0) && (i<4); i++) {
     encoded = len % 0x80;
     len /= 0x80;
     if(len)
       encoded |= 0x80;
-    buf[i] = (char)encoded;
+    buf[i] = encoded;
   }
 
   return i;
@@ -237,7 +169,7 @@ static int mqtt_encode_len(char *buf, size_t len)
 
 /* add the passwd to the CONNECT packet */
 static int add_passwd(const char *passwd, const size_t plen,
-                      char *pkt, const size_t start, int remain_pos)
+                       char *pkt, const size_t start, int remain_pos)
 {
   /* magic number that need to be set properly */
   const size_t conn_flags_pos = remain_pos + 8;
@@ -323,6 +255,7 @@ static CURLcode mqtt_connect(struct Curl_easy *data)
   int remain_pos = 0;
   char remain[4] = {0};
   size_t packetlen = 0;
+  size_t payloadlen = 0;
   size_t start_user = 0;
   size_t start_pwd = 0;
   char client_id[MQTT_CLIENTID_LEN + 1] = "curl";
@@ -337,11 +270,14 @@ static CURLcode mqtt_connect(struct Curl_easy *data)
   const char *passwd = data->state.aptr.passwd ?
     data->state.aptr.passwd : "";
   const size_t plen = strlen(passwd);
-  const size_t payloadlen = ulen + plen + MQTT_CLIENTID_LEN + 2 +
-  /* The plus 2s below are for the MSB and LSB describing the length of the
-     string to be added on the payload. Refer to spec 1.5.2 and 1.5.4 */
-    (ulen ? 2 : 0) +
-    (plen ? 2 : 0);
+
+  payloadlen = ulen + plen + MQTT_CLIENTID_LEN + 2;
+  /* The plus 2 are for the MSB and LSB describing the length of the string to
+   * be added on the payload. Refer to spec 1.5.2 and 1.5.4 */
+  if(ulen)
+    payloadlen += 2;
+  if(plen)
+    payloadlen += 2;
 
   /* getting how much occupy the remain length */
   remain_pos = mqtt_encode_len(remain, payloadlen + 10);
@@ -350,11 +286,12 @@ static CURLcode mqtt_connect(struct Curl_easy *data)
   packetlen = payloadlen + 10 + remain_pos + 1;
 
   /* allocating packet */
-  if(packetlen > 0xFFFFFFF)
+  if(packetlen > 268435455)
     return CURLE_WEIRD_SERVER_REPLY;
-  packet = calloc(1, packetlen);
+  packet = malloc(packetlen);
   if(!packet)
     return CURLE_OUT_OF_MEMORY;
+  memset(packet, 0, packetlen);
 
   /* set initial values for the CONNECT packet */
   pos = init_connpack(packet, remain, remain_pos);
@@ -370,18 +307,18 @@ static CURLcode mqtt_connect(struct Curl_easy *data)
   }
   infof(data, "Using client id '%s'", client_id);
 
-  /* position where the user payload starts */
+  /* position where starts the user payload */
   start_user = pos + 3 + MQTT_CLIENTID_LEN;
-  /* position where the password payload starts */
+  /* position where starts the password payload */
   start_pwd = start_user + ulen;
-  /* if username was provided, add it to the packet */
+  /* if user name was provided, add it to the packet */
   if(ulen) {
     start_pwd += 2;
 
     rc = add_user(username, ulen,
                   (unsigned char *)packet, start_user, remain_pos);
     if(rc) {
-      failf(data, "Username too long: [%zu]", ulen);
+      failf(data, "Username is too large: [%zu]", ulen);
       result = CURLE_WEIRD_SERVER_REPLY;
       goto end;
     }
@@ -391,7 +328,7 @@ static CURLcode mqtt_connect(struct Curl_easy *data)
   if(plen) {
     rc = add_passwd(passwd, plen, packet, start_pwd, remain_pos);
     if(rc) {
-      failf(data, "Password too long: [%zu]", plen);
+      failf(data, "Password is too large: [%zu]", plen);
       result = CURLE_WEIRD_SERVER_REPLY;
       goto end;
     }
@@ -410,70 +347,66 @@ end:
 
 static CURLcode mqtt_disconnect(struct Curl_easy *data)
 {
-  return mqtt_send(data, "\xe0\x00", 2);
+  CURLcode result = CURLE_OK;
+  struct MQTT *mq = data->req.p.mqtt;
+  result = mqtt_send(data, (char *)"\xe0\x00", 2);
+  Curl_safefree(mq->sendleftovers);
+  Curl_dyn_free(&mq->recvbuf);
+  return result;
 }
 
 static CURLcode mqtt_recv_atleast(struct Curl_easy *data, size_t nbytes)
 {
-  struct MQTT *mq = Curl_meta_get(data, CURL_META_MQTT_EASY);
-  size_t rlen;
+  struct MQTT *mq = data->req.p.mqtt;
+  size_t rlen = Curl_dyn_len(&mq->recvbuf);
   CURLcode result;
-
-  if(!mq)
-    return CURLE_FAILED_INIT;
-  rlen = curlx_dyn_len(&mq->recvbuf);
 
   if(rlen < nbytes) {
     unsigned char readbuf[1024];
-    size_t nread;
+    ssize_t nread;
 
     DEBUGASSERT(nbytes - rlen < sizeof(readbuf));
-    result = Curl_xfer_recv(data, (char *)readbuf, nbytes - rlen, &nread);
+    result = Curl_read(data, data->conn->sock[FIRSTSOCKET],
+                       (char *)readbuf, nbytes - rlen, &nread);
     if(result)
       return result;
-    if(curlx_dyn_addn(&mq->recvbuf, readbuf, nread))
+    DEBUGASSERT(nread >= 0);
+    if(Curl_dyn_addn(&mq->recvbuf, readbuf, (size_t)nread))
       return CURLE_OUT_OF_MEMORY;
-    rlen = curlx_dyn_len(&mq->recvbuf);
+    rlen = Curl_dyn_len(&mq->recvbuf);
   }
-  return (rlen >= nbytes) ? CURLE_OK : CURLE_AGAIN;
+  return (rlen >= nbytes)? CURLE_OK : CURLE_AGAIN;
 }
 
 static void mqtt_recv_consume(struct Curl_easy *data, size_t nbytes)
 {
-  struct MQTT *mq = Curl_meta_get(data, CURL_META_MQTT_EASY);
-  DEBUGASSERT(mq);
-  if(mq) {
-    size_t rlen = curlx_dyn_len(&mq->recvbuf);
-    if(rlen <= nbytes)
-      curlx_dyn_reset(&mq->recvbuf);
-    else
-      curlx_dyn_tail(&mq->recvbuf, rlen - nbytes);
-  }
+  struct MQTT *mq = data->req.p.mqtt;
+  size_t rlen = Curl_dyn_len(&mq->recvbuf);
+  if(rlen <= nbytes)
+    Curl_dyn_reset(&mq->recvbuf);
+  else
+    Curl_dyn_tail(&mq->recvbuf, rlen - nbytes);
 }
 
 static CURLcode mqtt_verify_connack(struct Curl_easy *data)
 {
-  struct MQTT *mq = Curl_meta_get(data, CURL_META_MQTT_EASY);
+  struct MQTT *mq = data->req.p.mqtt;
   CURLcode result;
   char *ptr;
-
-  DEBUGASSERT(mq);
-  if(!mq)
-    return CURLE_FAILED_INIT;
 
   result = mqtt_recv_atleast(data, MQTT_CONNACK_LEN);
   if(result)
     goto fail;
 
   /* verify CONNACK */
-  DEBUGASSERT(curlx_dyn_len(&mq->recvbuf) >= MQTT_CONNACK_LEN);
-  ptr = curlx_dyn_ptr(&mq->recvbuf);
+  DEBUGASSERT(Curl_dyn_len(&mq->recvbuf) >= MQTT_CONNACK_LEN);
+  ptr = Curl_dyn_ptr(&mq->recvbuf);
   Curl_debug(data, CURLINFO_HEADER_IN, ptr, MQTT_CONNACK_LEN);
 
   if(ptr[0] != 0x00 || ptr[1] != 0x00) {
     failf(data, "Expected %02x%02x but got %02x%02x",
           0x00, 0x00, ptr[0], ptr[1]);
-    curlx_dyn_reset(&mq->recvbuf);
+    Curl_dyn_reset(&mq->recvbuf);
     result = CURLE_WEIRD_SERVER_REPLY;
     goto fail;
   }
@@ -510,16 +443,12 @@ static CURLcode mqtt_subscribe(struct Curl_easy *data)
   char encodedsize[4];
   size_t n;
   struct connectdata *conn = data->conn;
-  struct mqtt_conn *mqtt = Curl_conn_meta_get(conn, CURL_META_MQTT_CONN);
-
-  if(!mqtt)
-    return CURLE_FAILED_INIT;
 
   result = mqtt_get_topic(data, &topic, &topiclen);
   if(result)
     goto fail;
 
-  mqtt->packetid++;
+  conn->proto.mqtt.packetid++;
 
   packetlen = topiclen + 5; /* packetid + topic (has a two byte length field)
                                + 2 bytes topic length + QoS byte */
@@ -534,14 +463,14 @@ static CURLcode mqtt_subscribe(struct Curl_easy *data)
 
   packet[0] = MQTT_MSG_SUBSCRIBE;
   memcpy(&packet[1], encodedsize, n);
-  packet[1 + n] = (mqtt->packetid >> 8) & 0xff;
-  packet[2 + n] = mqtt->packetid & 0xff;
+  packet[1 + n] = (conn->proto.mqtt.packetid >> 8) & 0xff;
+  packet[2 + n] = conn->proto.mqtt.packetid & 0xff;
   packet[3 + n] = (topiclen >> 8) & 0xff;
   packet[4 + n ] = topiclen & 0xff;
   memcpy(&packet[5 + n], topic, topiclen);
   packet[5 + n + topiclen] = 0; /* QoS zero */
 
-  result = mqtt_send(data, (const char *)packet, packetlen);
+  result = mqtt_send(data, (char *)packet, packetlen);
 
 fail:
   free(topic);
@@ -554,28 +483,25 @@ fail:
  */
 static CURLcode mqtt_verify_suback(struct Curl_easy *data)
 {
-  struct MQTT *mq = Curl_meta_get(data, CURL_META_MQTT_EASY);
+  struct MQTT *mq = data->req.p.mqtt;
   struct connectdata *conn = data->conn;
-  struct mqtt_conn *mqtt = Curl_conn_meta_get(conn, CURL_META_MQTT_CONN);
+  struct mqtt_conn *mqtt = &conn->proto.mqtt;
   CURLcode result;
   char *ptr;
-
-  if(!mqtt || !mq)
-    return CURLE_FAILED_INIT;
 
   result = mqtt_recv_atleast(data, MQTT_SUBACK_LEN);
   if(result)
     goto fail;
 
   /* verify SUBACK */
-  DEBUGASSERT(curlx_dyn_len(&mq->recvbuf) >= MQTT_SUBACK_LEN);
-  ptr = curlx_dyn_ptr(&mq->recvbuf);
+  DEBUGASSERT(Curl_dyn_len(&mq->recvbuf) >= MQTT_SUBACK_LEN);
+  ptr = Curl_dyn_ptr(&mq->recvbuf);
   Curl_debug(data, CURLINFO_HEADER_IN, ptr, MQTT_SUBACK_LEN);
 
   if(((unsigned char)ptr[0]) != ((mqtt->packetid >> 8) & 0xff) ||
      ((unsigned char)ptr[1]) != (mqtt->packetid & 0xff) ||
      ptr[2] != 0x00) {
-    curlx_dyn_reset(&mq->recvbuf);
+    Curl_dyn_reset(&mq->recvbuf);
     result = CURLE_WEIRD_SERVER_REPLY;
     goto fail;
   }
@@ -598,10 +524,8 @@ static CURLcode mqtt_publish(struct Curl_easy *data)
   char encodedbytes[4];
   curl_off_t postfieldsize = data->set.postfieldsize;
 
-  if(!payload) {
-    DEBUGF(infof(data, "mqtt_publish without payload, return bad arg"));
+  if(!payload)
     return CURLE_BAD_FUNCTION_ARGUMENT;
-  }
   if(postfieldsize < 0)
     payloadlen = strlen(payload);
   else
@@ -631,7 +555,7 @@ static CURLcode mqtt_publish(struct Curl_easy *data)
   i += topiclen;
   memcpy(&pkt[i], payload, payloadlen);
   i += payloadlen;
-  result = mqtt_send(data, (const char *)pkt, i);
+  result = mqtt_send(data, (char *)pkt, i);
 
 fail:
   free(pkt);
@@ -659,7 +583,7 @@ static size_t mqtt_decode_len(unsigned char *buf,
   return len;
 }
 
-#ifdef DEBUGBUILD
+#ifdef CURLDEBUG
 static const char *statenames[]={
   "MQTT_FIRST",
   "MQTT_REMAINING_LENGTH",
@@ -679,15 +603,12 @@ static void mqstate(struct Curl_easy *data,
                     enum mqttstate nextstate) /* used if state == FIRST */
 {
   struct connectdata *conn = data->conn;
-  struct mqtt_conn *mqtt = Curl_conn_meta_get(conn, CURL_META_MQTT_CONN);
-  DEBUGASSERT(mqtt);
-  if(!mqtt)
-    return;
-#ifdef DEBUGBUILD
+  struct mqtt_conn *mqtt = &conn->proto.mqtt;
+#ifdef CURLDEBUG
   infof(data, "%s (from %s) (next is %s)",
         statenames[state],
         statenames[mqtt->state],
-        (state == MQTT_FIRST) ? statenames[nextstate] : "");
+        (state == MQTT_FIRST)? statenames[nextstate] : "");
 #endif
   mqtt->state = state;
   if(state == MQTT_FIRST)
@@ -699,15 +620,13 @@ static CURLcode mqtt_read_publish(struct Curl_easy *data, bool *done)
 {
   CURLcode result = CURLE_OK;
   struct connectdata *conn = data->conn;
-  size_t nread;
+  curl_socket_t sockfd = conn->sock[FIRSTSOCKET];
+  ssize_t nread;
+  unsigned char *pkt = (unsigned char *)data->state.buffer;
   size_t remlen;
-  struct mqtt_conn *mqtt = Curl_conn_meta_get(conn, CURL_META_MQTT_CONN);
-  struct MQTT *mq = Curl_meta_get(data, CURL_META_MQTT_EASY);
+  struct mqtt_conn *mqtt = &conn->proto.mqtt;
+  struct MQTT *mq = data->req.p.mqtt;
   unsigned char packet;
-
-  DEBUGASSERT(mqtt);
-  if(!mqtt || !mq)
-    return CURLE_FAILED_INIT;
 
   switch(mqtt->state) {
 MQTT_SUBACK_COMING:
@@ -752,14 +671,13 @@ MQTT_SUBACK_COMING:
     data->req.bytecount = 0;
     data->req.size = remlen;
     mq->npacket = remlen; /* get this many bytes */
-    FALLTHROUGH();
+    /* FALLTHROUGH */
   case MQTT_PUB_REMAIN: {
     /* read rest of packet, but no more. Cap to buffer size */
-    char buffer[4*1024];
     size_t rest = mq->npacket;
-    if(rest > sizeof(buffer))
-      rest = sizeof(buffer);
-    result = Curl_xfer_recv(data, buffer, rest, &nread);
+    if(rest > (size_t)data->set.buffer_size)
+      rest = (size_t)data->set.buffer_size;
+    result = Curl_read(data, sockfd, (char *)pkt, rest, &nread);
     if(result) {
       if(CURLE_AGAIN == result) {
         infof(data, "EEEE AAAAGAIN");
@@ -772,15 +690,14 @@ MQTT_SUBACK_COMING:
       goto end;
     }
 
-    /* we received something */
-    mq->lastTime = curlx_now();
+    mq->npacket -= nread;
 
     /* if QoS is set, message contains packet id */
-    result = Curl_client_write(data, CLIENTWRITE_BODY, buffer, nread);
+
+    result = Curl_client_write(data, CLIENTWRITE_BODY, (char *)pkt, nread);
     if(result)
       goto end;
 
-    mq->npacket -= nread;
     if(!mq->npacket)
       /* no more PUBLISH payload, back to subscribe wait state */
       mqstate(data, MQTT_FIRST, MQTT_PUBWAIT);
@@ -797,14 +714,8 @@ end:
 
 static CURLcode mqtt_do(struct Curl_easy *data, bool *done)
 {
-  struct MQTT *mq = Curl_meta_get(data, CURL_META_MQTT_EASY);
   CURLcode result = CURLE_OK;
   *done = FALSE; /* unconditionally */
-
-  if(!mq)
-    return CURLE_FAILED_INIT;
-  mq->lastTime = curlx_now();
-  mq->pingsent = FALSE;
 
   result = mqtt_connect(data);
   if(result) {
@@ -818,78 +729,41 @@ static CURLcode mqtt_do(struct Curl_easy *data, bool *done)
 static CURLcode mqtt_done(struct Curl_easy *data,
                           CURLcode status, bool premature)
 {
-  struct MQTT *mq = Curl_meta_get(data, CURL_META_MQTT_EASY);
+  struct MQTT *mq = data->req.p.mqtt;
   (void)status;
   (void)premature;
-  if(mq) {
-    curlx_dyn_free(&mq->sendbuf);
-    curlx_dyn_free(&mq->recvbuf);
-  }
+  Curl_safefree(mq->sendleftovers);
+  Curl_dyn_free(&mq->recvbuf);
   return CURLE_OK;
-}
-
-/* we ping regularly to avoid being disconnected by the server */
-static CURLcode mqtt_ping(struct Curl_easy *data)
-{
-  struct MQTT *mq = Curl_meta_get(data, CURL_META_MQTT_EASY);
-  CURLcode result = CURLE_OK;
-  struct connectdata *conn = data->conn;
-  struct mqtt_conn *mqtt = Curl_conn_meta_get(conn, CURL_META_MQTT_CONN);
-
-  if(!mqtt || !mq)
-    return CURLE_FAILED_INIT;
-
-  if(mqtt->state == MQTT_FIRST &&
-     !mq->pingsent &&
-     data->set.upkeep_interval_ms > 0) {
-    struct curltime t = curlx_now();
-    timediff_t diff = curlx_timediff(t, mq->lastTime);
-
-    if(diff > data->set.upkeep_interval_ms) {
-      /* 0xC0 is PINGREQ, and 0x00 is remaining length */
-      unsigned char packet[2] = { 0xC0, 0x00 };
-      size_t packetlen = sizeof(packet);
-
-      result = mqtt_send(data, (char *)packet, packetlen);
-      if(!result) {
-        mq->pingsent = TRUE;
-      }
-      infof(data, "mqtt_ping: sent ping request.");
-    }
-  }
-  return result;
 }
 
 static CURLcode mqtt_doing(struct Curl_easy *data, bool *done)
 {
-  struct MQTT *mq = Curl_meta_get(data, CURL_META_MQTT_EASY);
   CURLcode result = CURLE_OK;
-  size_t nread;
-  unsigned char recvbyte;
-  struct mqtt_conn *mqtt = Curl_conn_meta_get(data->conn, CURL_META_MQTT_CONN);
-
-  if(!mqtt || !mq)
-    return CURLE_FAILED_INIT;
+  struct connectdata *conn = data->conn;
+  struct mqtt_conn *mqtt = &conn->proto.mqtt;
+  struct MQTT *mq = data->req.p.mqtt;
+  ssize_t nread;
+  curl_socket_t sockfd = conn->sock[FIRSTSOCKET];
+  unsigned char *pkt = (unsigned char *)data->state.buffer;
+  unsigned char byte;
 
   *done = FALSE;
 
-  if(curlx_dyn_len(&mq->sendbuf)) {
+  if(mq->nsend) {
     /* send the remainder of an outgoing packet */
-    result = mqtt_send(data, curlx_dyn_ptr(&mq->sendbuf),
-                       curlx_dyn_len(&mq->sendbuf));
+    char *ptr = mq->sendleftovers;
+    result = mqtt_send(data, mq->sendleftovers, mq->nsend);
+    free(ptr);
     if(result)
       return result;
   }
-
-  result = mqtt_ping(data);
-  if(result)
-    return result;
 
   infof(data, "mqtt_doing: state [%d]", (int) mqtt->state);
   switch(mqtt->state) {
   case MQTT_FIRST:
     /* Read the initial byte only */
-    result = Curl_xfer_recv(data, (char *)&mq->firstbyte, 1, &nread);
+    result = Curl_read(data, sockfd, (char *)&mq->firstbyte, 1, &nread);
     if(result)
       break;
     else if(!nread) {
@@ -898,30 +772,26 @@ static CURLcode mqtt_doing(struct Curl_easy *data, bool *done)
       result = CURLE_RECV_ERROR;
       break;
     }
-    Curl_debug(data, CURLINFO_HEADER_IN, (const char *)&mq->firstbyte, 1);
-
-    /* we received something */
-    mq->lastTime = curlx_now();
-
+    Curl_debug(data, CURLINFO_HEADER_IN, (char *)&mq->firstbyte, 1);
     /* remember the first byte */
     mq->npacket = 0;
     mqstate(data, MQTT_REMAINING_LENGTH, MQTT_NOSTATE);
-    FALLTHROUGH();
+    /* FALLTHROUGH */
   case MQTT_REMAINING_LENGTH:
     do {
-      result = Curl_xfer_recv(data, (char *)&recvbyte, 1, &nread);
-      if(result || !nread)
+      result = Curl_read(data, sockfd, (char *)&byte, 1, &nread);
+      if(!nread)
         break;
-      Curl_debug(data, CURLINFO_HEADER_IN, (const char *)&recvbyte, 1);
-      mq->pkt_hd[mq->npacket++] = recvbyte;
-    } while((recvbyte & 0x80) && (mq->npacket < 4));
-    if(!result && nread && (recvbyte & 0x80))
+      Curl_debug(data, CURLINFO_HEADER_IN, (char *)&byte, 1);
+      pkt[mq->npacket++] = byte;
+    } while((byte & 0x80) && (mq->npacket < 4));
+    if(nread && (byte & 0x80))
       /* MQTT supports up to 127 * 128^0 + 127 * 128^1 + 127 * 128^2 +
          127 * 128^3 bytes. server tried to send more */
       result = CURLE_WEIRD_SERVER_REPLY;
     if(result)
       break;
-    mq->remaining_length = mqtt_decode_len(mq->pkt_hd, mq->npacket, NULL);
+    mq->remaining_length = mqtt_decode_len(&pkt[0], mq->npacket, NULL);
     mq->npacket = 0;
     if(mq->remaining_length) {
       mqstate(data, mqtt->nextstate, MQTT_NOSTATE);
@@ -932,13 +802,6 @@ static CURLcode mqtt_doing(struct Curl_easy *data, bool *done)
     if(mq->firstbyte == MQTT_MSG_DISCONNECT) {
       infof(data, "Got DISCONNECT");
       *done = TRUE;
-    }
-
-    /* ping response */
-    if(mq->firstbyte == MQTT_MSG_PINGRESP) {
-      infof(data, "Received ping response.");
-      mq->pingsent = FALSE;
-      mqstate(data, MQTT_FIRST, MQTT_PUBWAIT);
     }
     break;
   case MQTT_CONNACK:

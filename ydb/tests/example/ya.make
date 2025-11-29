@@ -3,7 +3,14 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 TEST_SRCS(
-    test_example.py  # TODO: change file name to yours
+
+
+    test_example.py
+)
+
+
+DEPENDS(
+    ydb/apps/ydb
 )
 
 SIZE(MEDIUM)

@@ -96,9 +96,12 @@ void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregat
 }
 
 void TLocalBuffer::Push(TDataChunk&& data) {
-    PushStats.Chunks++;
-    PushStats.Rows += data.Rows;
-    PushStats.Bytes += data.Bytes;
+    if (PushStats.CollectBasic()) {
+        PushStats.Chunks++;
+        PushStats.Rows += data.Rows;
+        PushStats.Bytes += data.Bytes;
+        PushStats.Resume();
+    }
 
     (*Registry->LocalBufferChunks)++;
     *Registry->LocalBufferBytes += data.Bytes;
@@ -127,6 +130,9 @@ void TLocalBuffer::Push(TDataChunk&& data) {
     }
 
     if (FillLevel != fillLevel) {
+        if (FillLevel != EDqFillLevel::NoLimit) {
+            PopStats.TryPause();
+        }
         if (Aggregator) {
             Aggregator->UpdateCount(FillLevel, fillLevel);
         }
@@ -163,6 +169,7 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     std::lock_guard lock(Mutex);
 
     if (Queue.empty()) {
+        PushStats.TryPause();
         NeedToNotifyInput.store(true);
         return false;
     }
@@ -170,9 +177,12 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     data = std::move(Queue.front());
     Queue.pop();
 
-    PopStats.Chunks++;
-    PopStats.Rows += data.Rows;
-    PopStats.Bytes += data.Bytes;
+    if (PopStats.CollectBasic()) {
+        PopStats.Chunks++;
+        PopStats.Rows += data.Rows;
+        PopStats.Bytes += data.Bytes;
+        PopStats.Resume();
+    }
     *Registry->LocalBufferLatency += (TInstant::Now() - data.Timestamp).MicroSeconds();
 
     if (data.Finished) {
@@ -527,17 +537,22 @@ void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggrega
 
 void TOutputBuffer::Push(TDataChunk&& data) {
     if (!Descriptor->IsTerminatedOrAborted()) {
-        PushStats.Chunks++;
-        PushStats.Rows += data.Rows;
-        PushStats.Bytes += data.Bytes;
+        if (PushStats.CollectBasic()) {
+            PushStats.Chunks++;
+            PushStats.Rows += data.Rows;
+            PushStats.Bytes += data.Bytes;
+            PushStats.Resume();
+        }
         Descriptor->PushDataChunk(std::move(data), NodeState.get(), Descriptor);
     }
 }
 
 void TOutputBuffer::UpdatePopStats() {
-    PopStats.Bytes = Descriptor->BufferPopBytes.load();
-    PopStats.Chunks = Descriptor->BufferPopChunks.load();
-    PopStats.Rows = Descriptor->BufferPopRows.load();
+    if (PopStats.CollectBasic()) {
+        PopStats.Bytes = Descriptor->BufferPopBytes.load();
+        PopStats.Chunks = Descriptor->BufferPopChunks.load();
+        PopStats.Rows = Descriptor->BufferPopRows.load();
+    }
 }
 
 bool TOutputBuffer::IsEarlyFinished() {

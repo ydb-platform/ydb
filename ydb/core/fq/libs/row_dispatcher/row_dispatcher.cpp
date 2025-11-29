@@ -5,6 +5,9 @@
 #include "leader_election.h"
 #include "probes.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
+
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/metrics/sanitize_label.h>
@@ -117,14 +120,17 @@ struct TQueryStatKeyHash {
 
 struct TAggQueryStat {
     TAggQueryStat() = default;
-    TAggQueryStat(const TString& queryId, const ::NMonitoring::TDynamicCounterPtr& counters, const NYql::NPq::NProto::TDqPqTopicSource& sourceParams)
+    TAggQueryStat(const TString& queryId, const ::NMonitoring::TDynamicCounterPtr& counters, const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
         : QueryId(queryId)
         , SubGroup(counters) {
-        for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
-            SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+        auto topicGroup = SubGroup;
+        if (enableStreamingQueriesCounters) {
+            for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+                SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+            }
+            SubGroup = SubGroup->GetSubgroup("query_id", queryId);
+            topicGroup = SubGroup->GetSubgroup("read_group", SanitizeLabel(sourceParams.GetReadGroup()));
         }
-        auto queryGroup = SubGroup->GetSubgroup("query_id", queryId);
-        auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(sourceParams.GetReadGroup()));
         MaxQueuedBytesCounter = topicGroup->GetCounter("MaxQueuedBytes");
         AvgQueuedBytesCounter = topicGroup->GetCounter("AvgQueuedBytes");
         MaxReadLagCounter = topicGroup->GetCounter("MaxReadLag");
@@ -411,6 +417,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TMap<ui64, TAtomicSharedPtr<TConsumerInfo>> ConsumersByEventQueueId;
     THashMap<TTopicSessionKey, TTopicSessionInfo, TTopicSessionKeyHash> TopicSessions;
     TMap<TActorId, TReadActorInfo> ReadActorsInternalState;
+    bool EnableStreamingQueriesCounters = false;
 
 public:
     explicit TRowDispatcher(
@@ -425,7 +432,8 @@ public:
         const NYql::IPqGateway::TPtr& pqGateway,
         NYdb::TDriver driver,
         NActors::TMon* monitoring = nullptr,
-        NActors::TActorId nodesManagerId = {}
+        NActors::TActorId nodesManagerId = {},
+        bool enableStreamingQueriesCounters = false
     );
 
     void Bootstrap();
@@ -509,7 +517,8 @@ TRowDispatcher::TRowDispatcher(
     const NYql::IPqGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
-    NActors::TActorId nodesManagerId)
+    NActors::TActorId nodesManagerId,
+    bool enableStreamingQueriesCounters)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , CredentialsFactory(credentialsFactory)
@@ -525,6 +534,7 @@ TRowDispatcher::TRowDispatcher(
     , Driver(driver)
     , Monitoring(monitoring)
     , NodesManagerId(nodesManagerId)
+    , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
 {
     Y_ENSURE(!Tenant.empty());
 }
@@ -665,7 +675,7 @@ void TRowDispatcher::UpdateMetrics() {
                 TQueryStatKey statKey{consumer->QueryId, key.ReadGroup};
                 auto& stats = AggrStats.LastQueryStats.emplace(
                     statKey,
-                    TAggQueryStat(consumer->QueryId, Metrics.Counters, consumer->SourceParams)).first->second;
+                    TAggQueryStat(consumer->QueryId, Metrics.Counters, consumer->SourceParams, EnableStreamingQueriesCounters)).first->second;
                 stats.Add(partition.Stat, partition.FilteredBytes);
                 partition.FilteredBytes = 0;
             }
@@ -841,9 +851,11 @@ void TRowDispatcher::UpdateReadActorsInternalState() {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", read group " << ev->Get()->Record.GetSource().GetReadGroup() << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " part id " << JoinSeq(',', ev->Get()->Record.GetPartitionIds()) << " query id " << ev->Get()->Record.GetQueryId() << " cookie " << ev->Cookie);
-    auto queryGroup = Metrics.Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
-    auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(ev->Get()->Record.GetSource().GetReadGroup()));
-    topicGroup->GetCounter("StartSession", true)->Inc();
+    if (EnableStreamingQueriesCounters) {
+        auto queryGroup = Metrics.Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
+        auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(ev->Get()->Record.GetSource().GetReadGroup()));
+        topicGroup->GetCounter("StartSession", true)->Inc();
+    }
 
     LWPROBE(StartSession, ev->Sender.ToString(), ev->Get()->Record.GetQueryId(), ev->Get()->Record.ByteSizeLong());
 
@@ -896,7 +908,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 Counters,
                 CountersRoot,
                 PqGateway,
-                MaxSessionBufferSizeBytes
+                MaxSessionBufferSizeBytes,
+                EnableStreamingQueriesCounters
                 );
             TSessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
             sessionInfo.Consumers[ev->Sender] = consumerInfo;
@@ -1303,7 +1316,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NYql::IPqGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
-    NActors::TActorId nodesManagerId)
+    NActors::TActorId nodesManagerId,
+    bool enableStreamingQueriesCounters)
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
@@ -1317,7 +1331,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         pqGateway,
         driver,
         monitoring,
-        nodesManagerId));
+        nodesManagerId,
+        enableStreamingQueriesCounters));
 }
 
 } // namespace NFq

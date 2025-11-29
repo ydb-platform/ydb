@@ -28,6 +28,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     NYdb::TDriver driver,
     NActors::TMon* monitoring = nullptr,
     ::NMonitoring::TDynamicCounterPtr countersRoot = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
-    NActors::TActorId nodesManagerId = {});
+    NActors::TActorId nodesManagerId = {},
+    bool enableStreamingQueriesCounters = false);
 
 } // namespace NFq

@@ -57,6 +57,7 @@ public:
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 CreatePqNativeGateway(std::move(pqServices)),
                 1,
+                true,
                 freeSpace
             );
 

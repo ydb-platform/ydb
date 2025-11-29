@@ -2021,6 +2021,7 @@ namespace NKikimr {
                     PDiskCtx,
                     Db->LoggerID,
                     Db->LogCutterID,
+                    Db->SkeletonID,
                     Config->SyncLogMaxDiskAmount,
                     Config->SyncLogMaxEntryPointSize,
                     Config->SyncLogMaxMemAmount,

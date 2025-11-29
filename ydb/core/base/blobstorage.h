@@ -771,7 +771,7 @@ struct TEvBlobStorage {
         EvBSQueueResetConnection, // for test purposes
         EvYardResize,                                           // 268 636 340
         EvChangeExpectedSlotCount,
-        EvPhantomFlagStorageAddFlagsFromSnapshot,
+        EvPhantomFlagStorageFinishBuilder,
         EvPhantomFlagStorageGetSnapshot,
         EvPhantomFlagStorageGetSnapshotResult,
         EvSyncLogUpdateNeighbourSyncedLsn,

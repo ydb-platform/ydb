@@ -109,6 +109,7 @@ namespace NKikimr {
             nullptr,
             TActorId{},
             TActorId{},
+            TActorId{},
             syncLogMaxDiskAmount,
             syncLogMaxEntryPointSize,
             syncLogMaxMemAmount,

@@ -31,7 +31,7 @@ private:
     TString DiagnosticsFile;
     TString Query;
     TString QueryFile;
-    TString TxMode;
+    TString TxMode = "implicit";
     bool ExplainMode = false;
     bool ExplainAnalyzeMode = false;
     bool ExplainAst = false;

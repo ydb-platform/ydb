@@ -10,6 +10,7 @@
 
 #include <library/cpp/json/json_prettifier.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/colorizer/colors.h>
 
 #include <google/protobuf/util/json_util.h>
 
@@ -367,8 +368,27 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on statistics info")
             .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
     config.Opts->AddCharOption('s', "Collect statistics in basic mode").StoreTrue(&BasicStats);
-    config.Opts->AddLongOption("tx-mode", "Transaction mode (for generic & data queries) [serializable-rw, online-ro, stale-ro, snapshot-ro, snapshot-rw, no-tx (generic queries only)]")
-        .RequiredArgument("[String]").DefaultValue("serializable-rw").StoreResult(&TxMode);
+    // Transaction modes description with color highlighting
+    TVector<TString> txModes = {"serializable-rw", "online-ro", "stale-ro", "snapshot-ro", "snapshot-rw", "implicit"};
+    TStringStream txDescription;
+    txDescription << "Transaction mode (for generic & data queries). Available options: ";
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    bool printComma = false;
+    for (const auto& mode : txModes) {
+        if (printComma) {
+            txDescription << ", ";
+        } else {
+            printComma = true;
+        }
+        txDescription << colors.BoldColor() << mode << colors.OldColor();
+    }
+    txDescription << " (" << colors.BoldColor() << "implicit" << colors.OldColor() << " for generic queries only).\n"
+                  << "\"" << colors.BoldColor() << "implicit" << colors.OldColor()
+                  << "\" means the CLI does not explicitly set the transaction mode and YDB determines the behavior automatically."
+                  << "\nDefault: " << colors.CyanColor() << "\"serializable-rw\"" << colors.OldColor() << ".";
+    
+    config.Opts->AddLongOption("tx-mode", txDescription.Str())
+        .RequiredArgument("[String]").StoreResult(&TxMode);
     config.Opts->AddLongOption('q', "query", "Text of query to execute").RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
@@ -624,6 +644,29 @@ namespace {
         Y_UNREACHABLE();
     }
 
+    // Configure transaction control based on TxMode
+    auto getTxControl = [](const TString& TxMode) -> NQuery::TTxControl {
+        if (TxMode == "implicit" || TxMode == "notx") {
+            return NQuery::TTxControl::ImplicitTx();
+        }
+        
+        NQuery::TTxSettings txSettings;
+        if (TxMode == "serializable-rw") {
+            txSettings = NQuery::TTxSettings::SerializableRW();
+        } else if (TxMode == "online-ro") {
+            txSettings = NQuery::TTxSettings::OnlineRO();
+        } else if (TxMode == "stale-ro") {
+            txSettings = NQuery::TTxSettings::StaleRO();
+        } else if (TxMode == "snapshot-ro") {
+            txSettings = NQuery::TTxSettings::SnapshotRO();
+        } else if (TxMode == "snapshot-rw") {
+            txSettings = NQuery::TTxSettings::SnapshotRW();
+        } else if (!TxMode.empty()) {
+            throw TMisuseException() << "Unknown transaction mode.";
+        }
+        return NQuery::TTxControl::BeginTx(txSettings).CommitTx();
+    };
+
     template <typename TClient>
     auto StreamExecuteQuery(
         TClient client,
@@ -632,22 +675,6 @@ namespace {
         const TString& TxMode = "",
         const std::optional<TParams>& params = std::nullopt
     ) {
-        NQuery::TTxSettings txSettings;
-        if (TxMode) {
-            if (TxMode == "serializable-rw") {
-                txSettings = NQuery::TTxSettings::SerializableRW();
-            } else if (TxMode == "online-ro")  {
-                txSettings = NQuery::TTxSettings::OnlineRO();
-            } else if (TxMode == "stale-ro") {
-                txSettings = NQuery::TTxSettings::StaleRO();
-            } else if (TxMode == "snapshot-ro") {
-                txSettings = NQuery::TTxSettings::SnapshotRO();
-            } else if (TxMode == "snapshot-rw") {
-                txSettings = NQuery::TTxSettings::SnapshotRW();
-            } else if (TxMode != "no-tx" && TxMode != "notx") {
-                throw TMisuseException() << "Unknown transaction mode.";
-            }
-        }
 
         if constexpr (std::is_same_v<TClient, NTable::TTableClient>) {
             if (params) {
@@ -666,14 +693,14 @@ namespace {
             if (params) {
                 return client.StreamExecuteQuery(
                     query,
-                    ((TxMode == "no-tx" || TxMode == "notx") ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx(txSettings).CommitTx()),
+                    getTxControl(TxMode),
                     *params,
                     settings
                 );
             } else {
                 return client.StreamExecuteQuery(
                     query,
-                    ((TxMode == "no-tx" || TxMode == "notx") ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx(txSettings).CommitTx()),
+                    getTxControl(TxMode),
                     settings
                 );
             }

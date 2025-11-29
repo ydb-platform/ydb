@@ -509,8 +509,8 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     TKeyPrefix ikey(TKeyPrefix::TypeMeta, Partition);
 
     NKikimrPQ::TPartitionMeta meta;
-    meta.SetStartOffset(GetStartOffset());
-    meta.SetEndOffset(Max(BlobEncoder.NewHead.GetNextOffset(), GetEndOffset()));
+    //meta.SetStartOffset(GetStartOffset());
+    //meta.SetEndOffset(Max(BlobEncoder.NewHead.GetNextOffset(), GetEndOffset()));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
 
@@ -530,7 +530,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
 
     write->SetKey(ikey.Data(), ikey.Size());
-    write->SetValue(out.c_str(), out.size());
+    write->SetValue(std::move(out));
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 

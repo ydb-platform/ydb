@@ -1012,9 +1012,13 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
                 ui32 size = headKeys[i].Size;
                 ui64 offset = key.GetOffset();
-                while (currentLevel + 1 < totalLevels && size < compactLevelBorder[currentLevel + 1])
+                while (currentLevel + 1 < totalLevels && size < compactLevelBorder[currentLevel + 1]) {
                     ++currentLevel;
-                PQ_INIT_ENSURE(size < compactLevelBorder[currentLevel]);
+                }
+                PQ_INIT_ENSURE(size < compactLevelBorder[currentLevel])
+                    ("l", size)
+                    ("r", compactLevelBorder[currentLevel])
+                    ("c", currentLevel);
 
                 dataKeysHead[currentLevel].AddKey(key, size);
                 PQ_INIT_ENSURE(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());

@@ -102,7 +102,7 @@ private:
     virtual bool DoAddTxConflict() = 0;
 
     virtual ui64 DoGetEntityId() const override {
-        return SourceId;
+        return SourceIdx;
     }
 
     virtual ui64 DoGetEntityRecordsCount() const override;

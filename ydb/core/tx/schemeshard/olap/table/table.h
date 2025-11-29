@@ -62,6 +62,8 @@ public:
     NKikimrSchemeOp::TColumnTableDescription Description;
     TMaybe<NKikimrSchemeOp::TColumnStoreSharding> StandaloneSharding;
     TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
+    ::NKikimrSchemeOp::TBackupTask BackupSettings;
+    mutable TMap<TTxId, TTableInfo::TBackupRestoreResult> BackupHistory;
 
     TAggregatedStats Stats;
 

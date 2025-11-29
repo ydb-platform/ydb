@@ -819,6 +819,8 @@ namespace NKikimr {
             groupMapperErrorProto.SetMissingFailRealmsCount(error.MissingFailRealmsCount);
             groupMapperErrorProto.SetFailRealmsWithMissingDomainsCount(error.FailRealmsWithMissingDomainsCount);
             groupMapperErrorProto.SetDomainsWithMissingDisksCount(error.DomainsWithMissingDisksCount);
+            groupMapperErrorProto.SetRealmLocationKey(error.RealmLocationKey);
+            groupMapperErrorProto.SetDomainLocationKey(error.DomainLocationKey);
         }
 
         void TBlobStorageController::FitGroupsForUserConfig(TConfigState& state, ui32 availabilityDomainId,

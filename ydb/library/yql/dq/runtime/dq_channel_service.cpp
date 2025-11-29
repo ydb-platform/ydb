@@ -419,27 +419,6 @@ bool TOutputDescriptor::CheckGenMajor(ui64 genMajor, const TString& errorMessage
     return true;
 }
 
-/*
-bool TOutputDescriptor::PushToWaitQueue(TDataChunk&& data) {
-    auto bytes = data.Bytes;
-    bool result = false;
-
-    {
-        std::lock_guard lock(WaitQueueMutex);
-        if (WaitQueue.empty()) {
-            WaitTimestamp = data.Timestamp;
-            result = true;
-        }
-        WaitQueue.push(std::move(data));
-    }
-    AddPushBytes(bytes);
-
-    WaitQueueSize++;
-
-    return result;
-}
-*/
-
 bool TOutputDescriptor::IsFlushed() {
     return Flushed.load();
 }
@@ -767,8 +746,6 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
                 Queue.push_back(item);
                 SendMessage(item);
                 InflightBytes += bytes;
-                LOG_D("NodeId=" << NodeId << ", ChannelId=" << descriptor->Info.ChannelId << ", Fast Send");
-                LOG_T("FAST SEND, Node=" << NodeActorId.NodeId() << "=>" << PeerActorId.NodeId() << ", SeqNo=" << item->SeqNo << ", ChannelId=" << descriptor->Info.ChannelId << ", Bytes=" << bytes << ", Rows=" << rows << ", InflightBytes=" << InflightBytes << ", MaxInflightBytes=" << MaxInflightBytes);
                 *OutputBufferInflightBytes += bytes;
                 (*OutputBufferInflightMessages)++;
                 return;
@@ -776,7 +753,6 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         }
     }
 
-    // auto bytes = data.Bytes;
     bool result = false;
 
     std::lock_guard lock(descriptor->WaitQueueMutex);
@@ -797,7 +773,6 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         WaitersQueue.push(descriptor);
         WaitersQueueSize++;
         (*OutputBufferWaiterCount)++;
-        LOG_D("NodeId=" << NodeId << ", ChannelId=" << descriptor->Info.ChannelId << ", TNodeState::Push+ to WaitQueue, WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << ", WaitTimestamp=" << descriptor->WaitTimestamp);
         if (forceSendWaiters) {
             ActorSystem->Send(NodeActorId, new TEvPrivate::TEvSendWaiters());
         }
@@ -835,7 +810,6 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
     }
-    LOG_T("SEND MESSAGE, SeqNo=" << item->SeqNo << ", ChannelId=" << item->Descriptor->Info.ChannelId << ", Bytes=" << item->Data.Bytes << ", " << NodeActorId << " to " << PeerActorId);
     ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, ev.Release(), flags, item->SeqNo));
     item->State.store(TOutputItem::EState::Sent);
 }
@@ -923,10 +897,8 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     }
     data.Bytes = record.GetBytes();
     Y_ENSURE(data.Bytes > data.Buffer.Size()); // record.GetBytes() == data.Buffer.Size() + const
-    LOG_D("PushDataChunk, ChannelId=" << descriptor->Info.ChannelId << ", Bytes=" << data.Bytes << ", Rows=" << data.Rows);
     {
         if (data.Finished) {
-            LOG_D("FINISHED TInputDescriptor " << (descriptor->IsBinded ? "B" : "U") << ", ChannelId=" << descriptor->Info.ChannelId);
             std::lock_guard lock(Mutex);
             FinishedChannels.insert(descriptor->Info.ChannelId);
         }
@@ -1115,17 +1087,14 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
                     WaiterMessages -= waitQueueSize;
                     *OutputBufferWaiterMessages -= waitQueueSize;
 
-                    auto channelId = WaitersQueue.top()->Info.ChannelId;
                     WaitersQueue.pop();
                     WaitersQueueSize--;
-                    LOG_D("NodeId=" << NodeId << ", ChannelId=" << channelId << ", WaitersQueue PopX, WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load());
                     continue;
                 }
 
                 waiter = WaitersQueue.top();
                 WaitersQueue.pop();
                 WaitersQueueSize--;
-                LOG_D("NodeId=" << NodeId << ", ChannelId=" << waiter->Info.ChannelId << ", WaitersQueue Pop, WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << ", WaitTimestamp=" << waiter->WaitTimestamp);
                 break;
             }
         }
@@ -1156,19 +1125,16 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
 
                 std::lock_guard lock1(Mutex);
 
-                LOG_D("NodeId=" << NodeId << ", ChannelId=" << waiter->Info.ChannelId << ", TNodeState::Send from Waiters, WaitQueue.size()=" << waiter->WaitQueue.size() << ", WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << ", WaitTimestamp" << waiter->WaitTimestamp);
 
                 if (!waiter->WaitQueue.empty()) {
                     waiter->WaitTimestamp = waiter->WaitQueue.front().Timestamp;
                     WaitersQueue.push(waiter);
                     WaitersQueueSize++;
                     (*OutputBufferWaiterCount)++;
-                    LOG_D("NodeId=" << NodeId << ", ChannelId=" << waiter->Info.ChannelId << ", TNodeState::RePush to Waiters, WaitQueue.size()=" << waiter->WaitQueue.size() << ", WaitersQueue.size()=" << WaitersQueue.size() << ", WaitersQueueSize=" << WaitersQueueSize.load() << "WaitTimestamp" << waiter->WaitTimestamp);
                 }
 
                 item->SeqNo = ++SeqNo;
                 InflightBytes += bytes;
-                LOG_D("WAIT SEND, Node=" << NodeActorId.NodeId() << "=>" << PeerActorId.NodeId() << ", SeqNo=" << item->SeqNo << ", InflightBytes=" << inflightBytes << ", deltaBytes=" << deltaBytes);
                 *OutputBufferInflightBytes += bytes;
                 (*OutputBufferInflightMessages)++;
                 Queue.push_back(item);

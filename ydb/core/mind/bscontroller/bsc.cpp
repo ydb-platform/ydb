@@ -308,6 +308,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     auto prevStaticGroups = std::exchange(StaticGroups, {});
     StaticVDiskMap.clear();
 
+    std::unordered_map<TGroupId, TString> newGroupsBlobCheckerStatus;
+
     const TMonotonic mono = TActivationContext::Monotonic();
 
     if (StorageConfig->HasBlobStorageConfig()) {
@@ -333,11 +335,24 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             }
             for (const auto& group : ss.GetGroups()) {
                 const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                if (!BlobCheckerGroupRecords.contains(groupId)) {
+                    TString serialized = TBlobCheckerGroupStatus::CreateInitialSerialized(TMonotonic::Zero());
+                    newGroupsBlobCheckerStatus[groupId] = serialized;
+                    BlobCheckerGroupRecords[groupId] = serialized;
+                }
                 StaticGroups.try_emplace(groupId, group, prevStaticGroups);
                 SysViewChangedGroups.insert(groupId);
             }
         } else {
             Y_FAIL("no storage configuration provided");
+        }
+
+        if (IsBlobCheckerEnabled() && !newGroupsBlobCheckerStatus.empty()) {
+            Send(BlobCheckerOrchestratorId, new TEvBlobCheckerUpdateGroupSet(
+                    std::move(newGroupsBlobCheckerStatus), {}));
+        }
+        if (BlobCheckerPlanner) {
+            BlobCheckerPlanner->SetGroupCount(TotalGroupCount());
         }
     }
 
@@ -1003,6 +1018,9 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
+        fFunc(TEvBlobCheckerPlanCheck::EventType, EnqueueIncomingEvent);
+        fFunc(TEvBlobCheckerUpdateGroupStatus::EventType, EnqueueIncomingEvent);
+        fFunc(TEvBlobCheckerUpdateSettings::EventType, EnqueueIncomingEvent);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -1025,7 +1043,8 @@ void TBlobStorageController::PassAway() {
         ResponsivenessPinger->Detach(TActivationContext::ActorContextFor(ResponsivenessActorID));
         ResponsivenessPinger = nullptr;
     }
-    for (TActorId *ptr : {&SelfHealId, &StatProcessorActorId, &SystemViewsCollectorId, &ClusterBalanceActorId}) {
+    for (TActorId *ptr : {&SelfHealId, &StatProcessorActorId, &SystemViewsCollectorId, &ClusterBalanceActorId,
+            &BlobCheckerOrchestratorId}) {
         if (const TActorId actorId = std::exchange(*ptr, {})) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
         }
@@ -1092,6 +1111,11 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         // timers and different observation (also includes RO transactions in TConfigRequest)
         case TEvPrivate::EvScrub:                                      return 5;
         case TEvPrivate::EvVSlotReadyUpdate:                           return 5;
+
+        // BlobChecker <-> BSC interface, low-priority background activity
+        case TEvBlobStorage::EvBlobCheckerUpdateGroupStatus:           return 7;
+        case TEvBlobStorage::EvBlobCheckerPlanCheck:                   return 7;
+        case TEvBlobStorage::EvBlobCheckerUpdateSettings:              return 7;
 
         // external observation and non-latency-bound activities
         case TEvPrivate::EvUpdateSystemViews:                          return 10;

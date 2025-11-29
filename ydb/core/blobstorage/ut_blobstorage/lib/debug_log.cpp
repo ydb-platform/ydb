@@ -33,4 +33,6 @@ const std::initializer_list<ui32> TEnvironmentSetup::DebugLogComponents{
 //    NActorsServices::INTERCONNECT,
 //    NActorsServices::INTERCONNECT_SESSION,
 //    NKikimrServices::BS_VDISK_BALANCING,
+//    NKikimrServices::BLOB_CHECKER_ORCHESTRATOR,
+//    NKikimrServices::BLOB_CHECKER_WORKER,
 };

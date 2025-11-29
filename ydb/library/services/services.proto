@@ -452,6 +452,10 @@ enum EServiceKikimr {
     LOCAL_DB_BACKUP = 3700;
 
     SCHEMA_SECRET_CACHE = 3800;
+
+    // BlobChecker
+    BLOB_CHECKER_ORCHESTRATOR = 3900;
+    BLOB_CHECKER_WORKER = 3901;
 };
 
 message TActivity {
@@ -1132,5 +1136,7 @@ message TActivity {
         BS_VDISK_METADATA_ACTOR = 671;
         BUILD_FULLTEXT_INDEX = 672;
         BS_PHANTOM_FLAG_STORAGE_BUILDER = 673;
+        BLOB_CHECKER_ORCHESTRATOR_ACTOR = 674;
+        BLOB_CHECKER_WORKER_ACTOR = 675;
     };
 };

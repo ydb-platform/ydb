@@ -527,9 +527,6 @@ private:
             PRE() {
                 str << "Current config:" << Endl;
                 str << Config.DebugString() << Endl;
-                str << Endl;
-
-                str << Endl << "Transactions:" << Endl;
                 State_->DumpInfo(str, SelfId().NodeId());
             }
         }

@@ -363,6 +363,8 @@ private:
 
         bool enableFilterPushdownOverJoinOptionalSide = TableServiceConfig.GetFilterPushdownOverJoinOptionalSide();
 
+        bool enableBuildAggregationResultStage = TableServiceConfig.GetEnableBuildAggregationResultStages();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -410,7 +412,8 @@ private:
             TableServiceConfig.GetEnableTopSortSelectIndex() != enableTopSortSelectIndex ||
             TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex() != enablePointPredicateSortAutoSelectIndex ||
             TableServiceConfig.GetEnableDqHashCombineByDefault() != enableDqHashCombineByDefault ||
-            TableServiceConfig.GetFilterPushdownOverJoinOptionalSide() != enableFilterPushdownOverJoinOptionalSide)
+            TableServiceConfig.GetFilterPushdownOverJoinOptionalSide() != enableFilterPushdownOverJoinOptionalSide ||
+            TableServiceConfig.GetEnableBuildAggregationResultStages() != enableBuildAggregationResultStage)
         {
 
             QueryCache->Clear();

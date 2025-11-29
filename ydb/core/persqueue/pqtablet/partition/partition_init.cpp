@@ -1021,8 +1021,12 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                     ("c", currentLevel);
 
                 dataKeysHead[currentLevel].AddKey(key, size);
-                PQ_INIT_ENSURE(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
-                PQ_INIT_ENSURE(!dataKeysHead[currentLevel].NeedCompaction());
+                PQ_INIT_ENSURE(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel())
+                    ("l", dataKeysHead[currentLevel].KeysCount())
+                    ("r", AppData(ctx)->PQConfig.GetMaxBlobsPerLevel())
+                    ("c", currentLevel);
+                PQ_INIT_ENSURE(!dataKeysHead[currentLevel].NeedCompaction())
+                    ("c", currentLevel);
 
                 PQ_LOG_D("read res partition offset " << offset << " endOffset " << Partition()->BlobEncoder.EndOffset
                         << " key " << key.GetOffset() << "," << key.GetCount() << " valuesize " << read.GetValue().size()

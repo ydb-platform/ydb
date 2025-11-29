@@ -2587,13 +2587,13 @@ void TPartition::RunPersist() {
         WritesTotal.Inc();
         HaveWriteMsg = true;
 
-        AddMetaKey(PersistRequest.Get());
         AddCmdWriteTxMeta(PersistRequest->Record);
         AddCmdWriteUserInfos(PersistRequest->Record);
         AddCmdWriteConfig(PersistRequest->Record);
     }
 
     if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
+        AddMetaKey(PersistRequest.Get());
         AddMessageDeduplicatorKeys(PersistRequest.Get());
 
         // Apply counters

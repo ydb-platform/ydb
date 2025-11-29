@@ -417,8 +417,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .NotUnderDeleting()
-                .IsCommonSensePath();
+                .NotUnderDeleting();
+
+            // Allow restoring to private paths (e.g., index implementation tables)
+            if (!dstTablePath.IsInsideTableIndexPath(false)) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -558,8 +562,12 @@ bool CreateRestoreMultipleIncrementalBackups(
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
-                .NotUnderDeleting()
-                .IsCommonSensePath();
+                .NotUnderDeleting();
+
+            // Allow restoring to private paths (e.g., index implementation tables)
+            if (!dstTablePath.IsInsideTableIndexPath(false)) {
+                checks.IsCommonSensePath();
+            }
         } else {
             checks
                 .FailOnExist(TPathElement::EPathType::EPathTypeTable, false);

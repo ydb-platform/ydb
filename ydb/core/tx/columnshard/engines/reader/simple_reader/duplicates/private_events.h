@@ -39,10 +39,11 @@ class TEvFilterConstructionResult
 private:
     using TFilters = THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>;
     TConclusion<TFilters> Result;
+    std::optional<TJobStatus::TResultInFlightGuard> ResultGuard;
 
 public:
-    TEvFilterConstructionResult(TConclusion<TFilters>&& result)
-        : Result(std::move(result))
+    TEvFilterConstructionResult(TConclusion<TFilters>&& result, TJobStatus::TResultInFlightGuard&& guard)
+        : Result(std::move(result)), ResultGuard(std::move(guard))
     {
     }
 

@@ -24,6 +24,8 @@ namespace NKikimr {
             ui32 MissingFailRealmsCount = 0;
             ui32 FailRealmsWithMissingDomainsCount = 0;
             ui32 DomainsWithMissingDisksCount = 0;
+            TString RealmLocationKey;
+            TString DomainLocationKey;
         };
 
         class TPDiskSlotTracker {

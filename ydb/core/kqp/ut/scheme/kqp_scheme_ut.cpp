@@ -3294,6 +3294,34 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(CopyIndexImplTable, EnableAccessToIndexImplTables) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAccessToIndexImplTables(EnableAccessToIndexImplTables);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTablesWithIndex(session);
+        TString implTablePath = "/Root/SecondaryKeys/Index/indexImplTable";
+        TString copyImplTablePath = "/Root/CopyImplTable";
+
+        const auto result = session.CopyTable(implTablePath, copyImplTablePath).GetValueSync();
+
+        if (EnableAccessToIndexImplTables) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = session.DescribeTable(copyImplTablePath).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "path is not a common path",
+                result.GetIssues().ToString()
+            );
+        }
+    }
+
     Y_UNIT_TEST(AlterTableRenameIndex) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

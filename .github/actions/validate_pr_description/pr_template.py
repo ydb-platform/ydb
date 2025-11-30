@@ -8,7 +8,7 @@ ISSUE_PATTERNS = [
     r"https://github.com/ydb-platform/[a-z\-]+/issues/\d+",
     r"https://st.yandex-team.ru/[a-zA-Z]+-\d+",
     r"#\d+",
-    r"[a-zA-Z]+-\d+"
+    r"\b[a-zA-Z]+-\d+(?![-0-9])"  # Negative lookahead to avoid matching branch names like "stable-25-2" in URLs
 ]
 
 # Full PR template

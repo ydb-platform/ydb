@@ -59,7 +59,7 @@ on:
         default: small,medium,large
         options:
           - small
-          - medium,
+          - medium
           - large
           - small,medium
           - small,medium,large
@@ -93,6 +93,7 @@ jobs:
         with:
           sparse-checkout: |
             .github/config/stable_branches.json
+            .github/actions/run_tests/
 
       - name: Set branches
         id: set-branches
@@ -163,6 +164,21 @@ jobs:
           
           echo "Final branches to use: $(cat $GITHUB_OUTPUT | grep branch_array | cut -d= -f2)"
 
+      - name: Post start comment to PR
+        if: inputs.pull_number != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pull_number }}
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          TEST_SIZE: ${{ inputs.test_size }}
+          TEST_TARGETS: ${{ inputs.test_targets }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 -m pip install PyGithub -q
+          python3 ./.github/actions/run_tests/pr_comment.py start
+
   run_tests:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
@@ -204,6 +220,7 @@ jobs:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
       - name: Run YDB Tests
+        id: run_tests
         timeout-minutes: ${{ fromJson(env.timeout) }}
         uses: ./.github/actions/build_and_test_ya
         with:
@@ -224,3 +241,16 @@ jobs:
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.TELEGRAM_YDBOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+
+      - name: Update PR comment with results
+        if: always() && inputs.pull_number != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pull_number }}
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          TEST_SIZE: ${{ inputs.test_size }}
+          TEST_TARGETS: ${{ inputs.test_targets }}
+          TEST_STATUS: ${{ steps.run_tests.outcome }}
+        run: |
+          python3 -m pip install PyGithub -q
+          python3 ./.github/actions/run_tests/pr_comment.py complete

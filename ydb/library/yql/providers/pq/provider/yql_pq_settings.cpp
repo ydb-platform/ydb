@@ -5,6 +5,17 @@ namespace NYql {
 using namespace NCommon;
 
 TPqConfiguration::TPqConfiguration() {
+    REGISTER_SETTING(*this, Auth)
+        .ValueSetter([this](const TString&, const TString& value) {
+            Auth = value;
+            for (auto& clusterSetting : ClustersConfigurationSettings) {
+                clusterSetting.second.AuthToken = value;
+            }
+
+            for (auto& token: Tokens) {
+                token.second = ComposeStructuredTokenJsonForServiceAccount("", "", value);
+            }
+        });
     REGISTER_SETTING(*this, Consumer);
     REGISTER_SETTING(*this, Database);
     REGISTER_SETTING(*this, PqReadByRtmrCluster_);

@@ -175,6 +175,14 @@ public:
         return State_->DqIntegration.Get();
     }
 
+    IYtflowIntegration* GetYtflowIntegration() override {
+        return State_->YtflowIntegration.Get();
+    }
+
+    IYtflowOptimization* GetYtflowOptimization() override {
+        return State_->YtflowOptimization.Get();
+    }
+
 private:
     TPqState::TPtr State_;
     IPqGateway::TPtr Gateway_;

@@ -869,13 +869,14 @@ void TDeleteKeysStep::Execute(const TActorContext &ctx) {
     }
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
-    for (const auto& key : GetContext().DeletedKeys) {
+    for (auto& key : GetContext().DeletedKeys) {
         auto* cmd = request->Record.AddCmdDeleteRange();
         cmd->MutableRange()->SetFrom(key);
         cmd->MutableRange()->SetIncludeFrom(true);
-        cmd->MutableRange()->SetTo(key);
+        cmd->MutableRange()->SetTo(std::move(key));
         cmd->MutableRange()->SetIncludeTo(true);
     }
+    GetContext().DeletedKeys = {};
 
     ctx.Send(Partition()->TabletActorId, request.release());
 }

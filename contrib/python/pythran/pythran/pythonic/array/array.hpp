@@ -14,15 +14,14 @@ namespace array
   {
 
     template <char c>
-    types::array<typename details::typecodes<c>::type>
-    array(std::integral_constant<char, c>)
+    types::array<typename details::typecodes<c>::type> array(std::integral_constant<char, c>)
     {
       return {0};
     }
 
     template <char c, class E>
-    types::array<typename details::typecodes<c>::type>
-    array(std::integral_constant<char, c>, E &&elts)
+    types::array<typename details::typecodes<c>::type> array(std::integral_constant<char, c>,
+                                                             E &&elts)
     {
       return {std::forward<E>(elts)};
     }

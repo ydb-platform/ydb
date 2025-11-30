@@ -18,12 +18,10 @@ namespace numpy
 {
   template <class dtype>
   types::ndarray<typename dtype::type, types::pshape<long>>
-  fromfile(types::str const &file_name, dtype d, long count,
-           types::str const &sep, long offset)
+  fromfile(types::str const &file_name, dtype d, long count, types::str const &sep, long offset)
   {
     if (sep.size() != 0)
-      throw types::NotImplementedError(
-          "Sep input is not implemented yet, should be left empty");
+      throw types::NotImplementedError("Sep input is not implemented yet, should be left empty");
     std::fstream fs;
     fs.open(file_name.c_str(), std::fstream::in | std::fstream::binary);
     if (fs.rdstate() != std::fstream::goodbit) {
@@ -40,8 +38,8 @@ namespace numpy
       count = maxCount;
     }
 
-    types::ndarray<typename dtype::type, types::pshape<long>> res(
-        types::pshape<long>{count}, types::none_type{});
+    types::ndarray<typename dtype::type, types::pshape<long>> res(types::pshape<long>{count},
+                                                                  types::none_type{});
     fs.read((char *)res.buffer, sizeof(typename dtype::type) * count);
     return res;
   }

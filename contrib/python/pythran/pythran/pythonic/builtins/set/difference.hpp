@@ -28,8 +28,7 @@ namespace builtins
     }
 
     template <typename... Types>
-    types::empty_set difference(types::empty_set const &set,
-                                Types const &...others)
+    types::empty_set difference(types::empty_set const &set, Types const &...others)
     {
       return types::empty_set();
     }

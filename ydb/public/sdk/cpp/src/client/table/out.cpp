@@ -89,6 +89,9 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ELayout, stream, valu
         case NYdb::NTable::TFulltextIndexSettings::ELayout::Flat:
             stream << "flat";
             break;
+        case NYdb::NTable::TFulltextIndexSettings::ELayout::FlatRelevance:
+            stream << "flat_relevance";
+            break;
         case NYdb::NTable::TFulltextIndexSettings::ELayout::Unspecified:
             stream << "unspecified";
             break;

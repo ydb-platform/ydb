@@ -13,3 +13,6 @@
 - [PostgreSQL](postgresql.md)
 - [S3](s3/external_table.md)
 - [{{ ydb-short-name }}](ydb.md)
+{% if audience == "tech" %}
+- [Solomon](solomon.md)
+{% endif %}

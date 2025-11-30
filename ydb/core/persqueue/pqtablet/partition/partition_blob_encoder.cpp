@@ -392,7 +392,7 @@ void TPartitionBlobEncoder::SyncNewHeadKey()
 
     while (!HeadKeys.empty() && !isLess(HeadKeys.back().Key, NewHeadKey.Key)) {
         // HeadKeys.back >= NewHeadKey
-        DeletedKeys.emplace_back(HeadKeys.back().BlobKeyToken->Key, std::weak_ptr<TBlobKeyToken>(HeadKeys.back().BlobKeyToken));
+        DeletedKeys.emplace_back(HeadKeys.back().BlobKeyToken);
         HeadKeys.pop_back();
     }
 
@@ -558,7 +558,7 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
 void TPartitionBlobEncoder::pop_front() {
     auto& key = DataKeysBody.front();
     if (key.BlobKeyToken->NeedDelete) {
-        DeletedKeys.emplace_back(key.BlobKeyToken->Key, std::weak_ptr<TBlobKeyToken>(key.BlobKeyToken));
+        DeletedKeys.emplace_back(key.BlobKeyToken);
     }
     BodySize -= key.Size;
     DataKeysBody.pop_front();

@@ -106,6 +106,11 @@ struct TPartitionBlobEncoder {
     struct TDeletedKey {
         TString Key;
         std::weak_ptr<TBlobKeyToken> Lock;
+
+        TDeletedKey(const TBlobKeyTokenPtr& token) {
+            Key = token->Key;
+            Lock = std::weak_ptr<TBlobKeyToken>(token);
+        }
     };
     std::deque<TDeletedKey> DeletedKeys;
 

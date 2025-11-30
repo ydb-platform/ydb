@@ -2,8 +2,7 @@
 
 ### Functionality
 
-* Added support for creating unique indexes on existing tables. This feature is enabled by setting the `enable_add_unique_index` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
-* Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
+* None:Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 15186:Increased [the query text limit size](../dev/system-views#query-metrics) in system views from 4 KB to 10 KB. [#15186](https://github.com/ydb-platform/ydb/pull/15186) ([spuchin](https://github.com/spuchin))
 * 15693:Added a health check configuration that administrators can customize: the number of node restarts, tablets, the time difference between database dynodes,
 and timeout (by default, the maximum response time from healthcheck). Documentation is under construction. [#15693](https://github.com/ydb-platform/ydb/pull/15693) ([Andrei Rykov](https://github.com/StekPerepolnen))
@@ -132,6 +131,14 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20670:Resolved the issue with DDL errors for external sources and added more information to the `ALTER TABLE ... RENAME TO` error. [#20670](https://github.com/ydb-platform/ydb/pull/20670) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20519:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20520) that caused VDisk to freeze in infinite local recovery mode when a ChunkRead request failed. This change will allow loader actor to terminate properly on PDisk errors, and LocalRecovery to get notified about this error and to finish with proper status. [#20519](https://github.com/ydb-platform/ydb/pull/20519) ([Sergey Belyakov](https://github.com/serbel324))
 * 22298:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20812) where attach streams remained active after session shutdown, causing unexpected BadSession errors. [#22298](https://github.com/ydb-platform/ydb/pull/22298) ([Kirill Kurdyukov](https://github.com/KirillKurdyukov))
+* 29750:Fixed a rare crash in the partition actor [#29750](https://github.com/ydb-platform/ydb/pull/29750) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 29575:Fixed https://github.com/ydb-platform/ydb/issues/29514 INTERNAL_ERROR for EvWrite if connection to client was lost. [#29575](https://github.com/ydb-platform/ydb/pull/29575) ([Nikita Vasilev](https://github.com/nikvas0))
+* 29418:Fixed an error in calculating metrics in the PQ tablet, as a result of which the resource usage was incorrectly determined, which led to unnecessary balancing of tablets. [#29418](https://github.com/ydb-platform/ydb/pull/29418) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 29412:Fixes race condition where clients receive "Could not find correct token validator" error when
+using newly issued tokens before LoginProvider state is updated.
+https://github.com/ydb-platform/ydb/issues/28510 [#29412](https://github.com/ydb-platform/ydb/pull/29412) ([Andrey Molotkov](https://github.com/molotkov-and))
+* 29331:Fixed #29497 wrong statistic for CREATE TABLE AS in presence of retries. [#29331](https://github.com/ydb-platform/ydb/pull/29331) ([Nikita Vasilev](https://github.com/nikvas0))
+* 29304:fixes bug, that caused datetime64 values to be different after export and then import [#29304](https://github.com/ydb-platform/ydb/pull/29304) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
 
 ### YDB UI
 
@@ -157,3 +164,4 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
+

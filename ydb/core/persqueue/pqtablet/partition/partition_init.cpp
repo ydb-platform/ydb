@@ -533,41 +533,6 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     };
 }
 
-//
-// TDeleteKeysStep
-//
-
-TDeleteKeysStep::TDeleteKeysStep(TInitializer* initializer)
-    : TBaseKVStep(initializer, "TDeleteKeysStep", true) {
-}
-
-void TDeleteKeysStep::Execute(const TActorContext &ctx) {
-    if (GetContext().DeletedKeys.empty()) {
-        Done(ctx);
-        return;
-    }
-
-    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
-    for (const auto& key : GetContext().DeletedKeys) {
-        auto* cmd = request->Record.AddCmdDeleteRange();
-        cmd->MutableRange()->SetFrom(key);
-        cmd->MutableRange()->SetIncludeFrom(true);
-        cmd->MutableRange()->SetTo(key);
-        cmd->MutableRange()->SetIncludeTo(true);
-    }
-
-    ctx.Send(Partition()->TabletActorId, request.release());
-}
-
-void TDeleteKeysStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
-
-    Done(ctx);
-}
-
 THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& ranges,
                                       const TPartitionId& partitionId)
 {
@@ -889,6 +854,40 @@ void TInitDataRangeStep::FormHeadAndProceed() {
     PQ_INIT_ENSURE(fwz.Head.Offset >= startOffset || fwz.Head.Offset == startOffset - 1 && fwz.Head.PartNo > 0);
 }
 
+//
+// TDeleteKeysStep
+//
+
+TDeleteKeysStep::TDeleteKeysStep(TInitializer* initializer)
+    : TBaseKVStep(initializer, "TDeleteKeysStep", true) {
+}
+
+void TDeleteKeysStep::Execute(const TActorContext &ctx) {
+    if (GetContext().DeletedKeys.empty()) {
+        Done(ctx);
+        return;
+    }
+
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    for (const auto& key : GetContext().DeletedKeys) {
+        auto* cmd = request->Record.AddCmdDeleteRange();
+        cmd->MutableRange()->SetFrom(key);
+        cmd->MutableRange()->SetIncludeFrom(true);
+        cmd->MutableRange()->SetTo(key);
+        cmd->MutableRange()->SetIncludeTo(true);
+    }
+
+    ctx.Send(Partition()->TabletActorId, request.release());
+}
+
+void TDeleteKeysStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
+    if (!ValidateResponse(*this, ev, ctx)) {
+        PoisonPill(ctx);
+        return;
+    }
+
+    Done(ctx);
+}
 
 //
 // TInitMessageDeduplicatorStep

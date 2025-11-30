@@ -392,6 +392,7 @@ void TPartitionBlobEncoder::SyncNewHeadKey()
 
     while (!HeadKeys.empty() && !isLess(HeadKeys.back().Key, NewHeadKey.Key)) {
         // HeadKeys.back >= NewHeadKey
+        DeletedKeys.emplace_back(HeadKeys.back().BlobKeyToken->Key, std::weak_ptr<TBlobKeyToken>(HeadKeys.back().BlobKeyToken));
         HeadKeys.pop_back();
     }
 

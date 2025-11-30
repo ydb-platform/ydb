@@ -2675,9 +2675,12 @@ bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
             auto& k = deletedKeys.front();
 
             if (auto lock = k.Lock.lock(); lock) {
+                LOG_D("Key locked: " << k.Key);
                 // key is locked, wait for it to be unlocked
                 break;
             }
+
+            LOG_D("Key deleted: " << k.Key);
 
             haveChanges = true;
 

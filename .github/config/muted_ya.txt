@@ -24,7 +24,6 @@ ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
-ydb/core/sys_view/ut SystemView.AuthGroups_Access
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
@@ -46,7 +45,6 @@ ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/compatibility py3test.[test_kafka_topic.py */*] chunk
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_prestable-25-3_to_current-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_prestable-25-3_to_stable-25-2-1-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_prestable-25-3-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_prestable-25-3_to_current-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_prestable-25-3_to_prestable-25-3-row]

@@ -771,7 +771,7 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
-        .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
+        .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
             return NRpcProxy::CreateTableReader(std::move(inputStream));
         }));
 }
@@ -803,7 +803,7 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
 
             FromProto(schema.Get(), meta.schema());
         }))
-        .ApplyUnique(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
+        .AsUnique().Apply(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
             return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
         })).As<ITableWriterPtr>();
 }
@@ -822,7 +822,7 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
     FillRequest(req.Get(), path, options);
 
     return req->Invoke()
-        .ApplyUnique(BIND([] (TRsp&& result) -> TDistributedWriteSessionWithCookies {
+        .AsUnique().Apply(BIND([] (TRsp&& result) -> TDistributedWriteSessionWithCookies {
             std::vector<TSignedWriteFragmentCookiePtr> cookies;
             cookies.reserve(result->signed_cookies().size());
             for (const auto& cookie : result->signed_cookies()) {
@@ -873,7 +873,7 @@ TFuture<TDistributedWriteFileSessionWithCookies> TClientBase::StartDistributedWr
     FillRequest(req.Get(), path, options);
 
     return req->Invoke()
-        .ApplyUnique(BIND([] (TRsp&& result) {
+        .AsUnique().Apply(BIND([] (TRsp&& result) {
             std::vector<TSignedWriteFileFragmentCookiePtr> cookies;
             cookies.reserve(result->signed_cookies().size());
             for (const auto& cookie : result->signed_cookies()) {

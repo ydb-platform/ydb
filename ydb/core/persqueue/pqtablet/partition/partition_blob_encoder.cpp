@@ -370,6 +370,12 @@ void TPartitionBlobEncoder::ClearPartitionedBlob(const TPartitionId& partitionId
 void TPartitionBlobEncoder::SyncHeadKeys()
 {
     if (!CompactedKeys.empty()) {
+        for (auto& k : HeadKeys) {
+            if (k.BlobKeyToken->NeedDelete) {
+                DeletedKeys.emplace_back(k.BlobKeyToken);
+            }
+        }
+
         HeadKeys.clear();
     }
 }

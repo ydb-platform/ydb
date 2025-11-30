@@ -187,7 +187,10 @@ namespace {
         for (const auto& file : filesToUpdate) {
             EnsureLocalBinBlock(file);
         }
-        Cerr << "PATH updated. Please restart your shell to apply changes." << Endl;
+        NColorizer::TColors warnColors = NColorizer::AutoColors(Cerr);
+        Cerr << warnColors.RedColor()
+            << "PATH updated. Restart your shell (exec -l $SHELL) or re-source your profile files to apply changes."
+            << warnColors.OldColor() << Endl;
     }
 #else
 

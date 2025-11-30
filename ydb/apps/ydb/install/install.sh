@@ -257,10 +257,15 @@ function input_yes_no() {
     done
 }
 
+function print_restart_notice() {
+    echo "IMPORTANT: restart your shell (exec -l \$SHELL) or re-source updated profile files to apply the new PATH settings."
+}
+
 cleanup_legacy_environment
 
 if [ "${AUTO_RC}" = "yes" ]; then
     configure_default_profiles
+    print_restart_notice
     exit 0
 fi
 
@@ -273,6 +278,7 @@ if input_yes_no ; then
     else
         configure_default_profiles
     fi
+    print_restart_notice
 else
     echo "Add '${HOME}/.local/bin' to your PATH in the appropriate shell profile to use 'ydb' without specifying the full path."
 fi

@@ -104,8 +104,10 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
             mapElements.push_back(std::make_pair(iu, fromIU));
         } else {
             auto element = mapElement.Cast<TKqpOpMapElementLambda>();
-            if (element.Lambda().Body().Maybe<TCoMember>().Name().Maybe<TCoAtom>()) {
-                auto member = element.Lambda().Body().Cast<TCoMember>();
+            // case lambda ($arg) { member $arg `name }
+            if (auto maybeMember = element.Lambda().Body().Maybe<TCoMember>();
+                maybeMember && maybeMember.Cast().Struct().Ptr() == element.Lambda().Args().Arg(0).Ptr()) {
+                auto member = maybeMember.Cast();
                 auto name = member.Name().Cast<TCoAtom>();
                 auto fromIU = TInfoUnit(name.StringValue());
                 mapElements.push_back(std::make_pair(iu, fromIU));

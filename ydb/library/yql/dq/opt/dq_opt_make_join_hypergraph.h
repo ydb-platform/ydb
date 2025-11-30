@@ -31,20 +31,20 @@ inline TVector<TString> GetConditionUsedRelationNames(const TVector<TJoinColumn>
     return res;
 }
 
-inline bool AllJoinsAreInner(const std::shared_ptr<IBaseOptimizerNode>& joinTree) {
-    if (joinTree->Kind == RelNodeType) { return true; }
-    auto joinNode = std::static_pointer_cast<TJoinOptimizerNode>(joinTree);
-    return (joinNode->JoinType == EJoinKind::InnerJoin) && AllJoinsAreInner(joinNode->LeftArg) && AllJoinsAreInner(joinNode->RightArg);
-}
-
 template <typename TNodeSet>
-typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
+void AddHyperedge(
+    TJoinHypergraph<TNodeSet>& graph,
     const std::shared_ptr<TJoinOptimizerNode>& joinNode,
-    const TNodeSet& conditionUsedRels,
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes,
     const TVector<TJoinColumn>& leftJoinKeys,
     const TVector<TJoinColumn>& rightJoinKeys
 ) {
+    if (joinNode->JoinType == EJoinKind::Cross) {
+        return;
+    }
+
+    TNodeSet conditionUsedRels = graph.GetNodesByRelNames(GetConditionUsedRelationNames(leftJoinKeys, rightJoinKeys));
+
     auto conflictRulesCollector = TConflictRulesCollector<TNodeSet>(joinNode, subtreeNodes);
     auto conflictRules = conflictRulesCollector.CollectConflicts();
 
@@ -65,40 +65,52 @@ typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     TNodeSet right = TES & subtreeNodes[joinNode->RightArg];
 
     bool isCommutative = OperatorIsCommutative(joinNode->JoinType) && (joinNode->IsReorderable);
-    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, joinNode->LeftAny, joinNode->RightAny, isCommutative, leftJoinKeys, rightJoinKeys);
+
+    typename TJoinHypergraph<TNodeSet>::TEdge edge(left, right, joinNode->JoinType, joinNode->LeftAny, joinNode->RightAny, isCommutative, leftJoinKeys, rightJoinKeys);
+    graph.AddEdge(edge);
 }
 
-/*
- * In this routine we decompose AND condition for equijoin into many edges, instead of one hyperedge.
- * We group conditions with same relations into one (for example A.id = B.id, A.z = B.z).
- */
-template<typename TNodeSet>
-void AddCycle(
+template <typename TNodeSet>
+void AddHyperedges(
     TJoinHypergraph<TNodeSet>& graph,
     const std::shared_ptr<TJoinOptimizerNode>& joinNode,
-    std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes
+    std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys
 ) {
+    if (joinNode->JoinType != EJoinKind::InnerJoin || leftJoinKeys.size() <= 1) {
+        AddHyperedge(graph, joinNode, subtreeNodes, leftJoinKeys, rightJoinKeys);
+        return;
+    }
+
     auto zip = Zip(joinNode->LeftJoinKeys, joinNode->RightJoinKeys);
+
     using TJoinCondition = std::pair<TJoinColumn, TJoinColumn>;
-    std::vector<TJoinCondition> joinConds{zip.begin(), zip.end()};
-    std::sort(joinConds.begin(), joinConds.end());
+    std::vector<TJoinCondition> joinConditions{zip.begin(), zip.end()};
+
+    std::sort(joinConditions.begin(), joinConditions.end());
 
     auto isOneGroup = [](const TJoinCondition& lhs, const TJoinCondition& rhs) -> bool {
-        return lhs.first.RelName == rhs.first.RelName && lhs.second.RelName == rhs.second.RelName;
+        return lhs.first.RelName == rhs.first.RelName
+            && lhs.second.RelName == rhs.second.RelName;
     };
 
-    for (size_t i = 0; i < joinConds.size();) {
-        size_t groupBegin = i;
-        TVector<TJoinColumn> curGroupLhsJoinKeys, curGroupRhsJoinKeys;
-        while (i < joinConds.size() && isOneGroup(joinConds[groupBegin], joinConds[i])) {
-            curGroupLhsJoinKeys.push_back(joinConds[i].first);
-            curGroupRhsJoinKeys.push_back(joinConds[i].second);
-            ++i;
+    for (ui32 i = 0; i < joinConditions.size(); ) {
+        TVector<TJoinColumn> currentGroupLhsJoinKeys, currentGroupRhsJoinKeys;
+
+        ui32 groupBegin = i;
+        while (i < joinConditions.size() &&
+               isOneGroup(joinConditions[groupBegin], joinConditions[i])) {
+
+            const auto &[lhs, rhs] = joinConditions[i];
+
+            currentGroupLhsJoinKeys.push_back(lhs);
+            currentGroupRhsJoinKeys.push_back(rhs);
+            ++ i;
         }
 
-        TNodeSet conditionUsedRels{};
-        conditionUsedRels = graph.GetNodesByRelNames(GetConditionUsedRelationNames(curGroupLhsJoinKeys, curGroupRhsJoinKeys));
-        graph.AddEdge(MakeHyperedge(joinNode, conditionUsedRels,subtreeNodes, curGroupLhsJoinKeys, curGroupRhsJoinKeys));
+        AddHyperedge(graph, joinNode, subtreeNodes,
+                     currentGroupLhsJoinKeys, currentGroupRhsJoinKeys);
     }
 }
 
@@ -122,16 +134,7 @@ void MakeJoinHypergraphRec(
     MakeJoinHypergraphRec(graph, joinNode->RightArg, subtreeNodes);
 
     subtreeNodes[joinTree] = subtreeNodes[joinNode->LeftArg] | subtreeNodes[joinNode->RightArg];
-
-    /* In case of inner equi-innerjoins we create a cycle, not a hyperedge  */
-    if (joinNode->LeftJoinKeys.size() > 1 && AllJoinsAreInner(joinTree)) {
-        AddCycle(graph, joinNode, subtreeNodes);
-        return;
-    }
-
-    TNodeSet conditionUsedRels{};
-    conditionUsedRels = graph.GetNodesByRelNames(GetConditionUsedRelationNames(joinNode->LeftJoinKeys, joinNode->RightJoinKeys));
-    graph.AddEdge(MakeHyperedge<TNodeSet>(joinNode, conditionUsedRels, subtreeNodes, joinNode->LeftJoinKeys, joinNode->RightJoinKeys));
+    AddHyperedges<TNodeSet>(graph, joinNode, subtreeNodes, joinNode->LeftJoinKeys, joinNode->RightJoinKeys);
 }
 
 template <typename TNodeSet>

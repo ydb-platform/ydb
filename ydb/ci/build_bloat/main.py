@@ -228,10 +228,10 @@ def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, 
         obj = json.load(f)
 
     cpp_file = None
+    include_events = []  # (timestamp, +1/-1, path)
 
     # we will store "begin events" until we see matching "end"
     source_begin = {}  # path -> timestamp
-    include_events = []  # (timestamp, +1/-1, path)
 
     for event in obj["traceEvents"]:
         name = event["name"]
@@ -255,6 +255,7 @@ def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, 
             cpp_file = args["detail"]
 
     path_to_time = {}
+    last_time_stamp = 0
     time_breakdown = {}  # header/cpp -> (header -> (cnt, total time))
 
     if cpp_file is None:
@@ -265,7 +266,6 @@ def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, 
 
     cpp_file = sanitize_path(cpp_file, base_src_dir)
     current_includes_stack = [(cpp_file, 0)]
-    last_time_stamp = 0
 
     for time_stamp, ev, path in include_events:
         if current_includes_stack:

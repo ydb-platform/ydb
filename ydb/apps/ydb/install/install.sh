@@ -135,18 +135,17 @@ function remove_file_if_exists() {
     local target="$1"
     if [ -f "${target}" ]; then
         rm -f "${target}"
+        echo "Removed legacy file ${target}"
     fi
 }
 
-function is_dir_empty() {
+function try_remove_dir_if_empty() {
     local dir="$1"
-    if [ ! -d "${dir}" ]; then
-        return 0
+    if [ -d "${dir}" ] && [ -z "$(ls -A "${dir}")" ]; then
+        if rmdir "${dir}" 2>/dev/null; then
+            echo "Removed empty legacy directory ${dir}"
+        fi
     fi
-    if [ -z "$(ls -A "${dir}")" ]; then
-        return 0
-    fi
-    return 1
 }
 
 function cleanup_legacy_rc_file() {
@@ -195,9 +194,9 @@ function cleanup_legacy_environment() {
     cleanup_legacy_rc_file "${HOME}/.bash_profile"
     cleanup_legacy_rc_file "${HOME}/.bashrc"
     cleanup_legacy_rc_file "${HOME}/.profile"
-    if is_dir_empty "${LEGACY_ROOT}"; then
-        rmdir -p "${LEGACY_ROOT}" 2>/dev/null || true
-    fi
+    try_remove_dir_if_empty "${LEGACY_BIN_DIR}"
+    try_remove_dir_if_empty "${LEGACY_ROOT}/install"
+    try_remove_dir_if_empty "${LEGACY_ROOT}"
 }
 
 function configure_zsh_profiles() {

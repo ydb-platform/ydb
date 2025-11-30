@@ -299,6 +299,14 @@ bool PersistWindowsPath(const TString& newPath) {
         if (!legacyBinary.Exists()) {
             return;
         }
+        const TFsPath legacyBinDir = legacyBinary.Parent();
+        const TFsPath legacyRootDir = legacyBinDir.Parent();
+        const TFsPath legacyInstallDir = legacyRootDir.Child("install");
+        auto cleanupLegacyDirs = [&]() {
+            NLocalPaths::DeleteDirIfEmpty(legacyBinDir);
+            NLocalPaths::DeleteDirIfEmpty(legacyInstallDir);
+            NLocalPaths::DeleteDirIfEmpty(legacyRootDir);
+        };
 #if defined(_win32_)
         TFsPath backup(TStringBuilder() << legacyBinary.GetPath() << "_old");
         backup.Fix();
@@ -309,6 +317,7 @@ bool PersistWindowsPath(const TString& newPath) {
         } catch (const yexception& e) {
             if (DeletePathIfExistsSafe(legacyBinary)) {
                 Cerr << "Removed legacy binary " << legacyBinary.GetPath() << Endl;
+                cleanupLegacyDirs();
             } else {
                 Cerr << "Failed to remove legacy binary " << legacyBinary.GetPath() << ": " << e.what() << Endl;
             }
@@ -316,6 +325,7 @@ bool PersistWindowsPath(const TString& newPath) {
 #else
         if (DeletePathIfExistsSafe(legacyBinary)) {
             Cerr << "Removed legacy binary " << legacyBinary.GetPath() << Endl;
+            cleanupLegacyDirs();
         }
 #endif
     }

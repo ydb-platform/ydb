@@ -106,12 +106,6 @@ bool IsDirEmpty(const TFsPath& path) {
     return children.empty();
 }
 
-void DeleteDirIfEmpty(const TFsPath& path) {
-    if (path.Exists() && IsDirEmpty(path)) {
-        path.DeleteIfExists();
-    }
-}
-
 #if defined(_win32_)
 TFsPath ResolveWindowsDir(const char* overrideEnv, const char* envName, std::initializer_list<TString> fallbackSuffixes) {
     if (auto overridePath = GetEnvPath(overrideEnv)) {
@@ -203,6 +197,17 @@ void MoveImportProgress(const TFsPath& targetDir) {
     }
 }
 
+} // namespace
+
+void DeleteDirIfEmpty(const TFsPath& path) {
+    if (path.Exists() && IsDirEmpty(path)) {
+        try {
+            path.DeleteIfExists();
+            Cerr << "Removed empty legacy directory " << path.GetPath() << Endl;
+        } catch (const yexception& e) {
+            Cerr << "Failed to remove legacy directory " << path.GetPath() << ": " << e.what() << Endl;
+        }
+    }
 }
 
 TFsPath GetConfigDir() {

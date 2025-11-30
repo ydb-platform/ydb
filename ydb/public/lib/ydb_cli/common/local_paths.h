@@ -22,6 +22,7 @@ TFsPath GetImportProgressDir();
 TFsPath GetUpdateStateFile();
 TFsPath GetUpdateCacheDir();
 TFsPath GetHistoryFile();
+void DeleteDirIfEmpty(const TFsPath& path);
 
 }
 

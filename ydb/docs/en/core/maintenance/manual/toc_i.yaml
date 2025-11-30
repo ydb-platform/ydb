@@ -13,6 +13,8 @@ items:
   href: ../../devops/deployment-options/manual/decommissioning.md
 - name: Moving VDisks
   href: moving_vdisks.md
+- name: Backup collections operations
+  href: backup-collections.md
 - name: Staying within the failure model
   href: failure_model.md
 - name: Disk load balancing

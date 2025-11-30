@@ -37,6 +37,10 @@ items:
   href: limits-ydb.md
 - name: Multi-Version Concurrency Control (MVCC)
   href: mvcc.md
+- name: Backup and restore
+  href: backup.md
+- name: Backup collections
+  href: backup-collections.md
 - name: Asynchronous replication
   href: async-replication.md
   when: feature_async_replication

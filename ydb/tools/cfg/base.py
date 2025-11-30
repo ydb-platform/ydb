@@ -63,13 +63,15 @@ def merge_with_default(dft, override):
 
 
 class KiKiMRDrive(object):
-    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None, kind=None, pdisk_config=None):
+    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None, kind=None, pdisk_config=None, infer_pdisk_slot_count_from_unit_size=None, infer_pdisk_slot_count_max=None):
         self.type = type
         self.path = path
         self.shared_with_os = shared_with_os
         self.pdisk_config = pdisk_config
         self.expected_slot_count = expected_slot_count
         self.kind = kind
+        self.infer_pdisk_slot_count_from_unit_size = infer_pdisk_slot_count_from_unit_size
+        self.infer_pdisk_slot_count_max = infer_pdisk_slot_count_max
 
     def __eq__(self, other):
         return (
@@ -79,10 +81,12 @@ class KiKiMRDrive(object):
             and self.expected_slot_count == other.expected_slot_count
             and self.kind == other.kind
             and self.pdisk_config == other.pdisk_config
+            and self.infer_pdisk_slot_count_from_unit_size == other.infer_pdisk_slot_count_from_unit_size
+            and self.infer_pdisk_slot_count_max == other.infer_pdisk_slot_count_max
         )
 
     def __hash__(self):
-        return hash("\0".join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.kind, self.pdisk_config))))
+        return hash("\0".join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.kind, self.pdisk_config, self.infer_pdisk_slot_count_from_unit_size, self.infer_pdisk_slot_count_max))))
 
 
 Domain = collections.namedtuple(
@@ -238,10 +242,12 @@ class Tenant(object):
 
 
 class HostConfig(object):
-    def __init__(self, host_config_id, drives, generation=0):
+    def __init__(self, host_config_id, drives, generation=0, infer_pdisk_slot_count_from_unit_size=None, infer_pdisk_slot_count_max=None):
         self.drives = drives
         self.host_config_id = host_config_id
         self.generation = generation
+        self.infer_pdisk_slot_count_from_unit_size = infer_pdisk_slot_count_from_unit_size
+        self.infer_pdisk_slot_count_max = infer_pdisk_slot_count_max
 
 
 class _ClusterDescription(dict):
@@ -313,6 +319,7 @@ class ClusterDetailsProvider(object):
         self.table_profiles_config = self.__cluster_description.get("table_profiles_config")
         self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
+        self.infer_pdisk_slot_count = self._extract_infer_pdisk_slot_count(self.blob_storage_config)
         self.bootstrap_config = self.__cluster_description.get("bootstrap_config")
         self.memory_controller_config = self.__cluster_description.get("memory_controller_config")
         self.kafka_proxy_config = self.__cluster_description.get("kafka_proxy_config")
@@ -358,6 +365,15 @@ class ClusterDetailsProvider(object):
         subjective_description.set_validator(validator)
         subjective_description.validate()
         return subjective_description
+
+    def _extract_infer_pdisk_slot_count(self, blob_storage_config):
+        if blob_storage_config is None:
+            return None
+        if 'infer_pdisk_slot_count' not in blob_storage_config:
+            return None
+        infer_pdisk_slot_count = blob_storage_config['infer_pdisk_slot_count']
+        del blob_storage_config['infer_pdisk_slot_count']
+        return infer_pdisk_slot_count
 
     @property
     def storage_config_generation(self):
@@ -552,11 +568,15 @@ class ClusterDetailsProvider(object):
         converted_host_configs = []
         for host_config in self.__cluster_description.get("host_configs", []):
             host_config_drives = host_config.get("drives", host_config.get("drive", []))
+            infer_pdisk_slot_count_from_unit_size = host_config.get("infer_pdisk_slot_count_from_unit_size")
+            infer_pdisk_slot_count_max = host_config.get("infer_pdisk_slot_count_max")
             converted_host_configs.append(
                 HostConfig(
                     host_config_id=host_config["host_config_id"],
                     generation=host_config.get("generation", 0),
                     drives=tuple(KiKiMRDrive(**drive) for drive in host_config_drives),
+                    infer_pdisk_slot_count_from_unit_size=infer_pdisk_slot_count_from_unit_size,
+                    infer_pdisk_slot_count_max=infer_pdisk_slot_count_max,
                 )
             )
         return converted_host_configs

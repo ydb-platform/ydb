@@ -459,6 +459,29 @@ class StaticConfigGenerator(object):
             return yaml_config
         return result
 
+    def _apply_infer_pdisk_slot_count_to_host_config(self, host_config):
+        infer_settings = self.__cluster_details.infer_pdisk_slot_count
+        if infer_settings is None:
+            return
+
+        target_cfg = {
+            'infer_pdisk_slot_count_from_unit_size': {},
+            'infer_pdisk_slot_count_max': {},
+        }
+
+        ssd_and_nvme_settings = infer_settings.get('ssd_and_nvme')
+        if ssd_and_nvme_settings:
+            target_cfg['infer_pdisk_slot_count_from_unit_size']['ssd'] = ssd_and_nvme_settings['unit_size']
+            target_cfg['infer_pdisk_slot_count_max']['ssd'] = ssd_and_nvme_settings['max_slots']
+
+        rot_settings = infer_settings.get('rot')
+        if rot_settings:
+            target_cfg['infer_pdisk_slot_count_from_unit_size']['rot'] = rot_settings['unit_size']
+            target_cfg['infer_pdisk_slot_count_max']['rot'] = rot_settings['max_slots']
+
+        if target_cfg["infer_pdisk_slot_count_from_unit_size"]:
+            host_config.update(target_cfg)
+
     def get_normalized_config(self):
         app_config = self.get_app_config()
         dictionary = json_format.MessageToDict(app_config, preserving_proto_field_name=True)
@@ -495,6 +518,8 @@ class StaticConfigGenerator(object):
                             )
 
                             drive['pdisk_config'] = self.normalize_dictionary(json_format.MessageToDict(pd))
+
+                self._apply_infer_pdisk_slot_count_to_host_config(host_config)
 
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
@@ -616,6 +641,8 @@ class StaticConfigGenerator(object):
         normalized_config["static_erasure"] = str(self.__cluster_details.static_erasure)
 
         if 'blob_storage_config' in normalized_config:
+            if 'infer_pdisk_slot_count' in normalized_config['blob_storage_config']:
+                del normalized_config['blob_storage_config']['infer_pdisk_slot_count']
             for group in normalized_config['blob_storage_config']['service_set']['groups']:
                 for ring in group['rings']:
                     for fail_domain in ring['fail_domains']:

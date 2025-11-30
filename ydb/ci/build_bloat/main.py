@@ -266,7 +266,6 @@ def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, 
 
     cpp_file = sanitize_path(cpp_file, base_src_dir)
     current_includes_stack = [(cpp_file, 0)]
-
     for time_stamp, ev, path in include_events:
         if current_includes_stack:
             last_path, _ = current_includes_stack[-1]

@@ -1,7 +1,5 @@
 # CREATE TABLE
 
-## Синтаксис CREATE TABLE
-
 {% if feature_bulk_tables %}
 
 Таблица создается автоматически при первом [INSERT INTO](../insert_into.md){% if feature_mapreduce %}, в заданной оператором [USE](../use.md) базе данных{% endif %}. Схема при этом определяется автоматически.
@@ -14,37 +12,80 @@
 
 {% endif %}
 
-    CREATE [TEMP | TEMPORARY] TABLE table_name (
-        column1 type1,
-{% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
-        ...
-        columnN typeN,
-{% if feature_secondary_index == true %}
-        INDEX `<index_name>`
-          [GLOBAL|LOCAL]
-          [UNIQUE]
-          [SYNC|ASYNC]
-          [USING <index_type>]
-          ON ( <index_columns> )
-          [COVER ( <cover_columns> )]
-          [WITH ( <parameter_name> = <parameter_value>[, ...])]
-        ...
-{% endif %}
-{% if feature_map_tables %}
-        PRIMARY KEY ( column, ... ),
-        FAMILY column_family ( family_options, ... )
-{% else %}
-        ...
-{% endif %}
-    )
-{% if feature_map_tables %}
-    WITH ( key = value, ... )
-    [AS SELECT ...]
-{% endif %}
+```yql
+CREATE TABLE [IF NOT EXISTS] <table_name> (
+  [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL]
+  [, ...],
+    INDEX <index_name>
+      [GLOBAL]
+      [UNIQUE]
+      [SYNC|ASYNC]
+      [USING <index_type>]
+      ON ( <index_columns> )
+      [COVER ( <cover_columns> )]
+      [WITH ( <parameter_name> = <parameter_value>[, ...])]
+    [, ...]
+  PRIMARY KEY ( <column>[, ...]),
+  [FAMILY <column_family> ( family_options[, ...])]
+)
+[WITH (<setting_name> = <setting_value>[, ...])]
+
+[AS SELECT ...]
+```
 
 {% if oss == true and backend_name == "YDB" %}
 
-{% if feature_olap_tables %}
+## Параметры запроса
+
+### table_name
+
+Путь создаваемой таблицы.
+
+При выборе имени для таблицы учитывайте общие [правила именования схемных объектов](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+### IF NOT EXISTS
+
+Если таблица с указанным именем уже существует, выполнение оператора полностью пропускается — не происходит никаких проверок или сопоставления схемы, и никакой ошибки не возникает. Обратите внимание, что существующая таблица может отличаться по структуре от той, которую вы хотели бы создать этим запросом — сравнение или проверка эквивалентности не производится.
+
+### column_name
+
+Имя колонки, создаваемой в новой таблице.
+
+При выборе имени для колонки учитывайте общие [правила именования колонок](../../../../concepts/datamodel/table.md#column-naming-rules).
+
+### column_data_type
+
+Тип данных колонки. Полный список типов данных, которые поддерживает {{ ydb-short-name }} доступен в разделе [{#T}](../../types/index.md).
+
+### FAMILY <family_name> (настройка колонки)
+
+Указание принадлежности данной колонки к указанной группе колонок. Подробнее в разделе [{#T}](family.md).
+
+### NULL
+
+Данная колонка может содержать значения `NULL` (по умолчанию).
+
+### NOT NULL
+
+Данная колонка не принимает значения `NULL`.
+
+### INDEX
+
+Определение индекса на таблице. Поддерживаются [вторичные индексы](secondary_index.md) и [векторные индексы](vector_index.md).
+
+### PRIMARY KEY
+
+Определение первичного ключа таблицы. Указывает колонки, которые составляют первичный ключ в порядке перечисления. Подробнее о выборе первичного ключа в разделе [{#T}](../../../../dev/primary-key/index.md).
+
+### FAMILY <column_family> (настройка группы колонок)
+
+Определение группы колонок с заданными параметрами. Подробнее в разделе [{#T}](family.md).
+
+### WITH
+
+Дополнительные параметры создания таблицы. Подробнее в разделе [{#T}](with.md).
+
+{% note info %}
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
 
@@ -66,13 +107,12 @@ WITH (
 
 По умолчанию, если параметр `STORE` не указан, создается строковая таблица.
 
-{% endif %}
-
-{% note info %}
-
-При выборе имени для таблицы учитывайте общие [правила именования схемных объектов](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
-
 {% endnote %}
+
+### AS SELECT
+
+Создание и заполнение таблицы на основе результатов запроса `SELECT`. Подробнее в разделе [{#T}](as_select.md).
+
 
 ## Примеры создания таблиц
 

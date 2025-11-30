@@ -7,10 +7,10 @@
 Вот базовый фрагмент кода, который поможет вам начать:
 
 ```c#
-await using var connection = new YdbConnection("Host=localhost;Port=2136;Database=/local;MaxSessionPool=50");
-await connection.OpenAsync();
+await using var ydbDataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local;MaxSessionPool=50");
+await using var ydbConnection = await ydbDataSource.OpenConnectionAsync();
 
-var ydbCommand = connection.CreateCommand();
+var ydbCommand = ydbConnection.CreateCommand();
 ydbCommand.CommandText = """
                          SELECT series_id, season_id, episode_id, air_date, title
                          FROM episodes

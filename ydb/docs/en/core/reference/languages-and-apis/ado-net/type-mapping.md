@@ -6,30 +6,37 @@ The following lists the built-in mappings for reading and writing CLR types to Y
 
 The following shows the mappings used when reading values.
 
-These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()`, and similar methods.
+- These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()`, and similar methods.
+- You can read as other types by calling `YdbDataReader.GetFieldValue<T>()` and also `YdbDataReader.GetInt32()` / `YdbDataReader.GetInt64()` to get the raw value.
 
-| {{ ydb-short-name }} type     | .NET type                           |
-|-------------------------------|-------------------------------------|
-| `Bool`                        | `bool`                              |
-| `Text` (synonym of `Utf8`)    | `string`                            |
-| `Bytes` (synonym of `String`) | `byte[]`                            |
-| `Uint8`                       | `byte`                              |
-| `Uint16`                      | `ushort`                            |
-| `Uint32`                      | `uint`                              |
-| `Uint64`                      | `ulong`                             |
-| `Int8`                        | `sbyte`                             |
-| `Int16`                       | `short`                             |
-| `Int32`                       | `int`                               |
-| `Int64`                       | `long`                              |
-| `Float`                       | `float`                             |
-| `Double`                      | `double`                            |
-| `Date`                        | `DateTime`                          |
-| `Datetime`                    | `DateTime`                          |
-| `Timestamp`                   | `DateTime`                          |
-| `Decimal`                     | [see the Decimal section](#decimal) |
-| `Json`                        | `string`                            |
-| `JsonDocument`                | `string`                            |
-| `Yson`                        | `byte[]`                            |
+| {{ ydb-short-name }} тип   | .NET тип                                 | Non-default .NET типы                     |
+|----------------------------|------------------------------------------|-------------------------------------------|
+| Bool                       | bool                                     |                                           |
+| Int8                       | sbyte                                    |                                           |
+| Int16                      | short                                    |                                           |
+| Int32                      | int                                      |                                           |
+| Int64                      | long                                     |                                           |
+| Uint8                      | byte                                     |                                           |
+| Uint16                     | ushort                                   |                                           |
+| Uint32                     | uint                                     |                                           |
+| Uint64                     | ulong                                    |                                           |
+| Float                      | float                                    |                                           |
+| Double                     | double                                   |                                           |
+| Decimal (precision, scale) | decimal ([cм. раздел Decimal](#decimal)) |                                           |
+| Bytes (синоним `String`)   | byte[]                                   |                                           |
+| Text (синоним `Utf8`)      | string                                   |                                           |
+| Json                       | string                                   |                                           |
+| JsonDocument               | string                                   |                                           |
+| Yson                       | byte[]                                   |                                           |
+| Uuid                       | Guid                                     |                                           |
+| Date                       | DateTime                                 | DateOnly                                  |
+| Date32                     | DateTime                                 | DateOnly, int (`GetInt32()` — raw value)  |
+| Datetime                   | DateTime                                 | DateOnly                                  |
+| Datetime64                 | DateTime                                 | DateOnly, long (`GetInt64()` — raw value) |
+| Timestamp                  | DateTime                                 | DateOnly                                  |
+| Timestamp64                | DateTime                                 | DateOnly, long (`GetInt64()` — raw value) |
+| Interval                   | TimeSpan                                 | long (`GetInt64()` — raw value)           |
+| Interval64                 | TimeSpan                                 | long (`GetInt64()` — raw value)           |
 
 ## Decimal {#decimal}
 
@@ -54,34 +61,44 @@ await new YdbCommand(ydbConnection)
 
 ## Type Mapping Table for Writing
 
-| {{ ydb-short-name }} type     | DbType                                                                                    | .NET type                    |
-|-------------------------------|-------------------------------------------------------------------------------------------|------------------------------|
-| `Bool`                        | `Boolean`                                                                                 | `bool`                       |
-| `Text` (synonym of `Utf8`)    | `String`, `AnsiString`, `AnsiStringFixedLength`, `StringFixedLength`                      | `string`                     |
-| `Bytes` (synonym of `String`) | `Binary`                                                                                  | `byte[]`                     |
-| `Uint8`                       | `Byte`                                                                                    | `byte`                       |
-| `Uint16`                      | `UInt16`                                                                                  | `ushort`                     |
-| `Uint32`                      | `UInt32`                                                                                  | `uint`                       |
-| `Uint64`                      | `UInt64`                                                                                  | `ulong`                      |
-| `Int8`                        | `SByte`                                                                                   | `sbyte`                      |
-| `Int16`                       | `Int16`                                                                                   | `short`                      |
-| `Int32`                       | `Int32`                                                                                   | `int`                        |
-| `Int64`                       | `Int64`                                                                                   | `long`                       |
-| `Float`                       | `Single`                                                                                  | `float`                      |
-| `Double`                      | `Double`                                                                                  | `double`                     |
-| `Date`                        | `Date`                                                                                    | `DateTime`                   |
-| `Datetime`                    | `DateTime`                                                                                | `DateTime`                   |
-| `Timestamp`                   | `DateTime2` (for .NET type `DateTime`), `DateTimeOffset` (for .NET type `DateTimeOffset`) | `DateTime`, `DateTimeOffset` |
-| `Decimal($p, $s)`             | `Decimal`, `Currency`                                                                     | `decimal`                    |
+There are three rules that determine the YDB type sent for a parameter:
+
+1. If the parameter's `YdbDbType` is set, it is used.
+2. If the parameter's `DbType` is set, it is used.
+3. If none of the above is set, the backend type will be inferred from the CLR value type.
+
+| {{ ydb-short-name }} type   | .NET type     | Non-default .NET types                | YdbDbType         | DbType                                                       |
+|-----------------------------|---------------|---------------------------------------|-------------------|--------------------------------------------------------------|
+| Bool                        | bool          |                                       | Bool              | Boolean                                                      |
+| Int8                        | sbyte         |                                       | Int8              | SByte                                                        |
+| Int16                       | short         | sbyte, byte                           | Int16             | Int16                                                        |
+| Int32                       | int           | sbyte, byte, short, ushort            | Int32             | Int32                                                        |
+| Int64                       | long          | sbyte, byte, short, ushort, int, uint | Int64             | Int64                                                        |
+| Uint8                       | byte          |                                       | Uint8             | Byte                                                         |
+| Uint16                      | ushort        | byte                                  | Uint16            | UInt16                                                       |
+| Uint32                      | uint          | byte, ushort                          | Uint32            | UInt32                                                       |
+| Uint64                      | ulong         | byte, ushort, uint                    | Uint64            | UInt64                                                       |
+| Float                       | float         |                                       | Float             | Single                                                       |
+| Double                      | double        | float                                 | Double            | Double                                                       |
+| Decimal (precision, scale)  | decimal       |                                       | Decimal           | Decimal, Currency                                            |
+| Bytes (synonym of `String`) | byte[]        |                                       | Bytes             | Binary                                                       |
+| Text (synonym of `Utf8`)    | string        |                                       | Text              | String, AnsiString, AnsiStringFixedLength, StringFixedLength |
+| Json                        | string        |                                       | Json              |                                                              |
+| JsonDocument                | string        |                                       | JsonDocument      |                                                              |
+| Yson                        | byte[]        |                                       | Yson              |                                                              |
+| Uuid                        | Guid          |                                       | Uuid              | Guid                                                         |
+| Date                        | DateOnly      | DateTime                              | Date              | Date                                                         |
+| Date32                      |               | DateTime, DateOnly, int (raw value)   | Date32            |                                                              |
+| Datetime                    |               | DateTime, DateOnly                    | Datetime          | Datetime                                                     |
+| Datetime64                  |               | DateTime, long (raw value)            | Datetime64        |                                                              |
+| Timestamp                   | DateTime      |                                       | Timestamp         | DateTime2                                                    |
+| Timestamp64                 |               | DateTime, long (raw value)            | Timestamp64       |                                                              |
+| Interval                    | TimeSpan      | long (raw value)                      | Interval          |                                                              |
+| Interval64                  |               | TimeSpan, long (raw value)            | Interval64        |                                                              |
+| List                        | T[], List<T>  | T[], List<T>                          | List \| YdbDbType |                                                              |
 
 {% note info %}
 
-It's important to understand that if the `DbType` is not specified, the parameter will be inferred from the `System.Type`.
+When using List, specify the type as a bitwise OR of YdbDbType.List and the element type. For example, to specify the YdbDbType for List<Int32>, use `YdbDbType.List | YdbDbType.Int32`.
 
 {% endnote %}
-
-You can also specify any {{ ydb-short-name }} type using the constructors from `Ydb.Sdk.Value.YdbValue`. For example:
-
-```с#
-var parameter = new YdbParameter("$parameter", YdbValue.MakeJsonDocument("{\"type\": \"jsondoc\"}")); 
-```

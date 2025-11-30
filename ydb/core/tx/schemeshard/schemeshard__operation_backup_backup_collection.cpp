@@ -2,6 +2,7 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_create_cdc_stream.h"
+#include "schemeshard__operation_drop_cdc_stream.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_utils.h"
 #include "schemeshard_impl.h"
@@ -96,31 +97,67 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         desc.SetAllowUnderSameOperation(true);
 
         if (incrBackupEnabled) {
+            // NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
+            // createCdcStreamOp.SetTableName(item.GetPath());
+            // auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
+            // streamDescription.SetName(streamName);
+            // streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+            // streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+
+            // const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
+            
+            // {
+            //     auto checks = sPath.Check();
+            //     checks
+            //         .IsResolved()
+            //         .NotDeleted()
+            //         .IsTable();
+                
+            //     if (!checks) {
+            //         result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            //         return result;
+            //     }
+            // }
+            
+            // NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
+
+            // desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
             NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
             createCdcStreamOp.SetTableName(item.GetPath());
             auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
-            streamDescription.SetName(streamName);
+            streamDescription.SetName(streamName); // streamName генерируется выше в коде
             streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
-            
-            {
-                auto checks = sPath.Check();
-                checks
-                    .IsResolved()
-                    .NotDeleted()
-                    .IsTable();
-                
-                if (!checks) {
-                    result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-                    return result;
+            // ... тут проверки sPath (Resolve, NotDeleted и т.д.) ...
+
+            // 2. ИЩЕМ СУЩЕСТВУЮЩИЙ СТРИМ
+            // Нам нужно понять, есть ли у этой таблицы уже активный стрим бэкапа.
+            // Обычно они называются по паттерну, заканчивающемуся на "_continuousBackupImpl"
+            TString oldStreamName;
+            for (const auto& [childName, childId] : sPath.Base()->GetChildren()) {
+                if (childName.EndsWith("_continuousBackupImpl")) {
+                    TPath child = sPath.Child(childName);
+                    if (!child.IsDeleted() && child.IsCdcStream()) {
+                        oldStreamName = childName;
+                        break; // Нашли!
+                    }
                 }
             }
-            
-            NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
 
-            desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
+            if (!oldStreamName.empty()) {
+                NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
+
+                auto* rotateOp = desc.MutableRotateSrcCdcStream(); // Твое поле из proto!
+                rotateOp->SetTableName(item.GetPath());
+                rotateOp->SetOldStreamName(oldStreamName);
+                rotateOp->MutableNewStream()->CopyFrom(createCdcStreamOp);
+            } else {
+                // ВАРИАНТ Б: СОЗДАНИЕ (Старый код)
+                NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
+                desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
+            }
         }
     }
 

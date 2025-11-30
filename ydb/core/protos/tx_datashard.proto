@@ -514,6 +514,7 @@ message TMoveIndex {
 message TCreateIncrementalBackupSrc {
     optional TSendSnapshot SendSnapshot = 1;
     optional TCreateCdcStreamNotice CreateCdcStreamNotice = 2;
+    optional TRotateCdcStreamNotice RotateCdcStreamNotice = 3;
 }
 
 message TFlatSchemeTransaction {

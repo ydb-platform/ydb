@@ -120,13 +120,58 @@ public:
             // Send "SendParts" transaction to source datashard
             NKikimrTxDataShard::TFlatSchemeTransaction oldShardTx;
             context.SS->FillSeqNo(oldShardTx, seqNo);
+            // if (txState->CdcPathId != InvalidPathId) {
+            //     auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
+            //     FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
+            //     NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
+            // } else {
+            //     FillSrcSnapshot(txState, ui64(dstDatashardId), *oldShardTx.MutableSendSnapshot());
+            //     oldShardTx.SetReadOnly(true);
+            // }
+            // ... (после context.SS->FillSeqNo(oldShardTx, seqNo);)
+
+            // Заменяем старый блок if (txState->CdcPathId != InvalidPathId) на этот:
+
+            auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
+            FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
+
             if (txState->CdcPathId != InvalidPathId) {
-                auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
-                FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
-                NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
-            } else {
-                FillSrcSnapshot(txState, ui64(dstDatashardId), *oldShardTx.MutableSendSnapshot());
-                oldShardTx.SetReadOnly(true);
+                // Проверяем, это ротация или создание?
+                // Если есть старый стрим в состоянии Alter/Disabled под этой таблицей - значит ротация.
+                TPathId oldStreamId = InvalidPathId;
+                TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
+                for (const auto& [name, id] : srcPath.Base()->GetChildren()) {
+                    if (context.SS->CdcStreams.contains(id)) {
+                        auto stream = context.SS->CdcStreams.at(id);
+                        if (stream->AlterData && stream->AlterData->State == TCdcStreamInfo::EState::ECdcStreamStateDisabled) {
+                            oldStreamId = id;
+                            break;
+                        }
+                    }
+                }
+
+                if (oldStreamId != InvalidPathId) {
+                    // РОТАЦИЯ
+                    auto& notice = *combined.MutableRotateCdcStreamNotice();
+                    txState->SourcePathId.ToProto(notice.MutablePathId());
+                    oldStreamId.ToProto(notice.MutableOldStreamPathId());
+                    
+                    auto newStreamInfo = context.SS->CdcStreams.at(txState->CdcPathId);
+                    // Ищем имя нового стрима (оно нам нужно для описания)
+                    // Можно пройтись по детям и найти по ID, или взять из Info если там есть имя
+                    // Обычно имя передается в DescribeCdcStream вторым аргументом.
+                    // Найдем имя через PathId
+                    TString newStreamName = "unknown"; 
+                    for (const auto& [name, id] : srcPath.Base()->GetChildren()) {
+                         if (id == txState->CdcPathId) newStreamName = name;
+                    }
+
+                    context.SS->DescribeCdcStream(txState->CdcPathId, newStreamName, newStreamInfo, *notice.MutableNewStreamDescription());
+                    notice.SetTableSchemaVersion(context.SS->Tables.at(txState->SourcePathId)->AlterVersion);
+                } else {
+                    // ОБЫЧНОЕ СОЗДАНИЕ
+                    NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
+                }
             }
             auto srcEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, oldShardTx.SerializeAsString(), context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, srcDatashardId, srcShardIdx, srcEvent.Release());
@@ -228,6 +273,42 @@ public:
 
             context.SS->ClearDescribePathCaches(srcPath);
             context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
+
+            // === ВСТАВКА: ФИКСАЦИЯ СТРИМОВ ===
+            
+            // 1. Фиксируем НОВЫЙ стрим
+            if (context.SS->CdcStreams.contains(txState->CdcPathId)) {
+                auto stream = context.SS->CdcStreams.at(txState->CdcPathId);
+                if (stream->AlterData) {
+                    // Сохраняем финальное состояние в базу
+                    context.SS->PersistCdcStream(db, txState->CdcPathId);
+                    // Применяем AlterData -> делаем его основным состоянием
+                    stream->FinishAlter(); 
+                }
+            }
+
+            // 2. Фиксируем СТАРЫЙ стрим (если была ротация)
+            // Нам нужно найти стрим, который мы изменили в Propose.
+            // Мы можем найти его, перебрав детей исходной таблицы и проверив LastTxId.
+            for (const auto& [name, id] : srcPath->GetChildren()) {
+                if (id == txState->CdcPathId) continue; // Пропускаем новый
+
+                if (context.SS->CdcStreams.contains(id)) {
+                    auto stream = context.SS->CdcStreams.at(id);
+                    auto streamPath = context.SS->PathsById.at(id);
+                    
+                    // Если у стрима есть черновик изменений И он менялся в ЭТОЙ транзакции
+                    if (stream->AlterData && streamPath->LastTxId == OperationId.GetTxId()) {
+                        context.SS->PersistCdcStream(db, id);
+                        stream->FinishAlter();
+                        
+                        // Обновляем кеши для старого стрима
+                        context.SS->ClearDescribePathCaches(streamPath);
+                        context.OnComplete.PublishToSchemeBoard(OperationId, id);
+                    }
+                }
+            }
+            // =================================
         }
 
         context.SS->ClearDescribePathCaches(path);
@@ -330,6 +411,23 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+        if (Transaction.GetCreateTable().HasRotateSrcCdcStream()) {
+            const auto& rot = Transaction.GetCreateTable().GetRotateSrcCdcStream();
+            const TString& oldName = rot.GetOldStreamName();
+            const TString& newName = rot.GetNewStream().GetStreamDescription().GetName();
+            
+            TPath src = TPath::Resolve(Transaction.GetCreateTable().GetCopyFromTable(), context.SS);
+            TPath oldP = src.Child(oldName);
+            TPath newP = src.Child(newName);
+
+            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "DEBUG_ROTATION: OpId# " << OperationId
+                << " OldName: " << oldName 
+                << " OldExists: " << oldP.IsResolved() << " (Deleted: " << oldP.IsDeleted() << ")"
+                << " NewName: " << newName 
+                << " NewExists: " << newP.IsResolved());
+        }
+        
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const TString& parentPath = Transaction.GetWorkingDir();
@@ -509,6 +607,103 @@ public:
 
         const bool omitFollowers = schema.GetOmitFollowers();
 
+        // ... (после проверок srcTableInfo)
+
+        // === ПЕРЕМЕННАЯ ДЛЯ ПЕРЕДАЧИ ДАННЫХ ВНИЗ ===
+        TPathId rotationNewStreamId = InvalidPathId; 
+        // ==========================================
+
+        if (Transaction.GetCreateTable().HasRotateSrcCdcStream()) {
+            const auto& rotateOp = Transaction.GetCreateTable().GetRotateSrcCdcStream();
+            const TString& oldStreamName = rotateOp.GetOldStreamName();
+            const TString& newStreamName = rotateOp.GetNewStream().GetStreamDescription().GetName();
+
+            // 1. Проверяем СТАРЫЙ стрим (Он ДОЛЖЕН существовать и быть CDC)
+            TPath oldStreamPath = srcPath.Child(oldStreamName);
+            {
+                auto checks = oldStreamPath.Check();
+                checks.NotEmpty().IsResolved().NotDeleted().IsCdcStream();
+                if (!checks) {
+                    result->SetError(checks.GetStatus(), checks.GetError());
+                    return result;
+                }
+            }
+
+            // 2. Проверяем НОВЫЙ стрим
+            TPath newStreamPath = srcPath.Child(newStreamName);
+            TPathId newCdcPathId = InvalidPathId;
+
+            if (newStreamPath.IsResolved()) {
+                 // Сценарий А: Стрим уже создан соседней операцией (DoCreateStreamImpl) в этой же транзакции
+                 // Проверяем: ID транзакции создания совпадает с нашим ID?
+                 if (newStreamPath.Base()->CreateTxId != OperationId.GetTxId()) {
+                      result->SetError(NKikimrScheme::StatusAlreadyExists, "Stream already exists (and belongs to another tx)");
+                      return result;
+                 }
+                 
+                 // Стрим наш! Берем его ID.
+                 newCdcPathId = newStreamPath.Base()->PathId;
+                 
+                 // Мы просто используем уже созданный путь и ID.
+            } else {
+                 // Сценарий Б: Стрима нет (мы первые).
+                 // Проверяем, что можем создать.
+                 auto checks = newStreamPath.Check();
+                 checks.NotEmpty().NotResolved();
+                 if (!checks) {
+                    result->SetError(checks.GetStatus(), checks.GetError());
+                    return result;
+                 }
+                 
+                 // Создаем новый ID
+                 newCdcPathId = context.SS->AllocatePathId();
+                 
+                 // Захватываем изменения
+                 context.MemChanges.GrabNewPath(context.SS, newCdcPathId);
+                 context.MemChanges.GrabNewCdcStream(context.SS, newCdcPathId);
+                 
+                 // Материализуем путь
+                 newStreamPath.MaterializeLeaf(owner, newCdcPathId);
+                 newStreamPath.Base()->PathState = TPathElement::EPathState::EPathStateCreate;
+                 newStreamPath.Base()->CreateTxId = OperationId.GetTxId();
+                 newStreamPath.Base()->LastTxId = OperationId.GetTxId();
+                 newStreamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
+                 
+                 // Персистим создание
+                 context.DbChanges.PersistPath(newCdcPathId);
+                 context.DbChanges.PersistAlterCdcStream(newCdcPathId);
+            }
+
+            // 3. Подготовка в памяти (настраиваем объект стрима)
+            // Если стрим был создан DoCreateStreamImpl, у него уже есть Info.
+            if (!context.SS->CdcStreams.contains(newCdcPathId)) {
+                 // Создаем с нуля
+                 auto newStreamInfo = TCdcStreamInfo::Create(rotateOp.GetNewStream().GetStreamDescription());
+                 newStreamInfo->State = TCdcStreamInfo::EState::ECdcStreamStateScan; 
+                 context.SS->CdcStreams[newCdcPathId] = newStreamInfo;
+            } else {
+                 // Стрим уже создан DoCreateStreamImpl.
+                 // Можно принудительно выставить статус Scan, если DoCreateStreamImpl сделал иначе
+                 // context.SS->CdcStreams.at(newCdcPathId)->State = TCdcStreamInfo::EState::ECdcStreamStateScan;
+            }
+
+            // 4. Работа со старым стримом (всегда одинаковая)
+            context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
+            context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
+
+            auto oldStreamInfo = context.SS->CdcStreams.at(oldStreamPath.Base()->PathId);
+            auto streamAlter = oldStreamInfo->CreateNextVersion();
+            streamAlter->State = TCdcStreamInfo::EState::ECdcStreamStateDisabled;
+            oldStreamPath.Base()->PathState = TPathElement::EPathState::EPathStateAlter;
+            oldStreamPath.Base()->LastTxId = OperationId.GetTxId();
+
+            context.DbChanges.PersistPath(oldStreamPath.Base()->PathId);
+            context.DbChanges.PersistAlterCdcStream(oldStreamPath.Base()->PathId);
+
+            // 5. Запоминаем ID для передачи в TTxState
+            rotationNewStreamId = newCdcPathId;
+        }
+
         PrepareScheme(&schema, name, srcTableInfo, context);
         schema.SetIsBackup(isBackup);
 
@@ -622,6 +817,10 @@ public:
         srcPath.Base()->LastTxId = OperationId.GetTxId();
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCopyTable, newTable->PathId, srcPath.Base()->PathId);
+        // Если мы делали ротацию, записываем ID нового стрима в состояние транзакции
+        if (rotationNewStreamId != InvalidPathId) {
+            txState.CdcPathId = rotationNewStreamId;
+        }
         txState.State = TTxState::CreateParts;
         if (Transaction.HasCreateCdcStream()) {
             txState.CdcPathId = srcPath.Base()->PathId;

@@ -11,6 +11,7 @@
 namespace NLastGetopt {
     class TCompletionGenerator {
     public:
+        TCompletionGenerator(const TModChooser* modChooser, const TOpts* opts);
         explicit TCompletionGenerator(const TModChooser* modChooser);
         explicit TCompletionGenerator(const TOpts* opts);
         virtual ~TCompletionGenerator() = default;
@@ -19,7 +20,8 @@ namespace NLastGetopt {
         virtual void Generate(TStringBuf command, IOutputStream& stream) = 0;
 
     protected:
-        std::variant<const TModChooser*, const TOpts*> Options_;
+        const TModChooser* chooser;
+        const TOpts* opts;
     };
 
     class TZshCompletionGenerator: public TCompletionGenerator {
@@ -30,6 +32,7 @@ namespace NLastGetopt {
         void Generate(TStringBuf command, IOutputStream& stream) override;
 
     private:
+        static void GenerateBothCompletion(TFormattedOutput& out, const TModChooser& chooser, const TOpts& opts, NComp::TCompleterManager& manager);
         static void GenerateModesCompletion(TFormattedOutput& out, const TModChooser& chooser, NComp::TCompleterManager& manager);
         static void GenerateOptsCompletion(TFormattedOutput& out, const TOpts& opts, NComp::TCompleterManager& manager);
         static void GenerateDefaultOptsCompletion(TFormattedOutput& out, NComp::TCompleterManager& manager);
@@ -44,6 +47,7 @@ namespace NLastGetopt {
         void Generate(TStringBuf command, IOutputStream& stream) override;
 
     private:
+        static void GenerateBothCompletion(TFormattedOutput& out, const TModChooser& chooser, const TOpts& opts, NComp::TCompleterManager& manager, size_t level);
         static void GenerateModesCompletion(TFormattedOutput& out, const TModChooser& chooser, NComp::TCompleterManager& manager, size_t level);
         static void GenerateOptsCompletion(TFormattedOutput& out, const TOpts& opts, NComp::TCompleterManager& manager, size_t level);
         static void GenerateDefaultOptsCompletion(TFormattedOutput& out, NComp::TCompleterManager& manager);

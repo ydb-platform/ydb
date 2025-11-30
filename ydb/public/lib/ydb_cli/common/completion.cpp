@@ -4,6 +4,7 @@
 namespace NYdb {
 namespace NConsoleClient {
 void TYdbCommandAutoCompletionWrapper::RegisterOptions(NLastGetopt::TOpts &opts) {
+  command->Config(config);
   opts = command->Opts.GetOpts();
 }
 
@@ -13,6 +14,7 @@ int TYdbCommandAutoCompletionWrapper::DoRun(NLastGetopt::TOptsParseResult &&pars
 }
 
 void TYdbCommandTreeAutoCompletionWrapper::RegisterOptions(NLastGetopt::TOpts &opts) {
+  commandTree->Config(config);
   opts = commandTree->Opts.GetOpts();
 }
 
@@ -21,7 +23,7 @@ int TYdbCommandTreeAutoCompletionWrapper::DoRun(NLastGetopt::TOptsParseResult &&
   return EXIT_FAILURE;
 }
 
-void RegisterModes(TModChooser &chooser, const TClientCommandTree *commandTree) {
+void RegisterModes(TModChooser &chooser, const TClientCommandTree *commandTree, TClientCommand::TConfig config) {
   chooser.SetDescription(commandTree->Description);
 
   Cerr << "RegisterModes " << commandTree->Name << Endl;
@@ -32,10 +34,10 @@ void RegisterModes(TModChooser &chooser, const TClientCommandTree *commandTree) 
     TClientCommand *cmd = dynamic_cast<TClientCommand *>(command.get());
     if (tree) {
       Cerr << "RegisterModes added (tree)" << commandTree->Name << " " << name << Endl;
-      TMainClassModes* ptr = new TYdbCommandTreeAutoCompletionWrapper(tree);
+      TMainClassModes* ptr = new TYdbCommandTreeAutoCompletionWrapper(tree, config);
       chooser.AddMode(name, ptr, command->Description, command->Hidden, command->Hidden);
     } else if (cmd) {
-        TMainClassArgs* ptr = new TYdbCommandAutoCompletionWrapper(cmd);
+        TMainClassArgs* ptr = new TYdbCommandAutoCompletionWrapper(cmd, config);
         Cerr << "RegisterModes added " << commandTree->Name << " " << name << Endl;
         chooser.AddMode(name, ptr, command->Description, command->Hidden, command->Hidden);
     }
@@ -44,10 +46,10 @@ void RegisterModes(TModChooser &chooser, const TClientCommandTree *commandTree) 
 
 
 void TYdbCommandTreeAutoCompletionWrapper::RegisterModes(TModChooser &chooser) {
-    ::NYdb::NConsoleClient::RegisterModes(chooser, commandTree);
+    ::NYdb::NConsoleClient::RegisterModes(chooser, commandTree, config);
 }
 
-NLastGetopt::TOpt GenerateCompletionOption(const TClientCommandTree *commandTree) {
+NLastGetopt::TOpt GenerateCompletionOption(const TClientCommandTree *commandTree, TClientCommand::TConfig& config) {
   NLastGetopt::TOpt completionOption =
       NLastGetopt::TOpt()
           .AddLongName("completion")
@@ -57,14 +59,14 @@ NLastGetopt::TOpt GenerateCompletionOption(const TClientCommandTree *commandTree
           .CompletionArgHelp("shell syntax for completion script")
           .IfPresentDisableCompletion()
           .Completer(NLastGetopt::NComp::Choice({{"zsh"}, {"bash"}}))
-          .Handler1T<TString>([commandTree](TStringBuf shell) {
+          .Handler1T<TString>([commandTree, config](TStringBuf shell) {
             if (shell.empty()) {
             //   Cerr << Wrap(80, NLastGetopt::MakeInfo("ydb", "--completion")) << Endl;
               exit(0);
             } 
             
             TModChooser *modChooser = new TModChooser();
-            RegisterModes(*modChooser, commandTree);
+            RegisterModes(*modChooser, commandTree, config);
         
 
             auto modes = modChooser->GetUnsortedModes();
@@ -74,9 +76,9 @@ NLastGetopt::TOpt GenerateCompletionOption(const TClientCommandTree *commandTree
             }
 
             if (shell == "bash") {
-              NLastGetopt::TBashCompletionGenerator(modChooser).Generate("ydb", Cout);
+              NLastGetopt::TBashCompletionGenerator(modChooser, &config.Opts->GetOpts()).Generate("ydb", Cout);
             } else if (shell == "zsh") {
-              NLastGetopt::TZshCompletionGenerator(modChooser).Generate("ydb", Cout);
+              NLastGetopt::TZshCompletionGenerator(modChooser, &config.Opts->GetOpts()).Generate("ydb", Cout);
             } else {
               Cerr << "Unknown shell name " << TString{shell}.Quote() << Endl;
               exit(1);

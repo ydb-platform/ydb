@@ -427,8 +427,8 @@ public:
     void MarkLocal();
     void UseOnlyExplicitProfile();
 
+    virtual void Config(TConfig& config); // TODO fix add friend
 protected:
-    virtual void Config(TConfig& config);
     virtual void SaveParseResult(TConfig& config);
     virtual void Parse(TConfig& config);
     virtual void Validate(TConfig& config);
@@ -469,8 +469,8 @@ public:
 
     const TMap<TString, std::unique_ptr<TClientCommand>>& GetSubCommands() const;
 
+    virtual void Config(TConfig& config) override; // TODO make protected back and add friend
 protected:
-    virtual void Config(TConfig& config) override;
     virtual void SaveParseResult(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;

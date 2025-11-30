@@ -166,7 +166,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             .Optional().Hidden().StoreTrue(&config.SkipDiscovery);
     }
 
-    opts.GetOpts().AddOption(GenerateCompletionOption(this));
+    opts.GetOpts().AddOption(GenerateCompletionOption(this, config));
     // opts.GetOpts().AddCompletionOption("ydb");
 
     TClientCommandRootBase::Config(config);

@@ -8,17 +8,20 @@
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
+
+  {% cut "ydb-go-sdk" %}
 
   ```go
   package main
 
   import (
     "context"
+    "fmt"
     "os"
 
     "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/table"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
   )
 
   func main() {
@@ -32,18 +35,245 @@
       panic(err)
     }
     defer db.Close(ctx)
-    txControl := table.TxControl(
-      table.BeginTx(table.WithSerializableReadWrite()),
-      table.CommitTx(),
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      query.WithTxControl(query.SerializableReadWriteTxControl(query.CommitTx())),
     )
-    err := driver.Table().Do(scope.Ctx, func(ctx context.Context, s table.Session) error {
-      _, _, err := s.Execute(ctx, txControl, "SELECT 1", nil)
-      return err
-    })
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+    // работа с row
+    _ = row
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "database/sql" %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "database/sql"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    nativeDriver, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer nativeDriver.Close(ctx)
+
+    connector, err := ydb.Connector(nativeDriver)
+    if err != nil {
+      panic(err)
+    }
+    defer connector.Close()
+
+    db := sql.OpenDB(connector)
+    defer db.Close()
+
+     err = retry.DoTx(ctx, db, 
+       func(ctx context.Context, tx *sql.Tx) error {
+         row := tx.QueryRowContext(ctx, "SELECT 1")
+         var result int
+         return row.Scan(&result)
+	  }, 
+	  retry.WithIdempotent(true), 
+	  // Режим Serializable Read-Write используется по умолчанию для транзакций
+	  // Либо его можно установить явно как приведено ниже
+	  retry.WithTxOptions(&sql.TxOptions{
+		Isolation: sql.LevelSerializable,
+		ReadOnly:  false,
+	  }),
+	)
     if err != nil {
       fmt.Printf("unexpected error: %v", err)
     }
   }
+  ```
+
+  {% endcut %}
+
+- Java
+
+  {% cut "ydb-java-sdk" %}
+
+  ```java
+  import tech.ydb.query.QueryClient;
+  import tech.ydb.query.TxMode;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+  import tech.ydb.core.Result;
+  import java.util.concurrent.CompletableFuture;
+
+  // ...
+
+  QueryClient queryClient = QueryClient.newClient(transport).build();
+  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+  retryCtx.supplyResult(session -> {
+      QueryReader reader = QueryReader.readFrom(
+          session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW)
+      ).join().getValue();
+      return CompletableFuture.completedFuture(Result.success(reader));
+  }).join().getValue();
+  ```
+
+  {% endcut %}
+
+  {% cut "JDBC" %}
+
+  ```java
+  import java.sql.Connection;
+  import java.sql.DriverManager;
+  import java.sql.ResultSet;
+  import java.sql.Statement;
+
+  // ...
+
+  try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
+      // Режим Serializable используется по умолчанию
+      connection.setAutoCommit(false);
+      connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+
+      try (Statement statement = connection.createStatement()) {
+          ResultSet rs = statement.executeQuery("SELECT 1");
+          // работа с rs
+      }
+
+      connection.commit();
+  }
+  ```
+
+  {% endcut %}
+
+- Python
+
+  {% cut "ydb-python-sdk" %}
+
+  ```python
+  import ydb
+
+  def execute_query(pool: ydb.QuerySessionPool):
+      # Режим Serializable Read-Write используется по умолчанию
+      def callee(session: ydb.QuerySession):
+          with session.transaction(ydb.QuerySerializableReadWrite()).execute(
+              "SELECT 1",
+              commit_tx=True,
+          ) as result_sets:
+              pass  # работа с result_sets
+
+      pool.retry_operation_sync(callee)
+  ```
+
+  {% endcut %}
+
+  {% cut "dbapi" %}
+
+  ```python
+  import ydb.dbapi
+
+  with ydb.dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      # Serializable режим используется по умолчанию
+      with connection.cursor() as cursor:
+          cursor.execute("SELECT 1")
+          row = cursor.fetchone()
+  ```
+
+  {% endcut %}
+
+- C++
+
+  ```cpp
+  auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
+  auto result = session.ExecuteQuery(
+      "SELECT 1",
+      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+  ).GetValueSync();
+  ```
+
+- C# (.NET)
+
+  {% cut "ydb-dotnet-sdk" %}
+
+  ```csharp
+  using Ydb.Sdk.Services.Query;
+
+  // Режим Serializable Read-Write используется по умолчанию
+  var response = await queryClient.Exec("SELECT 1");
+  ```
+
+  {% endcut %}
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  await using var connection = await dataSource.OpenConnectionAsync();
+  // Режим Serializable используется по умолчанию
+  await using var transaction = await connection.BeginTransactionAsync(TxMode.SerializableRw);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await command.ExecuteNonQueryAsync();
+  await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  ```csharp
+  using Microsoft.EntityFrameworkCore;
+
+  // Entity Framework использует режим Serializable по умолчанию
+  await using var context = await dbContextFactory.CreateDbContextAsync();
+  await using var transaction = await context.Database.BeginTransactionAsync();
+  var result = await context.SomeEntities.FirstOrDefaultAsync();
+  await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+- Js/Ts
+
+  ```typescript
+  import { Driver, QuerySession } from 'ydb-sdk';
+
+  // ...
+
+  await driver.queryClient.do({
+      fn: async (session: QuerySession) => {
+          const result = await session.execute({
+              text: 'SELECT 1',
+              txControl: { beginTx: { serializableReadWrite: {} }, commitTx: true },
+          });
+          // работа с result
+      },
+  });
+  ```
+
+- Rust
+
+  ```rust
+  use ydb::{Query, TransactionOptions};
+
+  let query = Query::new("SELECT 1");
+  let tx_options = TransactionOptions::new()
+      .with_serializable_read_write();
+  let result = client.query(query, tx_options).await?;
   ```
 
 - PHP
@@ -83,17 +313,18 @@
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
 
   ```go
   package main
 
   import (
     "context"
+    "fmt"
     "os"
 
     "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/table"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
   )
 
   func main() {
@@ -107,18 +338,66 @@
       panic(err)
     }
     defer db.Close(ctx)
-    txControl := table.TxControl(
-      table.BeginTx(table.WithOnlineReadOnly(table.WithInconsistentReads())),
-      table.CommitTx(),
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      query.WithTxControl(
+        query.OnlineReadOnlyTxControl(query.WithInconsistentReads()),
+      ),
     )
-    err := driver.Table().Do(scope.Ctx, func(ctx context.Context, s table.Session) error {
-      _, _, err := s.Execute(ctx, txControl, "SELECT 1", nil)
-      return err
-    })
     if err != nil {
       fmt.Printf("unexpected error: %v", err)
     }
+    // работа с row
+    _ = row
   }
+  ```
+
+- Java
+
+  ```java
+  import tech.ydb.query.QueryClient;
+  import tech.ydb.query.TxMode;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+  import tech.ydb.core.Result;
+  import java.util.concurrent.CompletableFuture;
+
+  // ...
+
+  QueryClient queryClient = QueryClient.newClient(transport).build();
+  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+  retryCtx.supplyResult(session -> {
+      QueryReader reader = QueryReader.readFrom(
+          session.createQuery("SELECT 1", TxMode.ONLINE_RO)
+      ).join().getValue();
+      return CompletableFuture.completedFuture(Result.success(reader));
+  }).join().getValue();
+  ```
+
+- Python
+
+  ```python
+  import ydb
+
+  def execute_query(pool: ydb.QuerySessionPool):
+      def callee(session: ydb.QuerySession):
+          with session.transaction(ydb.QueryOnlineReadOnly()).execute(
+              "SELECT 1",
+              commit_tx=True,
+          ) as result_sets:
+              pass  # работа с result_sets
+
+      pool.retry_operation_sync(callee)
+  ```
+
+- C++
+
+  ```cpp
+  auto settings = NYdb::NQuery::TTxSettings::OnlineRO();
+  auto result = session.ExecuteQuery(
+      "SELECT 1",
+      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+  ).GetValueSync();
   ```
 
 {% endlist %}
@@ -127,17 +406,18 @@
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
 
   ```go
   package main
 
   import (
     "context"
+    "fmt"
     "os"
 
     "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/table"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
   )
 
   func main() {
@@ -151,18 +431,64 @@
       panic(err)
     }
     defer db.Close(ctx)
-    txControl := table.TxControl(
-      table.BeginTx(table.WithStaleReadOnly()),
-      table.CommitTx(),
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      query.WithTxControl(query.StaleReadOnlyTxControl()),
     )
-    err := driver.Table().Do(scope.Ctx, func(ctx context.Context, s table.Session) error {
-      _, _, err := s.Execute(ctx, txControl, "SELECT 1", nil)
-      return err
-    })
     if err != nil {
       fmt.Printf("unexpected error: %v", err)
     }
+    // работа с row
+    _ = row
   }
+  ```
+
+- Java
+
+  ```java
+  import tech.ydb.query.QueryClient;
+  import tech.ydb.query.TxMode;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+  import tech.ydb.core.Result;
+  import java.util.concurrent.CompletableFuture;
+
+  // ...
+
+  QueryClient queryClient = QueryClient.newClient(transport).build();
+  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+  retryCtx.supplyResult(session -> {
+      QueryReader reader = QueryReader.readFrom(
+          session.createQuery("SELECT 1", TxMode.STALE_RO)
+      ).join().getValue();
+      return CompletableFuture.completedFuture(Result.success(reader));
+  }).join().getValue();
+  ```
+
+- Python
+
+  ```python
+  import ydb
+
+  def execute_query(pool: ydb.QuerySessionPool):
+      def callee(session: ydb.QuerySession):
+          with session.transaction(ydb.QueryStaleReadOnly()).execute(
+              "SELECT 1",
+              commit_tx=True,
+          ) as result_sets:
+              pass  # работа с result_sets
+
+      pool.retry_operation_sync(callee)
+  ```
+
+- C++
+
+  ```cpp
+  auto settings = NYdb::NQuery::TTxSettings::StaleRO();
+  auto result = session.ExecuteQuery(
+      "SELECT 1",
+      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+  ).GetValueSync();
   ```
 
 {% endlist %}
@@ -171,17 +497,20 @@
 
 {% list tabs group=lang %}
 
-- Go (native)
+- Go
+
+  {% cut "ydb-go-sdk" %}
 
   ```go
   package main
 
   import (
     "context"
+    "fmt"
     "os"
 
     "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/table"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
   )
 
   func main() {
@@ -195,18 +524,362 @@
       panic(err)
     }
     defer db.Close(ctx)
-    txControl := table.TxControl(
-      table.BeginTx(table.WithSnapshotReadOnly()),
-      table.CommitTx(),
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      query.WithTxControl(query.SnapshotReadOnlyTxControl()),
     )
-    err := driver.Table().Do(scope.Ctx, func(ctx context.Context, s table.Session) error {
-      _, _, err := s.Execute(ctx, txControl, "SELECT 1", nil)
-      return err
-    })
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+    // работа с row
+    _ = row
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "database/sql" %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "database/sql"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    nativeDriver, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer nativeDriver.Close(ctx)
+
+    connector, err := ydb.Connector(nativeDriver)
+    if err != nil {
+      panic(err)
+    }
+    defer connector.Close()
+
+    db := sql.OpenDB(connector)
+    defer db.Close()
+
+    // Snapshot Read-Only — обеспечивает согласованное чтение данных на определённый момент времени
+    err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
+      row := tx.QueryRowContext(ctx, "SELECT 1")
+      var result int
+      return row.Scan(&result)
+    }, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
+      Isolation: sql.LevelSnapshot,
+      ReadOnly:  true,
+    }))
     if err != nil {
       fmt.Printf("unexpected error: %v", err)
     }
   }
   ```
+
+  {% endcut %}
+
+- Java
+
+  {% cut "ydb-java-sdk" %}
+
+  ```java
+  import tech.ydb.query.QueryClient;
+  import tech.ydb.query.TxMode;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+  import tech.ydb.core.Result;
+  import java.util.concurrent.CompletableFuture;
+
+  // ...
+
+  QueryClient queryClient = QueryClient.newClient(transport).build();
+  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+  retryCtx.supplyResult(session -> {
+      QueryReader reader = QueryReader.readFrom(
+          session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO)
+      ).join().getValue();
+      return CompletableFuture.completedFuture(Result.success(reader));
+  }).join().getValue();
+  ```
+
+  {% endcut %}
+
+  {% cut "JDBC" %}
+
+  ```java
+  import java.sql.Connection;
+  import java.sql.DriverManager;
+  import java.sql.ResultSet;
+  import java.sql.Statement;
+
+  // ...
+
+  try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
+      connection.setAutoCommit(false);
+      connection.setReadOnly(true);
+
+      try (Statement statement = connection.createStatement()) {
+          ResultSet rs = statement.executeQuery("SELECT 1");
+          // работа с rs
+      }
+
+      connection.commit();
+  }
+  ```
+
+  {% endcut %}
+
+- Python
+
+  ```python
+  import ydb
+
+  def execute_query(pool: ydb.QuerySessionPool):
+      def callee(session: ydb.QuerySession):
+          with session.transaction(ydb.QuerySnapshotReadOnly()).execute(
+              "SELECT 1",
+              commit_tx=True,
+          ) as result_sets:
+              pass  # работа с result_sets
+
+      pool.retry_operation_sync(callee)
+  ```
+
+- C++
+
+  ```cpp
+  auto settings = NYdb::NQuery::TTxSettings::SnapshotRO();
+  auto result = session.ExecuteQuery(
+      "SELECT 1",
+      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+  ).GetValueSync();
+  ```
+
+- C# (.NET)
+
+  {% cut "ydb-dotnet-sdk" %}
+
+  ```csharp
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows(
+      "SELECT 1",
+      txMode: TxMode.SnapshotRo
+  );
+  ```
+
+  {% endcut %}
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  await using var connection = await dataSource.OpenConnectionAsync();
+  await using var transaction = await connection.BeginTransactionAsync(TxMode.SnapshotRo);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await using var reader = await command.ExecuteReaderAsync();
+  await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+- Js/Ts
+
+  ```typescript
+  import { Driver, QuerySession } from 'ydb-sdk';
+
+  // ...
+
+  await driver.queryClient.do({
+      fn: async (session: QuerySession) => {
+          const result = await session.execute({
+              text: 'SELECT 1',
+              txControl: { beginTx: { snapshotReadOnly: {} }, commitTx: true },
+          });
+          // работа с result
+      },
+  });
+  ```
+
+{% endlist %}
+
+## Snapshot Read-Write {#snapshot-read-write}
+
+{% list tabs group=lang %}
+
+- Go
+
+  {% cut "ydb-go-sdk" %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      query.WithTxControl(query.SnapshotReadWriteTxControl(query.CommitTx())),
+    )
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+    // работа с row
+    _ = row
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "database/sql" %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "database/sql"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    nativeDriver, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer nativeDriver.Close(ctx)
+
+    connector, err := ydb.Connector(nativeDriver)
+    if err != nil {
+      panic(err)
+    }
+    defer connector.Close()
+
+    db := sql.OpenDB(connector)
+    defer db.Close()
+
+    // Snapshot Read-Write — обеспечивает согласованное чтение данных на определённый момент времени
+    // с возможностью записи
+    err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
+      row := tx.QueryRowContext(ctx, "SELECT 1")
+      var result int
+      return row.Scan(&result)
+    }, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
+      Isolation: sql.LevelSnapshot,
+      ReadOnly:  false,
+    }))
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+  }
+  ```
+
+  {% endcut %}
+
+- Java
+
+  ```java
+  import tech.ydb.query.QueryClient;
+  import tech.ydb.query.TxMode;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+  import tech.ydb.core.Result;
+  import java.util.concurrent.CompletableFuture;
+
+  // ...
+
+  QueryClient queryClient = QueryClient.newClient(transport).build();
+  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+  retryCtx.supplyResult(session -> {
+      QueryReader reader = QueryReader.readFrom(
+          session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW)
+      ).join().getValue();
+      return CompletableFuture.completedFuture(Result.success(reader));
+  }).join().getValue();
+  ```
+
+- Python
+
+  ```python
+  import ydb
+
+  def execute_query(pool: ydb.QuerySessionPool):
+      def callee(session: ydb.QuerySession):
+          with session.transaction(ydb.QuerySnapshotReadWrite()).execute(
+              "SELECT 1",
+              commit_tx=True,
+          ) as result_sets:
+              pass  # работа с result_sets
+
+      pool.retry_operation_sync(callee)
+  ```
+
+- C++
+
+  ```cpp
+  auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
+  auto result = session.ExecuteQuery(
+      "SELECT 1",
+      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+  ).GetValueSync();
+  ```
+
+- C# (.NET)
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  await using var connection = await dataSource.OpenConnectionAsync();
+  await using var transaction = await connection.BeginTransactionAsync(TxMode.SnapshotRw);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await command.ExecuteNonQueryAsync();
+  await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
 
 {% endlist %}

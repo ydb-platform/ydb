@@ -14,12 +14,12 @@
 
 {% endif %}
 
+```yql
     CREATE [TEMP | TEMPORARY] TABLE table_name (
         column1 type1,
-{% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
+        column2 type2 column_option_list
         ...
         columnN typeN,
-{% if feature_secondary_index == true %}
         INDEX `<index_name>`
           [GLOBAL|LOCAL]
           [UNIQUE]
@@ -29,22 +29,25 @@
           [COVER ( <cover_columns> )]
           [WITH ( <parameter_name> = <parameter_value>[, ...])]
         ...
-{% endif %}
-{% if feature_map_tables %}
         PRIMARY KEY ( column, ... ),
         FAMILY column_family ( family_options, ... )
-{% else %}
         ...
-{% endif %}
     )
-{% if feature_map_tables %}
     WITH ( key = value, ... )
     [AS SELECT ...]
-{% endif %}
+```
+
+## Параметры запроса
+
+### column_option_list
+
+{% include [column_option_list.md](../_includes/column_option_list.md) %}
 
 {% if oss == true and backend_name == "YDB" %}
 
 {% if feature_olap_tables %}
+
+## Типы таблиц
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
 
@@ -86,8 +89,9 @@ WITH (
     CREATE TABLE <table_name> (
       a Uint64,
       b Uint64,
-      c Float,
-      d "List<List<Int32>>"
+      c Float NOT NULL DEFAULT 3.0f,
+      d String (DEFAULT "Text", NOT NULL),
+      e "List<List<Int32>>"
       PRIMARY KEY (a, b)
     );
     ```
@@ -98,7 +102,8 @@ WITH (
     CREATE TABLE <table_name> (
       a Uint64,
       b Uint64,
-      c Float,
+      c Float NOT NULL DEFAULT 3.0f,
+      d String (DEFAULT "Text", NOT NULL),
       PRIMARY KEY (a, b)
     );
     ```
@@ -154,7 +159,8 @@ WITH (
   CREATE TABLE <table_name> (
     a Uint64,
     b Uint64,
-    c Float,
+    c Float NOT NULL DEFAULT 3.0f,
+    d String (DEFAULT "Text", NOT NULL),
     PRIMARY KEY (a, b)
   )
   WITH (

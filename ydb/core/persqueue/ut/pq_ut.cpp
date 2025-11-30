@@ -2546,6 +2546,7 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
 
     auto observe = [&](TAutoPtr<IEventHandle>& ev) {
         if (auto* event = ev->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            Cerr << ">>> got event: " << event->Record.ShortDebugString() << Endl;
             foundCmdDeleteFirstMessage = false;
             const auto& record = event->Record;
             for (size_t i = 0; i < record.CmdDeleteRangeSize(); ++i) {
@@ -2599,7 +2600,7 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
     data[0].second = TString(1_KB, 'x');
     CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 2);
 
-    Cerr << ">>> write #1" << Endl;
+    Cerr << ">>> write #4" << Endl;
 
     keys = GetTabletKeys(tc);
     UNIT_ASSERT_C(!keys.contains(firstMessageKey),
@@ -2726,6 +2727,8 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     // Making sure that the blobs have not been deleted yet
     auto keys = GetTabletKeys(tc);
 
+    Cerr << "keys: " << JoinRange(", ", keys.begin(), keys.end()) << Endl;
+
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
@@ -2770,11 +2773,13 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
 
     keys = GetTabletKeys(tc);
 
+    Cerr << "keys: " << JoinRange(", ", keys.begin(), keys.end()) << Endl;
+
     // We make sure that the blobs with messages on offsets 2 and 3 have not been deleted
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
-    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
 
     tc.Runtime->Send(blobResponseEvent);
 
@@ -2786,9 +2791,12 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
 
     keys = GetTabletKeys(tc);
 
+    Cerr << "keys: " << JoinRange(", ", keys.begin(), keys.end()) << Endl;
+
     // Making sure that the blobs for messages with offsets 2 and 3 are removed
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
 }
 
 Y_UNIT_TEST(IncompleteProxyResponse) {

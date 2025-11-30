@@ -141,6 +141,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitMetaStep;
     friend TInitInfoRangeStep;
     friend TInitDataRangeStep;
+    friend TDeleteKeysStep;
     friend TInitMessageDeduplicatorStep;
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
@@ -210,7 +211,6 @@ private:
                                const TString& errorStr,
                                const TWriteMsg& p,
                                NPersQueue::NErrorCode::EErrorCode errorCode);
-    void ClearOldHead(const ui64 offset, const ui16 partNo);
     void CreateMirrorerActor();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
@@ -801,9 +801,6 @@ private:
 
     TMessageQueue PendingRequests;
     TMessageQueue QuotaWaitingRequests;
-
-    std::shared_ptr<std::deque<TString>> DeletedKeys;
-    std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
 
     TPartitionBlobEncoder CompactionBlobEncoder; // Compaction zone
     TPartitionBlobEncoder BlobEncoder;           // FastWrite zone

@@ -171,9 +171,7 @@ void TVectorWorkloadParams::Init() {
         Y_ABORT_UNLESS(describeTableResult.IsSuccess(), "DescribeTable failed: %s", describeTableResult.GetIssues().ToString().c_str());
 
         const auto& tableDescription = describeTableResult.GetTableDescription();
-        Y_ABORT_UNLESS(tableDescription.GetPrimaryKeyColumns().size() == 1,
-            "Only single key is supported. But table %s has %d key columns", QueryTableName.c_str(), tableDescription.GetPrimaryKeyColumns().size());
-        QueryTableKeyColumn = tableDescription.GetPrimaryKeyColumns().at(0);
+        QueryTableKeyColumns = tableDescription.GetPrimaryKeyColumns();
     }
 
     if (NonIndexedSearch) {

@@ -172,7 +172,8 @@ public:
 
             // Allow CDC operations on tables that are under incremental backup/restore
             if (checks && tablePath.IsUnderOperation() &&
-                !tablePath.IsUnderOutgoingIncrementalRestore()) {
+                !tablePath.IsUnderOutgoingIncrementalRestore() && 
+                tablePath.Base()->LastTxId != OperationId.GetTxId()) {
                 checks.NotUnderOperation();
             }
 
@@ -555,7 +556,8 @@ public:
 
             // Allow CDC operations on tables that are under incremental backup/restore
             if (checks && tablePath.IsUnderOperation() &&
-                !tablePath.IsUnderOutgoingIncrementalRestore()) {
+                !tablePath.IsUnderOutgoingIncrementalRestore() && 
+                tablePath.Base()->LastTxId != OperationId.GetTxId()) {
                 checks.NotUnderOperation();
             }
 
@@ -650,7 +652,9 @@ public:
         txState.CdcPathId = newStreamPath.Base()->PathId;
         txState.State = TTxState::ConfigureParts;
 
-        tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
+        if (tablePath.Base()->PathState != NKikimrSchemeOp::EPathStateCopying) {
+            tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
+        }
         tablePath.Base()->LastTxId = OperationId.GetTxId();
 
         for (const auto& splitOpId : table->GetSplitOpsInFlight()) {

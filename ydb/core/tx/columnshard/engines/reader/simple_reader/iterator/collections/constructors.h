@@ -32,6 +32,9 @@ public:
     void SetIndex(const ui32 index) {
         SourceIdx = index;
     }
+    bool IsInitialized() const {
+        return !!SourceIdx;
+    }
 
     void SetIsStartedByCursor() {
         IsStartedByCursorFlag = true;
@@ -73,7 +76,6 @@ public:
 class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSourceConstructor> {
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>;
-    ui32 CurrentSourceIdx = 0;
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;
@@ -100,8 +102,6 @@ private:
 
     virtual std::shared_ptr<NCommon::IDataSource> DoExtractNextImpl(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
         auto constructor = TBase::PopObjectWithAccessor();
-        constructor.MutableObject().SetIndex(CurrentSourceIdx);
-        ++CurrentSourceIdx;
         return constructor.MutableObject().Construct(context, constructor.DetachAccessor());
     }
 

@@ -198,11 +198,12 @@ public:
 class TSimpleScanCursor: public IScanCursor {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TSimpleRow>, PrimaryKey);
-    ui64 SourceIdx = 0;
+    std::optional<ui32> SourceIdx;
     YDB_READONLY(ui32, RecordIndex, 0);
 
     virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
-        proto.MutableColumnShardSimple()->SetSourceIdx(SourceIdx);
+        AFL_VERIFY(SourceIdx);
+        proto.MutableColumnShardSimple()->SetSourceIdx(*SourceIdx);
         proto.MutableColumnShardSimple()->SetStartRecordIndex(RecordIndex);
     }
 
@@ -215,7 +216,8 @@ private:
     }
 
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
-        if (SourceIdx != entity.GetEntityId()) {
+        AFL_VERIFY(SourceIdx);
+        if (*SourceIdx != entity.GetEntityId()) {
             return false;
         }
         if (!entity.GetEntityRecordsCount()) {
@@ -243,7 +245,8 @@ private:
     }
 
     virtual bool DoCheckSourceIntervalUsage(const ui32 sourceIdx, const ui32 indexStart, const ui32 recordsCount) const override {
-        AFL_VERIFY(sourceIdx == SourceIdx);
+        AFL_VERIFY(SourceIdx);
+        AFL_VERIFY(sourceIdx == *SourceIdx);
         if (indexStart >= RecordIndex) {
             return true;
         }
@@ -264,12 +267,13 @@ public:
 
 class TNotSortedSimpleScanCursor: public TSimpleScanCursor {
 private:
-    YDB_READONLY(ui64, SourceIdx, 0);
+    std::optional<ui32> SourceIdx;
     YDB_READONLY(ui32, RecordIndex, 0);
 
     virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
         auto& data = *proto.MutableColumnShardNotSortedSimple();
-        data.SetSourceIdx(SourceIdx);
+        AFL_VERIFY(SourceIdx);
+        data.SetSourceIdx(*SourceIdx);
         data.SetStartRecordIndex(RecordIndex);
     }
 
@@ -282,7 +286,8 @@ private:
     }
 
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
-        if (SourceIdx != entity.GetEntityId()) {
+        AFL_VERIFY(SourceIdx);
+        if (*SourceIdx != entity.GetEntityId()) {
             return false;
         }
         if (!entity.GetEntityRecordsCount()) {
@@ -311,7 +316,8 @@ private:
     }
 
     virtual bool DoCheckSourceIntervalUsage(const ui32 sourceIdx, const ui32 indexStart, const ui32 recordsCount) const override {
-        AFL_VERIFY(sourceIdx == SourceIdx);
+        AFL_VERIFY(SourceIdx);
+        AFL_VERIFY(sourceIdx == *SourceIdx);
         if (indexStart >= RecordIndex) {
             return true;
         }
@@ -355,7 +361,7 @@ private:
         return true;
     }
 
-    virtual bool DoCheckSourceIntervalUsage(const ui32 /*sourceId*/, const ui32 /*indexStart*/, const ui32 /*recordsCount*/) const override {
+    virtual bool DoCheckSourceIntervalUsage(const ui32 /*sourceIdx*/, const ui32 /*indexStart*/, const ui32 /*recordsCount*/) const override {
         return true;
     }
 

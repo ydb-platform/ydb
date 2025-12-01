@@ -2,18 +2,12 @@ name: Cherry-pick_v2
 on:
   workflow_dispatch:
     inputs:
-      commit_sha:
-        type: string
-        description: |
-          (Optional) Commit SHA to use for checking out scripts.
-          If not provided, the default branch will be used.
-        default: ""
-      commits:
+      commits_and_pulls:
         type: string
         default: ""
         description: |
-          List of commits to cherry-pick.
-          Can be represented as full or short commit SHA, PR number or URL to commit or PR.
+          List of sha commits or pull numbers to cherry-pick.
+          Can be represented as full or short commit SHA, PR number.
           Separated by space, comma or line end.
           Example: "sha5682 123245"
         required: true
@@ -21,6 +15,12 @@ on:
         default: ""
         description: Comma or space separated branches to cherry-pick
         required: true
+      script_version_sha:
+        type: string
+        description: |
+          (Optional) Commit SHA to use for checking out scripts.
+          If not provided, the default branch will be used.
+        default: ""
       allow_unmerged:
         type: boolean
         default: true

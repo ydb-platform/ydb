@@ -118,6 +118,7 @@ public:
         const TChecker& IsSecret(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsStreamingQuery(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& Or(TCheckerMethodPtr leftFunc, TCheckerMethodPtr rightFunc, EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsTestShard(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:
@@ -191,6 +192,7 @@ public:
     bool IsSequence() const;
     bool IsReplication() const;
     bool IsTransfer() const;
+    bool IsTestShard() const;
     ui32 Depth() const;
     ui64 Shards() const;
     const TString& LeafName() const;

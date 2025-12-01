@@ -321,7 +321,7 @@ message TTableDescription {
     optional bool PartitionRangeEndIsInclusive = 23;
 
     optional string CopyFromTable = 30;
-    repeated TSplitBoundary SplitBoundary = 31;     // Boundaries for non-uniform split
+    repeated TSplitBoundary SplitBoundary = 31; // Boundaries for non-uniform split
 
     repeated TIndexDescription TableIndexes = 32;
 
@@ -1590,6 +1590,21 @@ message TAlterSolomonVolume {
     optional TKeyValueStorageConfig StorageConfig = 5;
 }
 
+message TTestShardDescription {
+    optional string Name = 1; // mandatory
+    optional uint64 PathId = 2;
+    optional uint64 TabletId = 3; // do not set
+    optional uint64 Version = 4; // do not set
+}
+
+message TCreateTestShard {
+    optional string Name = 1; // mandatory
+    optional uint64 OwnerIdx = 2;
+    optional uint32 Count = 3;
+    optional TKeyValueStorageConfig StorageConfig = 4;
+    optional string Config = 5;
+}
+
 message TBlockStoreAssignOp {
     optional string Name = 1; // mandatory
     optional string NewMountToken = 2; // unset to unassign
@@ -1611,7 +1626,7 @@ message TSplitMergeTablePartitions {
     optional string TablePath = 2;
     optional uint64 TableLocalId = 3;
     repeated uint64 SourceTabletId = 4;
-    repeated TSplitBoundary SplitBoundary = 5;  // Points of split (there will be N+1 parts)
+    repeated TSplitBoundary SplitBoundary = 5; // Points of split (there will be N+1 parts)
     optional uint64 SchemeshardId = 6;          // Only needed if TableId is used instead of path
     optional uint64 TableOwnerId = 7;
     optional bool AllowOneToOneSplitMerge = 8;  // Allow a special 1-to-1 split/merge for emergencies
@@ -1954,6 +1969,8 @@ message TModifyScheme {
     // for example, by resetting all sequences.
     optional TTruncateTable TruncateTable = 92;
 
+    optional TCreateTestShard CreateTestShard = 93;
+
     // Some entries are grouped by semantics, so are out of order
 }
 
@@ -2026,6 +2043,7 @@ enum EPathType {
     EPathTypeSysView = 24;
     EPathTypeSecret = 25;
     EPathTypeStreamingQuery = 26;
+    EPathTypeTestShard = 27;
 }
 
 enum EPathSubType {
@@ -2089,6 +2107,7 @@ message TPathVersion {
     optional uint64 SysViewVersion = 32;
     optional uint64 SecretVersion = 33;
     optional uint64 StreamingQueryVersion = 34;
+    optional uint64 TestShardVersion = 35;
 }
 
 // Describes single path
@@ -2150,9 +2169,9 @@ message TLastBackupResult {
 // Result for TDescribePath request
 message TPathDescription {
     optional TDirEntry Self = 1;                    // info about the path itself
-    repeated TDirEntry Children = 2;                // for directory
+    repeated TDirEntry Children = 2; // for directory
     optional TTableDescription Table = 3;           // for table
-    repeated TTablePartition TablePartitions = 4;   // for table
+    repeated TTablePartition TablePartitions = 4; // for table
     optional TPersQueueGroupDescription PersQueueGroup = 5; // for pq group
     optional TBackupProgress BackupProgress = 6;
     repeated TLastBackupResult LastBackupResult = 7;
@@ -2183,6 +2202,7 @@ message TPathDescription {
     optional TSysViewDescription SysViewDescription = 32;
     optional TSecretDescription SecretDescription = 33;
     optional TStreamingQueryDescription StreamingQueryDescription = 34;
+    optional TTestShardDescription TestShardDescription = 35;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB

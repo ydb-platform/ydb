@@ -310,6 +310,11 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER STREAMING QUERY";
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
         return "TRUNCATE TABLE";
+    // test shard
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShard:
+        return "CREATE TEST SHARD";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShard:
+        return "DROP TEST SHARD";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -709,6 +714,11 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
         result.emplace_back(tx.GetTruncateTable().GetTableName());
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShard:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateTestShard().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShard:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     }
 

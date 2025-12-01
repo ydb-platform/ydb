@@ -14,21 +14,18 @@ public:
         : TClientImplCommon(std::move(connections), settings)
     {}
 
-    TAsyncCreateTestShardResult CreateTestShard(uint64_t ownerIdx,
+    TAsyncCreateTestShardResult CreateTestShard(const std::string& path,
             const std::vector<std::string>& channels, uint32_t count,
-            const std::string& config, const std::string& database,
+            const std::string& config,
             const TCreateTestShardSettings& settings) {
         auto request = MakeOperationRequest<Ydb::TestShard::CreateTestShardRequest>(settings);
-        request.set_owner_idx(ownerIdx);
+        request.set_path(path);
         for (const auto& channel : channels) {
             request.add_channels(channel);
         }
         request.set_count(count);
         if (!config.empty()) {
             request.set_config(config);
-        }
-        if (!database.empty()) {
-            request.set_database(database);
         }
 
         auto promise = NThreading::NewPromise<TCreateTestShardResult>();
@@ -58,15 +55,10 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncStatus DeleteTestShard(uint64_t ownerIdx, uint32_t count,
-            const std::string& database,
+    TAsyncStatus DeleteTestShard(const std::string& path,
             const TDeleteTestShardSettings& settings) {
         auto request = MakeOperationRequest<Ydb::TestShard::DeleteTestShardRequest>(settings);
-        request.set_owner_idx(ownerIdx);
-        request.set_count(count);
-        if (!database.empty()) {
-            request.set_database(database);
-        }
+        request.set_path(path);
 
         return RunSimple<Ydb::TestShard::V1::TestShardService, Ydb::TestShard::DeleteTestShardRequest, Ydb::TestShard::DeleteTestShardResponse>(
             std::move(request),
@@ -81,17 +73,16 @@ TTestShardClient::TTestShardClient(const TDriver& driver, const TCommonClientSet
 
 TTestShardClient::~TTestShardClient() = default;
 
-TAsyncCreateTestShardResult TTestShardClient::CreateTestShard(uint64_t ownerIdx,
+TAsyncCreateTestShardResult TTestShardClient::CreateTestShard(const std::string& path,
         const std::vector<std::string>& channels, uint32_t count,
-        const std::string& config, const std::string& database,
+        const std::string& config,
         const TCreateTestShardSettings& settings) {
-    return Impl_->CreateTestShard(ownerIdx, channels, count, config, database, settings);
+    return Impl_->CreateTestShard(path, channels, count, config, settings);
 }
 
-TAsyncStatus TTestShardClient::DeleteTestShard(uint64_t ownerIdx,
-        uint32_t count, const std::string& database,
+TAsyncStatus TTestShardClient::DeleteTestShard(const std::string& path,
         const TDeleteTestShardSettings& settings) {
-    return Impl_->DeleteTestShard(ownerIdx, count, database, settings);
+    return Impl_->DeleteTestShard(path, settings);
 }
 
 } // namespace NYdb::inline Dev::NTestShard

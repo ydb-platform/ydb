@@ -132,6 +132,8 @@ enum ESimpleCounters : int;
     item(TxDropStreamingQuery, 115) \
     item(TxAlterStreamingQuery, 116) \
     item(TxTruncateTable, 117) \
+    item(TxCreateTestShard, 117) \
+    item(TxDropTestShard, 118) \
 
 // TX_STATE_TYPE_ENUM
 

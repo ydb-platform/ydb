@@ -26,6 +26,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/test_tablet/events.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
@@ -1745,6 +1746,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateLongIncrementalBackupOp:
     case TTxState::TxCreateSecret:
     case TTxState::TxCreateStreamingQuery:
+    case TTxState::TxCreateTestShard:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1817,6 +1819,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropSysView:
     case TTxState::TxDropSecret:
     case TTxState::TxDropStreamingQuery:
+    case TTxState::TxDropTestShard:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -3537,6 +3540,42 @@ void TSchemeShard::PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId path
     db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistTestShard(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    const auto path = PathsById.find(pathId);
+    Y_ABORT_UNLESS(path != PathsById.end());
+    Y_ABORT_UNLESS(path->second && path->second->IsTestShard());
+
+    const auto testShardIt = TestShards.find(pathId);
+    Y_ABORT_UNLESS(testShardIt != TestShards.end());
+    const auto testShard = testShardIt->second;
+    Y_ABORT_UNLESS(testShard);
+
+    db.Table<Schema::TestShards>().Key(pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::TestShards::Version>(testShard->Version)
+    );
+
+    for (const auto& [shardIdx, tabletId] : testShard->TestShards) {
+        db.Table<Schema::TestShardTablets>().Key(pathId.LocalPathId, shardIdx.GetLocalId()).Update(
+            NIceDb::TUpdate<Schema::TestShardTablets::TabletId>(tabletId)
+        );
+    }
+}
+
+void TSchemeShard::PersistRemoveTestShard(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    if (const auto it = TestShards.find(pathId); it != TestShards.end()) {
+        const auto testShard = it->second;
+        for (const auto& [shardIdx, _] : testShard->TestShards) {
+            db.Table<Schema::TestShardTablets>().Key(pathId.LocalPathId, shardIdx.GetLocalId()).Delete();
+        }
+        TestShards.erase(it);
+        DecrementPathDbRefCount(pathId);
+    }
+    db.Table<Schema::TestShards>().Key(pathId.LocalPathId).Delete();
+}
+
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -4894,6 +4933,13 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetStreamingQueryVersion();
                 break;
             }
+            case NKikimrSchemeOp::EPathType::EPathTypeTestShard: {
+                const auto it = TestShards.find(pathId);
+                Y_ABORT_UNLESS(it != TestShards.end());
+                result.SetTestShardVersion(it->second->Version);
+                generalVersion += result.GetTestShardVersion();
+                break;
+            }
 
             case NKikimrSchemeOp::EPathType::EPathTypeSecret: {
                 auto it = Secrets.find(pathId);
@@ -5504,6 +5550,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvBlobStorage::TEvControllerShredResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunShredBSC, Handle);
 
+        HFuncTraced(NKikimr::NTestShard::TEvControlResponse, Handle);
+
         HFuncTraced(TEvPersQueue::TEvOffloadStatus, Handle);
         HFuncTraced(TEvPrivate::TEvContinuousBackupCleanerResult, Handle);
 
@@ -5828,6 +5876,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     case TPathElement::EPathType::EPathTypeStreamingQuery:
         TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Sub(1);
         break;
+    case TPathElement::EPathType::EPathTypeTestShard:
+        TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Sub(1);
+        break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");
     }
@@ -5923,6 +5974,9 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             break;
         case TPathElement::EPathType::EPathTypeBlobDepot:
             Y_ABORT("not implemented");
+        case TPathElement::EPathType::EPathTypeTestShard:
+            PersistRemoveTestShard(db, node->PathId);
+            break;
         default:
             // not all path types support removal
             break;
@@ -8298,6 +8352,45 @@ void TSchemeShard::Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, 
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunShredBSC::TPtr&, const TActorContext&) {
     ShredManager->SendRequestToBSC();
+}
+
+void TSchemeShard::Handle(NKikimr::NTestShard::TEvControlResponse::TPtr& ev, const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Handle TEvControlResponse"
+                << ", at schemeshard: " << TabletID()
+                << ", message: " << ev->Get()->Record.ShortDebugString());
+
+    auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
+    auto shardIdx = GetShardIdx(tabletId);
+    if (shardIdx == InvalidShardIdx) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvControlResponse for unknown tabletId, ignore it"
+                       << ", tabletId: " << tabletId
+                       << ", message: " << ev->Get()->Record.ShortDebugString()
+                       << ", at schemeshard: " << TabletID());
+        return;
+    }
+
+    const auto txId = ShardInfos.at(shardIdx).CurrentTxId;
+    if (!Operations.contains(txId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvControlResponse for unknown txId, ignore it"
+                       << ", txId: " << txId
+                       << ", message: " << ev->Get()->Record.ShortDebugString()
+                       << ", at schemeshard: " << TabletID());
+        return;
+    }
+
+    TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
+    if (partId == InvalidSubTxId) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvControlResponse but partId in unknown"
+                       << ", for txId: " << txId
+                       << ", tabletId: " << tabletId
+                       << ", at schemeshard: " << TabletID());
+        return;
+    }
+    Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext&) {

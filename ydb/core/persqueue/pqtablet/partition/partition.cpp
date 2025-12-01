@@ -366,6 +366,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
     , SamplingControl(samplingControl)
+    , MessageIdDeduplicator(partition, CreateDefaultTimeProvider(), TDuration::Minutes(5))
 {
     TabletCounters.Populate(*Counters);
     TabletCounters.ResetCounters();

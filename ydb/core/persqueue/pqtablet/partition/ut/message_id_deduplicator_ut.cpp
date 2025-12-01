@@ -1,3 +1,4 @@
+#include <ydb/core/persqueue/common/partition_id.h>
 #include <ydb/core/persqueue/pqtablet/partition/message_id_deduplicator.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
@@ -23,9 +24,11 @@ struct MockTimeProvider : public ITimeProvider {
 };
 
 struct TestScenario {
+    TPartitionId PartitionId = TPartitionId(1);
+
     TestScenario()
         : TimeProvider(MakeIntrusive<MockTimeProvider>())
-        , Deduplicator(TimeProvider, TDuration::Seconds(10))
+        , Deduplicator(PartitionId, TimeProvider, TDuration::Seconds(10))
     {
     }
 
@@ -51,7 +54,7 @@ struct TestScenario {
     }
 
     void AssertWALLoad() {
-        TMessageIdDeduplicator target(TimeProvider, TDuration::Seconds(10));
+        TMessageIdDeduplicator target(PartitionId,TimeProvider, TDuration::Seconds(10));
         for (auto& wal : WALs) {
             target.ApplyWAL("key-1", std::move(wal));
         }

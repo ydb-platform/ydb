@@ -867,7 +867,7 @@ void TInitMessageDeduplicatorStep::Execute(const TActorContext &ctx) {
     if (MirroringEnabled(Partition()->Config) || Partition()->Partition.IsSupportivePartition()) {
         return Done(ctx);
     }
-    auto firstKey = MakeDeduplicatorWALKey(Partition()->Partition.OriginalPartitionId, TInstant::Now() - Partition()->MessageIdDeduplicator.GetDeduplicationWindow());
+    auto firstKey = MakeDeduplicatorWALKey(Partition()->Partition.OriginalPartitionId, 0);
     RequestDeduplicatorRange(ctx, Partition()->TabletActorId, PartitionId(), firstKey);
 }
 
@@ -899,9 +899,9 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
                 }
             }
 
-            if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
-                PQ_INIT_ENSURE(range.PairSize());
-                RequestDeduplicatorRange(ctx, Partition()->TabletActorId, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
+            if (range->GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
+                PQ_INIT_ENSURE(range->PairSize());
+                RequestDeduplicatorRange(ctx, Partition()->TabletActorId, PartitionId(), range->GetPair(range->PairSize() - 1).GetKey());
                 return;
             }
 
@@ -911,7 +911,7 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
             Done(ctx);
             break;
         default:
-            AFL_ENSURE("bad status")("s", range.GetStatus());
+            AFL_ENSURE("bad status")("s", range->GetStatus());
     };
 }
 

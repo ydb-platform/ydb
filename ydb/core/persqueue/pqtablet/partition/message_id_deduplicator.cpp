@@ -10,16 +10,18 @@ namespace NKikimr::NPQ {
 
 namespace {
 
-constexpr TDuration BucketSize = TDuration::MilliSeconds(100);
+constexpr TDuration BucketSize = TDuration::Seconds(1);
+constexpr ui64 MaxDeduplicationIDs = TDuration::Minutes(5).Seconds() * 1000;
 
-TInstant Trim(TInstant value) {
-    return TInstant::MilliSeconds(value.MilliSeconds() / BucketSize.MilliSeconds() * BucketSize.MilliSeconds() + BucketSize.MilliSeconds());
+TInstant Trim(TInstant value, bool up = true) {
+    return TInstant::MilliSeconds(value.MilliSeconds() / BucketSize.MilliSeconds() * BucketSize.MilliSeconds() + (up ? BucketSize.MilliSeconds() : 0));
 }
 
 }
 
-TMessageIdDeduplicator::TMessageIdDeduplicator(TIntrusivePtr<ITimeProvider> timeProvider, TDuration deduplicationWindow)
-    : TimeProvider(timeProvider)
+TMessageIdDeduplicator::TMessageIdDeduplicator(const TPartitionId& partitionId, TIntrusivePtr<ITimeProvider> timeProvider, TDuration deduplicationWindow)
+    : PartitionId(partitionId)
+    , TimeProvider(timeProvider)
     , DeduplicationWindow(deduplicationWindow)
 {
 }
@@ -40,11 +42,11 @@ std::optional<ui64> TMessageIdDeduplicator::AddMessage(const TString& deduplicat
         return it->second;
     }
 
-    const auto now = Trim(TimeProvider->Now());
+    const auto now = TimeProvider->Now();
     const auto expirationTime = now + DeduplicationWindow;
 
     if (!CurrentBucket.StartTime) {
-        CurrentBucket.StartTime = now;
+        CurrentBucket.StartTime = Trim(now, false) + DeduplicationWindow;
         CurrentBucket.StartMessageIndex = Queue.size();
     }
 
@@ -61,7 +63,7 @@ size_t TMessageIdDeduplicator::Compact() {
 
     while (!Queue.empty()) {
         const auto& message = Queue.front();
-        if (message.ExpirationTime > now) {
+        if (Queue.size() <= MaxDeduplicationIDs && message.ExpirationTime > now) {
             break;
         }
         auto it = Messages.find(message.DeduplicationId);
@@ -79,12 +81,16 @@ size_t TMessageIdDeduplicator::Compact() {
     auto compactBucket = [&](TBucket& bucket) {
         bucket.StartMessageIndex = normalize(bucket.StartMessageIndex);
         bucket.LastWrittenMessageIndex = normalize(bucket.LastWrittenMessageIndex);
-        bucket.StartTime = Queue.empty() ? TInstant::Zero() : Queue.front().ExpirationTime;
+        bucket.StartTime = Queue.empty() ? TInstant::Zero() : Trim(Queue.front().ExpirationTime, false);
     };
 
     compactBucket(CurrentBucket);
     if (PendingBucket) {
         compactBucket(*PendingBucket);
+    }
+
+    while(WALKeys.empty() || WALKeys.front().ExpirationTime <= now) {
+        WALKeys.pop_front();
     }
 
     return removed;
@@ -99,6 +105,7 @@ void TMessageIdDeduplicator::Commit() {
 }
 
 bool TMessageIdDeduplicator::ApplyWAL(TString&& key, NKikimrPQ::TMessageDeduplicationIdWAL&& wal) {
+    const auto now = TimeProvider->Now();
     CurrentBucket.StartMessageIndex = Queue.size();
 
     size_t offset = 0;
@@ -107,6 +114,9 @@ bool TMessageIdDeduplicator::ApplyWAL(TString&& key, NKikimrPQ::TMessageDeduplic
     for (auto& message : *wal.MutableMessage()) {
         offset += message.GetOffsetDelta();
         expirationTime += TDuration::MilliSeconds(message.GetExpirationTimestampMillisecondsDelta());
+        if (expirationTime <= now) {
+            continue;
+        }
 
         auto it = Messages.find(message.GetDeduplicationId());
         if (it != Messages.end() && it->second >= offset) {
@@ -117,23 +127,22 @@ bool TMessageIdDeduplicator::ApplyWAL(TString&& key, NKikimrPQ::TMessageDeduplic
     }
 
     CurrentBucket.LastWrittenMessageIndex = Queue.size();
-    CurrentBucket.StartTime = Queue.empty() ? TInstant::Zero() : Queue.back().ExpirationTime;
+    CurrentBucket.StartTime = Queue.empty() ? TInstant::Zero() : Trim(Queue.back().ExpirationTime, false);
 
     WALKeys.emplace_back(std::move(key), expirationTime);
 
     return true;
 }
 
-bool TMessageIdDeduplicator::SerializeTo(NKikimrPQ::TMessageDeduplicationIdWAL& wal) {
+std::optional<TString> TMessageIdDeduplicator::SerializeTo(NKikimrPQ::TMessageDeduplicationIdWAL& wal) {
     if (Queue.empty() || !HasChanges) {
-        return false;
+        return std::nullopt;
     }
 
-    const auto expirationTime = Queue.back().ExpirationTime;
-    const bool sameBucket = CurrentBucket.StartTime == expirationTime;
+    const bool sameBucket = CurrentBucket.StartTime > Queue.back().ExpirationTime - BucketSize;
     size_t startIndex = sameBucket ? CurrentBucket.StartMessageIndex : CurrentBucket.LastWrittenMessageIndex;
     if (startIndex == Queue.size()) {
-        return false;
+        return std::nullopt;
     }
 
     ui64 lastOffset = 0;
@@ -150,25 +159,39 @@ bool TMessageIdDeduplicator::SerializeTo(NKikimrPQ::TMessageDeduplicationIdWAL& 
     }
 
     PendingBucket = {
-        .StartTime = expirationTime,
+        .StartTime = Trim(lastExpirationTime, false),
         .StartMessageIndex = startIndex,
         .LastWrittenMessageIndex = Queue.size(),
     };
 
-    return true;
+    if (!sameBucket) {
+        WALKeys.emplace_back(MakeDeduplicatorWALKey(PartitionId.OriginalPartitionId, NextMessageIdDeduplicatorWAL), lastExpirationTime);
+        NextMessageIdDeduplicatorWAL++;
+    } else {
+        WALKeys.back().ExpirationTime = lastExpirationTime;
+    }
+
+    return WALKeys.back().Key;
+}
+
+TString TMessageIdDeduplicator::GetFirstActualWAL() const {
+    if (WALKeys.empty()) {
+        return MakeDeduplicatorWALKey(PartitionId.OriginalPartitionId, NextMessageIdDeduplicatorWAL);
+    }
+    return WALKeys.front().Key;
 }
 
 const std::deque<TMessageIdDeduplicator::TMessage>& TMessageIdDeduplicator::GetQueue() const {
     return Queue;
 }
 
-TString MakeDeduplicatorWALKey(ui32 partitionId, const TInstant& expirationTime) {
+TString MakeDeduplicatorWALKey(ui32 partitionId, ui64 id) {
     static constexpr char WALSeparator = '|';
 
     TKeyPrefix ikey(TKeyPrefix::EType::TypeDeduplicator, TPartitionId(partitionId));
     ikey.Append(WALSeparator);
 
-    auto bucket = Sprintf("%.16llX", expirationTime.MilliSeconds() / BucketSize.MilliSeconds());
+    auto bucket = Sprintf("%.16llX", id);
     ikey.Append(bucket.data(), bucket.size());
 
     return ikey.ToString();
@@ -182,11 +205,10 @@ void TPartition::AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request) {
     MessageIdDeduplicator.Compact();
 
     NKikimrPQ::TMessageDeduplicationIdWAL wal;
-    if (MessageIdDeduplicator.SerializeTo(wal)) {
-        auto expirationTime = TInstant::MilliSeconds(wal.GetExpirationTimestampMilliseconds());
+    if (auto key = MessageIdDeduplicator.SerializeTo(wal); key) {
 
         auto* writeWAL = request->Record.AddCmdWrite();
-        writeWAL->SetKey(MakeDeduplicatorWALKey(Partition.OriginalPartitionId, expirationTime));
+        writeWAL->SetKey(key.value());
         writeWAL->SetValue(wal.SerializeAsString());
         if (writeWAL->GetValue().size() < 1000) {
             writeWAL->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
@@ -194,10 +216,10 @@ void TPartition::AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request) {
     }
 
     auto* deleteExpired = request->Record.AddCmdDeleteRange();
-    deleteExpired->MutableRange()->SetFrom(MakeDeduplicatorWALKey(Partition.OriginalPartitionId, TInstant::Zero()));
-    deleteExpired->MutableRange()->SetTo(MakeDeduplicatorWALKey(Partition.OriginalPartitionId, MessageIdDeduplicator.GetExpirationTime()));
+    deleteExpired->MutableRange()->SetFrom(MakeDeduplicatorWALKey(Partition.OriginalPartitionId, 0));
+    deleteExpired->MutableRange()->SetTo(MessageIdDeduplicator.GetFirstActualWAL());
     deleteExpired->MutableRange()->SetIncludeFrom(true);
-    deleteExpired->MutableRange()->SetIncludeTo(true);
+    deleteExpired->MutableRange()->SetIncludeTo(false);
 }
 
 std::optional<ui64> TPartition::DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset) {

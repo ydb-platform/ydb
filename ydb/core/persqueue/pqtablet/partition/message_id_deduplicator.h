@@ -11,7 +11,9 @@ class TMessageDeduplicationIdWAL;
 
 namespace NKikimr::NPQ {
 
-TString MakeDeduplicatorWALKey(ui32 partitionId, const TInstant& expirationTime);
+class TPartitionId;
+
+TString MakeDeduplicatorWALKey(ui32 partitionId, ui64 id);
 
 class TMessageIdDeduplicator {
 public:
@@ -23,7 +25,7 @@ public:
         bool operator==(const TMessage& other) const = default;
     };
 
-    TMessageIdDeduplicator(TIntrusivePtr<ITimeProvider> timeProvider = CreateDefaultTimeProvider(), TDuration deduplicationWindow = TDuration::Minutes(5));
+    TMessageIdDeduplicator(const TPartitionId& partitionId, TIntrusivePtr<ITimeProvider> timeProvider = CreateDefaultTimeProvider(), TDuration deduplicationWindow = TDuration::Minutes(5));
     ~TMessageIdDeduplicator();
 
     TDuration GetDeduplicationWindow() const;
@@ -35,11 +37,13 @@ public:
     void Commit();
 
     bool ApplyWAL(TString&& key, NKikimrPQ::TMessageDeduplicationIdWAL&& wal);
-    bool SerializeTo(NKikimrPQ::TMessageDeduplicationIdWAL& wal);
+    std::optional<TString> SerializeTo(NKikimrPQ::TMessageDeduplicationIdWAL& wal);
+    TString GetFirstActualWAL() const;
 
     const std::deque<TMessage>& GetQueue() const;
 
 private:
+    const TPartitionId& PartitionId;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TDuration DeduplicationWindow;
 

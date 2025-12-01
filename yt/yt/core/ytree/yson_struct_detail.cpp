@@ -8,6 +8,11 @@ using namespace NYPath;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static TYPath GetPrintableStructType(const std::type_info& type)
+{
+    return "[" + TypeName(type) + "]:";
+}
+
 std::optional<EUnrecognizedStrategy> GetRecursiveUnrecognizedStrategy(EUnrecognizedStrategy strategy)
 {
     return strategy == EUnrecognizedStrategy::KeepRecursive || strategy == EUnrecognizedStrategy::ThrowRecursive
@@ -110,7 +115,7 @@ void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const std::func
 {
     for (const auto& [name, parameter] : SortedParameters_) {
         parameter->PostprocessParameter(target, [&] {
-            return (pathGetter ? pathGetter() : TYPath("")) + "/" + ToYPathLiteral(name);
+            return (pathGetter ? pathGetter() : GetPrintableStructType(GetStructType())) + "/" + ToYPathLiteral(name);
         });
     }
 
@@ -119,7 +124,8 @@ void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const std::func
             postprocessor(target);
         }
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Postprocess failed at %v",
+        THROW_ERROR_EXCEPTION("Postprocess failed at %v:%v",
+            TypeName(GetStructType()),
             !pathGetter ? "root" : pathGetter())
                 << ex;
     }
@@ -158,7 +164,7 @@ void TYsonStructMeta::LoadStruct(
         }
         auto loadOptions = TLoadParameterOptions{
             .PathGetter = [&] {
-                return (pathGetter ? pathGetter() : TYPath("")) + "/" + ToYPathLiteral(key);
+                return (pathGetter ? pathGetter() : GetPrintableStructType(GetStructType())) + "/" + ToYPathLiteral(key);
             },
             .RecursiveUnrecognizedRecursively = GetRecursiveUnrecognizedStrategy(unrecognizedStrategy),
         };
@@ -175,6 +181,7 @@ void TYsonStructMeta::LoadStruct(
                 if (ShouldThrow(unrecognizedStrategy)) {
                     auto path = (pathGetter ? pathGetter() : TYPath(""));
                     THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + ToYPathLiteral(key))
+                        << TErrorAttribute("struct", TypeName(GetStructType()))
                         << TErrorAttribute("key", key)
                         << TErrorAttribute("path", path);
                 }
@@ -207,8 +214,8 @@ void TYsonStructMeta::LoadStruct(
 
     auto createLoadOptions = [&] (TStringBuf key) {
         return TLoadParameterOptions{
-            .PathGetter = [&pathGetter, key] {
-                return (pathGetter ? pathGetter() : TYPath("")) + "/" + ToYPathLiteral(key);
+            .PathGetter = [&pathGetter, key, this] {
+                return (pathGetter ? pathGetter() : GetPrintableStructType(GetStructType())) + "/" + ToYPathLiteral(key);
             },
             .RecursiveUnrecognizedRecursively = GetRecursiveUnrecognizedStrategy(unrecognizedStrategy),
         };
@@ -260,6 +267,7 @@ void TYsonStructMeta::LoadStruct(
         if (ShouldThrow(unrecognizedStrategy)) {
             auto path = (pathGetter ? pathGetter() : TYPath(""));
             THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + ToYPathLiteral(key))
+                << TErrorAttribute("struct", TypeName(GetStructType()))
                 << TErrorAttribute("key", key)
                 << TErrorAttribute("path", path);
         }
@@ -367,10 +375,17 @@ void TYsonStructMeta::WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStr
         .EndMap();
 }
 
-void TYsonStructMeta::Traverse(TYsonStructParameterVisitor visitor, const NYPath::TYPath& path) const
+void TYsonStructMeta::Traverse(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path) const
 {
     for (const auto& [name, parameter] : InitialOrderParameters_) {
-        parameter->TraverseParameter(visitor, path);
+        auto parameterPath = path + "/" + NYPath::ToYPathLiteral(name);
+        visitor(TYsonStructTraverseContext{
+            .Path = parameterPath,
+            .StructType = StructType_,
+            .Key = name,
+            .Parameter = parameter.Get(),
+        });
+        parameter->TraverseParameter(visitor, parameterPath);
     }
 }
 
@@ -426,6 +441,12 @@ bool TYsonStructMeta::CompareStructs(
     }
 
     return true;
+}
+
+const std::type_info& TYsonStructMeta::GetStructType() const
+{
+    YT_VERIFY(StructType_);
+    return *StructType_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

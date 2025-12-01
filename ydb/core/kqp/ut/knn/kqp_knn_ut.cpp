@@ -13,6 +13,30 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpKnn) {
+    void CheckDistance(float actual, float expected) {
+        UNIT_ASSERT_C(std::abs(actual - expected) < 0.0001f,
+            "Expected distance " << expected << ", got " << actual);
+    }
+
+    template <bool Nullable>
+    std::vector<std::pair<i64, float>> ExtractPksAndScores(TResultSetParser parser) {
+        std::vector<std::pair<i64, float>> results;
+        while (parser.TryNextRow()) {
+            i64 pk;
+            if constexpr (Nullable) {
+                auto pkOpt = parser.ColumnParser("pk").GetOptionalInt64();
+                UNIT_ASSERT(pkOpt.has_value());
+                pk = *pkOpt;
+            } else {
+                pk = parser.ColumnParser("pk").GetInt64();
+            }
+            auto distanceOpt = parser.ColumnParser("distance").GetOptionalFloat();
+            UNIT_ASSERT(distanceOpt.has_value());
+            float distance = *distanceOpt;
+            results.push_back({pk, distance});
+        }
+        return results;
+    }
 
     TSession CreateTableForVectorSearch(TTableClient& db, bool nullable, const TString& dataCol = "data") {
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -78,17 +102,30 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         auto session = kikimr.RunCall([&] { return CreateTableForVectorSearch(db, Nullable, "___data"); });
 
         ui64 expectedLimit = 3;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
-                auto& read = ev->Get<TEvDataShard::TEvRead>()->Record;
-                UNIT_ASSERT(read.HasVectorTopK());
-                auto& topK = read.GetVectorTopK();
-                UNIT_ASSERT(topK.GetTargetVector() == "\x67\x71\x02");
-                UNIT_ASSERT_VALUES_EQUAL(topK.GetLimit(), expectedLimit);
+        ui64 testTableLocalId = 0;
+        auto observer = runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            auto* evRead = ev->Get();
+            auto& read = evRead->Record;
+            auto localId = read.GetTableId().GetTableId();
+
+            // Learn testTableLocalId from the first read with VectorTopK
+            if (read.HasVectorTopK()) {
+                if (testTableLocalId == 0) {
+                    testTableLocalId = localId;
+                }
+                if (localId == testTableLocalId) {
+                    auto& topK = read.GetVectorTopK();
+                    UNIT_ASSERT(topK.GetTargetVector() == "\x67\x71\x02");
+                    UNIT_ASSERT_VALUES_EQUAL(topK.GetLimit(), expectedLimit);
+                }
+            } else if (testTableLocalId != 0 && localId == testTableLocalId) {
+                // VectorTopK pushdown for point lookups is not yet implemented
+                if (!evRead->Keys.empty()) {
+                    return;
+                }
+                UNIT_ASSERT_C(false, "Read from TestTable must have VectorTopK");
             }
-            return false;
-        };
-        runtime->SetEventFilter(captureEvents);
+        });
 
         auto runQuery = [&](const TString& query) {
             auto result = kikimr.RunCall([&] {
@@ -98,6 +135,15 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
 
+        auto runQueryWithResult = [&](const TString& query) {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
         auto runQueryWithParams = [&](const TString& query, TParams params) {
             auto result = kikimr.RunCall([&] {
                 return session.ExecuteDataQuery(query,
@@ -105,6 +151,13 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
             });
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
+
+        // Literal target vector
+        runQuery(Q_(R"(
+            SELECT pk FROM `/Root/TestTable`
+            ORDER BY Knn::CosineDistance(emb, "\x67\x71\x02")
+            LIMIT 3
+        )"));
 
         // Explicit columns
         runQuery(Q_(R"(
@@ -166,7 +219,7 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                 .Build()
             .Build());
 
-        // LIMIT 1 (minimum)
+        // LIMIT 1
         expectedLimit = 1;
         runQuery(Q_(R"(
             $TargetEmbedding = String::HexDecode("677102");
@@ -175,13 +228,32 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
             LIMIT 1
         )"));
 
-        // Larger LIMIT
+        // LIMIT 100
         expectedLimit = 100;
         runQuery(Q_(R"(
             $TargetEmbedding = String::HexDecode("677102");
             SELECT * FROM `/Root/TestTable`
             ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
             LIMIT 100
+        )"));
+        expectedLimit = 3;
+
+        // Test two-stage query from the same table: quantized search followed by full precision reranking
+        // The first query uses pushdown of VectorTopK.
+        // The second query uses point lookups (WHERE pk IN ...) where pushdown of VectorTopK is not implemented.
+        runQuery(Q_(R"(
+            $TargetEmbedding = String::HexDecode("677102");
+
+            $Pks = SELECT pk
+            FROM `/Root/TestTable`
+            ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+            LIMIT 3;
+
+            SELECT pk, Knn::CosineDistance(emb, $TargetEmbedding) AS distance
+            FROM `/Root/TestTable`
+            WHERE pk IN $Pks
+            ORDER BY distance
+            LIMIT 3;
         )"));
 
         // Verify actual results - check that top 3 PKs are correct
@@ -190,53 +262,58 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         //   pk=8 (117, 118): 0.000882 - closest
         //   pk=5 (80, 96):   0.000985
         //   pk=9 (118, 118): 0.001070
-        expectedLimit = 3;
         {
-            TString query(Q_(R"(
+            auto result = runQueryWithResult(Q_(R"(
                 $TargetEmbedding = String::HexDecode("677102");
                 SELECT pk, Knn::CosineDistance(emb, $TargetEmbedding) AS distance FROM `/Root/TestTable`
                 ORDER BY distance
                 LIMIT 3
             )"));
 
-            auto result = kikimr.RunCall([&] {
-                return session.ExecuteDataQuery(query,
-                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            });
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
             // Extract PKs and distances from result
-            std::vector<std::pair<i64, float>> results;
-            auto parser = result.GetResultSetParser(0);
-            while (parser.TryNextRow()) {
-                i64 pk;
-                if constexpr (Nullable) {
-                    auto pkOpt = parser.ColumnParser("pk").GetOptionalInt64();
-                    UNIT_ASSERT(pkOpt.has_value());
-                    pk = *pkOpt;
-                } else {
-                    pk = parser.ColumnParser("pk").GetInt64();
-                }
-                auto distanceOpt = parser.ColumnParser("distance").GetOptionalFloat();
-                UNIT_ASSERT(distanceOpt.has_value());
-                float distance = *distanceOpt;
-                results.push_back({pk, distance});
-            }
+            auto results = ExtractPksAndScores<Nullable>(result.GetResultSetParser(0));
 
             UNIT_ASSERT_VALUES_EQUAL(results.size(), 3u);
             UNIT_ASSERT_VALUES_EQUAL(results[0].first, 8);
             UNIT_ASSERT_VALUES_EQUAL(results[1].first, 5);
             UNIT_ASSERT_VALUES_EQUAL(results[2].first, 9);
-
-            // Check exact distance values (with small epsilon for float comparison)
-            auto checkDistance = [](float actual, float expected) {
-                UNIT_ASSERT_C(std::abs(actual - expected) < 0.0001f,
-                    "Expected distance " << expected << ", got " << actual);
-            };
-            checkDistance(results[0].second, 0.000882f);
-            checkDistance(results[1].second, 0.000985f);
-            checkDistance(results[2].second, 0.001070f);
+            CheckDistance(results[0].second, 0.000882f);
+            CheckDistance(results[1].second, 0.000985f);
+            CheckDistance(results[2].second, 0.001070f);
         }
+
+        // Test with subquery: target vector from another table
+        {
+            // Create a second table to store the target vector
+            auto schemeResult = kikimr.RunCall([&] {
+                return session.ExecuteSchemeQuery(R"(
+                    CREATE TABLE `/Root/TargetVectors` (
+                        id Int64 NOT NULL,
+                        target_emb String,
+                        PRIMARY KEY (id)
+                    )
+                )").ExtractValueSync();
+            });
+            UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+            // Insert the target vector
+            runQuery(Q_(R"(
+                UPSERT INTO `/Root/TargetVectors` (id, target_emb) VALUES
+                (1, "\x67\x71\x02")
+            )"));
+
+            // Run query with subquery
+            expectedLimit = 3;
+            runQuery(Q_(R"(
+                $TargetEmbedding = (SELECT target_emb FROM `/Root/TargetVectors` WHERE id = 1);
+                SELECT pk, Knn::CosineDistance(emb, $TargetEmbedding) AS distance FROM `/Root/TestTable`
+                ORDER BY distance
+                LIMIT 3
+            )"));
+        }
+
+        // Observer is automatically removed when it goes out of scope
+        observer.Remove();
     }
 
 }

@@ -208,6 +208,7 @@ TMaybe<std::tuple<TString, TString, TExprNode::TPtr>> ExtractKnnDistanceFromAppl
 
     // Find the member (column) and target expression
     // Knn distance functions have exactly 2 arguments: column and target vector
+    // The FIRST argument is always the column (Member reference), the SECOND is the target
     TMaybe<TString> columnName;
     TExprNode::TPtr targetExpr;
     size_t argCount = 0;
@@ -219,19 +220,22 @@ TMaybe<std::tuple<TString, TString, TExprNode::TPtr>> ExtractKnnDistanceFromAppl
         }
         argCount++;
 
-        // Try to resolve the argument through substitutions first
+        // Resolve the argument through substitutions
         TExprNode::TPtr resolvedArg = arg.Ptr();
         auto it = argSubstitutions.find(arg.Raw());
         if (it != argSubstitutions.end()) {
             resolvedArg = it->second;
         }
-
-        // Check if the (possibly resolved) argument is a Member - that's the column
         TExprBase resolvedExpr(resolvedArg);
-        if (auto member = resolvedExpr.Maybe<TCoMember>()) {
-            columnName = TString(member.Cast().Name().Value());
-        } else {
-            // Not a column reference - it's the target expression
+
+        // First argument is the column, second argument is the target
+        if (argCount == 1) {
+            // Column argument - should resolve to Member(something, 'column_name')
+            if (auto member = resolvedExpr.Maybe<TCoMember>()) {
+                columnName = TString(member.Cast().Name().Value());
+            }
+        } else if (argCount == 2) {
+            // Target argument
             targetExpr = resolvedArg;
         }
     }
@@ -491,7 +495,8 @@ TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const
 
     // Target expression - wrap in precompute if not a simple type
     TExprBase targetExprBase(targetExpr);
-    if (targetExprBase.Maybe<TCoString>() || targetExprBase.Maybe<TCoParameter>()) {
+    if (targetExprBase.Maybe<TCoString>() || targetExprBase.Maybe<TCoParameter>() || targetExprBase.Maybe<TCoArgument>()) {
+        // TCoArgument represents a stage input (e.g., precomputed subquery result)
         settings.VectorTopKTarget = targetExpr;
     } else {
         // Wrap non-simple expressions in precompute (TDqPhyPrecompute)

@@ -74,7 +74,7 @@ class YdbTestShardWorkload(WorkloadBase):
             self.tempdir = tempfile.TemporaryDirectory(dir=os.getcwd())
             self.working_dir = os.path.join(self.tempdir.name, "testshard_ydb_cli")
             os.makedirs(self.working_dir, exist_ok=True)
-        
+
         res = resource.find(name)
         path_to_unpack = os.path.join(self.working_dir, name)
         with open(path_to_unpack, "wb") as f:
@@ -121,7 +121,7 @@ class YdbTestShardWorkload(WorkloadBase):
         if self.tsserver_process is not None:
             logger.warning("tsserver already running")
             return
-        
+
         logger.info(f"Starting tsserver on port {self.tsserver_port}, path: {self.tsserver_path}")
         self.tsserver_process = subprocess.Popen(
             [self.tsserver_path, str(self.tsserver_port)],
@@ -129,11 +129,11 @@ class YdbTestShardWorkload(WorkloadBase):
             stderr=subprocess.STDOUT,
         )
         time.sleep(1)
-        
+
         if self.tsserver_process.poll() is not None:
             returncode = self.tsserver_process.returncode
             raise RuntimeError(f"Failed to start tsserver, exit code: {returncode}")
-        
+
         logger.info(f"tsserver started successfully (PID: {self.tsserver_process.pid}) on port {self.tsserver_port}")
 
     def _stop_tsserver(self):

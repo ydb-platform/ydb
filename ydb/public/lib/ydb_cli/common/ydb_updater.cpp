@@ -165,6 +165,7 @@ namespace {
         }
         if (DeletePathIfExistsSafe(helper)) {
             Cerr << "Removed legacy PATH helper script " << helper.GetPath() << Endl;
+            NLocalPaths::DeleteDirIfEmpty(helper.Parent());
         }
         const TVector<TFsPath> filesToClean = {
             MakeHomeFile(".zprofile"),

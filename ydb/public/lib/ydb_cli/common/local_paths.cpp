@@ -188,9 +188,7 @@ void MoveImportProgress(const TFsPath& targetDir) {
         movedAny = true;
         ++movedCount;
     }
-    if (IsDirEmpty(legacyDir)) {
-        legacyDir.DeleteIfExists();
-    }
+    DeleteDirIfEmpty(legacyDir);
     if (movedAny) {
         Cerr << "Migrated " << movedCount << " legacy import progress files from "
             << legacyDir.GetPath() << " to " << targetDir.GetPath() << Endl;

@@ -29,7 +29,6 @@ public:
     ~TMessageIdDeduplicator();
 
     TDuration GetDeduplicationWindow() const;
-    TInstant GetExpirationTime() const;
 
     std::optional<ui64> AddMessage(const TString& deduplicationId, const ui64 offset);
     size_t Compact();

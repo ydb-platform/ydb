@@ -13,8 +13,8 @@ namespace {
 constexpr TDuration BucketSize = TDuration::Seconds(1);
 constexpr ui64 MaxDeduplicationIDs = TDuration::Minutes(5).Seconds() * 1000;
 
-TInstant Trim(TInstant value, bool up = true) {
-    return TInstant::MilliSeconds(value.MilliSeconds() / BucketSize.MilliSeconds() * BucketSize.MilliSeconds() + (up ? BucketSize.MilliSeconds() : 0));
+TInstant Trim(TInstant value) {
+    return TInstant::MilliSeconds(value.MilliSeconds() / BucketSize.MilliSeconds() * BucketSize.MilliSeconds());
 }
 
 }
@@ -32,10 +32,6 @@ TDuration TMessageIdDeduplicator::GetDeduplicationWindow() const {
     return DeduplicationWindow;
 }
 
-TInstant TMessageIdDeduplicator::GetExpirationTime() const {
-    return Trim(TimeProvider->Now()) + DeduplicationWindow;
-}
-
 std::optional<ui64> TMessageIdDeduplicator::AddMessage(const TString& deduplicationId, const ui64 offset) {
     auto it = Messages.find(deduplicationId);
     if (it != Messages.end()) {
@@ -46,7 +42,7 @@ std::optional<ui64> TMessageIdDeduplicator::AddMessage(const TString& deduplicat
     const auto expirationTime = now + DeduplicationWindow;
 
     if (!CurrentBucket.StartTime) {
-        CurrentBucket.StartTime = Trim(now, false) + DeduplicationWindow;
+        CurrentBucket.StartTime = Trim(now) + DeduplicationWindow;
         CurrentBucket.StartMessageIndex = Queue.size();
     }
 
@@ -86,7 +82,7 @@ size_t TMessageIdDeduplicator::Compact() {
     auto compactBucket = [&](TBucket& bucket) {
         bucket.StartMessageIndex = normalize(bucket.StartMessageIndex);
         bucket.LastWrittenMessageIndex = normalize(bucket.LastWrittenMessageIndex);
-        bucket.StartTime = Queue.empty() ? TInstant::Zero() : Trim(Queue.front().ExpirationTime, false);
+        bucket.StartTime = Queue.empty() ? TInstant::Zero() : Trim(Queue.front().ExpirationTime);
     };
 
     compactBucket(CurrentBucket);
@@ -128,7 +124,7 @@ bool TMessageIdDeduplicator::ApplyWAL(TString&& key, NKikimrPQ::TMessageDeduplic
     }
 
     CurrentBucket.LastWrittenMessageIndex = Queue.size();
-    CurrentBucket.StartTime = Queue.empty() ? TInstant::Zero() : Trim(Queue.back().ExpirationTime, false);
+    CurrentBucket.StartTime = Queue.empty() ? TInstant::Zero() : Trim(Queue.back().ExpirationTime);
 
     WALKeys.emplace_back(std::move(key), expirationTime);
 
@@ -160,7 +156,7 @@ std::optional<TString> TMessageIdDeduplicator::SerializeTo(NKikimrPQ::TMessageDe
     }
 
     PendingBucket = {
-        .StartTime = Trim(lastExpirationTime, false),
+        .StartTime = Trim(lastExpirationTime),
         .StartMessageIndex = startIndex,
         .LastWrittenMessageIndex = Queue.size(),
     };

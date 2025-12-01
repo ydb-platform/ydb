@@ -363,8 +363,8 @@ void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             if (const auto maybeAlgorithm = columnIt->second.Compression->Algorithm) {
                 compression->SetAlgorithm(maybeAlgorithm->c_str());
             }
-            if (const auto maybeLevel = columnIt->second.Compression->Algorithm) {
-                compression->SetLevel(FromString<i64>(*maybeLevel));
+            if (const auto maybeLevel = columnIt->second.Compression->Level) {
+                compression->SetLevel(*maybeLevel);
             }
         }
     }

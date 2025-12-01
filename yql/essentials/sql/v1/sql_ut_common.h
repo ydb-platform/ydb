@@ -1,5 +1,7 @@
 #pragma once
 
+#include "sql_select_yql.h"
+
 namespace {
 TString ToString(const TParsedTokenList& tokens) {
     TStringBuilder reconstructedQuery;
@@ -11232,7 +11234,7 @@ Y_UNIT_TEST(LangVer) {
 
 Y_UNIT_TEST(AutoTopLevel) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'auto';
@@ -11244,7 +11246,7 @@ Y_UNIT_TEST(AutoTopLevel) {
 
 Y_UNIT_TEST(AutoSubquery) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'auto';
@@ -11257,7 +11259,7 @@ Y_UNIT_TEST(AutoSubquery) {
 
 Y_UNIT_TEST(Minimal) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11272,7 +11274,7 @@ Y_UNIT_TEST(Minimal) {
 
 Y_UNIT_TEST(Expr) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11293,7 +11295,7 @@ Y_UNIT_TEST(Expr) {
 
 Y_UNIT_TEST(ResultColumnLabel) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11308,7 +11310,7 @@ Y_UNIT_TEST(ResultColumnLabel) {
 
 Y_UNIT_TEST(Asterisk) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11327,7 +11329,7 @@ Y_UNIT_TEST(Asterisk) {
 
 Y_UNIT_TEST(AsteriskInvalidLeft) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11341,7 +11343,7 @@ Y_UNIT_TEST(AsteriskInvalidLeft) {
 
 Y_UNIT_TEST(AsteriskInvalidRight) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11355,7 +11357,7 @@ Y_UNIT_TEST(AsteriskInvalidRight) {
 
 Y_UNIT_TEST(FromAnonValues) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11374,7 +11376,7 @@ Y_UNIT_TEST(FromAnonValues) {
 
 Y_UNIT_TEST(FromValues) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11395,7 +11397,7 @@ Y_UNIT_TEST(FromValues) {
 
 Y_UNIT_TEST(FromTableWithImmediateCluster) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11414,7 +11416,7 @@ Y_UNIT_TEST(FromTableWithImmediateCluster) {
 
 Y_UNIT_TEST(Where) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11433,7 +11435,7 @@ Y_UNIT_TEST(Where) {
 
 Y_UNIT_TEST(FromSubquery) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11450,7 +11452,7 @@ Y_UNIT_TEST(FromSubquery) {
 
 Y_UNIT_TEST(Join2) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11462,7 +11464,7 @@ Y_UNIT_TEST(Join2) {
 
 Y_UNIT_TEST(AsteriskJoin) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11477,7 +11479,7 @@ Y_UNIT_TEST(AsteriskJoin) {
 
 Y_UNIT_TEST(QualifiedAsteriskJoin) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11492,7 +11494,7 @@ Y_UNIT_TEST(QualifiedAsteriskJoin) {
 
 Y_UNIT_TEST(Join2Alias) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11506,7 +11508,7 @@ Y_UNIT_TEST(Join2Alias) {
 
 Y_UNIT_TEST(Join3) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11521,7 +11523,7 @@ Y_UNIT_TEST(Join3) {
 
 Y_UNIT_TEST(Join3Mix) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11536,7 +11538,7 @@ Y_UNIT_TEST(Join3Mix) {
 
 Y_UNIT_TEST(OrderBy) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11549,7 +11551,7 @@ Y_UNIT_TEST(OrderBy) {
 
 Y_UNIT_TEST(LimitOffset) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11560,7 +11562,7 @@ Y_UNIT_TEST(LimitOffset) {
 
 Y_UNIT_TEST(CorrelatedProjection) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11571,7 +11573,7 @@ Y_UNIT_TEST(CorrelatedProjection) {
 
 Y_UNIT_TEST(InSubqueryProjection) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11583,7 +11585,7 @@ Y_UNIT_TEST(InSubqueryProjection) {
 
 Y_UNIT_TEST(InSubqueryWhere) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11597,7 +11599,7 @@ Y_UNIT_TEST(InSubqueryWhere) {
 
 Y_UNIT_TEST(ExistsSubqueryWhere) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::GetMaxLangVersion();
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';

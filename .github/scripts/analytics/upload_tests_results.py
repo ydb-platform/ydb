@@ -212,7 +212,7 @@ def main():
         os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
             "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
         ]
-    test_table_name = f"{path_in_database}/test_runs_column"
+    test_table_name = f"{path_in_database}/test_runs_opt"
     full_path = posixpath.join(DATABASE_PATH, test_table_name)
 
     try:

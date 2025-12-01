@@ -11,6 +11,7 @@ SRCS(
     GLOBAL clean_empty.cpp
     GLOBAL clean_index_columns.cpp
     GLOBAL clean_inserted_portions.cpp
+    GLOBAL clean_sub_columns_portions.cpp
     GLOBAL clean_ttl_preset_setting_info.cpp
     GLOBAL clean_ttl_preset_setting_version_info.cpp
     GLOBAL clean_unused_tables_template.cpp

@@ -1416,13 +1416,10 @@ message TMLPStorageWAL {
 }
 
 message TMessageDeduplicationIdWAL {
-    optional uint64 BaseOffset = 1;
-    optional uint64 BaseExpirationTimestampMilliseconds = 2;
-
     message TMessage {
         optional string DeduplicationId = 1;
         optional uint64 OffsetDelta = 2;
         optional uint64 ExpirationTimestampMillisecondsDelta = 3;
     }
-    repeated TMessage Message = 3;
+    repeated TMessage Message = 1;
 };

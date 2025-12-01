@@ -34,7 +34,7 @@ public:
 
     void Commit();
 
-    bool ApplyWAL(NKikimrPQ::TMessageDeduplicationIdWAL&& wal);
+    bool ApplyWAL(TString&& key, NKikimrPQ::TMessageDeduplicationIdWAL&& wal);
     bool SerializeTo(NKikimrPQ::TMessageDeduplicationIdWAL& wal);
 
     const std::deque<TMessage>& GetQueue() const;
@@ -52,11 +52,15 @@ private:
         size_t StartMessageIndex = 0;
         size_t LastWrittenMessageIndex = 0;
     };
-
     TBucket CurrentBucket;
     std::optional<TBucket> PendingBucket;
 
     ui64 NextMessageIdDeduplicatorWAL = 0;
+    struct WALKey {
+        TString Key;
+        TInstant ExpirationTime;
+    };
+    std::deque<WALKey> WALKeys;
 };
 
 } // namespace NKikimr::NPQ

@@ -41,7 +41,7 @@ struct TestScenario {
             return;
         }
 
-        if (!WALs.empty() && WALs.back().GetExpirationTimestampMilliseconds() == wal.GetExpirationTimestampMilliseconds()) {
+        if (!WALs.empty() && WALs.back().GetMessage(0).GetExpirationTimestampMillisecondsDelta() == wal.GetMessage(0).GetExpirationTimestampMillisecondsDelta()) {
             WALs.back() = std::move(wal);
         } else {
             WALs.push_back(std::move(wal));
@@ -53,7 +53,7 @@ struct TestScenario {
     void AssertWALLoad() {
         TMessageIdDeduplicator target(TimeProvider, TDuration::Seconds(10));
         for (auto& wal : WALs) {
-            target.ApplyWAL(std::move(wal));
+            target.ApplyWAL("key-1", std::move(wal));
         }
         WALs.clear();
 

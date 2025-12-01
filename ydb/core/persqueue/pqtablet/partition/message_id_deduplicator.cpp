@@ -98,21 +98,28 @@ void TMessageIdDeduplicator::Commit() {
     }
 }
 
-bool TMessageIdDeduplicator::ApplyWAL(NKikimrPQ::TMessageDeduplicationIdWAL&& wal) {
+bool TMessageIdDeduplicator::ApplyWAL(TString&& key, NKikimrPQ::TMessageDeduplicationIdWAL&& wal) {
     CurrentBucket.StartMessageIndex = Queue.size();
 
-    auto expirationTime = TInstant::MilliSeconds(wal.GetExpirationTimestampMilliseconds());
+    size_t offset = 0;
+    TInstant expirationTime = TInstant::Zero();
+
     for (auto& message : *wal.MutableMessage()) {
+        offset += message.GetOffsetDelta();
+        expirationTime += TDuration::MilliSeconds(message.GetExpirationTimestampMillisecondsDelta());
+
         auto it = Messages.find(message.GetDeduplicationId());
-        if (it != Messages.end() && it->second >= message.GetOffset()) {
+        if (it != Messages.end() && it->second >= offset) {
             continue;
         }
-        Queue.emplace_back(message.GetDeduplicationId(), expirationTime, message.GetOffset());
-        Messages[std::move(*message.MutableDeduplicationId())] = message.GetOffset();
+        Queue.emplace_back(message.GetDeduplicationId(), expirationTime, offset);
+        Messages[std::move(*message.MutableDeduplicationId())] = offset;
     }
 
     CurrentBucket.LastWrittenMessageIndex = Queue.size();
     CurrentBucket.StartTime = Queue.empty() ? TInstant::Zero() : Queue.back().ExpirationTime;
+
+    WALKeys.emplace_back(std::move(key), expirationTime);
 
     return true;
 }
@@ -129,12 +136,17 @@ bool TMessageIdDeduplicator::SerializeTo(NKikimrPQ::TMessageDeduplicationIdWAL& 
         return false;
     }
 
-    wal.SetExpirationTimestampMilliseconds(expirationTime.MilliSeconds());
+    ui64 lastOffset = 0;
+    TInstant lastExpirationTime = TInstant::Zero();
+
     for (size_t i = startIndex; i < Queue.size(); ++i) {
-        Queue[i].ExpirationTime = expirationTime;
         auto* message = wal.AddMessage();
-        message->SetOffset(Queue[i].Offset);
+        message->SetOffsetDelta(Queue[i].Offset - lastOffset);
         message->SetDeduplicationId(Queue[i].DeduplicationId);
+        message->SetExpirationTimestampMillisecondsDelta(Queue[i].ExpirationTime.MilliSeconds() - lastExpirationTime.MilliSeconds());
+
+        lastOffset = Queue[i].Offset;
+        lastExpirationTime = Queue[i].ExpirationTime;
     }
 
     PendingBucket = {

@@ -880,25 +880,20 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
 
-    auto& range = response.GetReadRangeResult(0);
+    auto* range = response.MutableReadRangeResult(0);
 
-    PQ_INIT_ENSURE(range.HasStatus());
-    switch(range.GetStatus()) {
+    PQ_INIT_ENSURE(range->HasStatus());
+    switch(range->GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
-            for (auto& w : range.GetPair()) {
+            for (auto& w : *range->MutablePair()) {
                 NKikimrPQ::TMessageDeduplicationIdWAL wal;
                 if (!wal.ParseFromString(w.GetValue())) {
                     PQ_LOG_ERROR("tablet " << Partition()->TabletId << " Initializing of message id deduplicator failed: " << w.key());
                     return PoisonPill(ctx);
                 }
 
-                if (wal.GetExpirationTimestampMilliseconds() < TInstant::Now().MilliSeconds()) {
-                    PQ_LOG_D("tablet " << Partition()->TabletId << " Initializing of message id deduplicator expired: " << w.key());
-                    continue;
-                }
-
-                if (!Partition()->MessageIdDeduplicator.ApplyWAL(std::move(wal))) {
+                if (!Partition()->MessageIdDeduplicator.ApplyWAL(std::move(*w.MutableKey()), std::move(wal))) {
                     PQ_LOG_ERROR("tablet " << Partition()->TabletId << " Initializing of message id deduplicator failed: " << w.key() << " wal is corrupted");
                     return PoisonPill(ctx);
                 }

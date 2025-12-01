@@ -86,8 +86,8 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
         
         # Badge with only message (no label) - format: badge/message-color
         # Encode only spaces, keep emoji as is
-        badge_text = "▶".replace(" ", "%20")
-        button = f"[![▶](https://img.shields.io/badge/{badge_text}-4caf50)]({url_ui})"
+        badge_text = "▶  Backport".replace(" ", "%20")
+        button = f"[![▶  Backport](https://img.shields.io/badge/{badge_text}-4caf50)]({url_ui})"
         rows.append(f"| `{branch_display}` | {button} |")
     
     # Generate URL for backporting all unique branches (manual button)
@@ -106,7 +106,7 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
     
     # Badge with only message for manual button
     # Encode only spaces, keep emoji and parentheses as is (shields.io handles them)
-    badge_text_manual = "▶  Backport (manual)".replace(" ", "%20")
+    badge_text_manual = "▶  Backport manual".replace(" ", "%20")
     
     table = "<!-- backport-table -->\n"
     table += "<h3>Backport</h3>\n\n"
@@ -115,7 +115,7 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
     table += "|--------|-----|\n"
     table += "\n".join(rows)
     table += "\n\n"
-    table += f"[![▶](https://img.shields.io/badge/{badge_text_manual}-2196F3)]({url_manual_ui})"
+    table += f"[![▶  Backport manual](https://img.shields.io/badge/{badge_text_manual}-2196F3)]({url_manual_ui})"
     return table
 
 

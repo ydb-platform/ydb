@@ -2742,6 +2742,34 @@ private:
         const TVector<TTableReq>& tables,
         TTableInfoResult& result)
     {
+        const auto requestOnlyRequiredAttrs = execCtx->Options_.Config()->_RequestOnlyRequiredAttrs.Get().GetOrElse(false);
+
+        static const auto attributeFilter = TAttributeFilter()
+            .AddAttribute("chunk_count")
+            .AddAttribute("chunk_row_count")
+            .AddAttribute("compression_codec")
+            .AddAttribute("content_revision")
+            .AddAttribute("data_weight")
+            .AddAttribute("dynamic")
+            .AddAttribute("enable_dynamic_store_read")
+            .AddAttribute("erasure_codec")
+            .AddAttribute("id")
+            .AddAttribute("media")
+            .AddAttribute("modification_time")
+            .AddAttribute("optimize_for")
+            .AddAttribute("primary_medium")
+            .AddAttribute("revision")
+            .AddAttribute("row_count")
+            .AddAttribute("schema")
+            .AddAttribute("schema_mode")
+            .AddAttribute("security_tags")
+            .AddAttribute("type")
+            .AddAttribute("uncompressed_data_size")
+            .AddAttribute("user_attributes")
+            .AddAttribute("_format")
+            .AddAttribute("_qb2_premapper")
+            .AddAttribute("_read_schema");
+
         TVector<NYT::TNode> attributes(tables.size());
         NSorted::TSimpleMap<size_t, TString> requestSchemasIdxs;
         {
@@ -2749,14 +2777,27 @@ private:
             auto batchGet = tx->CreateBatchRequest();
             TVector<TFuture<void>> batchRes(Reserve(idxs.size()));
             for (auto& idx: idxs) {
-                batchRes.push_back(batchGet->Get(idx.second + "/@").Apply([&attributes, &requestSchemasIdxs, &lock, idx] (const TFuture<NYT::TNode>& res) {
-                    attributes[idx.first] = res.GetValue();
-                    if (attributes[idx.first].HasKey("schema") && attributes[idx.first]["schema"].IsEntity()) {
-                        with_lock (lock) {
-                            requestSchemasIdxs.push_back(idx);
+                batchRes.push_back(batchGet->Get(
+                    idx.second + "/@",
+                    requestOnlyRequiredAttrs
+                        ? TGetOptions().AttributeFilter(attributeFilter)
+                        : TGetOptions()
+                    ).Apply([&attributes, &requestSchemasIdxs, &lock, idx, requestOnlyRequiredAttrs] (const TFuture<NYT::TNode>& res) {
+                        attributes[idx.first] = res.GetValue();
+                        if (attributes[idx.first].HasKey("schema") && attributes[idx.first]["schema"].IsEntity()) {
+                            with_lock (lock) {
+                                requestSchemasIdxs.push_back(idx);
+                            }
                         }
-                    }
-                }));
+                        if (requestOnlyRequiredAttrs && attributes[idx.first].HasKey("user_attributes") && !attributes[idx.first]["user_attributes"].IsEntity()) {
+                            for (const auto& [attrName, attrValue]: attributes[idx.first]["user_attributes"].AsMap()) {
+                                if (attrName.StartsWith(TStringBuf("_yql"))) {
+                                    attributes[idx.first][attrName] = attrValue;
+                                }
+                            }
+                        }
+                    })
+                );
             }
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();

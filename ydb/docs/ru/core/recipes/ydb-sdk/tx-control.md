@@ -118,10 +118,10 @@
 
   // ...
   try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-	  QueryReader reader = retryCtx.supplyResult(
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
           session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
-	  );
+      );
       // Работа с reader
   }
   ```
@@ -356,10 +356,10 @@
 
   // ...
   try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-	  QueryReader reader = retryCtx.supplyResult(
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
           session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
-	  );
+      );
       // Работа с reader
   }
   ```
@@ -442,10 +442,10 @@
 
   // ...
   try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-	  QueryReader reader = retryCtx.supplyResult(
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
           session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
-	  );
+      );
       // Работа с reader
   }
   ```
@@ -587,10 +587,10 @@
 
   // ...
   try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-	  QueryReader reader = retryCtx.supplyResult(
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
           session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
-	  );
+      );
       // Работа с reader
   }
   ```
@@ -801,10 +801,10 @@
 
   // ...
   try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-	  QueryReader reader = retryCtx.supplyResult(
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
           session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
-	  );
+      );
       // Работа с reader
   }
   ```

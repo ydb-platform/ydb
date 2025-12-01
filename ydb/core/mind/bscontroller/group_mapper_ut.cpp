@@ -194,13 +194,13 @@ public:
 
     ui32 AllocateGroup(TGroupMapper& mapper, TGroupMapper::TGroupDefinition& group, ui32 groupSizeInUnits = 0u, bool allowFailure = false) {
         ui32 groupId = NextGroupId++;
-        TString error;
+        TGroupMapperError error;
         bool success = mapper.AllocateGroup(groupId, group, {}, {}, groupSizeInUnits, 0, false, TBridgePileId(), error);
         if (!success && allowFailure) {
-            Ctest << "error# " << error << Endl;
+            Ctest << "error# " << error.ErrorMessage << Endl;
             return 0;
         }
-        UNIT_ASSERT_C(success, error);
+        UNIT_ASSERT_C(success, error.ErrorMessage);
         TGroupRecord& record = Groups[groupId];
         record.Group = group;
         record.GroupSizeInUnits = groupSizeInUnits;
@@ -242,11 +242,11 @@ public:
 
         Ctest << "groupId# " << groupId << " reallocating group# " << FormatGroup(group.Group) << Endl;
 
-        TString error;
+        TGroupMapperError error;
         bool success = mapper.AllocateGroup(groupId, group.Group, replacedDisks, std::move(forbid), group.GroupSizeInUnits, 0,
             requireOperational, TBridgePileId(), error);
         if (!success) {
-            Ctest << "error# " << error << Endl;
+            Ctest << "error# " << error.ErrorMessage << Endl;
             if (allowError) {
                 // revert group to its original state
                 for (const auto& [vdiskId, pdiskId] : replacedDisks) {

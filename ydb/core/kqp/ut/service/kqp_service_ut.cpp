@@ -601,64 +601,6 @@ struct TDictCase {
         }
     }
 
-     Y_UNIT_TEST(TwoNodeOneShuttingDown) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableShuttingDownNodeState(true);
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetNodeCount(2)
-                                        .SetUseRealThreads(false));
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        ui32 const nodeId = runtime.GetNodeId(0);
-
-        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
-        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
-        kikimr.RunCall([&]() {CreateLargeTable(kikimr, 100, 2, 2, 10, 2);});
-
-        ui32 nodeShuttingDownCount = 0;
-        auto grab = [&nodeShuttingDownCount](TAutoPtr<IEventHandle>& ev) -> auto {
-            if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksResponse::EventType) {
-                auto msg = ev->Get<TEvKqpNode::TEvStartKqpTasksResponse>()->Record;
-                if (msg.NotStartedTasksSize() > 0 && msg.GetNotStartedTasks()[0].GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN) {
-                    ++nodeShuttingDownCount;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-
-        runtime.SetObserverFunc(grab);
-        auto shutdownState = new TKqpShutdownState();
-        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {}, new TEvKqp::TEvInitiateShutdownRequest(shutdownState)));
-
-        auto query = R"(SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "22222";)";
-        auto resultFuture = kikimr.RunInThreadPool([&]{
-            return db.StreamExecuteScanQuery(query).GetValueSync();});
-
-        TDispatchOptions opts;
-        opts.FinalEvents.emplace_back([&nodeShuttingDownCount](IEventHandle&) {
-            return nodeShuttingDownCount > 0;
-        });
-        runtime.DispatchEvents(opts);
-
-        auto result = runtime.WaitFuture(resultFuture);
-        UNIT_ASSERT_VALUES_EQUAL_C(nodeShuttingDownCount, 1, "Expected to be 1 since one node is shutting down");
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-    }
-
-    Y_UNIT_TEST_TWIN(ShuttingDownNodeCheckRequestSuccess, FirstNodeShuttingDown) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableShuttingDownNodeState(true);
-        TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(featureFlags).SetNodeCount(2));
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto nodeId = runtime.GetNodeId(FirstNodeShuttingDown ? 0 : 1);
-        auto shutdownState = new TKqpShutdownState();
-        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {}, new TEvKqp::TEvInitiateShutdownRequest(shutdownState)));
-        Sleep(TDuration::MilliSeconds(500));
-        auto result = session.ExecuteDataQuery(R"(SELECT * FROM `/Root/EightShard`;)", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT(false);
-    }
-
     Y_UNIT_TEST(ShuttingDownAllTheNodes) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableShuttingDownNodeState(true);

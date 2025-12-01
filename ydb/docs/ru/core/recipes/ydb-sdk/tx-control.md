@@ -250,17 +250,28 @@
 - Js/Ts
 
   ```typescript
-  import { Driver, QuerySession } from 'ydb-sdk';
+  import { Driver } from '@ydb-platform/ydb-sdk';
 
   // ...
 
-  await driver.queryClient.do({
-      fn: async (session: QuerySession) => {
-          const result = await session.execute({
+  // Режим Serializable Read-Write используется по умолчанию
+  await driver.queryClient.doTx({
+      fn: async (session) => {
+          const { resultSets } = await session.execute({
               text: 'SELECT 1',
-              txControl: { beginTx: { serializableReadWrite: {} }, commitTx: true },
           });
-          // работа с result
+          // работа с resultSets
+      },
+  });
+
+  // Или явно указать txSettings
+  await driver.queryClient.doTx({
+      txSettings: { serializableReadWrite: {} },
+      fn: async (session) => {
+          const { resultSets } = await session.execute({
+              text: 'SELECT 1',
+          });
+          // работа с resultSets
       },
   });
   ```
@@ -701,17 +712,17 @@
 - Js/Ts
 
   ```typescript
-  import { Driver, QuerySession } from 'ydb-sdk';
+  import { Driver } from '@ydb-platform/ydb-sdk';
 
   // ...
 
-  await driver.queryClient.do({
-      fn: async (session: QuerySession) => {
-          const result = await session.execute({
+  await driver.queryClient.doTx({
+      txSettings: { snapshotReadOnly: {} },
+      fn: async (session) => {
+          const { resultSets } = await session.execute({
               text: 'SELECT 1',
-              txControl: { beginTx: { snapshotReadOnly: {} }, commitTx: true },
           });
-          // работа с result
+          // работа с resultSets
       },
   });
   ```

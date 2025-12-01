@@ -15,6 +15,7 @@ CLUSTER_CONFIG = dict(
     extra_feature_flags=[
         "enable_schema_secrets",
         "enable_external_data_sources",
+        "enable_replace_if_exists_for_external_entities",
     ],
 )
 UNEXISTED_PATH = "/Root/test/secret-not-found"
@@ -31,16 +32,28 @@ def get_eds_with_one_secret(secret_path):
         );"""
 
 
-def get_eds_with_many_secrets(secret_path1, secret_path2, s3_location="fake_location", eds_name=None):
+def get_eds_with_many_secrets(
+    secret_name1,
+    secret_name2,
+    s3_location="fake_location",
+    eds_name=None,
+    schema_secrets=False,
+    create_or_replace=False,
+):
     if not eds_name:
-        eds_name = f"eds_{secret_path1}_{secret_path2}"
+        eds_name = f"eds_{secret_name1}_{secret_name2}"
+    suffix = "PATH" if schema_secrets else "NAME"
+    aws_access_key_id_secret_setting_name = f"AWS_ACCESS_KEY_ID_SECRET_{suffix}"
+    aws_secret_access_key_secret_setting_name = f"AWS_SECRET_ACCESS_KEY_SECRET_{suffix}"
+    create_type = "CREATE OR REPLACE" if create_or_replace else "CREATE"
+
     return f"""
-        CREATE EXTERNAL DATA SOURCE `{eds_name}` WITH (
+        {create_type} EXTERNAL DATA SOURCE `{eds_name}` WITH (
             SOURCE_TYPE="ObjectStorage",
             LOCATION="{s3_location}",
             AUTH_METHOD="AWS",
-            AWS_ACCESS_KEY_ID_SECRET_NAME="{secret_path1}",
-            AWS_SECRET_ACCESS_KEY_SECRET_NAME="{secret_path2}",
+            {aws_access_key_id_secret_setting_name}="{secret_name1}",
+            {aws_secret_access_key_secret_setting_name}="{secret_name2}",
             AWS_REGION="ru-central-1"
         );"""
 
@@ -257,5 +270,79 @@ def test_success_external_data_table(db_fixture, ydb_cluster):
             SCHEMA = ( Data String )
         );"""
     result_sets = run_with_assert(user2_config, query)
+    data = result_sets[0].rows[0]['Data']
+    assert isinstance(data, bytes) and data.decode() == 'Hello S3!'
+
+
+def test_migration_to_new_secrets_external_data_source(db_fixture, ydb_cluster):
+    user1_config = create_user(ydb_cluster, db_fixture, "user1")
+
+    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])
+
+    # create secrets
+    secret_name1 = 's3_access_key'
+    secret_name2 = 's3_secret_key'
+    run_with_assert(
+        user1_config,
+        f"""
+        CREATE OBJECT {secret_name1} (TYPE SECRET) WITH value='minio';
+        CREATE OBJECT {secret_name2} (TYPE SECRET) WITH value='minio';""",
+    )
+    run_with_assert(
+        user1_config,
+        f"""
+        CREATE SECRET `{secret_name1}` WITH ( value='minio' );
+        CREATE SECRET `{secret_name2}` WITH ( value='minio' );""",
+    )
+
+    # create eds and successfully read from it
+    s3_endpoint, _, _, s3_bucket = setup_s3()
+    eds_name = "s3_source"
+    run_with_assert(
+        user1_config,
+        get_eds_with_many_secrets(
+            secret_name1,
+            secret_name2,
+            s3_location=f"{s3_endpoint}/{s3_bucket}",
+            eds_name=f"{eds_name}",
+            schema_secrets=False,
+            create_or_replace=False,
+        ),
+    )
+
+    read_from_eds_query = f"""
+        SELECT * FROM {eds_name}.`file.txt` WITH (
+            FORMAT = "raw",
+            SCHEMA = ( Data String )
+        );"""
+    result_sets = run_with_assert(user1_config, read_from_eds_query)
+    data = result_sets[0].rows[0]['Data']
+    assert isinstance(data, bytes) and data.decode() == 'Hello S3!'
+
+    # drop secret objects
+    run_with_assert(
+        user1_config,
+        f"""
+        DROP OBJECT {secret_name1} (TYPE SECRET);
+        DROP OBJECT {secret_name2} (TYPE SECRET);""",
+    )
+
+    # fail to read from external data source
+    result_sets = run_with_assert(user1_config, read_from_eds_query, f"secret with name \\'{secret_name1}\\' not found")
+
+    # change eds and successfully read from it
+    run_with_assert(
+        user1_config,
+        get_eds_with_many_secrets(
+            secret_name1,
+            secret_name2,
+            s3_location=f"{s3_endpoint}/{s3_bucket}",
+            eds_name=f"{eds_name}",
+            schema_secrets=True,
+            create_or_replace=True,
+        ),
+    )
+
+    result_sets = run_with_assert(user1_config, read_from_eds_query)
     data = result_sets[0].rows[0]['Data']
     assert isinstance(data, bytes) and data.decode() == 'Hello S3!'

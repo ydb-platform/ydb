@@ -47,7 +47,7 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<
         auto accessorResult = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
         if (accessorResult.IsFail()) {
             // TODO: return failure ?
-            return {};
+            return NAccessor::TTrivialArray::BuildEmpty(std::make_shared<arrow::StringType>());
         }
         accessor = accessorResult.DetachResult();
     } else {
@@ -56,19 +56,18 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<
         auto accessorResult = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
         if (accessorResult.IsFail()) {
             // TODO: return failure ?
-            return {};
+            return NAccessor::TTrivialArray::BuildEmpty(std::make_shared<arrow::StringType>());
         }
         accessor = accessorResult.DetachResult();
     }
 
     if (!accessor) {
-        return {};
+        return NAccessor::TTrivialArray::BuildEmpty(std::make_shared<arrow::StringType>());
     }
 
-    auto builder = NAccessor::TTrivialArray::MakeBuilderUtf8(accessor->GetRecordsCount());
 
     ui32 recordIndex = 0;
-
+    auto builder = NAccessor::TTrivialArray::MakeBuilderUtf8(accessor->GetRecordsCount());
     accessor->VisitValues([&](const std::optional<TStringBuf>& value) {
         if (value.has_value()) {
             builder.AddRecord(recordIndex, value.value());

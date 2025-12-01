@@ -9,6 +9,29 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
+TString QuoteJsonItem(TStringBuf item) {
+    TString result;
+    result.push_back('"');
+
+    for (char ch : item) {
+        if (ch == '"') {
+            result.append("\\\"");
+        } else if (ch == '\\') {
+            result.append("\\\\");
+        } else {
+            result.push_back(ch);
+        }
+    }
+
+    result.push_back('"');
+
+    return result;
+}
+
+TJsonPath ToJsonPath(TStringBuf path) {
+    return TString("$.") + path;
+}
+
 TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonPathSplitSettings& settings) {
     NYql::TIssues issues;
     auto path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 5);
@@ -54,6 +77,32 @@ TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonP
     }
     if (settings.FillStartPositions) {
         std::ranges::reverse(result.StartPositions);
+    }
+
+    return result;
+}
+
+TString ToSubcolumnName(TStringBuf path) {
+    auto pathItemsResult = SplitJsonPath(path, NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
+    if (pathItemsResult.IsFail()) {
+        pathItemsResult = SplitJsonPath(ToJsonPath(path), NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
+        if (pathItemsResult.IsFail()) {
+            Cerr << "Conversion is not possible" << Endl;
+            return TString(path);
+        }
+    }
+    auto [pathItems, pathTypes, _] = pathItemsResult.DetachResult();
+    TString result;
+    result.reserve(path.size() + 2 * pathItems.size());
+    for (decltype(pathItems)::size_type i = 0; i < pathItems.size(); ++i) {
+        if (pathTypes[i] == NYql::NJsonPath::EJsonPathItemType::ArrayAccess) {
+            result.append(pathItems[i]);
+        } else {
+            if (!result.empty()) {
+                result.append(".");
+            }
+            result.append(QuoteJsonItem(pathItems[i]));
+        }
     }
 
     return result;

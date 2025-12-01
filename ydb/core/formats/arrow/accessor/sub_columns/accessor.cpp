@@ -193,8 +193,8 @@ const NJson::TJsonValue& TJsonRestorer::GetResult() const {
 
 void TJsonRestorer::SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue) {
     // Path may be empty (for backward compatibility), so make it $."" in this case
-    auto splitResult = NSubColumns::SplitJsonPath("$." + (path.empty() ? "\"\"" : path), NSubColumns::TJsonPathSplitSettings{.FillTypes = true});
-    AFL_VERIFY(splitResult.IsSuccess())("error", splitResult.GetErrorMessage());
+    auto splitResult = NSubColumns::SplitJsonPath(NSubColumns::ToJsonPath(path.empty() ? "\"\"" : path), NSubColumns::TJsonPathSplitSettings{.FillTypes = true});
+    AFL_VERIFY(splitResult.IsSuccess())("error", splitResult.GetErrorMessage())("path", path);
     const auto [pathItems, pathTypes, _] = splitResult.DetachResult();
     AFL_VERIFY(pathItems.size() > 0);
     AFL_VERIFY(pathItems.size() == pathTypes.size());

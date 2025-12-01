@@ -15,7 +15,11 @@
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 // Should be in JSONPath (Query Expressions for JSON) format (RFC: https://datatracker.ietf.org/doc/html/rfc9535)
+using TJsonPath = TString;
 using TJsonPathBuf = TStringBuf;
+
+TString QuoteJsonItem(TStringBuf item);
+TJsonPath ToJsonPath(TStringBuf path);
 
 struct TSplittedJsonPath {
     TVector<TString> PathItems;
@@ -28,7 +32,10 @@ struct TJsonPathSplitSettings {
     bool FillStartPositions = false;
 };
 
+
 TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonPathSplitSettings& settings = {});
+
+TString ToSubcolumnName(TStringBuf path);
 
 
 class TJsonPathAccessor {

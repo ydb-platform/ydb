@@ -479,4 +479,25 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         CheckValueByPath(jsonPathAccessorTrie, "$.k.m[0]", "3");
         CheckValueByPath(jsonPathAccessorTrie, "$.k.m[1]", "4");
     }
+
+    Y_UNIT_TEST(SubColumnNameFromDifferentPaths) {
+        UNIT_ASSERT_VALUES_EQUAL(R"("a")", NSubColumns::ToSubcolumnName("a"));
+        UNIT_ASSERT_VALUES_EQUAL(R"("a")", NSubColumns::ToSubcolumnName("$.a"));
+        UNIT_ASSERT_VALUES_EQUAL(R"("a")", NSubColumns::ToSubcolumnName("strict $.a"));
+        UNIT_ASSERT_VALUES_EQUAL(R"("a")", NSubColumns::ToSubcolumnName("lax $.a"));
+        UNIT_ASSERT_VALUES_EQUAL(R"("a"."b")", NSubColumns::ToSubcolumnName("$.a.b"));
+        UNIT_ASSERT_VALUES_EQUAL(R"("a"."b ! ?")", NSubColumns::ToSubcolumnName("$.a.\"b ! \?\""));
+        UNIT_ASSERT_VALUES_EQUAL(R"("a"."b ! ?")", NSubColumns::ToSubcolumnName("$.a.\"b ! \\?\""));
+        UNIT_ASSERT_VALUES_EQUAL(R"("a"."b ! ?")", NSubColumns::ToSubcolumnName("$.a.\"b ! \\\?\""));
+
+        for (const auto& str : {"a", "'", "\"", "\?", "\\", "\a", "\b", "\f", "\n", "\r", "\t", "\v", R"(??()", "\\\"", "\\\\\"", "\\\\\\\""}) {
+            NKikimr::NArrow::NAccessor::TJsonRestorer restorer;
+            NJson::TJsonValue expected;
+
+            restorer.SetValueByPath(NSubColumns::ToSubcolumnName(NSubColumns::QuoteJsonItem(str)), 1);
+            expected[str] = 1;
+            UNIT_ASSERT_VALUES_EQUAL(expected, restorer.GetResult());
+        }
+
+    }
 };

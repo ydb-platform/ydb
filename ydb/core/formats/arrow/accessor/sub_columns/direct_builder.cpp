@@ -122,12 +122,12 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
 }
 
 std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {
-    const auto escapedKey = EscapeC(key);
+    const auto escapedKey = QuoteJsonItem(key);
     if (currentPrefix.size()) {
-        return Sprintf("%.*s.\"%.*s\"", currentPrefix.size(), currentPrefix.data(), escapedKey.size(), escapedKey.data());
+        return Sprintf("%.*s.%.*s", currentPrefix.size(), currentPrefix.data(), escapedKey.size(), escapedKey.data());
     }
 
-    return Sprintf("\"%.*s\"", escapedKey.size(), escapedKey.data());
+    return Sprintf("%.*s", escapedKey.size(), escapedKey.data());
 }
 
 TStringBuf TDataBuilder::AddKeyOwn(const TStringBuf currentPrefix, std::string&& key) {

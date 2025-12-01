@@ -166,6 +166,10 @@ public:
         return TRTStats(TString(view.data(), view.size()), GetColumnRecordsCount(index), GetColumnSize(index));
     }
 
+    ui32 GetDataNamesCount() const {
+        return DataNames->length();
+    }
+
     ui32 GetColumnsCount() const {
         return Original->num_rows();
     }

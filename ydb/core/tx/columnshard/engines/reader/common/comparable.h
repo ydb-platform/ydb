@@ -24,9 +24,11 @@ public:
     const NArrow::TSimpleRow& GetValue() const {
         return Value;
     }
-
     NArrow::TSimpleRow CopyValue() const {
         return Value;
+    }
+    NArrow::TSimpleRow&& ExtractValue() && {
+        return std::move(Value);
     }
 
     explicit TReplaceKeyAdapter(NArrow::TSimpleRow&& rk, const bool reverse)

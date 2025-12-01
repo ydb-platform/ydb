@@ -28,8 +28,8 @@ public:
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
         auto tasks = Granule->GetOptimizerPlanner().GetTasksDescription();
-        return std::make_shared<TSourceData>(
-            GetSourceId(), GetSourceIdx(), GetTabletId(), Granule, std::move(tasks), ExternalPathId, ExtractStart(), ExtractFinish(), context);
+        return std::make_shared<TSourceData>(GetSourceId(), GetSourceIdx(), GetTabletId(), Granule, std::move(tasks), ExternalPathId,
+            ExtractStart().ExtractValue(), ExtractFinish().ExtractValue(), context);
     }
 };
 

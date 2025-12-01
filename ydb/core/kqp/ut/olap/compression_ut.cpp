@@ -45,7 +45,7 @@ std::pair<ui64, ui64> GetVolumes(
 Y_UNIT_TEST_SUITE(KqpOlapCompression) {
     Y_UNIT_TEST(CreateWithCompression) {
         auto settings = TKikimrSettings()
-            .SetEnableOlapCompression(false)
+            .SetEnableOlapCompression(true)
             .SetWithSampleTables(false);
         TTestHelper testHelper(settings);
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
 
     Y_UNIT_TEST(ChangeCompression) {
         auto settings = TKikimrSettings()
-            .SetEnableOlapCompression(false)
+            .SetEnableOlapCompression(true)
             .SetWithSampleTables(false);
         TTestHelper testHelper(settings);
         TVector<TTestHelper::TColumnSchema> schema = {

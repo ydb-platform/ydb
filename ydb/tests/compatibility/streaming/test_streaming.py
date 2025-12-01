@@ -26,7 +26,7 @@ class StreamingTestBase:
         yield from super().setup_cluster(
             extra_feature_flags={
                 "enable_external_data_sources": True,
-                "enable_streaming_queries": True
+                "enable_streaming_queries": True,
             },
             additional_log_configs={
                 'KQP_COMPUTE': LogLevels.TRACE,
@@ -34,7 +34,11 @@ class StreamingTestBase:
                 'STREAMS_STORAGE_SERVICE': LogLevels.TRACE,
                 'FQ_ROW_DISPATCHER': LogLevels.TRACE,
                 'KQP_PROXY': LogLevels.DEBUG,
-                'KQP_EXECUTOR': LogLevels.DEBUG},
+                'KQP_EXECUTOR': LogLevels.DEBUG,
+            },
+            table_service_config={
+                "enable_watermarks": True,
+            },
         )
 
     def create_topics(self):

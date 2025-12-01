@@ -74,6 +74,7 @@ namespace NKikimr::NTestShard {
         }
 
         void Handle(TEvControlRequest::TPtr ev, const TActorContext& ctx) {
+            LOG_DEBUG_S(ctx, NKikimrServices::TEST_SHARD, "Handle TEvControlRequest");
             const auto& record = ev->Get()->Record;
             switch (record.GetCommandCase()) {
                 case NKikimrClient::TTestShardControlRequest::kInitialize:

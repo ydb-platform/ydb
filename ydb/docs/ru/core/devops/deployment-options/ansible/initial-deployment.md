@@ -59,7 +59,7 @@
 * Обновите пакеты командой `sudo apt-get upgrade`;
 * Установите пакет `software-properties-common` для управления источниками программного обеспечения вашего дистрибутива — `sudo apt install software-properties-common`;
 * Добавьте новый PPA в apt — `sudo add-apt-repository --yes --update ppa:ansible/ansible`;
-* Установите Ansible — `sudo apt-get install ansible-core` (убедитесь, что устанавливаемая версия не выше 2.18; установка пакета просто `ansible` приведёт к устаревшей и неподходящей версии);
+* Установите Ansible — `sudo apt-get install ansible-core` (убедитесь, что устанавливаемая версия не выше 2.18 и не меньше 2.15.2; установка пакета просто `ansible` приведёт к устаревшей и неподходящей версии);
 * Проверьте версию Ansible core — `ansible --version`.
 
 {% endcut %}
@@ -71,7 +71,7 @@
 * Создайте директорию, где будет создано виртуальное окружение и куда будут загружены плейбуки. Например, `mkdir venv-ansible`;
 * Создайте виртуальное окружение Python — `python3 -m venv venv-ansible`;
 * Активируйте виртуальное окружение — `source venv-ansible/bin/activate`. Все дальнейшие действия с Ansible выполняются внутри виртуального окружения. Выйти из него можно командой `deactivate`;
-* Установите рекомендуемую версию Ansible с помощью команды `pip3 install ansible-core` (убедитесь, что устанавливаемая версия не выше 2.18);
+* Установите рекомендуемую версию Ansible с помощью команды `pip3 install ansible-core` (убедитесь, что устанавливаемая версия не выше 2.18 и не меньше 2.15.2);
 * Проверьте версию Ansible core — `ansible --version`.
 
 {% endcut %}

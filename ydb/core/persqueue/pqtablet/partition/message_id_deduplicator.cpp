@@ -70,9 +70,8 @@ size_t TMessageIdDeduplicator::Compact() {
         ++removed;
     }
 
-    while(!WALKeys.empty() && WALKeys.front().ExpirationTime <= now) {
+    while (!WALKeys.empty() && WALKeys.front().ExpirationTime <= now) {
         WALKeys.pop_front();
-        ++removed;
     }
 
     auto normalize = [&](size_t value) {

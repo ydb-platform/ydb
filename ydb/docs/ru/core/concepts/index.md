@@ -9,17 +9,13 @@
 - [Подключение к базе данных](connect.md)
 - [Схемные объекты](datamodel/index.md)
 - [Топология кластера](topology.md)
+- [Выполнение запросов](query_execution/index.md)
 - [Транзакции](transactions.md)
-- [Вторичные индексы](secondary_indexes.md)
-- [Векторный поиск](vector_search.md)
 - [Change Data Capture (CDC)](cdc.md)
 - [Время жизни и вытеснение](ttl.md)
 - [Scan-запросы](scan_query.md)
 - [Ограничения базы данных](limits-ydb.md)
-- [Многоверсионное управление конкурентностью (MVCC)](mvcc.md)
 {% if feature_async_replication %}- [Асинхронная репликация](async-replication.md){% endif %}
-- [Оптимизатор запросов](optimizer.md)
-- [Федеративные запросы](federated_query/index.md)
 
 ## См. также {#see-also}
 

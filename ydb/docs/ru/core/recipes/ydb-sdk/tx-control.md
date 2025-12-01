@@ -115,15 +115,15 @@
   import tech.ydb.query.TxMode;
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.core.Result;
-  import java.util.concurrent.CompletableFuture;
 
   // ...
-
-  QueryClient queryClient = QueryClient.newClient(transport).build();
-  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-
-  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW)));
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+	  QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
+	  );
+      // Работа с reader
+  }
   ```
 
   {% endcut %}
@@ -353,15 +353,15 @@
   import tech.ydb.query.TxMode;
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.core.Result;
-  import java.util.concurrent.CompletableFuture;
 
   // ...
-
-  QueryClient queryClient = QueryClient.newClient(transport).build();
-  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-
-  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO)));
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+	  QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
+	  );
+      // Работа с reader
+  }
   ```
 
 - Python
@@ -439,15 +439,15 @@
   import tech.ydb.query.TxMode;
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.core.Result;
-  import java.util.concurrent.CompletableFuture;
 
   // ...
-
-  QueryClient queryClient = QueryClient.newClient(transport).build();
-  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-
-  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO)));
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+	  QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
+	  );
+      // Работа с reader
+  }
   ```
 
 - Python
@@ -584,16 +584,15 @@
   import tech.ydb.query.TxMode;
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.core.Result;
-  import java.util.concurrent.CompletableFuture;
 
   // ...
-
-  QueryClient queryClient = QueryClient.newClient(transport).build();
-  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-
-  // По умолчанию ReadOnly запросы выполняются в режиме SNAPSHOT_RO
-  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO)));
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+	  QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
+	  );
+      // Работа с reader
+  }
   ```
 
   {% endcut %}
@@ -610,6 +609,7 @@
 
   try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
       connection.setAutoCommit(false);
+      // Режим SNAPSHOT_RO используется по умолчанию для read-only подключений
       connection.setReadOnly(true);
 
       try (Statement statement = connection.createStatement()) {
@@ -798,15 +798,15 @@
   import tech.ydb.query.TxMode;
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.core.Result;
-  import java.util.concurrent.CompletableFuture;
 
   // ...
-
-  QueryClient queryClient = QueryClient.newClient(transport).build();
-  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-
-  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW)));
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+	  QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
+	  );
+      // Работа с reader
+  }
   ```
 
 - Python

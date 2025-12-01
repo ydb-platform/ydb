@@ -2960,7 +2960,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     result.GetIssues().ToString().contains(
                         "Data manipulation queries with column-oriented tables are supported only by API QueryService."),
                     result.GetIssues().ToString());
-                }
+            }
         }
     }
 

@@ -5060,7 +5060,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
                 prepareResult.GetIssues().ToString().contains(
-                    "Data manipulation queries with column-oriented are disabled."),
+                    "Data manipulation queries with column-oriented tables are disabled."),
                 prepareResult.GetIssues().ToString());
         }
 

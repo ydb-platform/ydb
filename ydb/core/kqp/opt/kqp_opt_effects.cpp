@@ -214,7 +214,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     }
     if (isOlap && !kqpCtx.Config->EnableOlapSink) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Data manipulation queries with column-oriented are disabled."));
+            TStringBuilder() << "Data manipulation queries with column-oriented tables are disabled."));
         return false;
     }
 
@@ -368,7 +368,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
     }
     if (isOlap && !kqpCtx.Config->EnableOlapSink) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Data manipulation queries with column-oriented are disabled."));
+            TStringBuilder() << "Data manipulation queries with column-oriented tables are disabled."));
         return false;
     }
 

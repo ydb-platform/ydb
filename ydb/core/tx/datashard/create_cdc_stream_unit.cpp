@@ -19,65 +19,6 @@ public:
         return true;
     }
 
-    // EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-    //     Y_ENSURE(op->IsSchemeTx());
-
-    //     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    //     Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
-
-    //     auto& schemeTx = tx->GetSchemeTx();
-    //     if (!schemeTx.HasCreateCdcStreamNotice() && !schemeTx.HasCreateIncrementalBackupSrc()) {
-    //         return EExecutionStatus::Executed;
-    //     }
-
-    //     const auto& params =
-    //         schemeTx.HasCreateCdcStreamNotice() ?
-    //         schemeTx.GetCreateCdcStreamNotice() :
-    //         schemeTx.GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice();
-    //     const auto& streamDesc = params.GetStreamDescription();
-    //     const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
-
-    //     const auto pathId = TPathId::FromProto(params.GetPathId());
-    //     Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
-
-    //     const auto version = params.GetTableSchemaVersion();
-    //     Y_ENSURE(version);
-
-    //     auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, version, streamDesc);
-    //     TDataShardLocksDb locksDb(DataShard, txc);
-    //     DataShard.AddUserTable(pathId, tableInfo, &locksDb);
-
-    //     if (tableInfo->NeedSchemaSnapshots()) {
-    //         DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
-    //     }
-
-    //     if (params.HasSnapshotName()) {
-    //         Y_ENSURE(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateScan);
-    //         Y_ENSURE(tx->GetStep() != 0);
-
-    //         DataShard.GetSnapshotManager().AddSnapshot(txc.DB,
-    //             TSnapshotKey(pathId, tx->GetStep(), tx->GetTxId()),
-    //             params.GetSnapshotName(), TSnapshot::FlagScheme, TDuration::Zero());
-
-    //         DataShard.GetCdcStreamScanManager().Add(txc.DB,
-    //             pathId, streamPathId, TRowVersion(tx->GetStep(), tx->GetTxId()));
-    //     }
-
-    //     if (streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateReady) {
-    //         if (const auto heartbeatInterval = TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs())) {
-    //             DataShard.GetCdcStreamHeartbeatManager().AddCdcStream(txc.DB, pathId, streamPathId, heartbeatInterval);
-    //         }
-    //     }
-
-    //     AddSender.Reset(new TEvChangeExchange::TEvAddSender(
-    //         pathId, TEvChangeExchange::ESenderType::CdcStream, streamPathId
-    //     ));
-
-    //     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
-    //     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
-
-    //     return EExecutionStatus::DelayCompleteNoMoreRestarts;
-    // }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         Y_ENSURE(op->IsSchemeTx());
@@ -87,14 +28,10 @@ public:
 
         auto& schemeTx = tx->GetSchemeTx();
         
-        // Базовая проверка: есть ли вообще задача на работу со стримами
         if (!schemeTx.HasCreateCdcStreamNotice() && !schemeTx.HasCreateIncrementalBackupSrc()) {
             return EExecutionStatus::Executed;
         }
 
-        // ============================================================
-        // ЛОГИКА РОТАЦИИ (НОВАЯ)
-        // ============================================================
         if (schemeTx.HasCreateIncrementalBackupSrc()) {
             const auto& backup = schemeTx.GetCreateIncrementalBackupSrc();
             if (backup.HasRotateCdcStreamNotice()) {
@@ -108,11 +45,9 @@ public:
                 Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
                 Y_ENSURE(version);
 
-                // 1. Атомарно меняем схему (закрываем старый, открываем новый)
                 auto tableInfo = DataShard.AlterTableRotateCdcStream(ctx, txc, pathId, version, oldStreamPathId, newStreamDesc);
                 Y_ENSURE(tableInfo, "Table info not found during atomic rotation");
 
-                // 2. Обновляем локи
                 TDataShardLocksDb locksDb(DataShard, txc);
                 DataShard.AddUserTable(pathId, tableInfo, &locksDb);
 
@@ -120,7 +55,6 @@ public:
                     DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
                 }
 
-                // 3. Отменяем сканирование старого стрима (если оно шло)
                 auto& scanManager = DataShard.GetCdcStreamScanManager();
                 scanManager.Forget(txc.DB, pathId, oldStreamPathId);
                 if (const auto* info = scanManager.Get(oldStreamPathId)) {
@@ -128,7 +62,6 @@ public:
                     scanManager.Complete(oldStreamPathId);
                 }
 
-                // 4. Переключаем Heartbeat (чтобы resolved timestamps тикали в новом стриме)
                 DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, oldStreamPathId);
                 if (newStreamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateReady) {
                     if (const auto heartbeatInterval = TDuration::MilliSeconds(newStreamDesc.GetResolvedTimestampsIntervalMs())) {
@@ -136,7 +69,6 @@ public:
                     }
                 }
 
-                // 5. Уведомляем ChangeExchange
                 AddSender.Reset(new TEvChangeExchange::TEvAddSender(
                     pathId, TEvChangeExchange::ESenderType::CdcStream, newStreamPathId
                 ));
@@ -148,10 +80,6 @@ public:
             }
         }
 
-        // ============================================================
-        // ЛОГИКА СОЗДАНИЯ (СТАРАЯ)
-        // ============================================================
-        
         const auto& params =
             schemeTx.HasCreateCdcStreamNotice() ?
             schemeTx.GetCreateCdcStreamNotice() :

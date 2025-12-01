@@ -787,7 +787,6 @@ bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *act
 
     const auto& op = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc();
 
-    // 1. Проверка снэпшота (всегда должна быть)
     if (op.HasSendSnapshot()) {
         const auto& snap = op.GetSendSnapshot();
         ui64 tableId = snap.GetTableId_Deprecated();
@@ -798,15 +797,12 @@ bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *act
         Y_ENSURE(DataShard.GetUserTables().contains(tableId));
     }
 
-    // 2. Проверка стримов (Создание ИЛИ Ротация)
     if (op.HasRotateCdcStreamNotice()) {
         const auto& notice = op.GetRotateCdcStreamNotice();
         if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc (Rotate)")) {
             return false;
         }
-        // Можно добавить CheckSchemaVersion, если нужно, но не обязательно, так как это делает Execute
     } else {
-        // Старое поведение: ожидаем CreateCdcStreamNotice
         const auto& notice = op.GetCreateCdcStreamNotice();
         if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc (Create)")) {
             return false;

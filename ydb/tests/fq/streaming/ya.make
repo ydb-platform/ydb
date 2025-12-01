@@ -15,6 +15,7 @@ PY_SRCS(
 SIZE(MEDIUM)
 
 PEERDIR(
+    contrib/python/pyarrow
     ydb/tests/library
     ydb/tests/library/test_meta
     ydb/public/sdk/python

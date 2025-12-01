@@ -6,7 +6,6 @@ import yatest
 
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pyarrow.ipc
 
 from ydb.tests.fq.streaming.common import StreamingTestBase
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics
@@ -519,7 +518,7 @@ class TestStreamingInYdb(StreamingTestBase):
         self.init_topics(source_name, partitions_count=10)
         self.create_source(kikimr, source_name, False)
 
-        def test_format(self, kikimr, format, input):
+        def test_format(kikimr, format, input):
             sql = R'''
                 CREATE STREAMING QUERY `{query_name}` AS
                 DO BEGIN
@@ -531,7 +530,7 @@ class TestStreamingInYdb(StreamingTestBase):
                     INSERT INTO {source_name}.`{output_topic}` SELECT time FROM $in;
                 END DO;'''
 
-            query_name = "test_csv_with_names"
+            query_name = f"test_{format}"
             kikimr.ydb_client.query(sql.format(query_name=query_name, source_name=source_name, input_topic=self.input_topic, format=format, output_topic=self.output_topic))
             path = f"/Root/{query_name}"
             self.wait_completed_checkpoints(kikimr, path)
@@ -542,12 +541,12 @@ class TestStreamingInYdb(StreamingTestBase):
 
             kikimr.ydb_client.query(f'DROP STREAMING QUERY `{query_name}`;')
 
-        input = ['time, value, is_error\n"time to work",42,True\n"time to sleep",777,True']
-        test_format(self, kikimr, "csv_with_names", input)
-        input = ['time\tvalue\tis_error\ntime to work\t42\tTrue"\ntime to sleep\t777\tTrue']
-        test_format(self, kikimr, "tsv_with_names", input)
+        input = ['time,value,is_error\n"time to work",42,True\n"time to sleep",777,True']
+        test_format(kikimr, "csv_with_names", input)
+        input = ['time\tvalue\tis_error\ntime to work\t42\tTrue\ntime to sleep\t777\tTrue']
+        test_format(kikimr, "tsv_with_names", input)
         input = ['[{"time": "time to work", "value": 42, "is_error": "True"}, {"time": "time to sleep", "value": 42, "is_error": "True"}]']
-        test_format(self, kikimr, "json_list", input)
+        test_format(kikimr, "json_list", input)
 
     def test_json_as_string(self, kikimr, entity_name):
         source_name = entity_name("source3_")
@@ -564,7 +563,7 @@ class TestStreamingInYdb(StreamingTestBase):
                 INSERT INTO {source_name}.`{output_topic}` SELECT time FROM $in;
             END DO;'''
 
-        query_name = "test_json_list"
+        query_name = "test_json_as_string"
         kikimr.ydb_client.query(sql.format(query_name=query_name, source_name=source_name, input_topic=self.input_topic, output_topic=self.output_topic))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
@@ -599,7 +598,7 @@ class TestStreamingInYdb(StreamingTestBase):
         schema = pa.schema([('time', pa.string()), ('value', pa.uint64()), ('is_error', pa.bool_())])
         data = [['time to work'], [42], [True]]
         table = pa.Table.from_arrays(data, schema=schema)
-        filename = 'test_parquet_converters_to_timestamp.parquet'
+        filename = 'test_parquet_data.parquet'
         pq.write_table(table, yatest.common.work_path(filename))
         with open(yatest.common.work_path(filename), 'rb') as f:
             binary_data = f.read()

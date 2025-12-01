@@ -858,10 +858,10 @@ protected:
                     ui32 requestId = record.GetNotStartedTasks(0).GetRequestId();
                     auto targetNode = MakeKqpNodeServiceID(SelfId().NodeId());
                     
-                    if (!Planner->SendStartKqpTasksRequest(requestId, targetNode, ev->Sender.NodeId() == SelfId().NodeId())) {
+                    if (!Planner->SendStartKqpTasksRequest(requestId, targetNode, true)) {
                         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, 
                             MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE,
-                                "All compute nodes are unavailable or shutting down"));
+                                "Compute node is unavailable"));
                     }
                     break;
                 }

@@ -124,12 +124,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   QueryClient queryClient = QueryClient.newClient(transport).build();
   SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
 
-  retryCtx.supplyResult(session -> {
-      QueryReader reader = QueryReader.readFrom(
-          session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW)
-      ).join().getValue();
-      return CompletableFuture.completedFuture(Result.success(reader));
-  }).join().getValue();
+  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW)));
   ```
 
   {% endcut %}
@@ -251,24 +246,18 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - Js/Ts
 
   ```typescript
-  import { Query, TxMode } from '@ydbjs/query';
+  import { sql } from '@ydbjs/query';
 
   // ...
 
   // Serializable Read-Write mode is used by default
-  await query.tx(async (tx) => {
-      const resultSets = await tx.execute({
-          text: 'SELECT 1',
-      });
-      // work with resultSets
+  await sql.begin({ idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
   });
 
   // Or explicitly specify transaction mode
-  await query.tx({ mode: TxMode.SerializableReadWrite }, async (tx) => {
-      const resultSets = await tx.execute({
-          text: 'SELECT 1',
-      });
-      // work with resultSets
+  await sql.begin({ isolation: 'serializableReadWrite', idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
   });
   ```
 
@@ -373,12 +362,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   QueryClient queryClient = QueryClient.newClient(transport).build();
   SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
 
-  retryCtx.supplyResult(session -> {
-      QueryReader reader = QueryReader.readFrom(
-          session.createQuery("SELECT 1", TxMode.ONLINE_RO)
-      ).join().getValue();
-      return CompletableFuture.completedFuture(Result.success(reader));
-  }).join().getValue();
+  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO)));
   ```
 
 - Python
@@ -464,12 +448,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   QueryClient queryClient = QueryClient.newClient(transport).build();
   SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
 
-  retryCtx.supplyResult(session -> {
-      QueryReader reader = QueryReader.readFrom(
-          session.createQuery("SELECT 1", TxMode.STALE_RO)
-      ).join().getValue();
-      return CompletableFuture.completedFuture(Result.success(reader));
-  }).join().getValue();
+  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO)));
   ```
 
 - Python
@@ -614,12 +593,8 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   QueryClient queryClient = QueryClient.newClient(transport).build();
   SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
 
-  retryCtx.supplyResult(session -> {
-      QueryReader reader = QueryReader.readFrom(
-          session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO)
-      ).join().getValue();
-      return CompletableFuture.completedFuture(Result.success(reader));
-  }).join().getValue();
+  // By default, ReadOnly queries are executed in SNAPSHOT_RO mode
+  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO)));
   ```
 
   {% endcut %}
@@ -708,15 +683,12 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - Js/Ts
 
   ```typescript
-  import { Query, TxMode } from '@ydbjs/query';
+  import { sql } from '@ydbjs/query';
 
   // ...
 
-  await query.tx({ mode: TxMode.SnapshotReadOnly }, async (tx) => {
-      const resultSets = await tx.execute({
-          text: 'SELECT 1',
-      });
-      // work with resultSets
+  await sql.begin({ isolation: 'snapshotReadOnly', idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
   });
   ```
 
@@ -835,12 +807,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   QueryClient queryClient = QueryClient.newClient(transport).build();
   SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
 
-  retryCtx.supplyResult(session -> {
-      QueryReader reader = QueryReader.readFrom(
-          session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW)
-      ).join().getValue();
-      return CompletableFuture.completedFuture(Result.success(reader));
-  }).join().getValue();
+  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW)));
   ```
 
 - Python

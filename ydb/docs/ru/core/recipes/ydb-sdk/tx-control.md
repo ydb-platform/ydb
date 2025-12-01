@@ -123,12 +123,7 @@
   QueryClient queryClient = QueryClient.newClient(transport).build();
   SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
 
-  retryCtx.supplyResult(session -> {
-      QueryReader reader = QueryReader.readFrom(
-          session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW)
-      ).join().getValue();
-      return CompletableFuture.completedFuture(Result.success(reader));
-  }).join().getValue();
+  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW)));
   ```
 
   {% endcut %}
@@ -250,24 +245,18 @@
 - Js/Ts
 
   ```typescript
-  import { Query, TxMode } from '@ydbjs/query';
+  import { sql } from '@ydbjs/query';
 
   // ...
 
   // Режим Serializable Read-Write используется по умолчанию
-  await query.tx(async (tx) => {
-      const resultSets = await tx.execute({
-          text: 'SELECT 1',
-      });
-      // работа с resultSets
+  await sql.begin({ idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
   });
 
   // Или явно указать режим транзакции
-  await query.tx({ mode: TxMode.SerializableReadWrite }, async (tx) => {
-      const resultSets = await tx.execute({
-          text: 'SELECT 1',
-      });
-      // работа с resultSets
+  await sql.begin({ isolation: 'serializableReadWrite', idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
   });
   ```
 
@@ -372,12 +361,7 @@
   QueryClient queryClient = QueryClient.newClient(transport).build();
   SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
 
-  retryCtx.supplyResult(session -> {
-      QueryReader reader = QueryReader.readFrom(
-          session.createQuery("SELECT 1", TxMode.ONLINE_RO)
-      ).join().getValue();
-      return CompletableFuture.completedFuture(Result.success(reader));
-  }).join().getValue();
+  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO)));
   ```
 
 - Python
@@ -463,12 +447,7 @@
   QueryClient queryClient = QueryClient.newClient(transport).build();
   SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
 
-  retryCtx.supplyResult(session -> {
-      QueryReader reader = QueryReader.readFrom(
-          session.createQuery("SELECT 1", TxMode.STALE_RO)
-      ).join().getValue();
-      return CompletableFuture.completedFuture(Result.success(reader));
-  }).join().getValue();
+  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO)));
   ```
 
 - Python
@@ -613,12 +592,8 @@
   QueryClient queryClient = QueryClient.newClient(transport).build();
   SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
 
-  retryCtx.supplyResult(session -> {
-      QueryReader reader = QueryReader.readFrom(
-          session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO)
-      ).join().getValue();
-      return CompletableFuture.completedFuture(Result.success(reader));
-  }).join().getValue();
+  // По умолчанию ReadOnly запросы выполняются в режиме SNAPSHOT_RO
+  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO)));
   ```
 
   {% endcut %}
@@ -707,15 +682,12 @@
 - Js/Ts
 
   ```typescript
-  import { Query, TxMode } from '@ydbjs/query';
+  import { sql } from '@ydbjs/query';
 
   // ...
 
-  await query.tx({ mode: TxMode.SnapshotReadOnly }, async (tx) => {
-      const resultSets = await tx.execute({
-          text: 'SELECT 1',
-      });
-      // работа с resultSets
+  await sql.begin({ isolation: 'snapshotReadOnly', idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
   });
   ```
 
@@ -834,12 +806,7 @@
   QueryClient queryClient = QueryClient.newClient(transport).build();
   SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
 
-  retryCtx.supplyResult(session -> {
-      QueryReader reader = QueryReader.readFrom(
-          session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW)
-      ).join().getValue();
-      return CompletableFuture.completedFuture(Result.success(reader));
-  }).join().getValue();
+  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW)));
   ```
 
 - Python

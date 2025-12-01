@@ -368,7 +368,6 @@ int TYdbUpdater::Update(bool forceUpdate) {
     TFsPath tmpPathToBinary = CreateCacheDownloadPath();
     TString downloadUrl = TStringBuilder() << StorageUrl << '/' << LatestVersion << '/' << osVersion
         << '/' << osArch << '/' << NLocalPaths::YdbBinaryName;
-    downloadUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/testing/test/ydb";
     Cout << "Downloading binary from url " << downloadUrl << Endl;
     TShellCommand curlCmd(TStringBuilder() << "curl --connect-timeout 60 " << downloadUrl << " -o " << tmpPathToBinary.GetPath());
     curlCmd.Run().Wait();

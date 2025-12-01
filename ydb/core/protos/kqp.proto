@@ -766,8 +766,8 @@ message TEvKqpScanCursor {
     }
     oneof Implementation {
         TColumnShardScanPlain ColumnShardPlain = 10;
-        TColumnShardScanSimple ColumnShardSimple = 14;
-        TColumnShardScanNotSortedSimple ColumnShardNotSortedSimple = 15;
+        TColumnShardScanSimple ColumnShardSimple = 13;
+        TColumnShardScanNotSortedSimple ColumnShardNotSortedSimple = 14;
     }
     reserved 11, 12; // deprecated
 }

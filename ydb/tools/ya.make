@@ -5,6 +5,7 @@ RECURSE(
     query_replay
     query_replay_yt
     stress_tool
+    s3_bench
     tsserver
     tstool
     ydbd_slice

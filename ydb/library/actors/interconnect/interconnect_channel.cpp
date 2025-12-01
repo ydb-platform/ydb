@@ -281,7 +281,7 @@ namespace NActors {
             std::optional<bool> complete = false;
             if (IsPartInline) {
                 complete = FeedInlinePayload(task, event);
-            } else if (IsPartRdma) {
+            } else if (IsPartRdma && rdmaDeviceIndex >= 0) {
                 complete = FeedRdmaPayload(task, event, rdmaDeviceIndex, task.Params.ChecksumRdmaEvent);
             } else {
                 complete = FeedExternalPayload(task, event);

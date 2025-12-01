@@ -1673,6 +1673,12 @@ bool TPath::IsCommonSensePath() const {
     return true;
 }
 
+bool TPath::ShouldSkipCommonPathCheckForIndexImplTable() const {
+    const bool featureFlagEnabled = AppData()->FeatureFlags.GetEnableAccessToIndexImplTables();
+    const bool isInsideIndexPath = IsInsideTableIndexPath(false);
+    return featureFlagEnabled && isInsideIndexPath;
+}
+
 bool TPath::AtLocalSchemeShardPath() const {
     if (Elements.empty()) {
         return true;

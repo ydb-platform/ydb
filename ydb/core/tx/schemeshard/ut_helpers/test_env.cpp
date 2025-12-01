@@ -622,6 +622,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);
     app.SetEnableRealSystemViewPaths(opts.EnableRealSystemViewPaths_);
     app.FeatureFlags.SetEnableAlterDatabase(opts.EnableAlterDatabase_);
+    app.SetEnableAccessToIndexImplTables(opts.EnableAccessToIndexImplTables_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

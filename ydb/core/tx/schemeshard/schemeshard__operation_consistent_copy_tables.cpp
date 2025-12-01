@@ -121,13 +121,19 @@ bool CreateConsistentCopyTables(
         const auto& dstStr = descr.GetDstPath();
 
         TPath srcPath = TPath::Resolve(srcStr, context.SS);
+
         {
             TPath::TChecker checks = srcPath.Check();
             checks.IsResolved()
                   .NotDeleted()
-                  .IsTable()
-                  .IsCommonSensePath()
-                  .IsTheSameDomain(firstPath);
+                  .IsTable();
+
+            // Allow copying index impl tables when feature flag is enabled
+            if (!srcPath.ShouldSkipCommonPathCheckForIndexImplTable()) {
+                checks.IsCommonSensePath();
+            }
+
+            checks.IsTheSameDomain(firstPath);
 
             if (!checks) {
                 result = {CreateReject(nextId, checks.GetStatus(), checks.GetError())};

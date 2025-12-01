@@ -293,6 +293,15 @@ TFsPath GetUpdateStateFile() {
         TFsPath legacy = legacyDir.Child("config.json").Fix();
         if (legacy.Exists()) {
             MoveFilePreservingContents(legacy, file, FILE_MODE_PRIVATE);
+            TFsPath legacyBackup = legacyDir.Child("config.json.bak");
+            if (legacyBackup.Exists()) {
+                try {
+                    legacyBackup.DeleteIfExists();
+                } catch (const yexception& e) {
+                    Cerr << "Failed to delete legacy update backup " << legacyBackup.GetPath()
+                        << ": " << e.what() << Endl;
+                }
+            }
             DeleteDirIfEmpty(legacyDir);
             DeleteDirIfEmpty(GetHomePath().Child("ydb"));
         }

@@ -270,6 +270,10 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateStreamingQuery = 210 [(CounterOpts) = {Name: "InFlightOps/CreateStreamingQuery"}];
     COUNTER_IN_FLIGHT_OPS_TxDropStreamingQuery = 211   [(CounterOpts) = {Name: "InFlightOps/DropStreamingQuery"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterStreamingQuery = 212  [(CounterOpts) = {Name: "InFlightOps/AlterStreamingQuery"}];
+
+    COUNTER_TEST_SHARD_COUNT = 213                     [(CounterOpts) = {Name: "TestShardCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateTestShard = 214      [(CounterOpts) = {Name: "InFlightOps/CreateTestShard"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropTestShard = 215        [(CounterOpts) = {Name: "InFlightOps/DropTestShard"}];
 }
 
 enum ECumulativeCounters {
@@ -440,6 +444,9 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateStreamingQuery = 130 [(CounterOpts) = {Name: "FinishedOps/CreateStreamingQuery"}];
     COUNTER_FINISHED_OPS_TxDropStreamingQuery = 131   [(CounterOpts) = {Name: "FinishedOps/DropStreamingQuery"}];
     COUNTER_FINISHED_OPS_TxAlterStreamingQuery = 132  [(CounterOpts) = {Name: "FinishedOps/AlterStreamingQuery"}];
+
+    COUNTER_FINISHED_OPS_TxCreateTestShard = 133      [(CounterOpts) = {Name: "FinishedOps/CreateTestShard"}];
+    COUNTER_FINISHED_OPS_TxDropTestShard = 134        [(CounterOpts) = {Name: "FinishedOps/DropTestShard"}];
 }
 
 enum EPercentileCounters {
@@ -695,4 +702,5 @@ enum ETxTypes {
     TXTYPE_GET_BACKUP_COLLECTION_RESTORE = 107 [(TxTypeOpts) = {Name: "TxGetBackupCollectionRestore"}];
     TXTYPE_LIST_BACKUP_COLLECTION_RESTORE = 108 [(TxTypeOpts) = {Name: "TxListBackupCollectionRestore"}];
     TXTYPE_FORGET_BACKUP_COLLECTION_RESTORE = 109 [(TxTypeOpts) = {Name: "TxForgetBackupCollectionRestore"}];
+    TXTYPE_TEST_SHARD_CONTROL = 110 [(TxTypeOpts) = {Name: "TxTestShardControl"}];
 }

@@ -61,17 +61,17 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
         query_string = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()])
         url_ui = f"{base_url}?{query_string}&ui=true"
         
-        # Badge with "Run tests" text
-        badge_text = "▶ Run tests".replace(" ", "%20")
-        button = f"[![▶ Run tests](https://img.shields.io/badge/{badge_text}-{preset['badge_color']})]({url_ui})"
-        
-        rows.append(f"  <tr><td><code>{preset['name']}</code></td><td>{button}</td></tr>")
+        # Badge with only message (no label) - format: badge/message-color
+        # Encode only spaces, keep emoji as is - use two spaces like in backport
+        badge_text = "▶  Run tests".replace(" ", "%20")
+        button = f"[![▶  Run tests](https://img.shields.io/badge/{badge_text}-{preset['badge_color']})]({url_ui})"
+        rows.append(f"| `{preset['name']}` | {button} |")
     
     table = "<!-- run-tests-table -->\n"
     table += "<h3>Run Tests</h3>\n\n"
-    table += "<table>\n"
+    table += "| Build Preset | Run |\n"
+    table += "|--------|-----|\n"
     table += "\n".join(rows)
-    table += "\n</table>"
     return table
 
 

@@ -367,6 +367,13 @@ void TYsonStructMeta::WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStr
         .EndMap();
 }
 
+void TYsonStructMeta::Traverse(TYsonStructParameterVisitor visitor, const NYPath::TYPath& path) const
+{
+    for (const auto& [name, parameter] : InitialOrderParameters_) {
+        parameter->TraverseParameter(visitor, path);
+    }
+}
+
 void TYsonStructMeta::FinishInitialization(const std::type_info& structType)
 {
     StructType_ = &structType;

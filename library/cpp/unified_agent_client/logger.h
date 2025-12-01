@@ -2,6 +2,7 @@
 
 #include <library/cpp/unified_agent_client/f_maybe.h>
 #include <library/cpp/unified_agent_client/throttling.h>
+#include <library/cpp/unified_agent_client/formatters.h>
 
 #include <library/cpp/logger/log.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>

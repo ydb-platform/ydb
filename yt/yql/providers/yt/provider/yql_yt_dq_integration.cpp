@@ -478,6 +478,9 @@ public:
                         } else if (pathInfo.Ranges && !canUseYtPartitioningApi) {
                             AddMessage(ctx, "table with ranges", skipIssues, ytState->PassiveExecution);
                             return false;
+                        } else if (pathInfo.QLFilter && !canUseYtPartitioningApi) {
+                            AddMessage(ctx, "table with QLFilter", skipIssues, ytState->PassiveExecution);
+                            return false;
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
                             AddMessage(ctx, "dynamic table", skipIssues, ytState->PassiveExecution);
                             return false;
@@ -623,6 +626,9 @@ public:
 
                         if (pathInfo->Ranges && !canUseYtPartitioningApi) {
                             AddErrorWrap(ctx, node_->Pos(), "table with ranges");
+                            return Nothing();
+                        } else if (pathInfo->QLFilter && !canUseYtPartitioningApi) {
+                            AddErrorWrap(ctx, node_->Pos(), "table with QLFilter");
                             return Nothing();
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
                             AddErrorWrap(ctx, node_->Pos(), "dynamic table");

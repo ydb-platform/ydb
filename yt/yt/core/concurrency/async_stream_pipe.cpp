@@ -95,7 +95,7 @@ TFuture<TSharedRef> TBoundedAsyncStreamPipe::Read()
         return MakeFuture<TSharedRef>(Error_);
     }
 
-    return result.ApplyUnique(BIND([this, this_ = MakeStrong(this)] (TSharedRef&& data) -> TFuture<TSharedRef> {
+    return result.AsUnique().Apply(BIND([this, this_ = MakeStrong(this)] (TSharedRef&& data) -> TFuture<TSharedRef> {
         if (Aborted_.load()) {
             return MakeFuture<TSharedRef>(Error_);
         }

@@ -12,6 +12,7 @@
 #include <yt/yt/core/ytree/tree_visitor.h>
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/yson_struct.h>
+#include <yt/yt/core/ytree/traverse.h>
 
 #include <yt/yt/core/ytree/unittests/proto/test.pb.h>
 
@@ -4389,6 +4390,156 @@ TEST(TYsonStructTest, Map)
     EXPECT_EQ(fromNode->ComplexMap, ysonStruct->ComplexMap);
     EXPECT_EQ(fromNode->ComplexKey, ysonStruct->ComplexKey);
     EXPECT_EQ(*fromNode, *ysonStruct);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestYsonStructVisitorSub
+    : public TYsonStruct
+{
+    int X;
+    int Y;
+
+    REGISTER_YSON_STRUCT(TTestYsonStructVisitorSub);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("x", &TThis::X)
+            .Default();
+        registrar.Parameter("y", &TThis::Y);
+    }
+};
+
+using TTestYsonStructVisitorSubPtr = TIntrusivePtr<TTestYsonStructVisitorSub>;
+
+struct TTestYsonStructVisitorSubLite
+    : public TYsonStructLite
+{
+    int A;
+    int B;
+    TTestYsonStructVisitorSubPtr Sub;
+
+    REGISTER_YSON_STRUCT_LITE(TTestYsonStructVisitorSubLite);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("a", &TThis::A)
+            .Default();
+        registrar.Parameter("b", &TThis::B);
+        registrar.Parameter("sub", &TThis::Sub)
+            .DefaultNew();
+    }
+};
+
+struct TTestYsonStructVisitorPolyBase
+    : public TYsonStruct
+{
+    int A;
+
+    REGISTER_YSON_STRUCT(TTestYsonStructVisitorPolyBase);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("a", &TThis::A)
+            .Default();
+    }
+};
+
+struct TTestYsonStructVisitorPolyDerived1
+    : public TTestYsonStructVisitorPolyBase
+{
+    int B;
+
+    REGISTER_YSON_STRUCT(TTestYsonStructVisitorPolyDerived1);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("b", &TThis::B);
+    }
+};
+
+struct TTestYsonStructVisitorPolyDerived2
+    : public TTestYsonStructVisitorPolyBase
+{
+    int C;
+
+    REGISTER_YSON_STRUCT(TTestYsonStructVisitorPolyDerived2);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("c", &TThis::C)
+            .Default();
+    }
+};
+
+DEFINE_POLYMORPHIC_YSON_STRUCT(YsonStructVisitorPoly, TTestYsonStructVisitorPolyBase,
+    ((Base) (TTestYsonStructVisitorPolyBase))
+    ((Drv1) (TTestYsonStructVisitorPolyDerived1))
+    ((Drv2) (TTestYsonStructVisitorPolyDerived2))
+);
+
+struct TTestYsonStructVisitor
+    : public TYsonStruct
+{
+    int X;
+    TString Y;
+    TTestYsonStructVisitorSubPtr Sub;
+    TTestYsonStructVisitorSubLite SubLite;
+    THashMap<TString, TTestYsonStructVisitorSubPtr> SubMap;
+    std::tuple<int, TString, TTestYsonStructVisitorSubPtr> SubTuple;
+    TYsonStructVisitorPoly Poly;
+
+    REGISTER_YSON_STRUCT(TTestYsonStructVisitor);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("x", &TThis::X);
+        registrar.Parameter("y", &TThis::Y)
+            .Default();
+        registrar.Parameter("sub", &TThis::Sub);
+        registrar.Parameter("sub_lite", &TThis::SubLite)
+            .Default();
+        registrar.Parameter("sub_map", &TThis::SubMap);
+        registrar.Parameter("sub_tuple", &TThis::SubTuple)
+            .Default();
+        registrar.Parameter("poly", &TThis::Poly)
+            .Default();
+    }
+};
+
+TEST(TestYsonStruct, Visitor)
+{
+    std::vector<std::pair<TString, bool>> visited;
+    auto visitor = [&](const auto& context) {
+        visited.emplace_back(context.Path, !context.Parameter->IsRequired());
+    };
+    TraverseYsonStruct<TTestYsonStructVisitor>(visitor);
+    auto expected = std::vector<std::pair<TString, bool>>{
+        {"/x", false},
+        {"/y", true},
+        {"/sub", false},
+        {"/sub/x", true},
+        {"/sub/y", false},
+        {"/sub_lite", true},
+        {"/sub_lite/a", true},
+        {"/sub_lite/b", false},
+        {"/sub_lite/sub", true},
+        {"/sub_lite/sub/x", true},
+        {"/sub_lite/sub/y", false},
+        {"/sub_map", false},
+        {"/sub_map/*/x", true},
+        {"/sub_map/*/y", false},
+        {"/sub_tuple", true},
+        {"/sub_tuple/2/x", true},
+        {"/sub_tuple/2/y", false},
+        {"/poly", true},
+        {"/poly/base/a", true},
+        {"/poly/drv1/a", true},
+        {"/poly/drv1/b", false},
+        {"/poly/drv2/a", true},
+        {"/poly/drv2/c", true},
+    };
+    EXPECT_EQ(visited, expected);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

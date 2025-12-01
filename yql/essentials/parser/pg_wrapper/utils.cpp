@@ -113,8 +113,13 @@ TExtensionsRegistry::TExtensionsRegistry()
     Y_UNUSED(TouchReadTableApi());
 }
 
+std::shared_ptr<TExtensionsRegistry>& TExtensionsRegistry::InstanceShared() {
+    return *Singleton<std::shared_ptr<TExtensionsRegistry>>(std::make_shared<TExtensionsRegistry>());
+}
+
 TExtensionsRegistry& TExtensionsRegistry::Instance() {
-    return *Singleton<TExtensionsRegistry>();
+    static TExtensionsRegistry* instance = InstanceShared().get();
+    return *instance;
 }
 
 void TExtensionsRegistry::InitThread() {
@@ -183,7 +188,7 @@ extern "C" Oid get_extension_oid(const char *extname, bool missing_ok)
         result = NPg::LookupExtensionByName(extname);
     } catch (const yexception&) {
     }
-    
+
     if (!OidIsValid(result) && !missing_ok)
         ereport(ERROR,
             (errcode(ERRCODE_UNDEFINED_OBJECT),

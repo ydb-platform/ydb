@@ -118,6 +118,8 @@ struct TTranslationSettings {
     bool AssumeYdbOnClusterWithSlash;
     TString DynamicClusterProvider;
     TString FileAliasPrefix;
+    // lower case mapping Module -> Functions
+    const THashMap<TString, THashSet<TString>>* UdfFilter = nullptr;
 
     TVector<ui32> PgParameterTypeOids;
     bool AutoParametrizeEnabled = false;

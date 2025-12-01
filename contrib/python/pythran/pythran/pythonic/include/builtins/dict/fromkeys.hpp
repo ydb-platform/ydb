@@ -16,7 +16,7 @@ namespace builtins
   {
 
     template <class Iterable, class V = types::none_type>
-    types::dict<typename std::remove_reference<Iterable>::type::value_type, V>
+    types::dict<typename std::remove_reference_t<Iterable>::value_type, V>
     fromkeys(Iterable &&iter, V const &v = builtins::None);
 
     DEFINE_FUNCTOR(pythonic::builtins::dict, fromkeys);

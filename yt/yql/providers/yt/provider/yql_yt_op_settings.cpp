@@ -974,13 +974,8 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             break;
         }
         case EYtSettingType::QLFilter: {
-            if (!EnsureTupleSize(*setting, 2, ctx)) {
+            if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
-            }
-            const auto qlFilter = setting->Child(1);
-            if (!qlFilter->IsCallable("YtQLFilter")) {
-                ctx.AddError(TIssue(ctx.GetPosition(qlFilter->Pos()), TStringBuilder()
-                    << "Expected YtQLFilter node, got: " << qlFilter->Content()));
             }
             break;
         }

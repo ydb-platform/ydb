@@ -2843,7 +2843,7 @@ struct TExprContext: private TNonCopyable {
     }
 
     TPositionHandle AppendPosition(const TPosition& pos);
-    TPosition GetPosition(TPositionHandle handle) const;
+    const TPosition& GetPosition(TPositionHandle handle) const;
 
     TExprNodeBuilder Builder(TPositionHandle pos) {
         return TExprNodeBuilder(pos, *this);

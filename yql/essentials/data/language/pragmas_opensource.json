@@ -435,9 +435,6 @@
     "name": "yt.PruneKeyFilterLambda"
   },
   {
-    "name": "yt.PruneQLFilterLambda"
-  },
-  {
     "name": "yt.PublishedAutoMerge"
   },
   {

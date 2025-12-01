@@ -24,34 +24,32 @@
 
 #include "curl_setup.h"
 
-#ifdef _WIN32
+#if defined(_WIN32)
 
 #include <curl/curl.h>
 #include "system_win32.h"
-#include "curlx/version_win32.h"
+#include "version_win32.h"
 #include "curl_sspi.h"
-#include "curlx/warnless.h"
+#include "warnless.h"
 
 /* The last #include files should be: */
 #include "curl_memory.h"
 #include "memdebug.h"
 
-#ifndef HAVE_IF_NAMETOINDEX
+LARGE_INTEGER Curl_freq;
+bool Curl_isVistaOrGreater;
+
 /* Handle of iphlpapp.dll */
 static HMODULE s_hIpHlpApiDll = NULL;
 
 /* Pointer to the if_nametoindex function */
 IF_NAMETOINDEX_FN Curl_if_nametoindex = NULL;
 
-/* This is used to dynamically load DLLs */
-static HMODULE curl_load_library(LPCTSTR filename);
-#endif
-
-/* Curl_win32_init() performs Win32 global initialization */
+/* Curl_win32_init() performs win32 global initialization */
 CURLcode Curl_win32_init(long flags)
 {
   /* CURL_GLOBAL_WIN32 controls the *optional* part of the initialization which
-     is just for Winsock at the moment. Any required Win32 initialization
+     is just for Winsock at the moment. Any required win32 initialization
      should take place after this block. */
   if(flags & CURL_GLOBAL_WIN32) {
 #ifdef USE_WINSOCK
@@ -63,7 +61,7 @@ CURLcode Curl_win32_init(long flags)
     res = WSAStartup(wVersionRequested, &wsaData);
 
     if(res)
-      /* Tell the user that we could not find a usable */
+      /* Tell the user that we couldn't find a usable */
       /* winsock.dll.     */
       return CURLE_FAILED_INIT;
 
@@ -75,7 +73,7 @@ CURLcode Curl_win32_init(long flags)
 
     if(LOBYTE(wsaData.wVersion) != LOBYTE(wVersionRequested) ||
        HIBYTE(wsaData.wVersion) != HIBYTE(wVersionRequested) ) {
-      /* Tell the user that we could not find a usable */
+      /* Tell the user that we couldn't find a usable */
 
       /* winsock.dll. */
       WSACleanup();
@@ -95,24 +93,16 @@ CURLcode Curl_win32_init(long flags)
   }
 #endif
 
-#ifndef HAVE_IF_NAMETOINDEX
-  s_hIpHlpApiDll = curl_load_library(TEXT("iphlpapi.dll"));
+  s_hIpHlpApiDll = Curl_load_library(TEXT("iphlpapi.dll"));
   if(s_hIpHlpApiDll) {
     /* Get the address of the if_nametoindex function */
-#ifdef UNDER_CE
-    #define CURL_TEXT(n) TEXT(n)
-#else
-    #define CURL_TEXT(n) (n)
-#endif
     IF_NAMETOINDEX_FN pIfNameToIndex =
       CURLX_FUNCTION_CAST(IF_NAMETOINDEX_FN,
-                          (GetProcAddress(s_hIpHlpApiDll,
-                                          CURL_TEXT("if_nametoindex"))));
+                          (GetProcAddress(s_hIpHlpApiDll, "if_nametoindex")));
 
     if(pIfNameToIndex)
       Curl_if_nametoindex = pIfNameToIndex;
   }
-#endif
 
   /* curlx_verify_windows_version must be called during init at least once
      because it has its own initialization routine. */
@@ -130,13 +120,11 @@ CURLcode Curl_win32_init(long flags)
 /* Curl_win32_cleanup() is the opposite of Curl_win32_init() */
 void Curl_win32_cleanup(long init_flags)
 {
-#ifndef HAVE_IF_NAMETOINDEX
   if(s_hIpHlpApiDll) {
     FreeLibrary(s_hIpHlpApiDll);
     s_hIpHlpApiDll = NULL;
     Curl_if_nametoindex = NULL;
   }
-#endif
 
 #ifdef USE_WINDOWS_SSPI
   Curl_sspi_global_cleanup();
@@ -149,13 +137,11 @@ void Curl_win32_cleanup(long init_flags)
   }
 }
 
-#ifndef HAVE_IF_NAMETOINDEX
-
-#ifndef LOAD_WITH_ALTERED_SEARCH_PATH
+#if !defined(LOAD_WITH_ALTERED_SEARCH_PATH)
 #define LOAD_WITH_ALTERED_SEARCH_PATH  0x00000008
 #endif
 
-#ifndef LOAD_LIBRARY_SEARCH_SYSTEM32
+#if !defined(LOAD_LIBRARY_SEARCH_SYSTEM32)
 #define LOAD_LIBRARY_SEARCH_SYSTEM32   0x00000800
 #endif
 
@@ -164,7 +150,7 @@ typedef HMODULE (APIENTRY *LOADLIBRARYEX_FN)(LPCTSTR, HANDLE, DWORD);
 
 /* See function definitions in winbase.h */
 #ifdef UNICODE
-#  ifdef UNDER_CE
+#  ifdef _WIN32_WCE
 #    define LOADLIBARYEX  L"LoadLibraryExW"
 #  else
 #    define LOADLIBARYEX  "LoadLibraryExW"
@@ -174,7 +160,7 @@ typedef HMODULE (APIENTRY *LOADLIBRARYEX_FN)(LPCTSTR, HANDLE, DWORD);
 #endif
 
 /*
- * curl_load_library()
+ * Curl_load_library()
  *
  * This is used to dynamically load DLLs using the most secure method available
  * for the version of Windows that we are running on.
@@ -187,13 +173,13 @@ typedef HMODULE (APIENTRY *LOADLIBRARYEX_FN)(LPCTSTR, HANDLE, DWORD);
  *
  * Returns the handle of the module on success; otherwise NULL.
  */
-static HMODULE curl_load_library(LPCTSTR filename)
+HMODULE Curl_load_library(LPCTSTR filename)
 {
-#if !defined(CURL_WINDOWS_UWP) && !defined(UNDER_CE)
+#ifndef CURL_WINDOWS_APP
   HMODULE hModule = NULL;
   LOADLIBRARYEX_FN pLoadLibraryEx = NULL;
 
-  /* Get a handle to kernel32 so we can access its functions at runtime */
+  /* Get a handle to kernel32 so we can access it's functions at runtime */
   HMODULE hKernel32 = GetModuleHandle(TEXT("kernel32"));
   if(!hKernel32)
     return NULL;
@@ -204,7 +190,7 @@ static HMODULE curl_load_library(LPCTSTR filename)
     CURLX_FUNCTION_CAST(LOADLIBRARYEX_FN,
                         (GetProcAddress(hKernel32, LOADLIBARYEX)));
 
-  /* Detect if there is already a path in the filename and load the library if
+  /* Detect if there's already a path in the filename and load the library if
      there is. Note: Both back slashes and forward slashes have been supported
      since the earlier days of DOS at an API level although they are not
      supported by command prompt */
@@ -225,7 +211,7 @@ static HMODULE curl_load_library(LPCTSTR filename)
     /* Attempt to get the Windows system path */
     UINT systemdirlen = GetSystemDirectory(NULL, 0);
     if(systemdirlen) {
-      /* Allocate space for the full DLL path (Room for the null-terminator
+      /* Allocate space for the full DLL path (Room for the null terminator
          is included in systemdirlen) */
       size_t filenamelen = _tcslen(filename);
       TCHAR *path = malloc(sizeof(TCHAR) * (systemdirlen + 1 + filenamelen));
@@ -239,17 +225,17 @@ static HMODULE curl_load_library(LPCTSTR filename)
         hModule = pLoadLibraryEx ?
           pLoadLibraryEx(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH) :
           LoadLibrary(path);
+
       }
       free(path);
     }
   }
   return hModule;
 #else
-  /* the Universal Windows Platform (UWP) cannot do this */
+  /* the Universal Windows Platform (UWP) can't do this */
   (void)filename;
   return NULL;
 #endif
 }
-#endif /* !HAVE_IF_NAMETOINDEX */
 
 #endif /* _WIN32 */

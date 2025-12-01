@@ -16,12 +16,11 @@ namespace numpy
     T item(types::ndarray<T, pS> const &expr, long i);
 
     template <class E, size_t N>
-    auto item(E &&expr,
-              types::array_tuple<long, N> const &i) -> decltype(expr[i]);
+    auto item(E &&expr, types::array_tuple<long, N> const &i) -> decltype(expr[i]);
 
     // only for compatibility purpose, very bad impl
     template <class E>
-    typename std::decay<E>::type::dtype item(E &&expr, long i);
+    typename std::decay_t<E>::dtype item(E &&expr, long i);
 
     DEFINE_FUNCTOR(pythonic::numpy::ndarray, item);
   } // namespace ndarray

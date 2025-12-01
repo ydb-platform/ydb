@@ -653,7 +653,7 @@ class PythonModule(object):
             types = []
             for wrapper_name, wrapper_types, overload in overloads:
                 funcs.append("pythonic::types::ufunc_wrapper<{}, {}>".format(
-                    wrapper_name, ", ".join(wrapper_types)))
+                    wrapper_name, ", ".join(wrapper_types[-1:] + wrapper_types[:-1])))
                 types.extend(overload)
 
             ufunc = '''

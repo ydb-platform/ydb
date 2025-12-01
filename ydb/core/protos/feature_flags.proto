@@ -241,5 +241,6 @@ message TFeatureFlags {
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
     optional bool EnableColumnTablesBackup = 216 [default = true];
     optional bool EnableReplication = 217 [default = true];
-    optional bool EnableStreamingQueriesCounters = 218 [default = false];
-}
+    optional bool EnableShuttingDownNodeState = 218 [default = false];
+    optional bool EnableStreamingQueriesCounters = 219 [default = false];
+    }

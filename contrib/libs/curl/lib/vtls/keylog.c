@@ -21,22 +21,31 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-#include "../curl_setup.h"
+#include "curl_setup.h"
 
 #if defined(USE_OPENSSL) || \
-  defined(USE_GNUTLS) || \
   defined(USE_WOLFSSL) || \
   (defined(USE_NGTCP2) && defined(USE_NGHTTP3)) || \
-  defined(USE_QUICHE) || \
-  defined(USE_RUSTLS)
+  defined(USE_QUICHE)
 
 #include "keylog.h"
 #include <curl/curl.h>
-#include "../escape.h"
 
 /* The last #include files should be: */
-#include "../curl_memory.h"
-#include "../memdebug.h"
+#include "curl_memory.h"
+#include "memdebug.h"
+
+#define KEYLOG_LABEL_MAXLEN (sizeof("CLIENT_HANDSHAKE_TRAFFIC_SECRET") - 1)
+
+#define CLIENT_RANDOM_SIZE  32
+
+/*
+ * The master secret in TLS 1.2 and before is always 48 bytes. In TLS 1.3, the
+ * secret size depends on the cipher suite's hash function which is 32 bytes
+ * for SHA-256 and 48 bytes for SHA-384.
+ */
+#define SECRET_MAXLEN       48
+
 
 /* The fp for the open SSLKEYLOGFILE, or NULL if not open */
 static FILE *keylog_file_fp;
@@ -89,13 +98,13 @@ Curl_tls_keylog_write_line(const char *line)
   char buf[256];
 
   if(!keylog_file_fp || !line) {
-    return FALSE;
+    return false;
   }
 
   linelen = strlen(line);
   if(linelen == 0 || linelen > sizeof(buf) - 2) {
-    /* Empty line or too big to fit in an LF and NUL. */
-    return FALSE;
+    /* Empty line or too big to fit in a LF and NUL. */
+    return false;
   }
 
   memcpy(buf, line, linelen);
@@ -107,7 +116,7 @@ Curl_tls_keylog_write_line(const char *line)
   /* Using fputs here instead of fprintf since libcurl's fprintf replacement
      may not be thread-safe. */
   fputs(buf, keylog_file_fp);
-  return TRUE;
+  return true;
 }
 
 bool
@@ -115,18 +124,19 @@ Curl_tls_keylog_write(const char *label,
                       const unsigned char client_random[CLIENT_RANDOM_SIZE],
                       const unsigned char *secret, size_t secretlen)
 {
+  const char *hex = "0123456789ABCDEF";
   size_t pos, i;
-  unsigned char line[KEYLOG_LABEL_MAXLEN + 1 + 2 * CLIENT_RANDOM_SIZE + 1 +
-                     2 * SECRET_MAXLEN + 1 + 1];
+  char line[KEYLOG_LABEL_MAXLEN + 1 + 2 * CLIENT_RANDOM_SIZE + 1 +
+            2 * SECRET_MAXLEN + 1 + 1];
 
   if(!keylog_file_fp) {
-    return FALSE;
+    return false;
   }
 
   pos = strlen(label);
   if(pos > KEYLOG_LABEL_MAXLEN || !secretlen || secretlen > SECRET_MAXLEN) {
     /* Should never happen - sanity check anyway. */
-    return FALSE;
+    return false;
   }
 
   memcpy(line, label, pos);
@@ -134,23 +144,23 @@ Curl_tls_keylog_write(const char *label,
 
   /* Client Random */
   for(i = 0; i < CLIENT_RANDOM_SIZE; i++) {
-    Curl_hexbyte(&line[pos], client_random[i]);
-    pos += 2;
+    line[pos++] = hex[client_random[i] >> 4];
+    line[pos++] = hex[client_random[i] & 0xF];
   }
   line[pos++] = ' ';
 
   /* Secret */
   for(i = 0; i < secretlen; i++) {
-    Curl_hexbyte(&line[pos], secret[i]);
-    pos += 2;
+    line[pos++] = hex[secret[i] >> 4];
+    line[pos++] = hex[secret[i] & 0xF];
   }
   line[pos++] = '\n';
   line[pos] = '\0';
 
   /* Using fputs here instead of fprintf since libcurl's fprintf replacement
      may not be thread-safe. */
-  fputs((char *)line, keylog_file_fp);
-  return TRUE;
+  fputs(line, keylog_file_fp);
+  return true;
 }
 
 #endif  /* TLS or QUIC backend */

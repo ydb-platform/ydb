@@ -30,7 +30,7 @@ struct Curl_sockaddr_storage {
   union {
     struct sockaddr sa;
     struct sockaddr_in sa_in;
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
     struct sockaddr_in6 sa_in6;
 #endif
 #ifdef HAVE_STRUCT_SOCKADDR_STORAGE

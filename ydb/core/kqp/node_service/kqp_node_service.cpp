@@ -379,6 +379,10 @@ private:
     }
 
     void HandleWork(TEvKqp::TEvInitiateShutdownRequest::TPtr& ev) {
+        if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
+            LOG_I("Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request");
+            return;
+        }
         LOG_I("Prepare to shutdown: do not acccept any messages from this time");
         ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
         Become(&TKqpNodeService::ShuttingDownState);

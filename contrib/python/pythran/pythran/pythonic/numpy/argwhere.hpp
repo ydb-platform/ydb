@@ -12,16 +12,14 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  typename types::ndarray<long, types::array_tuple<long, 2>>
-  argwhere(E const &expr)
+  typename types::ndarray<long, types::array_tuple<long, 2>> argwhere(E const &expr)
   {
     constexpr long N = E::value;
     auto arr = asarray(expr);
     long sz = arr.flat_size();
     auto eshape = sutils::getshape(arr);
 
-    utils::shared_ref<types::raw_array<long>> buffer(sz *
-                                                     N); // too much memory used
+    utils::shared_ref<types::raw_array<long>> buffer(sz * N); // too much memory used
     long *buffer_iter = buffer->data;
 
     long real_sz = 0;

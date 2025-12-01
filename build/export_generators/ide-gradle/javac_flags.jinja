@@ -1,5 +1,5 @@
 {%- macro JavacFlags(task, target_javac_flags, has_errorprone, dis_errorprone) -%}
-{%-     set target_javac_flags = target_javac_flags|unique -%}
+{%-     set target_javac_flags = target_javac_flags -%}
 {%-     set javac_flags = [] -%}
 {%-     set compiler_jvm_flags = [] -%}
 {%-     if target_javac_flags|length -%}

@@ -208,17 +208,17 @@ TMaybe<std::tuple<TString, TString, TExprNode::TPtr>> ExtractKnnDistanceFromAppl
 
     // Find the member (column) and target expression
     // Knn distance functions have exactly 2 arguments: column and target vector
-    // The FIRST argument is always the column (Member reference), the SECOND is the target
+    // The arguments are symmetric (distance is commutative), so either order is valid:
+    //   Knn::Distance(column, target) or Knn::Distance(target, column)
     TMaybe<TString> columnName;
     TExprNode::TPtr targetExpr;
-    size_t argCount = 0;
+    TVector<std::pair<TExprNode::TPtr, TExprBase>> resolvedArgs;
 
     for (const auto& arg : apply.Args()) {
         // Skip the callable itself (first element in Args)
         if (arg.Raw() == apply.Callable().Raw()) {
             continue;
         }
-        argCount++;
 
         // Resolve the argument through substitutions
         TExprNode::TPtr resolvedArg = arg.Ptr();
@@ -226,22 +226,24 @@ TMaybe<std::tuple<TString, TString, TExprNode::TPtr>> ExtractKnnDistanceFromAppl
         if (it != argSubstitutions.end()) {
             resolvedArg = it->second;
         }
-        TExprBase resolvedExpr(resolvedArg);
-
-        // First argument is the column, second argument is the target
-        if (argCount == 1) {
-            // Column argument - should resolve to Member(something, 'column_name')
-            if (auto member = resolvedExpr.Maybe<TCoMember>()) {
-                columnName = TString(member.Cast().Name().Value());
-            }
-        } else if (argCount == 2) {
-            // Target argument
-            targetExpr = resolvedArg;
-        }
+        resolvedArgs.emplace_back(resolvedArg, TExprBase(resolvedArg));
     }
 
     // Knn distance functions should have exactly 2 arguments
-    if (!columnName || !targetExpr || argCount != 2) {
+    if (resolvedArgs.size() != 2) {
+        return {};
+    }
+
+    // Check both argument orders since distance is symmetric
+    for (size_t i = 0; i < 2; ++i) {
+        if (auto member = resolvedArgs[i].second.Maybe<TCoMember>()) {
+            columnName = TString(member.Cast().Name().Value());
+            targetExpr = resolvedArgs[1 - i].first;
+            break;
+        }
+    }
+
+    if (!columnName || !targetExpr) {
         return {};
     }
 

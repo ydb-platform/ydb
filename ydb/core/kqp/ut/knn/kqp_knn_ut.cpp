@@ -302,11 +302,18 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                 (1, "\x67\x71\x02")
             )"));
 
-            // Run query with subquery
-            expectedLimit = 3;
+            // Run query with subquery target, normal argument order (column first)
             runQuery(Q_(R"(
                 $TargetEmbedding = (SELECT target_emb FROM `/Root/TargetVectors` WHERE id = 1);
                 SELECT pk, Knn::CosineDistance(emb, $TargetEmbedding) AS distance FROM `/Root/TestTable`
+                ORDER BY distance
+                LIMIT 3
+            )"));
+
+            // Run query with subquery target, reversed argument order (target first)
+            runQuery(Q_(R"(
+                $TargetEmbedding = (SELECT target_emb FROM `/Root/TargetVectors` WHERE id = 1);
+                SELECT pk, Knn::CosineDistance($TargetEmbedding, emb) AS distance FROM `/Root/TestTable`
                 ORDER BY distance
                 LIMIT 3
             )"));

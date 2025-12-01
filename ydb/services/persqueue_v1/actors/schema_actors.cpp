@@ -1395,9 +1395,13 @@ bool TPartitionsLocationActor::ApplyResponse(
 
 void TPartitionsLocationActor::Finalize() {
     if (Settings.Partitions) {
-        Y_ABORT_UNLESS(Response->Partitions.size() == Settings.Partitions.size());
+        AFL_ENSURE(Response->Partitions.size() == Settings.Partitions.size())
+            ("l", Response->Partitions.size())
+            ("r", Settings.Partitions.size());
     } else {
-        Y_ABORT_UNLESS(Response->Partitions.size() == PQGroupInfo->Description.PartitionsSize());
+        AFL_ENSURE(Response->Partitions.size() >= PQGroupInfo->Description.PartitionsSize())
+            ("l", Response->Partitions.size())
+            ("r", PQGroupInfo->Description.PartitionsSize());
     }
     TBase::RespondWithCode(Ydb::StatusIds::SUCCESS);
 }
@@ -1405,6 +1409,16 @@ void TPartitionsLocationActor::Finalize() {
 void TPartitionsLocationActor::RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) {
     this->AddIssue(FillIssue(error, errorCode));
     this->RespondWithCode(status);
+}
+
+bool TPartitionsLocationActor::OnUnhandledException(const std::exception& exc) {
+    ALOG_ERROR(NKikimrServices::PQ_READ_PROXY, "unhandled exception "
+        << TypeName(exc) << ": " << exc.what() << Endl
+        << TBackTrace::FromCurrentException().PrintToString());
+
+    this->RaiseError("Unhandled exception", Ydb::PersQueue::ErrorCode::ERROR, Ydb::StatusIds::UNAVAILABLE, ActorContext());
+
+    return true;
 }
 
 TAlterTopicActorInternal::TAlterTopicActorInternal(

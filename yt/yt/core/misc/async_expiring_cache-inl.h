@@ -51,6 +51,8 @@ TAsyncExpiringCache<TKey, TValue>::TAsyncExpiringCache(
         BIND(&TAsyncExpiringCache::RefreshAllItems, MakeWeak(this))))
     , ShardCount_(config->ShardCount)
     , Invoker_(invoker)
+    // NB(apachee): +1 to avoid 0. Cf. #TRandomizedHash.
+    , ShardKeyHash_(RandomNumber<size_t>(std::numeric_limits<size_t>::max()) + 1)
     , MapShards_(config->ShardCount)
     , Config_(config)
     , HitCounter_(profiler.Counter("/hit"))
@@ -830,7 +832,7 @@ std::vector<std::vector<typename TAsyncExpiringCache<TKey, TValue>::TItem>> TAsy
 template <class TKey, class TValue>
 int TAsyncExpiringCache<TKey, TValue>::GetShardIndex(const TKey& key) const
 {
-    return THash<TKey>()(key) % ShardCount_;
+    return ShardKeyHash_(key) % ShardCount_;
 }
 
 template <class TKey, class TValue>

@@ -251,29 +251,24 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - Js/Ts
 
   ```typescript
-  import { Driver } from '@ydb-platform/ydb-sdk';
+  import { Query, TxMode } from '@ydbjs/query';
 
   // ...
 
   // Serializable Read-Write mode is used by default
-  await driver.queryClient.doTx({
-      fn: async (session) => {
-          const { resultSets } = await session.execute({
-              text: 'SELECT 1',
-          });
-          // work with resultSets
-      },
+  await query.tx(async (tx) => {
+      const resultSets = await tx.execute({
+          text: 'SELECT 1',
+      });
+      // work with resultSets
   });
 
-  // Or explicitly specify txSettings
-  await driver.queryClient.doTx({
-      txSettings: { serializableReadWrite: {} },
-      fn: async (session) => {
-          const { resultSets } = await session.execute({
-              text: 'SELECT 1',
-          });
-          // work with resultSets
-      },
+  // Or explicitly specify transaction mode
+  await query.tx({ mode: TxMode.SerializableReadWrite }, async (tx) => {
+      const resultSets = await tx.execute({
+          text: 'SELECT 1',
+      });
+      // work with resultSets
   });
   ```
 
@@ -713,18 +708,15 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - Js/Ts
 
   ```typescript
-  import { Driver } from '@ydb-platform/ydb-sdk';
+  import { Query, TxMode } from '@ydbjs/query';
 
   // ...
 
-  await driver.queryClient.doTx({
-      txSettings: { snapshotReadOnly: {} },
-      fn: async (session) => {
-          const { resultSets } = await session.execute({
-              text: 'SELECT 1',
-          });
-          // work with resultSets
-      },
+  await query.tx({ mode: TxMode.SnapshotReadOnly }, async (tx) => {
+      const resultSets = await tx.execute({
+          text: 'SELECT 1',
+      });
+      // work with resultSets
   });
   ```
 

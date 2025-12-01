@@ -1,4 +1,5 @@
 RECURSE(
+    backup
     cdc
     common
     ctas

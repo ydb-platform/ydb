@@ -178,6 +178,7 @@ param (
         [Environment]::SetEnvironmentVariable("Path", $joined, [System.EnvironmentVariableTarget]::User)
         $env:Path = [Environment]::ExpandEnvironmentVariables($joined)
         Write-Host "Replaced legacy PATH entry with $canonicalDir"
+        Write-Host "IMPORTANT: restart your shell so the new PATH is applied."
         return
     }
     if ($hasCanonical) {
@@ -190,6 +191,7 @@ param (
         [Environment]::SetEnvironmentVariable("Path", $joined, [System.EnvironmentVariableTarget]::User)
         $env:Path = [Environment]::ExpandEnvironmentVariables($joined)
         Write-Host "Added $canonicalDir to PATH"
+        Write-Host "IMPORTANT: restart your shell so the new PATH is applied."
     } else {
         Write-Host "You can add $canonicalDir to PATH later via System Settings."
     }

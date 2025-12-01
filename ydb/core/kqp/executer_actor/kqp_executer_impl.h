@@ -848,33 +848,10 @@ protected:
                     if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
                         LOG_D("Received NODE_SHUTTING_DOWN but feature flag EnableShuttingDownNodeState is disabled");
                         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
-<<<<<<< HEAD
-<<<<<<< HEAD
                             YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-=======
-                            YqlIssue({}, NYql::TIssuesIds::SHARD_NOT_AVAILABLE, 
->>>>>>> c92427a22e7 (change error code)
                                 "Compute node is unavailable"));
                         break;
                     }
-                    LOG_D("Received NODE_SHUTTING_DOWN, retry tasks locally");
-                    if (ev->Sender.NodeId() == SelfId().NodeId()) {
-                        LOG_W("[SHUTDOWN] Cannot retry: sender is local node"
-                            << ", senderNode: " << ev->Sender.NodeId()
-                            << ", selfNode: " << SelfId().NodeId());
-                        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, 
-                            MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, TStringBuilder() <<
-                        "Compute node is shutting down and is not available"));
-                        break;
-                    }
-
-                    ui32 requestId = record.GetNotStartedTasks(0).GetRequestId();
-=======
-                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, 
-                                "Compute node is unavailable"));
-                        break;
-                    }
->>>>>>> 3e59e95b7ca (fix planer logic)
                     
                     LOG_D("Received NODE_SHUTTING_DOWN, attempting run tasks locally");
                     

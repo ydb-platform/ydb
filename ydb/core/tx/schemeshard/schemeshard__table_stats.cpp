@@ -301,8 +301,6 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                     << ", pathId: " << pathId << ", pathId map=" << pathElement->Name
                     << ", is column=" << isColumnTable << ", is olap=" << isOlapStore);
 
-    const TPartitionStats newStats = PrepareStats(ctx, rec, channelsMapping);
-
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "Add stats from shard with datashardId(TabletID)=" << datashardId << " followerId=" << followerId
                     << ", pathId " << pathId.LocalPathId

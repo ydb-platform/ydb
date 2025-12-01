@@ -20,7 +20,7 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
 void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 void RequestDeduplicatorRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
-bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
+bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev);
 
 //
 // TInitializer
@@ -119,10 +119,6 @@ const TPartitionId& TInitializerStep::PartitionId() const {
     return Initializer->Partition->Partition;
 }
 
-void TInitializerStep::PoisonPill(const TActorContext& ctx) {
-    ctx.Send(Partition()->TabletActorId, new TEvents::TEvPoisonPill());
-}
-
 const TString& TInitializerStep::TopicName() const {
     return Partition()->TopicName();
 }
@@ -173,10 +169,7 @@ void TInitConfigStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& res = ev->Get()->Record;
     PQ_INIT_ENSURE(res.ReadResultSize() == 1);
@@ -200,14 +193,8 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
         Partition()->Config = Partition()->TabletConfig;
         break;
 
-    case NKikimrProto::ERROR:
-        PQ_LOG_ERROR("can't read config");
-        PoisonPill(ctx);
-        return;
-
     default:
-        Cerr << "ERROR " << response.GetStatus() << "\n";
-        Y_ABORT("bad status");
+        AFL_ENSURE(false)("status", response.GetStatus());
     };
 
     // There should be no consumers in the configuration of the background partition. When creating a partition,
@@ -253,10 +240,7 @@ void TInitDiskStatusStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.GetStatusResultSize());
@@ -294,18 +278,15 @@ void TInitMetaStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadResultSize() == 2);
-    LoadMeta(response, ctx);
+    LoadMeta(response);
     Done(ctx);
 }
 
-void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const TMaybe<TActorContext>& mbCtx) {
+void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
     auto handleReadResult = [&](const NKikimrClient::TKeyValueResponse::TReadResult& response, auto&& action) {
         switch (response.GetStatus()) {
         case NKikimrProto::OK:
@@ -313,18 +294,8 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
             break;
         case NKikimrProto::NODATA:
             break;
-        case NKikimrProto::ERROR:
-            if (!mbCtx) {
-                Y_ABORT();
-            } else {
-                auto& ctx = mbCtx.GetRef();
-                PQ_LOG_ERROR("read topic error");
-                PoisonPill(ctx);
-            }
-            break;
         default:
-            Cerr << "ERROR " << response.GetStatus() << "\n";
-            Y_ABORT("bad status");
+            AFL_ENSURE(false)("status", response.GetStatus());
         };
     };
 
@@ -393,10 +364,7 @@ void TInitInfoRangeStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
@@ -418,13 +386,10 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             for (ui32 i = 0; i < range.PairSize(); ++i) {
                 const auto& pair = range.GetPair(i);
                 PQ_INIT_ENSURE(pair.HasStatus());
-                if (pair.GetStatus() != NKikimrProto::OK) {
-                    PQ_LOG_ERROR("read range error got status " << pair.GetStatus() << " for key " << (pair.HasKey() ? pair.GetKey() : "unknown")
-                    );
 
-                    PoisonPill(ctx);
-                    return;
-                }
+                AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK)
+                    ("s", pair.GetStatus())
+                    ("k", pair.HasKey() ? pair.GetKey() : "unknown");
 
                 PQ_INIT_ENSURE(pair.HasKey());
                 PQ_INIT_ENSURE(pair.HasValue());
@@ -453,13 +418,8 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
         case NKikimrProto::NODATA:
             PostProcessing(ctx);
             break;
-        case NKikimrProto::ERROR:
-            PQ_LOG_ERROR("read topic error");
-            PoisonPill(ctx);
-            break;
         default:
-            Cerr << "ERROR " << range.GetStatus() << "\n";
-            Y_ABORT("bad status");
+            AFL_ENSURE(false)("status", range.GetStatus());
     };
 }
 
@@ -487,10 +447,7 @@ void TInitDataRangeStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
@@ -522,14 +479,13 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             //     ("l", *GetContext().EndOffset)
             //     ("r", Partition()->GetEndOffset());
 
-            Done(ctx);
-            break;
+            [[fallthrough]];
+
         case NKikimrProto::NODATA:
             Done(ctx);
             break;
         default:
-            Cerr << "ERROR " << range.GetStatus() << "\n";
-            Y_ABORT("bad status");
+            AFL_ENSURE(false)("status", range.GetStatus());
     };
 }
 
@@ -882,10 +838,7 @@ void TDeleteKeysStep::Execute(const TActorContext &ctx) {
 }
 
 void TDeleteKeysStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     Done(ctx);
 }
@@ -907,10 +860,7 @@ void TInitMessageDeduplicatorStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
@@ -923,20 +873,16 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
         case NKikimrProto::OVERRUN:
             for (auto& w : range.GetPair()) {
                 NKikimrPQ::TMessageDeduplicationIdWAL wal;
-                if (!wal.ParseFromString(w.GetValue())) {
-                    PQ_LOG_ERROR("tablet " << Partition()->TabletId << " Initializing of message id deduplicator failed: " << w.key());
-                    return PoisonPill(ctx);
-                }
+                auto r = wal.ParseFromString(w.GetValue());
+                AFL_ENSURE(r)("k", w.key());
 
                 if (wal.GetExpirationTimestampMilliseconds() < TInstant::Now().MilliSeconds()) {
                     PQ_LOG_D("tablet " << Partition()->TabletId << " Initializing of message id deduplicator expired: " << w.key());
                     continue;
                 }
 
-                if (!Partition()->MessageIdDeduplicator.ApplyWAL(std::move(wal))) {
-                    PQ_LOG_ERROR("tablet " << Partition()->TabletId << " Initializing of message id deduplicator failed: " << w.key() << " wal is corrupted");
-                    return PoisonPill(ctx);
-                }
+                auto a = Partition()->MessageIdDeduplicator.ApplyWAL(std::move(wal));
+                AFL_ENSURE(a)("k", w.key());
             }
 
             if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
@@ -945,8 +891,7 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
                 return;
             }
 
-            Done(ctx);
-            break;
+            [[fallthrough]];
         case NKikimrProto::NODATA:
             Done(ctx);
             break;
@@ -986,10 +931,7 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
+    ValidateResponse(*this, ev);
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadResultSize());
@@ -1046,23 +988,13 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
                 break;
                 }
-            case NKikimrProto::OVERRUN:
-                Y_ABORT("implement overrun in readresult!!");
-                return;
-            case NKikimrProto::NODATA:
-                Y_ABORT("NODATA can't be here");
-                return;
             case NKikimrProto::ERROR:
-                PQ_LOG_ERROR("tablet " << Partition()->TabletId << " HandleOnInit ReadResult "
-                        << i << " status NKikimrProto::ERROR result message: \"" << read.GetMessage()
-                        << " \" errorReason: \"" << response.GetErrorReason() << "\""
-                );
-                PoisonPill(ctx);
+                AFL_ENSURE(false)
+                    ("m", read.GetMessage())
+                    ("e", response.GetErrorReason());
                 return;
             default:
-                Cerr << "ERROR " << read.GetStatus() << " message: \"" << read.GetMessage() << "\"\n";
-                Y_ABORT("bad status");
-
+                AFL_ENSURE(false)("status", read.GetStatus());
         };
     }
 
@@ -1518,23 +1450,19 @@ void TPartition::CreateCompacter() {
 // Functions
 //
 
-bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&) {
+bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev) {
     auto& response = ev->Get()->Record;
-    if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-        PQ_LOG_ERROR("commands for topic '" << step.TopicName() << " partition " << step.PartitionId()
-                << " are not processed at all, got KV error " << response.GetStatus()
-        );
-        return false;
-    }
+    AFL_ENSURE(response.GetStatus() == NMsgBusProxy::MSTATUS_OK)
+        ("d", "commands for topic are not processed at all")
+        ("topic", step.TopicName())
+        ("status", response.GetStatus());
 
     for (ui32 i = 0; i < response.GetStatusResultSize(); ++i) {
         auto& res = response.GetGetStatusResult(i);
-        if (res.GetStatus() != NKikimrProto::OK) {
-            PQ_LOG_ERROR("commands for topic '" << step.TopicName() << "' partition " << step.PartitionId()
-                    << " are not processed at all, got KV error in CmdGetStatus " << res.GetStatus()
-            );
-            return false;
-        }
+        AFL_ENSURE(res.GetStatus() == NKikimrProto::OK)
+            ("d", "got KV error in CmdGetStatus")
+            ("topic", step.TopicName())
+            ("status", res.GetStatus());
     }
 
     return true;

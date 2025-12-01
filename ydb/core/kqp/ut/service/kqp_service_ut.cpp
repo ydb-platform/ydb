@@ -601,34 +601,42 @@ struct TDictCase {
         }
     }
 
-    Y_UNIT_TEST(ShuttingDownAllTheNodes) {
+    Y_UNIT_TEST(ShuttingDownOneNode) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableShuttingDownNodeState(true);
         TKikimrRunner kikimr(TKikimrSettings()
                                         .SetFeatureFlags(featureFlags)
-                                        .SetNodeCount(2)
-                                        .SetUseRealThreads(false));
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                                        .SetNodeCount(1));
+        CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
+
+        auto queryClient = kikimr.GetQueryClient();
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto shutdownState = new TKqpShutdownState();
-        for (auto nodeIdx : {0, 1}) {
-            auto nodeId = runtime.GetNodeId(nodeIdx);
-            runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {}, new TEvKqp::TEvInitiateShutdownRequest(shutdownState)), nodeIdx);
-        }
+        auto nodeId = runtime.GetNodeId(0);
+        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {}, new TEvKqp::TEvInitiateShutdownRequest(shutdownState)), 0);
+
         Sleep(TDuration::MilliSeconds(500));
-        auto result = session.ExecuteDataQuery(R"(SELECT * FROM `/Root/EightShard`;)", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
-        UNIT_ASSERT(false);
+        auto result = queryClient.ExecuteQuery(R"(
+                SELECT Key, COUNT(*) AS cnt, SUM(Data) AS sum_data, MAX(DataText) AS max_text
+                FROM `/Root/LargeTable`
+                WHERE Data > 0
+                GROUP BY Key
+                ORDER BY cnt DESC
+                LIMIT 100
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::UNAVAILABLE, result.GetIssues().ToString());
     }
 
 
     Y_UNIT_TEST(ThreeNodesGradualShutdown) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableShuttingDownNodeState(true);
-
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetNodeCount(3)
-                                            .SetUseRealThreads(false));
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableShuttingDownNodeState(true);
+        
+        TKikimrRunner kikimr(TKikimrSettings()
+                                        .SetFeatureFlags(featureFlags)
+                                        .SetNodeCount(3)
+                                        .SetUseRealThreads(false));
         kikimr.RunCall([&]() {CreateLargeTable(kikimr, 100, 2, 2, 10, 2);});
 
         auto queries = std::vector<TString>({

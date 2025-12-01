@@ -417,10 +417,7 @@ private:
             LOG_I("Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request");
             return;
         }
-        
-        LOG_I("Prepare to shutdown: do not accept any messages from this time"
-            << ", sender: " << ev->Sender
-            << ", self: " << SelfId());
+        LOG_I("Prepare to shutdown: do not accept any messages from this time");
         ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
         Become(&TKqpNodeService::ShuttingDownState);
     }

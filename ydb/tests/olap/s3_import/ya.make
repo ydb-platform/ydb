@@ -1,7 +1,7 @@
 PY3TEST()
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 
 TEST_SRCS(

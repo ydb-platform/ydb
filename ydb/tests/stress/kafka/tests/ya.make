@@ -1,5 +1,5 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/kafka/kafka_streams_test")
 

@@ -38,14 +38,15 @@ ALTER STREAMING QUERY `my_queries/query_name` SET (
 -- Change query text
 ALTER STREAMING QUERY `my_queries/query_name` SET (
     FORCE = TRUE -- Allow to drop checkpoint in case of incompatible changes in query.
-) AS DO BEGIN
+) AS
+DO BEGIN
 PRAGMA FeatureR010 = 'prototype';
 
 $input = (
     SELECT
         *
     FROM
-        `source_name`.`input_topic_name` WITH (
+        source_name.input_topic_name WITH (
             FORMAT = 'json_each_row',
             SCHEMA (time String NOT NULL, event_class String NOT NULL, host String NOT NULL, message String NOT NULL)
         )
@@ -83,7 +84,7 @@ $json = (
         $matches
 );
 
-INSERT INTO `source_name`.`output_topic_name`
+INSERT INTO source_name.output_topic_name
 SELECT
     *
 FROM

@@ -1,3 +1,4 @@
 items:
 - { name: Обзор,                                                  href: index.md }
+- { name: Форматы данных,                                         href: formats.md }
 - { name: Чекпойнты,                                              href: checkpoints.md }

@@ -27,10 +27,9 @@
 Для отключения (исключительно в тестовых целях) используется прагма `ydb.DisableCheckpoints`.
 
 ```sql
-
-CREATE OR REPLACE STREAMING QUERY `my_queries/query1`
-BEGIN
+CREATE OR REPLACE STREAMING QUERY `my_queries/query1` AS
+DO BEGIN
     PRAGMA ydb.DisableCheckpoints="True";
-    INSERT INTO `source_name`.`output_topic_name` SELECT * FROM `source_name`.`input_topic_name`;
-END;
+    INSERT INTO source_name.output_topic_name SELECT * FROM source_name.input_topic_name;
+END DO;
 ```

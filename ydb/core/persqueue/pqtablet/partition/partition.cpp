@@ -2574,7 +2574,6 @@ void TPartition::RunPersist() {
     }
 
     haveChanges |= TryAddDeleteHeadKeysToPersistRequest();
-    haveChanges |= AddMessageDeduplicatorKeys(PersistRequest.Get());
 
     if (Compacter) {
         Compacter->TryCompactionIfPossible();
@@ -2588,13 +2587,15 @@ void TPartition::RunPersist() {
         WritesTotal.Inc();
         HaveWriteMsg = true;
 
-        AddMetaKey(PersistRequest.Get());
         AddCmdWriteTxMeta(PersistRequest->Record);
         AddCmdWriteUserInfos(PersistRequest->Record);
         AddCmdWriteConfig(PersistRequest->Record);
     }
 
     if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
+        AddMessageDeduplicatorKeys(PersistRequest.Get());
+        AddMetaKey(PersistRequest.Get());
+
         // Apply counters
         for (const auto& writeInfo : WriteInfosApplied) {
             // writeTimeLag

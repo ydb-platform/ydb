@@ -119,10 +119,10 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   // ...
   try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-	  QueryReader reader = retryCtx.supplyResult(
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
           session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
-	  );
+      );
       // work with reader
   }
 
@@ -358,13 +358,12 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   // ...
   try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-	  QueryReader reader = retryCtx.supplyResult(
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
           session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
-	  );
+      );
       // work with reader
   }
-
   ```
 
 - Python
@@ -444,12 +443,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   import tech.ydb.query.tools.SessionRetryContext;
 
   // ...
-
   try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-	  QueryReader reader = retryCtx.supplyResult(
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
           session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
-	  );
+      );
       // work with reader
   }
   ```
@@ -591,10 +589,10 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   // ...
   try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-	  QueryReader reader = retryCtx.supplyResult(
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
           session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
-	  );
+      );
       // work with reader
   }
   ```
@@ -805,10 +803,10 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   // ...
   try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-	  QueryReader reader = retryCtx.supplyResult(
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
           session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
-	  );
+      );
       // work with reader
   }
   ```

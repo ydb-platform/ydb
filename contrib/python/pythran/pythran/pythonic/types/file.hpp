@@ -63,8 +63,7 @@ namespace types
   }
 
   inline file::file(types::str const &filename, types::str const &strmode)
-      : file_iterator(), data(utils::no_memory()), mode(strmode),
-        name(filename), newlines('\n')
+      : file_iterator(), data(utils::no_memory()), mode(strmode), name(filename), newlines('\n')
   {
     open(filename, strmode);
     if (mode.find_first_of("r+") != -1)
@@ -267,14 +266,12 @@ namespace types
   // Like in :
   // for line in open("myfile"):
   //     print line
-  inline file_iterator::file_iterator(file &ref)
-      : f(&ref), set(false), curr(), position(ref.tell())
+  inline file_iterator::file_iterator(file &ref) : f(&ref), set(false), curr(), position(ref.tell())
   {
   }
 
   inline file_iterator::file_iterator()
-      : f(nullptr), set(false), curr(),
-        position(std::numeric_limits<long>::max()) {};
+      : f(nullptr), set(false), curr(), position(std::numeric_limits<long>::max()) {};
 
   inline bool file_iterator::operator==(file_iterator const &f2) const
   {

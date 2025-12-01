@@ -442,6 +442,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<std::vector<TOperationEvent>>, ListOperationEvents, (const NScheduler::TOperationIdOrAlias&, const TListOperationEventsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListOperationsResult>, ListOperations, (const TListOperationsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<TJobTraceMeta>>, ListJobTraces, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TListJobTracesOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TCheckOperationPermissionResult>, CheckOperationPermission, (const std::string&, const NScheduler::TOperationIdOrAlias&, NYTree::EPermission, const TCheckOperationPermissionOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListJobsResult>, ListJobs, (const NScheduler::TOperationIdOrAlias&, const TListJobsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NYson::TYsonString>, GetJob, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AbandonJob, (NJobTrackerClient::TJobId, const TAbandonJobOptions&));
@@ -612,7 +613,7 @@ TFuture<ITransactionPtr> TTransaction::StartTransaction(
     NTransactionClient::ETransactionType type,
     const TTransactionStartOptions& options)
 {
-    return Underlying_->StartTransaction(type, options).ApplyUnique(BIND(
+    return Underlying_->StartTransaction(type, options).AsUnique().Apply(BIND(
         [this, this_ = MakeStrong(this)] (TErrorOr<ITransactionPtr>&& result) -> TErrorOr<ITransactionPtr> {
             if (!result.IsOK()) {
                 Client_->HandleError(result, ClientIndex_);
@@ -705,7 +706,7 @@ template <class T>
 TFuture<T> TClient::DoCall(int retryAttemptCount, const TCallback<TFuture<T>(const IClientPtr&, int)>& callee)
 {
     auto [client, clientIndex] = GetActiveClient();
-    return callee(client, clientIndex).ApplyUnique(BIND(
+    return callee(client, clientIndex).AsUnique().Apply(BIND(
         [
             this,
             this_ = MakeStrong(this),
@@ -728,7 +729,7 @@ TFuture<ITransactionPtr> TClient::StartTransaction(
     const NApi::TTransactionStartOptions& options)
 {
     auto callee = BIND([this_ = MakeStrong(this), type, options] (const IClientPtr& client, int clientIndex) {
-        return client->StartTransaction(type, options).ApplyUnique(BIND(
+        return client->StartTransaction(type, options).AsUnique().Apply(BIND(
             [this_, clientIndex] (ITransactionPtr&& transaction) -> ITransactionPtr {
                 return New<TTransaction>(std::move(this_), clientIndex, std::move(transaction));
             }));

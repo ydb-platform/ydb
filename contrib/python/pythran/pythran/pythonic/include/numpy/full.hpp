@@ -11,16 +11,14 @@ namespace numpy
 {
 
   template <class pS, class F, class dtype>
-  types::ndarray<typename dtype::type, sutils::shape_t<pS>>
-  full(pS const &shape, F fill_value, dtype d);
+  types::ndarray<typename dtype::type, sutils::shape_t<pS>> full(pS const &shape, F fill_value,
+                                                                 dtype d);
 
   template <class F, class dtype>
-  types::ndarray<typename dtype::type, types::pshape<long>>
-  full(long size, F fill_value, dtype d);
+  types::ndarray<typename dtype::type, types::pshape<long>> full(long size, F fill_value, dtype d);
 
   template <long N, class F, class dtype>
-  types::ndarray<typename dtype::type,
-                 types::pshape<std::integral_constant<long, N>>>
+  types::ndarray<typename dtype::type, types::pshape<std::integral_constant<long, N>>>
   full(std::integral_constant<long, N>, F fill_value, dtype d);
 
   template <class pS, class F>
@@ -28,8 +26,7 @@ namespace numpy
                                               types::none_type _ = {});
 
   template <class F>
-  types::ndarray<F, types::pshape<long>> full(long size, F fill_value,
-                                              types::none_type _ = {});
+  types::ndarray<F, types::pshape<long>> full(long size, F fill_value, types::none_type _ = {});
 
   template <long N, class F>
   types::ndarray<F, types::pshape<std::integral_constant<long, N>>>

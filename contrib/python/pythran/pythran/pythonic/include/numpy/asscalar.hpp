@@ -10,10 +10,9 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class T>
-  using asscalar_result_type = typename std::conditional<
+  using asscalar_result_type = std::conditional_t<
       std::is_integral<T>::value, long,
-      typename std::conditional<std::is_floating_point<T>::value, double,
-                                std::complex<double>>::type>::type;
+      std::conditional_t<std::is_floating_point<T>::value, double, std::complex<double>>>;
 
   template <class E>
   asscalar_result_type<typename E::dtype> asscalar(E const &expr);

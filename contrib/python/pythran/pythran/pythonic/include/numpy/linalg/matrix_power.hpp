@@ -9,8 +9,7 @@ namespace numpy
   namespace linalg
   {
     template <class E>
-    auto matrix_power(E const &expr,
-                      long n) -> decltype(numpy::functor::array{}(expr));
+    auto matrix_power(E const &expr, long n) -> decltype(numpy::functor::array{}(expr));
 
     DEFINE_FUNCTOR(pythonic::numpy::linalg, matrix_power);
   } // namespace linalg

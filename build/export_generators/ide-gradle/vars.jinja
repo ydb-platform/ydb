@@ -19,8 +19,8 @@
 {%-     set with_kotlinc_plugin_serialization = all_targets|selectattr('with_kotlinc_plugin_serialization')|map(attribute='with_kotlinc_plugin_serialization')|sum -%}
 {%-     set with_kotlinc_plugin_lombok = all_targets|selectattr('with_kotlinc_plugin_lombok')|map(attribute='with_kotlinc_plugin_lombok')|sum -%}
 {#-     KAPT -#}
-{%-     set with_kapt = target.with_kapt and target.kapt.classpaths|length -%}
-{%-     set with_test_kapt = extra_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length and extra_targets|selectattr('with_kapt', 'eq', true)|selectattr('kapt')|map(attribute='kapt')|selectattr('classpaths')|map(attribute='classpaths')|sum|length -%}
+{%-     set with_kapt = target.with_kapt and (target.kapt.classpaths|length or target.kapt.kapts|length) -%}
+{%-     set with_test_kapt = extra_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length and extra_targets|selectattr('with_kapt', 'eq', true)|selectattr('kapt')|map(attribute='kapt')|selectattr('classpaths')|map(attribute='classpaths')|sum|length or extra_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length and extra_targets|selectattr('with_kapt', 'eq', true)|selectattr('kapt')|map(attribute='kapt')|selectattr('kapts')|map(attribute='kapts')|sum|length -%}
 {#-     Options kapt.kotlin.generated autocreated by kapt plugin, skip it -#}
 {%-     set all_kapt_ap_opts = all_targets|selectattr('kapt')|map(attribute='kapt')|selectattr('ap_opts')|map(attribute='ap_opts')|sum|reject('startsWith', 'kapt.kotlin.generated=') -%}
 {%- endif -%}
@@ -33,7 +33,8 @@
 {%- endif -%}
 
 {#- Lombok -#}
-{%- set with_lombok_plugin = not(disable_lombok_plugin) and (all_targets|selectattr('use_annotation_processor')|map(attribute='use_annotation_processor')|sum|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length) -%}
+{%- set LOMBOK_PATH = 'contrib/java/org/projectlombok/lombok' -%}
+{%- set with_lombok_plugin = not(disable_lombok_plugin) and (all_targets|selectattr('use_annotation_processors')|map(attribute='use_annotation_processors')|sum|map(attribute='jar')|select('startsWith', LOMBOK_PATH)|length or all_targets|selectattr('use_annotation_processor')|map(attribute='use_annotation_processor')|sum|select('startsWith', LOMBOK_PATH)|length) -%}
 
 {#- JNI -#}
 {%- set jnis = all_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('type', 'eq', 'dll')|selectattr('jar')|map(attribute='jar')|unique -%}

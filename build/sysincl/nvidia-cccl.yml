@@ -645,6 +645,7 @@
   - cuda/std/__memory_: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/std/__memory_"
   - cuda/std/__new/allocate.h: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/std/__new/allocate.h"
   - cuda/std/__new/bad_alloc.h: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/std/__new/bad_alloc.h"
+  - cuda/std/__new/device_new.h: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/std/__new/device_new.h"
   - cuda/std/__new/launder.h: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/std/__new/launder.h"
   - cuda/std/__new_: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/std/__new_"
   - cuda/std/__numeric/accumulate.h: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/std/__numeric/accumulate.h"

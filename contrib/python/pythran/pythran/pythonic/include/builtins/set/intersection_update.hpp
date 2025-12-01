@@ -13,16 +13,13 @@ namespace builtins
   {
 
     template <typename T, typename... Types>
-    types::none_type intersection_update(types::set<T> &set,
-                                         Types const &...others);
+    types::none_type intersection_update(types::set<T> &set, Types const &...others);
 
     template <typename T, typename... Types>
-    types::none_type intersection_update(types::set<T> &&set,
-                                         Types const &...others);
+    types::none_type intersection_update(types::set<T> &&set, Types const &...others);
 
     template <typename... Types>
-    types::none_type intersection_update(types::empty_set &&set,
-                                         Types const &...others);
+    types::none_type intersection_update(types::empty_set &&set, Types const &...others);
 
     DEFINE_FUNCTOR(pythonic::builtins::set, intersection_update);
   } // namespace set

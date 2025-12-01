@@ -330,6 +330,12 @@ public:
         const NJobTrackerClient::TJobId jobId,
         const TListJobTracesOptions& options) override;
 
+    TFuture<TCheckOperationPermissionResult> CheckOperationPermission(
+        const std::string& user,
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NYTree::EPermission permission,
+        const TCheckOperationPermissionOptions& options) override;
+
     TFuture<NApi::TListJobsResult> ListJobs(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const NApi::TListJobsOptions&) override;

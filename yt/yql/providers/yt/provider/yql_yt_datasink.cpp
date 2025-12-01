@@ -430,6 +430,7 @@ public:
                 op.Maybe<TYtReduce>() || op.Maybe<TYtSort>() || op.Maybe<TYtEquiJoin>())
             {
                 TSet<TString> keyFilterColumns;
+                TSet<TString> qlFilterColumns;
                 for (auto section: op.Input()) {
                     for (auto col : GetKeyFilterColumns(section, EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2)) {
                         keyFilterColumns.insert(TString(col));
@@ -451,6 +452,12 @@ public:
                             YQL_ENSURE(keyLength <= rowSpec->SortedBy.size());
                             keyFilterColumns.insert(rowSpec->SortedBy.begin(), rowSpec->SortedBy.begin() + keyLength);
                         }
+                        if (auto qlFilter = path.QLFilter().Maybe<TYtQLFilter>()) {
+                            const TStructExprType* qlFilterType = qlFilter.Cast().Ref().Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                            for (const auto& item : qlFilterType->GetItems()) {
+                                qlFilterColumns.emplace(item->GetName());
+                            }
+                        }
                     }
                 }
 
@@ -458,6 +465,16 @@ public:
                     writer.OnKeyedItem("InputKeyFilterColumns");
                     writer.OnBeginList();
                     for (auto column : keyFilterColumns) {
+                        writer.OnListItem();
+                        writer.OnStringScalar(column);
+                    }
+                    writer.OnEndList();
+                }
+
+                if (!qlFilterColumns.empty()) {
+                    writer.OnKeyedItem("InputQLFilterColumns");
+                    writer.OnBeginList();
+                    for (auto column : qlFilterColumns) {
                         writer.OnListItem();
                         writer.OnStringScalar(column);
                     }

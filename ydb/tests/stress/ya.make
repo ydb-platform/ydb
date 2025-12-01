@@ -21,4 +21,5 @@ RECURSE(
     topic_kafka
     transfer
     viewer
+    streaming
 )

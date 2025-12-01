@@ -31,16 +31,10 @@
 #include "urldata.h"
 #include "conncache.h"
 
-struct Curl_easy;
-struct Curl_ssl_scache;
-
 #define CURL_GOOD_SHARE 0x7e117a1e
 #define GOOD_SHARE_HANDLE(x) ((x) && (x)->magic == CURL_GOOD_SHARE)
 
-#define CURL_SHARE_KEEP_CONNECT(s)    \
-        ((s) && ((s)->specifier & (1<< CURL_LOCK_DATA_CONNECT)))
-
-/* this struct is libcurl-private, do not export details */
+/* this struct is libcurl-private, don't export details */
 struct Curl_share {
   unsigned int magic; /* CURL_GOOD_SHARE */
   unsigned int specifier;
@@ -49,9 +43,8 @@ struct Curl_share {
   curl_lock_function lockfunc;
   curl_unlock_function unlockfunc;
   void *clientdata;
-  struct Curl_easy *admin;
-  struct cpool cpool;
-  struct Curl_dnscache dnscache; /* DNS cache */
+  struct conncache conn_cache;
+  struct Curl_hash hostcache;
 #if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_COOKIES)
   struct CookieInfo *cookies;
 #endif
@@ -62,17 +55,14 @@ struct Curl_share {
   struct hsts *hsts;
 #endif
 #ifdef USE_SSL
-  struct Curl_ssl_scache *ssl_scache;
+  struct Curl_ssl_session *sslsession;
+  size_t max_ssl_sessions;
+  long sessionage;
 #endif
 };
 
 CURLSHcode Curl_share_lock(struct Curl_easy *, curl_lock_data,
                            curl_lock_access);
 CURLSHcode Curl_share_unlock(struct Curl_easy *, curl_lock_data);
-
-/* convenience macro to check if this handle is using a shared SSL spool */
-#define CURL_SHARE_ssl_scache(data) (data->share &&                      \
-                                    (data->share->specifier &           \
-                                     (1<<CURL_LOCK_DATA_SSL_SESSION)))
 
 #endif /* HEADER_CURL_SHARE_H */

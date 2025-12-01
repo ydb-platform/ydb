@@ -1,0 +1,9 @@
+PRAGMA yt.UseQLFilter;
+
+SELECT
+    *
+FROM
+    plato.CONCAT(Input, Input2)
+WHERE
+    a > 5 AND a < 50
+;

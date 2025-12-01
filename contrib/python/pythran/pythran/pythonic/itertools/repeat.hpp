@@ -11,8 +11,7 @@ namespace itertools
 {
 
   template <class T, bool Endless>
-  repeat_iterator<T, Endless>::repeat_iterator(T value, long count)
-      : value_(value), count_(count)
+  repeat_iterator<T, Endless>::repeat_iterator(T value, long count) : value_(value), count_(count)
   {
   }
 
@@ -30,27 +29,23 @@ namespace itertools
   }
 
   template <class T, bool Endless>
-  bool repeat_iterator<T, Endless>::operator!=(
-      repeat_iterator<T, Endless> const &other) const
+  bool repeat_iterator<T, Endless>::operator!=(repeat_iterator<T, Endless> const &other) const
   {
     return Endless || count_ != other.count_;
   }
   template <class T, bool Endless>
-  bool repeat_iterator<T, Endless>::operator==(
-      repeat_iterator<T, Endless> const &other) const
+  bool repeat_iterator<T, Endless>::operator==(repeat_iterator<T, Endless> const &other) const
   {
     return !Endless && count_ == other.count_;
   }
   template <class T, bool Endless>
-  bool repeat_iterator<T, Endless>::operator<(
-      repeat_iterator<T, Endless> const &other) const
+  bool repeat_iterator<T, Endless>::operator<(repeat_iterator<T, Endless> const &other) const
   {
     return !Endless && count_ < other.count_;
   }
 
   template <class T, bool Endless>
-  _repeat<T, Endless>::_repeat(T value, long count)
-      : repeat_iterator<T, Endless>(value, count)
+  _repeat<T, Endless>::_repeat(T value, long count) : repeat_iterator<T, Endless>(value, count)
   {
   }
 

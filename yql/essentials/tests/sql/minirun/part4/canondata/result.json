@@ -678,6 +678,20 @@
             "uri": "https://{canondata_backend}/1942671/f9fe8b5ff2967f43b60e0f5b3fa5c2c4eff69207/resource.tar.gz#test.test_expr-expr_trivial_named-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[expr-flatten_member_non_literal_tuple-default.txt-Debug]": [
+        {
+            "checksum": "fb6af2b7022c811ecdc3f2e38f325a87",
+            "size": 253,
+            "uri": "https://{canondata_backend}/1880306/6f389d8653306282eb5d28d20d4dea72f6c860cc/resource.tar.gz#test.test_expr-flatten_member_non_literal_tuple-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-flatten_member_non_literal_tuple-default.txt-Results]": [
+        {
+            "checksum": "967f0283e0a213d41a394a40b79f4e8c",
+            "size": 1137,
+            "uri": "https://{canondata_backend}/1880306/6f389d8653306282eb5d28d20d4dea72f6c860cc/resource.tar.gz#test.test_expr-flatten_member_non_literal_tuple-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[expr-implicit_cast_literals_under_if-default.txt-Debug]": [
         {
             "checksum": "4b77adf69d37142a5b230c0578f6b55c",

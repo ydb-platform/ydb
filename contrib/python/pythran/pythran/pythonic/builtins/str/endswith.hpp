@@ -14,8 +14,7 @@ namespace builtins
   namespace str
   {
 
-    bool endswith(types::str const &s, types::str const &suffix, long start,
-                  long end)
+    bool endswith(types::str const &s, types::str const &suffix, long start, long end)
     {
       if (end == -1)
         end = s.size();

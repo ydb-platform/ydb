@@ -2771,6 +2771,7 @@ message TKafkaProxyConfig {
     optional bool AutoCreateTopicsEnable = 13 [default = false];
     optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
     optional bool AutoCreateConsumersEnable = 15 [default = true];
+    optional string PublicHost = 16;
 }
 
 message TAwsCompatibilityConfig {

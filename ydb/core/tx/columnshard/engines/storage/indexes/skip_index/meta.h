@@ -83,10 +83,12 @@ public:
     }
 
     TSkipBitmapIndex() = default;
-    TSkipBitmapIndex(const ui32 indexId, const TString& indexName, const ui32 columnId, const TString& storageId,
-        const TReadDataExtractorContainer& extractor, const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
-        : TBase(indexId, indexName, columnId, storageId, extractor)
-        , BitsStorageConstructor(bitsStorageConstructor) {
+    TSkipBitmapIndex(const ui32 indexId, const TString& indexName, const ui32 columnId,
+        const TString& storageId, const bool inheritPortionStorage, const TReadDataExtractorContainer& extractor,
+        const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
+        : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, extractor)
+        , BitsStorageConstructor(bitsStorageConstructor)
+    {
         AFL_VERIFY(!!BitsStorageConstructor);
     }
 };

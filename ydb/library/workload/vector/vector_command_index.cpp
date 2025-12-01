@@ -65,8 +65,8 @@ int TWorkloadCommandBuildIndex::DoRun() {
         Params.TableName.c_str(),
         Params.IndexName.c_str(),
         Params.Distance.c_str(),
-        Params.VectorType.c_str(),
-        Params.VectorDimension,
+        Params.VectorOpts.VectorType.c_str(),
+        Params.VectorOpts.VectorDimension,
         Params.KmeansTreeLevels,
         Params.KmeansTreeClusters
     );

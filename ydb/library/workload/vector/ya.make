@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    configure_opts.cpp
     vector_command_index.cpp
     vector_data_generator.cpp
     vector_recall_evaluator.cpp

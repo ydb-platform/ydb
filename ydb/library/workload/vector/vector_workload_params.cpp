@@ -19,10 +19,7 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             .Required().StoreResult(&VectorInitCount);
         opts.AddLongOption( "distance", "Distance/similarity function")
             .Required().StoreResult(&Distance);
-        opts.AddLongOption( "vector-type", "Type of vectors")
-            .Required().StoreResult(&VectorType);
-        opts.AddLongOption( "vector-dimension", "Vector dimension")
-            .Required().StoreResult(&VectorDimension);
+        NVector::ConfigureVectorOpts(opts, &VectorOpts);
         opts.AddLongOption( "kmeans-tree-levels", "Number of levels in the kmeans tree")
             .Required().StoreResult(&KmeansTreeLevels);
         opts.AddLongOption( "kmeans-tree-clusters", "Number of cluster in kmeans")
@@ -48,7 +45,7 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
         opts.AddLongOption( "non-indexed", "Take vector settings from the index, but search without the index")
             .StoreTrue(&NonIndexedSearch);
         opts.AddLongOption("stale-ro", "Read with StaleRO mode")
-            .StoreTrue(&StaleRO);            
+            .StoreTrue(&StaleRO);
     };
 
     switch (commandType) {
@@ -83,12 +80,10 @@ void TVectorWorkloadParams::ConfigureCommonOpts(NLastGetopt::TOpts& opts) {
 }
 
 void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
+    NVector::ConfigureVectorOpts(opts, &VectorOpts);
+
     opts.AddLongOption( "distance", "Distance/similarity function")
         .Required().StoreResult(&Distance);
-    opts.AddLongOption( "vector-type", "Type of vectors")
-        .Required().StoreResult(&VectorType);
-    opts.AddLongOption( "vector-dimension", "Vector dimension")
-        .Required().StoreResult(&VectorDimension);
     opts.AddLongOption( "kmeans-tree-levels", "Number of levels in the kmeans tree. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
         .Required().StoreResult(&KmeansTreeLevels);
     opts.AddLongOption( "kmeans-tree-clusters", "Number of clusters in kmeans. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
@@ -136,7 +131,7 @@ void TVectorWorkloadParams::Init() {
             // Extract the distance metric from index settings
             const auto& indexSettings = std::get<NYdb::NTable::TKMeansTreeSettings>(index.GetIndexSettings());
             Metric = indexSettings.Settings.Metric;
-            VectorDimension = indexSettings.Settings.VectorDimension;
+            VectorOpts.VectorDimension = indexSettings.Settings.VectorDimension;
 
             break;
         }

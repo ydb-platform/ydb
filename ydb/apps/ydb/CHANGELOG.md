@@ -1,5 +1,6 @@
 * Added the `--tx-mode` option to the `ydb sql` command.
 * Added `snapshot-ro` and `snapshot-rw` transaction modes to `ydb table query execute` and `ydb sql` commands.
+* Unified CLI local paths and migration logic to XDG/canonical locations across platforms.
 * Added `NO_COLOR` environment variable support to disable ANSI colors in YDB CLI (no-color.org)
 * Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output .tar.bz2 file.
 * Added a simple progress bar for non-interactive stderr.

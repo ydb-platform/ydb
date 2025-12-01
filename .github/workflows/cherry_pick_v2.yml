@@ -2,11 +2,11 @@ name: Cherry-pick_v2
 on:
   workflow_dispatch:
     inputs:
-      commits_and_pulls_to_cherry_pick:
+      commits_and_prs:
         type: string
         default: ""
         description: |
-          List of sha commits or pull numbers to cherry-pick.
+          List of commit SHAs or PR numbers to cherry-pick.
           Can be represented as full or short commit SHA, PR number.
           Separated by space, comma or line end.
           Example: "sha5682 123245"
@@ -61,6 +61,6 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
           python3 ./.github/scripts/cherry_pick_v2.py \
-            --commits="${{ inputs.commits_and_pulls_to_cherry_pick }}" \
+            --commits="${{ inputs.commits_and_prs }}" \
             --target-branches="${{ inputs.target_branches }}" \
             ${{ inputs.allow_unmerged == true && '--allow-unmerged' || '' }}

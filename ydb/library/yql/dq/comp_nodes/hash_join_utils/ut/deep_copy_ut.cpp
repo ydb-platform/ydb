@@ -57,6 +57,57 @@ Y_UNIT_TEST_SUITE(TPackedTupleDeepCopy) {
         }
 
     }
+    Y_UNIT_TEST(TestFlatten) {
+        TScalarLayoutConverterTestData data;
+        NKikimr::NMiniKQL::TType* intType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::Int64);
+        NKikimr::NMiniKQL::TType* stringType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::String);
+        TVector<TType *> types{intType, intType, stringType, stringType};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Payload, NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Payload};
+        auto converter = MakeScalarLayoutConverter(TTypeInfoHelper{}, types, roles, data.HolderFactory);
+
+        const auto intEq = MakeEquateImpl(intType);
+        const auto stringEq = MakeEquateImpl(intType);
+        std::vector<NYql::NUdf::IEquate::TPtr> eqs;
+        std::vector<IPrint::TPtr> prints;
+        for(auto* type: types) {
+            eqs.push_back(MakeEquateImpl(type));
+            prints.push_back(MakePrinter(type));
+        }
+
+        TPackResult first;
+        TPackResult second;
+        std::vector<NYql::NUdf::TUnboxedValue> values{};
+        for(int index = 0; index < 2; ++index ){
+            values.push_back(TUnboxedValuePod(123+index));
+            values.push_back(TUnboxedValuePod(12930));
+            values.push_back(MakeString("adsloaml"));
+            values.push_back(MakeString(std::string(123+index, 'a')));
+        }
+        converter->Pack(values.data(), first);
+        converter->Pack(values.data() + 4, second);
+        std::vector<NYql::NUdf::TUnboxedValue> expectedOut(8);
+
+        converter->Unpack(first, 0, expectedOut.data());
+        converter->Unpack(second, 0, expectedOut.data()+4);
+
+        std::vector<NYql::NUdf::TUnboxedValue> concatOut(8);
+        std::vector<TPackResult> res;
+        res.push_back(std::move(first));
+        res.push_back(std::move(second));
+        first = converter->GetTupleLayout()->Flatten(res);
+
+        // first.AppendTuple({.PackedData = second.PackedTuples.data(), .OverflowBegin = second.Overflow.data()}, converter->GetTupleLayout());
+
+        for (int index = 0; index < 2; ++index) {
+            converter->Unpack(first, index, concatOut.data() + 4*index);
+        }
+        for(int index = 0; index < 8; ++index ){
+            auto eq = eqs[index%types.size()];
+            auto print = prints[index%types.size()];
+            UNIT_ASSERT_C(eq->Equals(concatOut[index], expectedOut[index]), std::format("concat != expected: {} vs {}", print->Stringify(concatOut[index]), print->Stringify(expectedOut[index])));
+        }
+
+    }
 
     
 }

@@ -275,8 +275,7 @@ template <typename Source> class TInMemoryHashJoin {
                 return EFetchResult::Yield;
             }
             case NYql::NUdf::EFetchStatus::Ok: {
-                auto& packResult = std::get<One<IBlockLayoutConverter::TPackResult>>(var);
-                BuildChunks_.push_back(std::move(packResult.Data));
+                BuildChunks_.push_back(std::move(GetPayload(var)));
                 break;
             }
             default:

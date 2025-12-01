@@ -19,16 +19,17 @@ private:
 public:
     TDataSourceConstructor(
         const NColumnShard::TSchemeShardLocalPathId& externalPathId, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule)
-        : TBase(tabletId, granule->GetPathId().GetRawValue(), TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId, 0),
+        : TBase(tabletId, TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId, 0),
               TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId, Max<ui64>()))
         , Granule(std::move(granule))
         , ExternalPathId(externalPathId)
-        , PortionsCount(Granule->GetPortions().size()) {
+        , PortionsCount(Granule->GetPortions().size())
+    {
     }
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
         auto tasks = Granule->GetOptimizerPlanner().GetTasksDescription();
-        return std::make_shared<TSourceData>(GetSourceId(), GetSourceIdx(), GetTabletId(), Granule, std::move(tasks), ExternalPathId,
+        return std::make_shared<TSourceData>(GetSourceIdx(), GetTabletId(), Granule, std::move(tasks), ExternalPathId,
             ExtractStart().ExtractValue(), ExtractFinish().ExtractValue(), context);
     }
 };

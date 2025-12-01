@@ -69,14 +69,6 @@ private:
         }
     }
 
-    virtual NArrow::TSimpleRow GetMinPK() const override {
-        return Start.GetValue();
-    }
-
-    virtual NArrow::TSimpleRow GetMaxPK() const override {
-        return Finish.GetValue();
-    }
-
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
         NBlobOperations::NRead::TCompositeReadBlobs&& /*blobsOriginal*/) const override {
         AFL_VERIFY(false);
@@ -166,13 +158,14 @@ public:
         return type == NCommon::IDataSource::EType::SimpleSysInfo;
     }
 
-    TSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot,
-        const NOlap::TSnapshot& maxSnapshot, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
+    TSourceData(const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot, const NOlap::TSnapshot& maxSnapshot,
+        NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
-        : TBase(EType::SimpleSysInfo, sourceId, sourceIdx, context, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
+        : TBase(EType::SimpleSysInfo, sourceIdx, context, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
         , TabletId(tabletId)
         , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted())
-        , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted()) {
+        , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted())
+    {
     }
 };
 
@@ -186,10 +179,11 @@ public:
         return NColumnShard::TInternalPathId::FromRawValue(0);
     }
 
-    TTabletSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish,
+    TTabletSourceData(const ui32 sourceIdx, const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish,
         const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot, const NOlap::TSnapshot& maxSnapshot,
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
-        : TBase(sourceId, sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context) {
+        : TBase(sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context)
+    {
     }
 };
 
@@ -203,11 +197,12 @@ public:
         return GetUnifiedPathId().GetInternalPathId();
     }
 
-    TPathSourceData(const ui32 sourceId, const ui32 sourceIdx, const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId,
-        NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot,
+    TPathSourceData(const ui32 sourceIdx, const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, NArrow::TSimpleRow&& start,
+        NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot,
         const NOlap::TSnapshot& maxSnapshot, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
-        : TBase(sourceId, sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context)
-        , UnifiedPathId(pathId) {
+        : TBase(sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context)
+        , UnifiedPathId(pathId)
+    {
     }
 };
 

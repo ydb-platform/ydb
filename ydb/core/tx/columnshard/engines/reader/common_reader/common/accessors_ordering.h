@@ -9,7 +9,6 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 class TDataSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
-    ui32 SourceId = 0;
     TReplaceKeyAdapter Start;
     TReplaceKeyAdapter Finish;
     ui32 SourceIdx = 0;
@@ -20,10 +19,6 @@ private:
     }
 
 public:
-    ui32 GetSourceId() const {
-        return SourceId;
-    }
-
     void SetIndex(const ui32 index) {
         AFL_VERIFY(!SourceIdxInitialized);
         SourceIdxInitialized = true;
@@ -43,12 +38,10 @@ public:
         return std::move(Finish);
     }
 
-    TDataSourceConstructor(const ui32 sourceId, TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish)
-        : SourceId(sourceId)
-        , Start(std::move(start))
+    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish)
+        : Start(std::move(start))
         , Finish(std::move(finish))
     {
-        AFL_VERIFY(SourceId);
     }
 
     const TReplaceKeyAdapter& GetStart() const {

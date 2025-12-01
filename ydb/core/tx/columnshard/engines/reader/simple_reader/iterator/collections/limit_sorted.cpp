@@ -28,13 +28,13 @@ std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoTryExtractNext
         AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() == FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())(
                                                   "fetching", FetchingInFlightSources.size());
         AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceIdx()).second);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoTryExtractNext")("source_id", result->GetSourceId());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoTryExtractNext")("source_idx", result->GetSourceIdx());
         return result;
     }
 }
 
 void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceFinished")("source_id", source->GetSourceId())("limit", Limit)(
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceFinished")("source_idx", source->GetSourceIdx())("limit", Limit)(
         "max", GetMaxInFlight())("in_flight_limit", InFlightLimit)("count", GetSourcesInFlightCount());
     if (!source->GetAs<IDataSource>()->GetResultRecordsCount() && InFlightLimit < GetMaxInFlight()) {
         InFlightLimit = 2 * InFlightLimit;

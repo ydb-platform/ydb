@@ -60,6 +60,8 @@ public:
     }
 
     void Finish(const std::shared_ptr<NArrow::TColumnFilter>& applyFilter, const std::shared_ptr<IDataSource>& source) {
+        std::shared_ptr<NCommon::IPortionDataSource> portion = std::dynamic_pointer_cast<NCommon::IPortionDataSource>(source);
+        AFL_VERIFY(portion);
         const bool deserialize = source->IsSourceInMemory();
         if (!!OthersBlobs) {
             source->GetContext()->GetCommonContext()->GetCounters().GetSubColumns()->GetOtherCounters().OnRead(OthersBlobs->size());
@@ -78,8 +80,9 @@ public:
                 i.second.GetBlobDataVerified().size());
             const std::shared_ptr<NArrow::NAccessor::IChunkedArray> arrOriginal =
                 deserialize ? columnLoader->ApplyVerified(i.second.GetBlobDataVerified(), GetRecordsCount())
-                            : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(
-                                  GetRecordsCount(), columnLoader, i.second.GetBlobDataVerified(), source->GetSourceId(), source->GetPortionAccessor().GetPortionInfo().GetPathId().DebugString(), true);
+                            : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(GetRecordsCount(), columnLoader,
+                                  i.second.GetBlobDataVerified(), portion->GetPortionId(),
+                                  source->GetPortionAccessor().GetPortionInfo().GetPathId().DebugString(), true);
             if (applyFilter) {
                 PartialArray->AddColumn(i.first, applyFilter->Apply(arrOriginal));
             } else {

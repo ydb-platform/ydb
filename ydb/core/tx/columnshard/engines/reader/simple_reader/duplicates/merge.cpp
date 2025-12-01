@@ -10,8 +10,8 @@ private:
     YDB_READONLY(ui64, RowsSkipped, 0);
     bool IsDone = false;
 
-    void AddImpl(const ui64 sourceId, const bool value) {
-        auto* findFilter = Filters.FindPtr(sourceId);
+    void AddImpl(const ui64 portionId, const bool value) {
+        auto* findFilter = Filters.FindPtr(portionId);
         AFL_VERIFY(findFilter);
         findFilter->Add(value);
     }
@@ -40,9 +40,9 @@ public:
         return std::move(Filters);
     }
 
-    void AddSource(const ui64 sourceId) {
+    void AddSource(const ui64 portionId) {
         AFL_VERIFY(!IsDone);
-        AFL_VERIFY(Filters.emplace(sourceId, NArrow::TColumnFilter::BuildAllowFilter()).second);
+        AFL_VERIFY(Filters.emplace(portionId, NArrow::TColumnFilter::BuildAllowFilter()).second);
     }
 };
 

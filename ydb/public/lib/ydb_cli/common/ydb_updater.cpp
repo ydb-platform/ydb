@@ -239,12 +239,17 @@ bool PersistWindowsPath(const TString& newPath) {
             TString newPath = JoinSeq(";", elements);
             SetEnv("PATH", newPath);
             bool persisted = PersistWindowsPath(newPath);
+            NColorizer::TColors warn = NColorizer::AutoColors(Cerr);
             if (persisted) {
-                Cerr << "Updated user PATH: replaced \"" << legacyEntry << "\" with \"" << canonicalEntry
-                    << "\". Please restart your shell to apply changes." << Endl;
+                Cerr << warn.RedColor()
+                    << "Binary location has changed: replaced \"" << legacyEntry << "\" with \"" << canonicalEntry
+                    << "\" in user PATH. Restart your shell to apply changes and continue using 'ydb'."
+                    << warn.OldColor() << Endl;
             } else {
-                Cerr << "Updated PATH in current session, but failed to persist changes. "
-                    << "Please update PATH manually to include " << canonicalEntry << Endl;
+                Cerr << warn.RedColor()
+                    << "Updated PATH only for current session; failed to persist changes. "
+                    << "Add \"" << canonicalEntry << "\" to your PATH manually and restart the shell."
+                    << warn.OldColor() << Endl;
             }
             return;
         }
@@ -312,6 +317,8 @@ bool PersistWindowsPath(const TString& newPath) {
             NLocalPaths::DeleteDirIfEmpty(legacyRootDir);
         };
 #if defined(_win32_)
+        TFsPath legacyBackup = legacyBinDir.Child(TStringBuilder() << NLocalPaths::YdbBinaryName << "_old");
+        DeletePathIfExistsSafe(legacyBackup);
         TFsPath canonicalBackup = NLocalPaths::GetCanonicalBinaryPath().Parent().Child(
             TStringBuilder() << NLocalPaths::YdbBinaryName << "_old").Fix();
         DeletePathIfExistsSafe(canonicalBackup);

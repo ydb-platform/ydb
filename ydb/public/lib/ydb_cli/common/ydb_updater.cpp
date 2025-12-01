@@ -265,7 +265,11 @@ bool PersistWindowsPath(const TString& newPath) {
 
     TFsPath CreateCacheDownloadPath() {
         TFsPath dir = NLocalPaths::GetUpdateCacheDir();
+#if defined(_win32_)
+        TFsPath path = dir.Child(TStringBuilder() << "ydb-update-" << CreateGuidAsString() << ".exe");
+#else
         TFsPath path = dir.Child(TStringBuilder() << "ydb-update-" << CreateGuidAsString());
+#endif
         path.Fix();
         EnsureParentDirExists(path);
         return path;

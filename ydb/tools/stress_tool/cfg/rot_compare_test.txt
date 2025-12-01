@@ -1,26 +1,23 @@
-# nbs sector read
+# small sectors
 AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 4 ReadProportion: 1.0 }
-AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 16 ReadProportion: 1.0 }
-
 AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 4 ReadProportion: 0.0 }
-AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 16 ReadProportion: 0.0 }
-
-AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 16 ReadProportion: 0.8 }
+AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 4 ReadProportion: 0.8 }
 
 # nbs block-4-2 compacted blob part-size
 AioTestList: { DurationSeconds: 60 RequestSize: 524288 QueueDepth: 4 ReadProportion: 1.0 }
 AioTestList: { DurationSeconds: 60 RequestSize: 524288 QueueDepth: 4 ReadProportion: 0.0 }
 AioTestList: { DurationSeconds: 60 RequestSize: 1048576 QueueDepth: 4 ReadProportion: 1.0 }
 AioTestList: { DurationSeconds: 60 RequestSize: 1048576 QueueDepth: 4 ReadProportion: 0.0 }
-AioTestList: { DurationSeconds: 60 RequestSize: 2097152 QueueDepth: 4 ReadProportion: 1.0 }
-AioTestList: { DurationSeconds: 60 RequestSize: 2097152 QueueDepth: 4 ReadProportion: 0.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 2097152 QueueDepth: 2 ReadProportion: 1.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 2097152 QueueDepth: 2 ReadProportion: 0.0 }
 
 # ydb mirror-3dc datashard compacted blob part-size
-AioTestList: { DurationSeconds: 60 RequestSize: 8388608 QueueDepth: 4 ReadProportion: 1.0 }
-AioTestList: { DurationSeconds: 60 RequestSize: 8388608 QueueDepth: 4 ReadProportion: 0.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 8388608 QueueDepth: 2 ReadProportion: 1.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 8388608 QueueDepth: 2 ReadProportion: 0.0 }
 
 PDiskTestList: {
     PDiskTestList: {
+        # 4KiB slots
         PDiskReadLoad: {
             Tag: 1
             PDiskId: 1
@@ -37,7 +34,7 @@ PDiskTestList: {
             DurationSeconds: 120
             IntervalMsMin: 0
             IntervalMsMax: 0
-            InFlightReads: 64
+            InFlightReads: 4
             Sequential: false
             IsWardenlessTest: true
         }
@@ -59,30 +56,31 @@ PDiskTestList: {
             DurationSeconds: 120
             IntervalMsMin: 0
             IntervalMsMax: 0
-            InFlightWrites: 64
+            InFlightWrites: 4
             LogMode: LOG_SEQUENTIAL
             Sequential: false
             IsWardenlessTest: true
         }
     }
+    # 512KiB slots
     PDiskTestList: {
         PDiskReadLoad: {
             Tag: 3
             PDiskId: 1
             PDiskGuid: 12345
             VDiskId: { GroupID: 1 GroupGeneration: 5 Ring: 1 Domain: 1 VDisk: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
             DurationSeconds: 120
             IntervalMsMin: 0
             IntervalMsMax: 0
-            InFlightReads: 16
+            InFlightReads: 4
             Sequential: false
             IsWardenlessTest: true
         }
@@ -93,18 +91,18 @@ PDiskTestList: {
             PDiskId: 1
             PDiskGuid: 12345
             VDiskId: { GroupID: 1 GroupGeneration: 5 Ring: 1 Domain: 1 VDisk: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
-            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
+            Chunks: { Slots: 256 Weight: 1 }
             DurationSeconds: 120
             IntervalMsMin: 0
             IntervalMsMax: 0
-            InFlightWrites: 16
+            InFlightWrites: 4
             LogMode: LOG_SEQUENTIAL
             Sequential: false
             IsWardenlessTest: true

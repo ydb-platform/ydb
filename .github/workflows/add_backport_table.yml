@@ -58,5 +58,5 @@ jobs:
           SHOW_BACKPORT_IN_PR: ${{ vars.SHOW_BACKPORT_IN_PR }}
           PR_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_number || '' }}
         run: |
-          python3 ./.github/actions/add_backport_table/add_backport_table.py
+          python3 ./.github/scripts/add_backport_table.py
 

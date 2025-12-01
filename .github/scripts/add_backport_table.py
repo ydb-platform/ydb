@@ -66,6 +66,10 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
         # Use the branch entry as is (may contain multiple branches separated by comma)
         branch_value = branch_entry.strip()
         
+        # Format branches for display: split and join with ", " (comma with space)
+        branch_list = [b.strip() for b in branch_value.split(',')]
+        branch_display = ", ".join(branch_list)
+        
         # Use PR number - workflow_dispatch input name is commits_and_prs
         params = {
             "owner": owner,
@@ -73,7 +77,7 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
             "workflow_id": workflow_id,
             "ref": "main",
             "commits_and_prs": str(pr_number),  # workflow_dispatch input parameter name
-            "target_branches": branch_value,
+            "target_branches": branch_value,  # Use original value for URL parameter
             "allow_unmerged": "true",
             "return_url": return_url
         }
@@ -82,9 +86,9 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
         
         # Badge with only message (no label) - format: badge/message-color
         # Encode only spaces, keep emoji as is
-        badge_text = "⚙️".replace(" ", "%20")
-        button = f"[![⚙️](https://img.shields.io/badge/{badge_text}-4caf50)]({url_ui})"
-        rows.append(f"| `{branch_value}` | {button} |")
+        badge_text = "▶".replace(" ", "%20")
+        button = f"[![▶](https://img.shields.io/badge/{badge_text}-4caf50)]({url_ui})"
+        rows.append(f"| `{branch_display}` | {button} |")
     
     # Generate URL for backporting all unique branches (manual button)
     params_manual = {
@@ -102,16 +106,16 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
     
     # Badge with only message for manual button
     # Encode only spaces, keep emoji and parentheses as is (shields.io handles them)
-    badge_text_manual = "⚙️  Backport (manual)".replace(" ", "%20")
+    badge_text_manual = "▶  Backport (manual)".replace(" ", "%20")
     
     table = "<!-- backport-table -->\n"
     table += "<h3>Backport</h3>\n\n"
-    table += "To backport this PR, click the button next to the target branch and then click \"Run workflow\" in the GitHub Actions UI.\n\n"
+    table += "To backport this PR, click the button next to the target branch and then click \"Run workflow\" in the Run Actions UI.\n\n"
     table += "| Branch | Run |\n"
     table += "|--------|-----|\n"
     table += "\n".join(rows)
     table += "\n\n"
-    table += f"[![⚙️](https://img.shields.io/badge/{badge_text_manual}-2196F3)]({url_manual_ui})"
+    table += f"[![▶](https://img.shields.io/badge/{badge_text_manual}-2196F3)]({url_manual_ui})"
     return table
 
 

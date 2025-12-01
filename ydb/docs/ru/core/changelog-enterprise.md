@@ -131,8 +131,6 @@
 * В операциях резервного копирования и восстановления [поддержаны](https://github.com/ydb-platform/ydb/pull/25675) представления (VIEW). Чтобы воспользоваться функциональностью, необходимо установить флаг `enable_view_export` в секции `feature_flags` конфигурации [базы данных](./maintenance/manual/dynamic-config) или [кластера](./maintenance/manual/static-config).
 * В текст ошибок [Transaction locks invalidated](./troubleshooting/performance/queries/transaction-lock-invalidation) в случае невозможности идентифицировать таблицу (Unknown table) добавляются дополнительные идентификаторы: идентификатор пути к объекту (`PathId`) и идентификатор таблетки (`TabletId`).
 
-## Версия 24.4 {#24-4}
-
 ### Версия 24.4.4.15 {#24-4-4-15}
 
 Дата выхода: 19 сентября 2025.

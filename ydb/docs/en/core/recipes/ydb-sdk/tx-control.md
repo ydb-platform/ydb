@@ -116,15 +116,16 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   import tech.ydb.query.TxMode;
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.core.Result;
-  import java.util.concurrent.CompletableFuture;
 
   // ...
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+	  QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
+	  );
+      // work with reader
+  }
 
-  QueryClient queryClient = QueryClient.newClient(transport).build();
-  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-
-  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW)));
   ```
 
   {% endcut %}
@@ -354,15 +355,16 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   import tech.ydb.query.TxMode;
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.core.Result;
-  import java.util.concurrent.CompletableFuture;
 
   // ...
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+	  QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
+	  );
+      // work with reader
+  }
 
-  QueryClient queryClient = QueryClient.newClient(transport).build();
-  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-
-  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO)));
   ```
 
 - Python
@@ -440,15 +442,16 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   import tech.ydb.query.TxMode;
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.core.Result;
-  import java.util.concurrent.CompletableFuture;
 
   // ...
 
-  QueryClient queryClient = QueryClient.newClient(transport).build();
-  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-
-  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO)));
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+	  QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
+	  );
+      // work with reader
+  }
   ```
 
 - Python
@@ -585,16 +588,15 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   import tech.ydb.query.TxMode;
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.core.Result;
-  import java.util.concurrent.CompletableFuture;
 
   // ...
-
-  QueryClient queryClient = QueryClient.newClient(transport).build();
-  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-
-  // By default, ReadOnly queries are executed in SNAPSHOT_RO mode
-  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO)));
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+	  QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
+	  );
+      // work with reader
+  }
   ```
 
   {% endcut %}
@@ -611,6 +613,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
       connection.setAutoCommit(false);
+      // SNAPSHOT_RO is used by default for read-only connections
       connection.setReadOnly(true);
 
       try (Statement statement = connection.createStatement()) {
@@ -799,15 +802,15 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   import tech.ydb.query.TxMode;
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.core.Result;
-  import java.util.concurrent.CompletableFuture;
 
   // ...
-
-  QueryClient queryClient = QueryClient.newClient(transport).build();
-  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-
-  QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW)));
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+	  SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+	  QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
+	  );
+      // work with reader
+  }
   ```
 
 - Python

@@ -178,9 +178,9 @@
   {% cut "dbapi" %}
 
   ```python
-  import ydb.dbapi
+  import ydb_dbapi
 
-  with ydb.dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+  with ydb_dbapi.connect(host="localhost", port="2136", database="/local") as connection:
       # Serializable режим используется по умолчанию
       with connection.cursor() as cursor:
           cursor.execute("SELECT 1")

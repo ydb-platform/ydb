@@ -180,9 +180,9 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   {% cut "dbapi" %}
 
   ```python
-  import ydb.dbapi
+  import ydb_dbapi
 
-  with ydb.dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+  with ydb_dbapi.connect(host="localhost", port="2136", database="/local") as connection:
       # Serializable mode is used by default
       with connection.cursor() as cursor:
           cursor.execute("SELECT 1")

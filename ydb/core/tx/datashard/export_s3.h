@@ -7,6 +7,9 @@
 #include "export_iface.h"
 #include "export_s3_buffer.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -26,7 +29,10 @@ public:
 
         const auto& scanSettings = Task.GetScanSettings();
         const ui64 maxRows = scanSettings.GetRowsBatchSize() ? scanSettings.GetRowsBatchSize() : Max<ui64>();
-        const ui64 maxBytes = scanSettings.GetBytesBatchSize();
+
+        const ui64 configMaxBytes = AppData()->DataShardConfig.GetBackupBytesBatchSize();
+        const ui64 maxBytes = scanSettings.HasBytesBatchSize() ? scanSettings.GetBytesBatchSize() : configMaxBytes;
+
         const ui64 minBytes = Task.GetS3Settings().GetLimits().GetMinWriteBatchSize();
 
         switch (CodecFromTask(Task)) {

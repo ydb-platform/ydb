@@ -2,7 +2,7 @@
 
 #include <ydb/library/workload/benchmark_base/workload.h_serialized.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
-#include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/library/workload/abstract/colors.h>
 
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/streams/factory/open_by_signature/factory.h>
@@ -181,7 +181,7 @@ TString TTpcBaseWorkloadGenerator::GetHeader(const TString& query) const {
 void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
     TStringBuilder floatDescr;
-    auto colors = NYdb::NConsoleClient::AutoColors(Cout);
+    auto colors = GetColors(Cout);
     floatDescr << "Float mode. Defines the type to be used for floating-point values. Available options:" << Endl
         << "  " << colors.BoldColor() << EFloatMode::DOUBLE << colors.OldColor() << Endl
         << "    Use native Float type for floating-point values." << Endl

@@ -35,7 +35,6 @@ def parallel_allure_test_description(
     end_time: float,
     addition_table_strings: dict[str, any] = None,
     attachments: tuple[str, str, allure.attachment_type] = None,
-    reference_set: str = '',
     node_errors: list[NodeErrors] = None,
     verify_errors=None,
     addition_blocks: list[str] = [],
@@ -50,7 +49,6 @@ def parallel_allure_test_description(
         end_time: Test end timestamp
         addition_table_strings: Additional key-value pairs for info table
         attachments: Tuple of (body, name, type) for attachments
-        refference_set: Reference set name for results comparison
         node_errors: List of node error objects
         verify_errors: Verification errors
         addition_blocks: Additional HTML blocks to include
@@ -77,7 +75,6 @@ def parallel_allure_test_description(
 
     _set_monitoring(test_info, start_time, end_time)
     _set_coredumps(test_info, start_time, end_time)
-    # _set_results_plot(test_info, suite, test, refference_set)
     _set_logs_command(test_info, start_time, end_time)
 
     service_url = YdbCluster._get_service_url()

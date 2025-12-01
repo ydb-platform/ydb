@@ -82,6 +82,7 @@ $canonicalInstallDir = Join-Path $env:LOCALAPPDATA "Programs\ydb"
 $canonicalBinPath = Join-Path $canonicalInstallDir "ydb.exe"
 $legacyInstallDir = Join-Path $home "ydb\bin"
 $legacyBinaryPath = Join-Path $legacyInstallDir "ydb.exe"
+$legacyBackupPath = Join-Path $legacyInstallDir "ydb.exe_old"
 $ydbStorageUrl = $env:ydbStorageUrl
 if ([string]::IsNullOrEmpty($ydbStorageUrl)) {
     $ydbStorageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb"
@@ -112,6 +113,10 @@ Write-Host "ydb is installed to $canonicalBinPath"
 if (Test-Path $legacyBinaryPath) {
     Remove-Item -Force $legacyBinaryPath
     Write-Host "Removed legacy binary $legacyBinaryPath"
+}
+if (Test-Path $legacyBackupPath) {
+    Remove-Item -Force $legacyBackupPath
+    Write-Host "Removed legacy backup binary $legacyBackupPath"
 }
 
 function Normalize-PathString {

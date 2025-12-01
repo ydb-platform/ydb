@@ -308,20 +308,19 @@ bool PersistWindowsPath(const TString& newPath) {
             NLocalPaths::DeleteDirIfEmpty(legacyRootDir);
         };
 #if defined(_win32_)
-        TFsPath backup(TStringBuilder() << legacyBinary.GetPath() << "_old");
-        backup.Fix();
-        DeletePathIfExistsSafe(backup);
+        TFsPath canonicalBackup = NLocalPaths::GetCanonicalBinaryPath().Parent().Child(
+            TStringBuilder() << NLocalPaths::YdbBinaryName << "_old").Fix();
+        DeletePathIfExistsSafe(canonicalBackup);
         try {
-            legacyBinary.RenameTo(backup);
-            Cerr << "Legacy binary moved to " << backup.GetPath() << ". You can delete it after closing current session." << Endl;
+            EnsureParentDirExists(canonicalBackup);
+            legacyBinary.RenameTo(canonicalBackup);
+            Cerr << "Legacy binary moved to canonical backup " << canonicalBackup.GetPath() << Endl;
         } catch (const yexception& e) {
-            if (DeletePathIfExistsSafe(legacyBinary)) {
-                Cerr << "Removed legacy binary " << legacyBinary.GetPath() << Endl;
-                cleanupLegacyDirs();
-            } else {
-                Cerr << "Failed to remove legacy binary " << legacyBinary.GetPath() << ": " << e.what() << Endl;
-            }
+            Cerr << "Failed to move legacy binary to canonical backup: " << e.what() << Endl;
+            Cerr << "Legacy binary remains at " << legacyBinary.GetPath() << ". Delete it manually after exiting the CLI." << Endl;
+            return;
         }
+        cleanupLegacyDirs();
 #else
         if (DeletePathIfExistsSafe(legacyBinary)) {
             Cerr << "Removed legacy binary " << legacyBinary.GetPath() << Endl;

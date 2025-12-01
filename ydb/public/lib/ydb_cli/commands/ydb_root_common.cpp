@@ -445,7 +445,11 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
 
 void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     if (ProfileFile.empty()) {
-        config.ProfileFile = NLocalPaths::GetProfilesFile().GetPath();
+        if (Settings.YdbDir == "canonical") {
+            config.ProfileFile = NLocalPaths::GetProfilesFile().GetPath();
+        } else {
+            config.ProfileFile = TStringBuilder() << NLocalPaths::GetHomePath().GetPath() << '/' << Settings.YdbDir << "/config/config.yaml";
+        }
     } else {
         config.ProfileFile = TFsPath(ProfileFile).RealLocation().GetPath();
     }

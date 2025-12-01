@@ -104,7 +104,7 @@ int NewYdbClient(int argc, char** argv) {
     settings.UseExportToYt = false;
     settings.MentionUserAccount = false;
     settings.StorageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/release";
-    settings.YdbDir = "ydb";
+    settings.YdbDir = "canonical";
 
     auto commandsRoot = MakeHolder<TYdbClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
     commandsRoot->Opts.SetTitle("YDB client");

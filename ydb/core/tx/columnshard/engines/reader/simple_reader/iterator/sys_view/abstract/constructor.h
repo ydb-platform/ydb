@@ -17,8 +17,8 @@ private:
     }
 
 public:
-    TDataSourceConstructor(const ui64 tabletId, const ui32 sourceId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish)
-        : NCommon::TDataSourceConstructor(sourceId, TReplaceKeyAdapter(std::move(start), false), TReplaceKeyAdapter(std::move(finish), false))
+    TDataSourceConstructor(const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish)
+        : NCommon::TDataSourceConstructor(TReplaceKeyAdapter(std::move(start), false), TReplaceKeyAdapter(std::move(finish), false))
         , TabletId(tabletId)
     {
     }

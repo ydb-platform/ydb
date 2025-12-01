@@ -20,11 +20,12 @@ private:
 public:
     TPortionDataConstructor(const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, const TPortionInfo::TConstPtr& portion,
         const ISnapshotSchema::TPtr& schema)
-        : TBase(tabletId, portion->GetPortionId(), TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portion->GetPortionId(), 0, 0),
+        : TBase(tabletId, TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portion->GetPortionId(), 0, 0),
               TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portion->GetPortionId(), Max<ui32>(), Max<ui32>()))
         , PathId(pathId)
         , Portion(portion)
-        , Schema(schema) {
+        , Schema(schema)
+    {
     }
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(

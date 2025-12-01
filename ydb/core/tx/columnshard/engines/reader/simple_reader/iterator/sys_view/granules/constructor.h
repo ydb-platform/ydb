@@ -17,14 +17,13 @@ private:
     ui32 PortionsCount;
     
 private:
-    TDataSourceConstructor(const NColumnShard::TSchemeShardLocalPathId& externalPathId, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule)
-        : TBase(tabletId, 
-                granule->GetPathId().GetRawValue(), 
-                TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId),
-                TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId))
+    TDataSourceConstructor(
+        const NColumnShard::TSchemeShardLocalPathId& externalPathId, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule)
+        : TBase(tabletId, TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId), TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId))
         , Granule(granule)
         , ExternalPathId(externalPathId)
-        , PortionsCount(Granule->GetPortions().size()) {
+        , PortionsCount(Granule->GetPortions().size())
+    {
     }
 
 public:
@@ -36,7 +35,7 @@ public:
         std::vector<std::shared_ptr<const TGranuleMeta>> g = { Granule };
         std::vector<NColumnShard::TSchemeShardLocalPathId> p = { ExternalPathId };
         std::vector<ui32> c = { PortionsCount };
-        return std::make_shared<TSourceData>(GetSourceId(), GetSourceIdx(), GetTabletId(), std::move(g), std::move(p), std::move(c),
+        return std::make_shared<TSourceData>(GetSourceIdx(), GetTabletId(), std::move(g), std::move(p), std::move(c),
             ExtractStart().ExtractValue(), ExtractFinish().ExtractValue(), context);
     }
 };

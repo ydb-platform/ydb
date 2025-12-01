@@ -55,16 +55,28 @@
 
 На примере Ubuntu 22.04 LTS:
 
-* Обновите список пакетов apt командой `sudo apt-get update`.
-* Обновите пакеты командой `sudo apt-get upgrade`.
-* Установите пакет `software-properties-common` для управления источниками программного обеспечения вашего дистрибутива — `sudo apt install software-properties-common`.
-* Добавьте новый PPA в apt — `sudo add-apt-repository --yes --update ppa:ansible/ansible`.
-* Установите Ansible — `sudo apt-get install ansible-core=2.16.3-0ubuntu2` (обратите внимание, что установка просто `ansible` приведёт к неподходящей устаревшей версии).
-* Проверьте версию Ansible core — `ansible --version`
-
-Подробнее см. [руководство по установке Ansible](https://docs.ansible.com/ansible/latest/installation_guide/index.html) для получения дополнительной информации и других вариантов установки.
+* Обновите список пакетов apt командой `sudo apt-get update`;
+* Обновите пакеты командой `sudo apt-get upgrade`;
+* Установите пакет `software-properties-common` для управления источниками программного обеспечения вашего дистрибутива — `sudo apt install software-properties-common`;
+* Добавьте новый PPA в apt — `sudo add-apt-repository --yes --update ppa:ansible/ansible`;
+* Установите Ansible — `sudo apt-get install ansible-core` (убедитесь, что устанавливаемая версия не выше 2.18; установка пакета просто `ansible` приведёт к устаревшей и неподходящей версии);
+* Проверьте версию Ansible core — `ansible --version`.
 
 {% endcut %}
+
+{% cut "Установка Ansible в виртуальное окружение Python" %}
+
+* Обновите список пакетов apt — `sudo apt-get update`;
+* Установите пакет `venv` для Python3 — `sudo apt-get install python3-venv`;
+* Создайте директорию, где будет создано виртуальное окружение и куда будут загружены плейбуки. Например, `mkdir venv-ansible`;
+* Создайте виртуальное окружение Python — `python3 -m venv venv-ansible`;
+* Активируйте виртуальное окружение — `source venv-ansible/bin/activate`. Все дальнейшие действия с Ansible выполняются внутри виртуального окружения. Выйти из него можно командой `deactivate`;
+* Установите рекомендуемую версию Ansible с помощью команды `pip3 install ansible-core` (убедитесь, что устанавливаемая версия не выше 2.18);
+* Проверьте версию Ansible core — `ansible --version`.
+
+{% endcut %}
+
+Подробнее см. [руководство по установке Ansible](https://docs.ansible.com/ansible/latest/installation_guide/index.html) для получения дополнительной информации и других вариантов установки.
 
 ## Настройка проекта Ansible {#ansible-project-setup}
 

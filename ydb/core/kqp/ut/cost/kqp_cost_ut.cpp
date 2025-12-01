@@ -1868,6 +1868,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 4,
                     .Reads = 4,
                     .Deletes = 0,
+
+                    .WriteBytes = isOlap ? 1472 : 80,
+                    .ReadBytes = isOlap ? 144 : 80,
+                    .DeleteBytes = 0,
                 });
         }
     }
@@ -1934,6 +1938,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 4,
                     .Reads = 4,
                     .Deletes = 0,
+
+                    .WriteBytes = isOlap ? 1472 : 80,
+                    .ReadBytes = isOlap ? 144 : 80,
+                    .DeleteBytes = 0,
                 });
         }
 

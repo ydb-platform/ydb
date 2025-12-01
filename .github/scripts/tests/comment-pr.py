@@ -45,15 +45,36 @@ def main():
     args = parser.parse_args()
     color = args.color
 
-    run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
+    run_number = int(os.environ.get("GITHUB_RUN_NUMBER", os.environ.get("GITHUB_RUN_ID", "0")))
     build_preset = os.environ["BUILD_PRESET"]
 
     gh = Github(auth=GithubAuth.Token(os.environ["GITHUB_TOKEN"]))
+    
+    # Try to get PR from event or from PR_NUMBER env var
+    pr = None
+    event_name = os.environ.get('GITHUB_EVENT_NAME', '')
+    
+    if event_name.startswith('pull_request'):
+        # Standard pull_request event
+        with open(os.environ["GITHUB_EVENT_PATH"]) as fp:
+            event = json.load(fp)
+        pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
+    else:
+        # workflow_call or workflow_dispatch - try to get PR_NUMBER from env
+        # PR_NUMBER is just the number, e.g. "12345"
+        pr_number = os.environ.get("PR_NUMBER")
+        if pr_number:
+            try:
+                repo = gh.get_repo(os.environ["GITHUB_REPOSITORY"])
+                pr = repo.get_pull(int(pr_number))
+            except Exception as e:
+                print(f"::warning::Failed to get PR {pr_number}: {e}")
+                return
+    
+    if pr is None:
+        print("::warning::No PR found, skipping comment")
+        return
 
-    with open(os.environ["GITHUB_EVENT_PATH"]) as fp:
-        event = json.load(fp)
-
-    pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
     text = args.text.read()
     if text.endswith("\n"):
         # dirty hack because echo adds a new line 
@@ -64,5 +85,5 @@ def main():
 
 
 if __name__ == "__main__":
-    if os.environ.get('GITHUB_EVENT_NAME', '').startswith('pull_request'):
-        main()
+    # Always try to run, will exit early if no PR found
+    main()

@@ -75,6 +75,10 @@ inputs:
     type: boolean
     default: false
     description: "Collect coredumps via enabling ulimit -c unlimited"
+  pull_number:
+    type: string
+    required: false
+    description: "Pull request number (for workflow_call events)"
 
 outputs:
   success:
@@ -571,6 +575,32 @@ runs:
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
+        fi
+
+    - name: Post final test summary comment
+      if: always() && inputs.run_tests && "${{ inputs.pull_number }}" != ""
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        BUILD_PRESET: ${{ inputs.build_preset }}
+        PR_NUMBER: ${{ inputs.pull_number }}
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        TEST_SIZE: ${{ inputs.test_size }}
+        BUILD_TARGET: ${{ inputs.build_target }}
+      run: |
+        if [ -f "summary_text.txt" ] && [ -s "summary_text.txt" ] && [ -f "summary_color.txt" ]; then
+          COLOR=$(cat summary_color.txt)
+          {
+            echo "**Build Preset:** \`$BUILD_PRESET\`"
+            echo "**Test Size:** \`$TEST_SIZE\`"
+            [[ -n "$BUILD_TARGET" ]] && [[ "$BUILD_TARGET" != "ydb/" ]] && echo "**Test Targets:** \`$BUILD_TARGET\`"
+            echo ""
+            cat summary_text.txt
+            echo ""
+            echo "[View workflow run](https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+          } | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color "$COLOR" --rewrite
         fi
 
     - name: comment-build-status

@@ -804,6 +804,13 @@ protected:
                     break;
                 }
                 case NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN: {
+                    if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
+                        LOG_D("Received NODE_SHUTTING_DOWN but feature flag EnableShuttingDownNodeState is disabled");
+                        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                                "Compute node is unavailable"));
+                        break;
+                    }
                     for (auto& task : record.GetNotStartedTasks()) {
                         if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN
                               and ev->Sender.NodeId() != SelfId().NodeId()) {

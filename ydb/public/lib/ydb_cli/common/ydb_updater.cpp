@@ -16,7 +16,6 @@
 #include <util/system/env.h>
 #include <util/system/execpath.h>
 #include <util/system/shellcommand.h>
-#include <library/cpp/colorizer/output.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include "local_paths.h"
@@ -188,7 +187,7 @@ namespace {
         for (const auto& file : filesToUpdate) {
             EnsureLocalBinBlock(file);
         }
-        NColorizer::TColors warnColors = NColorizer::AutoColors(Cerr);
+        NColorizer::TColors warnColors = NConsoleClient::AutoColors(Cerr);
         Cerr << warnColors.RedColor()
             << "PATH updated. Restart your shell (exec -l $SHELL) or re-source your profile files to apply changes."
             << warnColors.OldColor() << Endl;
@@ -240,7 +239,7 @@ bool PersistWindowsPath(const TString& newPath) {
             TString newPath = JoinSeq(";", elements);
             SetEnv("PATH", newPath);
             bool persisted = PersistWindowsPath(newPath);
-            NColorizer::TColors warn = NColorizer::AutoColors(Cerr);
+            NColorizer::TColors warn = NConsoleClient::AutoColors(Cerr);
             if (persisted) {
                 Cerr << warn.RedColor()
                     << "Binary location has changed: replaced \"" << legacyEntry << "\" with \"" << canonicalEntry

@@ -18,7 +18,7 @@ CREATE EXTERNAL DATA SOURCE s3_data_source WITH (
 );
 ```
 
-Для настройки соединения с приватным бакетом необходимо выполнить несколько SQL-запросов. Сначала нужно создать [секреты](../../datamodel/secrets.md), содержащие `AWS_ACCESS_KEY_ID` и `AWS_SECRET_ACCESS_KEY`.
+Для настройки соединения с приватным бакетом необходимо выполнить несколько SQL-запросов. Сначала нужно создать [секреты](../../../datamodel/secrets.md), содержащие `AWS_ACCESS_KEY_ID` и `AWS_SECRET_ACCESS_KEY`.
 
 ```yql
 CREATE SECRET aws_access_id WITH (value=<id>);
@@ -40,7 +40,7 @@ CREATE EXTERNAL DATA SOURCE s3_data_source WITH (
 
 ## Использование внешнего источника данных для S3-бакета {#external-data-source-settings}
 
-При работе с S3-совместимым хранилищем данных с помощью [внешних источников данных](../../datamodel/external_data_source.md) можно выяснить свойства файлов в бакете S3 до создания [внешних таблиц](../../datamodel/external_table.md):
+При работе с S3-совместимым хранилищем данных с помощью [внешних источников данных](../../../datamodel/external_data_source.md) можно выяснить свойства файлов в бакете S3 до создания [внешних таблиц](../../../datamodel/external_table.md):
 
 - Быстро просмотреть файлы
 - Проверить права доступа

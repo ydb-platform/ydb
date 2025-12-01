@@ -4,7 +4,7 @@
 
 Для подключения к внешней базе {{ ydb-short-name }} со стороны другой базы {{ ydb-short-name }}, выступающей в роли движка обработки федеративных запросов, на последней требуется выполнить следующие шаги:
 
-1. Подготовить аутентификационные данные для доступа к удалённой базе {{ ydb-short-name }}. В настоящее время в федеративных запросах к {{ ydb-short-name }} доступен метод аутентификации по [логину и паролю](../../security/authentication.md#static-credentials) (остальные методы не поддерживаются). Пароль к внешней базе сохраняется в виде [секрета](../datamodel/secrets.md):
+1. Подготовить аутентификационные данные для доступа к удалённой базе {{ ydb-short-name }}. В настоящее время в федеративных запросах к {{ ydb-short-name }} доступен метод аутентификации по [логину и паролю](../../../security/authentication.md#static-credentials) (остальные методы не поддерживаются). Пароль к внешней базе сохраняется в виде [секрета](../../datamodel/secrets.md):
 
    ```yql
     CREATE SECRET ydb_datasource_user_password WITH (value = "<password>");
@@ -38,7 +38,7 @@ SELECT * FROM ydb_datasource.`<table_name>`
 где:
 
 - `ydb_datasource` - идентификатор внешнего источника данных;
-- `<table_name>` - полное имя таблицы внутри [иерархии](../../concepts/index.html#ydb-hierarchy) каталогов в базе данных {{ ydb-short-name }}, например, `table`, `dir1/table1` или `dir1/dir2/table3`.
+- `<table_name>` - полное имя таблицы внутри [иерархии](../../architecture.md#ydb-hierarchy) каталогов в базе данных {{ ydb-short-name }}, например, `table`, `dir1/table1` или `dir1/dir2/table3`.
 
 В случае, если таблица находится на верхнем уровне иерархии (не принадлежит ни одному из каталогов), допускается не заключать имя таблицы в обратные апострофы "\`":
 
@@ -57,7 +57,7 @@ SELECT * FROM ydb_datasource.<table_name>
     |---|---|---|
     |Фильтров вида `IS NULL`/`IS NOT NULL`|`WHERE column1 IS NULL` или `WHERE column1 IS NOT NULL`||
     |Логических условий `OR`, `NOT`, `AND` и круглых скобок для управление приоритетом вычислений. |`WHERE column1 IS NULL OR (column2 IS NOT NULL AND column3 > 10)`.||
-    |[Операторов сравнения](../../yql/reference/syntax/expressions.md#comparison-operators) c другими колонками или константами. |`WHERE column1 > column2 OR column3 <= 10`.||
+    |[Операторов сравнения](../../../yql/reference/syntax/expressions.md#comparison-operators) c другими колонками или константами. |`WHERE column1 > column2 OR column3 <= 10`.||
     |Оператора сопоставления строк с образцом `LIKE`.|`WHERE column1 LIKE '_abc%'`|В настоящее время поддерживается пушдаун только простых паттернов, основанных на префиксах (`'abc_'`, `'abc%'`), суффиксах (`'_abc'`, `'%abc'`) или поиске подстроки в строке (`'_abc_'`, `'%abc%'`, `'_abc%'`, `'%abc_'`). При необходимости пушдауна более сложных паттернов рекомендуется воспользуется `REGEXP`.|
     |Оператора сопоставления строк с образцом `REGEXP`.|`WHERE column1 REGEXP '.*abc.*'`||
 

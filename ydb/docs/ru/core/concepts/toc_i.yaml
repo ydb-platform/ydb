@@ -17,15 +17,12 @@ items:
 - name: Топология кластера
   href: topology.md
 - name: Выполнение запросов
-  href: query_execution.md
+  href: query_execution/index.md
+  include:
+    path: query_execution/toc_p.yaml
+    mode: link  
 - name: Транзакции
   href: transactions.md
-- name: Вторичные индексы
-  href: secondary_indexes.md
-- name: Векторный поиск
-  href: vector_search.md
-- name: Спиллинг
-  href: spilling.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
@@ -35,17 +32,9 @@ items:
   href: scan_query.md
 - name: Ограничения базы данных
   href: limits-ydb.md
-- name: Многоверсионное управление конкурентным доступом (MVCC)
-  href: mvcc.md
 - name: Асинхронная репликация
   href: async-replication.md
 - name: Режим bridge
   href: bridge.md
 - name: Трансфер данных
   href: transfer.md
-- name: Оптимизатор запросов
-  href: optimizer.md
-- name: Федеративные запросы
-  include:
-    path: federated_query/toc_p.yaml
-    mode: link

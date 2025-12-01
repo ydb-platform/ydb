@@ -2101,7 +2101,7 @@ bool TTableInfo::CheckSplitByLoad(
 
     // Ignore stats from unknown datashard (it could have been split)
     const auto* stats = Stats.PartitionStats.FindPtr(shardIdx);
-    if (!stats)
+    if (!stats) {
         return false;
     }
 

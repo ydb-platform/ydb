@@ -76,7 +76,7 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     } else if (authMethod == "MDB_BASIC") {
         auto& mdbBasic = *externalDataSourceDesc.MutableAuth()->MutableMdbBasic();
         mdbBasic.SetServiceAccountId(GetOrEmpty(settings, "service_account_id"));
-         mdbBasic.SetServiceAccountSecretName(GetSecretName(settings, "service_account_secret"));
+        mdbBasic.SetServiceAccountSecretName(GetSecretName(settings, "service_account_secret"));
         mdbBasic.SetLogin(GetOrEmpty(settings, "login"));
         mdbBasic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
     } else if (authMethod == "AWS") {

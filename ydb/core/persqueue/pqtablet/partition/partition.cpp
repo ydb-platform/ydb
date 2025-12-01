@@ -341,7 +341,6 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , SourceManager(*this)
     , WriteInflightSize(0)
     , BlobCache(blobCache)
-    , DeletedKeys(std::make_shared<std::deque<TString>>())
     , CompactionBlobEncoder(partition, false)
     , BlobEncoder(partition, true)
     , GapSize(0)
@@ -533,7 +532,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
 
     write->SetKey(ikey.Data(), ikey.Size());
-    write->SetValue(out.c_str(), out.size());
+    write->SetValue(std::move(out));
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 
@@ -591,8 +590,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             }
         }
 
-        CompactionBlobEncoder.BodySize -= firstKey.Size;
-        CompactionBlobEncoder.DataKeysBody.pop_front();
+        CompactionBlobEncoder.pop_front();
 
         if (!GapOffsets.empty() && nextKey.Key.GetOffset() == GapOffsets.front().second) {
             GapSize -= GapOffsets.front().second - GapOffsets.front().first;
@@ -2573,11 +2571,14 @@ void TPartition::RunPersist() {
             EndProcessWrites(PersistRequest.Get(), ctx);
         }
         EndHandleRequests(PersistRequest.Get(), ctx);
-        //haveChanges = true;
     }
 
     haveChanges |= TryAddDeleteHeadKeysToPersistRequest();
     haveChanges |= AddMessageDeduplicatorKeys(PersistRequest.Get());
+
+    if (Compacter) {
+        Compacter->TryCompactionIfPossible();
+    }
 
     if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
         WriteCycleStartTime = now;
@@ -2585,15 +2586,12 @@ void TPartition::RunPersist() {
         TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
         PartitionQuotaWaitTimeForCurrentBlob = TDuration::Zero();
         WritesTotal.Inc();
-        AddMetaKey(PersistRequest.Get());
         HaveWriteMsg = true;
 
+        AddMetaKey(PersistRequest.Get());
         AddCmdWriteTxMeta(PersistRequest->Record);
         AddCmdWriteUserInfos(PersistRequest->Record);
         AddCmdWriteConfig(PersistRequest->Record);
-    }
-    if (Compacter) {
-        Compacter->TryCompactionIfPossible();
     }
 
     if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
@@ -2669,21 +2667,36 @@ void TPartition::RunPersist() {
 
 bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
 {
-    bool haveChanges = !DeletedKeys->empty();
+    bool haveChanges = false;
 
-    while (!DeletedKeys->empty()) {
-        auto& k = DeletedKeys->back();
+    auto doDelete = [&](auto& deletedKeys) {
+        while (!deletedKeys.empty()) {
+            auto& k = deletedKeys.front();
 
-        auto* cmd = PersistRequest->Record.AddCmdDeleteRange();
-        auto* range = cmd->MutableRange();
+            if (auto lock = k.Lock.lock(); lock) {
+                LOG_D("Key locked: " << k.Key);
+                // key is locked, wait for it to be unlocked
+                break;
+            }
 
-        range->SetFrom(k.data(), k.size());
-        range->SetIncludeFrom(true);
-        range->SetTo(k.data(), k.size());
-        range->SetIncludeTo(true);
+            LOG_D("Key deleted: " << k.Key);
 
-        DeletedKeys->pop_back();
-    }
+            haveChanges = true;
+
+            auto* cmd = PersistRequest->Record.AddCmdDeleteRange();
+            auto* range = cmd->MutableRange();
+
+            range->SetFrom(k.Key);
+            range->SetIncludeFrom(true);
+            range->SetTo(std::move(k.Key));
+            range->SetIncludeTo(true);
+
+            deletedKeys.pop_front();
+        }
+    };
+
+    doDelete(CompactionBlobEncoder.DeletedKeys);
+    doDelete(BlobEncoder.DeletedKeys);
 
     return haveChanges;
 }
@@ -2734,18 +2747,7 @@ bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
 
 TBlobKeyTokenPtr TPartition::MakeBlobKeyToken(const TString& key)
 {
-    // The number of links counts is `std::shared_ptr'. It is possible to set its own destructor,
-    // which adds the key to the queue for deletion before freeing the memory.
-    auto ptr = std::make_unique<TBlobKeyToken>(key);
-
-    auto deleter = [keys = DeletedKeys](TBlobKeyToken* token) {
-        if (token->NeedDelete) {
-            keys->emplace_back(std::move(token->Key));
-        }
-        delete token;
-    };
-
-    return {ptr.release(), std::move(deleter)};
+    return std::make_shared<TBlobKeyToken>(key);
 }
 
 void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
@@ -4147,17 +4149,6 @@ THolder<TEvPQ::TEvTxCommitDone> TPartition::MakeCommitDone(ui64 step, ui64 txId)
 
 void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
     ctx.Schedule(UPDATE_AVAIL_SIZE_INTERVAL, new TEvPQ::TEvUpdateAvailableSize());
-}
-
-void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo) {
-    for (auto it = BlobEncoder.HeadKeys.rbegin(); it != BlobEncoder.HeadKeys.rend(); ++it) {
-        if (it->Key.GetOffset() > offset || it->Key.GetOffset() == offset && it->Key.GetPartNo() >= partNo) {
-            // The repackaged blocks will be deleted after writing.
-            DefferedKeysForDeletion.push_back(std::move(it->BlobKeyToken));
-        } else {
-            break;
-        }
-    }
 }
 
 ui32 TPartition::NextChannel(bool isHead, ui32 blobSize) {

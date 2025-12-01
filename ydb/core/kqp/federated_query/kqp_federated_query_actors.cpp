@@ -212,7 +212,7 @@ void TDescribeSchemaSecretsService::Bootstrap() {
 void TDescribeSchemaSecretsService::SaveIncomingRequestInfo(const TEvResolveSecret& ev) {
     TResponseContext ctx;
     for (size_t i = 0; i < ev.SecretNames.size(); ++i) {
-        ctx.Secrets[ev.SecretNames[i]] = i;
+        ctx.Secrets.emplace(ev.SecretNames[i], i);
         ctx.Result = ev.Promise;
     }
     ResolveInFlight[LastCookie] = std::move(ctx);

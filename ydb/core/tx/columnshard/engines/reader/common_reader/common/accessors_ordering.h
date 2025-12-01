@@ -1,17 +1,92 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/comparable.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/context.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
-template <class TObject>
+
+class TDataSourceConstructor: public ICursorEntity, public TMoveOnly {
+private:
+    ui32 SourceId = 0;
+    TReplaceKeyAdapter Start;
+    TReplaceKeyAdapter Finish;
+    ui32 SourceIdx = 0;
+    bool SourceIdxInitialized = false;
+
+    virtual ui64 DoGetEntityId() const override {
+        return GetSourceIdx();
+    }
+
+public:
+    ui32 GetSourceId() const {
+        return SourceId;
+    }
+
+    void SetIndex(const ui32 index) {
+        AFL_VERIFY(!SourceIdxInitialized);
+        SourceIdxInitialized = true;
+        SourceIdx = index;
+    }
+
+    ui32 GetSourceIdx() const {
+        AFL_VERIFY(SourceIdxInitialized);
+        return SourceIdx;
+    }
+
+    TReplaceKeyAdapter ExtractStart() {
+        return std::move(Start);
+    }
+
+    TReplaceKeyAdapter ExtractFinish() {
+        return std::move(Finish);
+    }
+
+    TDataSourceConstructor(const ui32 sourceId, TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish)
+        : SourceId(sourceId)
+        , Start(std::move(start))
+        , Finish(std::move(finish))
+    {
+        AFL_VERIFY(SourceId);
+    }
+
+    const TReplaceKeyAdapter& GetStart() const {
+        return Start;
+    }
+    const TReplaceKeyAdapter& GetFinish() const {
+        return Finish;
+    }
+
+    class TComparator {
+    private:
+        const ERequestSorting Sorting;
+
+    public:
+        TComparator(const ERequestSorting sorting)
+            : Sorting(sorting)
+        {
+            AFL_VERIFY(Sorting != ERequestSorting::NONE);
+        }
+
+        bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
+            if (Sorting == ERequestSorting::DESC) {
+                return l.Finish < r.Finish;
+            } else {
+                return r.Start < l.Start;
+            }
+        }
+    };
+};
+
+template <std::derived_from<TDataSourceConstructor> TObject>
 class TOrderedObjects {
 private:
     const ERequestSorting Sorting;
     std::deque<TObject> HeapObjects;
     YDB_READONLY_DEF(std::deque<TObject>, AlreadySorted);
     bool Initialized = false;
+    ui32 NextObjectIdx = 0;
 
 public:
     TOrderedObjects(const ERequestSorting sorting)
@@ -32,10 +107,10 @@ public:
 
     TObject& MutableNextObject() {
         AFL_VERIFY(GetSize());
-        if (AlreadySorted.size()) {
-            return AlreadySorted.front();
+        if (AlreadySorted.empty()) {
+            PrepareOrdered(1);
         }
-        return HeapObjects.front();
+        return AlreadySorted.front();
     }
 
     void Initialize(std::deque<TObject>&& objects) {
@@ -46,6 +121,9 @@ public:
             std::make_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TComparator(Sorting));
         } else {
             AlreadySorted = std::move(objects);
+            for (auto& source : AlreadySorted) {
+                source.SetIndex(NextObjectIdx++);
+            }
         }
     }
 
@@ -53,23 +131,22 @@ public:
         if (Sorting != ERequestSorting::NONE) {
             while (AlreadySorted.size() < count && HeapObjects.size()) {
                 std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TComparator(Sorting));
+                HeapObjects.back().SetIndex(NextObjectIdx++);
                 AlreadySorted.emplace_back(std::move(HeapObjects.back()));
                 HeapObjects.pop_back();
             }
+        } else {
+            AFL_VERIFY(HeapObjects.empty());
         }
     }
 
     TObject PopFront() {
-        if (AlreadySorted.size()) {
-            AFL_VERIFY(AlreadySorted.size());
-            auto result = std::move(AlreadySorted.front());
-            AlreadySorted.pop_front();
-            return result;
+        if (AlreadySorted.empty()) {
+            PrepareOrdered(1);
         }
-        AFL_VERIFY(HeapObjects.size());
-        std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TComparator(Sorting));
-        auto result = std::move(HeapObjects.back());
-        HeapObjects.pop_back();
+        AFL_VERIFY(AlreadySorted.size());
+        auto result = std::move(AlreadySorted.front());
+        AlreadySorted.pop_front();
         return result;
     }
 
@@ -144,7 +221,7 @@ public:
     }
 };
 
-template <class TConstructor>
+template <std::derived_from<TDataSourceConstructor> TConstructor>
 class TSourcesConstructorWithAccessors: public TSourcesConstructorWithAccessorsImpl {
 private:
     TOrderedObjects<TConstructor> Constructors;

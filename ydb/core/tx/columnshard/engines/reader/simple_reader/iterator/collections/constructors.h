@@ -12,30 +12,17 @@ class TPortionInfo;
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-class TSourceConstructor: public ICursorEntity, public TMoveOnly {
+class TSourceConstructor: public NCommon::TDataSourceConstructor {
 private:
-    TCompareKeyForScanSequence Start;
     YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
     ui32 RecordsCount = 0;
     bool IsStartedByCursorFlag = false;
-    std::optional<ui32> SourceIdx;
 
-    virtual ui64 DoGetEntityId() const override {
-        AFL_VERIFY(SourceIdx);
-        return *SourceIdx;
-    }
     virtual ui64 DoGetEntityRecordsCount() const override {
         return RecordsCount;
     }
 
 public:
-    void SetIndex(const ui32 index) {
-        SourceIdx = index;
-    }
-    bool IsInitialized() const {
-        return !!SourceIdx;
-    }
-
     void SetIsStartedByCursor() {
         IsStartedByCursorFlag = true;
     }
@@ -43,32 +30,16 @@ public:
         return IsStartedByCursorFlag;
     }
 
-    const TCompareKeyForScanSequence& GetStart() const {
-        return Start;
-    }
-
     TSourceConstructor(const std::shared_ptr<TPortionInfo>&& portion, const NReader::ERequestSorting sorting)
-        : Start(TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
-                    sorting == NReader::ERequestSorting::DESC), portion->GetPortionId())
+        : NCommon::TDataSourceConstructor(portion->GetPortionId(),
+              TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
+                  sorting == NReader::ERequestSorting::DESC),
+              TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyStart() : portion->IndexKeyEnd(),
+                  sorting == NReader::ERequestSorting::DESC))
         , Portion(std::move(portion))
         , RecordsCount(portion->GetRecordsCount())
     {
     }
-
-    class TComparator {
-    private:
-        const ERequestSorting Sorting;
-
-    public:
-        TComparator(const ERequestSorting sorting)
-            : Sorting(sorting) {
-            AFL_VERIFY(Sorting != ERequestSorting::NONE);
-        }
-
-        bool operator()(const TSourceConstructor& l, const TSourceConstructor& r) const {
-            return r.Start < l.Start;
-        }
-    };
 
     std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const;
 };

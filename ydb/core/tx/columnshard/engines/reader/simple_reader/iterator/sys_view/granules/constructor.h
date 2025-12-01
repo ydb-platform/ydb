@@ -36,8 +36,8 @@ public:
         std::vector<std::shared_ptr<const TGranuleMeta>> g = { Granule };
         std::vector<NColumnShard::TSchemeShardLocalPathId> p = { ExternalPathId };
         std::vector<ui32> c = { PortionsCount };
-        return std::make_shared<TSourceData>(
-            GetSourceId(), GetSourceIdx(), GetTabletId(), std::move(g), std::move(p), std::move(c), ExtractStart(), ExtractFinish(), context);
+        return std::make_shared<TSourceData>(GetSourceId(), GetSourceIdx(), GetTabletId(), std::move(g), std::move(p), std::move(c),
+            ExtractStart().ExtractValue(), ExtractFinish().ExtractValue(), context);
     }
 };
 

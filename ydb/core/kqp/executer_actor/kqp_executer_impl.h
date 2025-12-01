@@ -849,6 +849,7 @@ protected:
                         LOG_D("Received NODE_SHUTTING_DOWN but feature flag EnableShuttingDownNodeState is disabled");
                         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
 <<<<<<< HEAD
+<<<<<<< HEAD
                             YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
 =======
                             YqlIssue({}, NYql::TIssuesIds::SHARD_NOT_AVAILABLE, 
@@ -868,9 +869,23 @@ protected:
                     }
 
                     ui32 requestId = record.GetNotStartedTasks(0).GetRequestId();
+=======
+                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, 
+                                "Compute node is unavailable"));
+                        break;
+                    }
+>>>>>>> 3e59e95b7ca (fix planer logic)
                     
+                    LOG_D("Received NODE_SHUTTING_DOWN, attempting run tasks locally");
+                    
+                    ui32 requestId = record.GetNotStartedTasks(0).GetRequestId();
                     auto targetNode = MakeKqpNodeServiceID(SelfId().NodeId());
-                    Planner->SendStartKqpTasksRequest(requestId, targetNode);
+                    
+                    if (!Planner->SendStartKqpTasksRequest(requestId, targetNode, ev->Sender.NodeId() == SelfId().NodeId())) {
+                        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, 
+                            MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE,
+                                "All compute nodes are unavailable or shutting down"));
+                    }
                     break;
                 }
                 case NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR: {

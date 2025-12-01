@@ -144,7 +144,7 @@ void TKqpPlanner::LogMemoryStatistics(const TLogFunc& logFunc) {
     logFunc(TStringBuilder() << "Total tasks: " << ResourceEstimations.size() << ", total memory: " << totalMemory);
 }
 
-bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& target) {
+bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& target, bool isLocalNodeAlreadyShutdowned) {
     YQL_ENSURE(requestId < Requests.size());
 
     auto& requestData = Requests[requestId];
@@ -160,15 +160,24 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
         ev = SerializeRequest(requestData);
     }
 
-    if (requestData.RetryNumber == ExecuterRetriesConfig.GetMaxRetryNumber()) {
+    if (requestData.RetryNumber == ExecuterRetriesConfig.GetMaxRetryNumber() || isLocalNodeAlreadyShutdowned) {
         LOG_E("Retry failed by retries limit, requestId: " << requestId);
         TMaybe<ui32> targetNode;
         for (size_t i = 0; i < ResourcesSnapshot.size(); ++i) {
-            if (!TrackingNodes.contains(ResourcesSnapshot[i].nodeid())) {
-                targetNode = ResourcesSnapshot[i].nodeid();
+            if (!TrackingNodes.contains(ResourcesSnapshot[i].nodeid()) &&
+                    !(isLocalNodeAlreadyShutdowned && ResourcesSnapshot[i].GetNodeId() == ExecuterId.NodeId())) {
+                targetNode = ResourcesSnapshot[i].GetNodeId();
                 break;
             }
         }
+        
+        if (!targetNode && !isLocalNodeAlreadyShutdowned) {
+            ui32 localNodeId = ExecuterId.NodeId();
+            LOG_D("No untried nodes found in ResourcesSnapshot, falling back to local node: " << localNodeId 
+                  << ", requestId: " << requestId);
+            targetNode = localNodeId;
+        }
+        
         if (targetNode) {
             LOG_D("Try to retry to another node, nodeId: " << *targetNode << ", requestId: " << requestId);
             auto anotherTarget = MakeKqpNodeServiceID(*targetNode);
@@ -182,13 +191,13 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
     }
 
     if (requestData.RetryNumber >= 1) {
-        LOG_D("Try to retry by ActorUnknown reason, nodeId: " << target.NodeId() << ", requestId: " << requestId);
+        LOG_D("Try to retry by ActorUnknown reason or NODE_SHUTTING_DOWN, nodeId: " << target.NodeId() << ", requestId: " << requestId);
     }
 
     requestData.RetryNumber++;
 
     TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(target, ExecuterId, ev.release(),
-        requestData.Flag, requestId,  nullptr, ExecuterSpan.GetTraceId()));
+        CalcSendMessageFlagsForNode(target.NodeId()), requestId,  nullptr, ExecuterSpan.GetTraceId()));
     return true;
 }
 

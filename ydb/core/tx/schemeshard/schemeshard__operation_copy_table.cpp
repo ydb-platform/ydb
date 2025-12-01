@@ -3,6 +3,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_states.h"
 #include "schemeshard_cdc_stream_common.h"
+#include "schemeshard_continuous_backup_cleaner.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
@@ -271,26 +272,35 @@ public:
                     auto streamPath = context.SS->PathsById.at(id);
                     
                     if (stream->AlterData && streamPath->LastTxId == OperationId.GetTxId()) {
-                        // context.SS->PersistCdcStream(db, id);
-                        // stream->FinishAlter();
-                        
-                        // context.SS->ClearDescribePathCaches(streamPath);
-                        // context.OnComplete.PublishToSchemeBoard(OperationId, id);
-
                         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "TCopyTable HandleReply: Finalizing rotation for OLD stream " << name << " id " << id);
+                            "TCopyTable HandleReply: Finalizing rotation for OLD stream " << name << " id " << id
+                            << " -> Scheduling DELETE");
 
                         context.SS->PersistCdcStream(db, id);
                         stream->FinishAlter();
                         
                         streamPath->PathState = TPathElement::EPathState::EPathStateNoChanges;
-                        
                         streamPath->LastTxId = InvalidTxId; 
                         
                         context.SS->PersistPath(db, streamPath->PathId);
-
                         context.SS->ClearDescribePathCaches(streamPath);
                         context.OnComplete.PublishToSchemeBoard(OperationId, id);
+
+                        Y_ABORT_UNLESS(context.SS->PathsById.contains(srcPath->ParentPathId));
+                        auto parentDir = context.SS->PathsById.at(srcPath->ParentPathId);
+                        TString workingDir = context.SS->PathToString(parentDir);
+
+                        auto cleaner = CreateContinuousBackupCleaner(
+                            context.SS->TxAllocatorClient,
+                            context.SS->SelfId(),
+                            0,
+                            id,
+                            workingDir,
+                            srcPath->Name,
+                            name
+                        );
+                        
+                        context.Ctx.Register(cleaner);
                     }
                 }
             }

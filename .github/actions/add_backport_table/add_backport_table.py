@@ -114,26 +114,15 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
     return table
 
 
-def create_or_update_pr_comment(pr_number: int, app_domain: str) -> None:
+def create_or_update_pr_comment(pr, app_domain: str) -> None:
     """Create or update backport table comment on PR.
     
     Args:
-        pr_number: PR number
+        pr: GitHub PullRequest object
         app_domain: Application domain for workflow URLs
     """
     try:
-        github_token = os.environ.get("GITHUB_TOKEN")
-        github_repo = os.environ.get("GITHUB_REPOSITORY")
-        
-        if not github_token:
-            raise ValueError("GITHUB_TOKEN environment variable is not set")
-        
-        if not github_repo:
-            raise ValueError("GITHUB_REPOSITORY environment variable is not set")
-        
-        gh = Github(auth=GithubAuth.Token(github_token))
-        repo = gh.get_repo(github_repo)
-        pr = repo.get_pull(pr_number)
+        pr_number = pr.number
         
         backport_table = generate_backport_table(pr_number, app_domain)
         header = "<!-- backport-table -->"
@@ -160,44 +149,69 @@ def create_or_update_pr_comment(pr_number: int, app_domain: str) -> None:
 
 def main():
     """Main function to add backport table to PR body."""
-    # Check if feature is enabled
-    show_backport_table = os.environ.get("SHOW_BACKPORT_IN_PR", "").upper() == "TRUE"
-    if not show_backport_table:
-        print("::notice::SHOW_BACKPORT_IN_PR is not set to TRUE, skipping backport table addition")
-        return
+    # Check if feature is enabled (skip check for workflow_dispatch)
+    pr_number_from_input = os.environ.get("PR_NUMBER")
+    is_workflow_dispatch = bool(pr_number_from_input)
     
-    # Get PR info from event
-    event_path = os.environ.get("GITHUB_EVENT_PATH")
-    if not event_path:
-        raise ValueError("GITHUB_EVENT_PATH environment variable is not set")
+    if not is_workflow_dispatch:
+        show_backport_table = os.environ.get("SHOW_BACKPORT_IN_PR", "").upper() == "TRUE"
+        if not show_backport_table:
+            print("::notice::SHOW_BACKPORT_IN_PR is not set to TRUE, skipping backport table addition")
+            return
     
-    if not os.path.exists(event_path):
-        raise FileNotFoundError(f"Event file not found: {event_path}")
+    # Get PR info - either from event or from workflow_dispatch input
+    github_token = os.environ.get("GITHUB_TOKEN")
+    github_repo = os.environ.get("GITHUB_REPOSITORY")
     
-    with open(event_path, 'r') as f:
-        event = json.load(f)
+    if not github_token:
+        raise ValueError("GITHUB_TOKEN environment variable is not set")
+    if not github_repo:
+        raise ValueError("GITHUB_REPOSITORY environment variable is not set")
     
-    if "pull_request" not in event:
-        raise ValueError("Event does not contain pull_request data")
+    gh = Github(auth=GithubAuth.Token(github_token))
+    repo = gh.get_repo(github_repo)
     
-    pr_number = event["pull_request"]["number"]
-    base_ref = event["pull_request"]["base"]["ref"]
-    
-    # Check if PR is merged into main
-    if not event["pull_request"].get("merged"):
-        print(f"::notice::PR #{pr_number} is not merged, skipping backport table addition")
-        return
-    
-    # Check if PR is merged into main branch
-    if base_ref != "main":
-        print(f"::notice::PR #{pr_number} is merged into {base_ref}, not main. Skipping backport table addition")
-        return
+    if pr_number_from_input:
+        # workflow_dispatch mode - get PR by number (no checks for merged or base branch)
+        pr_number = int(pr_number_from_input)
+        pr = repo.get_pull(pr_number)
+        print(f"::notice::workflow_dispatch mode: Adding backport table to PR #{pr_number} (skipping merged/base branch checks)")
+    else:
+        # pull_request event mode - get PR from event
+        event_path = os.environ.get("GITHUB_EVENT_PATH")
+        if not event_path:
+            raise ValueError("GITHUB_EVENT_PATH environment variable is not set")
+        
+        if not os.path.exists(event_path):
+            raise FileNotFoundError(f"Event file not found: {event_path}")
+        
+        with open(event_path, 'r') as f:
+            event = json.load(f)
+        
+        if "pull_request" not in event:
+            raise ValueError("Event does not contain pull_request data")
+        
+        pr_number = event["pull_request"]["number"]
+        base_ref = event["pull_request"]["base"]["ref"]
+        
+        # Check if PR is merged into main
+        if not event["pull_request"].get("merged"):
+            print(f"::notice::PR #{pr_number} is not merged, skipping backport table addition")
+            return
+        
+        # Check if PR is merged into main branch
+        if base_ref != "main":
+            print(f"::notice::PR #{pr_number} is merged into {base_ref}, not main. Skipping backport table addition")
+            return
+        
+        # Get PR object for consistency
+        pr = repo.get_pull(pr_number)
     
     app_domain = os.environ.get("APP_DOMAIN")
     if not app_domain:
         raise ValueError("APP_DOMAIN environment variable is not set (required when SHOW_BACKPORT_IN_PR=TRUE)")
     
-    create_or_update_pr_comment(pr_number, app_domain)
+    create_or_update_pr_comment(pr, app_domain)
 
 
 if __name__ == "__main__":

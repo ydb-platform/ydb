@@ -6,6 +6,12 @@ on:
       - closed
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull Request number to add backport table to'
+        required: true
+        type: number
 
 permissions:
   contents: read
@@ -19,9 +25,15 @@ jobs:
     name: Add backport table to merged PR
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: >
-      github.event.pull_request.merged == true &&
-      github.event.pull_request.base.ref == 'main' &&
-      vars.SHOW_BACKPORT_IN_PR == 'TRUE'
+      (
+        github.event_name == 'workflow_dispatch'
+      ) ||
+      (
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.merged == true &&
+        github.event.pull_request.base.ref == 'main' &&
+        vars.SHOW_BACKPORT_IN_PR == 'TRUE'
+      )
     
     steps:
       - name: Checkout repository
@@ -44,6 +56,7 @@ jobs:
           GITHUB_WORKSPACE: ${{ github.workspace }}
           APP_DOMAIN: ${{ vars.APP_DOMAIN }}
           SHOW_BACKPORT_IN_PR: ${{ vars.SHOW_BACKPORT_IN_PR }}
+          PR_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_number || '' }}
         run: |
           python3 ./.github/actions/add_backport_table/add_backport_table.py
 

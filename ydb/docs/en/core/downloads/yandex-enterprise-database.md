@@ -40,7 +40,7 @@ Yandex Enterprise Database distributions are available for download via the link
 - [For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/checksums.txt)
 - [For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/checksums.debug.txt)
 
-| [См. список](../changelog-enterprise.md#25-1-4-ent-3) ||
+| [See list](../changelog-enterprise.md#25-1-4-ent-3) ||
 || **v24.4** |  |  |  |  ||
 || v.24.4.4.20 | 01.11.2025 |
 
@@ -52,7 +52,7 @@ Yandex Enterprise Database distributions are available for download via the link
 - [For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/checksums.txt)
 - [For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/checksums.debug.txt)
 
-| [См. список](../changelog-enterprise.md#24-4-4-20) ||
+| [See list](../changelog-enterprise.md#24-4-4-20) ||
 || v.24.4.4.15 | 19.09.2025 |
 
 - [Distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64.tar.xz)

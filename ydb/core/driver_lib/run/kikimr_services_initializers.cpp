@@ -3109,11 +3109,10 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
             )
         );
         const auto &grpcConfig = Config.GetGRpcConfig();
-        if (grpcConfig.GetPublicHost()) {
-            const TString &address = grpcConfig.GetHost() && grpcConfig.GetHost() != "[::]" ? grpcConfig.GetHost() : FQDNHostName();
-            auto& kafkaMutableConfig = *Config.MutableKafkaProxyConfig();
-            kafkaMutableConfig.SetPublicHost(grpcConfig.GetPublicHost() ? grpcConfig.GetPublicHost() : address);
-        }
+        const TString &address = grpcConfig.GetHost() && grpcConfig.GetHost() != "[::]" ? grpcConfig.GetHost() : FQDNHostName();
+        auto& kafkaMutableConfig = *Config.MutableKafkaProxyConfig();
+        kafkaMutableConfig.SetPublicHost(grpcConfig.GetPublicHost() ? grpcConfig.GetPublicHost() : address);
+
         setup->LocalServices.emplace_back(
             TActorId(),
             TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),

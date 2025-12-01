@@ -107,19 +107,21 @@ namespace {
         }
         TString cleaned;
         cleaned.reserve(content.size());
+        bool firstKeptLine = true;
         bool changed = false;
         size_t pos = 0;
-        while (pos <= content.size()) {
+        while (pos < content.size()) {
             size_t next = content.find('\n', pos);
             TString line = content.substr(pos, next == TString::npos ? TString::npos : next - pos);
             if (!line.empty() || next != TString::npos) {
                 if (ShouldRemoveLegacyLine(line)) {
                     changed = true;
                 } else {
-                    if (!cleaned.empty()) {
+                    if (!firstKeptLine) {
                         cleaned.push_back('\n');
                     }
                     cleaned.append(line);
+                    firstKeptLine = false;
                 }
             }
             if (next == TString::npos) {
@@ -207,6 +209,12 @@ TString EscapeForPowerShellSingleQuotes(const TString& value) {
     return result;
 }
 
+TString NormalizeWindowsPathEntry(const TString& path) {
+    TString normalized = StripString(path);
+    normalized.to_lower();
+    return normalized;
+}
+
 bool PersistWindowsPath(const TString& newPath) {
     TString escaped = EscapeForPowerShellSingleQuotes(newPath);
     TShellCommand cmd(TStringBuilder()
@@ -219,6 +227,8 @@ bool PersistWindowsPath(const TString& newPath) {
     void UpdateWindowsPathReferences() {
         TString legacyEntry = NLocalPaths::GetLegacyBinaryPath().Parent().GetPath();
         TString canonicalEntry = NLocalPaths::GetCanonicalBinaryPath().Parent().GetPath();
+        TString legacyEntryNorm = NormalizeWindowsPathEntry(legacyEntry);
+        TString canonicalEntryNorm = NormalizeWindowsPathEntry(canonicalEntry);
         TVector<TString> elements = StringSplitter(GetEnv("PATH")).Split(';').ToList<TString>();
         bool replaced = false;
         bool hasCanonical = false;
@@ -227,11 +237,12 @@ bool PersistWindowsPath(const TString& newPath) {
             if (trimmed.empty()) {
                 continue;
             }
-            if (trimmed == legacyEntry) {
+            TString normalized = NormalizeWindowsPathEntry(trimmed);
+            if (normalized == legacyEntryNorm) {
                 element = canonicalEntry;
                 replaced = true;
                 hasCanonical = true;
-            } else if (trimmed == canonicalEntry) {
+            } else if (normalized == canonicalEntryNorm) {
                 hasCanonical = true;
             }
         }

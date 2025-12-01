@@ -74,6 +74,11 @@ size_t TMessageIdDeduplicator::Compact() {
         ++removed;
     }
 
+    while(!WALKeys.empty() && WALKeys.front().ExpirationTime <= now) {
+        WALKeys.pop_front();
+        ++removed;
+    }
+
     auto normalize = [&](size_t value) {
         return value > removed ? value - removed : 0;
     };
@@ -87,10 +92,6 @@ size_t TMessageIdDeduplicator::Compact() {
     compactBucket(CurrentBucket);
     if (PendingBucket) {
         compactBucket(*PendingBucket);
-    }
-
-    while(WALKeys.empty() || WALKeys.front().ExpirationTime <= now) {
-        WALKeys.pop_front();
     }
 
     return removed;
@@ -164,7 +165,7 @@ std::optional<TString> TMessageIdDeduplicator::SerializeTo(NKikimrPQ::TMessageDe
         .LastWrittenMessageIndex = Queue.size(),
     };
 
-    if (!sameBucket) {
+    if (WALKeys.empty() || !sameBucket) {
         WALKeys.emplace_back(MakeDeduplicatorWALKey(PartitionId.OriginalPartitionId, NextMessageIdDeduplicatorWAL), lastExpirationTime);
         NextMessageIdDeduplicatorWAL++;
     } else {
@@ -197,22 +198,24 @@ TString MakeDeduplicatorWALKey(ui32 partitionId, ui64 id) {
     return ikey.ToString();
 }
 
-void TPartition::AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request) {
+bool TPartition::AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request) {
     if (MirroringEnabled(Config) || Partition.IsSupportivePartition()) {
-        return;
+        return false;
     }
 
     MessageIdDeduplicator.Compact();
 
+    bool hasChanges = false;
+
     NKikimrPQ::TMessageDeduplicationIdWAL wal;
     if (auto key = MessageIdDeduplicator.SerializeTo(wal); key) {
-
         auto* writeWAL = request->Record.AddCmdWrite();
         writeWAL->SetKey(key.value());
         writeWAL->SetValue(wal.SerializeAsString());
         if (writeWAL->GetValue().size() < 1000) {
             writeWAL->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
         }
+        hasChanges = true;
     }
 
     auto* deleteExpired = request->Record.AddCmdDeleteRange();
@@ -220,6 +223,8 @@ void TPartition::AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request) {
     deleteExpired->MutableRange()->SetTo(MessageIdDeduplicator.GetFirstActualWAL());
     deleteExpired->MutableRange()->SetIncludeFrom(true);
     deleteExpired->MutableRange()->SetIncludeTo(false);
+
+    return hasChanges;
 }
 
 std::optional<ui64> TPartition::DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset) {

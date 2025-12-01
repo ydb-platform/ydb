@@ -366,7 +366,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
     , SamplingControl(samplingControl)
-    , MessageIdDeduplicator(partition, CreateDefaultTimeProvider(), TDuration::Minutes(5))
+    , MessageIdDeduplicator(Partition, CreateDefaultTimeProvider(), TDuration::Minutes(5))
 {
     TabletCounters.Populate(*Counters);
     TabletCounters.ResetCounters();
@@ -515,6 +515,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     //meta.SetEndOffset(Max(BlobEncoder.NewHead.GetNextOffset(), GetEndOffset()));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
+    meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
 
     if (IsSupportive()) {
         auto* counterData = meta.MutableCounterData();
@@ -2575,9 +2576,8 @@ void TPartition::RunPersist() {
         //haveChanges = true;
     }
 
-    if (TryAddDeleteHeadKeysToPersistRequest()) {
-        haveChanges = true;
-    }
+    haveChanges |= TryAddDeleteHeadKeysToPersistRequest();
+    haveChanges |= AddMessageDeduplicatorKeys(PersistRequest.Get());
 
     if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
         WriteCycleStartTime = now;
@@ -2597,8 +2597,6 @@ void TPartition::RunPersist() {
     }
 
     if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
-        AddMessageDeduplicatorKeys(PersistRequest.Get());
-
         // Apply counters
         for (const auto& writeInfo : WriteInfosApplied) {
             // writeTimeLag

@@ -42,6 +42,8 @@ public:
 
     const std::deque<TMessage>& GetQueue() const;
 
+    ui64 NextMessageIdDeduplicatorWAL = 1;
+
 private:
     const TPartitionId& PartitionId;
     TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -59,7 +61,6 @@ private:
     TBucket CurrentBucket;
     std::optional<TBucket> PendingBucket;
 
-    ui64 NextMessageIdDeduplicatorWAL = 0;
     struct WALKey {
         TString Key;
         TInstant ExpirationTime;

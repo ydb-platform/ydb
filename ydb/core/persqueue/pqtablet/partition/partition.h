@@ -1262,7 +1262,7 @@ private:
     ui64 LastNotifiedEndOffset = 0;
 
     TMessageIdDeduplicator MessageIdDeduplicator;
-    void AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
+    bool AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
     std::optional<ui64> DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset);
 };
 

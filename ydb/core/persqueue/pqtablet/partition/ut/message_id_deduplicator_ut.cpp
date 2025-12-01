@@ -40,23 +40,22 @@ struct TestScenario {
         Deduplicator.Compact();
 
         NKikimrPQ::TMessageDeduplicationIdWAL wal;
-        if (!Deduplicator.SerializeTo(wal)) {
-            return;
-        }
+        if (auto key = Deduplicator.SerializeTo(wal); key) {
+            Cerr << "Append WAL: " << key.value() << Endl;
+            if (!WALs.empty() && WALs.back().first == key.value()) {
+                WALs.back().second = std::move(wal);
+            } else {
+                WALs.push_back({std::move(key.value()), std::move(wal)});
+            }
 
-        if (!WALs.empty() && WALs.back().GetMessage(0).GetExpirationTimestampMillisecondsDelta() == wal.GetMessage(0).GetExpirationTimestampMillisecondsDelta()) {
-            WALs.back() = std::move(wal);
-        } else {
-            WALs.push_back(std::move(wal));
+            Deduplicator.Commit();
         }
-
-        Deduplicator.Commit();
     }
 
     void AssertWALLoad() {
         TMessageIdDeduplicator target(PartitionId,TimeProvider, TDuration::Seconds(10));
         for (auto& wal : WALs) {
-            target.ApplyWAL("key-1", std::move(wal));
+            target.ApplyWAL("key-1", std::move(wal.second));
         }
         WALs.clear();
 
@@ -65,7 +64,7 @@ struct TestScenario {
 
     TIntrusivePtr<MockTimeProvider> TimeProvider;
     TMessageIdDeduplicator Deduplicator;
-    std::deque<NKikimrPQ::TMessageDeduplicationIdWAL> WALs;
+    std::deque<std::pair<TString, NKikimrPQ::TMessageDeduplicationIdWAL>> WALs;
 };
 
 
@@ -125,7 +124,7 @@ TEST(TDeduplicatorTest, AddTwoMessages_DifferentTime_DifferentBucket) {
 
     EXPECT_FALSE(scenario.AddMessage("message1", 1).has_value());
     scenario.CreateWAL();
-    scenario.TimeProvider->Tick(TDuration::MilliSeconds(110));
+    scenario.TimeProvider->Tick(TDuration::MilliSeconds(1010));
     EXPECT_FALSE(scenario.AddMessage("message2", 2).has_value());
     scenario.CreateWAL();
 

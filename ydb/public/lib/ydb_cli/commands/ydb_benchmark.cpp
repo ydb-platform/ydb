@@ -114,7 +114,11 @@ TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const 
         return "";
     }
 
-    return (QuerySettings.empty() ? TString() : (JoinSeq("\n", QuerySettings) + "\n")) + JoinSeq('\n', lines);
+    TString result = JoinSeq('\n', lines);
+    if (!QuerySettings.empty()) {
+        result = JoinSeq("\n", QuerySettings) + "\n" + result;
+    }
+    return result;
 }
 
 bool TWorkloadCommandBenchmark::NeedRun(const TString& queryName) const {

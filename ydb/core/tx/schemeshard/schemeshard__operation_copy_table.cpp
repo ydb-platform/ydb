@@ -122,10 +122,10 @@ public:
             NKikimrTxDataShard::TFlatSchemeTransaction oldShardTx;
             context.SS->FillSeqNo(oldShardTx, seqNo);
 
-            auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
-            FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
-
             if (txState->CdcPathId != InvalidPathId) {
+                auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
+                FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
+
                 TPathId oldStreamId = InvalidPathId;
                 TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
                 for (const auto& [name, id] : srcPath.Base()->GetChildren()) {
@@ -154,7 +154,11 @@ public:
                 } else {
                     NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
                 }
+            } else {
+                FillSrcSnapshot(txState, ui64(dstDatashardId), *oldShardTx.MutableSendSnapshot());
+                oldShardTx.SetReadOnly(true);
             }
+
             auto srcEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, oldShardTx.SerializeAsString(), context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, srcDatashardId, srcShardIdx, srcEvent.Release());
         }

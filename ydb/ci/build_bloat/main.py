@@ -232,6 +232,7 @@ def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, 
 
     # we will store "begin events" until we see matching "end"
     source_begin = {}  # path -> timestamp
+    source_stack = []  # stack of paths in open order
 
     for event in obj["traceEvents"]:
         name = event["name"]
@@ -239,14 +240,24 @@ def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, 
         ph = event["ph"]
         ts = event["ts"]
 
-        if name == "Source" and ph == "b": # begin event
+        if name == "Source" and ph == "b":  # begin event
             path = sanitize_path(args["detail"], base_src_dir)
             source_begin[path] = ts
+            source_stack.append(path)
 
-        elif name == "Source" and ph == "e": # end event
-            path = sanitize_path(args["detail"], base_src_dir)
+        elif name == "Source" and ph == "e":  # end event
+            detail = args.get("detail")
+            if detail is not None:
+                path = sanitize_path(detail, base_src_dir)
+            else:
+                assert source_stack, "Source end without any open begin"
+                path = source_stack[-1]
+
             ts_begin = source_begin.pop(path, None)
             assert ts_begin is not None
+
+            if source_stack and source_stack[-1] == path:
+                source_stack.pop()
 
             include_events.append((ts_begin, +1, path))
             include_events.append((ts, -1, path))

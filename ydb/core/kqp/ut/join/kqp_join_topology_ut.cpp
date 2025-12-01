@@ -234,8 +234,8 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     }
 
     void OverrideRepeatedTestConfig(std::string prefix, TArgs args, TRepeatedTestConfig& config) {
-        OverrideWithArg<uint64_t>(prefix + ".MinRepeats", args, config.MinRepeats);
-        OverrideWithArg<uint64_t>(prefix + ".MaxRepeats", args, config.MaxRepeats);
+        OverrideWithArg<ui64>(prefix + ".MinRepeats", args, config.MinRepeats);
+        OverrideWithArg<ui64>(prefix + ".MaxRepeats", args, config.MaxRepeats);
         OverrideWithArg<std::chrono::nanoseconds>(prefix + ".Timeout", args, config.Timeout);
     }
 
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             rng.seed(state->Seed);
         }
 
-        auto numTablesRanged = args.GetArg<uint64_t>("N");
+        auto numTablesRanged = args.GetArg<ui64>("N");
 
         TSchema fullSchema = TSchema::MakeWithEnoughColumns(numTablesRanged.GetLast());
         TString stats = TSchemaStats::MakeRandom(rng, fullSchema, 7, 10).ToJSON();
@@ -466,10 +466,10 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     void RunBenches(TTestContext& ctx, TBenchmarkConfig config, TArgs args) {
         std::string resultType = args.GetStringOrDefault("result", "SE");
 
-        ui64 topologyGenerationRepeats = args.GetArgOrDefault<uint64_t>("gen-n", "1").GetValue();
-        ui64 mcmcRepeats = args.GetArgOrDefault<uint64_t>("mcmc-n", "1").GetValue();
-        ui64 equiJoinKeysGenerationRepeats = args.GetArgOrDefault<uint64_t>("keys-n", "1").GetValue();
-        bool reorder = args.GetArgOrDefault<uint64_t>("reorder", "1").GetValue() != 0;
+        ui64 topologyGenerationRepeats = args.GetArgOrDefault<ui64>("gen-n", "1").GetValue();
+        ui64 mcmcRepeats = args.GetArgOrDefault<ui64>("mcmc-n", "1").GetValue();
+        ui64 equiJoinKeysGenerationRepeats = args.GetArgOrDefault<ui64>("keys-n", "1").GetValue();
+        bool reorder = args.GetArgOrDefault<ui64>("reorder", "1").GetValue() != 0;
 
         std::string topologyName = args.GetStringOrDefault("type", "star");
         auto generateTopology = GetTopology(topologyName);

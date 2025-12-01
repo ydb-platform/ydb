@@ -26,7 +26,7 @@
 
 ## Спиллинг в {{ ydb-short-name }} {#architecture}
 
-{{ ydb-short-name }} реализует механизм спиллинга через **Spilling Service** — [акторный сервис](glossary.md#actor-service), который предоставляет временное хранилище для блобов данных. Спиллинг осуществляется только на [узлах базы данных](glossary.md#database-node). Подробная техническая информация о Spilling Service доступна в разделе [Spilling Service](../contributor/spilling-service.md).
+{{ ydb-short-name }} реализует механизм спиллинга через **Spilling Service** — [акторный сервис](../glossary.md#actor-service), который предоставляет временное хранилище для блобов данных. Спиллинг осуществляется только на [узлах базы данных](../glossary.md#database-node). Подробная техническая информация о Spilling Service доступна в разделе [Spilling Service](../../contributor/spilling-service.md).
 
 ### Типы спиллинга в {{ ydb-short-name }}
 
@@ -74,11 +74,11 @@
 
 ## Взаимодействие с контроллером памяти
 
-При выполнении запросов {{ ydb-short-name }} старается умещаться в заданный лимит памяти, который устанавливается [контроллером памяти](../reference/configuration/memory_controller_config.md). Чтобы продолжать помещаться в этот лимит даже при росте промежуточных вычислений, используется спиллинг. Подробнее см. раздел [Управление памятью](../reference/configuration/table_service_config.md#memory-management).
+При выполнении запросов {{ ydb-short-name }} старается умещаться в заданный лимит памяти, который устанавливается [контроллером памяти](../../reference/configuration/memory_controller_config.md). Чтобы продолжать помещаться в этот лимит даже при росте промежуточных вычислений, используется спиллинг. Подробнее см. раздел [Управление памятью](../../reference/configuration/table_service_config.md#memory-management).
 
 ## См. также
 
-- [Spilling Service](../contributor/spilling-service.md)
-- [Конфигурация спиллинга](../reference/configuration/table_service_config.md)
-- [Мониторинг {{ ydb-short-name }}](../devops/observability/monitoring.md)
-- [Диагностика производительности](../troubleshooting/performance/index.md)
+- [Spilling Service](../../contributor/spilling-service.md)
+- [Конфигурация спиллинга](../../reference/configuration/table_service_config.md)
+- [Мониторинг {{ ydb-short-name }}](../../devops/observability/monitoring.md)
+- [Диагностика производительности](../../troubleshooting/performance/index.md)

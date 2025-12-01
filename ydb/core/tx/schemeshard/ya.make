@@ -343,9 +343,11 @@ PEERDIR(
     library/cpp/html/pcdata
     library/cpp/json
     library/cpp/protobuf/json
+    library/cpp/regex/pcre
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/base
+    ydb/core/backup/regexp
     ydb/core/blob_depot
     ydb/core/blobstorage/base
     ydb/core/blockstore/core

@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
             importSettings
                 .AppendExcludeRegexp("^Table$") // No matching
-                .AppendExcludeRegexp("^dir1$") // Partial match does not prevent from exporting children - only full path match
+                .AppendExcludeRegexp("^dir1$") // Partial match does not prevent from importing children - only full path match
                 .AppendExcludeRegexp("^dir1/Table"); // Matches table in directory
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);

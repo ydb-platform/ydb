@@ -11,6 +11,7 @@ namespace NKikimr::NPQ {
 namespace {
 
 constexpr TDuration BucketSize = TDuration::Seconds(1);
+// Maximum deduplication IDs to keep in memory: assumes ~1000 msg/sec for 5 minute window
 constexpr ui64 MaxDeduplicationIDs = TDuration::Minutes(5).Seconds() * 1000;
 
 TInstant Trim(TInstant value) {
@@ -145,13 +146,15 @@ std::optional<TString> TMessageIdDeduplicator::SerializeTo(NKikimrPQ::TMessageDe
     TInstant lastExpirationTime = TInstant::Zero();
 
     for (size_t i = startIndex; i < Queue.size(); ++i) {
+        auto messageTime = std::max(Queue[i].ExpirationTime, lastExpirationTime);
+        
         auto* message = wal.AddMessage();
         message->SetOffsetDelta(Queue[i].Offset - lastOffset);
         message->SetDeduplicationId(Queue[i].DeduplicationId);
-        message->SetExpirationTimestampMillisecondsDelta(Queue[i].ExpirationTime.MilliSeconds() - lastExpirationTime.MilliSeconds());
+        message->SetExpirationTimestampMillisecondsDelta(messageTime.MilliSeconds() - lastExpirationTime.MilliSeconds());
 
         lastOffset = Queue[i].Offset;
-        lastExpirationTime = Queue[i].ExpirationTime;
+        lastExpirationTime = messageTime;
     }
 
     PendingBucket = {

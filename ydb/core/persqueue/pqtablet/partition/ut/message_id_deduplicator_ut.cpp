@@ -53,9 +53,9 @@ struct TestScenario {
     }
 
     void AssertWALLoad() {
-        TMessageIdDeduplicator target(PartitionId,TimeProvider, TDuration::Seconds(10));
+        TMessageIdDeduplicator target(PartitionId, TimeProvider, TDuration::Seconds(10));
         for (auto& wal : WALs) {
-            target.ApplyWAL("key-1", std::move(wal.second));
+            target.ApplyWAL(std::move(wal.first), std::move(wal.second));
         }
         WALs.clear();
 

@@ -14,8 +14,7 @@ namespace builtins
   {
 
     template <class K, class V, class W, class X>
-    typename __combined<V, X>::type get(types::dict<K, V> const &d, W const &k,
-                                        X const &default_);
+    typename __combined<V, X>::type get(types::dict<K, V> const &d, W const &k, X const &default_);
 
     template <class K, class V, class W>
     types::none<V> get(types::dict<K, V> const &d, W const &k);

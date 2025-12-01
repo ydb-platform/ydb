@@ -12,8 +12,7 @@ namespace operator_
 {
 
   template <class A, class B>
-  auto lshift(A &&a, B &&b) -> decltype(std::forward<A>(a)
-                                        << std::forward<B>(b))
+  auto lshift(A &&a, B &&b) -> decltype(std::forward<A>(a) << std::forward<B>(b))
   {
     return std::forward<A>(a) << std::forward<B>(b);
   }
@@ -25,8 +24,8 @@ namespace operator_
     return b ? false : a;
   }
 
-  DEFINE_ALL_OPERATOR_OVERLOADS_NO_BOOL_IMPL(
-      lshift, <<, (a <= (std::numeric_limits<decltype(b)>::max() >> b)))
+  DEFINE_ALL_OPERATOR_OVERLOADS_NO_BOOL_IMPL(lshift, <<,
+                                             (a <= (std::numeric_limits<decltype(b)>::max() >> b)))
 } // namespace operator_
 PYTHONIC_NS_END
 

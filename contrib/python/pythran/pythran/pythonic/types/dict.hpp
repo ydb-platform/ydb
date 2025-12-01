@@ -26,10 +26,10 @@ namespace types
   {
   }
   template <class I>
-  typename item_iterator_adaptator<I>::value_type
-  item_iterator_adaptator<I>::operator*() const
+  typename item_iterator_adaptator<I>::value_type item_iterator_adaptator<I>::operator*() const
   {
-    auto &&tmp = *base;;
+    auto &&tmp = *base;
+    ;
     return pythonic::types::make_tuple(tmp.first, tmp.second);
   }
 
@@ -40,8 +40,7 @@ namespace types
   }
 
   template <class I>
-  typename key_iterator_adaptator<I>::value_type
-  key_iterator_adaptator<I>::operator*() const
+  typename key_iterator_adaptator<I>::value_type key_iterator_adaptator<I>::operator*() const
   {
     return base->first;
   }
@@ -53,8 +52,7 @@ namespace types
   }
 
   template <class I>
-  typename value_iterator_adaptator<I>::value_type
-  value_iterator_adaptator<I>::operator*() const
+  typename value_iterator_adaptator<I>::value_type value_iterator_adaptator<I>::operator*() const
   {
     return base->second;
   }
@@ -154,8 +152,7 @@ namespace types
   }
 
   template <class K, class V>
-  dict<K, V>::dict(std::initializer_list<value_type> l)
-      : data(l.begin(), l.end())
+  dict<K, V>::dict(std::initializer_list<value_type> l) : data(l.begin(), l.end())
   {
   }
 
@@ -166,8 +163,7 @@ namespace types
 
   template <class K, class V>
   template <class Kp, class Vp>
-  dict<K, V>::dict(dict<Kp, Vp> const &other)
-      : data(other.data->begin(), other.data->end())
+  dict<K, V>::dict(dict<Kp, Vp> const &other) : data(other.data->begin(), other.data->end())
   {
   }
 
@@ -187,8 +183,8 @@ namespace types
   template <class K, class V>
   typename dict<K, V>::const_iterator dict<K, V>::begin() const
   {
-    return key_iterator_adaptator<
-        typename dict<K, V>::container_type::const_iterator>(data->begin());
+    return key_iterator_adaptator<typename dict<K, V>::container_type::const_iterator>(
+        data->begin());
   }
 
   template <class K, class V>
@@ -200,92 +196,84 @@ namespace types
   template <class K, class V>
   typename dict<K, V>::const_iterator dict<K, V>::end() const
   {
-    return key_iterator_adaptator<
-        typename dict<K, V>::container_type::const_iterator>(data->end());
+    return key_iterator_adaptator<typename dict<K, V>::container_type::const_iterator>(data->end());
   }
 
   template <class K, class V>
   typename dict<K, V>::item_iterator dict<K, V>::item_begin()
   {
-    return item_iterator_adaptator<
-        typename dict<K, V>::container_type::iterator>(data->begin());
+    return item_iterator_adaptator<typename dict<K, V>::container_type::iterator>(data->begin());
   }
 
   template <class K, class V>
   typename dict<K, V>::item_const_iterator dict<K, V>::item_begin() const
   {
-    return item_iterator_adaptator<
-        typename dict<K, V>::container_type::const_iterator>(data->begin());
+    return item_iterator_adaptator<typename dict<K, V>::container_type::const_iterator>(
+        data->begin());
   }
 
   template <class K, class V>
   typename dict<K, V>::item_iterator dict<K, V>::item_end()
   {
-    return item_iterator_adaptator<
-        typename dict<K, V>::container_type::iterator>(data->end());
+    return item_iterator_adaptator<typename dict<K, V>::container_type::iterator>(data->end());
   }
 
   template <class K, class V>
   typename dict<K, V>::item_const_iterator dict<K, V>::item_end() const
   {
-    return item_iterator_adaptator<
-        typename dict<K, V>::container_type::const_iterator>(data->end());
+    return item_iterator_adaptator<typename dict<K, V>::container_type::const_iterator>(
+        data->end());
   }
 
   template <class K, class V>
   typename dict<K, V>::key_iterator dict<K, V>::key_begin()
   {
-    return key_iterator_adaptator<
-        typename dict<K, V>::container_type::iterator>(data->begin());
+    return key_iterator_adaptator<typename dict<K, V>::container_type::iterator>(data->begin());
   }
 
   template <class K, class V>
   typename dict<K, V>::key_const_iterator dict<K, V>::key_begin() const
   {
-    return key_iterator_adaptator<
-        typename dict<K, V>::container_type::const_iterator>(data->begin());
+    return key_iterator_adaptator<typename dict<K, V>::container_type::const_iterator>(
+        data->begin());
   }
 
   template <class K, class V>
   typename dict<K, V>::key_iterator dict<K, V>::key_end()
   {
-    return key_iterator_adaptator<
-        typename dict<K, V>::container_type::iterator>(data->end());
+    return key_iterator_adaptator<typename dict<K, V>::container_type::iterator>(data->end());
   }
 
   template <class K, class V>
   typename dict<K, V>::key_const_iterator dict<K, V>::key_end() const
   {
-    return key_iterator_adaptator<
-        typename dict<K, V>::container_type::const_iterator>(data->end());
+    return key_iterator_adaptator<typename dict<K, V>::container_type::const_iterator>(data->end());
   }
 
   template <class K, class V>
   typename dict<K, V>::value_iterator dict<K, V>::value_begin()
   {
-    return value_iterator_adaptator<
-        typename dict<K, V>::container_type::iterator>(data->begin());
+    return value_iterator_adaptator<typename dict<K, V>::container_type::iterator>(data->begin());
   }
 
   template <class K, class V>
   typename dict<K, V>::value_const_iterator dict<K, V>::value_begin() const
   {
-    return value_iterator_adaptator<
-        typename dict<K, V>::container_type::const_iterator>(data->begin());
+    return value_iterator_adaptator<typename dict<K, V>::container_type::const_iterator>(
+        data->begin());
   }
 
   template <class K, class V>
   typename dict<K, V>::value_iterator dict<K, V>::value_end()
   {
-    return value_iterator_adaptator<
-        typename dict<K, V>::container_type::iterator>(data->end());
+    return value_iterator_adaptator<typename dict<K, V>::container_type::iterator>(data->end());
   }
 
   template <class K, class V>
   typename dict<K, V>::value_const_iterator dict<K, V>::value_end() const
   {
-    return value_iterator_adaptator<
-        typename dict<K, V>::container_type::const_iterator>(data->end());
+    return value_iterator_adaptator<typename dict<K, V>::container_type::const_iterator>(
+        data->end());
   }
 
   // dict interface
@@ -325,8 +313,8 @@ namespace types
   template <class K, class V>
   typename dict<K, V>::item_const_iterator dict<K, V>::find(K const &key) const
   {
-    return item_iterator_adaptator<
-        typename dict<K, V>::container_type::const_iterator>(data->find(key));
+    return item_iterator_adaptator<typename dict<K, V>::container_type::const_iterator>(
+        data->find(key));
   }
 
   template <class K, class V>

@@ -335,7 +335,7 @@ TClientContextPtr TClientRequest::CreateClientContext()
     if (traceContext) {
         auto* tracingExt = Header().MutableExtension(NRpc::NProto::TRequestHeader::tracing_ext);
         ToProto(tracingExt, traceContext, SendBaggage_ && TDispatcher::Get()->ShouldSendTracingBaggage());
-        if (traceContext->IsSampled()) {
+        if (traceContext->IsRecorded()) {
             TraceRequest(traceContext);
         }
     }
@@ -603,6 +603,9 @@ void TClientResponse::Finish(const TError& error)
 void TClientResponse::TraceResponse()
 {
     if (const auto& traceContext = ClientContext_->GetTraceContext()) {
+        if (!Address_.empty() && traceContext->IsRecorded()) {
+            traceContext->AddTag(EndpointAddressAnnotation, Address_);
+        }
         traceContext->Finish();
     }
 }

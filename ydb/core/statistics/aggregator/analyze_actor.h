@@ -23,13 +23,20 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     // StateQuery
 
     struct TColumnDesc {
-        explicit TColumnDesc(ui32 tag, ui32 seq)
-        : Tag(tag), Seq(seq)
+        ui32 Tag;
+        std::optional<ui32> CountDistinctSeq;
+        std::optional<ui32> CmsSeq;
+
+        explicit TColumnDesc(ui32 tag)
+            : Tag(tag)
         {}
 
-        ui32 Tag;
-        ui32 Seq;
+        TString ExtractSimpleStats(ui64 count, const TVector<NYdb::TValue>& aggColumns) const;
+        // Precondition: CmsSeq is non-null.
+        TString ExtractCMS(const TVector<NYdb::TValue>& aggColumns) const;
     };
+
+    std::optional<ui32> CountSeq;
     TVector<TColumnDesc> Columns;
 
     struct TEvPrivate {

@@ -215,7 +215,6 @@ void TAnalyzeActor::FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus
     PassAway();
 }
 
-
 void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     const auto& request = *ev->Get()->Request;
     Y_ABORT_UNLESS(request.ResultSet.size() == 1);
@@ -245,7 +244,16 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     TSelectBuilder builder;
 
     // TODO: many statistics types
-    builder.AddBuiltinAggregation({}, "count");
+    CountSeq = builder.AddBuiltinAggregation({}, "count");
+
+    auto addColumn = [&](ui32 tag, const TString& name) {
+        Columns.emplace_back(tag);
+        // TODO: escape column names
+        Columns.back().CountDistinctSeq = builder.AddBuiltinAggregation(
+            name, "HLL");
+        Columns.back().CmsSeq = builder.AddUDAFAggregation(
+            name, "CountMinSketch", CMS_WIDTH, CMS_DEPTH);
+    };
     if (!ColumnTags.empty()) {
         for (const auto& colTag : ColumnTags) {
             auto colIt = columnNames.find(colTag);
@@ -253,17 +261,11 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
                 // Column probably already deleted, skip it.
                 continue;
             }
-
-            // TODO: escape column names
-            Columns.emplace_back(
-                colTag,
-                builder.AddUDAFAggregation(colIt->second, "CountMinSketch", CMS_WIDTH, CMS_DEPTH));
+            addColumn(colTag, colIt->second);
         }
     } else {
         for (const auto& [tag, name] : columnNames) {
-            Columns.emplace_back(
-                tag,
-                builder.AddUDAFAggregation(name, "CountMinSketch", CMS_WIDTH, CMS_DEPTH));
+            addColumn(tag, name);
         }
     }
 
@@ -273,6 +275,35 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     Register(actor.release());
 }
 
+TString TAnalyzeActor::TColumnDesc::ExtractSimpleStats(
+        ui64 count, const TVector<NYdb::TValue>& aggColumns) const {
+    NKikimrStat::TSimpleColumnStatistics result;
+    result.SetCount(count);
+
+    NYdb::TValueParser hllVal(aggColumns.at(CountDistinctSeq.value()));
+    ui64 countDistinct = hllVal.GetOptionalUint64().value_or(0);
+    result.SetCountDistinct(countDistinct);
+
+    return result.SerializeAsString();
+}
+
+TString TAnalyzeActor::TColumnDesc::ExtractCMS(const TVector<NYdb::TValue>& aggColumns) const {
+    TString data;
+    NYdb::TValueParser val(aggColumns.at(CmsSeq.value()));
+    val.OpenOptional();
+    if (!val.IsNull()) {
+        const auto& bytes = val.GetBytes();
+        data.assign(bytes.data(), bytes.size());
+    } else {
+        auto defaultVal = std::unique_ptr<TCountMinSketch>(
+            TCountMinSketch::Create(CMS_WIDTH, CMS_DEPTH));
+        auto bytes = defaultVal->AsStringBuf();
+        data.assign(bytes.data(), bytes.size());
+    }
+    return data;
+}
+
+
 void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     const auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
@@ -281,25 +312,21 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     }
 
     std::vector<TStatisticsItem> items;
+    NYdb::TValueParser val(result.AggColumns.at(CountSeq.value()));
+    ui64 rowCount = val.GetUint64();
+
     for (const auto& col : Columns) {
-        TString data;
-
-        NYdb::TValueParser val(result.AggColumns.at(col.Seq));
-        val.OpenOptional();
-        if (!val.IsNull()) {
-            const auto& bytes = val.GetBytes();
-            data.assign(bytes.data(), bytes.size());
-        } else {
-            auto defaultVal = std::unique_ptr<TCountMinSketch>(
-                TCountMinSketch::Create(CMS_WIDTH, CMS_DEPTH));
-            auto bytes = defaultVal->AsStringBuf();
-            data.assign(bytes.data(), bytes.size());
-        }
-
         items.emplace_back(
             col.Tag,
-            NKikimr::NStat::COUNT_MIN_SKETCH,
-            data);
+            NKikimr::NStat::SIMPLE_COLUMN,
+            col.ExtractSimpleStats(rowCount, result.AggColumns));
+
+        if (col.CmsSeq) {
+            items.emplace_back(
+                col.Tag,
+                NKikimr::NStat::COUNT_MIN_SKETCH,
+                col.ExtractCMS(result.AggColumns));
+        }
     }
 
     auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(std::move(items));

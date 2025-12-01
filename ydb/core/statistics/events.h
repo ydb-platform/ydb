@@ -27,7 +27,7 @@ struct TStatCountMinSketch {
 
 enum EStatType {
     SIMPLE = 0,
-    HYPER_LOG_LOG = 1,
+    SIMPLE_COLUMN = 1,
     COUNT_MIN_SKETCH = 2,
 };
 

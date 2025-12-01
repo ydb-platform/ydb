@@ -354,7 +354,7 @@ struct TTableAggregatedStats {
 struct TAggregatedStats : public TTableAggregatedStats {
     THashMap<TPathId, TTableAggregatedStats> TableStats;
 
-    void UpdateTableStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now);
+    void UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now);
 };
 
 struct TSubDomainInfo;

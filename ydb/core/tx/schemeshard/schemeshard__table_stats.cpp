@@ -368,7 +368,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                 LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "add stats for exists table with pathId=" << tablePathId);
 
-                Self->ColumnTables.GetVerifiedPtr(tablePathId)->UpdateTableStats(&diskSpaceUsageDelta, shardIdx, tablePathId, newTableStats, now);
+                Self->ColumnTables.GetVerifiedPtr(tablePathId)->UpdateTableStats(shardIdx, tablePathId, newTableStats, now);
             } else {
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "failed add stats for table with pathId=" << tablePathId);

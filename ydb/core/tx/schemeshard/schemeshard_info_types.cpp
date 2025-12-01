@@ -277,27 +277,33 @@ void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartiti
 }
 
 void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& diskSpaceUsageDelta) {
+    // just (in)sanity check, diskSpaceUsageDelta should have at least 1 element
+    if (diskSpaceUsageDelta.empty()) {
+        return;
+    }
     // see filling of diskSpaceUsageDelta in UpdateShardStats()
-    for (const auto& [poolKind, delta] : diskSpaceUsageDelta) {
-        if (poolKind.empty()) {
-            // total space
-            DiskSpaceUsage.Tables.DataSize += delta.DataSize;
-            counters->ChangeDiskSpaceTablesDataBytes(delta.DataSize);
+    // total space usage, index 0
+    {
+        const auto& [poolKind, delta] = diskSpaceUsageDelta[0];
 
-            DiskSpaceUsage.Tables.IndexSize += delta.IndexSize;
-            counters->ChangeDiskSpaceTablesIndexBytes(delta.IndexSize);
+        DiskSpaceUsage.Tables.DataSize += delta.DataSize;
+        counters->ChangeDiskSpaceTablesDataBytes(delta.DataSize);
 
-            i64 oldTotalBytes = DiskSpaceUsage.Tables.TotalSize;
-            DiskSpaceUsage.Tables.TotalSize = DiskSpaceUsage.Tables.DataSize + DiskSpaceUsage.Tables.IndexSize;
-            i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize;
-            counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes);
-        } else {
-            // space separated by storage pool kinds
-            auto& r = DiskSpaceUsage.StoragePoolsUsage[poolKind];
-            r.DataSize += delta.DataSize;
-            r.IndexSize += delta.IndexSize;
-            counters->AddDiskSpaceTables(GetUserFacingStorageType(poolKind), delta.DataSize, delta.IndexSize);
-        }
+        DiskSpaceUsage.Tables.IndexSize += delta.IndexSize;
+        counters->ChangeDiskSpaceTablesIndexBytes(delta.IndexSize);
+
+        i64 oldTotalBytes = DiskSpaceUsage.Tables.TotalSize;
+        DiskSpaceUsage.Tables.TotalSize = DiskSpaceUsage.Tables.DataSize + DiskSpaceUsage.Tables.IndexSize;
+        i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize;
+        counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes);
+    }
+    // space usage by storage pool kinds, from index 1 onwards
+    for (size_t i = 1; i < diskSpaceUsageDelta.size(); ++i) {
+        const auto& [poolKind, delta] = diskSpaceUsageDelta[i];
+        auto& r = DiskSpaceUsage.StoragePoolsUsage[poolKind];
+        r.DataSize += delta.DataSize;
+        r.IndexSize += delta.IndexSize;
+        counters->AddDiskSpaceTables(GetUserFacingStorageType(poolKind), delta.DataSize, delta.IndexSize);
     }
 }
 
@@ -1851,10 +1857,9 @@ void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsag
             diskSpaceUsageDelta->emplace_back(poolKind, delta);
         }
     }
-    for (const auto& [poolKind, delta] : *diskSpaceUsageDelta) {
-        if (poolKind.empty()) {
-            continue;
-        }
+    // from index 1 onwards (as index 0 holds total space delta)
+    for (size_t i = 1; i < diskSpaceUsageDelta->size(); ++i) {
+        const auto& [poolKind, delta] = (*diskSpaceUsageDelta)[i];
         auto& r = Aggregated.StoragePoolsStats[poolKind];
         r.DataSize += delta.DataSize;
         r.IndexSize += delta.IndexSize;
@@ -1909,10 +1914,11 @@ void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsag
     UpdatedStats.insert(datashardIdx);
 }
 
-void TAggregatedStats::UpdateTableStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {
+void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {
     auto& tableStats = TableStats[pathId];
     tableStats.PartitionStats[shardIdx]; // insert if none
-    tableStats.UpdateShardStats(diskSpaceUsageDelta, shardIdx, newStats, now);
+    TDiskSpaceUsageDelta unused;
+    tableStats.UpdateShardStats(&unused, shardIdx, newStats, now);
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {

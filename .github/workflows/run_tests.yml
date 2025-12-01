@@ -93,7 +93,7 @@ jobs:
         with:
           sparse-checkout: |
             .github/config/stable_branches.json
-            .github/actions/run_tests/
+            .github/scripts/run_tests_pr_comment.py
 
       - name: Set branches
         id: set-branches
@@ -177,7 +177,7 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
           python3 -m pip install PyGithub -q
-          python3 ./.github/actions/run_tests/pr_comment.py start
+          python3 ./.github/scripts/run_tests_pr_comment.py start
 
   run_tests:
     needs: prepare
@@ -253,4 +253,4 @@ jobs:
           TEST_STATUS: ${{ steps.run_tests.outcome }}
         run: |
           python3 -m pip install PyGithub -q
-          python3 ./.github/actions/run_tests/pr_comment.py complete
+          python3 ./.github/scripts/run_tests_pr_comment.py complete

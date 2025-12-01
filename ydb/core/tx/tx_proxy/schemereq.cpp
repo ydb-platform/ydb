@@ -484,6 +484,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpTruncateTable:
             return *modifyScheme.MutableTruncateTable()->MutableTableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateTestShard:
+            return *modifyScheme.MutableCreateTestShard()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpDropTestShard:
+            return *modifyScheme.MutableDrop()->MutableName();
         }
         Y_UNREACHABLE();
     }
@@ -516,6 +522,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSysView:
         case NKikimrSchemeOp::ESchemeOpCreateSecret:
         case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
+        case NKikimrSchemeOp::ESchemeOpCreateTestShard:
             return true;
         default:
             return false;
@@ -904,6 +911,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
         case NKikimrSchemeOp::ESchemeOpDropSecret:
         case NKikimrSchemeOp::ESchemeOpDropStreamingQuery:
+        case NKikimrSchemeOp::ESchemeOpDropTestShard:
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -967,6 +975,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
         case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
+        case NKikimrSchemeOp::ESchemeOpCreateTestShard:
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;

@@ -700,4 +700,5 @@ message TTestShardControlRequest {
 }
 
 message TTestShardControlResponse {
+    optional uint64 TabletId = 1;
 }

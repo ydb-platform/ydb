@@ -283,6 +283,10 @@ enum ESimpleCounters {
     COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_RUNNING = 219 [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueRunning"}];
 
     COUNTER_IN_FLIGHT_OPS_TxPrepareIndexValidation = 220 [(CounterOpts) = {Name: "InFlightOps/PrepareIndexValidation"}];
+
+    COUNTER_TEST_SHARD_COUNT = 221                     [(CounterOpts) = {Name: "TestShardCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateTestShard = 222      [(CounterOpts) = {Name: "InFlightOps/CreateTestShard"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropTestShard = 223        [(CounterOpts) = {Name: "InFlightOps/DropTestShard"}];
 }
 
 enum ECumulativeCounters {
@@ -465,6 +469,9 @@ enum ECumulativeCounters {
     COUNTER_FORCED_COMPACTION_LOANED = 139        [(CounterOpts) = {Name: "ForcedCompactionLoaned"}];
 
     COUNTER_FINISHED_OPS_TxPrepareIndexValidation = 140 [(CounterOpts) = {Name: "FinishedOps/PrepareIndexValidation"}];
+
+    COUNTER_FINISHED_OPS_TxCreateTestShard = 141      [(CounterOpts) = {Name: "FinishedOps/CreateTestShard"}];
+    COUNTER_FINISHED_OPS_TxDropTestShard = 142        [(CounterOpts) = {Name: "FinishedOps/DropTestShard"}];
 }
 
 enum EPercentileCounters {
@@ -729,4 +736,6 @@ enum ETxTypes {
     TXTYPE_PROGRESS_FORCED_COMPACTION = 115 [(TxTypeOpts) = {Name: "TxProgressForcedCompaction"}];
 
     TXTYPE_USER_HASHES_MIGRATION = 116 [(TxTypeOpts) = {Name: "TTxUserHashesMigration"}];
+
+    TXTYPE_TEST_SHARD_CONTROL = 117 [(TxTypeOpts) = {Name: "TxTestShardControl"}];
 }

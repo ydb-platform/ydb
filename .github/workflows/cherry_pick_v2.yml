@@ -9,7 +9,7 @@ on:
           List of commit SHAs or PR numbers to cherry-pick.
           Can be represented as a full or short commit SHA or a PR number.
           Separated by space, comma or line end.
-          Example: "sha5682 123245"
+          Example: "sha5682 12345"
         required: true
       target_branches:
         default: ""

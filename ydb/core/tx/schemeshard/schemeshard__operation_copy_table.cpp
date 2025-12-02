@@ -149,7 +149,7 @@ public:
                     }
 
                     context.SS->DescribeCdcStream(txState->CdcPathId, newStreamName, newStreamInfo, *notice.MutableNewStreamDescription());
-                    notice.SetTableSchemaVersion(context.SS->Tables.at(txState->SourcePathId)->AlterVersion);
+                    notice.SetTableSchemaVersion(context.SS->Tables.at(txState->SourcePathId)->AlterVersion + 1);
                 } else {
                     NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
                 }
@@ -258,7 +258,7 @@ public:
                 if (context.SS->Tables.contains(srcPathId)) {
                     auto srcTable = context.SS->Tables.at(srcPathId);
                     srcTable->AlterVersion += 1;
-                    context.SS->PersistTableAlterVersion(db, srcPathId, table);
+                    context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
                 }
 
                 if (context.SS->CdcStreams.contains(txState->CdcPathId)) {

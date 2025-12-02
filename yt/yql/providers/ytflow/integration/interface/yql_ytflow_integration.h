@@ -6,7 +6,9 @@
 
 
 namespace google::protobuf {
-    class Any;
+
+class Any;
+
 } // namespace google::protobuf
 
 
@@ -18,13 +20,13 @@ public:
 
     // Nothing if callable is not for reading,
     // false if callable is for reading and there are some errors (they are added to ctx),
-    // true if callable is for reading and no issues occured.
+    // true if callable is for reading and no issues occurred.
     virtual TMaybe<bool> CanRead(const TExprNode& read, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx) = 0;
 
     // Nothing if callable is not for writing,
     // false if callable is for writing and there are some errors (they are added to ctx),
-    // true if callable is for writing and no issues occured.
+    // true if callable is for writing and no issues occurred.
     virtual TMaybe<bool> CanWrite(const TExprNode& write, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr WrapWrite(const TExprNode::TPtr& write, TExprContext& ctx) = 0;
 

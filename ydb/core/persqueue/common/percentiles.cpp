@@ -66,23 +66,6 @@ const TVector<std::pair<ui64, TString>> SLOW_LATENCY_MS_INTERVALS = {
 };
 
 const TVector<std::pair<ui64, TString>> SIZE_INTERVALS = {
-    {1_KB, "1kb"},
-    {5_KB, "5kb"},
-    {10_KB, "10kb"},
-    {20_KB, "20kb"},
-    {50_KB, "50kb"},
-    {100_KB, "100kb"},
-    {200_KB, "200kb"},
-    {512_KB, "512kb"},
-    {1024_KB, "1024kb"},
-    {2048_KB,"2048kb"},
-    {5120_KB, "5120kb"},
-    {10240_KB, "10240kb"},
-    {65536_KB, "65536kb"},
-    {999'999'999, "99999999kb"}
-};
-
-const TVector<std::pair<ui64, TString>> SIZE_BYTES_INTERVALS = {
     {1024, "1024"},
     {5120, "5120"},
     {10'240, "10240"},
@@ -97,6 +80,23 @@ const TVector<std::pair<ui64, TString>> SIZE_BYTES_INTERVALS = {
     {10'485'760, "10485760"},
     {67'108'864, "67108864"},
     {999'999'999, "99999999"}
+};
+
+const TVector<std::pair<ui64, TString>> SIZE_KB_INTERVALS = {
+    {1_KB, "1kb"},
+    {5_KB, "5kb"},
+    {10_KB, "10kb"},
+    {20_KB, "20kb"},
+    {50_KB, "50kb"},
+    {100_KB, "100kb"},
+    {200_KB, "200kb"},
+    {512_KB, "512kb"},
+    {1024_KB, "1024kb"},
+    {2048_KB,"2048kb"},
+    {5120_KB, "5120kb"},
+    {10240_KB, "10240kb"},
+    {65536_KB, "65536kb"},
+    {999'999'999, "99999999kb"}
 };
 
 }

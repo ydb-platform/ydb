@@ -13,6 +13,6 @@ extern const TVector<std::pair<ui64, TString>> SLOW_LATENCY_INTERVALS;
 extern const TVector<std::pair<ui64, TString>> SLOW_LATENCY_MS_INTERVALS;
 
 extern const TVector<std::pair<ui64, TString>> SIZE_INTERVALS;
-extern const TVector<std::pair<ui64, TString>> SIZE_BYTES_INTERVALS;
+extern const TVector<std::pair<ui64, TString>> SIZE_KB_INTERVALS;
 
 }

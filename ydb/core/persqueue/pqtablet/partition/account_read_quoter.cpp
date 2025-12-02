@@ -196,7 +196,7 @@ void TAccountReadQuoter::InitCountersImpl(const TActorContext& ctx) {
                 {"sensor", "ConsumerReadQuotaWait"}
             },
             "Interval",
-            FAST_LATENCY_INTERVALS,
+            FAST_LATENCY_MS_INTERVALS,
             true
         ));
     }

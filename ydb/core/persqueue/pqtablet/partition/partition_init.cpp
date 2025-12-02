@@ -1257,7 +1257,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
     {
         std::unique_ptr<TPercentileCounter> percentileCounter(new TPercentileCounter(
             subGroup, labels, {{"sensor", "MessageSize" + suffix}}, "Size",
-            SIZE_INTERVALS, true));
+            SIZE_KB_INTERVALS, true));
 
         MessageSize.Setup(IsSupportive(), std::move(percentileCounter));
     }
@@ -1339,7 +1339,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         std::unique_ptr<TPercentileCounter> percentileCounter(new TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), {},
             subgroups, "bin",
-            SIZE_BYTES_INTERVALS, true));
+            SIZE_INTERVALS, true));
         MessageSize.Setup(IsSupportive(), std::move(percentileCounter));
     }
 

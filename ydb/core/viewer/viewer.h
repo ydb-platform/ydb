@@ -176,6 +176,15 @@ struct TRequestState {
         return {};
     }
 
+    bool Accepts(const TString& type) const {
+        TString acceptHeader = GetHeader("Accept");
+        if (acceptHeader.empty()) {
+            return false;
+        }
+        TVector<TString> acceptedTypes = StringSplitter(acceptHeader).Split(',');
+        return std::find(acceptedTypes.begin(), acceptedTypes.end(), type) != acceptedTypes.end();
+    }
+
     explicit operator bool() const {
         return Request.index() != 0;
     }

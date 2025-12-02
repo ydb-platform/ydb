@@ -7,7 +7,7 @@ from github import Github, Auth as GithubAuth
 from github.PullRequest import PullRequest
 
 
-def update_pr_comment_text(pr: PullRequest, build_preset: str, run_number: int, color: str, text: str, rewrite: bool):
+def update_pr_comment_text(pr: PullRequest, build_preset: str, run_number: int, color: str, text: str, rewrite: bool, no_timestamp: bool = False):
     header = f"<!-- status pr={pr.number}, preset={build_preset}, run={run_number} -->"
 
     body = comment = None
@@ -22,9 +22,12 @@ def update_pr_comment_text(pr: PullRequest, build_preset: str, run_number: int, 
     if body is None:
         body = [header]
 
-    indicator = f":{color}_circle:"
-    timestamp_str = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-    body.append(f"{indicator} `{timestamp_str}` {text}")
+    if no_timestamp:
+        body.append(text)
+    else:
+        indicator = f":{color}_circle:"
+        timestamp_str = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        body.append(f"{indicator} `{timestamp_str}` {text}")
 
     body = "\n".join(body)
 
@@ -40,6 +43,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rewrite", dest="rewrite", action="store_true")
     parser.add_argument("--color", dest="color", default="white")
+    parser.add_argument("--no-timestamp", dest="no_timestamp", action="store_true", help="Skip adding timestamp to comment")
     parser.add_argument("text", type=argparse.FileType("r"), nargs="?", default="-")
 
     args = parser.parse_args()
@@ -81,7 +85,7 @@ def main():
         # and 'echo | comment-pr.py' leads to an extra newline  
         text = text[:-1]
 
-    update_pr_comment_text(pr, build_preset, run_number, color, text, args.rewrite)
+    update_pr_comment_text(pr, build_preset, run_number, color, text, args.rewrite, args.no_timestamp)
 
 
 if __name__ == "__main__":

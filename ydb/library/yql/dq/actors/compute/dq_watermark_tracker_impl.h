@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 #include <util/system/types.h>
@@ -15,9 +16,21 @@ namespace NYql::NDq {
 template <typename TInputKey>
 struct TDqWatermarkTrackerImpl {
 public:
-    explicit TDqWatermarkTrackerImpl(const TString& logPrefix)
+    explicit TDqWatermarkTrackerImpl(const TString& logPrefix, const ::NMonitoring::TDynamicCounterPtr& counters = {})
         : LogPrefix_(logPrefix)
+        , Counters_(counters)
     {}
+
+    ~TDqWatermarkTrackerImpl() {
+        if (IdleInputs_) {
+            size_t idleableCount = 0;
+            for (auto& [_, data]: Data_) {
+                idleableCount += (data.IdleTimeout != TDuration::Max());
+            }
+            Y_DEBUG_ABORT_UNLESS(idleableCount >= ExpiresQueue_.size());
+            IdleInputs_->Sub(idleableCount - ExpiresQueue_.size());
+        }
+    }
 
     void SetLogPrefix(const TString& logPrefix) {
         LogPrefix_ = logPrefix;
@@ -57,6 +70,7 @@ public:
             if (rec.empty()) {
                 WATERMARK_LOG_T("Unidle " << it->first << " got " << watermark << " > " << data.Watermark);
                 WatermarksQueue_.emplace(watermark, it);
+                IdleInputs_->Dec();
             } else {
                 WATERMARK_LOG_T("Update " << it->first << " watermark from " << rec.value().Time << " to " << watermark);
                 rec.value().Time = watermark;
@@ -69,6 +83,9 @@ public:
             if (inserted) {
                 //updated = true;
                 WATERMARK_LOG_T("Unidle " << it->first << " got " << watermark << " <= " << data.Watermark);
+                if (IdleInputs_) {
+                    IdleInputs_->Dec();
+                }
             }
         } else {
             Y_DEBUG_ABORT_UNLESS(WatermarksQueue_.contains(TWatermarksQueueItem { data.Watermark, it }));
@@ -88,6 +105,10 @@ public:
             data.ExpiresAt = systemTime + idleTimeout;
             auto [_, inserted] = ExpiresQueue_.emplace(data.ExpiresAt, it);
             Y_DEBUG_ABORT_UNLESS(inserted);
+            if (Counters_ && !IdleEvents_) {
+                IdleEvents_ = Counters_->GetCounter("WatermarksIdleEvents", true);
+                IdleInputs_ = Counters_->GetCounter("WatermarksIdleInputs");
+            }
         }
         {
             auto [_, inserted] = WatermarksQueue_.emplace(Nothing(), it);
@@ -105,7 +126,10 @@ public:
         WatermarksQueue_.erase(TWatermarksQueueItem { data.Watermark, it });
         // note: erases nothing if input was idle
         if (data.IdleTimeout != TDuration::Max()) {
-            ExpiresQueue_.erase(TExpiresQueueItem { data.ExpiresAt, it });
+            auto removed = ExpiresQueue_.erase(TExpiresQueueItem { data.ExpiresAt, it });
+            if (!removed && IdleInputs_) {
+                IdleInputs_->Dec();
+            }
             // note: erases nothing if input was idle
         }
         Data_.erase(it);
@@ -124,6 +148,10 @@ public:
            auto removed = WatermarksQueue_.erase(TWatermarksQueueItem { data.Watermark, it->Iterator } );
            Y_DEBUG_ABORT_UNLESS(removed); // any partition in ExpiresQueue_ must have matching record in WatermarksQueue_
            it = ExpiresQueue_.erase(it);
+            if (IdleInputs_) {
+                IdleInputs_->Inc();
+                IdleEvents_->Inc();
+            }
         }
 
         return RecalcWatermark();
@@ -230,6 +258,10 @@ private:
     TMaybe<TInstant> Watermark_;
     TString LogPrefix_;
     std::deque<TInstant> InflyIdlenessChecks_;
+
+    const NMonitoring::TDynamicCounterPtr Counters_;
+    NMonitoring::TDynamicCounters::TCounterPtr IdleEvents_;
+    NMonitoring::TDynamicCounters::TCounterPtr IdleInputs_;
 };
 #undef WATERMARK_LOG_T
 #undef WATERMARK_LOG_D

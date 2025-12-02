@@ -632,7 +632,7 @@ private:
             SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
             SourceParams.GetWatermarks().GetIdleTimeoutUs() :
             lateArrivalDelayUs;
-        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleTimeoutUs));
+        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleTimeoutUs), Metrics.Counters ? Metrics.SubGroup : nullptr);
     }
 
     void SchedulePartitionIdlenessCheck(TInstant at) override {

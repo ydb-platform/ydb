@@ -170,11 +170,11 @@ runs:
           ulimit -c 0
         fi
 
+        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+
         # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
         ORIGINAL_HEAD=$(git rev-parse HEAD)
         echo "ORIGINAL_HEAD=$ORIGINAL_HEAD" >> $GITHUB_ENV
-
-        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")

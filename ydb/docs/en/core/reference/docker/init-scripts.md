@@ -1,6 +1,6 @@
 # Custom initialization scripts
 
-The {{ ydb-short-name }} Docker container supports custom initialization scripts that allow you to automate database setup tasks. This feature is inspired by the PostgreSQL/Bitnami initialization pattern.
+The {{ ydb-short-name }} Docker container supports custom initialization scripts that allow you to automate database setup tasks.
 
 ## Script directories
 
@@ -11,19 +11,24 @@ There are two directories for placing custom scripts:
 | `/preinit.d` | Scripts in this directory are executed on every container start, **before** the {{ ydb-short-name }} server starts. |
 | `/init.d` | Scripts in this directory are executed only **once** after a successful {{ ydb-short-name }} server start. A marker file is created to prevent re-execution on subsequent container restarts. |
 
+### Understanding preinit vs init
+
+- **preinit.d**: Executed on every container start, before the {{ ydb-short-name }} server starts. Useful for setting environment variables, configuring logging, or other preparatory tasks that might need to be done each time the container starts.
+- **init.d**: Executed only once after a successful {{ ydb-short-name }} server start. Example: creating database structure (tables, indexes) and inserting initial data.
+
 ## Supported file types
 
 ### Pre-init scripts (`/preinit.d`)
 
 | Extension | Description |
 |---|---|
-| `.sh` | Shell scripts. If the script is executable, it is run directly. Otherwise, it is sourced, allowing it to modify environment variables for subsequent scripts. |
+| `.sh` | Shell scripts. If the script is executable, it is run directly. Otherwise, it is [sourced](https://bash.cyberciti.biz/guide/Source_command), allowing it to modify environment variables for subsequent scripts. |
 
 ### Init scripts (`/init.d`)
 
 | Extension | Description |
 |---|---|
-| `.sh` | Shell scripts. If the script is executable, it is run directly. Otherwise, it is sourced. |
+| `.sh` | Shell scripts. If the script is executable, it is run directly. Otherwise, it is [sourced](https://bash.cyberciti.biz/guide/Source_command). |
 | `.sql` | SQL files. The contents are executed using the YDB YQL command-line interface. |
 | `.sql.gz` | Gzip-compressed SQL files. The contents are decompressed and executed. |
 
@@ -44,8 +49,8 @@ You can customize the script directories using environment variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `YBD_PREINITSCRIPTS_DIR` | `/preinit.d` | Path to the pre-init scripts directory |
-| `YBD_INITSCRIPTS_DIR` | `/init.d` | Path to the init scripts directory |
+| `YDB_PREINITSCRIPTS_DIR` | `/preinit.d` | Path to the pre-init scripts directory |
+| `YDB_INITSCRIPTS_DIR` | `/init.d` | Path to the init scripts directory |
 
 ## Error handling
 
@@ -61,16 +66,15 @@ Create a shell script to configure database settings:
 #!/bin/bash
 # /init.d/01-setup.sh
 echo "Setting up database..."
-/ydb --no-discovery yql -s "CREATE TABLE test (id Uint64, PRIMARY KEY (id));"
+/ydb --no-discovery sql -s "CREATE TABLE test (id Uint64, PRIMARY KEY (id));"
 ```
 
 Mount the script when starting the container:
-
 ```bash
 docker run -d \
     --name ydb-local \
     -v $(pwd)/init.d:/init.d \
-    {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
+    {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}
 ```
 
 ### Using SQL files
@@ -95,12 +99,11 @@ CREATE TABLE orders (
 ```
 
 Mount the init directory:
-
 ```bash
 docker run -d \
     --name ydb-local \
     -v $(pwd)/init.d:/init.d \
-    {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
+    {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}
 ```
 
 ### Using pre-init scripts
@@ -119,5 +122,27 @@ Mount the pre-init directory:
 docker run -d \
     --name ydb-local \
     -v $(pwd)/preinit.d:/preinit.d \
-    {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
+    {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}
+```
+
+### Restoring from a backup using init scripts
+
+Create a script in the `/init.d` directory to perform the restoration:
+
+```bash
+# /init.d/01-restore-backup.sh
+#!/bin/bash
+if [ -d "/backup" ] && [ -n "$(ls -A /backup)" ]; then
+    /ydb --no-discovery tools restore -p . -i /backup
+fi
+```
+
+Mount the init directory, as well as the volume with your backup:
+
+```bash
+docker run -d \
+    --name ydb-local \
+    -v $(pwd)/init.d:/init.d \
+    -v $(pwd)/backup:/backup \
+    {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}
 ```

@@ -58,6 +58,7 @@ FROM
     $json
 ;
 ```
+{% endcut %}
 
 ### Формат tsv_with_names {#tsv_with_names}
 
@@ -101,6 +102,7 @@ FROM
     $json
 ;
 ```
+{% endcut %}
 
 ### Формат json_list {#json_list}
 
@@ -186,6 +188,7 @@ FROM
 END DO;
 
 ```
+{% endcut %}
 
 ### Формат json_as_string {#json_as_string}
 
@@ -240,6 +243,7 @@ SELECT
 FROM
     $json
 ```
+{% endcut %}
 
 ### Формат parquet {#parquet}
 
@@ -276,6 +280,7 @@ SELECT
 FROM
     $json
 ```
+{% endcut %}
 
 ### Формат raw {#raw}
 
@@ -312,6 +317,7 @@ FROM
 ;
 END DO;
 ```
+{% endcut %}
 
 ### Поддерживаемые типы данных {#schema}
 

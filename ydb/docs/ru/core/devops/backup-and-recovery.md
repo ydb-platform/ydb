@@ -64,7 +64,7 @@
 
 1. **Планирование стратегии резервного копирования**: Определите частоту резервного копирования (ежедневное полное, ежечасное инкрементальное), период хранения и требования к внешнему хранилищу.
 
-2. **Создание коллекции резервных копий**: Определите, какие таблицы включить. Детали синтаксиса см. в [CREATE BACKUP COLLECTION](../yql/reference/syntax/create-backup-collection.md).
+2. **Создание коллекции резервных копий**: Определите, какие таблицы включить, используя SQL-оператор `CREATE BACKUP COLLECTION`.
 
 3. **Настройка внешнего планирования**: {{ ydb-short-name }} не предоставляет встроенного планирования. Используйте cron или аналогичные инструменты для выполнения команд резервного копирования.
 
@@ -74,7 +74,7 @@
 
 ### Создание коллекций резервных копий
 
-Создайте коллекцию с помощью SQL. Детали синтаксиса см. в [CREATE BACKUP COLLECTION](../yql/reference/syntax/create-backup-collection.md).
+Создайте коллекцию с помощью SQL:
 
 ```sql
 CREATE BACKUP COLLECTION `production_backups`
@@ -90,7 +90,7 @@ WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 BACKUP `production_backups`;
 ```
 
-Детали синтаксиса см. в [BACKUP](../yql/reference/syntax/backup.md).
+Используйте команду `BACKUP` для запуска операций резервного копирования.
 
 **Инкрементальная резервная копия** (после начальной полной резервной копии):
 
@@ -133,7 +133,7 @@ ydb scheme ls .backups/collections/production_backups/
 
 ### Восстановление из резервных копий
 
-Для восстановления данных используйте команду RESTORE. Детали синтаксиса см. в [RESTORE](../yql/reference/syntax/restore-backup-collection.md).
+Для восстановления данных используйте команду `RESTORE`:
 
 ```sql
 RESTORE `production_backups`;

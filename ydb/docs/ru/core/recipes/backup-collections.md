@@ -248,5 +248,5 @@ ydb tools restore -i /tmp/test_restore -d /Root/test_restore_verification
 
 ## См. также {#see-also}
 
-- [Концепции коллекций резервных копий](../concepts/backup-collections.md)
-- [Руководство по операциям](../maintenance/manual/backup-collections.md)
+- [Коллекции резервных копий](../concepts/datamodel/backup-collection.md)
+- [Резервное копирование и восстановление](../devops/backup-and-recovery.md)

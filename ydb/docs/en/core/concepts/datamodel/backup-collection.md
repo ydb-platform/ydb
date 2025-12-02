@@ -148,7 +148,4 @@ The restore operation maintains transactional consistency across all tables in t
 
 - [Backup concepts](../backup.md): Overview of all backup approaches in {{ ydb-short-name }}
 - [Backup and Recovery guide](../../devops/backup-and-recovery.md#backup-collections): Practical operations guide
-- [CREATE BACKUP COLLECTION](../../yql/reference/syntax/create-backup-collection.md): YQL syntax reference
-- [BACKUP](../../yql/reference/syntax/backup.md): YQL syntax reference
-- [RESTORE](../../yql/reference/syntax/restore-backup-collection.md): YQL syntax reference
-- [DROP BACKUP COLLECTION](../../yql/reference/syntax/drop-backup-collection.md): YQL syntax reference
+- [Recipes and examples](../../recipes/backup-collections.md): Common scenarios and examples

@@ -190,5 +190,5 @@ ydb tools restore -i /tmp/test_restore -d /Root/test_restore_verification
 
 ## See also {#see-also}
 
-- [Backup collections concepts](../concepts/backup-collections.md)
-- [Operations guide](../maintenance/manual/backup-collections.md)
+- [Backup collections](../concepts/datamodel/backup-collection.md)
+- [Backup and recovery guide](../devops/backup-and-recovery.md)

@@ -64,7 +64,7 @@ A typical production backup setup involves:
 
 1. **Plan your backup strategy**: Determine backup frequency (daily full, hourly incremental), retention period, and external storage requirements.
 
-2. **Create a backup collection**: Define which tables to include. For syntax details, see [CREATE BACKUP COLLECTION](../yql/reference/syntax/create-backup-collection.md).
+2. **Create a backup collection**: Define which tables to include using the `CREATE BACKUP COLLECTION` SQL statement.
 
 3. **Schedule backups externally**: {{ ydb-short-name }} does not provide built-in scheduling. Use cron or similar tools to execute backup commands.
 
@@ -74,7 +74,7 @@ A typical production backup setup involves:
 
 ### Creating Backup Collections
 
-Create a collection using SQL. For detailed syntax, see [CREATE BACKUP COLLECTION](../yql/reference/syntax/create-backup-collection.md).
+Create a collection using SQL:
 
 ```sql
 CREATE BACKUP COLLECTION `production_backups`
@@ -90,7 +90,7 @@ WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 BACKUP `production_backups`;
 ```
 
-For detailed syntax, see [BACKUP](../yql/reference/syntax/backup.md).
+Use the `BACKUP` command to trigger backup operations.
 
 **Incremental backup** (after initial full backup):
 
@@ -133,7 +133,7 @@ Canceling backup operations is not yet supported. The `ydb operation cancel` com
 
 ### Restoring from Backups
 
-To restore data, use the RESTORE command. For detailed syntax, see [RESTORE](../yql/reference/syntax/restore-backup-collection.md).
+To restore data, use the `RESTORE` command:
 
 ```sql
 RESTORE `production_backups`;

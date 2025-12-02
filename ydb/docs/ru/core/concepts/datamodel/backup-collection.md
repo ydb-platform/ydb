@@ -148,7 +148,4 @@ block-beta
 
 - [Концепции резервного копирования](../backup.md): Обзор всех подходов к резервному копированию в {{ ydb-short-name }}
 - [Руководство по резервному копированию и восстановлению](../../devops/backup-and-recovery.md#backup-collections): Практическое руководство
-- [CREATE BACKUP COLLECTION](../../yql/reference/syntax/create-backup-collection.md): Справочник по синтаксису YQL
-- [BACKUP](../../yql/reference/syntax/backup.md): Справочник по синтаксису YQL
-- [RESTORE](../../yql/reference/syntax/restore-backup-collection.md): Справочник по синтаксису YQL
-- [DROP BACKUP COLLECTION](../../yql/reference/syntax/drop-backup-collection.md): Справочник по синтаксису YQL
+- [Рецепты и примеры](../../recipes/backup-collections.md): Типовые сценарии и примеры

@@ -609,6 +609,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, UseNativeDynamicTableRead);
     REGISTER_SETTING(*this, _ForbidSensitiveDataInOperationSpec);
     REGISTER_SETTING(*this, DontForceTransformForInputTables);
+    REGISTER_SETTING(*this, _RequestOnlyRequiredAttrs);
     REGISTER_SETTING(*this, _LocalTableContentLimit);
     REGISTER_SETTING(*this, ValidatePool);
     REGISTER_SETTING(*this, ValidateClusters);

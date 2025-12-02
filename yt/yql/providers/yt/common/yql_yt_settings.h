@@ -352,6 +352,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseColumnGroupsFromInputTables;
     NCommon::TConfSetting<bool, Static> UseNativeDynamicTableRead;
     NCommon::TConfSetting<bool, Static> DontForceTransformForInputTables;
+    NCommon::TConfSetting<bool, Static> _RequestOnlyRequiredAttrs;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

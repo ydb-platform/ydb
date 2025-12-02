@@ -105,6 +105,11 @@ private:
     const NConcurrency::TPeriodicExecutorPtr RefreshExecutor_;
     const int ShardCount_ = 1;
     const IInvokerPtr Invoker_;
+    //! Hash for determining shard index for each key.
+    //!
+    //! \note We use a hash separate from that of TEntry's hash map to ensure that for a random key, its shard index is independent
+    //! from the bucket index in the shard's hash map.
+    const TRandomizedHash<TKey> ShardKeyHash_;
 
     std::atomic<bool> Started_ = false;
 

@@ -193,9 +193,7 @@ private:
 
         serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.PDisksPath);
         serverSettings.SetCustomDiskParams(storage);
-
-        const auto storageGeneration = StorageMeta_.GetStorageGeneration();
-        serverSettings.SetStorageGeneration(storageGeneration, storageGeneration > 0);
+        serverSettings.SetStorageGeneration(0, /* fetchPoolsGeneration */ true);
     }
 
     static void FlushStorageFileHolder() {
@@ -360,9 +358,6 @@ private:
 
         Server_ = MakeIntrusive<TKqprunServer>(serverSettings);
         Server_->Initialize();
-
-        StorageMeta_.SetStorageGeneration(StorageMeta_.GetStorageGeneration() + 1);
-        UpdateStorageMeta();
 
         if (serverSettings.CustomDiskParams.UseDisk) {
             SetupStorageFileHolder(serverSettings.CustomDiskParams.DiskPath);

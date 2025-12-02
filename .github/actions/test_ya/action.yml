@@ -173,6 +173,11 @@ runs:
           ulimit -c 0
         fi
 
+        # For run_tests (when PULL_NUMBER is set), write start message first
+        if [ -n "$PULL_NUMBER" ] && [ "${{ inputs.run_tests }}" = "true" ]; then
+          echo "Run tests **$BUILD_PRESET** (Test Size: \`$TEST_SIZE\`, Test Targets: \`$BUILD_TARGET\`) has started." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+        fi
+
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
@@ -392,12 +397,7 @@ runs:
 
           CURRENT_MESSAGE="ya make is running..."
           if [ $IS_RETRY = 0 ]; then
-            # For run_tests (when PULL_NUMBER is set), add header info to the first message
-            if [ -n "$PULL_NUMBER" ]; then
-              CURRENT_MESSAGE="Run tests **$BUILD_PRESET** (Test Size: \`$TEST_SIZE\`, Test Targets: \`$BUILD_TARGET\`) has started."
-            else
-              CURRENT_MESSAGE="$CURRENT_MESSAGE"
-            fi
+            CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"

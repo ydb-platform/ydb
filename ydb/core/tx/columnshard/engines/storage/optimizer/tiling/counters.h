@@ -1,37 +1,38 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/counters/portions.h>
-
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
+static constexpr ui32 TILING_LAYERS_COUNT = 10;
 
 class TPortionCategoryCounterAgents: public NColumnShard::TPortionCategoryCounterAgents {
 private:
     using TBase = NColumnShard::TPortionCategoryCounterAgents;
 
 public:
-    const std::shared_ptr<NColumnShard::TValueAggregationAgent> Hight;
+    const std::shared_ptr<NColumnShard::TValueAggregationAgent> Height;
+
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
-        , Hight(TBase::GetValueAutoAggregations("ByGranule/Level/Hight")){
+        , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height")){
     }
 };
 
 class TPortionCategoryCounters: public NColumnShard::TPortionCategoryCounters {
 private:
     using TBase = NColumnShard::TPortionCategoryCounters;
-    std::shared_ptr<NColumnShard::TValueAggregationClient> Hight;
+    std::shared_ptr<NColumnShard::TValueAggregationClient> Height;
 
 public:
     TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
         : TBase(agents) {
-        Hight = agents.Hight->GetClient();
+        Height = agents.Height->GetClient();
     }
 
-    void SetHight(const i32 hight) {
-        Hight->SetValue(hight);
+    void SetHeight(const i32 height) {
+        Height->SetValue(height);
     }
 };
 
@@ -53,34 +54,37 @@ private:
 public:
     TGlobalCounters()
         : TBase("TilingCompactionOptimizer") {
-        for (ui32 i = 0; i <= 10; ++i) {
+        for (ui32 i = 0; i < TILING_LAYERS_COUNT; ++i) {
             Levels.emplace_back(std::make_shared<TLevelAgents>("level=" + ::ToString(i), *this));
-        }
-        for (ui32 i = 0; i <= 10; ++i) {
             Accumulators.emplace_back(std::make_shared<TLevelAgents>("acc=" + ::ToString(i), *this));
         }
     }
 
-    static std::shared_ptr<TLevelAgents> GetLevelAgents(const ui32 levelId) {
-        AFL_VERIFY(levelId < Singleton<TGlobalCounters>()->Levels.size());
-        return Singleton<TGlobalCounters>()->Levels[levelId];
+    static std::shared_ptr<TPortionCategoryCounters> BuildClient(
+        const std::vector<std::shared_ptr<TLevelAgents>>& agentList,
+        const ui32 idx,
+        const TString& debugName)
+    {
+        AFL_VERIFY(idx < agentList.size())("idx", idx)("limit", agentList.size())("type", debugName);
+        return std::make_shared<TPortionCategoryCounters>(*agentList[idx]->Portions);
     }
 
-    static std::shared_ptr<TLevelAgents> GetAccumulatorAgents(const ui32 accId) {
-        AFL_VERIFY(accId < Singleton<TGlobalCounters>()->Accumulators.size());
-        return Singleton<TGlobalCounters>()->Accumulators[accId];
+    static std::shared_ptr<TPortionCategoryCounters> BuildLevelClient(const ui32 levelId) {
+        return BuildClient(Singleton<TGlobalCounters>()->Levels, levelId, "level");
     }
 
-    static std::shared_ptr<TPortionCategoryCounters> BuildPortionsCounter(const ui32 levelId) {
-        return std::make_shared<TPortionCategoryCounters>(*GetLevelAgents(levelId)->Portions);
+    static std::shared_ptr<TPortionCategoryCounters> BuildAccumulatorClient(const ui32 accId) {
+        return BuildClient(Singleton<TGlobalCounters>()->Accumulators, accId, "accumulator");
     }
 };
 
 class TLevelCounters {
 public:
     const std::shared_ptr<TPortionCategoryCounters> Portions;
-    TLevelCounters(const ui32 levelId)
-        : Portions(TGlobalCounters::BuildPortionsCounter(levelId)) {
+
+    explicit TLevelCounters(std::shared_ptr<TPortionCategoryCounters> portions)
+        : Portions(std::move(portions)) {
+        AFL_VERIFY(Portions);
     }
 };
 
@@ -90,11 +94,9 @@ public:
     std::vector<TLevelCounters> Accumulators;
 
     TCounters() {
-        for (ui32 i = 0; i < 10; ++i) {
-            Levels.emplace_back(i);
-        }
-        for (ui32 i = 0; i < 10; ++i) {
-            Accumulators.emplace_back(i);
+        for (ui32 i = 0; i < TILING_LAYERS_COUNT; ++i) {
+            Levels.emplace_back(TGlobalCounters::BuildLevelClient(i));
+            Accumulators.emplace_back(TGlobalCounters::BuildAccumulatorClient(i));
         }
     }
 
@@ -104,8 +106,9 @@ public:
     }
 
     const TLevelCounters& GetAccumulatorCounters(const ui32 accIdx) const {
-        AFL_VERIFY(accIdx < Levels.size())("idx", accIdx)("count", Accumulators.size());
+        AFL_VERIFY(accIdx < Accumulators.size())("idx", accIdx)("count", Accumulators.size());
         return Accumulators[accIdx];
     }
 };
+
 }

@@ -316,9 +316,9 @@ struct TLevel {
         if (Portions.size() < 2) {
             return false;
         }
-        auto hight = Intersections.GetMaxCount();
-        Counters.Portions->SetHight(hight);
-        return hight >= i32(settings.Factor);
+        auto height = Intersections.GetMaxCount();
+        Counters.Portions->SetHeight(height);
+        return height >= i32(settings.Factor);
     }
 
     void Add(const TPortionInfo::TPtr& p) {

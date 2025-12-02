@@ -201,7 +201,8 @@ THolder<IWorkloadQueryGenerator> TVectorWorkloadParams::CreateGenerator() const 
 
 TWorkloadDataInitializer::TList TVectorWorkloadParams::CreateDataInitializers() const {
     return {
-        std::make_shared<TWorkloadVectorFilesDataInitializer>(*this)
+        std::make_shared<TWorkloadVectorFilesDataInitializer>(*this),
+        std::make_shared<TWorkloadVectorGenerateDataInitializer>(*this),
     };
 }
 

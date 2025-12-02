@@ -5,7 +5,8 @@ import os
 import time
 
 from .conftest import run_with_assert, create_user, provide_grants, create_secrets, DATABASE, USE_SECRET_GRANTS
-
+from ydb.tests.oss.ydb_sdk_import import ydb
+# move ydb from here
 
 logger = logging.getLogger(__name__)
 
@@ -275,7 +276,7 @@ def test_success_external_data_table(db_fixture, ydb_cluster):
     assert isinstance(data, bytes) and data.decode() == 'Hello S3!'
 
 
-def test_migration_to_new_secrets_external_data_source(db_fixture, ydb_cluster):
+def test_migration_to_new_secrets_in_external_data_source(db_fixture, ydb_cluster):
     user1_config = create_user(ydb_cluster, db_fixture, "user1")
 
     provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])
@@ -345,7 +346,7 @@ def test_migration_to_new_secrets_external_data_source(db_fixture, ydb_cluster):
     assert isinstance(data, bytes) and data.decode() == 'Hello S3!'
 
 
-def test_migration_to_new_secrets_async_replication(db_fixture, ydb_cluster):
+def test_migration_to_new_secrets_in_async_replication(db_fixture, ydb_cluster):
     user1_config = create_user(ydb_cluster, db_fixture, "user1")
 
     provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table", "ydb.granular.alter_schema"])
@@ -388,6 +389,8 @@ def test_migration_to_new_secrets_async_replication(db_fixture, ydb_cluster):
 
     # ... and successfully read from it
     def wait_for_rows_count(expected_rows_count, wait_for_the_first_success=True):
+        # wait_for_the_first_success=True means that we expect that the expected rows count will happen as soon as possible (errors might happen while waiting)
+        # wait_for_the_first_success=False means that expected rows count should not be changed within time
         tries_count = 0
         while tries_count < 5:
             read_from_replica = f"SELECT * FROM `{replica_name}`;"
@@ -401,7 +404,7 @@ def test_migration_to_new_secrets_async_replication(db_fixture, ydb_cluster):
             except Exception as e:
                 if not wait_for_the_first_success:
                     assert False, f'Unexpected result: {str(e)}'
-                pass
+
             tries_count += 1
             time.sleep(1)
 
@@ -436,6 +439,130 @@ def test_migration_to_new_secrets_async_replication(db_fixture, ydb_cluster):
         ALTER ASYNC REPLICATION `{replication_name}` SET (STATE = "PAUSED");
         ALTER ASYNC REPLICATION `{replication_name}` SET (PASSWORD_SECRET_PATH = "{secret_name}");
         ALTER ASYNC REPLICATION `{replication_name}` SET (STATE = "StandBy");
+        """,
+    )
+    wait_for_rows_count(2)
+
+
+def test_migration_to_new_secrets_in_transfer(db_fixture, ydb_cluster):
+    user1_config = create_user(ydb_cluster, db_fixture, "user1")
+
+    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table", 'ydb.granular.describe_schema', "ydb.granular.create_queue", "ydb.granular.alter_schema"])
+
+    # create secrets
+    secret_name = 'userPassword'
+    run_with_assert(
+        user1_config,
+        f"""
+        CREATE OBJECT {secret_name} (TYPE SECRET) WITH value = '';
+        CREATE SECRET `{secret_name}` WITH ( value='' );""",
+    )
+
+    # setup table
+    table_name = 'table'
+    run_with_assert(
+        user1_config,
+        f"""
+            CREATE TABLE {table_name} (
+                partition Uint32 NOT NULL,
+                offset Uint64 NOT NULL,
+                message Utf8,
+                PRIMARY KEY (partition, offset)
+            );
+        """,
+    )
+
+    # setup topic
+    topic_name = 'topic'
+    run_with_assert(
+        user1_config,
+        f"""
+            CREATE TOPIC {topic_name};
+        """,
+    )
+
+    # create transfer
+    lmb = '''
+        $l = ($x) -> {
+            return [
+                <|
+                    partition:CAST($x._partition AS Uint32),
+                    offset:CAST($x._offset AS Uint64),
+                    message:CAST($x._data AS Utf8)
+                |>
+            ];
+        };
+    '''
+    transfer_name = 'transfer'
+    create_transfer_query = f"""
+            {lmb}
+
+            CREATE TRANSFER {transfer_name}
+            FROM {topic_name} TO {table_name} USING $l
+            WITH (
+                CONNECTION_STRING="grpc://{ydb_cluster.nodes[1].host}:{ydb_cluster.nodes[1].port}/?database={DATABASE}",
+                FLUSH_INTERVAL = Interval('PT1S'),
+                BATCH_SIZE_BYTES = 10,
+                USER = "user1",
+                PASSWORD_SECRET_NAME = "{secret_name}"
+            );
+        """
+    run_with_assert(user1_config, create_transfer_query)
+
+    # write to transfer...
+    with ydb.Driver(user1_config) as driver:
+        with driver.topic_client.writer(topic_name, producer_id="producer-id") as writer:
+            writer.write(ydb.TopicWriterMessage(f"message-{time.time()}"))
+
+    # ... and successfully read from the table
+    def wait_for_rows_count(expected_rows_count, wait_for_the_first_success=True):
+        # wait_for_the_first_success=True means that we expect that the expected rows count will happen as soon as possible (errors might happen while waiting)
+        # wait_for_the_first_success=False means that expected rows count should not be changed within time
+        tries_count = 0
+        while tries_count < 5:
+            read_from_table_query = f"SELECT * FROM `{table_name}`;"
+            try:
+                result_sets = run_with_assert(user1_config, read_from_table_query)
+                if len(result_sets[0].rows) == expected_rows_count:
+                    if wait_for_the_first_success:
+                        return
+                else:
+                    assert False, 'Unexpected result'
+            except Exception as e:
+                if not wait_for_the_first_success:
+                    assert False, f'Unexpected result: {str(e)}'
+
+            tries_count += 1
+            time.sleep(1)
+
+        if wait_for_the_first_success:
+            assert False, 'Looks like transfer does not work as expected'
+
+    wait_for_rows_count(1)
+
+    # break the auth
+    run_with_assert(
+        user1_config,
+        f"""
+        ALTER TRANSFER `{transfer_name}` SET (STATE = "PAUSED");
+        DROP OBJECT {secret_name} (TYPE SECRET);
+        ALTER TRANSFER `{transfer_name}` SET (STATE = "StandBy");
+        """,
+    )
+
+    # assert that replication is broken - new messages will not be transfered
+    with ydb.Driver(user1_config) as driver:
+        with driver.topic_client.writer(topic_name, producer_id="producer-id") as writer:
+            writer.write(ydb.TopicWriterMessage(f"message-{time.time()}"))
+    wait_for_rows_count(1, wait_for_the_first_success=False)
+
+    # create new secret and fix the auth
+    run_with_assert(
+        user1_config,
+        f"""
+        ALTER TRANSFER `{transfer_name}` SET (STATE = "PAUSED");
+        ALTER TRANSFER `{transfer_name}` SET (PASSWORD_SECRET_PATH = "{secret_name}");
+        ALTER TRANSFER `{transfer_name}` SET (STATE = "StandBy");
         """,
     )
     wait_for_rows_count(2)

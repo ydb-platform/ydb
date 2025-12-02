@@ -1,6 +1,6 @@
 # CREATE BACKUP COLLECTION
 
-Выражение `CREATE BACKUP COLLECTION` создает [коллекцию резервных копий](../../../concepts/backup-collections.md).
+Выражение `CREATE BACKUP COLLECTION` создает [коллекцию резервных копий](../../../concepts/datamodel/backup-collection.md).
 
 ```yql
 CREATE BACKUP COLLECTION collection_name (
@@ -51,7 +51,7 @@ CREATE BACKUP COLLECTION production_backups (
 
 ## См. также
 
-* [Коллекции резервных копий](../../../concepts/backup-collections.md).
+* [Коллекции резервных копий](../../../concepts/datamodel/backup-collection.md).
 * [BACKUP](backup.md).
 * [RESTORE](restore-backup-collection.md).
 * [DROP BACKUP COLLECTION](drop-backup-collection.md).

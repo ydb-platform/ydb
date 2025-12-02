@@ -1,6 +1,6 @@
 # DROP BACKUP COLLECTION
 
-The `DROP BACKUP COLLECTION` statement deletes a [backup collection](../../../concepts/backup-collections.md) and all its backups.
+The `DROP BACKUP COLLECTION` statement deletes a [backup collection](../../../concepts/datamodel/backup-collection.md) and all its backups.
 
 ```yql
 DROP BACKUP COLLECTION collection_name;
@@ -26,7 +26,7 @@ DROP BACKUP COLLECTION old_backups;
 
 ## See also
 
-* [Backup collections](../../../concepts/backup-collections.md).
+* [Backup collections](../../../concepts/datamodel/backup-collection.md).
 * [CREATE BACKUP COLLECTION](create-backup-collection.md).
 * [BACKUP](backup.md).
 * [RESTORE](restore-backup-collection.md).

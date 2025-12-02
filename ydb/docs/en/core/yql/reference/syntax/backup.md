@@ -1,6 +1,6 @@
 # BACKUP
 
-The `BACKUP` statement creates a backup of tables in a [backup collection](../../../concepts/backup-collections.md).
+The `BACKUP` statement creates a backup of tables in a [backup collection](../../../concepts/datamodel/backup-collection.md).
 
 ```yql
 BACKUP collection_name [INCREMENTAL];
@@ -73,8 +73,8 @@ ydb operation get <operation-id>
 
 ## See also
 
-* [Backup collections](../../../concepts/backup-collections.md).
+* [Backup collections](../../../concepts/datamodel/backup-collection.md).
 * [CREATE BACKUP COLLECTION](create-backup-collection.md).
 * [RESTORE](restore-backup-collection.md).
 * [DROP BACKUP COLLECTION](drop-backup-collection.md).
-* [Backup collections operations guide](../../../maintenance/manual/backup-collections.md).
+* [Backup and recovery guide](../../../devops/backup-and-recovery.md).

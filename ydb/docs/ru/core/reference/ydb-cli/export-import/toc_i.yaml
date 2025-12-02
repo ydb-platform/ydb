@@ -14,4 +14,4 @@ items:
 - name: Импорт данных из файла в существующую таблицу
   href: import-file.md
 - name: Коллекции резервных копий
-  href: ../../../maintenance/manual/backup-collections.md
+  href: ../../../devops/backup-and-recovery.md

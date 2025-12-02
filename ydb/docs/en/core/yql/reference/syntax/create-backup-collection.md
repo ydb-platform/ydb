@@ -1,6 +1,6 @@
 # CREATE BACKUP COLLECTION
 
-The `CREATE BACKUP COLLECTION` statement creates a [backup collection](../../../concepts/backup-collections.md).
+The `CREATE BACKUP COLLECTION` statement creates a [backup collection](../../../concepts/datamodel/backup-collection.md).
 
 ```yql
 CREATE BACKUP COLLECTION collection_name (
@@ -51,7 +51,7 @@ CREATE BACKUP COLLECTION production_backups (
 
 ## See also
 
-* [Backup collections](../../../concepts/backup-collections.md).
+* [Backup collections](../../../concepts/datamodel/backup-collection.md).
 * [BACKUP](backup.md).
 * [RESTORE](restore-backup-collection.md).
 * [DROP BACKUP COLLECTION](drop-backup-collection.md).

@@ -1,6 +1,6 @@
 # RESTORE
 
-Выражение `RESTORE` восстанавливает таблицы из [коллекции резервных копий](../../../concepts/backup-collections.md).
+Выражение `RESTORE` восстанавливает таблицы из [коллекции резервных копий](../../../concepts/datamodel/backup-collection.md).
 
 ```yql
 RESTORE collection_name;
@@ -48,8 +48,8 @@ ydb operation get <operation-id>
 
 ## См. также
 
-* [Концепции коллекций резервных копий](../../../concepts/backup-collections.md)
+* [Коллекции резервных копий](../../../concepts/datamodel/backup-collection.md)
 * [CREATE BACKUP COLLECTION](create-backup-collection.md)
 * [BACKUP](backup.md)
 * [DROP BACKUP COLLECTION](drop-backup-collection.md)
-* [Руководство по операциям](../../../maintenance/manual/backup-collections.md)
+* [Резервное копирование и восстановление](../../../devops/backup-and-recovery.md)

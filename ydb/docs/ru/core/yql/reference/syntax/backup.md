@@ -1,6 +1,6 @@
 # BACKUP
 
-Выражение `BACKUP` создает резервную копию таблиц в [коллекции резервных копий](../../../concepts/backup-collections.md).
+Выражение `BACKUP` создает резервную копию таблиц в [коллекции резервных копий](../../../concepts/datamodel/backup-collection.md).
 
 ```yql
 BACKUP collection_name [INCREMENTAL];
@@ -73,8 +73,8 @@ ydb operation get <operation-id>
 
 ## См. также
 
-* [Коллекции резервных копий](../../../concepts/backup-collections.md).
+* [Коллекции резервных копий](../../../concepts/datamodel/backup-collection.md).
 * [CREATE BACKUP COLLECTION](create-backup-collection.md).
 * [RESTORE](restore-backup-collection.md).
 * [DROP BACKUP COLLECTION](drop-backup-collection.md).
-* [Руководство по операциям с коллекциями резервных копий](../../../maintenance/manual/backup-collections.md).
+* [Резервное копирование и восстановление](../../../devops/backup-and-recovery.md).

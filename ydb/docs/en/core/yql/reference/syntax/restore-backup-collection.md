@@ -1,6 +1,6 @@
 # RESTORE
 
-The `RESTORE` statement restores tables from a [backup collection](../../../concepts/backup-collections.md).
+The `RESTORE` statement restores tables from a [backup collection](../../../concepts/datamodel/backup-collection.md).
 
 ```yql
 RESTORE collection_name;
@@ -48,8 +48,8 @@ ydb operation get <operation-id>
 
 ## See also
 
-* [Backup collections concepts](../../../concepts/backup-collections.md)
+* [Backup collections](../../../concepts/datamodel/backup-collection.md)
 * [CREATE BACKUP COLLECTION](create-backup-collection.md)
 * [BACKUP](backup.md)
 * [DROP BACKUP COLLECTION](drop-backup-collection.md)
-* [Operations guide](../../../maintenance/manual/backup-collections.md)
+* [Backup and recovery guide](../../../devops/backup-and-recovery.md)

@@ -1,6 +1,6 @@
 # DROP BACKUP COLLECTION
 
-Выражение `DROP BACKUP COLLECTION` удаляет [коллекцию резервных копий](../../../concepts/backup-collections.md) и все содержащиеся в ней резервные копии.
+Выражение `DROP BACKUP COLLECTION` удаляет [коллекцию резервных копий](../../../concepts/datamodel/backup-collection.md) и все содержащиеся в ней резервные копии.
 
 ```yql
 DROP BACKUP COLLECTION collection_name;
@@ -26,7 +26,7 @@ DROP BACKUP COLLECTION old_backups;
 
 ## См. также
 
-* [Коллекции резервных копий](../../../concepts/backup-collections.md).
+* [Коллекции резервных копий](../../../concepts/datamodel/backup-collection.md).
 * [CREATE BACKUP COLLECTION](create-backup-collection.md).
 * [BACKUP](backup.md).
 * [RESTORE](restore-backup-collection.md).

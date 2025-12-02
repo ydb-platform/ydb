@@ -158,6 +158,7 @@ runs:
         GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
         GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
         PULL_NUMBER: ${{ inputs.pull_number }}
+        PR_NUMBER: ${{ inputs.pull_number }}
         TEST_SIZE: ${{ inputs.test_size }}
         BUILD_TARGET: ${{ inputs.build_target }}
       run: |

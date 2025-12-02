@@ -196,8 +196,10 @@ jobs:
           commit_url="https://github.com/${GITHUB_REPOSITORY}/commit/${commit_sha}"
           check_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           
+          workflow_name="${{ github.workflow }}"
+          
           {
-            echo "### Run tests started"
+            echo "### $workflow_name started"
             echo ""
             echo "- **Build Preset:** \`$BUILD_PRESET\`"
             echo "- **Test Size:** \`$TEST_SIZE\`"

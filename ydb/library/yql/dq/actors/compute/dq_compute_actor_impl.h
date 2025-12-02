@@ -465,7 +465,7 @@ protected:
 
         auto status = ProcessOutputsState.LastRunStatus;
 
-        if (status == ERunStatus::PendingInput && ProcessOutputsState.AllOutputsFinished) {
+        if (status == ERunStatus::PendingInput && ProcessOutputsState.AllOutputsFinished && !HasEffectsOutputs) {
             CA_LOG_D("All outputs have been finished. Consider finished");
             status = ERunStatus::Finished;
         }
@@ -2194,6 +2194,10 @@ protected:
             const auto& outputDesc = Task.GetOutputs(i);
             Y_ABORT_UNLESS(!outputDesc.HasSink() || outputDesc.ChannelsSize() == 0); // HasSink => no channels
 
+            if (outputDesc.GetTypeCase() == NDqProto::TTaskOutput::kEffects) {
+                HasEffectsOutputs = true;
+            }
+
             if (outputDesc.HasTransform()) {
                 auto result = OutputTransformsMap.emplace(std::piecewise_construct, std::make_tuple(i), std::make_tuple());
                 YQL_ENSURE(result.second);
@@ -2616,6 +2620,7 @@ protected:
         bool LastPopReturnedNoData = false;
     };
     TProcessOutputsState ProcessOutputsState;
+    bool HasEffectsOutputs = false; // track execution of DISCARD results
 
     THolder<TDqMemoryQuota> MemoryQuota;
     TDqComputeActorWatermarks WatermarksTracker;

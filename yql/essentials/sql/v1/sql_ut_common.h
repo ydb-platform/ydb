@@ -1215,6 +1215,68 @@ Y_UNIT_TEST(AlterDatabaseSettings) {
     UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
 }
 
+Y_UNIT_TEST(TruncateTableAstYdb) {
+    auto executeTruncateRequest = [](const TString& sql, const TString& tableName) {
+        TVerifyLineFunc verifyLine = [&tableName](const TString& word, const TString& line) {
+            TStringBuilder sb;
+
+            if (tableName == "@tmp") {
+                sb << R"((let world (Write! world sink (TempTable '"tmp") (Void) '('('mode 'truncateTable)))))";
+            } else {
+                sb << R"((let world (Write! world sink (Key '('tablescheme (String '")"
+                   << tableName
+                   << R"("))) (Void) '('('mode 'truncateTable)))))";
+            }
+
+            Y_UNUSED(word);
+            UNIT_ASSERT_VALUES_UNEQUAL(
+                TString::npos,
+                line.find(static_cast<TString>(sb)));
+        };
+
+        NYql::TAstParseResult request = SqlToYql(sql, 1, TString(NYql::KikimrProviderName));
+        UNIT_ASSERT_C(request.IsOk(), request.Issues.ToString());
+        TWordCountHive elementStat({TString("\'mode \'truncateTable")});
+        VerifyProgram(request, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'truncateTable"]);
+    };
+
+    executeTruncateRequest("USE ydb;   TRUNCATE TABLE `/Root/test/table`;", "/Root/test/table");
+    executeTruncateRequest("USE ydb;   TRUNCATE TABLE plato.`Input`;", "Input");
+    executeTruncateRequest("USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH INFER_SCHEMA;", "/Root/test/table");
+    executeTruncateRequest("USE ydb;   TRUNCATE TABLE @tmp;", "@tmp");
+}
+
+Y_UNIT_TEST(TruncateTableAstNotYdb) {
+    auto executeTruncateRequest = [](const TString& sql, const TString& tableName) {
+        TVerifyLineFunc verifyLine = [&tableName](const TString& word, const TString& line) {
+            TStringBuilder sb;
+
+            if (tableName == "@tmp") {
+                sb << R"((let world (Write! world sink (TempTable '"tmp") (Void) '('('mode 'truncateTable)))))";
+            } else {
+                sb << R"((let world (Write! world sink (Key '('tablescheme (String '")"
+                   << tableName
+                   << R"("))) (Void) '('('mode 'truncateTable)))))";
+            }
+
+            Y_UNUSED(word);
+            UNIT_ASSERT_VALUES_UNEQUAL(
+                TString::npos,
+                line.find(static_cast<TString>(sb)));
+        };
+
+        NYql::TAstParseResult request = SqlToYql(sql);
+        UNIT_ASSERT_C(!request.IsOk(), request.Issues.ToString());
+        UNIT_ASSERT_STRING_CONTAINS(request.Issues.ToString(), "TRUNCATE TABLE is unsupported for");
+    };
+
+    executeTruncateRequest("USE plato;   TRUNCATE TABLE `/Root/test/table`;", "/Root/test/table");
+    executeTruncateRequest("USE plato;   TRUNCATE TABLE plato.`Input`;", "Input");
+    executeTruncateRequest("USE plato;   TRUNCATE TABLE `/Root/test/table` WITH INFER_SCHEMA;", "/Root/test/table");
+    executeTruncateRequest("USE plato;   TRUNCATE TABLE @tmp;", "@tmp");
+}
+
 Y_UNIT_TEST(CreateTableDublicateOptions) {
     {
         NYql::TAstParseResult req = SqlToYql(R"sql(
@@ -7504,7 +7566,7 @@ Y_UNIT_TEST(MultilineComments) {
 #if ANTLR_VER == 3
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: Unexpected token '*' : cannot match to any predicted input...\n\n");
 #else
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, UPDATE, UPSERT, USE, VALUES}\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES}\n");
 #endif
     res = SqlToYqlWithAnsiLexer(req);
     UNIT_ASSERT(res.Root);

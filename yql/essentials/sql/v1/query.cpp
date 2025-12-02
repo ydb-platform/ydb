@@ -1509,6 +1509,58 @@ TNodePtr BuildAlterDatabase(
         scoped);
 }
 
+class TTruncateTableNode final: public TAstListNode {
+public:
+    TTruncateTableNode(TPosition pos, const TTableRef& tr, const TTruncateTableParameters& params, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Params_(params)
+        , Table_(tr)
+        , Scoped_(scoped)
+    {
+        scoped->UseCluster(Table_.Service, Table_.Cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(Params_);
+        auto keys = Table_.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::CREATE);
+        if (!keys || !keys->Init(ctx, src)) {
+            return false;
+        }
+
+        TNodePtr cluster = Scoped_->WrapCluster(Table_.Cluster, ctx);
+
+        auto options = Y(Q(Y(Q("mode"), Q("truncateTable"))));
+
+        Add("block", Q(Y(Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos_, Table_.Service), cluster)),
+                         Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(options))),
+                         Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")))));
+
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const override {
+        return new TTruncateTableNode(GetPos(), Table_, Params_, Scoped_);
+    }
+
+private:
+    const TTruncateTableParameters Params_;
+    const TTableRef Table_;
+    TScopedStatePtr Scoped_;
+};
+
+TNodePtr BuildTruncateTable(
+    TPosition pos,
+    const TTableRef& tr,
+    const TTruncateTableParameters& params,
+    TScopedStatePtr scoped)
+{
+    return new TTruncateTableNode(
+        pos,
+        tr,
+        params,
+        scoped);
+}
+
 class TAlterTableNode final: public TAstListNode {
 public:
     TAlterTableNode(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped)

@@ -27,7 +27,6 @@ public:
 template <class TDataSourceConstructorImpl>
 class TConstructor: public NCommon::ISourcesConstructor {
 private:
-    ui32 CurrentSourceIdx = 0;
     virtual void DoClear() override {
         Constructors.Clear();
     }
@@ -40,7 +39,6 @@ private:
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext(
         const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) override final {
         auto constructor = Constructors.PopFront();
-        constructor.SetIndex(CurrentSourceIdx++);
         return constructor.Construct(context);
     }
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {

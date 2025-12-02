@@ -1,7 +1,7 @@
 name: Add run tests table to PR
 
 on:
-  pull_request:
+  pull_request_target:
     types:
       - opened
   workflow_dispatch:
@@ -27,7 +27,7 @@ jobs:
         github.event_name == 'workflow_dispatch'
       ) ||
       (
-        github.event_name == 'pull_request' &&
+        github.event_name == 'pull_request_target' &&
         vars.SHOW_RUN_TESTS_IN_PR == 'TRUE'
       )
     

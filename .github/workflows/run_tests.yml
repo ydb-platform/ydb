@@ -199,14 +199,14 @@ jobs:
           {
             echo "### Run tests started"
             echo ""
-            echo "**Build Preset:** \`$BUILD_PRESET\`"
-            echo "**Test Size:** \`$TEST_SIZE\`"
-            echo "**Test Targets:** \`$BUILD_TARGET\`"
+            echo "- **Build Preset:** \`$BUILD_PRESET\`"
+            echo "- **Test Size:** \`$TEST_SIZE\`"
+            echo "- **Test Targets:** \`$BUILD_TARGET\`"
             if [ "$COLLECT_COREDUMPS" = "true" ]; then
-              echo "**Collect Coredumps:** \`true\`"
+              echo "- **Collect Coredumps:** \`true\`"
             fi
-            echo "**Commit:** [${commit_short}](${commit_url})"
-            echo "**Workflow run:** [link](${check_url})"
+            echo "- **Commit:** [${commit_short}](${commit_url})"
+            echo "- **Workflow run:** [link](${check_url})"
             echo ""
           } | .github/scripts/tests/comment-pr.py --rewrite --no-timestamp
 

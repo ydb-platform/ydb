@@ -3,9 +3,9 @@
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/tiering/tier/object.h>
-#include <ydb/services/metadata/secret/accessor/secret_id.h>
-#include <ydb/services/metadata/secret/accessor/snapshot.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -124,15 +124,23 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
             }
 
             if (context.UserToken) {
-                std::shared_ptr<NMetadata::NSecret::ISecretAccessor> secretAccessor;
-                auto secretSnapshot = std::make_shared<NMetadata::NSecret::TSnapshot>();
-                secretAccessor = std::static_pointer_cast<NMetadata::NSecret::ISecretAccessor>(secretSnapshot);
-                if (secretAccessor) {
-                    if (auto status = tierConfig.CheckSecretAccess(secretAccessor, *context.UserToken); status.IsFail()) {
-                        errors.AddError(NKikimrScheme::StatusAccessDenied, 
-                            "Access denied to secrets in external data source \"" + tierPathString + "\": " + status.GetErrorMessage());
-                        return false;
-                    }
+                const auto& aws = proto.GetAuth().GetAws();
+                const TString accessKeySecretName = aws.GetAwsAccessKeyIdSecretName();
+                const TString secretKeySecretName = aws.GetAwsSecretAccessKeySecretName();
+                
+                TVector<TString> secretNames = {accessKeySecretName, secretKeySecretName};
+
+                const TString databaseName = tierPath.GetDomainPathString();
+                
+                auto userTokenPtr = MakeIntrusiveConst<NACLib::TUserToken>(*context.UserToken);
+                auto future = NKqp::DescribeSecret(secretNames, userTokenPtr, databaseName, context.Ctx.ActorSystem());
+                
+                auto result = future.GetValue(TDuration::Seconds(30));
+                
+                if (result.Status != Ydb::StatusIds::SUCCESS) {
+                    errors.AddError(NKikimrScheme::StatusAccessDenied, 
+                        "Access denied to secrets in external data source \"" + tierPathString + "\": " + result.Issues.ToOneLineString());
+                    return false;
                 }
             }
         }

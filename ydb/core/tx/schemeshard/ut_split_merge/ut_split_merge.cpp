@@ -1798,6 +1798,119 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         Cerr << "TEST table final state:" << Endl << tableInfo.DebugString() << Endl;
         TestDescribeResult(tableInfo, {NLs::PartitionCount(expectedPartitionCount)});
     }
+
+    /**
+     * Verify that the split-by-load logic uses the correct default value
+     * for the splitting threshold (50%) when the load is only on the leader.
+     */
+    Y_UNIT_TEST(CorrectSplitThresholdDefaultValueLeader) {
+        TTestBasicRuntime runtime;
+        auto env = SetupEnv(runtime);
+
+        const ui32 expectedPartitionCount = 5;
+        const ui64 cpuLoadSimulated = 51;  // percents
+
+        // NOTE: No split threshold settings here, use only the default value
+        //       (CpuPercentageThreshold = 50).
+        const auto tableScheme = Sprintf(
+            R"(
+                Name: "Table"
+                Columns { Name: "key"       Type: "Uint64"}
+                Columns { Name: "value"     Type: "Uint64"}
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 1
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MaxPartitionsCount: %d  # replacement field for required number of partitions
+
+                        SplitByLoadSettings: {
+                            Enabled: true
+                        }
+                    }
+                }
+            )",
+            expectedPartitionCount
+        );
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, txId, "/MyRoot", tableScheme);
+        env.TestWaitNotification(runtime, txId);
+
+        SplitByLoad(
+            runtime,
+            "/MyRoot/Table",
+            {{0, cpuLoadSimulated}}, // Target CPU load for the leader only
+            {{0, cpuLoadSimulated}}  // Target CPU load for the leader only
+        );
+
+        auto tableInfo = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        Cerr << "TEST table final state:" << Endl << tableInfo.DebugString() << Endl;
+        TestDescribeResult(tableInfo, {NLs::PartitionCount(expectedPartitionCount)});
+    }
+
+    /**
+     * Verify that the split-by-load logic uses the correct default value
+     * for the splitting threshold (50%) when the load is only on the followers.
+     */
+    Y_UNIT_TEST(CorrectSplitThresholdDefaultValueFollower) {
+        TTestBasicRuntime runtime;
+        auto env = SetupEnv(runtime);
+
+        const ui32 expectedPartitionCount = 5;
+        const ui64 cpuLoadSimulated = 51;  // percents
+
+        // NOTE: No split threshold settings here, use only the default value
+        //       (CpuPercentageThreshold = 50).
+        const auto tableScheme = Sprintf(
+            R"(
+                Name: "Table"
+                Columns { Name: "key"       Type: "Uint64"}
+                Columns { Name: "value"     Type: "Uint64"}
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 1
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MaxPartitionsCount: %d  # replacement field for required number of partitions
+
+                        SplitByLoadSettings: {
+                            Enabled: true
+                        }
+                    }
+
+                    FollowerCount: 3
+                }
+            )",
+            expectedPartitionCount
+        );
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, txId, "/MyRoot", tableScheme);
+        env.TestWaitNotification(runtime, txId);
+
+        SplitByLoad(
+            runtime,
+            "/MyRoot/Table",
+            {
+                // No simulated CPU load for the leader, only for one of the followers
+                {0, 0},
+                {1, 0},
+                {2, cpuLoadSimulated},
+                {3, 0},
+            },
+            {
+                // No simulated CPU load for the leader, only for one of the followers
+                {0, 0},
+                {1, 0},
+                {2, cpuLoadSimulated},
+                {3, 0},
+            },
+            true /* shouldSendReadRequests */
+        );
+
+        auto tableInfo = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        Cerr << "TEST table final state:" << Endl << tableInfo.DebugString() << Endl;
+        TestDescribeResult(tableInfo, {NLs::PartitionCount(expectedPartitionCount)});
+    }
 }
 
 /**

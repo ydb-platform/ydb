@@ -116,6 +116,7 @@ public:
         const TChecker& IsSysView(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsSecret(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsStreamingQuery(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& Or(const TChecker& (TChecker::* leftFunc)(EStatus status) const, const TChecker& (TChecker::* rightFunc)(EStatus status) const, EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:

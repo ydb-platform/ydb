@@ -823,10 +823,6 @@ public:
                     checks
                         .IsCommonSensePath()
                         .IsLikeDirectory();
-
-                    if (!Transaction.GetCreateTable().GetAllowUnderSameOperation()) {
-                        checks.NotUnderOperation();
-                    }
                 }
             }
 

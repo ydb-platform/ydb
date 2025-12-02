@@ -1204,6 +1204,28 @@ const TPath::TChecker& TPath::TChecker::IsStreamingQuery(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::Or(const TChecker& (TChecker::* leftFunc)(EStatus status) const, const TChecker& (TChecker::* rightFunc)(EStatus status) const, EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+    
+    TChecker left(*this);
+    (left.*leftFunc)(status);
+    
+    if (!left.Failed) {
+        return *this;
+    }
+    
+    TChecker right(*this);
+    (right.*rightFunc)(status);
+    
+    if (right.Failed) {
+        return Fail(left.Status, TStringBuilder() << left.Error << " and " << right.Error);
+    }
+
+    return *this;
+}
+
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
     return TStringBuilder()
         << "id: " << element->PathId << ", "

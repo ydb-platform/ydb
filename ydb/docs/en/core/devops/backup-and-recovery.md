@@ -64,7 +64,7 @@ A typical production backup setup involves:
 
 1. **Plan your backup strategy**: Determine backup frequency (daily full, hourly incremental), retention period, and external storage requirements.
 
-2. **Create a backup collection**: Define which tables to include using the `CREATE BACKUP COLLECTION` SQL statement.
+2. **Create a backup collection**: Define which tables to include using the [`CREATE BACKUP COLLECTION`](../yql/reference/syntax/create-backup-collection.md) SQL statement.
 
 3. **Schedule backups externally**: {{ ydb-short-name }} does not provide built-in scheduling. Use cron or similar tools to execute backup commands.
 
@@ -90,7 +90,7 @@ WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 BACKUP `production_backups`;
 ```
 
-Use the `BACKUP` command to trigger backup operations.
+Use the [`BACKUP`](../yql/reference/syntax/backup.md) command to trigger backup operations.
 
 **Incremental backup** (after initial full backup):
 
@@ -98,10 +98,22 @@ Use the `BACKUP` command to trigger backup operations.
 BACKUP `production_backups` INCREMENTAL;
 ```
 
+{% note warning %}
+
+**Not idempotent**: Each `BACKUP` command creates a new backup. If you retry after a timeout, the original backup may have completed successfully, and retrying will create an additional backup. Before retrying, check if a new backup directory was created: `ydb scheme ls .backups/collections/<collection_name>/`. For incremental backups, you can also check operation status with `ydb operation list incbackup`.
+
+{% endnote %}
+
 **Example schedule** (implemented via external scheduler):
 
 - Sunday 2:00 AM: Full backup
 - Monday-Saturday 2:00 AM: Incremental backup
+
+{% note info %}
+
+**Multiple collections**: You can run backups on different collections simultaneously. Backup operations run asynchronously and do not block each other or normal database operations. However, for resource-constrained clusters or very large backups, consider spacing out backup operations to reduce peak resource usage.
+
+{% endnote %}
 
 ### Monitoring Operations
 
@@ -133,13 +145,13 @@ Canceling backup operations is not yet supported. The `ydb operation cancel` com
 
 ### Restoring from Backups
 
-To restore data, use the `RESTORE` command:
+To restore data, use the [`RESTORE`](../yql/reference/syntax/restore-backup-collection.md) command:
 
 ```sql
 RESTORE `production_backups`;
 ```
 
-**Disaster recovery from external storage:**
+#### Disaster recovery from external storage {#disaster-recovery}
 
 If you've exported backups to external storage, import them first:
 
@@ -169,7 +181,7 @@ YDB does not provide built-in chain integrity verification. Manually track which
 
 {% endnote %}
 
-**Safe cleanup approach:**
+#### Safe cleanup approach {#safe-cleanup}
 
 1. Create a new full backup
 2. Verify the new backup is complete
@@ -186,7 +198,7 @@ ydb scheme rmdir -r .backups/collections/production_backups/20250209141519Z_incr
 
 For disaster recovery, export backup collections to external storage:
 
-**To S3-compatible storage:**
+#### To S3-compatible storage {#export-s3}
 
 ```bash
 ydb export s3 --s3-endpoint storage.example.com \
@@ -194,7 +206,7 @@ ydb export s3 --s3-endpoint storage.example.com \
   --item src=.backups/collections/production_backups,dst=production_backups
 ```
 
-**To filesystem:**
+#### To filesystem {#export-filesystem}
 
 ```bash
 ydb tools dump -p .backups/collections/production_backups \

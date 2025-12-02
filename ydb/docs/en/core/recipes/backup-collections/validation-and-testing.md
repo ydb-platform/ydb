@@ -7,12 +7,28 @@ Verify backup integrity and test restoration procedures.
 Check that backup operations completed successfully:
 
 ```bash
-# Check if backup operation completed successfully
-ydb operation list incbackup | grep -E "(COMPLETED|FAILED)"
+# List backup operations and check status
+ydb operation list incbackup
+```
+
+Look for these status values in the output:
+
+| Status | Meaning |
+|--------|---------|
+| `SUCCESS` | Operation completed successfully |
+| `PROGRESS` | Operation is still running |
+| `CANCELLED` | Operation was cancelled |
+| `ERROR` | Operation failed |
+
+```bash
+# Get detailed information about a specific operation
+ydb operation get <operation-id>
 
 # Verify backup directory exists
 ydb scheme ls .backups/collections/production_backups/ | tail -1
 ```
+
+If an operation shows `ERROR` status, check the operation details for the error message and verify that all tables in the collection are accessible.
 
 ## Verify external exports
 
@@ -60,6 +76,33 @@ ydb tools restore -i /tmp/test_restore -d /Root/test_restore_verification
 | Export verification | Weekly | Verify exports to external storage |
 | Full restore test | Monthly | Complete restore to test environment |
 | Disaster recovery drill | Quarterly | Full DR simulation |
+
+## Setting up monitoring and alerts
+
+YDB does not provide built-in backup monitoring or alerting. Implement external monitoring to detect backup failures:
+
+### Example monitoring script {#monitoring-script}
+
+```bash
+#!/bin/bash
+# Check for failed backup operations
+FAILED=$(ydb operation list incbackup --format json | jq '[.operations[] | select(.status == "ERROR")] | length')
+
+if [ "$FAILED" -gt 0 ]; then
+  echo "ALERT: $FAILED backup operation(s) failed" | mail -s "YDB Backup Alert" admin@example.com
+fi
+
+# Check that a backup was created in the last 24 hours
+LATEST=$(ydb scheme ls .backups/collections/production_backups/ | sort | tail -1)
+# Add your own logic to parse timestamp and compare with current time
+```
+
+### Monitoring recommendations {#monitoring-recommendations}
+
+- Schedule monitoring scripts via cron to run after expected backup times
+- Check both operation status (`ERROR`) and that new backups were created
+- Integrate with your existing alerting system (email, Slack, PagerDuty, etc.)
+- Monitor backup storage growth to avoid running out of space
 
 ## Next steps
 

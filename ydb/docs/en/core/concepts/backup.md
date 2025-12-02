@@ -48,3 +48,8 @@ Key characteristics:
 - [Backup collections](datamodel/backup-collection.md): Schema object reference and architecture details
 - [Backup and Recovery guide](../devops/backup-and-recovery.md): Practical operations guide
 - [Export/import reference](../reference/ydb-cli/export-import/index.md): CLI commands for backup operations
+- YQL reference:
+  - [`CREATE BACKUP COLLECTION`](../yql/reference/syntax/create-backup-collection.md)
+  - [`BACKUP`](../yql/reference/syntax/backup.md)
+  - [`RESTORE`](../yql/reference/syntax/restore-backup-collection.md)
+  - [`DROP BACKUP COLLECTION`](../yql/reference/syntax/drop-backup-collection.md)

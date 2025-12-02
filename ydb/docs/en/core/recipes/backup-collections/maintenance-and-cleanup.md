@@ -2,6 +2,26 @@
 
 Manage backup lifecycle and clean up old backups to control storage usage.
 
+## Identifying backup chains
+
+Backup directories are named with timestamps and suffixes (`_full` or `_incremental`). Incremental backups belong to the most recent full backup that precedes them chronologically.
+
+```bash
+# List backups sorted by time
+ydb scheme ls .backups/collections/production_backups/ | sort
+```
+
+Example output:
+```
+20250208141425Z_full        # Chain 1: full backup
+20250209141519Z_incremental # Chain 1: incremental (belongs to 20250208 full)
+20250210141612Z_incremental # Chain 1: incremental (belongs to 20250208 full)
+20250215120000Z_full        # Chain 2: new full backup starts new chain
+20250216140000Z_incremental # Chain 2: incremental (belongs to 20250215 full)
+```
+
+When you create a new full backup, it starts a new chain. All incrementals created after that full backup (until the next full) belong to that chain.
+
 ## Manual cleanup
 
 Remove old backup chains when they are no longer needed:

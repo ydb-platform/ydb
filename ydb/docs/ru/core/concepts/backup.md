@@ -48,3 +48,8 @@
 - [Коллекции резервных копий](datamodel/backup-collection.md): Справочник по схемному объекту и детали архитектуры
 - [Руководство по резервному копированию и восстановлению](../devops/backup-and-recovery.md): Практическое руководство
 - [Справочник по export/import](../reference/ydb-cli/export-import/index.md): Команды CLI для операций резервного копирования
+- Справочник YQL:
+  - [`CREATE BACKUP COLLECTION`](../yql/reference/syntax/create-backup-collection.md)
+  - [`BACKUP`](../yql/reference/syntax/backup.md)
+  - [`RESTORE`](../yql/reference/syntax/restore-backup-collection.md)
+  - [`DROP BACKUP COLLECTION`](../yql/reference/syntax/drop-backup-collection.md)

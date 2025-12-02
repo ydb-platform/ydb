@@ -4,6 +4,8 @@ This guide walks you through creating a backup collection, taking your first bac
 
 ## Creating a backup collection
 
+A backup collection is a [schema object](../../concepts/datamodel/index.md) stored in the database schema. You create and manage collections using SQL statements, and browse them using schema navigation commands (like `ydb scheme ls`) since they appear as directories in the database structure.
+
 Create a collection that includes the tables you want to back up together:
 
 ```sql
@@ -24,7 +26,10 @@ After creating the collection, take an initial full backup, then use incremental
 -- Take initial full backup
 BACKUP production_backups;
 
--- Later, take incremental backups
+-- Make changes to your data...
+-- INSERT, UPDATE, or DELETE operations on backed-up tables
+
+-- Later, take incremental backups to capture the changes
 BACKUP production_backups INCREMENTAL;
 ```
 

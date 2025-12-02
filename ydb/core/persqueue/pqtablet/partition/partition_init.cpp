@@ -388,8 +388,8 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
                 PQ_INIT_ENSURE(pair.HasStatus());
 
                 AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK)
-                    ("s", pair.GetStatus())
-                    ("k", pair.HasKey() ? pair.GetKey() : "unknown");
+                    ("status", pair.GetStatus())
+                    ("key", pair.GetKey());
 
                 PQ_INIT_ENSURE(pair.HasKey());
                 PQ_INIT_ENSURE(pair.HasValue());
@@ -497,7 +497,9 @@ THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResp
     for (const auto& range : ranges) {
         for (ui32 i = 0; i < range.PairSize(); ++i) {
             const auto& pair = range.GetPair(i);
-            AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+            AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK) //this is readrange without keys, only OK could be here
+                ("status", pair.GetStatus())
+                ("key", pair.GetKey());
             keys.push_back(pair.GetKey());
         }
     }
@@ -692,7 +694,7 @@ TKeyBoundaries SplitBodyHeadAndFastWrite(const std::deque<TDataKey>& keys)
         }
     }
 
-    AFL_ENSURE(b.Head <= b.FastWrite);
+    AFL_ENSURE(b.Head <= b.FastWrite)("head", b.Head)("fastWrite", b.FastWrite);
 
     return b;
 }
@@ -874,7 +876,7 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
             for (auto& w : range.GetPair()) {
                 NKikimrPQ::TMessageDeduplicationIdWAL wal;
                 auto r = wal.ParseFromString(w.GetValue());
-                AFL_ENSURE(r)("k", w.key());
+                AFL_ENSURE(r)("key", w.key());
 
                 if (wal.GetExpirationTimestampMilliseconds() < TInstant::Now().MilliSeconds()) {
                     PQ_LOG_D("tablet " << Partition()->TabletId << " Initializing of message id deduplicator expired: " << w.key());
@@ -882,7 +884,7 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
                 }
 
                 auto a = Partition()->MessageIdDeduplicator.ApplyWAL(std::move(wal));
-                AFL_ENSURE(a)("k", w.key());
+                AFL_ENSURE(a)("key", w.key());
             }
 
             if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
@@ -896,7 +898,7 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
             Done(ctx);
             break;
         default:
-            AFL_ENSURE("bad status")("s", range.GetStatus());
+            AFL_ENSURE("bad status")("status", range.GetStatus());
     };
 }
 

@@ -359,7 +359,7 @@ void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
     }
 }
 
-void TDistributedTransaction::OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event)
+void TDistributedTransaction::OnTxDone(const TEvPQ::TEvTxDone& event)
 {
     TX_ENSURE(Step == event.Step);
     TX_ENSURE(TxId == event.TxId);

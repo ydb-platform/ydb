@@ -54,8 +54,7 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
             "test_size": "small,medium,large",  # All test sizes
             "additional_ya_make_args": "",
             "build_preset": preset["name"],
-            "branches": f'["main"]',
-            "branches_config_path": "",
+            "collect_coredumps": "false",
             "return_url": return_url
         }
         query_string = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()])

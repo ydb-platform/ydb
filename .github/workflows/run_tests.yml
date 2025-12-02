@@ -93,7 +93,6 @@ jobs:
         with:
           sparse-checkout: |
             .github/config/stable_branches.json
-            .github/scripts/run_tests_pr_comment.py
 
       - name: Set branches
         id: set-branches

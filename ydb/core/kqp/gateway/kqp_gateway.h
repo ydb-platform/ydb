@@ -173,6 +173,10 @@ public:
 
         ui64 OutputChunkMaxSize = 0;
 
+        // Total number of transactions in the full query (for DISCARD handling)
+        // 0 means unknown (don't skip any intermediate results)
+        ui64 TotalTxCount = 0;
+
         bool IsTrailingResultsAllowed() const {
             return AllowTrailingResults && (
                 QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY ||

@@ -1773,6 +1773,9 @@ public:
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
             QueryState->StatementResultSize = GetResultsCount(request);
+            if (QueryState->PreparedQuery) {
+                request.TotalTxCount = QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize();
+            }
         }
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;

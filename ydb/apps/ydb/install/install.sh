@@ -24,11 +24,6 @@
 
 set -euo pipefail
 
-VERBOSE=${VERBOSE:-}
-if [[ ${VERBOSE} != "" ]]; then
-    set -x
-fi
-
 CURRENT_OS=""
 CURRENT_ARCH=""
 YDB_CLI_BIN="ydb"
@@ -69,46 +64,12 @@ case ${MACHINE} in
           ;;
 esac
 
-DEFAULT_RC_PATH="${HOME}/.bashrc"
-
-if [ "${SHELL_NAME}" != "bash" ]; then
-    DEFAULT_RC_PATH="${HOME}/.${SHELL_NAME}rc"
-elif [ "${SYSTEM}" = "Darwin" ]; then
-    DEFAULT_RC_PATH="${HOME}/.bash_profile"
-fi
-
-DEFAULT_INSTALL_PATH="${HOME}/ydb"
-YDB_CLI_INSTALL_PATH="${DEFAULT_INSTALL_PATH}"
+CANONICAL_BIN_DIR="${HOME}/.local/bin"
+CANONICAL_BIN_PATH="${CANONICAL_BIN_DIR}/${YDB_CLI_BIN}"
+LEGACY_ROOT="${HOME}/ydb"
+LEGACY_BIN_DIR="${LEGACY_ROOT}/bin"
+LEGACY_PATH_HELPER="${LEGACY_ROOT}/path.bash.inc"
 RC_PATH=
-NO_RC=
-AUTO_RC=
-
-while getopts "hi:r:na" opt ; do
-    case "$opt" in
-        i)
-            YDB_CLI_INSTALL_PATH="${OPTARG}"
-            ;;
-        r)
-            RC_PATH="${OPTARG}"
-            ;;
-        n)
-            NO_RC=yes
-            ;;
-        a)
-            AUTO_RC=yes
-            ;;
-        h)
-            echo "Usage: install [options...]"
-            echo "Options:"
-            echo " -i [INSTALL_DIR]    Installs to specified dir."
-            echo " -r [RC_FILE]        Automatically modify RC_FILE with PATH modification."
-            echo " -n                  Don't modify rc file and don't ask about it."
-            echo " -a                  Automatically modify default rc file with PATH modification."
-            echo " -h                  Prints help."
-            exit 0
-            ;;
-    esac
-done
 
 CURL_HELP="${YDB_CLI_TEST_CURL_HELP:-$(curl --help)}"
 CURL_OPTIONS=("-fS")
@@ -158,53 +119,125 @@ chmod +x "${TMP_YDB}"
 # Check that all is ok, and print full version to stdout.
 ${TMP_YDB} version || echo "Installation failed. Please contact support. System info: $(uname -a)"
 
-mkdir -p "${YDB_CLI_INSTALL_PATH}/bin"
-YDB_CLI="${YDB_CLI_INSTALL_PATH}/bin/${YDB_CLI_BIN}"
-mv -f "${TMP_YDB}" "${YDB_CLI}"
-mkdir -p "${YDB_CLI_INSTALL_PATH}/install"
+mkdir -p "${CANONICAL_BIN_DIR}"
+mv -f "${TMP_YDB}" "${CANONICAL_BIN_PATH}"
 
 case "${SHELL_NAME}" in
     bash | zsh)
         ;;
     *)
-        echo "ydb is installed to ${YDB_CLI}"
+        echo "ydb is installed to ${CANONICAL_BIN_PATH}"
         exit 0
         ;;
 esac
 
-YDB_CLI_BASH_PATH="${YDB_CLI_INSTALL_PATH}/path.bash.inc"
-
-if [ "${SHELL_NAME}" = "bash" ]; then
-    cat >"${YDB_CLI_BASH_PATH}" <<EOF
-ydb_cli_dir="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-bin_path="\${ydb_cli_dir}/bin"
-export PATH="\${bin_path}:\${PATH}"
-EOF
-else
-    cat >"${YDB_CLI_BASH_PATH}" <<EOF
-ydb_cli_dir="\$(cd "\$(dirname "\${(%):-%N}")" && pwd)"
-bin_path="\${ydb_cli_dir}/bin"
-export PATH="\${bin_path}:\${PATH}"
-EOF
-fi
-
-if [ "${NO_RC}" = "yes" ]; then
-    exit 0
-fi
-
-function modify_rc() {
-    if ! grep -Fq "if [ -f '${YDB_CLI_BASH_PATH}' ]; then source '${YDB_CLI_BASH_PATH}'; fi" "$1"; then
-        cat >> "$1" <<EOF
-
-# The next line updates PATH for YDB CLI.
-if [ -f '${YDB_CLI_BASH_PATH}' ]; then source '${YDB_CLI_BASH_PATH}'; fi
-EOF
-        echo ""
-        echo "ydb PATH has been added to your '${1}' profile"
+function remove_file_if_exists() {
+    local target="$1"
+    if [ -f "${target}" ]; then
+        rm -f "${target}"
+        echo "Removed legacy file ${target}"
     fi
+}
 
-    echo "" >> "$1"
-    echo "To complete installation, start a new shell (exec -l \$SHELL) or type 'source \"$1\"' in the current one"
+function try_remove_dir_if_empty() {
+    local dir="$1"
+    if [ -d "${dir}" ] && [ -z "$(ls -A "${dir}")" ]; then
+        if rmdir "${dir}" 2>/dev/null; then
+            echo "Removed empty legacy directory ${dir}"
+        fi
+    fi
+}
+
+function cleanup_legacy_rc_file() {
+    local file="$1"
+    if [ ! -f "${file}" ]; then
+        return
+    fi
+    local tmp
+    tmp=$(mktemp)
+    # Strip legacy helper sourcing and direct ~/ydb/bin edits.
+    sed -e '/ydb\/path\.bash\.inc/d' \
+        -e '/ydb\/bin/d' \
+        -e '/The next line updates PATH for YDB CLI/d' \
+        "${file}" > "${tmp}"
+    if ! cmp -s "${tmp}" "${file}"; then
+        mv "${tmp}" "${file}"
+        echo "Removed legacy YDB PATH settings from ${file}"
+    else
+        rm -f "${tmp}"
+    fi
+}
+
+function append_local_bin_block() {
+    local file="$1"
+    mkdir -p "$(dirname "${file}")"
+    touch "${file}"
+    cleanup_legacy_rc_file "${file}"
+    if grep -Fq ".local/bin" "${file}"; then
+        echo "${HOME}/.local/bin already present in ${file}"
+        return
+    fi
+    cat <<'EOF' >> "${file}"
+# YDB CLI: append ~/.local/bin to PATH
+if ! echo "${PATH}" | tr ':' '\n' | grep -Fq "${HOME}/.local/bin"; then
+    export PATH="${HOME}/.local/bin:${PATH}"
+fi
+EOF
+    echo "Updated PATH settings in ${file}"
+}
+
+function cleanup_legacy_environment() {
+    # Remove old helper script and clean known rc/profile files.
+    remove_file_if_exists "${LEGACY_PATH_HELPER}"
+    cleanup_legacy_rc_file "${HOME}/.zprofile"
+    cleanup_legacy_rc_file "${HOME}/.zshrc"
+    cleanup_legacy_rc_file "${HOME}/.bash_profile"
+    cleanup_legacy_rc_file "${HOME}/.bashrc"
+    cleanup_legacy_rc_file "${HOME}/.profile"
+    try_remove_dir_if_empty "${LEGACY_BIN_DIR}"
+    try_remove_dir_if_empty "${LEGACY_ROOT}/install"
+    try_remove_dir_if_empty "${LEGACY_ROOT}"
+}
+
+function configure_zsh_profiles() {
+    append_local_bin_block "${HOME}/.zprofile"
+}
+
+function configure_bash_profiles() {
+    append_local_bin_block "${HOME}/.bash_profile"
+    append_local_bin_block "${HOME}/.bashrc"
+}
+
+function configure_custom_profile() {
+    local file="$1"
+    append_local_bin_block "${file}"
+}
+
+function configure_default_profiles() {
+    if [ "${SHELL_NAME}" = "zsh" ]; then
+        configure_zsh_profiles
+    else
+        configure_bash_profiles
+    fi
+}
+
+function describe_default_profiles() {
+    # Show the user exactly which files will be touched if they keep defaults.
+    if [ "${SHELL_NAME}" = "zsh" ]; then
+        echo "${HOME}/.zprofile"
+    else
+        echo "${HOME}/.bash_profile and ${HOME}/.bashrc"
+    fi
+}
+
+function ask_for_rc_path() {
+    local defaults
+    defaults=$(describe_default_profiles)
+    # Allow users to override the target profile; pressing Enter keeps defaults.
+    echo "Enter a profile file to update, or leave blank to modify ${defaults}:"
+    printf "> "
+    read filepath
+    RC_PATH="${filepath}"
 }
 
 function input_yes_no() {
@@ -223,36 +256,28 @@ function input_yes_no() {
     done
 }
 
-function ask_for_rc_path() {
-    echo "Enter a path to an rc file to update, or leave blank to use"
-    echo -n "[${DEFAULT_RC_PATH}]: "
-    read filepath
-    if [ "${filepath}" = "" ]; then
-        filepath="${DEFAULT_RC_PATH}"
-    fi
-    RC_PATH="$filepath"
+function print_restart_notice() {
+    echo "IMPORTANT: restart your shell (exec -l \$SHELL) or re-source updated profile files to apply the new PATH settings."
 }
 
-function print_rc_guide() {
-    echo "Source '${YDB_CLI_BASH_PATH}' in your profile to add the command line directory to your \$PATH."
-}
-
-if [ "${RC_PATH}" != "" ] ; then
-    modify_rc "${RC_PATH}"
-    exit 0
-fi
+cleanup_legacy_environment
 
 if [ "${AUTO_RC}" = "yes" ]; then
-    modify_rc "${DEFAULT_RC_PATH}"
+    configure_default_profiles
+    print_restart_notice
     exit 0
 fi
-
 
 echo -n "Modify profile to update your \$PATH ? [Y/n] "
 
 if input_yes_no ; then
     ask_for_rc_path
-    modify_rc "${RC_PATH}"
+    if [ -n "${RC_PATH}" ]; then
+        configure_custom_profile "${RC_PATH}"
+    else
+        configure_default_profiles
+    fi
+    print_restart_notice
 else
-    print_rc_guide
+    echo "Add '${HOME}/.local/bin' to your PATH in the appropriate shell profile to use 'ydb' without specifying the full path."
 fi

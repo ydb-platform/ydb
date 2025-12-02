@@ -1,6 +1,6 @@
 # Custom initialization scripts
 
-The {{ ydb-short-name }} Docker container supports custom initialization scripts that allow you to automate database setup tasks. This feature is inspired by the PostgreSQL/Bitnami initialization pattern.
+The {{ ydb-short-name }} Docker container supports custom initialization scripts that allow you to automate database setup tasks.
 
 ## Script directories
 
@@ -44,8 +44,8 @@ You can customize the script directories using environment variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `YBD_PREINITSCRIPTS_DIR` | `/preinit.d` | Path to the pre-init scripts directory |
-| `YBD_INITSCRIPTS_DIR` | `/init.d` | Path to the init scripts directory |
+| `YDB_PREINITSCRIPTS_DIR` | `/preinit.d` | Path to the pre-init scripts directory |
+| `YDB_INITSCRIPTS_DIR` | `/init.d` | Path to the init scripts directory |
 
 ## Error handling
 

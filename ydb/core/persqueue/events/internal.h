@@ -957,6 +957,9 @@ struct TEvPQ {
 
         TMessageGroupsPtr ExplicitMessageGroups;
         TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+        TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfig;
+        TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfig;
+        TMaybe<NKikimrPQ::TPartitions> PartitionsData;
 
         NWilson::TSpan Span;
     };

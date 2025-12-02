@@ -3566,7 +3566,6 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     ProcessWriteTxs(ctx, request->Record);
     ProcessDeleteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
-    ProcessConfigTx(ctx, request.Get());
 
     WriteTxsInProgress = true;
 
@@ -4110,15 +4109,29 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
     PQ_LOG_T("Commit TxId " << tx.TxId);
 
     TMaybe<NKikimrPQ::TTransaction> serializedTx = tx.Serialize(NKikimrPQ::TTransaction::EXECUTED);
+    TMaybe<NKikimrPQ::TPQTabletConfig> tabletConfig;
+
+    if (tx.Kind == NKikimrPQ::TTransaction::KIND_CONFIG) {
+        tabletConfig = tx.TabletConfig;
+    }
 
     auto graph = MakePartitionGraph(tx.TabletConfig);
-    for (ui32 partitionId : tx.Partitions) {
+    for (const ui32 partitionId : tx.Partitions) {
         auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, graph, partitionId);
         auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId, explicitMessageGroups);
 
         if (serializedTx.Defined()) {
             event->SerializedTx = std::move(*serializedTx);
+
             serializedTx = Nothing();
+        }
+
+        if (tabletConfig.Defined()) {
+            event->TabletConfig = std::move(*tabletConfig);
+            event->BootstrapConfig = tx.BootstrapConfig;
+            event->PartitionsData = tx.PartitionsData;
+
+            tabletConfig = Nothing();
         }
 
         auto p = Partitions.find(TPartitionId(partitionId));

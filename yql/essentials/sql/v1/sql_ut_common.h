@@ -11316,7 +11316,7 @@ Y_UNIT_TEST_SUITE(YqlSelect) {
 
 Y_UNIT_TEST(LangVer) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 3);
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -11325,7 +11325,7 @@ Y_UNIT_TEST(LangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         res.Issues.ToOneLineString(),
-        "YqlSelect is not available before 2025.04");
+        "YqlSelect is not available before 2025.05");
 }
 
 Y_UNIT_TEST(AutoTopLevel) {

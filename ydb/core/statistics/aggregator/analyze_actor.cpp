@@ -1,8 +1,10 @@
+#include <numbers>
 #include <ydb/core/statistics/aggregator/analyze_actor.h>
 
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
+#include <util/generic/size_literals.h>
 #include <util/string/vector.h>
 
 #include <format>
@@ -127,6 +129,78 @@ private:
     TVector<TAggColumn> Columns;
 };
 
+class TCMSEval : public IColumnStatisticEval {
+    ui64 Width;
+    ui64 Depth = DEFAULT_DEPTH;
+    std::optional<ui32> Seq;
+
+    static constexpr ui64 MIN_WIDTH = 256;
+    static constexpr ui64 DEFAULT_DEPTH = 8;
+
+    TCMSEval(ui64 width) : Width(width) {}
+public:
+    static std::optional<TCMSEval> MaybeCreate(
+            const NKikimrStat::TSimpleColumnStatistics& simpleStats,
+            const NScheme::TTypeInfo&) {
+        if (simpleStats.GetCountDistinct() >= 0.8 * simpleStats.GetCount()) {
+            return std::nullopt;
+        }
+
+        const double n = simpleStats.GetCount();
+        const double ndv = simpleStats.GetCountDistinct();
+        if (ndv == 0) {
+            return TCMSEval(MIN_WIDTH);
+        }
+
+        const double c = 10;
+        const double eps = (c - 1) * (1 + std::log10(n / ndv)) / ndv;
+        const ui64 cmsWidth = std::max((ui64)MIN_WIDTH, (ui64)ceil(std::numbers::e_v<double> / eps));
+        return TCMSEval(cmsWidth);
+    }
+
+    EStatType GetType() const final { return EStatType::COUNT_MIN_SKETCH; }
+
+    size_t EstimateSize() const final { return Width * Depth * sizeof(ui32); }
+
+    void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
+        Seq = builder.AddUDAFAggregation(columnName, "CountMinSketch", Width, Depth);
+    }
+
+    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const final {
+        NYdb::TValueParser val(aggColumns.at(Seq.value()));
+        val.OpenOptional();
+        if (!val.IsNull()) {
+            const auto& bytes = val.GetBytes();
+            return TString(bytes.data(), bytes.size());
+        } else {
+            auto defaultVal = std::unique_ptr<TCountMinSketch>(
+                TCountMinSketch::Create(Width, Depth));
+            auto bytes = defaultVal->AsStringBuf();
+            return TString(bytes.data(), bytes.size());
+        }
+    }
+};
+
+TVector<EStatType> IColumnStatisticEval::SupportedTypes() {
+    return { EStatType::COUNT_MIN_SKETCH };
+}
+
+IColumnStatisticEval::TPtr IColumnStatisticEval::MaybeCreate(
+        EStatType statType,
+        const NKikimrStat::TSimpleColumnStatistics& simpleStats,
+        const NScheme::TTypeInfo& columnType) {
+    switch (statType) {
+    case EStatType::COUNT_MIN_SKETCH: {
+        auto maybeEval = TCMSEval::MaybeCreate(simpleStats, columnType);
+        if (!maybeEval) {
+            return TPtr{};
+        }
+        return std::make_unique<TCMSEval>(std::move(*maybeEval));
+    }
+    default:
+        return TPtr{};
+    }
+}
 
 class TAnalyzeActor::TScanActor : public TQueryBase {
 public:
@@ -190,9 +264,6 @@ private:
     bool ResponseSent = false;
 };
 
-static constexpr ui64 CMS_WIDTH = 256;
-static constexpr ui64 CMS_DEPTH = 8;
-
 void TAnalyzeActor::Bootstrap() {
     Become(&TThis::StateNavigate);
 
@@ -234,28 +305,25 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     }
 
     // TODO: escape table path
-    auto table = "/" + JoinVectorIntoString(entry.Path, "/");
+    TableName = "/" + JoinVectorIntoString(entry.Path, "/");
 
     THashMap<ui32, TSysTables::TTableColumnInfo> tag2Column;
     for (const auto& col : entry.Columns) {
         tag2Column[col.second.Id] = col.second;
     }
 
-    TSelectBuilder builder;
+    TSelectBuilder stage1Builder;
 
-    // TODO: many statistics types
-    CountSeq = builder.AddBuiltinAggregation({}, "count");
+    CountSeq = stage1Builder.AddBuiltinAggregation({}, "count");
 
     auto addColumn = [&](const TSysTables::TTableColumnInfo& colInfo) {
-        Columns.emplace_back(colInfo.Id, colInfo.PType);
+        Columns.emplace_back(colInfo.Id, colInfo.PType, colInfo.Name);
         // TODO: escape column names
-        Columns.back().CountDistinctSeq = builder.AddBuiltinAggregation(
+        Columns.back().CountDistinctSeq = stage1Builder.AddBuiltinAggregation(
             colInfo.Name, "HLL");
-        Columns.back().CmsSeq = builder.AddUDAFAggregation(
-            colInfo.Name, "CountMinSketch", CMS_WIDTH, CMS_DEPTH);
     };
-    if (!ColumnTags.empty()) {
-        for (const auto& colTag : ColumnTags) {
+    if (!RequestedColumnTags.empty()) {
+        for (const auto& colTag : RequestedColumnTags) {
             auto colIt = tag2Column.find(colTag);
             if (colIt == tag2Column.end()) {
                 // Column probably already deleted, skip it.
@@ -269,13 +337,13 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         }
     }
 
-    Become(&TThis::StateQuery);
+    Become(&TThis::StateQueryStage1);
     auto actor = std::make_unique<TScanActor>(
-        SelfId(), DatabaseName, builder.Build(table), builder.ColumnCount());
+        SelfId(), DatabaseName, stage1Builder.Build(TableName), stage1Builder.ColumnCount());
     Register(actor.release());
 }
 
-TString TAnalyzeActor::TColumnDesc::ExtractSimpleStats(
+NKikimrStat::TSimpleColumnStatistics TAnalyzeActor::TColumnDesc::ExtractSimpleStats(
         ui64 count, const TVector<NYdb::TValue>& aggColumns) const {
     NKikimrStat::TSimpleColumnStatistics result;
     result.SetCount(count);
@@ -284,52 +352,74 @@ TString TAnalyzeActor::TColumnDesc::ExtractSimpleStats(
     ui64 countDistinct = hllVal.GetOptionalUint64().value_or(0);
     result.SetCountDistinct(countDistinct);
 
-    return result.SerializeAsString();
+    return result;
 }
 
-TString TAnalyzeActor::TColumnDesc::ExtractCMS(const TVector<NYdb::TValue>& aggColumns) const {
-    TString data;
-    NYdb::TValueParser val(aggColumns.at(CmsSeq.value()));
-    val.OpenOptional();
-    if (!val.IsNull()) {
-        const auto& bytes = val.GetBytes();
-        data.assign(bytes.data(), bytes.size());
-    } else {
-        auto defaultVal = std::unique_ptr<TCountMinSketch>(
-            TCountMinSketch::Create(CMS_WIDTH, CMS_DEPTH));
-        auto bytes = defaultVal->AsStringBuf();
-        data.assign(bytes.data(), bytes.size());
-    }
-    return data;
-}
-
-
-void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
+void TAnalyzeActor::HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     const auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
         FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus::InternalError);
         return;
     }
 
-    std::vector<TStatisticsItem> items;
     NYdb::TValueParser val(result.AggColumns.at(CountSeq.value()));
     ui64 rowCount = val.GetUint64();
 
-    for (const auto& col : Columns) {
-        items.emplace_back(
+    auto supportedStatTypes = IColumnStatisticEval::SupportedTypes();
+
+    TSelectBuilder stage2Builder;
+    for (auto& col : Columns) {
+        auto simpleStats = col.ExtractSimpleStats(rowCount, result.AggColumns);
+        Results.emplace_back(
             col.Tag,
             NKikimr::NStat::SIMPLE_COLUMN,
-            col.ExtractSimpleStats(rowCount, result.AggColumns));
+            simpleStats.SerializeAsString());
 
-        if (col.CmsSeq) {
-            items.emplace_back(
-                col.Tag,
-                NKikimr::NStat::COUNT_MIN_SKETCH,
-                col.ExtractCMS(result.AggColumns));
+        for (auto type : supportedStatTypes) {
+            auto statEval = IColumnStatisticEval::MaybeCreate(type, simpleStats, col.Type);
+            if (!statEval) {
+                continue;
+            }
+            if (statEval->EstimateSize() >= 4_MB) {
+                // To avoid: Error: ydb/library/yql/dq/runtime/dq_output_channel.cpp:405: Row data size is too big: 53839241 bytes, exceeds limit of 50331648 bytes
+                continue;
+            }
+            statEval->AddAggregations(col.Name, stage2Builder);
+            col.Statistics.push_back(std::move(statEval));
         }
     }
 
-    auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(std::move(items));
+    if (stage2Builder.ColumnCount() == 0) {
+        // Second stage is not needed, return results right away.
+        auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(std::move(Results));
+        Send(Parent, response.release());
+        PassAway();
+        return;
+    }
+
+    Become(&TThis::StateQueryStage2);
+    auto actor = std::make_unique<TScanActor>(
+        SelfId(), DatabaseName, stage2Builder.Build(TableName), stage2Builder.ColumnCount());
+    Register(actor.release());
+}
+
+void TAnalyzeActor::HandleStage2(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
+    const auto& result = *ev->Get();
+    if (result.Status != Ydb::StatusIds::SUCCESS) {
+        FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus::InternalError);
+        return;
+    }
+
+    for (const auto& col : Columns) {
+        for (const auto& statEval : col.Statistics) {
+            Results.emplace_back(
+                col.Tag,
+                statEval->GetType(),
+                statEval->ExtractData(result.AggColumns));
+        }
+    }
+
+    auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(std::move(Results));
     Send(Parent, response.release());
     PassAway();
 }

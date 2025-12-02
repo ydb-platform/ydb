@@ -39,6 +39,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'pull_request' && 'main' || github.ref }}
           fetch-depth: 1
           sparse-checkout: |
             .github

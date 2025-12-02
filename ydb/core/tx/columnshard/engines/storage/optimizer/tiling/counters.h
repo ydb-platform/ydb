@@ -111,4 +111,4 @@ public:
     }
 };
 
-}
+}  // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

@@ -253,8 +253,9 @@ namespace NKikimr {
                 ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
             }
 
-            void Handle(TEvPhantomFlagStorageAddFlagsFromSnapshot::TPtr ev) {
-                KeepState.AddFlagsToPhantomFlagStorage(std::move(ev->Get()->Flags));
+            void Handle(TEvPhantomFlagStorageFinishBuilder::TPtr ev) {
+                KeepState.FinishPhantomFlagStorageBuilder(std::move(ev->Get()->Flags),
+                        std::move(ev->Get()->Thresholds));
             }
 
             void Handle(const TEvPhantomFlagStorageGetSnapshot::TPtr& ev) {
@@ -283,7 +284,7 @@ namespace NKikimr {
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)
                 HFunc(TEvListChunks, Handle)
-                hFunc(TEvPhantomFlagStorageAddFlagsFromSnapshot, Handle)
+                hFunc(TEvPhantomFlagStorageFinishBuilder, Handle)
                 hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
                 hFunc(TEvLocalSyncData, Handle)
                 hFunc(TEvSyncLogUpdateNeighbourSyncedLsn, Handle)

@@ -99,7 +99,6 @@ namespace NKikimr {
             bool DeleteChunkAction = false;
         };
 
-
         ////////////////////////////////////////////////////////////////////////////
         // TSyncLogKeeperState
         // Manages entry point and commits additionally to TSyncLog
@@ -165,7 +164,7 @@ namespace NKikimr {
             void UpdateNeighbourSyncedLsn(ui32 orderNumber, ui64 syncedLsn);
 
             // Add flags from cut sync log snapshot
-            void AddFlagsToPhantomFlagStorage(TPhantomFlags&& flags);
+            void FinishPhantomFlagStorageBuilder(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds);
             TPhantomFlagStorageSnapshot GetPhantomFlagStorageSnapshot() const;
             void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
 
@@ -205,6 +204,7 @@ namespace NKikimr {
 
             // synced lsns of neighbours
             std::vector<ui64> SyncedLsns;
+            TSyncedMask SyncedMask;
 
             // phantom flag storage
             TPhantomFlagStorageState PhantomFlagStorageState;

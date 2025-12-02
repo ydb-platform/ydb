@@ -38,6 +38,7 @@ namespace NKikimr {
                     std::make_shared<TActorSystemLoggerCtx>(ctx.ActorSystem()),
                     ctx.SelfID);
                 PerformActions(ctx);
+                UpdateCounters();
                 Become(&TThis::StateFunc);
             }
 
@@ -273,6 +274,7 @@ namespace NKikimr {
             }
 
             void UpdateCounters() {
+                KeepState.UpdateMetrics();
                 Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
             }
 

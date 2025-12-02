@@ -133,15 +133,15 @@ void TPhantomFlagStorageState::AdjustSize(ui64 sizeLimit) {
     if (newCapacity > MaxFlagsStoredCount) {
         StoredFlags.reserve(newCapacity);
         STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_STORAGE, BSPFS03,
-                VDISKP(SlCtx->VCtx, "Reserving addition space for PhantomFlagStorage"),
+                VDISKP(SlCtx->VCtx, "Reserving additional space for PhantomFlagStorage"),
                 (OldCapacity, MaxFlagsStoredCount),
                 (NewCapacity, newCapacity),
                 (ActualCapacity, StoredFlags.capacity()));
     } else if (newCapacity < MaxFlagsStoredCount) {
         ui32 flagsDropped = 0;
         if (newCapacity < StoredFlags.size()) {
-            StoredFlags = TPhantomFlags(StoredFlags.begin(), StoredFlags.begin() + newCapacity);
             flagsDropped = StoredFlags.size() - newCapacity;
+            StoredFlags = TPhantomFlags(StoredFlags.begin(), StoredFlags.begin() + newCapacity);
         }
         StoredFlags.shrink_to_fit();
         StoredFlags.reserve(newCapacity);
@@ -167,7 +167,6 @@ bool TPhantomFlagStorageState::AddFlag(const TLogoBlobRec& blobRec) {
                 (BlobId, blobRec.LogoBlobID().ToString()));
         return false;
     }
-    return false;
 }
 
 void TPhantomFlagStorageState::UpdateSyncedMask(const TSyncedMask& newSyncedMask) {

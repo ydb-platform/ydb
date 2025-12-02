@@ -10,8 +10,8 @@ export YDB_GRPC_ENABLE_TLS=${YDB_GRPC_ENABLE_TLS:-true}
 export YDB_GRPC_TLS_DATA_PATH=${YDB_GRPC_TLS_DATA_PATH:-/ydb_certs}
 
 export PYTHONWARNINGS=ignore
-export YBD_INITSCRIPTS_DIR=${YBD_INITSCRIPTS_DIR:-/init.d}
-export YBD_PREINITSCRIPTS_DIR=${YBD_PREINITSCRIPTS_DIR:-/preinit.d}
+export YDB_INITSCRIPTS_DIR=${YDB_INITSCRIPTS_DIR:-/init.d}
+export YDB_PREINITSCRIPTS_DIR=${YDB_PREINITSCRIPTS_DIR:-/preinit.d}
 
 # Create and activate a YDB profile for simplified commands
 /ydb config profile create local \
@@ -122,10 +122,10 @@ ydb_monitor_process() {
 }
 
 ydb_custom_pre_init_scripts() {
-    if [ -d "$YBD_PREINITSCRIPTS_DIR" ] && [ -n "$(find "$YBD_PREINITSCRIPTS_DIR/" -type f -name "*.sh")" ]; then
+    if [ -d "$YDB_PREINITSCRIPTS_DIR" ] && [ -n "$(find "$YDB_PREINITSCRIPTS_DIR/" -type f -name "*.sh")" ]; then
         local fail_marker="${YDB_WORKING_DIR}/.pre_init_failed"
         rm -f "$fail_marker"
-        find "$YBD_PREINITSCRIPTS_DIR/" -type f -name "*.sh" | sort | while read -r f; do
+        find "$YDB_PREINITSCRIPTS_DIR/" -type f -name "*.sh" | sort | while read -r f; do
             local status
             # Non-executable scripts are sourced to allow them to modify the environment for subsequent scripts.
             if [ -x "$f" ]; then
@@ -155,7 +155,7 @@ ydb_custom_pre_init_scripts() {
 
 ydb_custom_init_scripts() {
     local user_scripts_initialized_file="${YDB_WORKING_DIR}/.user_scripts_initialized"
-    if [ -d "$YBD_INITSCRIPTS_DIR" ] && [ -n "$(find "$YBD_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql\.gz\)")" ] && [ ! -f "$user_scripts_initialized_file" ]; then
+    if [ -d "$YDB_INITSCRIPTS_DIR" ] && [ -n "$(find "$YDB_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql\.gz\)")" ] && [ ! -f "$user_scripts_initialized_file" ]; then
         # YDB is started in the background by a separate process,
         # so we need to wait for it to become ready before running init scripts.
         if ! ydb_wait_ready; then
@@ -165,7 +165,7 @@ ydb_custom_init_scripts() {
 
         local fail_marker="${YDB_WORKING_DIR}/.init_failed"
         rm -f "$fail_marker"
-        find "$YBD_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql\.gz\)" | sort | while read -r f; do
+        find "$YDB_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql\.gz\)" | sort | while read -r f; do
             local status
             case "$f" in
             *.sh)

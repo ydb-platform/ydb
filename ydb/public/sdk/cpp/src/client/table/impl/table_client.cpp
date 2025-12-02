@@ -24,7 +24,7 @@ TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings) {
 TTableClient::TImpl::TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TClientSettings& settings)
     : TClientImplCommon(std::move(connections), settings)
     , Settings_(settings)
-    , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_, DbDriverState_->Log)
+    , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_, DbDriverState_)
 {
     if (!DbDriverState_->StatCollector.IsCollecting()) {
         return;

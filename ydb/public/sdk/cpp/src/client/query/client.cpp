@@ -64,7 +64,7 @@ public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings)
         , Settings_(settings)
-        , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_, DbDriverState_->Log)
+        , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_, DbDriverState_)
     {
         SetStatCollector(DbDriverState_->StatCollector.GetClientStatCollector("Query"));
         SessionPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector("Query"));

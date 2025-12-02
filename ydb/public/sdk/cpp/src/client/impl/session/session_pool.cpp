@@ -97,12 +97,12 @@ std::uint32_t TSessionPool::TWaitersQueue::Size() const {
 }
 
 
-TSessionPool::TSessionPool(std::uint32_t maxActiveSessions, const TLog& log)
+TSessionPool::TSessionPool(std::uint32_t maxActiveSessions, TDbDriverStatePtr dbDriverState)
     : Closed_(false)
     , WaitersQueue_(maxActiveSessions * 10)
     , ActiveSessions_(0)
     , MaxActiveSessions_(maxActiveSessions)
-    , Log_(log)
+    , DbDriverState_(dbDriverState)
 {}
 
 static void CloseAndDeleteSession(std::unique_ptr<TKqpSessionCommon>&& impl,
@@ -163,25 +163,25 @@ void TSessionPool::GetSession(std::unique_ptr<IGetSessionCtx> ctx)
 
     if (sessionSource == TSessionSource::Waiter) {
         // ctxPtr->ScheduleOnDeadlineWaiterCleanup() is called after TryPush
-        LOG_LAZY(Log_, TLOG_DEBUG,
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
             TStringBuilder() << "[SessionPool] Request queued: waiters=" << waitersCount
                 << ", max_queue=" << (MaxActiveSessions_ * 10));
     } else if (sessionSource == TSessionSource::Error) {
         FakeSessionsCounter_.Inc();
-        LOG_LAZY(Log_, TLOG_INFO,
+        LOG_LAZY(DbDriverState_->Log, TLOG_INFO,
             TStringBuilder() << "[SessionPool] Session limit exceeded: active=" << activeSessions
                 << ", limit=" << MaxActiveSessions_
                 << ", queue_size=" << waitersCount);
         ctx->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);
     } else if (sessionImpl) {
-        LOG_LAZY(Log_, TLOG_DEBUG,
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
             TStringBuilder() << "[SessionPool] Session from pool: session_id=" << sessionImpl->GetId()
                 << ", pool_size=" << poolSize
                 << ", active=" << activeSessions
                 << ", waiters=" << waitersCount);
         ReplySessionToUser(sessionImpl.release(), std::move(ctx));
     } else {
-        LOG_LAZY(Log_, TLOG_DEBUG,
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
             TStringBuilder() << "[SessionPool] Creating new session: active=" << activeSessions
                 << ", limit=" << MaxActiveSessions_);
         ctx->ReplyNewSession();
@@ -234,7 +234,7 @@ void TSessionPool::ClearOldWaiters() {
 
     if (!oldWaiters.empty()) {
         UpdateStats();
-        LOG_LAZY(Log_, TLOG_INFO,
+        LOG_LAZY(DbDriverState_->Log, TLOG_INFO,
             TStringBuilder() << "[SessionPool] Cleared expired waiters: count=" << oldWaiters.size()
                 << ", waiters_left=" << WaitersQueue_.Size());
     }
@@ -276,12 +276,12 @@ bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
     }
 
     if (getSessionCtx) {
-        LOG_LAZY(Log_, TLOG_DEBUG,
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
             TStringBuilder() << "[SessionPool] Session transferred to waiter: session_id=" << sessionId
                 << ", waiters_left=" << waitersCount);
         ReplySessionToUser(impl, std::move(getSessionCtx));
     } else {
-        LOG_LAZY(Log_, TLOG_DEBUG,
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
             TStringBuilder() << "[SessionPool] Session returned to pool: session_id=" << sessionId
                 << ", pool_size=" << poolSize
                 << ", active=" << activeSessions);
@@ -303,10 +303,6 @@ void TSessionPool::IncrementActiveCounterUnsafe() {
 }
 
 void TSessionPool::Drain(std::function<bool(std::unique_ptr<TKqpSessionCommon>&&)> cb, bool close) {
-    LOG_LAZY(Log_, TLOG_INFO,
-        TStringBuilder() << "[SessionPool] Draining pool: close=" << (close ? "true" : "false")
-            << ", pool_size=" << GetCurrentPoolSize());
-
     std::lock_guard guard(Mtx_);
     Closed_ = close;
     for (auto it = Sessions_.begin(); it != Sessions_.end();) {
@@ -391,7 +387,7 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakC
                 waiter->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);
             }
 
-            LOG_LAZY(Log_, TLOG_DEBUG,
+            LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
                 TStringBuilder() << "[SessionPool] Periodic task: touched=" << sessionsToTouch.size()
                     << ", deleted=" << sessionsToDelete.size()
                     << ", pool_size=" << GetCurrentPoolSize());
@@ -439,7 +435,7 @@ void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<IS
     }
 
     if (session) {
-        LOG_LAZY(Log_, TLOG_INFO,
+        LOG_LAZY(DbDriverState_->Log, TLOG_INFO,
             TStringBuilder() << "[SessionPool] Session closed by server: session_id=" << sessionId
                 << ", pool_size=" << GetCurrentPoolSize());
         Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);

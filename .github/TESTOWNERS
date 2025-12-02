@@ -2,7 +2,7 @@
 /*.md @ydb-platform/docs
 /ydb/docs/ @ydb-platform/docs
 
-#YQL @vitstn @ydb-platform/yql
+#YQL @vitstn @ydb-platform/yql 
 /ydb/library/yql/ @ydb-platform/yql
 /ydb/library/yql/dq @ydb-platform/yql @ydb-platform/qp
 /ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan

@@ -113,7 +113,8 @@ public:
     }
 
     [[nodiscard]] TMaybe<TInstant> HandleIdleness(TInstant systemTime) {
-        if (ExpiresQueue_.empty()) {
+        if (WatermarksQueue_.size() <= 1 || ExpiresQueue_.empty()) {
+            // ^^ there are no point in expiration of single input
             return Nothing();
         }
 
@@ -130,7 +131,7 @@ public:
     }
 
     [[nodiscard]] TMaybe<TInstant> GetNextIdlenessCheckAt() const {
-        if (ExpiresQueue_.empty()) {
+        if (WatermarksQueue_.size() <= 1 || ExpiresQueue_.empty()) {
             return Nothing();
         }
         return ExpiresQueue_.cbegin()->Time;

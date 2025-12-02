@@ -129,6 +129,9 @@ struct TTransaction {
     TInstant CalcPredicateTimestamp;
 
     TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+    TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfig;
+    TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfig;
+    TMaybe<NKikimrPQ::TPartitions> PartitionsData;
 };
 class TPartitionCompaction;
 

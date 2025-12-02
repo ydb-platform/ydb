@@ -68,12 +68,15 @@ def generate_compatibility_tests_button(pr_number: int, app_domain: str) -> str:
     return_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
     
     # Parameters for compatibility tests
+    # For PR: use "current" as target_version_ref to test compatibility with code from PR
+    # init and inter versions will use defaults from versions.inc if not specified
     params = {
         "owner": owner,
         "repo": repo,
         "workflow_id": workflow_id,
         "ref": "main",
         "pull_request_input": str(pr_number),
+        "target_version_ref": "current",  # Use binary built from PR code
         "build_preset": "relwithdebinfo",  # Fast preset for button
         "return_url": return_url
     }
@@ -82,7 +85,7 @@ def generate_compatibility_tests_button(pr_number: int, app_domain: str) -> str:
     
     # Badge with blue color to distinguish from regular tests
     badge_text = "▶  Run compatibility tests".replace(" ", "%20")
-    button = f"[![▶  Run compatibility tests](https://img.shields.io/badge/{badge_text}-2196F3)]({url_ui})"
+    button = f"[![▶  Run compatibility tests](https://img.shields.io/badge/{badge_text}-4caf50)]({url_ui})"
     return button
 
 

@@ -1,9 +1,9 @@
 name: Regression-run_compatibility
 run-name: >- 
           ${{
-          inputs.initial_version_ref != '' && inputs.initial_version_ref || 'default-init'}} -> ${{
-          inputs.inter_version_ref != '' && inputs.inter_version_ref || 'default-inter'}} -> ${{
-          inputs.target_version_ref != '' && inputs.target_version_ref || 'default-target'}}
+          github.event_name == 'workflow_dispatch' && github.event.inputs.initial_version_ref != '' && github.event.inputs.initial_version_ref || 'default-init'}} -> ${{
+          github.event_name == 'workflow_dispatch' && github.event.inputs.inter_version_ref != '' && github.event.inputs.inter_version_ref || 'default-inter'}} -> ${{
+          github.event_name == 'workflow_dispatch' && github.event.inputs.target_version_ref != '' && github.event.inputs.target_version_ref || 'default-target'}}
 
 on:
   schedule:
@@ -45,13 +45,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix: 
-        build_preset: ${{ (inputs.build_preset == '' || inputs.build_preset == 'all') && fromJSON('["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]') || fromJSON(format('["{0}"]', inputs.build_preset)) }}
+        build_preset: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.build_preset == '' || github.event.inputs.build_preset == 'all') && fromJSON('["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]') || fromJSON(format('["{0}"]', github.event.inputs.build_preset)) }}
     with:
       test_targets: ydb/tests/compatibility/
-      branches: ${{ inputs.pull_request_input && format('pull/{0}', inputs.pull_request_input) || github.ref_name }}
+      branches: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.pull_request_input == '') && github.ref_name || '' }}
       build_preset: ${{ matrix.build_preset }}
+      pull_number: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pull_request_input != '' && github.event.inputs.pull_request_input || '' }}
       additional_ya_make_args: >-
         ${{
-          inputs.initial_version_ref != '' && format(' -DYDB_COMPAT_INIT_REF={0} ', inputs.initial_version_ref) || ''}}${{
-          inputs.inter_version_ref != '' && format(' -DYDB_COMPAT_INTER_REF={0} ', inputs.inter_version_ref) || ''}}${{
-          inputs.target_version_ref != '' && format(' -DYDB_COMPAT_TARGET_REF={0}', inputs.target_version_ref) || ''}}
+          github.event_name == 'workflow_dispatch' && github.event.inputs.initial_version_ref != '' && format(' -DYDB_COMPAT_INIT_REF={0} ', github.event.inputs.initial_version_ref) || ''}}${{
+          github.event_name == 'workflow_dispatch' && github.event.inputs.inter_version_ref != '' && format(' -DYDB_COMPAT_INTER_REF={0} ', github.event.inputs.inter_version_ref) || ''}}${{
+          github.event_name == 'workflow_dispatch' && github.event.inputs.target_version_ref != '' && format(' -DYDB_COMPAT_TARGET_REF={0}', github.event.inputs.target_version_ref) || ''}}

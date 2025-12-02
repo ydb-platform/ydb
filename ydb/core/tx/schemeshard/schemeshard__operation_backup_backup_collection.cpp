@@ -7,7 +7,6 @@
 #include "schemeshard_utils.h"
 #include "schemeshard_impl.h"
 
-
 namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection>;
@@ -72,6 +71,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                        (incrBackupEnabled && bc->Description.GetIncrementalBackupConfig().GetOmitIndexes());
     
     TString streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
+    TVector<std::pair<TString, TString>> streamsToDrop;
 
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         auto& desc = *copyTables.Add();
@@ -124,6 +124,8 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                 rotateOp->SetTableName(item.GetPath());
                 rotateOp->SetOldStreamName(oldStreamName);
                 rotateOp->MutableNewStream()->CopyFrom(createCdcStreamOp);
+
+                streamsToDrop.emplace_back(item.GetPath(), oldStreamName);
             } else {
                 NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
                 desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
@@ -196,7 +198,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     }
                     
                     // Get index info and filter for global sync only
-                    // We need more complex logic for vector indexes in future
                     auto indexInfo = context.SS->Indexes.at(childPathId);
                     if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
                         continue;
@@ -244,6 +245,29 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                 }
             }
         }
+    }
+
+    for (const auto& [tablePathStr, streamName] : streamsToDrop) {
+        TPath tablePath = TPath::Resolve(tablePathStr, context.SS);
+        if (!tablePath.IsResolved()) continue;
+
+        NKikimrSchemeOp::TModifyScheme dropScheme;
+        dropScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropCdcStream);
+        dropScheme.SetInternal(true);
+        dropScheme.SetWorkingDir(tablePath.Parent().PathString());
+
+        auto* drop = dropScheme.MutableDropCdcStream();
+        drop->SetTableName(tablePath.LeafName());
+        drop->AddStreamName(streamName);
+
+        TTxTransaction dropTx;
+        dropTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropCdcStream);
+        dropTx.SetWorkingDir(dropScheme.GetWorkingDir());
+        dropTx.SetInternal(true);
+        *dropTx.MutableDropCdcStream() = *dropScheme.MutableDropCdcStream();
+
+        auto dropOps = CreateDropCdcStream(NextPartId(opId, result), dropTx, context);
+        result.insert(result.end(), dropOps.begin(), dropOps.end());
     }
 
     return result;

@@ -3,7 +3,6 @@
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/tiering/tier/object.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/base/appdata.h>
 
@@ -127,19 +126,28 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
                 const auto& aws = proto.GetAuth().GetAws();
                 const TString accessKeySecretName = aws.GetAwsAccessKeyIdSecretName();
                 const TString secretKeySecretName = aws.GetAwsSecretAccessKeySecretName();
-                
-                TVector<TString> secretNames = {accessKeySecretName, secretKeySecretName};
 
-                const TString databaseName = tierPath.GetDomainPathString();
-                
-                auto userTokenPtr = MakeIntrusiveConst<NACLib::TUserToken>(*context.UserToken);
-                auto future = NKqp::DescribeSecret(secretNames, userTokenPtr, databaseName, context.Ctx.ActorSystem());
-                
-                auto result = future.GetValue(TDuration::Seconds(30));
-                
-                if (result.Status != Ydb::StatusIds::SUCCESS) {
+                TPath accessKeySecretPath = TPath::Resolve(accessKeySecretName, context.SS);
+                if (!accessKeySecretPath.IsResolved() || accessKeySecretPath.IsDeleted()) {
                     errors.AddError(NKikimrScheme::StatusAccessDenied, 
-                        "Access denied to secrets in external data source \"" + tierPathString + "\": " + result.Issues.ToOneLineString());
+                        "Access denied to secret \"" + accessKeySecretName + "\" in external data source \"" + tierPathString + "\"");
+                    return false;
+                }
+
+                if (!accessKeySecretPath->IsSecret()) {
+                    errors.AddError("Object \"" + accessKeySecretName + "\" is not a secret");
+                    return false;
+                }
+                
+                TPath secretKeySecretPath = TPath::Resolve(secretKeySecretName, context.SS);
+                if (!secretKeySecretPath.IsResolved() || secretKeySecretPath.IsDeleted()) {
+                    errors.AddError(NKikimrScheme::StatusAccessDenied, 
+                        "Access denied to secret \"" + secretKeySecretName + "\" in external data source \"" + tierPathString + "\"");
+                    return false;
+                }
+
+                if (!secretKeySecretPath->IsSecret()) {
+                    errors.AddError("Object \"" + secretKeySecretName + "\" is not a secret");
                     return false;
                 }
             }

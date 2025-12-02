@@ -113,7 +113,7 @@ void VisitAllFields(const NProtoBuf::Message& msg, TTokenCollector& callback) {
         if (field.IsMessage()) {
             for (size_t j = 0; j < field.Size(); ++j) {
                 const auto& message = *field.Get<NProtoBuf::Message>(j);
-                const auto* tableRef = dynamic_cast<const TRule_table_ref*>(&message);
+                const auto* tableRef = dynamic_cast<const TRule_an_id_table*>(&message);
                 if (tableRef) {
                     callback.IsTableRefDescendent = true;
                 }

@@ -542,7 +542,6 @@ runs:
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
-            # Just append summary (header is already in the start message for run_tests)
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
           fi
 
@@ -586,7 +585,6 @@ runs:
           echo "status=true" >> $GITHUB_OUTPUT
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
         fi
-
 
     - name: comment-build-status
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'

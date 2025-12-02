@@ -1,0 +1,646 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: ydb/auth
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=auth/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "auth_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: auth
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/compile
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=compile/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "compile_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: compile
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/config
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=config/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "config_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: config
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/coordinator
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=coordinator/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "coordinator_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: coordinator
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/datastreams
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=datastreams/name_label=name/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "ydb_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: datastreams
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/dsproxy_queue
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=dsproxy_queue/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "dsproxy_queue_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: dsproxy_queue
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/dsproxy
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=dsproxy/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "dsproxy_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: dsproxy
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/dsproxy_mon
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=dsproxy_mon/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "dsproxy_mon_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: dsproxy_mon
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/dsproxy_overview
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=dsproxy_overview/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "dsproxy_overview_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: dsproxy_overview
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/dsproxy_percentile
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=dsproxy_percentile/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "dsproxy_percentile_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: dsproxy_percentile
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/grpc
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=grpc/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "grpc_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: grpc
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/kqp
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=kqp/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "kqp_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: kqp
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/netclassifier
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=netclassifier/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "netclassifier_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: netclassifier
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/processing
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=processing/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "processing_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: processing
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/proxy
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=proxy/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "proxy_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: proxy
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/followers
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=followers/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "followers_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: followers
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/storage_pool_stat
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=storage_pool_stat/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "storage_pool_stat_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: storage_pool_stat
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/tablets
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=tablets/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "tablets_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: tablets
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/topics
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=topics/name_label=name/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "ydb_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: topics
+    file_sd_configs:
+      - files:
+        - ydbd-database.yml
+  - job_name: ydb/utils
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=utils/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "utils_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: utils
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/dsproxynode
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=dsproxynode/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "dsproxynode_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: dsproxynode
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/interconnect
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=interconnect/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "interconnect_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: interconnect
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/pdisks
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=pdisks/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "pdisks_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: pdisks
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+  - job_name: ydb/persqueue
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=persqueue/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "persqueue_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: persqueue
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/pqproxy
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=pqproxy/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "pqproxy_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: pqproxy
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/vdisks
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=vdisks/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "vdisks_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: vdisks
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+  - job_name: ydb/healthcheck
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /healthcheck
+    params:
+      format:
+      - prometheus
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: healthcheck
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml
+  - job_name: ydb/ydb
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /counters/counters=ydb/name_label=name/prometheus
+    metric_relabel_configs:
+      - source_labels: ["__name__"]
+        target_label: "__name__"
+        replacement: "ydb_$1"
+    relabel_configs:
+      - regex: ([^:]+)(:[0-9]+)?
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: instance
+      - source_labels:
+        - __address__
+        target_label: counter
+        replacement: ydb
+    file_sd_configs:
+      - files:
+        - ydbd-storage.yml
+        - ydbd-database.yml

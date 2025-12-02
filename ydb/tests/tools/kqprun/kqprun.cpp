@@ -80,7 +80,7 @@ struct TExecutionOptions {
 
     bool HasExecutionCase(EExecutionCase executionCase) const {
         if (ExecutionCases.empty()) {
-            return executionCase == EExecutionCase::GenericScript;
+            return executionCase == EExecutionCase::GenericQuery;
         }
         return std::find(ExecutionCases.begin(), ExecutionCases.end(), executionCase) != ExecutionCases.end();
     }
@@ -453,6 +453,7 @@ class TMain : public TMainBase {
     TRunnerOptions RunnerOptions;
 
     std::unordered_map<TString, TString> Templates;
+    bool EmulateYt = false;
     THashMap<TString, TString> YtTablesMapping;
 
     struct TTopicSettings {
@@ -539,8 +540,13 @@ protected:
             });
 
         options.AddLongOption("emulate-yt", "Emulate YT table with local file (expected format of file - YSON each row), e. g. yt.Root/plato.Input@input.txt")
-            .RequiredArgument("table@file")
+            .OptionalArgument("table@file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                EmulateYt = true;
+                if (!option || !option->CurVal()) {
+                    return;
+                }
+
                 TStringBuf tableName;
                 TStringBuf filePath;
                 TStringBuf(option->CurVal()).Split('@', tableName, filePath);
@@ -653,7 +659,7 @@ protected:
             .StoreMappedResultT<TString>(&RunnerOptions.SchemeQueryAstOutput, &GetDefaultOutput);
 
         options.AddLongOption("script-ast-file", "File with script query ast (use '-' to write in stdout)")
-            .AddLongName("ast")    
+            .AddLongName("ast")
             .RequiredArgument("file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.ScriptQueryAstOutputs.emplace_back(GetDefaultOutput(TString(option->CurValOrDef())));
@@ -977,7 +983,7 @@ protected:
 
         SetupLogsConfig(*appConfig.MutableLogConfig());
 
-        if (!YtTablesMapping.empty()) {
+        if (!YtTablesMapping.empty() || EmulateYt) {
             const auto& fileStorageConfig = appConfig.GetQueryServiceConfig().GetFileStorage();
             auto fileStorage = WithAsync(CreateFileStorage(fileStorageConfig, {MakeYtDownloader(fileStorageConfig)}));
             auto ytFileServices = NYql::NFile::TYtFileServices::Make(RunnerOptions.YdbSettings.FunctionRegistry.Get(), YtTablesMapping, fileStorage);

@@ -3,6 +3,9 @@
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/tiering/tier/object.h>
+#include <ydb/services/metadata/secret/accessor/secret_id.h>
+#include <ydb/services/metadata/secret/accessor/snapshot.h>
+#include <ydb/library/aclib/aclib.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -114,9 +117,23 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
             AFL_VERIFY(findExternalDataSource);
             NKikimrSchemeOp::TExternalDataSourceDescription proto;
             (*findExternalDataSource)->FillProto(proto, false);
-            if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(proto); status.IsFail()) {
+            NColumnShard::NTiers::TTierConfig tierConfig;
+            if (auto status = tierConfig.DeserializeFromProto(proto); status.IsFail()) {
                 errors.AddError("Cannot use external data source \"" + tierPathString + "\" for tiering: " + status.GetErrorMessage());
                 return false;
+            }
+
+            if (context.UserToken) {
+                std::shared_ptr<NMetadata::NSecret::ISecretAccessor> secretAccessor;
+                auto secretSnapshot = std::make_shared<NMetadata::NSecret::TSnapshot>();
+                secretAccessor = std::static_pointer_cast<NMetadata::NSecret::ISecretAccessor>(secretSnapshot);
+                if (secretAccessor) {
+                    if (auto status = tierConfig.CheckSecretAccess(secretAccessor, *context.UserToken); status.IsFail()) {
+                        errors.AddError(NKikimrScheme::StatusAccessDenied, 
+                            "Access denied to secrets in external data source \"" + tierPathString + "\": " + status.GetErrorMessage());
+                        return false;
+                    }
+                }
             }
         }
     }

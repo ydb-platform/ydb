@@ -24,11 +24,13 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 
     struct TColumnDesc {
         ui32 Tag;
+        NScheme::TTypeInfo Type;
         std::optional<ui32> CountDistinctSeq;
         std::optional<ui32> CmsSeq;
 
-        explicit TColumnDesc(ui32 tag)
+        explicit TColumnDesc(ui32 tag, NScheme::TTypeInfo type)
             : Tag(tag)
+            , Type(type)
         {}
 
         TString ExtractSimpleStats(ui64 count, const TVector<NYdb::TValue>& aggColumns) const;

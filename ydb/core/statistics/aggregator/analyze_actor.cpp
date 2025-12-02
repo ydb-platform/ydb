@@ -236,9 +236,9 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     // TODO: escape table path
     auto table = "/" + JoinVectorIntoString(entry.Path, "/");
 
-    THashMap<ui32, TString> columnNames;
+    THashMap<ui32, TSysTables::TTableColumnInfo> tag2Column;
     for (const auto& col : entry.Columns) {
-        columnNames[col.second.Id] = col.second.Name;
+        tag2Column[col.second.Id] = col.second;
     }
 
     TSelectBuilder builder;
@@ -246,26 +246,26 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     // TODO: many statistics types
     CountSeq = builder.AddBuiltinAggregation({}, "count");
 
-    auto addColumn = [&](ui32 tag, const TString& name) {
-        Columns.emplace_back(tag);
+    auto addColumn = [&](const TSysTables::TTableColumnInfo& colInfo) {
+        Columns.emplace_back(colInfo.Id, colInfo.PType);
         // TODO: escape column names
         Columns.back().CountDistinctSeq = builder.AddBuiltinAggregation(
-            name, "HLL");
+            colInfo.Name, "HLL");
         Columns.back().CmsSeq = builder.AddUDAFAggregation(
-            name, "CountMinSketch", CMS_WIDTH, CMS_DEPTH);
+            colInfo.Name, "CountMinSketch", CMS_WIDTH, CMS_DEPTH);
     };
     if (!ColumnTags.empty()) {
         for (const auto& colTag : ColumnTags) {
-            auto colIt = columnNames.find(colTag);
-            if (colIt == columnNames.end()) {
+            auto colIt = tag2Column.find(colTag);
+            if (colIt == tag2Column.end()) {
                 // Column probably already deleted, skip it.
                 continue;
             }
-            addColumn(colTag, colIt->second);
+            addColumn(colIt->second);
         }
     } else {
-        for (const auto& [tag, name] : columnNames) {
-            addColumn(tag, name);
+        for (const auto& [tag, info] : tag2Column) {
+            addColumn(info);
         }
     }
 

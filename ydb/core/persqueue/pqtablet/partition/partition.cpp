@@ -2597,7 +2597,7 @@ void TPartition::RunPersist() {
         && PersistRequest->Record.CmdWriteSize() == 0
         && PersistRequest->Record.CmdRenameSize() == 0;
 
-    if (haveChanges && !requestEmpty) {
+    if (haveChanges || !requestEmpty) {
         AddMessageDeduplicatorKeys(PersistRequest.Get());
         AddMetaKey(PersistRequest.Get());
 

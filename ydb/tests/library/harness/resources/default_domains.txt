@@ -17,6 +17,7 @@
             Type: ROT
           }
         }
+        EncryptionMode: 1
       }
     }
     StoragePoolTypes {
@@ -31,6 +32,7 @@
             Type: ROT
           }
         }
+        EncryptionMode: 1
       }
     }
     StoragePoolTypes {
@@ -45,6 +47,7 @@
             Type: ROT
           }
         }
+        EncryptionMode: 1
       }
     }
     StoragePoolTypes {

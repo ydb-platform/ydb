@@ -150,11 +150,11 @@ public:
            auto removed = WatermarksQueue_.erase(TWatermarksQueueItem { data.Watermark, it->Iterator } );
            Y_DEBUG_ABORT_UNLESS(removed); // any partition in ExpiresQueue_ must have matching record in WatermarksQueue_
            it = ExpiresQueue_.erase(it);
-            if (IdleInputs_) {
-                IdleInputs_->Inc();
-                Y_DEBUG_ABORT_UNLESS(IdleEvents_);
-                IdleEvents_->Inc();
-            }
+           if (IdleInputs_) {
+               IdleInputs_->Inc();
+               Y_DEBUG_ABORT_UNLESS(IdleEvents_);
+               IdleEvents_->Inc();
+           }
         }
 
         return RecalcWatermark();

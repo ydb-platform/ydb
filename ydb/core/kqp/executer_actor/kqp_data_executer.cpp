@@ -2816,7 +2816,7 @@ private:
         }
 
         auto counters = Counters->Counters->GetKqpCounters();
-        if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
+        if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {
             counters = counters->GetSubgroup("path", context->StreamingQueryPath);
         }
         const auto& checkpointId = context->CheckpointId;

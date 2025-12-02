@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <chrono>
+#include <string>
 #include <vector>
 #include <random>
 
@@ -1040,6 +1041,277 @@ Y_UNIT_TEST(PackIsValidFuzz) {
     CTEST  << "Data size =  " << totalSize / (1024 * 1024) << "[MB]" << Endl;
     CTEST  << "Calculating speed = " << totalSize / ((totalNanoseconds + 999)/1000) << "MB/sec" << Endl;
     CTEST  << Endl;
+}
+
+Y_UNIT_TEST(StringifyFixedSize) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc kc1, kc2, pc1, pc2;
+
+    kc1.Role = EColumnRole::Key;
+    kc1.DataSize = 8;
+
+    kc2.Role = EColumnRole::Key;
+    kc2.DataSize = 4;
+
+    pc1.Role = EColumnRole::Payload;
+    pc1.DataSize = 8;
+
+    pc2.Role = EColumnRole::Payload;
+    pc2.DataSize = 4;
+
+    std::vector<TColumnDesc> columns{kc1, kc2, pc1, pc2};
+
+    auto tl = TTupleLayout::Create(columns);
+    UNIT_ASSERT(tl->TotalRowSize == 29);
+
+    const ui64 NTuples1 = 2;
+    const ui64 Tuples1DataBytes = (tl->TotalRowSize) * NTuples1;
+
+    std::vector<ui64> col1(NTuples1, 0);
+    std::vector<ui32> col2(NTuples1, 0);
+    std::vector<ui64> col3(NTuples1, 0);
+    std::vector<ui32> col4(NTuples1, 0);
+
+    col1[0] = 100;
+    col2[0] = 200;
+    col3[0] = 300;
+    col4[0] = 400;
+
+    col1[1] = 1000;
+    col2[1] = 2000;
+    col3[1] = 3000;
+    col4[1] = 4000;
+
+    const ui8* cols[4];
+    cols[0] = (ui8*) col1.data();
+    cols[1] = (ui8*) col2.data();
+    cols[2] = (ui8*) col3.data();
+    cols[3] = (ui8*) col4.data();
+
+    std::vector<ui8> colValid1((NTuples1 + 7)/8, ~0);
+    std::vector<ui8> colValid2((NTuples1 + 7)/8, ~0);
+    std::vector<ui8> colValid3((NTuples1 + 7)/8, ~0);
+    std::vector<ui8> colValid4((NTuples1 + 7)/8, ~0);
+    const ui8 *colsValid[4] = {
+        colValid1.data(),
+        colValid2.data(),
+        colValid3.data(),
+        colValid4.data(),
+    };
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> res(Tuples1DataBytes, 0);
+    tl->Pack(cols, colsValid, res.data(), overflow, 0, NTuples1);
+
+    // Test Stringify for first tuple
+    TSingleTuple tuple1{.PackedData = res.data(), .OverflowBegin = overflow.data()};
+    std::string str1 = tl->Stringify(tuple1);
+    CTEST << "Tuple 1: " << str1 << Endl;
+    
+    // Verify the string contains expected values
+    UNIT_ASSERT(str1.find("100") != std::string::npos);
+    UNIT_ASSERT(str1.find("200") != std::string::npos);
+    UNIT_ASSERT(str1.find("300") != std::string::npos);
+    UNIT_ASSERT(str1.find("400") != std::string::npos);
+    
+    // Verify format structure
+    UNIT_ASSERT(str1.front() == '{');
+    UNIT_ASSERT(str1.back() == '}');
+    UNIT_ASSERT(str1.find("[0]K") != std::string::npos);
+    UNIT_ASSERT(str1.find("[1]K") != std::string::npos);
+    UNIT_ASSERT(str1.find("[2]P") != std::string::npos);
+    UNIT_ASSERT(str1.find("[3]P") != std::string::npos);
+
+    // Test Stringify for second tuple
+    TSingleTuple tuple2{.PackedData = res.data() + tl->TotalRowSize, .OverflowBegin = overflow.data()};
+    std::string str2 = tl->Stringify(tuple2);
+    CTEST << "Tuple 2: " << str2 << Endl;
+    
+    UNIT_ASSERT(str2.find("1000") != std::string::npos);
+    UNIT_ASSERT(str2.find("2000") != std::string::npos);
+    UNIT_ASSERT(str2.find("3000") != std::string::npos);
+    UNIT_ASSERT(str2.find("4000") != std::string::npos);
+}
+
+Y_UNIT_TEST(StringifyVarSize) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc kc1, kcv1, pc1;
+
+    kc1.Role = EColumnRole::Key;
+    kc1.DataSize = 4;
+
+    kcv1.Role = EColumnRole::Key;
+    kcv1.DataSize = 16;
+    kcv1.SizeType = EColumnSizeType::Variable;
+
+    pc1.Role = EColumnRole::Payload;
+    pc1.DataSize = 4;
+
+    std::vector<TColumnDesc> columns{kc1, kcv1, pc1};
+
+    auto tl = TTupleLayout::Create(columns);
+
+    const ui64 NTuples1 = 2;
+    const ui64 Tuples1DataBytes = (tl->TotalRowSize) * NTuples1;
+
+    std::vector<ui32> col1(NTuples1, 0);
+    std::vector<ui32> col2(NTuples1, 0);
+
+    std::vector<ui32> vcol1(1, 0);
+    std::vector<ui8> vcol1data;
+
+    col1[0] = 42;
+    col1[1] = 99;
+    col2[0] = 123;
+    col2[1] = 456;
+
+    std::vector<TString> vcol1str {
+        "hello",
+        "world"
+    };
+    for (auto &&str: vcol1str) {
+        for (auto c: str)
+            vcol1data.push_back(c);
+        vcol1.push_back(vcol1data.size());
+    }
+
+    const ui8* cols[4];
+    cols[0] = (ui8*) col1.data();
+    cols[1] = (ui8*) vcol1.data();
+    cols[2] = (ui8*) vcol1data.data();
+    cols[3] = (ui8*) col2.data();
+
+    std::vector<ui8> colValid((NTuples1 + 7)/8, ~0);
+    const ui8 *colsValid[4] = {
+        colValid.data(),
+        colValid.data(),
+        nullptr,
+        colValid.data(),
+    };
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> res(Tuples1DataBytes, 0);
+    tl->Pack(cols, colsValid, res.data(), overflow, 0, NTuples1);
+
+    // Test Stringify for first tuple
+    TSingleTuple tuple1{.PackedData = res.data(), .OverflowBegin = overflow.data()};
+    std::string str1 = tl->Stringify(tuple1);
+    CTEST << "VarSize Tuple 1: " << str1 << Endl;
+    
+    // Verify the string contains expected values and format
+    UNIT_ASSERT(str1.find("[0]K: 42") != std::string::npos);
+    UNIT_ASSERT(str1.find("[1]K: \"hello\"") != std::string::npos);
+    UNIT_ASSERT(str1.find("[2]P: 123") != std::string::npos);
+
+    // Test Stringify for second tuple
+    TSingleTuple tuple2{.PackedData = res.data() + tl->TotalRowSize, .OverflowBegin = overflow.data()};
+    std::string str2 = tl->Stringify(tuple2);
+    CTEST << "VarSize Tuple 2: " << str2 << Endl;
+    
+    UNIT_ASSERT(str2.find("[0]K: 99") != std::string::npos);
+    UNIT_ASSERT(str2.find("[1]K: \"world\"") != std::string::npos);
+    UNIT_ASSERT(str2.find("[2]P: 456") != std::string::npos);
+}
+
+Y_UNIT_TEST(StringifyWithNull) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc kc1, pc1;
+
+    kc1.Role = EColumnRole::Key;
+    kc1.DataSize = 4;
+
+    pc1.Role = EColumnRole::Payload;
+    pc1.DataSize = 4;
+
+    std::vector<TColumnDesc> columns{kc1, pc1};
+
+    auto tl = TTupleLayout::Create(columns);
+
+    const ui64 NTuples1 = 1;
+    const ui64 Tuples1DataBytes = (tl->TotalRowSize) * NTuples1;
+
+    std::vector<ui32> col1(NTuples1, 42);
+    std::vector<ui32> col2(NTuples1, 0); // This will be NULL
+
+    const ui8* cols[2];
+    cols[0] = (ui8*) col1.data();
+    cols[1] = (ui8*) col2.data();
+
+    std::vector<ui8> colValid1((NTuples1 + 7)/8, ~0);
+    std::vector<ui8> colValid2((NTuples1 + 7)/8, 0); // Mark as NULL
+    const ui8 *colsValid[2] = {
+        colValid1.data(),
+        colValid2.data(),
+    };
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> res(Tuples1DataBytes, 0);
+    tl->Pack(cols, colsValid, res.data(), overflow, 0, NTuples1);
+
+    // Test Stringify
+    TSingleTuple tuple1{.PackedData = res.data(), .OverflowBegin = overflow.data()};
+    std::string str1 = tl->Stringify(tuple1);
+    CTEST << "Tuple with NULL: " << str1 << Endl;
+    
+    UNIT_ASSERT(str1.find("42") != std::string::npos);
+    UNIT_ASSERT(str1.find("NULL") != std::string::npos);
+}
+
+Y_UNIT_TEST(StringifyHexOutput) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc kc1, pc1;
+
+    kc1.Role = EColumnRole::Key;
+    kc1.DataSize = 4;
+
+    // 16 bytes is not a standard size (not 1, 2, 4, or 8), so it should be printed as hex
+    pc1.Role = EColumnRole::Payload;
+    pc1.DataSize = 16;
+
+    std::vector<TColumnDesc> columns{kc1, pc1};
+
+    auto tl = TTupleLayout::Create(columns);
+
+    const ui64 NTuples1 = 1;
+    const ui64 Tuples1DataBytes = (tl->TotalRowSize) * NTuples1;
+
+    std::vector<ui32> col1(NTuples1, 42);
+    std::vector<ui8> col2(NTuples1 * 16, 0);
+    // Fill with recognizable pattern: 0x01, 0x02, ... 0x10
+    for (ui32 i = 0; i < 16; ++i) {
+        col2[i] = i + 1;
+    }
+
+    const ui8* cols[2];
+    cols[0] = (ui8*) col1.data();
+    cols[1] = col2.data();
+
+    std::vector<ui8> colValid1((NTuples1 + 7)/8, ~0);
+    std::vector<ui8> colValid2((NTuples1 + 7)/8, ~0);
+    const ui8 *colsValid[2] = {
+        colValid1.data(),
+        colValid2.data(),
+    };
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> res(Tuples1DataBytes, 0);
+    tl->Pack(cols, colsValid, res.data(), overflow, 0, NTuples1);
+
+    // Test Stringify
+    TSingleTuple tuple1{.PackedData = res.data(), .OverflowBegin = overflow.data()};
+    std::string str1 = tl->Stringify(tuple1);
+    CTEST << "Tuple with hex field: " << str1 << Endl;
+    
+    // Verify the key value
+    UNIT_ASSERT(str1.find("42") != std::string::npos);
+    // Verify hex output format (should start with 0x and contain hex digits)
+    UNIT_ASSERT(str1.find("0x") != std::string::npos);
+    // Check for specific hex pattern (0x0102030405060708090a0b0c0d0e0f10)
+    UNIT_ASSERT(str1.find("0102") != std::string::npos);
 }
 }
 

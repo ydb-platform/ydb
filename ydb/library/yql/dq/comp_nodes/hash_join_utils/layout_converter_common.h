@@ -5,11 +5,6 @@
 
 namespace NKikimr::NMiniKQL {
 
-struct TSingleTuple {
-    const ui8* PackedData;
-    const ui8* OverflowBegin;
-};
-
 namespace NPackedTuple {
 struct TTupleLayout;
 }

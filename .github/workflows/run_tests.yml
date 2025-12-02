@@ -207,6 +207,7 @@ jobs:
             fi
             echo "**Commit:** [${commit_short}](${commit_url})"
             echo "**Workflow run:** [link](${check_url})"
+            echo ""
           } | .github/scripts/tests/comment-pr.py --rewrite --no-timestamp
 
   run_tests:

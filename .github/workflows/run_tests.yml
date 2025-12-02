@@ -37,6 +37,11 @@ on:
         required: false
         type: string
         default: ''
+      pull_number:
+        description: 'Pull request number, ex: 12345'
+        required: false
+        type: string
+        default: ''
 
   workflow_dispatch:
     inputs:

@@ -677,7 +677,6 @@ public:
         {
             if (!srcPath->IsTable() && !srcPath->IsColumnTable()) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables");
-                return result;
             }
             TPath::TChecker checks = srcPath.Check();
             checks

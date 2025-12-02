@@ -168,13 +168,10 @@ bool CreateConsistentCopyTables(
         TPath srcPath = TPath::Resolve(srcStr, context.SS);
 
         {
-            if (!srcPath->IsTable() && !srcPath->IsColumnTable()) {
-                result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, "Cannot copy non-tables")};
-                return false;
-            }
             TPath::TChecker checks = srcPath.Check();
             checks.IsResolved()
-                  .NotDeleted();
+                  .NotDeleted()
+                  .Or(&TPath::TChecker::IsTable, &TPath::TChecker::IsColumnTable);
 
             // Allow copying index impl tables when feature flag is enabled
             if (!srcPath.ShouldSkipCommonPathCheckForIndexImplTable()) {

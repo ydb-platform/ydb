@@ -35,9 +35,9 @@ public:
         : TxType(type)
         , OperationId(id)
     {
-        IgnoreMessages(DebugHint(),
-            { TEvColumnShard::TEvNotifyTxCompletionResult::EventType }
-        );
+        IgnoreMessages(DebugHint(), {
+            TEvColumnShard::TEvNotifyTxCompletionResult::EventType,
+        });
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
@@ -715,15 +715,13 @@ public:
 
         TPath path = TPath::Resolve(parentPath, context.SS).Dive(name);
         {
-            if (!path->IsTable() && !path->IsColumnTable()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot backup non-tables");
-            }
             TPath::TChecker checks = path.Check();
             checks
                 .NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
+                .Or(&TPath::TChecker::IsTable, &TPath::TChecker::IsColumnTable)
                 .NotDeleted()
                 .NotAsyncReplicaTable()
                 .NotUnderOperation();

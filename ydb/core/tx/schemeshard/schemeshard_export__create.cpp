@@ -856,7 +856,6 @@ private:
             if (!exportInfo->AllItemsAreDropped()) {
                 for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                     const auto& item = exportInfo->Items.at(itemIdx);
-
                     // Column Tables must be skiped here
                     if (!IsPathTypeTransferrable(item) || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable || item.State != EState::Dropping) {
                         continue;
@@ -1202,6 +1201,7 @@ private:
             Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
             if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
+                // TODO (hcpp): support auto dropping after full support for read-only copying for columnar tables. https://github.com/ydb-platform/ydb/issues/26498
                 if (!AppData()->FeatureFlags.GetEnableExportAutoDropping() || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
                     EndExport(exportInfo, EState::Done, db);
                 } else {

@@ -161,6 +161,7 @@ runs:
         PR_NUMBER: ${{ inputs.pull_number }}
         TEST_SIZE: ${{ inputs.test_size }}
         BUILD_TARGET: ${{ inputs.build_target }}
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -ex
         
@@ -173,16 +174,19 @@ runs:
           ulimit -c 0
         fi
 
-        # For run_tests (when PULL_NUMBER is set), write start message first
-        if [ -n "$PULL_NUMBER" ] && [ "${{ inputs.run_tests }}" = "true" ]; then
-          echo "Run tests **$BUILD_PRESET** (Test Size: \`$TEST_SIZE\`, Test Targets: \`$BUILD_TARGET\`) has started." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-        fi
-
-        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-
         # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
         ORIGINAL_HEAD=$(git rev-parse HEAD)
         echo "ORIGINAL_HEAD=$ORIGINAL_HEAD" >> $GITHUB_ENV
+
+        # For run_tests (when PULL_NUMBER is set), write start message first
+        if [ -n "$PULL_NUMBER" ] && [ "${{ inputs.run_tests }}" = "true" ]; then
+          check_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          commit_short=$(echo "$ORIGINAL_HEAD" | cut -c1-7)
+          commit_url="https://github.com/${GITHUB_REPOSITORY}/commit/${ORIGINAL_HEAD}"
+          echo "Run tests [check]($check_url) **$BUILD_PRESET** (test size: \`$TEST_SIZE\`, targets: \`$BUILD_TARGET\`) for [${commit_short}](${commit_url}) has started." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+        fi
+
+        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")

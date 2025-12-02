@@ -845,7 +845,7 @@ void TDqPqRdReadActor::InitWatermarkTracker() {
     TDqPqReadActorBase::InitWatermarkTracker(
             TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
             TDuration::MicroSeconds(idleTimeoutUs),
-            Metrics.Source);
+            Metrics.Counters ? Metrics.Source : nullptr);
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {

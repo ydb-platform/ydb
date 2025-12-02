@@ -59,6 +59,7 @@ enum EServiceKikimr {
     BS_PROXY_BRIDGE = 2604;
     BS_CLUSTER_BALANCING = 2605;
     BS_BRIDGE_SYNC = 2606;
+    BS_PHANTOM_FLAG_STORAGE = 2607;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //

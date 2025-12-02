@@ -272,6 +272,10 @@ namespace NKikimr {
                 KeepState.UpdateNeighbourSyncedLsn(ev->Get()->OrderNumber, ev->Get()->SyncedLsn);
             }
 
+            void UpdateCounters() {
+                Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
+            }
+
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
@@ -288,6 +292,7 @@ namespace NKikimr {
                 hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
                 hFunc(TEvLocalSyncData, Handle)
                 hFunc(TEvSyncLogUpdateNeighbourSyncedLsn, Handle)
+                cFunc(TEvents::TEvWakeup::EventType, UpdateCounters)
             )
 
         public:

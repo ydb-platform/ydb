@@ -120,6 +120,10 @@ void TPhantomFlagThresholds::Merge(TPhantomFlagThresholds&& other) {
     }
 }
 
+void TPhantomFlagThresholds::Clear() {
+    TabletThresholds.clear();
+}
+
 } // namespace NSyncLog
 
 } // namespace NKikimr

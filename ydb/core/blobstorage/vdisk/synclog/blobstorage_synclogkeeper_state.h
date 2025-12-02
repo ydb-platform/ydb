@@ -168,6 +168,8 @@ namespace NKikimr {
             TPhantomFlagStorageSnapshot GetPhantomFlagStorageSnapshot() const;
             void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
 
+            void UpdateMetrics();
+
         private:
             // VDisk Context
             TIntrusivePtr<TSyncLogCtx> SlCtx;

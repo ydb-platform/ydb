@@ -183,7 +183,14 @@ runs:
           check_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           commit_short=$(echo "$ORIGINAL_HEAD" | cut -c1-7)
           commit_url="https://github.com/${GITHUB_REPOSITORY}/commit/${ORIGINAL_HEAD}"
-          echo "Run tests [check]($check_url) **$BUILD_PRESET** (test size: \`$TEST_SIZE\`, targets: \`$BUILD_TARGET\`) for [${commit_short}](${commit_url}) has started." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+          
+          message="Run tests [check]($check_url) **$BUILD_PRESET** (test size: \`$TEST_SIZE\`, targets: \`$BUILD_TARGET\`"
+          if [ "$COLLECT_COREDUMPS" = "true" ]; then
+            message="${message}, collect coredumps: \`true\`"
+          fi
+          message="${message}) for [${commit_short}](${commit_url}) has started."
+          
+          echo "$message" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
         fi
 
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py

@@ -30,7 +30,7 @@ public:
         Hight = agents.Hight->GetClient();
     }
 
-    void SetHight(const ui64 hight) {
+    void SetHight(const i32 hight) {
         Hight->SetValue(hight);
     }
 };
@@ -54,10 +54,10 @@ public:
     TGlobalCounters()
         : TBase("TilingCompactionOptimizer") {
         for (ui32 i = 0; i <= 10; ++i) {
-            Levels.emplace_back(std::make_shared<TLevelAgents>(i, *this));
+            Levels.emplace_back(std::make_shared<TLevelAgents>("level=" + ::ToString(i), *this));
         }
         for (ui32 i = 0; i <= 10; ++i) {
-            Accumulators.emplace_back(std::make_shared<TLevelAgents>(i, *this));
+            Accumulators.emplace_back(std::make_shared<TLevelAgents>("acc=" + ::ToString(i), *this));
         }
     }
 

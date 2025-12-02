@@ -93,8 +93,8 @@ struct TRowDispatcherReadActorMetrics {
             for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
                 SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
             }
-            auto source = SubGroup->GetSubgroup("tx_id", TxId);
-            task = source->GetSubgroup("task_id", ToString(taskId));
+            Source = SubGroup->GetSubgroup("tx_id", TxId);
+            task = Source->GetSubgroup("task_id", ToString(taskId));
         }
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
@@ -111,6 +111,7 @@ struct TRowDispatcherReadActorMetrics {
     TString TxId;
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounterPtr SubGroup;
+    ::NMonitoring::TDynamicCounterPtr Source;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyGetNextBatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReInit;
@@ -835,6 +836,7 @@ void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
 }
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
+    // called on parent
     auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
     auto idleTimeoutUs = // TODO remove fallback
         SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
@@ -842,7 +844,8 @@ void TDqPqRdReadActor::InitWatermarkTracker() {
         lateArrivalDelayUs;
     TDqPqReadActorBase::InitWatermarkTracker(
             TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
-            TDuration::MicroSeconds(idleTimeoutUs));
+            TDuration::MicroSeconds(idleTimeoutUs),
+            Metrics.Source);
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {

@@ -1,0 +1,11 @@
+PROGRAM()
+
+SRCS(
+    main.cpp
+)
+
+NO_COMPILER_WARNINGS()
+
+ALLOCATOR(TCMALLOC_256K)
+
+END()

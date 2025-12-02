@@ -8206,6 +8206,40 @@ Y_UNIT_TEST(AlterExternalDataSource) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(AlterExternalDataSourceWithTablePathPrefix) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        PRAGMA TablePathPrefix='/Root';
+        ALTER EXTERNAL DATA SOURCE MyDataSource
+            SET (
+                SOURCE_TYPE = "ObjectStorage",
+                LOCATION="bucket",
+                AUTH_METHOD="AWS",
+                AWS_REGION="ru-central-1",
+                AWS_SECRET_ACCESS_KEY_SECRET_PATH="secret1",
+                AWS_ACCESS_KEY_ID_SECRET_PATH="/dir/secret2"
+            ),
+            RESET (Service_Account_Id, Service_Account_Secret_Path);
+    )sql");
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, R"#(objectId (String '"/Root/MyDataSource")#");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
+            // TablePathPrefix should change relative paths
+            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"aws_secret_access_key_secret_path" '"/Root/secret1"))#");
+            // TablePathPrefix should NOT change absolute paths
+            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"aws_access_key_id_secret_path" '"/dir/secret2"))#");
+        }
+    };
+
+    TWordCountHive elementStat = {std::make_pair("Write", 0)};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
 Y_UNIT_TEST(CreateExternalDataSourceOrReplace) {
     NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;

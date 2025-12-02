@@ -1118,7 +1118,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "EXTERNAL_DATA_SOURCE", false, std::move(kv), std::move(toReset), context));
+            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
+            AdjustSecretPaths(kv, EDS_SECRETS_SETTINGS, prefixPath);
+
+            auto operation = BuildAlterObjectOperation(
+                Ctx_.Pos(), BuildTablePath(prefixPath, objectId), "EXTERNAL_DATA_SOURCE",
+                /* missingOk = */ false, std::move(kv), std::move(toReset), context);
+            AddStatementToBlocks(blocks, std::move(operation));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore32: {

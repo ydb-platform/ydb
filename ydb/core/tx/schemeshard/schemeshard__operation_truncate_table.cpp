@@ -78,16 +78,15 @@ public:
 
         txState->ClearShardsInProgress();
 
-        TString txBody;
-        {
-            auto seqNo = context.SS->StartRound(*txState);
-
-            NKikimrTxDataShard::TFlatSchemeTransaction tx;
-            context.SS->FillSeqNo(tx, seqNo);
-            auto truncateTable = tx.MutableTruncateTable();
-            txState->TargetPathId.ToProto(truncateTable->MutablePathId());
-
-            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+        // Get main table info
+        TPath tablePath = TPath::Init(txState->TargetPathId, context.SS);
+        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+        TTableInfo::TPtr mainTable = context.SS->Tables.at(tablePath.Base()->PathId);
+        
+        // Collect main table shards
+        TSet<TShardIdx> mainTableShards;
+        for (auto& partition : mainTable->GetPartitions()) {
+            mainTableShards.insert(partition.ShardIdx);
         }
 
         Y_ABORT_UNLESS(txState->Shards.size());
@@ -95,7 +94,48 @@ public:
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, txBody, context.Ctx);
+            TPathId targetPathId = txState->TargetPathId;
+            
+            // If this is not a main table shard, find which index table it belongs to
+            if (mainTableShards.find(idx) == mainTableShards.end()) {
+                // This is an index shard, find its PathId
+                for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+                    TPath childPath = tablePath.Child(childName);
+                    if (childPath.IsDeleted() || !childPath->IsTableIndex()) {
+                        continue;
+                    }
+                    
+                    for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+                        if (!context.SS->Tables.contains(implTablePathId)) {
+                            continue;
+                        }
+                        
+                        TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
+                        for (auto& partition : indexTable->GetPartitions()) {
+                            if (partition.ShardIdx == idx) {
+                                targetPathId = implTablePathId;
+                                goto found;
+                            }
+                        }
+                    }
+                }
+                found:;
+            }
+            
+            // Create truncate message for the specific table (main or index)
+            TString txBody;
+            {
+                auto seqNo = context.SS->StartRound(*txState);
+
+                NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                context.SS->FillSeqNo(tx, seqNo);
+                auto truncateTable = tx.MutableTruncateTable();
+                targetPathId.ToProto(truncateTable->MutablePathId());
+
+                Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+            }
+
+            auto event = context.SS->MakeDataShardProposal(targetPathId, OperationId, txBody, context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
         }
 
@@ -184,6 +224,8 @@ public:
                 return result;
             }
 
+            // In the initial implementation, we forbid the table to have cdc streams and asynchronous indexes.
+            // It will be fixed in the near future.
             for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
                 TPath srcChildPath = tablePath.Child(childName);
@@ -229,6 +271,31 @@ public:
             context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
         }
 
+        for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
+            TPath childPath = tablePath.Child(childName);
+
+            if (childPath.IsDeleted() || !childPath->IsTableIndex()) {
+                continue;
+            }
+
+            for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+                if (!context.SS->Tables.contains(implTablePathId)) {
+                    continue;
+                }
+
+                TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
+                for (auto& shard : indexTable->GetPartitions()) {
+                    auto shardIdx = shard.ShardIdx;
+                    context.MemChanges.GrabShard(context.SS, shardIdx);
+                    context.DbChanges.PersistShard(shardIdx);
+
+                    txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::Propose);
+                    context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
+                }
+            }
+        }
+
         tablePath.Base()->PathState = TPathElement::EPathState::EPathStateNoChanges;
         tablePath.Base()->LastTxId = OperationId.GetTxId();
 
@@ -242,6 +309,27 @@ public:
             context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, tablePath.Base()->PathId, OperationId.GetTxId(), ETabletType::DataShard);
         }
         
+        for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
+            TPath childPath = tablePath.Child(childName);
+
+            if (childPath.IsDeleted() || !childPath->IsTableIndex()) {
+                continue;
+            }
+
+            for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+                if (!context.SS->Tables.contains(implTablePathId)) {
+                    continue;
+                }
+
+                TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
+                for (const auto& shard : indexTable->GetPartitions()) {
+                    auto shardIdx = shard.ShardIdx;
+                    context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, implTablePathId, OperationId.GetTxId(), ETabletType::DataShard);
+                }
+            }
+        }
+
         context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
         context.OnComplete.ActivateTx(OperationId);
 

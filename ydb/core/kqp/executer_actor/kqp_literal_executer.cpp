@@ -177,10 +177,14 @@ public:
         TaskId2StageId[task.Id] = task.StageId.StageId;
 
         for (auto& output : task.Outputs) {
+            auto* protoOutput = protoTask.AddOutputs();
+            if (output.Type == TTaskOutputType::Effects) {
+                protoOutput->MutableEffects();
+                continue;
+            }
             YQL_ENSURE(output.Type == TTaskOutputType::Map, "" << output.Type);
             YQL_ENSURE(output.Channels.size() == 1);
 
-            auto* protoOutput = protoTask.AddOutputs();
             protoOutput->MutableMap();
 
             auto& resultChannel = TasksGraph.GetChannel(output.Channels[0]);
@@ -212,6 +216,10 @@ public:
 
         with_lock (*alloc) { // allocator is used only by outputChannel->PopAll()
             for (auto& taskOutput : task.Outputs) {
+                // Skip Effects outputs - they have no channels (DISCARD results)
+                if (taskOutput.Type == TTaskOutputType::Effects) {
+                    continue;
+                }
                 for (ui64 outputChannelId : taskOutput.Channels) {
                     auto outputChannel = taskRunner->GetOutputChannel(outputChannelId);
                     auto& channelDesc = TasksGraph.GetChannel(outputChannelId);

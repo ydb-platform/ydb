@@ -27,3 +27,4 @@ class TestYdbBackupWorkload(StressFixture):
             "--backup-interval", "20",
         ]
         yatest.common.execute(cmd, wait=True)
+

@@ -6,6 +6,8 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
+#include <format>
+
 
 namespace NKikimr::NKqp {
 
@@ -81,14 +83,18 @@ public:
             }
         }
         for (auto&& i : localNodesWithNotEnoughResources) {
-            Nodes.emplace_back(std::move(i));
+            Nodes.emplace_front(std::move(i));
         }
+        std::cerr << std::format("[MISHA][TNodesManager]: node {} is chosen\n", result->NodeId);
         return result;
     }
 
     TNodesManager(const TVector<const NKikimrKqp::TKqpNodeResources*>& nodeResources) {
+        std::cerr << std::format("[MISHA][TNodesManager]: has {} nodes\n", nodeResources.size());
         for (auto& node : nodeResources) {
+            std::cerr << std::format("[MISHA][TNodesManager]: preparing node {}\n", node->GetNodeId());
             if (!node->GetAvailableComputeActors()) {
+                std::cerr << std::format("[MISHA][TNodesManager]: node {} has not enought memory\n", node->GetNodeId());
                 continue;
             }
             Nodes.emplace_back(TNodeDesc{

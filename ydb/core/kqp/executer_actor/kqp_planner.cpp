@@ -422,7 +422,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
     TVector<IKqpPlannerStrategy::TResult> plan;
 
-    if (!executerDcNodes.empty() && placingOptions.PreferLocalDatacenterExecution) {
+    if (!executerDcNodes.empty()) {
         plan = planner->Plan(executerDcNodes, ResourceEstimations);
     }
 

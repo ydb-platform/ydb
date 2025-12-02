@@ -11,3 +11,5 @@
 * 25453:Listing of objects with a common prefix has been fixed when importing changefeeds [#25454](https://github.com/ydb-platform/ydb/issues/25454) [#25453](https://github.com/ydb-platform/ydb/pull/25453) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
 * 25148:fix crash after follower alter https://github.com/ydb-platform/ydb/issues/20866 [#25148](https://github.com/ydb-platform/ydb/pull/25148) ([vporyadke](https://github.com/vporyadke))
 * 25122:fix a bug where tablet deletion might get stuck [#23858](https://github.com/ydb-platform/ydb/issues/23858) [#25122](https://github.com/ydb-platform/ydb/pull/25122) ([vporyadke](https://github.com/vporyadke))
+* 27642:Fixed the error of calculation of the consumer MaxCommittedTimeLag metric [#27642](https://github.com/ydb-platform/ydb/pull/27642) ([Nikolay Shestakov](https://github.com/nshestakov))
+

@@ -5,14 +5,6 @@
 
 namespace NKikimr::NMiniKQL {
 
-struct TSingleTuple {
-    const ui8* PackedData;
-    const ui8* OverflowBegin;
-};
-
-namespace NPackedTuple {
-struct TTupleLayout;
-}
 
 // Common types used by both IBlockLayoutConverter and IScalarLayoutConverter
 struct TPackResult {
@@ -46,14 +38,24 @@ struct TPackResult {
         bool allFieldEmpty = NTuples == 0 && PackedTuples.empty();
         bool haveOneFieldEmpty = NTuples == 0 || PackedTuples.empty();
         MKQL_ENSURE(allFieldEmpty == haveOneFieldEmpty, "inconsistent state");
+        if (allFieldEmpty) {
+            MKQL_ENSURE(Overflow.empty(), "sanity check");
+        }
         return allFieldEmpty;
     }
 
     void ForEachTuple(std::invocable<TSingleTuple> auto fn) const {
         int tupleSize = std::ssize(PackedTuples) / NTuples;
         for (int index = 0; index < NTuples; ++index) {
+            Cout << index << ' ';
+            Cout.Flush(); 
             fn(TSingleTuple{.PackedData = &PackedTuples[index * tupleSize], .OverflowBegin = Overflow.data()});
         }
+    }
+
+    void Clear() {
+        *this= TPackResult{};
+        MKQL_ENSURE(Empty(), "sanity check");
     }
 
     void AppendTuple(TSingleTuple tuple, const NPackedTuple::TTupleLayout* layout);

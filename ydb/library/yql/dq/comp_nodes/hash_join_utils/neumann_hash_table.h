@@ -10,7 +10,7 @@
 #include <util/generic/buffer.h>
 
 #include "tuple.h"
-
+#include "join_defs.h"
 namespace NKikimr {
 namespace NMiniKQL {
 namespace NPackedTuple {

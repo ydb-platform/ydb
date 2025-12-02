@@ -32,7 +32,8 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
     TBlockPackedTupleSource(TComputationContext& ctx, TSides<IComputationNode*> stream,
                             const TDqBlockJoinMetadata* meta,
                             TSides<std::unique_ptr<IBlockLayoutConverter>>& converters, ESide side)
-        : Stream_(stream.SelectSide(side))
+        : Side_(side)
+        , Stream_(stream.SelectSide(side))
         , StreamValues_(Stream_->GetValue(ctx))
         , Buff_(meta->InputTypes.SelectSide(side).size())
         , ArrowBlockToInternalConverter_(converters.SelectSide(side).get())
@@ -69,6 +70,12 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         // Cerr << std::format("got block, size: {}, type: {}", columns[0].length(), name) << Endl;
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
+        // Cout << std::format("fetch.side: {}\n", AsString(Side_) );
+        result.ForEachTuple([&](auto single){
+            MKQL_ENSURE(!ArrowBlockToInternalConverter_->GetTupleLayout()->Stringify(single).contains("N"), std::format("invalid N, side: {}", AsString(Side_)));
+            // MKQL_ENSURE(false, "a;kdamd");
+         });
+        // Cout << Endl;
         return One{std::move(result)};
     }
 
@@ -82,6 +89,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
     }
 
     bool Finished_ = false;
+    [[maybe_unused]]ESide Side_;
     IComputationNode* Stream_;
     NYql::NUdf::TUnboxedValue StreamValues_;
     TUnboxedValueVector Buff_;
@@ -99,27 +107,31 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     }
 
     i64 SizeTuples() const {
-        return Output_.NItems;
+        MKQL_ENSURE(Output_.Data.Build.NTuples == Output_.Data.Probe.NTuples, "inconsistent state");
+        return Output_.Data.Build.NTuples;
     }
 
-    struct PackedTuplesData {
-        TMKQLVector<ui8> PackedTuples;
-        TMKQLVector<ui8> Overflow;
-    };
 
     struct TuplePairs {
-        i64 NItems = 0;
-        TSides<PackedTuplesData> Data;
+        TSides<TPackResult> Data;
     };
 
     auto MakeConsumeFn() {
         return [this](TSides<TSingleTuple> tuples) {
+            // Cout << "Out:\n";
             ForEachSide([&](ESide side) {
-                Converters_.SelectSide(side)->GetTupleLayout()->TupleDeepCopy(
-                    tuples.SelectSide(side).PackedData, tuples.SelectSide(side).OverflowBegin,
-                    Output_.Data.SelectSide(side).PackedTuples, Output_.Data.SelectSide(side).Overflow);
+                // Cout << AsString(side) << std::format(": side, {}: "
+                MKQL_ENSURE(!Converters_.SelectSide(side)->GetTupleLayout()->Stringify(tuples.SelectSide(side)).contains("N"), "invalid N");
+                Output_.Data.SelectSide(side).AppendTuple(tuples.SelectSide(side), Converters_.SelectSide(side)->GetTupleLayout());
+                // Out
+                // Output_.Data.cle
+                Cout << AsString(side) << 128 << " " ;
+                Output_.Data.SelectSide(side).ForEachTuple([&](TSingleTuple tuple){
+                    if (Converters_.SelectSide(side)->GetTupleLayout()->Stringify(tuple).contains("N")){
+                        MKQL_ENSURE(false, "invalid N");
+                    }
+                });
             });
-            Output_.NItems++;
         };
     }
 
@@ -135,18 +147,16 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
   private:
     TSides<TVector<arrow::Datum>> Flush() {
         TSides<TVector<arrow::Datum>> out;
-        auto fillSide = [&](ESide side) {
-            IBlockLayoutConverter::TPackResult res;
+        ForEachSide([&](ESide side) {
 
-            res.NTuples = SizeTuples();
-            res.PackedTuples = std::move(Output_.Data.SelectSide(side).PackedTuples);
-            res.Overflow = std::move(Output_.Data.SelectSide(side).Overflow);
-            Converters_.SelectSide(side)->Unpack(res, out.SelectSide(side));
-        };
-        fillSide(ESide::Build);
-        fillSide(ESide::Probe);
+            Output_.Data.SelectSide(side).ForEachTuple([&](TSingleTuple tuple){
+                MKQL_ENSURE(!Converters_.SelectSide(side)->GetTupleLayout()->Stringify(tuple).contains("N"), "invalid N");
+            });
+            Converters_.SelectSide(side)->Unpack(Output_.Data.SelectSide(side), out.SelectSide(side));
+            Output_.Data.SelectSide(side).Clear();
 
-        Output_.NItems = 0;
+        });
+
         return out;
     }
 

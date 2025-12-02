@@ -14,6 +14,7 @@
 
 #include <arrow/util/bit_util.h>
 
+#include "layout_converter_common.h"
 #include "hashes_calc.h"
 #include "packing.h"
 

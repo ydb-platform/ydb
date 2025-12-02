@@ -30,7 +30,7 @@
 // 3.8. NET/IC Inflight == (Output.PopStats.Bytes - Input.PushStats.Bytes)
 // 3.9. We're NOT interested in per channel NET/IC inflight rather in per session (between nodes)
 
-// Guaranteed delivery, ordering and reconcilation
+// Guaranteed delivery, ordering and Reconciliation
 //
 // 1. All messages are numbered sequentially in single node to node session starting from 1
 // 2. Also node maintains monotically increased E
@@ -500,7 +500,7 @@ public:
         , GenMajor(1), GenMinor(1)
         , MaxInflightBytes(maxInflightBytes)
         , WaitersQueueSize(0)
-        , Reconcilation(0)
+        , Reconciliation(0)
         , WaiterMessages(0)
     {
         PeerActorId = MakeChannelServiceActorID(NodeId);
@@ -514,6 +514,7 @@ public:
         InputBufferCount = counters->GetCounter("InputBuffer/Count", false);
         InputBufferBytes = counters->GetCounter("InputBuffer/Bytes", true);
         InputBufferChunks = counters->GetCounter("InputBuffer/Chunks", true);
+        ReconciliationDelay = MinReconciliationDelay;
     }
 
     virtual ~TNodeState();
@@ -536,8 +537,8 @@ public:
     void SendAckWithError(ui64 cookie);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters(ui64 deltaBytes);
-    void RestartSession();
-    void ScheduleReconcilationGuard();
+    void RestartSession(bool discovery);
+    void ScheduleReconciliationGuard();
     void StartDiscovery();
     void Connect(NActors::TActorId& sender, ui64 genMajor);
     virtual TString GetDebugInfo();
@@ -571,7 +572,7 @@ public:
     mutable std::priority_queue<std::shared_ptr<TOutputDescriptor>, std::vector<std::shared_ptr<TOutputDescriptor>>, TOutputDescriptorCompare> WaitersQueue;
     std::atomic<ui64> WaitersQueueSize;
     const TDuration UnbindedWaitPeriod = TDuration::Minutes(10);
-    std::atomic<ui64> Reconcilation;
+    std::atomic<ui64> Reconciliation;
     std::atomic<ui64> WaiterMessages;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferBytes;
@@ -584,6 +585,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     std::set<ui32> FinishedChannels;
+    TDuration ReconciliationDelay;
+    const TDuration MinReconciliationDelay = TDuration::MilliSeconds(10);
+    const TDuration MaxReconciliationDelay = TDuration::Seconds(10);
 };
 
 class TDebugNodeState : public TNodeState {

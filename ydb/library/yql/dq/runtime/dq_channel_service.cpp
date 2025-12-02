@@ -932,21 +932,24 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
     if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
-        PeerActorId = MakeChannelServiceActorID(NodeId);
-        RestartSession();
+        LOG_W("DATA UNDELIVERED, RESTART WITH DISCOVERY" << ", " << NodeActorId << " from peer " << PeerActorId);
+        RestartSession(true);
         return;
     }
 
     switch (ev->Get()->SourceType) {
         case TEvDqCompute::TEvChannelDataV2::EventType: {
-            auto seqNo = ev->Cookie;
             std::lock_guard lock(Mutex);
-            GenMinor++;
-            for (auto item : Queue) {
-                if (item->SeqNo >= seqNo) {
-                    SendMessage(item);
-                }
+
+            if (!Queue.empty()) {
+                auto& item = Queue.front();
+                LOG_W("DATA UNDELIVERED, RESEND SeqNo=" << item->SeqNo << ", " << NodeActorId << " from peer " << PeerActorId);
+                GenMinor++;
+                Reconcilation.store(GenMinor);
+                SendMessage(item);
+                ScheduleReconcilationGuard();
             }
+
             break;
         }
         case TEvDqCompute::TEvChannelAckV2::EventType: {
@@ -1160,7 +1163,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
     }
 }
 
-void TNodeState::RestartSession() {
+void TNodeState::RestartSession(bool discovery) {
     {
         std::lock_guard lock(Mutex);
         *OutputBufferInflightBytes -= InflightBytes;
@@ -1171,8 +1174,15 @@ void TNodeState::RestartSession() {
         Queue.clear();
         GenMajor++;
         SeqNo = 0;
-        Reconcilation.store(0);
+        if (discovery) {
+            PeerActorId = MakeChannelServiceActorID(NodeId);
+            StartDiscovery();
+            return;
+        } else {
+            Reconcilation.store(0);
+        }
     }
+
     SendFromWaiters(InflightBytes);
 }
 
@@ -1196,7 +1206,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
         if (SeqNo < seqNo) {
             LOG_D("SESSION RESTART (Large SeqNo), SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
-            RestartSession();
+            RestartSession(false);
             return;
         }
 
@@ -1219,14 +1229,14 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         if (Queue.empty()) {
             if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
                 LOG_D("SESSION RESTART (Can't RESEND), SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
-                RestartSession();
+                RestartSession(false);
                 return;
             }
         } else {
             auto& item = Queue.front();
             if (item->SeqNo != seqNo) {
                 LOG_D("SESSION RESTART (SeqNo desync), SeqNo=" << SeqNo << ", item.SeqNo=" << item->SeqNo << ", " << NodeActorId << " from peer " << ev->Sender);
-                RestartSession();
+                RestartSession(false);
                 return;
             }
 

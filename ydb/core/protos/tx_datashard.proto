@@ -631,7 +631,7 @@ message TError {
         DUPLICATED_SNAPSHOT_POLICY = 11;
         MISSING_SNAPSHOT_POLICY = 12;
         PROGRAM_ERROR = 13;
-        OUT_OF_SPACE = 14;
+        DISK_GROUP_OUT_OF_SPACE = 14;
         READ_SIZE_EXECEEDED = 15;
         SHARD_IS_BLOCKED = 16;
         UNKNOWN = 17;
@@ -639,7 +639,7 @@ message TError {
         EXECUTION_CANCELLED = 19;
         // This enum value is not supported in versions 23-2 and below and would be interpreted as OK due to how proto2 enums work.
         // Version 23-3 can handle the value, so it is safe to use only in the next major release after 23-3.
-        DISK_SPACE_EXHAUSTED = 20;
+        DATABASE_DISK_SPACE_QUOTA_EXCEEDED = 20;
     }
 
     optional EKind Kind = 1;

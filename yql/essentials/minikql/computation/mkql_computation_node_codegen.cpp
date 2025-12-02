@@ -445,7 +445,8 @@ Value* GenCompareFunction<false>(NUdf::EDataSlot slot, Value* lv, Value* rv, TCo
                           ? CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_OLT, lhs, rhs, "less", block)
                           : info.Features & (NUdf::EDataTypeFeatures::SignedIntegralType | // signed
                                              NUdf::EDataTypeFeatures::TimeIntervalType |
-                                             NUdf::EDataTypeFeatures::DecimalType)
+                                             NUdf::EDataTypeFeatures::DecimalType |
+                                             NUdf::EDataTypeFeatures::ExtDateType)
                                 ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, lhs, rhs, "less", block)
                             : info.Features & (NUdf::EDataTypeFeatures::UnsignedIntegralType | // unsigned
                                                NUdf::EDataTypeFeatures::DateType |

@@ -831,6 +831,7 @@ bool TCheckSchemeTxUnit::CheckTruncate(TActiveTransaction *activeTx) {
     const auto pathId = GetPathId(truncate);
     const auto tablePtr = DataShard.GetUserTables().FindPtr(pathId.LocalPathId);
     if (!tablePtr) {
+        BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
         return false;
     }
 

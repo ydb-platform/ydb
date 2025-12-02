@@ -36,7 +36,7 @@ namespace {
         } else if (input.Ptr()->IsCallable("PgCast")) {
             auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsAttribute(child);
-        } else if (input.Ptr()->IsCallable("FromPg")) {
+        } else if (input.Ptr()->IsCallable("FromPg") || input.Ptr()->IsCallable("ToPg")) {
             auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsAttribute(child);
         } else if (auto exists = input.Maybe<TCoExists>()) {
@@ -66,7 +66,7 @@ namespace {
         } else if (input.Ptr()->IsCallable("PgCast")) {
             auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsMember(child);
-        } else if (input.Ptr()->IsCallable("FromPg")) {
+        } else if (input.Ptr()->IsCallable("FromPg") || input.Ptr()->IsCallable("ToPg")) {
             auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsMember(child);
         } else if (auto exists = input.Maybe<TCoExists>()) {

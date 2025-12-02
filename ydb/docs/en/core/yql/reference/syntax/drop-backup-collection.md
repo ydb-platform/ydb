@@ -12,7 +12,13 @@ DROP BACKUP COLLECTION collection_name;
 
 {% note warning %}
 
-This operation permanently deletes the backup collection and all backups it contains. This action cannot be undone.
+This operation permanently deletes the backup collection and all backups it contains from the cluster. This action cannot be undone.
+
+{% endnote %}
+
+{% note info %}
+
+Dropping a backup collection only affects cluster-stored data. Any backups previously exported to external storage (S3 or filesystem) are not affected and remain available for import.
 
 {% endnote %}
 

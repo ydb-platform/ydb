@@ -203,11 +203,11 @@ ydb tools dump -p .backups/collections/production_backups \
 
 ### Best Practices
 
-- **Establish regular schedules**: Consistent backup timing simplifies recovery planning
-- **Manage chain length**: Take new full backups periodically (weekly or bi-weekly) to avoid excessively long incremental chains
-- **Test restoration**: Periodically verify that backups can be restored successfully
-- **Monitor storage growth**: Track backup storage usage and plan capacity accordingly
-- **Export for disaster recovery**: Regularly export backup collections to external storage
+For detailed guidance on backup collection best practices, see the [Backup collection recipes](../recipes/backup-collections/index.md):
+
+- [Exporting to external storage](../recipes/backup-collections/exporting-to-external-storage.md) — disaster recovery with S3 or filesystem
+- [Maintenance and cleanup](../recipes/backup-collections/maintenance-and-cleanup.md) — managing storage and backup chains
+- [Validation and testing](../recipes/backup-collections/validation-and-testing.md) — verifying backup integrity
 
 {% include [_includes/backup_and_recovery/cli_overlay.md](_includes/backup_and_recovery/cli_overlay.md) %}
 

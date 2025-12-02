@@ -13,8 +13,6 @@ General format of the command:
 * `kind`: The type of operation. Possible values:
 
   * `buildindex`: The build index operations.
-  * `export/yt`: The export to YT operations.
-  * `scriptexec`: The script execution operations.
   * `export/s3`: The export to S3 operations.
   * `import/s3`: The import from S3 operations.
   * `incbackup`: The incremental backup operations.

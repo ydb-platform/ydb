@@ -152,18 +152,33 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
 
-        // Literal target vector
+        // Literal target vector, normal order (column, target)
         runQuery(Q_(R"(
             SELECT pk FROM `/Root/TestTable`
             ORDER BY Knn::CosineDistance(emb, "\x67\x71\x02")
             LIMIT 3
         )"));
 
-        // Explicit columns
+        // Literal target vector, reversed order (target, column)
+        runQuery(Q_(R"(
+            SELECT pk FROM `/Root/TestTable`
+            ORDER BY Knn::CosineDistance("\x67\x71\x02", emb)
+            LIMIT 3
+        )"));
+
+        // Variable equal to function call, normal order (column, target)
         runQuery(Q_(R"(
             $TargetEmbedding = String::HexDecode("677102");
             SELECT pk, emb, ___data FROM `/Root/TestTable`
             ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+            LIMIT 3
+        )"));
+
+        // Variable equal to function call, reversed order (target, column)
+        runQuery(Q_(R"(
+            $TargetEmbedding = String::HexDecode("677102");
+            SELECT pk, emb, ___data FROM `/Root/TestTable`
+            ORDER BY Knn::CosineDistance($TargetEmbedding, emb)
             LIMIT 3
         )"));
 

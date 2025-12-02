@@ -26,8 +26,8 @@ public:
         ui32 RemainsComputeActors = 0;
         TVector<ui64> Tasks;
         bool operator < (const TNodeDesc& item) const {
-            return std::tuple(Tasks.size(), RemainsMemory, RemainsComputeActors)
-                < std::tuple(item.Tasks.size(), item.RemainsMemory, item.RemainsComputeActors);
+            return std::tuple(-(i32)Tasks.size(), RemainsMemory, RemainsComputeActors)
+                < std::tuple(-(i32)item.Tasks.size(), item.RemainsMemory, item.RemainsComputeActors);
         }
 
         std::optional<IKqpPlannerStrategy::TResult> BuildResult() {
@@ -42,12 +42,12 @@ public:
         }
     };
 private:
-    std::deque<TNodeDesc> Nodes;
+    std::vector<TNodeDesc> Nodes;
 public:
-    std::deque<TNodeDesc>::iterator begin() {
+    std::vector<TNodeDesc>::iterator begin() {
         return Nodes.begin();
     }
-    std::deque<TNodeDesc>::iterator end() {
+    std::vector<TNodeDesc>::iterator end() {
         return Nodes.end();
     }
 
@@ -55,13 +55,15 @@ public:
         if (Nodes.empty()) {
             return {};
         }
+        std::pop_heap(Nodes.begin(), Nodes.end());
         auto result = std::move(Nodes.back());
         Nodes.pop_back();
         return result;
     }
 
     void PushNode(TNodeDesc&& node) {
-        Nodes.emplace_front(std::move(node));
+        Nodes.emplace_back(std::move(node));
+        std::push_heap(Nodes.begin(), Nodes.end());
     }
 
     std::optional<TNodeDesc> PopOptimalNodeWithLimits(const ui64 memoryLimit, const ui32 actorsLimit) {
@@ -71,6 +73,7 @@ public:
             if (Nodes.empty()) {
                 break;
             }
+            std::pop_heap(Nodes.begin(), Nodes.end());
             if (Nodes.back().RemainsComputeActors >= actorsLimit && Nodes.back().RemainsMemory >= memoryLimit) {
                 result = std::move(Nodes.back());
                 Nodes.pop_back();
@@ -82,6 +85,7 @@ public:
         }
         for (auto&& i : localNodesWithNotEnoughResources) {
             Nodes.emplace_back(std::move(i));
+            std::push_heap(Nodes.begin(), Nodes.end());
         }
         return result;
     }
@@ -99,6 +103,7 @@ public:
                 {}
                 });
         }
+        std::make_heap(Nodes.begin(), Nodes.end());
     }
 };
 

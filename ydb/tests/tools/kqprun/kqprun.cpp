@@ -1046,8 +1046,10 @@ int main(int argc, const char* argv[]) {
     NKikimr::NMiniKQL::InitializeGlobalPagedBufferCounters(memoryProfilingCounters);
 #endif
 
+    NKqpRun::TMain main;
+
     try {
-        NKqpRun::TMain().Run(argc, argv);
+        main.Run(argc, argv);
     } catch (...) {
         NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 

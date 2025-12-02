@@ -124,7 +124,6 @@ struct TTenantsTestSettings : TKikimrTestSettings {
 };
 
 enum class ESecretType {
-    SecretTypeNone,
     SecretTypeOld,
     SecretTypeScheme,
 };
@@ -141,7 +140,7 @@ struct TTransferTestConfig {
     TString TopicPath = "/Root/test_topic";
     TString TransferPath = "/Root/test_transfer";
     bool FakeTopicPath = false;
-    ESecretType SecretType = ESecretType::SecretTypeOld;
+    TMaybe<ESecretType> SecretType = ESecretType::SecretTypeOld;
     EAuthType AuthType = EAuthType::AuthTypeToken;
     ui64 BatchSizeBytes = 1024;
     TDuration FlushInterval = TDuration::Seconds(55);
@@ -154,8 +153,8 @@ struct TTransferTestConfig {
 
 void AssertAuthAndSecretTypes(const TTransferTestConfig& config) {
     UNIT_ASSERT_C(
-        (config.AuthType == EAuthType::AuthTypeNone && config.SecretType == ESecretType::SecretTypeNone) ||
-            config.AuthType != EAuthType::AuthTypeNone && config.SecretType != ESecretType::SecretTypeNone,
+        (config.AuthType == EAuthType::AuthTypeNone && !config.SecretType) ||
+            (config.AuthType != EAuthType::AuthTypeNone && config.SecretType),
         "AuthType and SecretType should be consistent"
     );
 }
@@ -1451,14 +1450,14 @@ void TestReplicationSettingsArePreserved(
         TReplicationClient& client,
         TBackupFunction&& backup,
         TRestoreFunction&& restore,
-        ESecretType secretType,
+        const TMaybe<ESecretType> tokenSecretType,
         const bool isOlap,
         const NDump::TRestoreSettings& restorationSettings = {})
 {
     using namespace fmt::literals;
-    if (secretType == ESecretType::SecretTypeScheme) {
+    if (tokenSecretType == ESecretType::SecretTypeScheme) {
         ExecuteQuery(session, "CREATE SECRET `secret` WITH (value = 'root@builtin');", true);
-    } else if (secretType == ESecretType::SecretTypeOld) {
+    } else if (tokenSecretType == ESecretType::SecretTypeOld) {
         ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
     }
     ExecuteQuery(session, fmt::format("CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k)) WITH (STORE = {store});", "store"_a = isOlap ? "COLUMN" : "ROW"), true);
@@ -1472,8 +1471,8 @@ void TestReplicationSettingsArePreserved(
                 );
             )",
             endpoint.c_str(),
-            (secretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'secret'" : ""),
-            (secretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'secret'" : "")
+            (tokenSecretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'secret'" : ""),
+            (tokenSecretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'secret'" : "")
         ), true
     );
 
@@ -1484,9 +1483,9 @@ void TestReplicationSettingsArePreserved(
         const auto& params = desc.GetConnectionParams();
         UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
         UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
-        if (secretType == ESecretType::SecretTypeScheme) {
+        if (tokenSecretType == ESecretType::SecretTypeScheme) {
             UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "/Root/secret");
-        } else if (secretType == ESecretType::SecretTypeOld) {
+        } else if (tokenSecretType == ESecretType::SecretTypeOld) {
             UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "secret");
         }
 
@@ -1697,60 +1696,60 @@ Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TSession
 
 void TestExternalDataSourceSettingsArePreserved(
     const char* path, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup,
-    TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings, ESecretType secretType,
+    TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings, const TMaybe<ESecretType>& secretType,
     EAuthType authType
 ) {
     if (secretType == ESecretType::SecretTypeScheme) {
         ExecuteQuery(querySession, "CREATE SECRET `secret` WITH (value = 'secret');", true);
-        if (authType == EAuthType::AuthTypeAws) {
-            ExecuteQuery(querySession, "CREATE SECRET `secret2` WITH (value = 'secret');", true);
-        }
     } else if (secretType == ESecretType::SecretTypeOld) {
         ExecuteQuery(querySession, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'secret');", true);
-        if (authType == EAuthType::AuthTypeAws) {
-            ExecuteQuery(querySession, "CREATE OBJECT `secret2` (TYPE SECRET) WITH (value = 'secret');", true);
+    }
+
+    TString createEdsQuery;
+    switch (authType) {
+        case EAuthType::AuthTypeToken: /* fallthrough */
+        case EAuthType::AuthTypeNone: {
+            createEdsQuery = Sprintf(
+                R"(
+                    CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                        SOURCE_TYPE = "Ydb",
+                        LOCATION = "192.168.1.1:8123",
+                        DATABASE_NAME = "/Root/test/",
+                        AUTH_METHOD = "%s"
+                        %s -- TOKEN_SECRET_NAME if needed
+                        %s -- TOKEN_SECRET_PATH if needed
+                    );
+                )",
+                path,
+                (!secretType ? "NONE" : "TOKEN"),
+                (secretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'secret'" : ""),
+                (secretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'secret'" : "")
+            );
+            break;
+        }
+        case EAuthType::AuthTypeAws: { // checks more than one secret
+            createEdsQuery = Sprintf(
+                R"(
+                    CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                        SOURCE_TYPE="ObjectStorage",
+                        LOCATION = "192.168.1.1:8123",
+                        AUTH_METHOD="AWS",
+                        AWS_REGION="ru-central-1",
+                        %s="secret",
+                        %s="secret"
+                    );
+                )",
+                path,
+                (secretType == ESecretType::SecretTypeScheme ? "AWS_ACCESS_KEY_ID_SECRET_PATH" : "AWS_ACCESS_KEY_ID_SECRET_NAME"),
+                (secretType == ESecretType::SecretTypeScheme ? "AWS_SECRET_ACCESS_KEY_SECRET_PATH" : "AWS_SECRET_ACCESS_KEY_SECRET_NAME")
+            );
+            break;
+        } default: {
+            UNIT_ASSERT_C(false, "Unsuppoted test setting");
         }
     }
 
-    TString query;
-    if (authType == EAuthType::AuthTypeToken || authType == EAuthType::AuthTypeNone) {
-        query = Sprintf(
-            R"(
-                CREATE EXTERNAL DATA SOURCE `%s` WITH (
-                    SOURCE_TYPE = "Ydb",
-                    LOCATION = "192.168.1.1:8123",
-                    DATABASE_NAME = "/Root/test/",
-                    AUTH_METHOD = "%s"
-                    %s -- TOKEN_SECRET_NAME is needed
-                    %s -- TOKEN_SECRET_PATH is needed
-                );
-            )",
-            path,
-            (secretType == ESecretType::SecretTypeNone ? "NONE" : "TOKEN"),
-            (secretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'secret'" : ""),
-            (secretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'secret'" : "")
-        );
-    } else if (authType == EAuthType::AuthTypeAws) {
-        query = Sprintf(
-            R"(
-                CREATE EXTERNAL DATA SOURCE `%s` WITH (
-                    SOURCE_TYPE="ObjectStorage",
-                    LOCATION = "192.168.1.1:8123",
-                    AUTH_METHOD="AWS",
-                    AWS_REGION="ru-central-1",
-                    %s="secret",
-                    %s="secret2"
-                );
-            )",
-            path,
-            (secretType == ESecretType::SecretTypeScheme ? "AWS_ACCESS_KEY_ID_SECRET_PATH" : "AWS_ACCESS_KEY_ID_SECRET_NAME"),
-            (secretType == ESecretType::SecretTypeScheme ? "AWS_SECRET_ACCESS_KEY_SECRET_PATH" : "AWS_SECRET_ACCESS_KEY_SECRET_NAME")
-        );
-    } else {
-        UNIT_ASSERT_C(false, "Unsuppoted test setting");
-    }
-
-    ExecuteQuery(querySession, query, true);
+    ExecuteQuery(querySession, createEdsQuery, true);
     const auto originalDescription = DescribeExternalDataSource(tableSession, path);
 
     backup();
@@ -2685,13 +2684,13 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestReplicationBackupRestore(const bool isOlap, ESecretType secretType) {
+    void TestReplicationBackupRestore(const bool isOlap, const TMaybe<ESecretType>& tokenSecretType) {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
-        if (secretType != ESecretType::SecretTypeNone) {
+        if (tokenSecretType) {
             driverConfig.SetAuthToken("root@builtin");
         }
         auto driver = TDriver(driverConfig);
@@ -2700,7 +2699,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TReplicationClient replicationClient(driver);
 
-        if (secretType != ESecretType::SecretTypeNone) {
+        if (tokenSecretType) {
             TPermissions permissions("root@builtin", {"ydb.generic.full"});
             const auto result = schemeClient.ModifyPermissions("/Root",
                 TModifyPermissionsSettings().AddGrantPermissions(permissions)
@@ -2715,7 +2714,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             endpoint, session, replicationClient,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup),
-            secretType, isOlap
+            tokenSecretType, isOlap
         );
     }
 
@@ -2809,7 +2808,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
-    void TestExternalDataSourceBackupRestore(ESecretType secretType, EAuthType authType) {
+    void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
@@ -2818,7 +2817,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
-        if (secretType != ESecretType::SecretTypeNone) {
+        if (secretType) {
             driverConfig.SetAuthToken("root@builtin");
         }
         auto driver = TDriver(driverConfig);
@@ -2827,7 +2826,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         NQuery::TQueryClient queryClient(driver);
         auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
         TSchemeClient schemeClient(driver);
-        if (secretType != ESecretType::SecretTypeNone) {
+        if (secretType) {
             TPermissions permissions("root@builtin", {"ydb.generic.full"});
             const auto result = schemeClient.ModifyPermissions("/Root",
                 TModifyPermissionsSettings().AddGrantPermissions(permissions)
@@ -3004,7 +3003,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeExternalTable:
                 return TestExternalTableBackupRestore();
             case EPathTypeExternalDataSource: {
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeNone, EAuthType::AuthTypeNone);
+                TestExternalDataSourceBackupRestore(/* secretType */ Nothing(), EAuthType::AuthTypeNone);
                 TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken);
                 TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken);
                 TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws);
@@ -3144,7 +3143,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings,
-            ESecretType::SecretTypeNone, EAuthType::AuthTypeNone
+            /* secretType */ Nothing(), EAuthType::AuthTypeNone
         );
 
         cleanup();
@@ -3269,7 +3268,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
-            NDump::TRestoreSettings{},  ESecretType::SecretTypeNone, EAuthType::AuthTypeNone
+            NDump::TRestoreSettings{},  /* secretType */ Nothing(), EAuthType::AuthTypeNone
         );
 
         cleanup();
@@ -3336,7 +3335,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
-        TestReplicationBackupRestore(false, ESecretType::SecretTypeNone);
+        TestReplicationBackupRestore(false, /* tokenSecretType */ Nothing());
     }
 
     Y_UNIT_TEST(BackupRestoreTransfer_UseTokenWithOldSecret) {
@@ -3373,7 +3372,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(BackupRestoreTransfer_NoTokenNoUserPassword) {
         TestTransferBackupRestore(TTransferTestConfig {
-            .SecretType = ESecretType::SecretTypeNone,
+            .SecretType = Nothing(),
             .AuthType = EAuthType::AuthTypeNone,
             .BackupRestoreAttemptsCount = 3,
         });

@@ -468,44 +468,48 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
         return nullptr;
     }
 
-    // Auto-detect vector type and dimension from target vector
-    const ui8 formatByte = static_cast<ui8>(targetVector.back());
+    const auto setLinearType = [&](Ydb::Table::VectorIndexSettings::VectorType type, size_t elementSize, TStringBuf typeName) -> bool {
+        if (targetVector.size() < HeaderLen + elementSize) {
+            error = TStringBuilder() << "Target vector too short for " << typeName << " type";
+            return false;
+        }
+        settings.set_vector_type(type);
+        settings.set_vector_dimension((targetVector.size() - HeaderLen) / elementSize);
+        return true;
+    };
 
+    const ui8 formatByte = static_cast<ui8>(targetVector.back());
     switch (formatByte) {
         case EFormat::FloatVector:
-            settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
-            if (targetVector.size() < HeaderLen + sizeof(float)) {
-                error = "Target vector too short for float type";
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, sizeof(float), "float")) {
                 return nullptr;
             }
-            settings.set_vector_dimension((targetVector.size() - HeaderLen) / sizeof(float));
             break;
         case EFormat::Uint8Vector:
-            settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
-            if (targetVector.size() < HeaderLen + sizeof(ui8)) {
-                error = "Target vector too short for uint8 type";
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8, sizeof(ui8), "uint8")) {
                 return nullptr;
             }
-            settings.set_vector_dimension((targetVector.size() - HeaderLen) / sizeof(ui8));
             break;
         case EFormat::Int8Vector:
-            settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8);
-            if (targetVector.size() < HeaderLen + sizeof(i8)) {
-                error = "Target vector too short for int8 type";
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8, sizeof(i8), "int8")) {
                 return nullptr;
             }
-            settings.set_vector_dimension((targetVector.size() - HeaderLen) / sizeof(i8));
             break;
-        case EFormat::BitVector:
-            settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT);
-            if (targetVector.size() < 2 + HeaderLen) {
+        case EFormat::BitVector: {
+            if (targetVector.size() < HeaderLen + 2) {
                 error = "Target vector too short for bit type";
                 return nullptr;
             }
-            // For bit vectors: size = HeaderLen + ceil(dim/8) + 1 (padding info) + 1 (format byte)
-            // padding = targetVector[size - 2], actual bits = (targetVector.size() - HeaderLen - 1) * 8 - padding
-            settings.set_vector_dimension((targetVector.size() - HeaderLen - 1) * 8 - static_cast<ui8>(targetVector[targetVector.size() - 2]));
+            const ui8 paddingBits = static_cast<ui8>(targetVector[targetVector.size() - 2]);
+            const size_t payloadBits = (targetVector.size() - HeaderLen - 1) * 8;
+            if (payloadBits < paddingBits) {
+                error = "Invalid bit vector padding";
+                return nullptr;
+            }
+            settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT);
+            settings.set_vector_dimension(payloadBits - paddingBits);
             break;
+        }
         default:
             error = TStringBuilder() << "Unknown vector format byte: " << static_cast<int>(formatByte);
             return nullptr;

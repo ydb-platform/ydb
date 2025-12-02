@@ -170,12 +170,17 @@ jobs:
           echo "Final branches to use: $(cat $GITHUB_OUTPUT | grep branch_array | cut -d= -f2)"
 
       - name: Install dependencies
-        if: inputs.pull_number != ''
+        if: always()
         run: |
-          pip install PyGithub
+          # Check if COMMIT_SHA is set (means we have a PR to comment on)
+          if [ -n "$COMMIT_SHA" ]; then
+            pip install PyGithub
+          else
+            echo "No PR detected, skipping dependency installation"
+          fi
 
       - name: Post run tests start comment
-        if: inputs.pull_number != ''
+        if: always()
         shell: bash
         env:
           BUILD_PRESET: ${{ inputs.build_preset }}
@@ -185,10 +190,10 @@ jobs:
           BUILD_TARGET: ${{ inputs.test_targets }}
           COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
         run: |
-          # Use commit SHA from Set branches step
+          # Check if COMMIT_SHA is set (means we have a PR to comment on)
           if [ -z "$COMMIT_SHA" ]; then
-            echo "::error::COMMIT_SHA is not set. This should have been set in the Set branches step."
-            exit 1
+            echo "No PR detected (COMMIT_SHA is not set), skipping comment"
+            exit 0
           fi
           commit_sha="$COMMIT_SHA"
           

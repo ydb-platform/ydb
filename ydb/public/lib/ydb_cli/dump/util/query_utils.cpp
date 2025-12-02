@@ -344,7 +344,7 @@ bool RewriteRefs(TString& queryStr, TStringBuf db, TStringBuf backupRoot, TStrin
 }
 
 bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, TStringBuf backupPathPrefix, TStringBuf restorePathPrefix, NYql::TIssues& issues) {
-    return RewriteRefs<TRule_table_ref>(query, "", backupRoot, restoreRoot, backupPathPrefix, restorePathPrefix, issues);
+    return RewriteRefs<TRule_an_id_table>(query, "", backupRoot, restoreRoot, backupPathPrefix, restorePathPrefix, issues);
 }
 
 bool RewriteObjectRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues) {

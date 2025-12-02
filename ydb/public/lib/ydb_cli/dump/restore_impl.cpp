@@ -319,6 +319,59 @@ bool IsSchemaSecret(TStringBuf secretName) {
     return secretName.StartsWith('/');
 }
 
+TRestoreResult CheckSecretExistence(const TString& secretName, const TLog* log, NQuery::TQueryClient& queryClient) {
+    LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Check existence of the secret " << secretName.Quote());
+
+    const auto tmpUser = CreateGuidAsString();
+    TString createAccessQuery;
+    TString dropAccessQuery;
+    if (IsSchemaSecret(secretName)) {
+        createAccessQuery = std::format("GRANT describe schema ON `{}` TO `{}`;", secretName.c_str(), tmpUser.c_str());
+        dropAccessQuery = std::format("REVOKE describe schema ON `{}` FROM `{}`;", secretName.c_str(), tmpUser.c_str());
+    } else {
+        createAccessQuery = std::format("CREATE OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
+        dropAccessQuery = std::format("DROP OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
+    }
+
+    auto result = queryClient.RetryQuerySync([&](NQuery::TSession session) {
+        return session.ExecuteQuery(createAccessQuery, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    });
+    if (!result.IsSuccess()) {
+        return Result<TRestoreResult>(EStatus::PRECONDITION_FAILED, TStringBuilder()
+            << "Secret " << secretName.Quote() << " does not exist or you do not have access permissions");
+    }
+
+    result = queryClient.RetryQuerySync([&](NQuery::TSession session) {
+        return session.ExecuteQuery(dropAccessQuery, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    });
+    if (!result.IsSuccess()) {
+        return Result<TRestoreResult>(EStatus::INTERNAL_ERROR, TStringBuilder()
+            << "Failed to drop temporary secret access " << secretName << ":" << tmpUser);
+    }
+
+    return result;
+}
+
+TRestoreResult CheckSecretsAndRewriteTheirPathsIfNeeded(TString& query, const TString& dbRestoreRoot, const TFsPath& fsPath,
+    const TLog* log, NQuery::TQueryClient& queryClient)
+{
+    auto secretSettings = GetSecretSettings(query);
+    for (auto& secretSetting : secretSettings) {
+        if (IsSchemaSecret(secretSetting.Value)) {
+            secretSetting.Value = RewriteAbsolutePath(secretSetting.Value, GetDatabase(query), dbRestoreRoot);
+        }
+        if (auto result = CheckSecretExistence(secretSetting.Value, log, queryClient); !result.IsSuccess()) {
+            return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
+        }
+        NYql::TIssues issues;
+        if (!RewriteCreateQuery(query, secretSetting.Name + " = '{}'", secretSetting.Value, issues)) {
+           return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
+        }
+    }
+
+    return Result<TRestoreResult>();
+}
+
 } // anonymous
 
 namespace NPrivate {
@@ -1528,58 +1581,6 @@ TRestoreResult TRestoreClient::RestoreTopic(
     return Result<TRestoreResult>(dbPath, std::move(result));
 }
 
-TRestoreResult TRestoreClient::CheckSecretExistence(const TString& secretName) {
-    LOG_D("Check existence of the secret " << secretName.Quote());
-
-    const auto tmpUser = CreateGuidAsString();
-    TString createAccessQuery;
-    TString dropAccessQuery;
-    if (IsSchemaSecret(secretName)) {
-        createAccessQuery = std::format("GRANT describe schema ON `{}` TO `{}`;", secretName.c_str(), tmpUser.c_str());
-        dropAccessQuery = std::format("REVOKE describe schema ON `{}` FROM `{}`;", secretName.c_str(), tmpUser.c_str());
-    } else {
-        createAccessQuery = std::format("CREATE OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
-        dropAccessQuery = std::format("DROP OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
-    }
-
-    auto result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
-        return session.ExecuteQuery(createAccessQuery, NQuery::TTxControl::NoTx()).ExtractValueSync();
-    });
-    if (!result.IsSuccess()) {
-        return Result<TRestoreResult>(EStatus::PRECONDITION_FAILED, TStringBuilder()
-            << "Secret " << secretName.Quote() << " does not exist or you do not have access permissions");
-    }
-
-    result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
-        return session.ExecuteQuery(dropAccessQuery, NQuery::TTxControl::NoTx()).ExtractValueSync();
-    });
-    if (!result.IsSuccess()) {
-        return Result<TRestoreResult>(EStatus::INTERNAL_ERROR, TStringBuilder()
-            << "Failed to drop temporary secret access " << secretName << ":" << tmpUser);
-    }
-
-    return result;
-}
-
-// TODO(yurikiselev): Make better name !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-TRestoreResult TRestoreClient::ProcessSecretInQuery(TString& query, const TString& dbRestoreRoot, const TFsPath& fsPath) {
-    auto secretSettings = GetSecretSettings(query);
-    for (auto& secretSetting : secretSettings) {
-        if (IsSchemaSecret(secretSetting.Value)) {
-            secretSetting.Value = RewriteAbsolutePath(secretSetting.Value, GetDatabase(query), dbRestoreRoot);
-        }
-        if (auto result = CheckSecretExistence(secretSetting.Value); !result.IsSuccess()) {
-            return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
-        }
-        NYql::TIssues issues;
-        if (!RewriteCreateQuery(query, secretSetting.Name + " = '{}'", secretSetting.Value, issues)) {
-           return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
-        }
-    }
-
-    return Result<TRestoreResult>();
-}
-
 TRestoreResult TRestoreClient::RestoreReplication(
     const TFsPath& fsPath,
     const TString& dbRestoreRoot,
@@ -1596,7 +1597,7 @@ TRestoreResult TRestoreClient::RestoreReplication(
     }
 
     auto query = ReadAsyncReplicationQuery(fsPath, Log.get());
-    if (const auto result = ProcessSecretInQuery(query, dbRestoreRoot, fsPath); !result.IsSuccess()) {
+    if (const auto result = CheckSecretsAndRewriteTheirPathsIfNeeded(query, dbRestoreRoot, fsPath, Log.get(), QueryClient); !result.IsSuccess()) {
         return result;
     }
 
@@ -1637,7 +1638,7 @@ TRestoreResult TRestoreClient::RestoreTransfer(
     }
 
     auto query = ReadTransferQuery(fsPath, Log.get());
-    if (const auto result = ProcessSecretInQuery(query, dbRestoreRoot, fsPath); !result.IsSuccess()) {
+    if (const auto result = CheckSecretsAndRewriteTheirPathsIfNeeded(query, dbRestoreRoot, fsPath,  Log.get(), QueryClient); !result.IsSuccess()) {
         return result;
     }
 
@@ -1763,7 +1764,7 @@ TRestoreResult TRestoreClient::RestoreExternalDataSource(
     }
 
     TString query = ReadExternalDataSourceQuery(fsPath, Log.get());
-    if (const auto result = ProcessSecretInQuery(query, dbRestoreRoot, fsPath); !result.IsSuccess()) {
+    if (const auto result = CheckSecretsAndRewriteTheirPathsIfNeeded(query, dbRestoreRoot, fsPath,  Log.get(), QueryClient); !result.IsSuccess()) {
         return result;
     }
 

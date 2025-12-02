@@ -233,8 +233,6 @@ class TRestoreClient {
         const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc,
         ui32 dataFilesCount);
 
-    TRestoreResult CheckSecretExistence(const TString& secretName);
-    TRestoreResult ProcessSecretInQuery(TString& query, const TString& dbRestoreRoot, const TFsPath& fsPath);
     TRestoreResult Drop(NScheme::ESchemeEntryType type, const TString& path, const TRestoreSettings& settings);
     TRestoreResult Restore(NScheme::ESchemeEntryType type, const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, bool delay);
     TRestoreResult DropAndRestore(const TFsPath& fsPath, const TString& dbRestoreRoot, const TRestoreSettings& settings);

@@ -77,6 +77,7 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
         NIceDb::TUpdate<Schema::IndexBuild::TableLocalId>(info.TablePathId.LocalPathId),
         NIceDb::TUpdate<Schema::IndexBuild::IndexName>(info.IndexName),
         NIceDb::TUpdate<Schema::IndexBuild::IndexType>(info.IndexType),
+        NIceDb::TUpdate<Schema::IndexBuild::TargetName>(info.TargetName),
         NIceDb::TUpdate<Schema::IndexBuild::MaxBatchRows>(info.ScanSettings.GetMaxBatchRows()),
         NIceDb::TUpdate<Schema::IndexBuild::MaxBatchBytes>(info.ScanSettings.GetMaxBatchBytes()),
         NIceDb::TUpdate<Schema::IndexBuild::MaxShards>(info.MaxInProgressShards),

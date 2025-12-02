@@ -157,6 +157,7 @@ runs:
         TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
         GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
         GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
+        PR_NUMBER: ${{ inputs.pull_number }}
       run: |
         set -ex
         

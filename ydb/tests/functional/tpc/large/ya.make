@@ -18,7 +18,7 @@ TAG(ya:fat)
 REQUIREMENTS(ram:16)
 
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(NO_KUBER_LOGS="yes")
 ENV(WAIT_CLUSTER_ALIVE_TIMEOUT="60")

@@ -34,7 +34,7 @@ public:
     TString IndexName;
     std::vector<std::string> KeyColumns;
     std::string EmbeddingColumn;
-    std::string QueryTableKeyColumn;
+    std::vector<std::string> QueryTableKeyColumns;
     std::optional<std::string> PrefixColumn;
     std::optional<std::string> PrefixType;
     NYdb::NTable::TVectorIndexSettings::EMetric Metric;

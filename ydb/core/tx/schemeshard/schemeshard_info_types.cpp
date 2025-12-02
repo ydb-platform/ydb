@@ -2307,7 +2307,8 @@ bool TTableInfo::CheckSplitByLoad(
             << " shardSize: " << stats->DataSize << " minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
             << " shardCount: " << Stats.PartitionStats.size()
             << " expectedShardCount: " << ExpectedPartitionCount << " maxShardCount: " << maxShards
-            << " cpuUsage: " << currentCpuUsage << " cpuUsageThreshold: " << cpuUsageThreshold * 1000000;
+            << " cpuUsage: " << currentCpuUsage
+            << " cpuUsageThreshold: " << static_cast<ui64>(cpuUsageThreshold * 1000000);
         return false;
     }
 
@@ -2320,7 +2321,7 @@ bool TTableInfo::CheckSplitByLoad(
         << "expectedShardCount: " << ExpectedPartitionCount << ", "
         << "maxShardCount: " << maxShards << ", "
         << "cpuUsage: " << currentCpuUsage << ", "
-        << "cpuUsageThreshold: " << cpuUsageThreshold * 1000000 << ")";
+        << "cpuUsageThreshold: " << static_cast<ui64>(cpuUsageThreshold * 1000000) << ")";
 
     return true;
 }

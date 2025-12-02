@@ -31,7 +31,7 @@ void SetSigHandler() noexcept {
     struct sigaction sigActionData;
     sigemptyset(&sigActionData.sa_mask);
     sigActionData.sa_handler = &SigHandler;
-    sigActionData.sa_flags = SA_INTERRUPT;
+    sigActionData.sa_flags = 0;
     sigaction(SIGUSR1, &sigActionData, nullptr);
 }
 

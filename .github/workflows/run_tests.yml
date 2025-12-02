@@ -131,9 +131,10 @@ jobs:
                 if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
                   echo "Replaced pull/$PULL_REQUEST_NUMBER with merge commit: $MERGE_SHA"
                   processed_branches+=("\"$MERGE_SHA\"")
-                  # Save merge commit SHA for comment step
+                  # Save merge commit SHA and PR number for comment step
                   if [ -z "$COMMIT_SHA" ]; then
                     echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
+                    echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
                   fi
                 else
                   echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER, discarding"
@@ -155,8 +156,9 @@ jobs:
                   jq -r '.merge_commit_sha')
             if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
               echo "branch_array=[\"$MERGE_SHA\"]" >> $GITHUB_OUTPUT
-              # Save merge commit SHA for comment step
+              # Save merge commit SHA and PR number for comment step
               echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
+              echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
             else
               echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
               exit 1
@@ -185,7 +187,6 @@ jobs:
         env:
           BUILD_PRESET: ${{ inputs.build_preset }}
           GITHUB_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ inputs.pull_number }}
           TEST_SIZE: ${{ inputs.test_size }}
           BUILD_TARGET: ${{ inputs.test_targets }}
           COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}

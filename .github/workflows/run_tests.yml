@@ -93,6 +93,7 @@ jobs:
         with:
           sparse-checkout: |
             .github/config/stable_branches.json
+            .github/scripts/tests/comment-pr.py
 
       - name: Set branches
         id: set-branches
@@ -130,6 +131,10 @@ jobs:
                 if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
                   echo "Replaced pull/$PULL_REQUEST_NUMBER with merge commit: $MERGE_SHA"
                   processed_branches+=("\"$MERGE_SHA\"")
+                  # Save merge commit SHA for comment step
+                  if [ -z "$COMMIT_SHA" ]; then
+                    echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
+                  fi
                 else
                   echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER, discarding"
                 fi
@@ -150,6 +155,8 @@ jobs:
                   jq -r '.merge_commit_sha')
             if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
               echo "branch_array=[\"$MERGE_SHA\"]" >> $GITHUB_OUTPUT
+              # Save merge commit SHA for comment step
+              echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
             else
               echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
               exit 1
@@ -161,6 +168,41 @@ jobs:
           fi
           
           echo "Final branches to use: $(cat $GITHUB_OUTPUT | grep branch_array | cut -d= -f2)"
+
+      - name: Post run tests start comment
+        if: inputs.pull_number != ''
+        shell: bash
+        env:
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pull_number }}
+          TEST_SIZE: ${{ inputs.test_size }}
+          BUILD_TARGET: ${{ inputs.test_targets }}
+          COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
+        run: |
+          # Use commit SHA from Set branches step
+          if [ -z "$COMMIT_SHA" ]; then
+            echo "::error::COMMIT_SHA is not set. This should have been set in the Set branches step."
+            exit 1
+          fi
+          commit_sha="$COMMIT_SHA"
+          
+          commit_short=$(echo "$commit_sha" | cut -c1-7)
+          commit_url="https://github.com/${GITHUB_REPOSITORY}/commit/${commit_sha}"
+          check_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          
+          {
+            echo "### Run tests started"
+            echo ""
+            echo "**Build Preset:** \`$BUILD_PRESET\`"
+            echo "**Test Size:** \`$TEST_SIZE\`"
+            echo "**Test Targets:** \`$BUILD_TARGET\`"
+            if [ "$COLLECT_COREDUMPS" = "true" ]; then
+              echo "**Collect Coredumps:** \`true\`"
+            fi
+            echo "**Commit:** [${commit_short}](${commit_url})"
+            echo "**Workflow run:** [link](${check_url})"
+          } | .github/scripts/tests/comment-pr.py --rewrite --no-timestamp
 
   run_tests:
     needs: prepare

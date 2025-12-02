@@ -169,6 +169,11 @@ jobs:
           
           echo "Final branches to use: $(cat $GITHUB_OUTPUT | grep branch_array | cut -d= -f2)"
 
+      - name: Install dependencies
+        if: inputs.pull_number != ''
+        run: |
+          pip install PyGithub
+
       - name: Post run tests start comment
         if: inputs.pull_number != ''
         shell: bash

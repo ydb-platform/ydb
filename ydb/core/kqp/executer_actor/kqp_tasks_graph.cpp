@@ -313,9 +313,11 @@ void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TCon
             break;
         }
     }
-    
+
+    bool isFinalTx = (totalTxCount > 0) && (txIdx == totalTxCount - 1);
     LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, 
         "[DISCARD_INDEX] BuildKqpTaskGraphResultChannels: txIdx=" << txIdx << "/" << totalTxCount 
+        << ", isFinalTx=" << (isFinalTx ? "YES" : "NO")
         << ", hasAnyQueryResultIndex=" << (hasAnyQueryResultIndex ? "YES" : "NO")
         << ", tx->ResultsSize()=" << tx->ResultsSize());
     
@@ -336,16 +338,8 @@ void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TCon
         auto& originTask = GetTask(originTaskId);
         auto& taskOutput = originTask.Outputs[outputIdx];
 
-        // Skip creating channel for DISCARD results:
-        // - Result has no QueryResultIndex (it's DISCARD or intermediate), AND
-        // - Either: some other result in this tx has QueryResultIndex (final tx with mixed results)
-        //   OR: this is single-result transaction (final tx with single DISCARD)
-        //
-        // Create channel for:
-        // - Results with QueryResultIndex (returned to user)
-        // - Intermediate transaction results (all results have no QueryResultIndex, multi-result tx)
-        //   These are passed to next transactions via TxResultBinding
         bool shouldSkipChannel = !result.HasQueryResultIndex() && 
+                                 isFinalTx &&
                                  (hasAnyQueryResultIndex || tx->ResultsSize() == 1);
         
         if (shouldSkipChannel) {
@@ -3157,7 +3151,9 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
         GetMeta().UseFastChannels = tx.Body->EnableFastChannels();
 
         // Not task-related
-        BuildKqpTaskGraphResultChannels(tx.Body, txIdx, transactions.size());
+        // Use TotalTxCount from Meta if available, otherwise fall back to Transactions.size()
+        ui64 totalTxCount = GetMeta().TotalTxCount > 0 ? GetMeta().TotalTxCount : Transactions.size();
+        BuildKqpTaskGraphResultChannels(tx.Body, txIdx, totalTxCount);
     }
 
     return sourceScanPartitionsCount;

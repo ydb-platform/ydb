@@ -235,6 +235,8 @@ struct TGraphMeta {
     bool StreamResult = false;
     Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
 
+    ui64 TotalTxCount = 0; // 0 is for not to skip intermediate results
+
     bool ShardsResolved = false;
     TMap<ui64 /* shardId */, ui64 /* nodeId */> ShardIdToNodeId;
     TMap<ui64 /* nodeId */, TVector<ui64 /* shardId */>> ShardsOnNode;
@@ -392,7 +394,8 @@ public:
     );
 
     // TODO: public used by TKqpLiteralExecuter
-    void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
+    // totalTxCount = 0 means unknown (don't skip any channels)
+    void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx, ui64 totalTxCount = 0);
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;

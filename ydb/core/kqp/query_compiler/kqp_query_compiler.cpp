@@ -844,10 +844,10 @@ public:
             auto& queryBindingProto = *queryProto.AddResultBindings();
             auto& txBindingProto = *queryBindingProto.MutableTxResultBinding();
             txBindingProto.SetTxIndex(txIndex);
-            txBindingProto.SetResultIndex(resultIdx);  // Use QueryResultIndex, not txResultIndex!
+            txBindingProto.SetResultIndex(txResultIndex);
             
             Cerr << "[DISCARD_COMPILER]   Created ResultBinding: TxIndex=" << txIndex 
-                << ", ResultIndex=" << resultIdx << Endl;
+                << ", ResultIndex=" << txResultIndex << Endl;
             
             resultIdx++;
 

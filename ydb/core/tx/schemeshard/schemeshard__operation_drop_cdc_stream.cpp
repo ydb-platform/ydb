@@ -453,11 +453,19 @@ public:
             auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
 
             if (stream->AlterData) {
-                LOG_N("TDropCdcStreamAtTable: Stream " << streamPath.Base()->Name 
-                    << " has AlterData (busy), retrying later.");
-                result->SetError(NKikimrScheme::StatusMultipleModifications, 
-                    TStringBuilder() << "Stream " << streamPath.Base()->Name << " has pending changes (AlterData)");
-                return result;
+                bool isOurTx = (streamPath.Base()->LastTxId == OperationId.GetTxId());
+
+                if (isOurTx) {
+                    LOG_I("TDropCdcStreamAtTable: Stream " << streamPath.Base()->Name 
+                        << " has AlterData from OUR transaction. Overriding with DROP.");
+                } else {
+                    LOG_N("TDropCdcStreamAtTable: Stream " << streamPath.Base()->Name 
+                        << " is busy by txId " << streamPath.Base()->LastTxId);
+                        
+                    result->SetError(NKikimrScheme::StatusMultipleModifications, 
+                        TStringBuilder() << "Stream " << streamPath.Base()->Name << " is busy by another operation");
+                    return result;
+                }
             }
 
             streamPath.Base()->PathState = TPathElement::EPathState::EPathStateDrop;

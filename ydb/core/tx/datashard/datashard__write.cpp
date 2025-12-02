@@ -283,7 +283,7 @@ NKikimrDataEvents::TEvWriteResult::EStatus NEvWrite::TConvertor::ConvertErrCode(
         case NKikimrTxDataShard::TError_EKind_SCHEME_CHANGED:
             return NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED;
         case NKikimrTxDataShard::TError_EKind_DISK_GROUP_OUT_OF_SPACE:
-            return NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
+            return NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE;
         case NKikimrTxDataShard::TError_EKind_DATABASE_DISK_SPACE_QUOTA_EXCEEDED:
             return NKikimrDataEvents::TEvWriteResult::STATUS_DATABASE_DISK_SPACE_QUOTA_EXCEEDED;
         default:

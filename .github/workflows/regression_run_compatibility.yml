@@ -26,6 +26,17 @@ on:
         description: Target(newest) version ("current" - compiles binary from the chosen branch)
         type: string
         required: false
+      build_preset:
+        description: 'Build preset (all, relwithdebinfo, release-asan, release-tsan, release-msan)'
+        type: choice
+        required: false
+        default: 'all'
+        options:
+          - all
+          - relwithdebinfo
+          - release-asan
+          - release-tsan
+          - release-msan
 jobs:
   main:
     name: Regression-run_compatibility
@@ -34,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: 
-        build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
+        build_preset: ${{ (inputs.build_preset == '' || inputs.build_preset == 'all') && fromJSON('["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]') || fromJSON(format('["{0}"]', inputs.build_preset)) }}
     with:
       test_targets: ydb/tests/compatibility/
       branches: ${{ inputs.pull_request_input && format('pull/{0}', inputs.pull_request_input) || github.ref_name }}

@@ -20,7 +20,7 @@ def normalize_app_domain(app_domain: str) -> str:
     return domain.rstrip('/')
 
 
-def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
+def generate_run_tests_button(pr_number: int, app_domain: str) -> str:
     """Generate run tests button with default parameters (relwithdebinfo, all test sizes)."""
     domain = normalize_app_domain(app_domain)
     base_url = f"https://{domain}/workflow/trigger"
@@ -53,6 +53,43 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
     # Encode only spaces, keep emoji as is - use two spaces like in backport
     badge_text = "▶  Run tests".replace(" ", "%20")
     button = f"[![▶  Run tests](https://img.shields.io/badge/{badge_text}-4caf50)]({url_ui})"
+    return button
+
+
+def generate_compatibility_tests_button(pr_number: int, app_domain: str) -> str:
+    """Generate run compatibility tests button."""
+    domain = normalize_app_domain(app_domain)
+    base_url = f"https://{domain}/workflow/trigger"
+    repo_env = os.environ.get("GITHUB_REPOSITORY")
+    if not repo_env or "/" not in repo_env:
+        raise ValueError("GITHUB_REPOSITORY environment variable is not set or malformed (expected 'owner/repo')")
+    owner, repo = repo_env.split("/", 1)
+    workflow_id = "regression_run_compatibility.yml"
+    return_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
+    
+    # Parameters for compatibility tests
+    params = {
+        "owner": owner,
+        "repo": repo,
+        "workflow_id": workflow_id,
+        "ref": "main",
+        "pull_request_input": str(pr_number),
+        "build_preset": "relwithdebinfo",  # Fast preset for button
+        "return_url": return_url
+    }
+    query_string = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()])
+    url_ui = f"{base_url}?{query_string}&ui=true"
+    
+    # Badge with blue color to distinguish from regular tests
+    badge_text = "▶  Run compatibility tests".replace(" ", "%20")
+    button = f"[![▶  Run compatibility tests](https://img.shields.io/badge/{badge_text}-2196F3)]({url_ui})"
+    return button
+
+
+def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
+    """Generate run tests table comment with buttons for regular and compatibility tests."""
+    run_tests_button = generate_run_tests_button(pr_number, app_domain)
+    compatibility_button = generate_compatibility_tests_button(pr_number, app_domain)
     
     comment = "<!-- run-tests-table -->\n"
     comment += "<h3>Run Extra Tests</h3>\n\n"
@@ -62,7 +99,7 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
     comment += "- **Sanitizers**: ASAN, MSAN, TSAN\n"
     comment += "- **Coredumps**: enable for debugging (default: off)\n"
     comment += "- **Additional args**: custom ya make arguments\n\n"
-    comment += button
+    comment += run_tests_button + " " + compatibility_button
     return comment
 
 

@@ -19,8 +19,6 @@ std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(
 
 std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNextImpl(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
     auto constructor = PopObjectWithAccessor();
-    constructor.MutableObject().SetIndex(CurrentSourceIdx);
-    ++CurrentSourceIdx;
     std::shared_ptr<NReader::NCommon::IDataSource> result = constructor.MutableObject().Construct(context, constructor.DetachAccessor());
     return result;
 }

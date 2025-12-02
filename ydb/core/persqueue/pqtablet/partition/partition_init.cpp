@@ -20,7 +20,7 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
 void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 void RequestDeduplicatorRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
-bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev);
+void ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev);
 
 //
 // TInitializer
@@ -992,7 +992,6 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 AFL_ENSURE(false)
                     ("m", read.GetMessage())
                     ("e", response.GetErrorReason());
-                return;
             default:
                 AFL_ENSURE(false)("status", read.GetStatus());
         };
@@ -1450,7 +1449,7 @@ void TPartition::CreateCompacter() {
 // Functions
 //
 
-bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev) {
+void ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev) {
     auto& response = ev->Get()->Record;
     AFL_ENSURE(response.GetStatus() == NMsgBusProxy::MSTATUS_OK)
         ("d", "commands for topic are not processed at all")
@@ -1464,8 +1463,6 @@ bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TP
             ("topic", step.TopicName())
             ("status", res.GetStatus());
     }
-
-    return true;
 }
 
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {

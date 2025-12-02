@@ -1534,12 +1534,12 @@ TRestoreResult TRestoreClient::CheckSecretExistence(const TString& secretName) {
     const auto tmpUser = CreateGuidAsString();
     TString createAccessQuery;
     TString dropAccessQuery;
-    if (!IsSchemaSecret(secretName)) {
-        createAccessQuery = std::format("CREATE OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
-        dropAccessQuery = std::format("DROP OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
-    } else {
+    if (IsSchemaSecret(secretName)) {
         createAccessQuery = std::format("GRANT describe schema ON `{}` TO `{}`;", secretName.c_str(), tmpUser.c_str());
         dropAccessQuery = std::format("REVOKE describe schema ON `{}` FROM `{}`;", secretName.c_str(), tmpUser.c_str());
+    } else {
+        createAccessQuery = std::format("CREATE OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
+        dropAccessQuery = std::format("DROP OBJECT `{}:{}` (TYPE SECRET_ACCESS);", secretName.c_str(), tmpUser.c_str());
     }
 
     auto result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
@@ -1586,8 +1586,7 @@ TRestoreResult TRestoreClient::RestoreReplication(
     const TString& dbPathRelativeToRestoreRoot,
     const TRestoreSettings& settings)
 {
-    LOG_D("Process " << "fsPath=" << fsPath.GetPath().Quote() << ", dbRestoreRoot=" << dbRestoreRoot.Quote()
-        << ", dbPathRelativeToRestoreRoot=" << dbPathRelativeToRestoreRoot.Quote());
+    LOG_D("Process " << fsPath.GetPath().Quote());
 
     const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
     LOG_I("Restore async replication " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());

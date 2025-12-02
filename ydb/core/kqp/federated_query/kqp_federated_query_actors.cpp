@@ -230,9 +230,6 @@ void TDescribeSchemaSecretsService::SendSchemeCacheRequests(const TEvResolveSecr
         }
         request->ResultSet.emplace_back(entry);
     }
-    if (userToken) {
-        LOG_N("SendSchemeCacheRequests: userToken->GetUserSID()=" << userToken->GetUserSID()); // TODO remove !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    }
     if (userToken && userToken->GetUserSID()) {
         request->UserToken = userToken;
     }

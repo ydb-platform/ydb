@@ -17,7 +17,6 @@
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
-#include <util/generic/set.h>
 
 #include <re2/re2.h>
 
@@ -260,7 +259,7 @@ TString GetDatabase(const TString& query) {
 
 TVector<TSecretSetting> GetSecretSettings(const TString& query) {
     static const TVector<TString> SECRET_SETTING_NAMES = [] {
-        static const TSet<TString> settings = {
+        static const TVector<TString> settings = {
             "TOKEN_SECRET",
             "PASSWORD_SECRET",
             "SERVICE_ACCOUNT_SECRET",

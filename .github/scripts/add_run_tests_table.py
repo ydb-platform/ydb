@@ -21,7 +21,7 @@ def normalize_app_domain(app_domain: str) -> str:
 
 
 def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
-    """Generate run tests execution table with buttons for different build presets."""
+    """Generate run tests button with default parameters (relwithdebinfo, all test sizes)."""
     domain = normalize_app_domain(app_domain)
     base_url = f"https://{domain}/workflow/trigger"
     repo_env = os.environ.get("GITHUB_REPOSITORY")
@@ -31,47 +31,39 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
     workflow_id = "run_tests.yml"
     return_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
     
-    # Build presets with their badge colors
-    build_presets = [
-        {"name": "relwithdebinfo", "badge_color": "4caf50"},
-        {"name": "release-asan", "badge_color": "ff9800"},
-        {"name": "release-msan", "badge_color": "2196F3"},
-        {"name": "release-tsan", "badge_color": "9c27b0"}
-    ]
+    # Default parameters: relwithdebinfo preset, all test sizes
+    params = {
+        "owner": owner,
+        "repo": repo,
+        "workflow_id": workflow_id,
+        "ref": "main",
+        "pull_number": str(pr_number),
+        "test_targets": "ydb/",
+        "test_type": "unittest,py3test,py2test,pytest",
+        "test_size": "small,medium,large",  # All test sizes
+        "additional_ya_make_args": "",
+        "build_preset": "relwithdebinfo",  # Default preset
+        "collect_coredumps": "false",
+        "return_url": return_url
+    }
+    query_string = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()])
+    url_ui = f"{base_url}?{query_string}&ui=true"
     
-    # Build HTML table: Build Preset with Run tests button
-    rows = []
-    for preset in build_presets:
-        # Generate URL for this preset (all test sizes included)
-        params = {
-            "owner": owner,
-            "repo": repo,
-            "workflow_id": workflow_id,
-            "ref": "main",
-            "pull_number": str(pr_number),
-            "test_targets": "ydb/",
-            "test_type": "unittest,py3test,py2test,pytest",
-            "test_size": "small,medium,large",  # All test sizes
-            "additional_ya_make_args": "",
-            "build_preset": preset["name"],
-            "collect_coredumps": "false",
-            "return_url": return_url
-        }
-        query_string = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()])
-        url_ui = f"{base_url}?{query_string}&ui=true"
-        
-        # Badge with only message (no label) - format: badge/message-color
-        # Encode only spaces, keep emoji as is - use two spaces like in backport
-        badge_text = "▶  Run tests".replace(" ", "%20")
-        button = f"[![▶  Run tests](https://img.shields.io/badge/{badge_text}-{preset['badge_color']})]({url_ui})"
-        rows.append(f"| `{preset['name']}` | {button} |")
+    # Badge with only message (no label) - format: badge/message-color
+    # Encode only spaces, keep emoji as is - use two spaces like in backport
+    badge_text = "▶  Run tests".replace(" ", "%20")
+    button = f"[![▶  Run tests](https://img.shields.io/badge/{badge_text}-4caf50)]({url_ui})"
     
-    table = "<!-- run-tests-table -->\n"
-    table += "<h3>Run Tests</h3>\n\n"
-    table += "| Build Preset | Run |\n"
-    table += "|--------|-----|\n"
-    table += "\n".join(rows)
-    return table
+    comment = "<!-- run-tests-table -->\n"
+    comment += "<h3>Run Extra Tests</h3>\n\n"
+    comment += "Run additional tests for this PR. You can customize:\n"
+    comment += "- **Test Size**: small, medium, large (default: all)\n"
+    comment += "- **Test Targets**: any directory path (default: `ydb/`)\n"
+    comment += "- **Sanitizers**: ASAN, MSAN, TSAN\n"
+    comment += "- **Coredumps**: enable for debugging (default: off)\n"
+    comment += "- **Additional args**: custom ya make arguments\n\n"
+    comment += button
+    return comment
 
 
 def create_or_update_pr_comment(pr, app_domain: str) -> None:

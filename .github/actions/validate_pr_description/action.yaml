@@ -9,6 +9,9 @@ runs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
         PR_BODY: ${{ inputs.pr_body}}
+        SHOW_RUN_TESTS_IN_PR: ${{ vars.SHOW_RUN_TESTS_IN_PR }}
+        SHOW_BACKPORT_IN_PR: ${{ vars.SHOW_BACKPORT_IN_PR }}
+        APP_DOMAIN: ${{ vars.APP_DOMAIN }}
       run: |
         python3 -m pip install PyGithub
         echo "$PR_BODY" | python3 ${{ github.action_path }}/validate_pr_description.py

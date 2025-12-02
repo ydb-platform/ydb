@@ -649,9 +649,9 @@ protected:
         TStringStream str;
         HTML(str) {
             PRE() {
-                str << "KQP Executer" << Endl;
+                str << "KQP Executer, SelfId=" << SelfId() << Endl;
 
-                TABLE_SORTABLE_CLASS ("table table-condensed") {
+                TABLE_SORTABLE_CLASS("table table-condensed") {
                     TABLEHEAD() {
                         TABLER() {
                             TABLEH() {str << "TxId";}
@@ -671,11 +671,7 @@ protected:
                                 TABLED() {str << task.Meta.NodeId;}
                                 TABLED() {
                                     if (task.ComputeActorId) {
-                                        if (task.ComputeActorId.NodeId() == SelfId().NodeId()) {
-                                            HREF("/actors/kqp_node?ca=" + ToString(task.ComputeActorId))  {
-                                                str << task.ComputeActorId;
-                                            }
-                                        } else {
+                                        XHREF(task.ComputeActorId.NodeId(), "/actors/kqp_node?ca=" + ToString(task.ComputeActorId))  {
                                             str << task.ComputeActorId;
                                         }
                                     } else {

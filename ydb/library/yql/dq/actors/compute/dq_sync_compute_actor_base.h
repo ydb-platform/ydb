@@ -96,20 +96,14 @@ protected:
         return true;  // returns true, when channels were handled synchronously
     }
 
-    TString GetMonitoringInfo(NActors::NMon::TEvHttpInfo::TPtr& ev) override {
+    TString GetMonitoringInfo(NActors::NMon::TEvHttpInfo::TPtr&) override {
         TStringStream str;
         HTML(str) {
             PRE() {
-                str << "TDqSyncComputeActorBase SelfId: " << this->SelfId() << Endl;
+                str << "TDqSyncComputeActorBase, SelfId=" << this->SelfId() << Endl;
                 str << "  State: " << (unsigned int)TBase::State << Endl;
 
-                TString uri(ev->Get()->Request.GetUri());
-                const TCgiParameters &cgi = ev->Get()->Request.GetParams();
-                if (cgi.Get("action") == "") {
-                    uri += "&action=run";
-                }
-
-                HREF(uri)  {
+                XHREF(this->SelfId().NodeId(), "/actors/kqp_node?action=run&ca=" + ToString(this->SelfId()))  {
                     str << "Resume Execution" << Endl;
                 }
 
@@ -119,49 +113,97 @@ protected:
                         << "  LastStatus: " << TaskRunner->LastStatus << Endl;
                 }
 
-                str << Endl << "Output Channels:" << Endl;
-
-                TABLE_SORTABLE_CLASS ("table table-condensed") {
-                    TABLEHEAD() {
-                        TABLER() {
-                            TABLEH() {str << "ChannelId";}
-                            TABLEH() {str << "PeerActorId";}
-                            TABLEH() {str << "FillLevel";}
-                            TABLEH() {str << "Finished";}
-                            TABLEH() {str << "EarlyFinish";}
-                        }
-                    }
-                    TABLEBODY() {
-                        for (auto& [channelId, info] : TBase::OutputChannelsMap) {
-                            TABLER() {
-                                TABLED() {str << channelId;}
-                                TABLED() {str << (info.HasPeer ? ToString(info.PeerId) : "N/A");}
-                                TABLED() {str << (info.Channel ? FillLevelToString(info.Channel->GetFillLevel()) : "nullptr");}
-                                TABLED() {str << info.Finished;}
-                                TABLED() {str << info.EarlyFinish;}
-                            }
-                        }
-                    }
-                }
-
                 str << Endl << "Input Channels:" << Endl;
 
-                TABLE_SORTABLE_CLASS ("table table-condensed") {
+                TABLE_SORTABLE_CLASS("table table-condensed") {
                     TABLEHEAD() {
                         TABLER() {
                             TABLEH() {str << "ChannelId";}
                             TABLEH() {str << "PeerActorId";}
+                            TABLEH() {str << "PushBytes";}
+                            TABLEH() {str << "PopBytes";}
                             TABLEH() {str << "Empty";}
                             TABLEH() {str << "Finished";}
+                            TABLEH() {str << "InputIndex";}
+                            TABLEH() {str << "LastPopTime";}
+                            TABLEH() {str << "LastPopResult";}
                         }
                     }
                     TABLEBODY() {
                         for (auto& [channelId, info] : TBase::InputChannelsMap) {
                             TABLER() {
                                 TABLED() {str << channelId;}
-                                TABLED() {str << (info.HasPeer ? ToString(info.PeerId) : "N/A");}
-                                TABLED() {str << (info.Channel ? ToString(info.Channel->Empty()) : "nullptr");}
-                                TABLED() {str << (info.Channel ? ToString(info.Channel->IsFinished()) : "nullptr");}
+                                TABLED() {
+                                    if (info.HasPeer) {
+                                        XHREF(info.PeerId.NodeId(), "/actors/kqp_node?ca=" + ToString(info.PeerId))  {
+                                            str << info.PeerId;
+                                        }
+                                    } else {
+                                        str << "N/A";
+                                    }
+                                }
+                                TABLED() {str << (info.Channel ? ToString(info.Channel->GetPushStats().Bytes) : "N/A");}
+                                TABLED() {str << (info.Channel ? ToString(info.Channel->GetPopStats().Bytes) : "N/A");}
+                                TABLED() {str << (info.Channel ? ToString(info.Channel->Empty()) : "N/A");}
+                                TABLED() {str << (info.Channel ? ToString(info.Channel->IsFinished()) : "N/A");}
+                                TABLED() {str << info.InputIndex;}
+                                TInstant lastPopTime;
+                                bool lastPopResult = false;
+                                if (info.Channel && info.Channel->GetIntrospectionInfo(lastPopTime, lastPopResult)) {
+                                    TABLED() {str << lastPopTime;}
+                                    TABLED() {str << lastPopResult;}
+                                } else {
+                                    TABLED() {str << "N/A";}
+                                    TABLED() {str << "N/A";}
+                                }
+                            }
+                        }
+                    }
+                }
+
+                str << Endl << "Output Channels:" << Endl;
+
+                TABLE_SORTABLE_CLASS("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ChannelId";}
+                            TABLEH() {str << "PeerActorId";}
+                            TABLEH() {str << "PushBytes";}
+                            TABLEH() {str << "PopBytes";}
+                            TABLEH() {str << "FillLevel";}
+                            TABLEH() {str << "Finished";}
+                            TABLEH() {str << "EarlyFinish";}
+                            TABLEH() {str << "LastFinishCheckTime";}
+                            TABLEH() {str << "LastFinishCheckResult";}
+                        }
+                    }
+                    TABLEBODY() {
+                        for (auto& [channelId, info] : TBase::OutputChannelsMap) {
+                            TABLER() {
+                                TABLED() {str << channelId;}
+                                TABLED() {
+                                    if (info.HasPeer) {
+                                        XHREF(info.PeerId.NodeId(), "/actors/kqp_node?ca=" + ToString(info.PeerId))  {
+                                            str << info.PeerId;
+                                        }
+                                    } else {
+                                        str << "N/A";
+                                    }
+                                }
+                                TABLED() {str << (info.Channel ? ToString(info.Channel->GetPushStats().Bytes) : "N/A");}
+                                TABLED() {str << (info.Channel ? ToString(info.Channel->GetPopStats().Bytes) : "N/A");}
+                                TABLED() {str << (info.Channel ? FillLevelToString(info.Channel->GetFillLevel()) : "A/A");}
+                                TABLED() {str << info.Finished;}
+                                TABLED() {str << info.EarlyFinish;}
+                                TInstant lastFinishCheckTime;
+                                bool lastFinishCheckResult = false;
+                                if (info.Channel && info.Channel->GetIntrospectionInfo(lastFinishCheckTime, lastFinishCheckResult)) {
+                                    TABLED() {str << lastFinishCheckTime;}
+                                    TABLED() {str << lastFinishCheckResult;}
+                                } else {
+                                    TABLED() {str << "N/A";}
+                                    TABLED() {str << "N/A";}
+                                }
                             }
                         }
                     }

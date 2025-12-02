@@ -525,9 +525,10 @@ private:
         TStringStream str;
         HTML(str) {
             PRE() {
-                str << "Current config:" << Endl;
+                str << "TKqpNodeService, SelfId=" << SelfId() << Endl;
+                str << Endl << "Current config:" << Endl;
                 str << Config.DebugString() << Endl;
-                State_->DumpInfo(str, SelfId().NodeId());
+                State_->DumpInfo(str);
             }
         }
 

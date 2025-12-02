@@ -81,6 +81,9 @@ public:
     virtual bool Bind(NActors::TActorId /* outputActorId */, NActors::TActorId /* inputActorId */ ) {
         return false;
     }
+    virtual bool GetIntrospectionInfo(TInstant& /* lastFinishCheckTime */, bool /* lastFinishCheckResult */ ) const {
+        return false;
+    }
 };
 
 struct TDqOutputChannelChunkSizeLimitExceeded : public yexception {

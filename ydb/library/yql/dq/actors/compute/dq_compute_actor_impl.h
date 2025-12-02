@@ -868,6 +868,7 @@ protected:
 
 protected:
     struct TInputChannelInfo {
+        ui32 InputIndex;
         TString LogPrefix;
         ui64 ChannelId;
         ui32 SrcStageId;
@@ -881,13 +882,15 @@ protected:
         i64 FreeSpace = 0;
 
         explicit TInputChannelInfo(
+                ui32 inputIndex,
                 const TString& logPrefix,
                 ui64 channelId,
                 ui32 srcStageId,
                 NDqProto::EWatermarksMode watermarksMode,
                 NDqProto::ECheckpointingMode checkpointingMode,
                 TDuration watermarksIdleTimeout)
-            : LogPrefix(logPrefix)
+            : InputIndex(inputIndex)
+            , LogPrefix(logPrefix)
             , ChannelId(channelId)
             , SrcStageId(srcStageId)
             , WatermarksMode(watermarksMode)
@@ -1710,6 +1713,7 @@ protected:
                     auto result = InputChannelsMap.emplace(
                         channel.GetId(),
                         TInputChannelInfo(
+                            i,
                             LogPrefix,
                             channel.GetId(),
                             channel.GetSrcStageId(),

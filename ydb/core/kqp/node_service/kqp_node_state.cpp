@@ -112,10 +112,10 @@ std::vector<TNodeRequest::TTaskInfo> TNodeState::GetTasksByTxId(ui64 txId) const
     return tasks;
 }
 
-void TNodeState::DumpInfo(TStringStream& str, ui32 nodeId) const {
+void TNodeState::DumpInfo(TStringStream& str) const {
     HTML(str) {
         str << Endl << "Transactions:" << Endl;
-        TABLE_SORTABLE_CLASS ("table table-condensed") {
+        TABLE_SORTABLE_CLASS("table table-condensed") {
             TABLEHEAD() {
                 TABLER() {
                     TABLEH() {str << "TxId";}
@@ -138,11 +138,7 @@ void TNodeState::DumpInfo(TStringStream& str, ui32 nodeId) const {
                             TABLER() {
                                 TABLED() {str << txId;}
                                 TABLED() {
-                                    if (requester.NodeId() == nodeId) {
-                                        HREF("?ex=" + ToString(requester))  {
-                                            str << requester;
-                                        }
-                                    } else {
+                                    XHREF(requester.NodeId(), "/actors/kqp_node?ex=" + ToString(requester))  {
                                         str << requester;
                                     }
                                 }
@@ -156,7 +152,7 @@ void TNodeState::DumpInfo(TStringStream& str, ui32 nodeId) const {
         }
 
         str << Endl << "Tasks:" << Endl;
-        TABLE_SORTABLE_CLASS ("table table-condensed") {
+        TABLE_SORTABLE_CLASS("table table-condensed") {
             TABLEHEAD() {
                 TABLER() {
                     TABLEH() {str << "TxId";}
@@ -180,22 +176,14 @@ void TNodeState::DumpInfo(TStringStream& str, ui32 nodeId) const {
                                 TABLER() {
                                     TABLED() {str << txId;}
                                     TABLED() {
-                                        if (requester.NodeId() == nodeId) {
-                                            HREF("?ex=" + ToString(requester))  {
-                                                str << requester;
-                                            }
-                                        } else {
+                                        XHREF(requester.NodeId(), "/actors/kqp_node?ex=" + ToString(requester))  {
                                             str << requester;
                                         }
                                     }
                                     TABLED() {str << taskId;}
                                     TABLED() {
                                         if (actorId) {
-                                            if (actorId->NodeId() == nodeId) {
-                                                HREF("?ca=" + ToString(*actorId))  {
-                                                    str << *actorId;
-                                                }
-                                            } else {
+                                            XHREF(actorId->NodeId(), "/actors/kqp_node?ca=" + ToString(*actorId))  {
                                                 str << *actorId;
                                             }
                                         } else {

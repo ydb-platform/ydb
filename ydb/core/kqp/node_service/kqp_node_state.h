@@ -60,7 +60,7 @@ public:
     // Returns only started tasks
     std::vector<TNodeRequest::TTaskInfo> GetTasksByTxId(ui64 txId) const;
 
-    void DumpInfo(TStringStream& str, ui32 nodeId) const;
+    void DumpInfo(TStringStream& str) const;
     bool FindCaId(const TString& caId, TActorId& id) const;
     bool FindExId(const TString& exId, ui32 nodeId, TActorId& id) const;
 

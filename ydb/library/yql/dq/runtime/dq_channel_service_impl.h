@@ -214,7 +214,7 @@ public:
     void StorageWakeupHandler();
 
     void NotifyInput();
-    void NotifyOutput();
+    void NotifyOutput(bool force);
 
     std::shared_ptr<TLocalBufferRegistry> Registry;
     TChannelFullInfo Info;
@@ -519,13 +519,13 @@ public:
     virtual ~TNodeState();
     void PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
     void SendMessage(std::shared_ptr<TOutputItem> item);
-    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
-    void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
-    void Handle(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev);
-    void Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
-    void Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev);
-    void Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev);
-    void Handle(TEvPrivate::TEvSendWaiters::TPtr& ev);
+    void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
+    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev);
+    void HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev);
+    void HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
+    void HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev);
+    void HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev);
+    void HandleSendWaiters(TEvPrivate::TEvSendWaiters::TPtr& ev);
     std::shared_ptr<TOutputBuffer> CreateOutputBuffer(const TChannelFullInfo& info, ui64 maxInflightBytes, ui64 minInflightBytes, IDqChannelStorage::TPtr storage);
     std::shared_ptr<TInputDescriptor> GetOrCreateInputDescriptor(const TChannelFullInfo& info, bool binded, bool leading);
     void TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
@@ -747,8 +747,10 @@ public:
     }
 
     bool IsFinished() const override {
-        return Serializer->Buffer->IsEarlyFinished()
+        LastFinishCheckTime = TInstant::Now();
+        LastFinishCheckResult = Serializer->Buffer->IsEarlyFinished()
             || (Finished && Serializer->Buffer->IsFlushed());
+        return LastFinishCheckResult;
     }
 
     NKikimr::NMiniKQL::TType* GetOutputType() const override {
@@ -808,6 +810,12 @@ public:
 
     bool Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override;
 
+    bool GetIntrospectionInfo(TInstant& lastFinishCheckTime, bool lastFinishCheckResult) const override {
+        lastFinishCheckTime = LastFinishCheckTime;
+        lastFinishCheckResult = LastFinishCheckResult;
+        return true;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::unique_ptr<TOutputSerializer> Serializer;
     TDqChannelDesc Desc;
@@ -815,6 +823,8 @@ public:
     bool Binded = false;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     IDqChannelStorage::TPtr Storage;
+    mutable TInstant LastFinishCheckTime;
+    mutable bool LastFinishCheckResult = false;
 };
 
 class TFastDqInputChannel : public IDqInputChannel {
@@ -915,12 +925,20 @@ public:
 
     bool Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override;
 
+    bool GetIntrospectionInfo(TInstant& lastPopTime, bool lastPopResult) const override {
+        lastPopTime = LastPopTime;
+        lastPopResult = LastPopResult;
+        return true;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::shared_ptr<IChannelBuffer> Buffer;
     std::unique_ptr<TInputDeserializer> Deserializer;
     TDqChannelDesc Desc;
     bool Finished = false;
     bool IsLocal = false;
+    TInstant LastPopTime;
+    bool LastPopResult = false;
 };
 
 class TChannelServiceActor : public NActors::TActorBootstrapped<TChannelServiceActor> {
@@ -1009,31 +1027,31 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        NodeState->Handle(ev);
+        NodeState->HandleUndelivered(ev);
     }
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
-        NodeState->Handle(ev);
+        NodeState->HandleWakeup(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
-        NodeState->Handle(ev);
+        NodeState->HandleDiscovery(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
-        NodeState->Handle(ev);
+        NodeState->HandleData(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
-        NodeState->Handle(ev);
+        NodeState->HandleAck(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
-        NodeState->Handle(ev);
+        NodeState->HandleUpdate(ev);
     }
 
     void Handle(TEvPrivate::TEvSendWaiters::TPtr& ev) {
-        NodeState->Handle(ev);
+        NodeState->HandleSendWaiters(ev);
     }
 
     std::shared_ptr<TNodeState> NodeState;
@@ -1060,15 +1078,15 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        NodeState->Handle(ev);
+        NodeState->HandleUndelivered(ev);
     }
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
-        NodeState->Handle(ev);
+        NodeState->HandleWakeup(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
-        NodeState->Handle(ev);
+        NodeState->HandleDiscovery(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
@@ -1079,13 +1097,13 @@ public:
             PendingChannelData.emplace(ev.Release());
         } else {
             while (!PendingChannelData.empty()) {
-                NodeState->Handle(PendingChannelData.front());
+                NodeState->HandleData(PendingChannelData.front());
                 PendingChannelData.pop();
             }
             if (NodeState->IsNullMode()) {
                 NodeState->HandleNullMode(ev);
             } else {
-                NodeState->Handle(ev);
+                NodeState->HandleData(ev);
             }
         }
     }
@@ -1098,19 +1116,19 @@ public:
             PendingChannelAck.emplace(ev.Release());
         } else {
             while (!PendingChannelAck.empty()) {
-                NodeState->Handle(PendingChannelAck.front());
+                NodeState->HandleAck(PendingChannelAck.front());
                 PendingChannelAck.pop();
             }
-            NodeState->Handle(ev);
+            NodeState->HandleAck(ev);
         }
     }
 
     void Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
-        NodeState->Handle(ev);
+        NodeState->HandleUpdate(ev);
     }
 
     void Handle(TEvPrivate::TEvSendWaiters::TPtr& ev) {
-        NodeState->Handle(ev);
+        NodeState->HandleSendWaiters(ev);
     }
 
     void Handle(TEvPrivate::TEvProcessPending::TPtr& ev) {
@@ -1121,7 +1139,7 @@ public:
                 if (NodeState->IsNullMode()) {
                     NodeState->HandleNullMode(PendingChannelData.front());
                 } else {
-                    NodeState->Handle(PendingChannelData.front());
+                    NodeState->HandleData(PendingChannelData.front());
                 }
                 PendingChannelData.pop();
                 if (maxCount && --maxCount == 0) {
@@ -1131,7 +1149,7 @@ public:
         }
         if (!NodeState->ChannelAckPaused.load()) {
             while (!PendingChannelAck.empty()) {
-                NodeState->Handle(PendingChannelAck.front());
+                NodeState->HandleAck(PendingChannelAck.front());
                 PendingChannelAck.pop();
                 if (maxCount && --maxCount == 0) {
                     return;

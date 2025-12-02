@@ -2573,13 +2573,14 @@ void TPartition::RunPersist() {
         EndHandleRequests(PersistRequest.Get(), ctx);
     }
 
-    haveChanges |= TryAddDeleteHeadKeysToPersistRequest();
-
     if (Compacter) {
         Compacter->TryCompactionIfPossible();
     }
 
-    if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
+    haveChanges |= TryAddDeleteHeadKeysToPersistRequest();
+    haveChanges |= TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig;
+
+    if (haveChanges) {
         WriteCycleStartTime = now;
         WriteStartTime = now;
         TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
@@ -2592,7 +2593,11 @@ void TPartition::RunPersist() {
         AddCmdWriteConfig(PersistRequest->Record);
     }
 
-    if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
+    auto requestEmpty = PersistRequest->Record.CmdDeleteRangeSize() == 0
+        && PersistRequest->Record.CmdWriteSize() == 0
+        && PersistRequest->Record.CmdRenameSize() == 0;
+
+    if (haveChanges && !requestEmpty) {
         AddMessageDeduplicatorKeys(PersistRequest.Get());
         AddMetaKey(PersistRequest.Get());
 

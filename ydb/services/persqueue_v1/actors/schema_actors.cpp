@@ -1379,6 +1379,11 @@ bool TPartitionsLocationActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
+    if (!record.GetStatus()) {
+        this->RaiseError("Partition locations are not available", Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
+            Ydb::StatusIds::UNAVAILABLE, ActorContext());
+        return false;
+    }
     for (auto i = 0u; i < record.LocationsSize(); i++) {
         const auto& part = record.GetLocations(i);
         TEvPQProxy::TPartitionLocationInfo partLocation;

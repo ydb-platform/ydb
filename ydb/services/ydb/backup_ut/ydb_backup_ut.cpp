@@ -797,6 +797,90 @@ void TestViewQueryTextIsPreserved(
     );
 }
 
+void TestViewWithNamedExpressions(
+        const char* view, const char* table, NQuery::TSession& session,
+        TBackupFunction&& backup, TRestoreFunction&& restore)
+{
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )", table
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+            UPSERT INTO `%s` (
+                Key,
+                Value
+            )
+            VALUES (1, "one");
+        )", table
+    ));
+
+    ExecuteQuery(session, Sprintf(R"(
+        $named_exp = (SELECT `Value` FROM `%s` WHERE Key = 1);
+        $named_exp_2 = (SELECT * FROM $named_exp);
+        CREATE VIEW `%s` WITH security_invoker = TRUE AS
+            SELECT * FROM `%s` WHERE `Value` = $named_exp_2 AND `Value` = $named_exp;
+    )", table, view, table), true);
+    const auto originalContent = GetTableContent(session, view);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+                DROP VIEW `%s`;
+            )", view
+        ), true
+    );
+
+    restore();
+    CompareResults(GetTableContent(session, view), originalContent);
+}
+
+void TestViewSelectFromIndex(
+        const char* view, const char* table, NQuery::TSession& session,
+        TBackupFunction&& backup, TRestoreFunction&& restore)
+{
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key),
+                    INDEX indexByValue GLOBAL SYNC ON (Value)
+                );
+            )", table
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+            UPSERT INTO `%s` (
+                Key,
+                Value
+            )
+            VALUES (1, "one");
+        )", table
+    ));
+
+
+    ExecuteQuery(session, Sprintf(R"(
+        CREATE VIEW `%s` WITH security_invoker = TRUE AS
+            SELECT * FROM `%s` VIEW `indexByValue` WHERE `Value` = "one";
+    )", view, table), true);
+    const auto originalContent = GetTableContent(session, view);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+                DROP VIEW `%s`;
+            )", view
+        ), true
+    );
+
+    restore();
+    CompareResults(GetTableContent(session, view), originalContent);
+}
+
 // The view might be restored to a different path from the original. The path might be in a different database.
 void TestViewReferenceTableIsPreserved(
     const char* view, const char* table, const char* restoredView,
@@ -1876,7 +1960,56 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+<<<<<<< HEAD
     Y_UNIT_TEST(RestoreViewReferenceTable) {
+=======
+    Y_UNIT_TEST(RestoreViewWithNamedExpressions) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* view = "/Root/view";
+        constexpr const char* table = "/Root/a/b/c/table";
+
+        TestViewWithNamedExpressions(
+            view,
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewSelectFromIndex) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* view = "/Root/view";
+        constexpr const char* table = "/Root/a/b/c/table";
+
+        TestViewSelectFromIndex(
+            view,
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(RestoreViewReferenceTable, IsOlap) {
+        if (IsOlap) {
+            return; // TODO: fix me issue@26498
+        }
+>>>>>>> c7e885a3bcc (Restore view: fix rewrite rules (#29940))
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
@@ -3072,7 +3205,42 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+<<<<<<< HEAD
     Y_UNIT_TEST(RestoreViewReferenceTable) {
+=======
+    Y_UNIT_TEST(RestoreViewWithNamedExpressions) {
+        TS3TestEnv testEnv;
+        constexpr const char* view = "/Root/view";
+        constexpr const char* table = "/Root/a/b/c/table";
+
+        TestViewWithNamedExpressions(
+            view,
+            table,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view" })
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewSelectFromIndex) {
+        TS3TestEnv testEnv;
+        constexpr const char* view = "/Root/view";
+        constexpr const char* table = "/Root/a/b/c/table";
+
+        TestViewSelectFromIndex(
+            view,
+            table,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view" })
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(RestoreViewReferenceTable, IsOlap) {
+        if (IsOlap) {
+            return; // TODO: fix me issue@26498
+        }
+>>>>>>> c7e885a3bcc (Restore view: fix rewrite rules (#29940))
         TS3TestEnv testEnv;
         constexpr const char* view = "/Root/view";
         constexpr const char* table = "/Root/a/b/c/table";

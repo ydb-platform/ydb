@@ -312,12 +312,17 @@ bool RewriteRefs(TString& queryStr, TStringBuf db, TStringBuf backupRoot, TStrin
     return true;
 }
 
+<<<<<<< HEAD
 bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, NYql::TIssues& issues) {
     return RewriteRefs<TRule_table_ref>(query, "", backupRoot, restoreRoot, issues);
 }
 
 bool RewriteTableRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues) {
     return RewriteRefs<TRule_table_ref>(query, GetDatabase(query), GetBackupRoot(query), restoreRoot, issues);
+=======
+bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, TStringBuf backupPathPrefix, TStringBuf restorePathPrefix, NYql::TIssues& issues) {
+    return RewriteRefs<TRule_an_id_table>(query, "", backupRoot, restoreRoot, backupPathPrefix, restorePathPrefix, issues);
+>>>>>>> c7e885a3bcc (Restore view: fix rewrite rules (#29940))
 }
 
 bool RewriteObjectRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues) {

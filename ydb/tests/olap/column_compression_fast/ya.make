@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 
 TEST_SRCS(
     test_disabled.py
+    test_obsolete.py
 )
 
 SIZE(SMALL)

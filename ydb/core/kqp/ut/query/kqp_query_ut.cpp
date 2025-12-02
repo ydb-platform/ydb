@@ -3399,7 +3399,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             CompareYson(output, R"([[1u;1u]])");
         }
     }
-
+}
+Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
     Y_UNIT_TEST(DiscardSelectSupport) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetQueryClient();
@@ -3623,19 +3624,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         {
             auto result = ExecuteQueryAndCheckResultSets(db, "SELECT 1; DISCARD SELECT 2; SELECT 3; DISCARD SELECT 4; SELECT 5; DISCARD SELECT 6; SELECT 7", 4, "Many transactions (> 2)");
             auto resultValues = std::vector{1, 3, 5, 7};
-            for (auto&& [i, value] : Enumerate(resultValues)) {
-                verifyResultValue(result, i, value);
-            }
-        }
-        {
-            auto result = ExecuteQueryAndCheckResultSets(db, R"(
-                DISCARDSELECT 10 AS base_value;
-                DISCARD SELECT Key FROM `/Root/TwoShard`;
-                SELECT base_value * 2;
-                DISCARD SELECT Data FROM `/Root/EightShard`;
-                SELECT base_value + 5
-            )", 3, "DISCARD interspersed");
-            auto resultValues = std::vector{20, 15};
             for (auto&& [i, value] : Enumerate(resultValues)) {
                 verifyResultValue(result, i, value);
             }

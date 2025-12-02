@@ -15,8 +15,47 @@ on:
         required: false
         default: true
 jobs:
+  # Compute parameters based on trigger type and inputs
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.compute.outputs.branches }}
+      branches_config_path: ${{ steps.compute.outputs.branches_config_path }}
+      pull_number: ${{ steps.compute.outputs.pull_number }}
+    steps:
+      - name: Compute regression parameters
+        id: compute
+        run: |
+          # branches: use current branch only if workflow_dispatch with no PR and use_default_branches=false
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && \
+             [[ -z "${{ github.event.inputs.pull_request_input }}" ]] && \
+             [[ "${{ github.event.inputs.use_default_branches }}" == "false" ]]; then
+            echo "branches=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "branches=" >> $GITHUB_OUTPUT
+          fi
+          
+          # branches_config_path: use config if schedule OR (workflow_dispatch with no PR and use_default_branches=true)
+          if [[ "${{ github.event_name }}" == "schedule" ]] || \
+             ([[ "${{ github.event_name }}" == "workflow_dispatch" ]] && \
+              [[ -z "${{ github.event.inputs.pull_request_input }}" ]] && \
+              [[ "${{ github.event.inputs.use_default_branches }}" == "true" ]]); then
+            echo "branches_config_path=.github/config/stable_tests_branches.json" >> $GITHUB_OUTPUT
+          else
+            echo "branches_config_path=" >> $GITHUB_OUTPUT
+          fi
+          
+          # pull_number: use input if workflow_dispatch and PR number provided
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && \
+             [[ -n "${{ github.event.inputs.pull_request_input }}" ]]; then
+            echo "pull_number=${{ github.event.inputs.pull_request_input }}" >> $GITHUB_OUTPUT
+          else
+            echo "pull_number=" >> $GITHUB_OUTPUT
+          fi
+
   main:
     name: Regression-run_stress
+    needs: prepare
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
     strategy:
@@ -25,7 +64,7 @@ jobs:
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/tests/stress/
-      branches: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pull_request_input == '' && startsWith(github.event.inputs.use_default_branches, 'false') && github.ref_name || '' }}
-      branches_config_path: ${{ (github.event_name != 'workflow_dispatch' || (github.event.inputs.pull_request_input == '' && github.event.inputs.use_default_branches == true)) && '.github/config/stable_tests_branches.json' || '' }}
+      branches: ${{ needs.prepare.outputs.branches }}
+      branches_config_path: ${{ needs.prepare.outputs.branches_config_path }}
       build_preset: ${{ matrix.build_preset }}
-      pull_number: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pull_request_input != '' && github.event.inputs.pull_request_input || '' }}
+      pull_number: ${{ needs.prepare.outputs.pull_number }}

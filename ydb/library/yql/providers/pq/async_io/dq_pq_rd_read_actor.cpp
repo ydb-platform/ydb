@@ -836,7 +836,7 @@ void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
 }
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
-    // called on parent
+    Y_DEBUG_ABORT_UNLESS(Parent == this); // called on Parent
     auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
     auto idleTimeoutUs = // TODO remove fallback
         SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
@@ -1344,7 +1344,7 @@ void TDqPqRdReadActor::SendNoSession(const NActors::TActorId& recipient, ui64 co
 }
 
 void TDqPqRdReadActor::NotifyCA() {
-    // called on Parent
+    Y_DEBUG_ABORT_UNLESS(Parent == this); // called on Parent
     Metrics.InFlyAsyncInputData->Set(1);
     InFlyAsyncInputData = true;
     Counters.NotifyCA++;

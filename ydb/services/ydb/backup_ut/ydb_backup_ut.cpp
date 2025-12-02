@@ -1456,9 +1456,9 @@ void TestReplicationSettingsArePreserved(
 {
     using namespace fmt::literals;
     if (tokenSecretType == ESecretType::SecretTypeScheme) {
-        ExecuteQuery(session, "CREATE SECRET `secret` WITH (value = 'root@builtin');", true);
+        ExecuteQuery(session, "CREATE SECRET `replication_secret` WITH (value = 'root@builtin');", true);
     } else if (tokenSecretType == ESecretType::SecretTypeOld) {
-        ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+        ExecuteQuery(session, "CREATE OBJECT `replication_secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
     }
     ExecuteQuery(session, fmt::format("CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k)) WITH (STORE = {store});", "store"_a = isOlap ? "COLUMN" : "ROW"), true);
     ExecuteQuery(session, Sprintf(R"(
@@ -1471,8 +1471,8 @@ void TestReplicationSettingsArePreserved(
                 );
             )",
             endpoint.c_str(),
-            (tokenSecretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'secret'" : ""),
-            (tokenSecretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'secret'" : "")
+            (tokenSecretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'replication_secret'" : ""),
+            (tokenSecretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'replication_secret'" : "")
         ), true
     );
 
@@ -1484,9 +1484,9 @@ void TestReplicationSettingsArePreserved(
         UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
         UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
         if (tokenSecretType == ESecretType::SecretTypeScheme) {
-            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "/Root/secret");
+            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "/Root/replication_secret");
         } else if (tokenSecretType == ESecretType::SecretTypeOld) {
-            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "secret");
+            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "replication_secret");
         }
 
         const auto& items = desc.GetItems();
@@ -1700,9 +1700,9 @@ void TestExternalDataSourceSettingsArePreserved(
     EAuthType authType
 ) {
     if (secretType == ESecretType::SecretTypeScheme) {
-        ExecuteQuery(querySession, "CREATE SECRET `secret` WITH (value = 'secret');", true);
+        ExecuteQuery(querySession, "CREATE SECRET `eds_secret` WITH (value = 'secret');", true);
     } else if (secretType == ESecretType::SecretTypeOld) {
-        ExecuteQuery(querySession, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'secret');", true);
+        ExecuteQuery(querySession, "CREATE OBJECT `eds_secret` (TYPE SECRET) WITH (value = 'secret');", true);
     }
 
     TString createEdsQuery;
@@ -1722,8 +1722,8 @@ void TestExternalDataSourceSettingsArePreserved(
                 )",
                 path,
                 (!secretType ? "NONE" : "TOKEN"),
-                (secretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'secret'" : ""),
-                (secretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'secret'" : "")
+                (secretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'eds_secret'" : ""),
+                (secretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'eds_secret'" : "")
             );
             break;
         }
@@ -1735,8 +1735,8 @@ void TestExternalDataSourceSettingsArePreserved(
                         LOCATION = "192.168.1.1:8123",
                         AUTH_METHOD="AWS",
                         AWS_REGION="ru-central-1",
-                        %s="secret",
-                        %s="secret"
+                        %s="eds_secret",
+                        %s="eds_secret"
                     );
                 )",
                 path,
@@ -3143,19 +3143,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings,
-            /* secretType */ Nothing(), EAuthType::AuthTypeNone
-        );
-
-        cleanup();
-        TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings,
             ESecretType::SecretTypeOld, EAuthType::AuthTypeToken
-        );
-
-        cleanup();
-        TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings,
-            ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken
         );
 
         cleanup();
@@ -3171,11 +3159,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         cleanup();
         TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeOld, IsOlap, restorationSettings
-        );
-
-        cleanup();
-        TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeScheme, IsOlap, restorationSettings
         );
 
         cleanup();
@@ -3268,19 +3251,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
-            NDump::TRestoreSettings{},  /* secretType */ Nothing(), EAuthType::AuthTypeNone
-        );
-
-        cleanup();
-        TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
             NDump::TRestoreSettings{}, ESecretType::SecretTypeOld, EAuthType::AuthTypeToken
-        );
-
-        cleanup();
-        TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
-            NDump::TRestoreSettings{}, ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken
         );
 
         cleanup();

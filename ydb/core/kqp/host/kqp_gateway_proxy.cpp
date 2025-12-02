@@ -405,68 +405,11 @@ template <typename T>
 bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T& metadata, Ydb::StatusIds::StatusCode& code, TString& error) {
     Y_ENSURE(metadata.ColumnOrder.size() == metadata.Columns.size());
 
-    THashMap<TString, ui32> columnFamiliesByName;
-    ui32 columnFamilyId = 1;
-    for (const auto& family : metadata.ColumnFamilies) {
-        if (family.Data.Defined()) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Field `DATA` is not supported for OLAP tables in column family '" << family.Name << "'";
-            return false;
-        }
-        if (family.CacheMode.Defined()) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Field `CACHE_MODE` is not supported for OLAP tables in column family '" << family.Name << "'";
-            return false;
-        }
-        auto columnFamilyIt = columnFamiliesByName.find(family.Name);
-        if (!columnFamilyIt.IsEnd()) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Duplicate column family `" << family.Name << '`';
-            return false;
-        }
-        auto familyDescription = schema.AddColumnFamilies();
-        familyDescription->SetName(family.Name);
-        if (familyDescription->GetName() == "default") {
-            familyDescription->SetId(0);
-        } else {
-            familyDescription->SetId(columnFamilyId++);
-        }
-        Y_ENSURE(columnFamiliesByName.emplace(familyDescription->GetName(), familyDescription->GetId()).second);
-        if (family.Compression.Defined()) {
-            NKikimrSchemeOp::EColumnCodec codec;
-            auto codecName = to_lower(family.Compression.GetRef());
-            if (codecName == "off") {
-                codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
-            } else if (codecName == "zstd") {
-                codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
-            } else if (codecName == "lz4") {
-                codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
-            } else {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Unknown compression '" << family.Compression.GetRef() << "' for a column family";
-                return false;
-            }
-            familyDescription->SetColumnCodec(codec);
-        } else {
-            if (family.Name != "default") {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Compression is not set for non `default` column family '" << family.Name << "'";
-                return false;
-            }
-        }
-
-        // TODO: error
-        if (family.CompressionLevel.Defined()) {
-            if (!family.Compression.Defined()) {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Compression is not set for column family '" << family.Name << "', but compression level is set";
-                return false;
-            }
-            familyDescription->SetColumnCodecLevel(family.CompressionLevel.GetRef());
-        }
+    if (!metadata.ColumnFamilies.empty()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = TStringBuilder() << "Column FAMILY is not supported for column tables";
+        return false;
     }
-
-    schema.SetNextColumnFamilyId(columnFamilyId);
 
     for (const auto& name : metadata.ColumnOrder) {
         auto columnIt = metadata.Columns.find(name);
@@ -492,23 +435,6 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnIt->second.TypeInfo, columnIt->second.TypeMod);
         if (columnType.TypeInfo) {
             *columnDesc.MutableTypeInfo() = *columnType.TypeInfo;
-        }
-
-        if (!columnFamiliesByName.empty()) {
-            TString columnFamilyName = "default";
-            ui32 columnFamilyId = 0;
-            if (columnIt->second.Families.size()) {
-                columnFamilyName = *columnIt->second.Families.begin();
-                auto columnFamilyIdIt = columnFamiliesByName.find(columnFamilyName);
-                if (columnFamilyIdIt.IsEnd()) {
-                    code = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << "Unknown column family `" << columnFamilyName << "` for column `" << columnDesc.GetName() << "`";
-                    return false;
-                }
-                columnFamilyId = columnFamilyIdIt->second;
-            }
-            columnDesc.SetColumnFamilyName(columnFamilyName);
-            columnDesc.SetColumnFamilyId(columnFamilyId);
         }
 
         if (columnIt->second.Compression) {

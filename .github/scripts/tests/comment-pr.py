@@ -85,5 +85,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # Always try to run, will exit early if no PR found
     main()

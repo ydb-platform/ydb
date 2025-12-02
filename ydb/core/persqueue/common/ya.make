@@ -6,6 +6,7 @@ SRCS(
     heartbeat.cpp
     key.cpp
     microseconds_sliding_window.cpp
+    percentiles.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(sourceid_info.h)

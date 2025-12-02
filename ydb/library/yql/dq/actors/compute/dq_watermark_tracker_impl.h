@@ -70,7 +70,9 @@ public:
             if (rec.empty()) {
                 WATERMARK_LOG_T("Unidle " << it->first << " got " << watermark << " > " << data.Watermark);
                 WatermarksQueue_.emplace(watermark, it);
-                IdleInputs_->Dec();
+                if (IdleInputs_) {
+                    IdleInputs_->Dec();
+                }
             } else {
                 WATERMARK_LOG_T("Update " << it->first << " watermark from " << rec.value().Time << " to " << watermark);
                 rec.value().Time = watermark;
@@ -105,7 +107,7 @@ public:
             data.ExpiresAt = systemTime + idleTimeout;
             auto [_, inserted] = ExpiresQueue_.emplace(data.ExpiresAt, it);
             Y_DEBUG_ABORT_UNLESS(inserted);
-            if (Counters_ && !IdleEvents_) {
+            if (Counters_ && !IdleInputs_) {
                 IdleEvents_ = Counters_->GetCounter("WatermarksIdleEvents", true);
                 IdleInputs_ = Counters_->GetCounter("WatermarksIdleInputs");
             }
@@ -150,6 +152,7 @@ public:
            it = ExpiresQueue_.erase(it);
             if (IdleInputs_) {
                 IdleInputs_->Inc();
+                Y_DEBUG_ABORT_UNLESS(IdleEvents_);
                 IdleEvents_->Inc();
             }
         }

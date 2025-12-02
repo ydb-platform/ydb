@@ -5,6 +5,7 @@
 * Added a new `omit-indexes` property to the `--item` option of the `ydb tools copy` command, allowing tables to be copied without their indexes.
 * Fixed a bug where the `ydb tools restore` command could crash with an `mutex lock failure (Invalid argument)` error due to an internal race condition.
 * The `ydb workload vector` now supports the `import files` subcommand to populate the table from CSV or parquet files.
+* Named expression-containing view restoration and restoration of views that access secondary indexes have been fixed.
 
 ## 2.27.0 ##
 

@@ -214,7 +214,9 @@ TVector<std::tuple<TString, TString, TExprNode::TPtr>> ExtractKnnDistanceFromApp
         resolvedArgs.emplace_back(resolved, TExprBase(resolved));
     }
 
-    if (resolvedArgs.size() != 2) return result;
+    if (resolvedArgs.size() != 2) {
+        return result;
+    }
 
     // Return interpretations where one argument is a Member (column reference)
     for (size_t i = 0; i < 2; ++i) {
@@ -260,9 +262,15 @@ TMaybeNode<TExprBase> FindColumnExprInStruct(const TExprBase& structExpr, const 
 
 // Unwrap Just/FlatMap to find AsStruct
 TMaybeNode<TCoAsStruct> UnwrapToStruct(const TExprBase& body) {
-    if (auto asStruct = body.Maybe<TCoAsStruct>()) return asStruct;
-    if (auto just = body.Maybe<TCoJust>()) return just.Cast().Input().Maybe<TCoAsStruct>();
-    if (auto flatMap = body.Maybe<TCoFlatMap>()) return UnwrapToStruct(flatMap.Cast().Lambda().Body());
+    if (auto asStruct = body.Maybe<TCoAsStruct>()) {
+        return asStruct;
+    }
+    if (auto just = body.Maybe<TCoJust>()) {
+        return just.Cast().Input().Maybe<TCoAsStruct>();
+    }
+    if (auto flatMap = body.Maybe<TCoFlatMap>()) {
+        return UnwrapToStruct(flatMap.Cast().Lambda().Body());
+    }
     return {};
 }
 
@@ -606,10 +614,18 @@ namespace {
 
 // Find TopSort in stage body (through Map/FlatMap/ToFlow wrappers)
 TMaybeNode<TCoTopSort> FindTopSortInBody(const TExprBase& body) {
-    if (auto t = body.Maybe<TCoTopSort>()) return t;
-    if (auto m = body.Maybe<TCoMap>()) return FindTopSortInBody(m.Cast().Lambda().Body());
-    if (auto f = body.Maybe<TCoFlatMapBase>()) return FindTopSortInBody(f.Cast().Lambda().Body());
-    if (auto t = body.Maybe<TCoToFlow>()) return FindTopSortInBody(t.Cast().Input());
+    if (auto t = body.Maybe<TCoTopSort>()) {
+        return t;
+    }
+    if (auto m = body.Maybe<TCoMap>()) {
+        return FindTopSortInBody(m.Cast().Lambda().Body());
+    }
+    if (auto f = body.Maybe<TCoFlatMapBase>()) {
+        return FindTopSortInBody(f.Cast().Lambda().Body());
+    }
+    if (auto t = body.Maybe<TCoToFlow>()) {
+        return FindTopSortInBody(t.Cast().Input());
+    }
     return {};
 }
 
@@ -677,7 +693,9 @@ TExprNode::TPtr ResolveStageTarget(const TExprBase& expr, const TDqStage& stage,
         if (n.IsArgument()) { hasArgument = true; return false; }
         return true;
     });
-    if (hasArgument) return nullptr;
+    if (hasArgument) {
+        return nullptr;
+    }
 
     return WrapInPrecompute(expr, ctx);
 }

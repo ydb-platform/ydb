@@ -813,6 +813,19 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
             PQ_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN)("Key", pair.GetKey());
 
+            if (tx.HasStep()) {
+                if (tx.GetStep() > PlanStep) {
+                    PlanStep = tx.GetStep();
+                    PlanTxId = tx.GetTxId();
+                    PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
+                } else if (tx.GetStep() == PlanStep) {
+                    if (tx.GetTxId() > PlanTxId) {
+                        PlanTxId = tx.GetTxId();
+                        PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
+                    }
+                }
+            }
+
             PQ_LOG_TX_I("Restore Tx. " <<
                      "TxId: " << tx.GetTxId() <<
                      ", Step: " << tx.GetStep() <<
@@ -3704,7 +3717,7 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
 
     if (step > PlanStep) {
         // если это план из будущего, то надо запомнить, последнюю запланированную транзакцию
-        PQ_ENSURE(lastPlannedTxId.Defined());
+        PQ_ENSURE(lastPlannedTxId.Defined())("step", step)("PlanStep", PlanStep);
         PlanStep = step;
         PlanTxId = *lastPlannedTxId;
     }

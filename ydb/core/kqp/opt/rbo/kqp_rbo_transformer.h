@@ -36,7 +36,7 @@ TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePt
 
 class TKqpNewRBOTransformer : public TSyncTransformerBase {
   public:
-    TKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
+    TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
                           TTypeAnnotationContext &typeCtx,
                           TAutoPtr<IGraphTransformer> rboTypeAnnTransformer, 
                           TAutoPtr<IGraphTransformer> typeAnnTransformer, 
@@ -57,11 +57,11 @@ class TKqpNewRBOTransformer : public TSyncTransformerBase {
 
   private:
     TTypeAnnotationContext &TypeCtx;
-    const TKqpOptimizeContext &KqpCtx;
+    TKqpOptimizeContext &KqpCtx;
     TRuleBasedOptimizer RBO;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
                                                       TTypeAnnotationContext &typeCtx,
                                                       TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
                                                       TAutoPtr<IGraphTransformer> typeAnnTransformer,

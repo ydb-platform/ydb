@@ -1,12 +1,13 @@
 #pragma once
 
 #include "kqp_rbo_context.h"
+#include "kqp_rbo_statistics.h"
+
 #include <cstddef>
 #include <iterator>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
-#include <ydb/core/kqp/opt/rbo/kqp_rbo_statistics.h>
 #include <yql/essentials/core/yql_cost_function.h>
 
 namespace NKikimr {
@@ -18,6 +19,13 @@ enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Aggrega
 
 /* Represents aggregation phases. */
 enum EAggregationPhase : ui32 {Intermediate, Final};
+
+enum EPrintPlanOptions: ui32 {
+    PrintBasicMetadata = 0x01,
+    PrintFullMetadata = 0x02,
+    PrintBasicStatistics = 0x04,
+    PrintFullStatistics = 0x08
+};
 
 /**
  * Info Unit is a reference to a column in the plan
@@ -100,6 +108,7 @@ struct TPhysicalOpProps {
     std::optional<TRBOMetadata> Metadata;
     std::optional<TRBOStatistics> Statistics;
     std::optional<EJoinAlgoType> JoinAlgo;
+    std::optional<double> Cost;
 };
 
 /**
@@ -442,7 +451,6 @@ class TOpFilter : public IUnaryOperator {
     TConjunctInfo GetConjunctInfo(TPlanProps& props) const;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
 
-    virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
     virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
 
     TExprNode::TPtr FilterLambda;
@@ -484,8 +492,6 @@ class TOpLimit : public IUnaryOperator {
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
 
-    virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
-
     TExprNode::TPtr LimitCond;
 };
 
@@ -498,8 +504,11 @@ class TOpRoot : public IUnaryOperator {
     IGraphTransformer::TStatus ComputeTypes(TRBOContext & ctx);
 
 
-    TString PlanToString(TExprContext& ctx);
-    void PlanToStringRec(std::shared_ptr<IOperator> op, TExprContext& ctx, TStringBuilder &builder, int ntabs);
+    TString PlanToString(TExprContext& ctx, ui32 printOptions = 0x0);
+    void PlanToStringRec(std::shared_ptr<IOperator> op, TExprContext& ctx, TStringBuilder &builder, int ntabs, ui32 printOptions = 0x0);
+
+    void ComputePlanMetadata(TRBOContext & ctx);
+    void ComputePlanStatistics(TRBOContext & ctx);
 
     TPlanProps PlanProps;
     TExprNode::TPtr Node;

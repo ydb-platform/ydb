@@ -181,7 +181,7 @@ TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePt
     return new TKqpRewriteSelectTransformer(kqpCtx, typeCtx);
 }
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
                                                        TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
                                                        TAutoPtr<IGraphTransformer> typeAnnTransformer,
                                                        TAutoPtr<IGraphTransformer> peephole,

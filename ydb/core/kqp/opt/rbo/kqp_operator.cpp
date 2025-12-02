@@ -925,19 +925,34 @@ TString TOpRoot::ToString(TExprContext& ctx) {
     return "Root"; 
 }
 
-TString TOpRoot::PlanToString(TExprContext& ctx) {
+TString TOpRoot::PlanToString(TExprContext& ctx, ui32 printOptions) {
     auto builder = TStringBuilder();
-    PlanToStringRec(GetInput(), ctx, builder, 0);
+    PlanToStringRec(GetInput(), ctx, builder, 0, printOptions);
     return builder;
 }
 
-void TOpRoot::PlanToStringRec(std::shared_ptr<IOperator> op, TExprContext& ctx, TStringBuilder &builder, int tabs) {
+void TOpRoot::PlanToStringRec(std::shared_ptr<IOperator> op, TExprContext& ctx, TStringBuilder &builder, int tabs, ui32 printOptions) {
+    TStringBuilder tabString;
     for (int i = 0; i < tabs; i++) {
-        builder << "  ";
+        tabString << "  ";
     }
-    builder << op->ToString(ctx) << "\n";
+
+    builder << tabString << op->ToString(ctx) << "\n";
+    if (printOptions & (EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintFullMetadata) &&
+            op->Props.Metadata.has_value()) {
+        builder << tabString << " ";
+        builder << op->Props.Metadata->ToString(printOptions) << "\n";
+    }
+
+    if (printOptions & (EPrintPlanOptions::PrintBasicStatistics | EPrintPlanOptions::PrintFullStatistics) &&
+            op->Props.Statistics.has_value()) {
+        builder << tabString << " ";
+        builder << op->Props.Statistics->ToString(printOptions);
+        builder << ", Cost: " << (op->Props.Cost.has_value() ? std::to_string(*op->Props.Cost) : "None") << "\n";
+    }
+    
     for (auto c : op->Children) {
-        PlanToStringRec(c, ctx, builder, tabs + 1);
+        PlanToStringRec(c, ctx, builder, tabs + 1, printOptions);
     }
 }
 

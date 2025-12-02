@@ -22,6 +22,8 @@ public:
 
     std::optional<std::int64_t> SortingOrderingIdx;
     std::optional<std::int64_t> ShufflingOrderingIdx;
+
+    TString ToString(ui32 printOptions);
 };
 
 class TRBOStatistics {
@@ -29,6 +31,8 @@ public:
     double RecordsCount = 0;
     double DataSize = 0;
     double Selectivity = 1.0;
+
+    TString ToString(ui32 printOptions);
 };
 
 }

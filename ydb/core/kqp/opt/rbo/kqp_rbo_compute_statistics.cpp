@@ -15,19 +15,38 @@ using namespace NKikimr::NKqp;
 using namespace NYql;
 using namespace NYql::NDq;
 
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts) {
+std::shared_ptr<TOptimizerStatistics> BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts) {
     TVector<TString> keyColumnNames;
     for (auto iu: props.Metadata->KeyColumns) {
         keyColumnNames.push_back(iu.ColumnName);
     }
 
-    return TOptimizerStatistics(props.Metadata->Type, 
+    double cost = props.Cost.has_value() ? *props.Cost : 0.0;
+
+    return std::make_shared<TOptimizerStatistics>(props.Metadata->Type, 
         withStatsAndCosts ? props.Statistics->DataSize : 0.0,
         props.Metadata->ColumnsCount,
         withStatsAndCosts ? props.Statistics->DataSize : 0.0,
-        withStatsAndCosts ? *props.Cost : 0.0,
+        withStatsAndCosts ? cost : 0.0,
         TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(
             new TOptimizerStatistics::TKeyColumns(keyColumnNames)));
+}
+
+TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NYql::TOptimizerStatistics::TKeyColumns> keyColumns, const TVector<TInfoUnit>& outputColumns) {
+    if (!keyColumns) {
+        return {};
+    }
+
+    TVector<TInfoUnit> result;
+    for (auto k : keyColumns->Data) {
+        auto it = std::find_if(outputColumns.begin(), outputColumns.end(), [&k](const TInfoUnit& iu) {
+            return k == iu.ColumnName;
+        });
+
+        Y_ENSURE(it!=outputColumns.end());
+        result.push_back(*it);
+    }
+    return result;
 }
 
 }
@@ -197,7 +216,9 @@ void TOpFilter::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
     }
 
     Props.Statistics = GetInput()->Props.Statistics;
-    auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetInput()->Props, true));
+    Props.Cost = GetInput()->Props.Cost;
+
+    auto inputStats = BuildOptimizerStatistics(GetInput()->Props, true);
     auto lambda = TCoLambda(FilterLambda);
     double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
 
@@ -212,7 +233,7 @@ void TOpFilter::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
 void TOpMap::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
-    if (GetInput()->Props.Metadata.has_value()) {
+    if (!GetInput()->Props.Metadata.has_value()) {
         return;
     }
     Props.Metadata = *GetInput()->Props.Metadata;
@@ -340,26 +361,26 @@ void TOpJoin::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
     }
 
     Props.Metadata->Aliases = GetLeftInput()->Props.Metadata->Aliases;
-    Props.Metadata->Aliases.emplace(GetRightInput()->Props.Metadata->Aliases.begin(), GetRightInput()->Props.Metadata->Aliases.end());
+    Props.Metadata->Aliases.insert(GetRightInput()->Props.Metadata->Aliases.begin(), GetRightInput()->Props.Metadata->Aliases.end());
 
     TVector<TString> unionOfLabels;
-    unionOfLabels.insert(Props.Metadata->Aliases.begin(), Props.Metadata->Aliases.end());
+    unionOfLabels.insert(unionOfLabels.begin(), Props.Metadata->Aliases.begin(), Props.Metadata->Aliases.end());
     EJoinAlgoType joinAlgo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : EJoinAlgoType::MapJoin;
 
     auto hints = ctx.KqpCtx.GetOptimizerHints();
-    auto CBOStats = ctx.CBOCtx.ComputeJoinStatsV2(leftStats, 
-        rightStats, 
+    auto CBOStats = ctx.CBOCtx.ComputeJoinStatsV2(*leftStats, 
+        *rightStats, 
         leftJoinKeys, 
         rightJoinKeys,
         joinAlgo,
         ConvertToJoinKind(JoinKind),
-        FindCardHint(unionOfLabels, *hints.CardinalityHints)
+        FindCardHint(unionOfLabels, *hints.CardinalityHints),
         false,
         false,
         FindCardHint(unionOfLabels, *hints.BytesHints));
 
     Props.Metadata->ColumnsCount = GetLeftInput()->Props.Metadata->ColumnsCount + GetRightInput()->Props.Metadata->ColumnsCount;
-    Props.Metadata->KeyColumns = CBOStats.KeyColumns;
+    Props.Metadata->KeyColumns = ConvertKeyColumns(CBOStats.KeyColumns, GetOutputIUs());
     Props.Metadata->StorageType = CBOStats.StorageType;
     Props.Metadata->Type = CBOStats.Type;
 }
@@ -374,7 +395,7 @@ void TOpJoin::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
     Props.Statistics = TRBOStatistics();
     
     auto leftStats = BuildOptimizerStatistics(GetLeftInput()->Props, true);
-    auto rightStats = BuildOptimizerStatitics(GetRightInput()->Props, true);
+    auto rightStats = BuildOptimizerStatistics(GetRightInput()->Props, true);
 
     TVector<TString> leftLabels;
     TVector<TString> rightLabels;
@@ -388,6 +409,8 @@ void TOpJoin::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
         rightJoinKeys.push_back(TJoinColumn(rightKey.Alias, rightKey.ColumnName));
     }
 
+    auto hints = ctx.KqpCtx.GetOptimizerHints();
+
     leftStats = ApplyRowsHints(leftStats, leftLabels, *hints.CardinalityHints);
     rightStats = ApplyRowsHints(rightStats, rightLabels, *hints.CardinalityHints);
 
@@ -395,18 +418,18 @@ void TOpJoin::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
     rightStats = ApplyBytesHints(rightStats, rightLabels, *hints.BytesHints);
 
     Props.Metadata->Aliases = GetLeftInput()->Props.Metadata->Aliases;
-    Props.Metadata->Aliases.emplace(GetRightInput()->Props.Metadata->Aliases.begin(), GetRightInput()->Props.Metadata->Aliases.end());
+    Props.Metadata->Aliases.insert(GetRightInput()->Props.Metadata->Aliases.begin(), GetRightInput()->Props.Metadata->Aliases.end());
 
-    TVector<TString> unionOfLabels = TVector<TString>(Props.Metadata->Aliases);
+    TVector<TString> unionOfLabels;
+    unionOfLabels.insert(unionOfLabels.begin(), Props.Metadata->Aliases.begin(), Props.Metadata->Aliases.end());
 
-    auto hints = ctx.KqpCtx.GetOptimizerHints();
-    auto CBOStats = ctx.CBOCtx.ComputeJoinStatsV2(leftStats, 
-        rightStats, 
+    auto CBOStats = ctx.CBOCtx.ComputeJoinStatsV2(*leftStats, 
+        *rightStats, 
         leftJoinKeys, 
         rightJoinKeys,
         Props.JoinAlgo.has_value() ? *Props.JoinAlgo : EJoinAlgoType::MapJoin,
         ConvertToJoinKind(JoinKind),
-        FindCardHint(unionOfLabels, *hints.CardinalityHints)
+        FindCardHint(unionOfLabels, *hints.CardinalityHints),
         false,
         false,
         FindCardHint(unionOfLabels, *hints.BytesHints));
@@ -441,17 +464,21 @@ void TOpUnionAll::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
     Props.Statistics = TRBOStatistics();
     Props.Statistics->DataSize = GetLeftInput()->Props.Statistics->DataSize + GetRightInput()->Props.Statistics->DataSize;
     Props.Statistics->RecordsCount = GetLeftInput()->Props.Statistics->RecordsCount + GetRightInput()->Props.Statistics->RecordsCount;
+
+    if (GetLeftInput()->Props.Cost.has_value() && GetRightInput()->Props.Cost.has_value()) {
+        Props.Cost = *GetLeftInput()->Props.Cost + *GetRightInput()->Props.Cost;
+    }
 }
 
 void TOpRoot::ComputePlanMetadata(TRBOContext & ctx) {
     for (auto it : *this) {
-        it.Current->ComputePlanMetadata(ctx);
+        it.Current->ComputeMetadata(ctx, PlanProps);
     }
 }
 
 void TOpRoot::ComputePlanStatistics(TRBOContext & ctx) {
     for (auto it : *this) {
-        it.Current->ComputePlanStatistics(ctx);
+        it.Current->ComputeStatistics(ctx, PlanProps);
     }
 }
 

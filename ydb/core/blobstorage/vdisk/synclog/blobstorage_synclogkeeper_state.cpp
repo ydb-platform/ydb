@@ -462,7 +462,7 @@ namespace NKikimr {
             ui64 firstStoredLsn = SyncLogPtr->GetFirstLsn();
             if (PhantomFlagStorageState.IsActive()) {
                 if (std::all_of(SyncedLsns.begin(), SyncedLsns.end(), [&](ui64 lsn) {
-                    return lsn >= firstStoredLsn;
+                    return lsn == Max<ui64>() || lsn + 1 >= firstStoredLsn;
                 })) {
                     PhantomFlagStorageState.Deactivate();
                 }
@@ -496,6 +496,10 @@ namespace NKikimr {
             }
 
             ChunksToDeleteDelayed.Insert(chunks);
+        }
+
+        void TSyncLogKeeperState::UpdateMetrics() {
+            PhantomFlagStorageState.UpdateMetrics();
         }
 
     } // NSyncLog

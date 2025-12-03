@@ -47,7 +47,7 @@ void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnSh
 }
 
 void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-    self.BackgroundController.FinishCompaction(GranuleMeta->GetPathId());
+    self.BackgroundController.FinishCompaction(GranuleMeta->GetPathId(), GetTaskIdentifier());
     Y_ABORT_UNLESS(NeedGranuleStatusProvide);
     if (context.FinishedSuccessfully) {
         GranuleMeta->OnCompactionFinished();

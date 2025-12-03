@@ -122,7 +122,7 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
 
 void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {
     Y_ABORT_UNLESS(Status != EOperationStatus::Draft);
-    StopWriting();
+    StopWriting(TStringBuilder{} << "Transaction was aborted for column shard"  << owner.TabletID() << " and lock id " << LockId);
     TBlobGroupSelector dsGroupSelector(owner.Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 

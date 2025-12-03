@@ -1,6 +1,6 @@
 #include "optimizer.h"
 
-#include "level/common_level.h"
+#include "level/one_layer.h"
 #include "level/zero_level.h"
 #include "selector/snapshot.h"
 #include "selector/transparent.h"
@@ -24,31 +24,51 @@ TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::sh
     RefreshWeights();
 }
 
-std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
+std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptimizationTasks(
     std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
     AFL_VERIFY(LevelsByWeight.size());
-    auto level = LevelsByWeight.begin()->second;
-    auto data = level->GetOptimizationTask();
+
     TSaverContext saverContext(StoragesManager);
-    std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> result;
-    //    if (level->GetLevelId() == 0) {
-    result =
-        std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
-    //    } else {
-    //        result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
-    //            granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
-    //        result->AddMovePortions(data.GetMovePortions());
-    //    }
-    result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
-    result->SetPortionExpectedSize(Levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
-    auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
-        "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
-    result->SetCheckPoints(std::move(positions));
-    for (auto&& i : result->GetSwitchedPortions()) {
-        AFL_VERIFY(!locksManager->IsLocked(i, NDataLocks::ELockCategory::Compaction));
+    std::vector<std::shared_ptr<TColumnEngineChanges>> results;
+    bool hasOneLayer = false;
+    for (const auto& [weight, level]: LevelsByWeight) {
+        if (weight == 0) {
+            break;
+        }
+        auto tasks = level->GetOptimizationTasks();
+        for (auto& data: tasks) {
+            if (data.IsEmpty()) {
+                continue;
+            }
+            hasOneLayer |= dynamic_pointer_cast<TOneLayerPortions>(level) != nullptr;
+            if (!results.empty() && hasOneLayer) {
+                return results;
+            }
+            std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> result;
+            //    if (level->GetLevelId() == 0) {
+            result =
+                std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
+            //    } else {
+            //        result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
+            //            granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
+            //        result->AddMovePortions(data.GetMovePortions());
+            //    }
+            result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
+            result->SetPortionExpectedSize(Levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
+            auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
+                "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
+            result->SetCheckPoints(std::move(positions));
+            for (auto&& i : result->GetSwitchedPortions()) {
+                AFL_VERIFY(!locksManager->IsLocked(i, NDataLocks::ELockCategory::Compaction));
+            }
+            results.push_back(result);
+            if (!AppDataVerified().ColumnShardConfig.GetEnableParallelCompaction()) {
+                return results;
+            }
+        }
     }
-    return result;
+    return results;
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

@@ -113,7 +113,7 @@ private:
 protected:
     virtual void DoModifyPortions(
         const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
+    virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
@@ -158,10 +158,14 @@ public:
         }
 
         if (std::cmp_less_equal(GetBadPortionsLimit(), badPortions->Val())) {
+           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+                   ("error", "overload: bad portions")("value", badPortions->Val())("limit", GetBadPortionsLimit());
             return true;
         }
 
         if (std::cmp_less_equal(GetNodePortionsCountLimit(), NodePortionsCounter.Val())) {
+           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+                   ("error", "overload: node portions count limit")("value", NodePortionsCounter.Val())("limit", GetNodePortionsCountLimit());
             return true;
         }
 
@@ -247,7 +251,7 @@ public:
         DoModifyPortions(add, remove);
     }
 
-    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(
+    std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
     TOptimizationPriority GetUsefulMetric() const {
         auto result = DoGetUsefulMetric();

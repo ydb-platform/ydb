@@ -45,8 +45,12 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
         std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
     auto resultVariants = externalInfo.GetDefaultSerializer()->Deserialize(TString(blobVariants.data(), blobVariants.size()), schemaVariants);
     if (!resultVariants.ok()) {
-        return TConclusionStatus::Fail(
-            "cannot parse dictionary variants: " + resultVariants.status().ToString() + " as " + externalInfo.GetColumnType()->ToString());
+        return TConclusionStatus::Fail(TStringBuilder{}
+            << "Internal deserialization error. type: dictionary (schema variants), schema: " << schemaVariants->ToString()
+            << " records count: " << externalInfo.GetRecordsCount()
+            << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unknown"})
+            << " reason: " << resultVariants.status().ToString()
+            << " original data: " << Base64Encode(TString(blobVariants.data(), blobVariants.size())));
     }
     auto rbVariants = TStatusValidator::GetValid(resultVariants);
     AFL_VERIFY(rbVariants->num_columns() == 1);
@@ -55,7 +59,13 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     auto schemaRecords = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", type) }));
     auto resultRecords = externalInfo.GetDefaultSerializer()->Deserialize(TString(blobRecords.data(), blobRecords.size()), schemaRecords);
     if (!resultRecords.ok()) {
-        return TConclusionStatus::Fail(resultRecords.status().ToString());
+        return TConclusionStatus::Fail(TStringBuilder{}
+            << "Internal deserialization error. type: dictionary (schema records), schema: " << schemaRecords->ToString()
+            << " records count: " << externalInfo.GetRecordsCount()
+            << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unknown"})
+            << " variants count: " << rbVariants->num_rows()
+            << " reason: " << resultRecords.status().ToString()
+            << " original data: " << Base64Encode(TString(blobRecords.data(), blobRecords.size())));
     }
     auto rbRecords = TStatusValidator::GetValid(resultRecords);
     AFL_VERIFY(rbRecords->num_columns() == 1);

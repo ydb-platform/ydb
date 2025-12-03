@@ -159,10 +159,7 @@ private:
         };
     };
 
-    const IDqAsyncOutputBuffer* GetSinkBuffer(ui64 id, const TAsyncOutputInfoBase& info) {
-        return info.Buffer ? info.Buffer.Get() : TaskRunnerStats.GetSink(id);
-    }
-
+public:
     void MonitoringExtra(TStringStream& html) {
         html << "<h3>Common</h3>";
         html << "Cookie: " << Cookie << "<br />";
@@ -200,6 +197,7 @@ private:
 #undef DUMP_PREFIXED
     }
 
+private:
     void OnStateRequest(TEvDqCompute::TEvStateRequest::TPtr& ev) {
         CA_LOG_T("Got TEvStateRequest from actor " << ev->Sender << " PingCookie: " << ev->Cookie);
         if (!SentStatsRequest) {

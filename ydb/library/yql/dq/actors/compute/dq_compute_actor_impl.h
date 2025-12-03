@@ -1276,10 +1276,6 @@ protected:
     void MonitoringExtra(TStringStream&) {
     }
 
-    const IDqAsyncOutputBuffer* GetSinkBuffer(ui64, const TAsyncOutputInfoBase& sink) {
-        return sink.Buffer.Get();
-    }
-
     void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
         TStringStream html;
         static_cast<TDerived*>(this)->MonitoringExtra(html);
@@ -1496,7 +1492,7 @@ protected:
             DUMP(info, Finished);
             DUMP(info, FinishIsAcknowledged);
             DUMP(info, PopStarted);
-            if (auto bufferPtr = GetSinkBuffer(id, info)) {
+            if (auto bufferPtr = GetSink(id, info)) {
                 const auto& buffer = *bufferPtr;
                 html << "DqOutputBuffer.OutputIndex: " << buffer.GetOutputIndex() << "<br />";
                 html << "DqOutputBuffer.FillLevel: " << static_cast<ui32>(buffer.GetFillLevel()) << "<br />";

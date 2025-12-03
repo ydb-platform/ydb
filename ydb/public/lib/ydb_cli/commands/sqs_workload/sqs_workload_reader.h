@@ -21,6 +21,7 @@ struct TSqsWorkloadReaderParams {
     ui32 Concurrency;
     ui32 BatchSize;
     TMaybe<ui32> ErrorMessagesRate;
+    TString ErrorMessagesDestiny;
     TDuration HandleMessageDelay;
     TDuration VisibilityTimeout;
 };

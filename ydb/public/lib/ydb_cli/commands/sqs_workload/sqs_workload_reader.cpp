@@ -19,6 +19,7 @@ namespace NYdb::NConsoleClient {
 namespace {
 
 constexpr auto kWaitTimeSeconds = 15;
+constexpr auto kErrorMessagesDestinyFatal = "fatal";
 
 }  // namespace
 
@@ -32,7 +33,6 @@ void TSqsWorkloadReader::OnMessageReceived(
         params.Log->Write(
             ELogPriority::TLOG_ERR, TStringBuilder() << "Error receiving message: " << outcome.GetError().GetMessage()
         );
-        params.ErrorFlag->store(true);
         return;
     }
 
@@ -88,7 +88,6 @@ void TSqsWorkloadReader::OnMessageReceived(
                 ELogPriority::TLOG_ERR,
                 TStringBuilder() << "Error deleting message: " << deleteMessageBatchOutcome.GetError().GetMessage()
             );
-            // params.ErrorFlag->store(true);
         }
     }
 }
@@ -98,7 +97,12 @@ bool TSqsWorkloadReader::ShouldFail(const TSqsWorkloadReaderParams& params, cons
         return false;
     }
 
-    return (std::hash<std::string>{}(message.GetMessageId()) % *params.ErrorMessagesRate) == 0;
+    auto shouldFail = (std::hash<std::string>{}(message.GetMessageId()) % *params.ErrorMessagesRate) == 0;
+    if (!shouldFail) {
+        return false;
+    }
+
+    return (params.ErrorMessagesDestiny == kErrorMessagesDestinyFatal) || (std::rand() % 2 == 0);
 }
 
 void TSqsWorkloadReader::RunLoop(const TSqsWorkloadReaderParams& params, TInstant endTime) {

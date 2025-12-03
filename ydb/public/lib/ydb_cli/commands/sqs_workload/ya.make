@@ -13,6 +13,8 @@ SRCS(
     sqs_workload_writer.cpp
     sqs_workload_init.cpp
     sqs_workload_init_scenario.cpp
+    sqs_workload_clean.cpp
+    sqs_workload_clean_scenario.cpp
 )
 
 PEERDIR(

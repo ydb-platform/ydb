@@ -41,6 +41,9 @@ void TCommandWorkloadSqsRunRead::Config(TConfig& config) {
             "This parameter means that every Nth received message will be handled with error."
         )
         .StoreResult(&Scenario.ErrorMessagesRate);
+    config.Opts->AddLongOption("error-messages-destiny", "Error messages destiny (fatal, sucess-after-retry).") 
+        .DefaultValue("fatal")
+        .StoreResult(&Scenario.ErrorMessagesDestiny);
     config.Opts->AddLongOption("visibility-timeout", "Visibility timeout in milliseconds.")
         .DefaultValue(1000)
         .StoreResult(&Scenario.VisibilityTimeoutMs);

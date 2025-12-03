@@ -25,6 +25,7 @@ int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
         .Concurrency = Concurrency,
         .BatchSize = BatchSize,
         .ErrorMessagesRate = ErrorMessagesRate,
+        .ErrorMessagesDestiny = ErrorMessagesDestiny,
         .HandleMessageDelay = TDuration::MilliSeconds(HandleMessageDelayMs),
         .VisibilityTimeout = TDuration::MilliSeconds(VisibilityTimeoutMs),
     };

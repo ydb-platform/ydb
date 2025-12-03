@@ -5,14 +5,12 @@
 
 namespace NYdb::NConsoleClient {
 
-class TSqsWorkloadReadScenario : public TSqsWorkloadScenario {
+class TSqsWorkloadCleanScenario : public TSqsWorkloadScenario {
 public:
     int Run(const TClientCommand::TConfig&);
 
-    TMaybe<ui32> ErrorMessagesRate;
-    TString ErrorMessagesDestiny;
-    ui64 VisibilityTimeoutMs;
-    ui64 HandleMessageDelayMs;
+    TString QueueName;
 };
 
 } // namespace NYdb::NConsoleClient
+

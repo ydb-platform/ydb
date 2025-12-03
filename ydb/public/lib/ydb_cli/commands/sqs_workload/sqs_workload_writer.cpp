@@ -45,7 +45,6 @@ void TSqsWorkloadWriter::
         params.Log->Write(
             ELogPriority::TLOG_ERR, TStringBuilder() << "Error sending message: " << outcome.GetError().GetMessage()
         );
-        // params.ErrorFlag->store(true);
     }
 
     if (outcome.GetResult().GetFailed().size() > 0) {

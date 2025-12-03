@@ -34,7 +34,7 @@ void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssue
     NYql::TIssues subIssues;
     if (!ValidateViewQuery(query, subIssues)) {
         NYql::TIssue restorabilityIssue(TStringBuilder()
-            << "Restorability of the view: " << dbPath.Quote() << "cannot be guaranteed. "
+            << "Restorability of the view " << dbPath.Quote() << " cannot be guaranteed. "
             << "For more information, please refer to the 'ydb tools dump' documentation. "
             << "Query stored in the view:\n" << query
         );

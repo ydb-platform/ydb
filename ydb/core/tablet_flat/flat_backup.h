@@ -2,14 +2,14 @@
 
 #include <util/generic/hash_set.h>
 
-namespace NKikimr::NiceDb {
+namespace NKikimr::NIceDb {
     struct Schema;
 }
 
 namespace NKikimr::NTable {
 
 class TBackupExclusion {
-    friend struct NKikimr::NiceDb::Schema;
+    friend struct NKikimr::NIceDb::Schema;
 
 public:
     using TTableId = ui32;

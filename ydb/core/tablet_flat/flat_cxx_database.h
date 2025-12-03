@@ -2177,6 +2177,8 @@ struct Schema {
         static void FillBackupExclusion(TBackupExclusion& exclusion) {
             if constexpr (std::is_same_v<typename Type::BackupPolicy, NoBackup>) {
                 exclusion.AddTable(Type::TableId);
+            } else {
+                Type::TColumns::FillBackupExclusion(exclusion);
             }
         }
     };

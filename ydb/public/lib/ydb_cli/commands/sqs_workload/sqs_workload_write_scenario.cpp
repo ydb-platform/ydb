@@ -18,6 +18,7 @@ int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig&) {
         .ErrorFlag = ErrorFlag,
         .SqsClient = SqsClient,
         .BatchSize = BatchSize,
+        .GroupsAmount = GroupsAmount,
         .MessageSize = MessageSize,
         .SleepTimeMs = SleepTimeMs,
     };

@@ -19,6 +19,7 @@ struct TSqsWorkloadWriterParams {
     std::shared_ptr<std::atomic_bool> ErrorFlag;
     std::shared_ptr<Aws::SQS::SQSClient> SqsClient;
     ui32 BatchSize;
+    ui32 GroupsAmount;
     ui32 MessageSize;
     ui32 SleepTimeMs;
 };

@@ -40,6 +40,9 @@ void TCommandWorkloadSqsRunWrite::Config(TConfig& config) {
     config.Opts->AddLongOption('z', "sleep-time", "Sleep time in milliseconds.")
         .DefaultValue(10)
         .StoreResult(&Scenario.SleepTimeMs);
+    config.Opts->AddLongOption('g', "groups-amount", "Groups amount.")
+        .DefaultValue(0)
+        .StoreResult(&Scenario.GroupsAmount);
 }
 
 void TCommandWorkloadSqsRunWrite::Parse(TConfig& config) { TClientCommand::Parse(config); }

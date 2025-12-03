@@ -27,6 +27,7 @@ struct TSqsWorkloadScenario {
     ui32 BatchSize;
     ui32 MessageSize;
     ui32 SleepTimeMs;
+    ui32 GroupsAmount;
     ui32 Concurrency = 1;
 
     void InitSqsClient();

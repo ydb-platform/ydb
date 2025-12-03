@@ -13,7 +13,7 @@ namespace NYdb::NConsoleClient {
 namespace {
 
 Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry>
-CreateSendMessageBatchRequestEntries(ui32 batchSize, ui32 messageSize) {
+CreateSendMessageBatchRequestEntries(ui32 batchSize, ui32 messageSize, ui32 messageGroups, ui32& messageGroupID) {
     Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry> entries;
     auto now = Now().MilliSeconds();
     for (ui32 i = 0; i < batchSize; ++i) {
@@ -22,9 +22,17 @@ CreateSendMessageBatchRequestEntries(ui32 batchSize, ui32 messageSize) {
             messageBody.push_back('a');
         }
 
-        entries.push_back(
-            Aws::SQS::Model::SendMessageBatchRequestEntry().WithMessageBody(messageBody).WithId(fmt::format("{}", i))
-        );
+        Aws::SQS::Model::SendMessageBatchRequestEntry entry;
+        entry.WithMessageBody(messageBody).WithId(fmt::format("{}", i));
+        if (messageGroups > 0) {
+            entry.WithMessageGroupId(fmt::format("{}", messageGroupID));
+        }
+
+        entries.push_back(std::move(entry));
+
+        if (messageGroups > 0) {
+            messageGroupID = (messageGroupID + 1) % messageGroups;
+        }
     }
     return entries;
 }
@@ -34,10 +42,16 @@ CreateSendMessageBatchRequestEntries(ui32 batchSize, ui32 messageSize) {
 void TSqsWorkloadWriter::
     OnMessageSent(const TSqsWorkloadWriterParams& params, const Aws::SQS::SQSClient*, const Aws::SQS::Model::SendMessageBatchRequest&, const Aws::SQS::Model::SendMessageBatchOutcome& outcome, const std::shared_ptr<const Aws::Client::AsyncCallerContext>&) {
     if (!outcome.IsSuccess()) {
-        // params.Log->Write(
-        //     ELogPriority::TLOG_ERR, TStringBuilder() << "Error sending message: " << outcome.GetError().GetMessage()
-        // );
+        params.Log->Write(
+            ELogPriority::TLOG_ERR, TStringBuilder() << "Error sending message: " << outcome.GetError().GetMessage()
+        );
         // params.ErrorFlag->store(true);
+    }
+
+    if (outcome.GetResult().GetFailed().size() > 0) {
+        params.Log->Write(
+            ELogPriority::TLOG_ERR, TStringBuilder() << "Failed to send message: " << outcome.GetResult().GetFailed().size()
+        );
     }
 
     std::unique_lock<std::mutex> locker(*params.Mutex);
@@ -46,10 +60,12 @@ void TSqsWorkloadWriter::
 }
 
 void TSqsWorkloadWriter::RunLoop(const TSqsWorkloadWriterParams& params, TInstant endTime) {
+    ui32 messageGroupID = 0;
+    
     while (Now() < endTime && !params.ErrorFlag->load()) {
         Aws::SQS::Model::SendMessageBatchRequest sendMessageBatchRequest;
         sendMessageBatchRequest.SetQueueUrl(fmt::format("http://{}/{}", params.EndPoint, params.QueueName).c_str());
-        sendMessageBatchRequest.SetEntries(CreateSendMessageBatchRequestEntries(params.BatchSize, params.MessageSize));
+        sendMessageBatchRequest.SetEntries(CreateSendMessageBatchRequestEntries(params.BatchSize, params.MessageSize, params.GroupsAmount, messageGroupID));
 
         {
             std::unique_lock<std::mutex> locker(*params.Mutex);

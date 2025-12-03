@@ -28,7 +28,7 @@ void TSqsWorkloadReader::OnMessageReceived(
     const Aws::SQS::SQSClient* client,
     const Aws::SQS::Model::ReceiveMessageRequest&,
     const Aws::SQS::Model::ReceiveMessageOutcome& outcome
-) {
+) {        
     if (!outcome.IsSuccess()) {
         params.Log->Write(
             ELogPriority::TLOG_ERR, TStringBuilder() << "Error receiving message: " << outcome.GetError().GetMessage()

@@ -19,8 +19,7 @@ namespace numpy
   {
 
     template <class pS>
-    types::ndarray<double, pS> gamma(double shape, double scale,
-                                     pS const &array_shape)
+    types::ndarray<double, pS> gamma(double shape, double scale, pS const &array_shape)
     {
       types::ndarray<double, pS> result{array_shape, types::none_type()};
       std::gamma_distribution<double> distribution{shape, scale};

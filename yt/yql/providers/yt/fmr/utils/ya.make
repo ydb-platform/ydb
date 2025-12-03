@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    yql_yt_binary_yson_comparator.cpp
     yql_yt_client.cpp
     yql_yt_column_group_helpers.cpp
     yql_yt_log_context.cpp

@@ -16,6 +16,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/util/aws.h>
+#include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
@@ -4337,6 +4338,193 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         Run(runtime, env, ConvertTestData(data), request, Ydb::StatusIds::PRECONDITION_FAILED);
         Run(runtime, env, ConvertTestData(data), request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
+    }
+
+    Y_UNIT_TEST(CheckItemProgress) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        TBlockEvents<NWrappers::NExternalStorage::TEvGetObjectRequest> blockPartition01(runtime, [](const auto& ev) {
+            return ev->Get()->Request.GetKey() == "/data_01.csv";
+        });
+
+        const auto data = GenerateTestData(R"(
+                columns {
+                    name: "key"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                partition_at_keys {
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "b" } }
+                    }
+                }
+                primary_key: "key"
+            )",
+            {{"a", 1}, {"b", 1}}
+        );
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("get object request into 01 partition", [&]{ return blockPartition01.size() >= 1; });
+        bool isCompleted = false;
+
+        while (!isCompleted) {
+            const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+            const auto entry = desc.GetResponse().GetEntry();
+
+            const auto item = entry.GetItemsProgress(0);
+            if (item.parts_completed() > 0) {
+                isCompleted = true;
+                UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 1);
+                UNIT_ASSERT_VALUES_UNEQUAL(item.start_time().seconds(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(item.end_time().seconds(), 0);
+            } else {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+        }
+
+        blockPartition01.Stop();
+        blockPartition01.Unblock();
+
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
+
+        const auto& item = entry.GetItemsProgress(0);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 2);
+        UNIT_ASSERT_VALUES_UNEQUAL(item.start_time().seconds(), 0);
+        UNIT_ASSERT_VALUES_UNEQUAL(item.end_time().seconds(), 0);
+    }
+
+    Y_UNIT_TEST(CheckItemProgressWithIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        // Wait for 3'rd index processing
+        TBlockEvents<TEvIndexBuilder::TEvCreateRequest> block2ndIndexBuild(runtime, [&](const auto& ev) {
+            return ev->Get()->Record.GetSettings().Getindex().Getname() == "by_value_2";
+        });
+
+        const auto data = GenerateTestData(R"(
+                columns {
+                    name: "key"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                primary_key: "key"
+                partition_at_keys {
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "b" } }
+                    }
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "c" } }
+                    }
+                }
+                indexes {
+                    name: "by_value_1"
+                    index_columns: "value"
+                    global_index {
+                        settings {
+                            partition_at_keys {
+                                split_points {
+                                    type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                                    value { items { text_value: "b" } }
+                                }
+                            }
+                        }
+                    }
+                }
+                indexes {
+                    name: "by_value_2"
+                    index_columns: "value"
+                    global_index {}
+                }
+            )",
+            {{"a", 1}, {"b", 1}, {"c", 1}}
+        );
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("2'nd index build start", [&]{ return block2ndIndexBuild.size() >= 1; });
+
+        const auto desc_blocked = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry_blocked = desc_blocked.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry_blocked.ItemsProgressSize(), 1);
+        // As only 1 item, it is guaranteed for entry to be in the build indexes state
+        UNIT_ASSERT_VALUES_EQUAL(entry_blocked.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES);
+
+        const auto& item_blocked = entry_blocked.GetItemsProgress(0);
+        // 3 table parts + 2 indexes each process 3 table parts
+        UNIT_ASSERT_VALUES_EQUAL(item_blocked.parts_total(), 9);
+        // Table and 1'st index processed
+        UNIT_ASSERT_VALUES_EQUAL(item_blocked.parts_completed(), 6);
+        UNIT_ASSERT_VALUES_UNEQUAL(item_blocked.start_time().seconds(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(item_blocked.end_time().seconds(), 0);
+
+        block2ndIndexBuild.Stop();
+        block2ndIndexBuild.Unblock();
+
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
+
+        const auto& item = entry.GetItemsProgress(0);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 9);
+        UNIT_ASSERT_VALUES_UNEQUAL(item.start_time().seconds(), 0);
+        UNIT_ASSERT_VALUES_UNEQUAL(item.end_time().seconds(), 0);
     }
 
     Y_UNIT_TEST(UidAsIdempotencyKey) {

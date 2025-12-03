@@ -36,27 +36,23 @@ namespace functools
       task(ClosureTypes const &...types);
 
       template <std::size_t... S, typename... Types>
-      auto call(utils::index_sequence<S...>, Types &&...types) const
+      auto call(std::index_sequence<S...>, Types &&...types) const
           -> decltype(std::get<0>(closure)(std::get<S + 1>(closure)...,
                                            std::forward<Types>(types)...))
       {
-        return std::get<0>(closure)(std::get<S + 1>(closure)...,
-                                    std::forward<Types>(types)...);
+        return std::get<0>(closure)(std::get<S + 1>(closure)..., std::forward<Types>(types)...);
       }
 
       template <typename... Types>
       auto operator()(Types &&...types) const
-          -> decltype(this->call(
-              utils::make_index_sequence<sizeof...(ClosureTypes) - 1>(),
-              std::forward<Types>(types)...));
+          -> decltype(this->call(std::make_index_sequence<sizeof...(ClosureTypes) - 1>(),
+                                 std::forward<Types>(types)...));
     };
   } // namespace details
 
   template <typename... Types>
   // remove references as closure capture the env by copy
-  details::task<typename std::remove_cv<
-      typename std::remove_reference<Types>::type>::type...>
-  partial(Types &&...types);
+  details::task<std::remove_cv_t<std::remove_reference_t<Types>>...> partial(Types &&...types);
 
   DEFINE_FUNCTOR(pythonic::functools, partial);
 } // namespace functools

@@ -33,7 +33,9 @@ public:
         NScheduler::TSchedulableActorOptions schedulableOptions,
         NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        const TString& database);
+        const TString& database,
+        bool enableWatermarks
+    );
 
     void DoBootstrap();
 
@@ -76,6 +78,7 @@ private:
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TString Database;
+    const bool EnableWatermarks;
 };
 
 } // namespace NKikimr::NKqp

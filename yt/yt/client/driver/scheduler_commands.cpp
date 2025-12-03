@@ -658,7 +658,6 @@ void TListJobsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 void TListJobTracesCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("job_id", &TThis::JobId);
@@ -676,7 +675,6 @@ void TListJobTracesCommand::Register(TRegistrar registrar)
         .Optional(/*init*/ false);
 }
 
-
 void TListJobTracesCommand::DoExecute(ICommandContextPtr context)
 {
     auto asyncResult = context->GetClient()->ListJobTraces(OperationIdOrAlias, JobId, Options);
@@ -689,6 +687,27 @@ void TListJobTracesCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TCheckOperationPermissionCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("user", &TThis::User);
+    registrar.Parameter("permission", &TThis::Permission);
+}
+
+void TCheckOperationPermissionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto asyncResult = context->GetClient()->CheckOperationPermission(
+        User,
+        OperationIdOrAlias,
+        Permission,
+        Options);
+    auto result = WaitFor(asyncResult)
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .Value(result));
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 void TGetJobCommand::Register(TRegistrar registrar)
 {

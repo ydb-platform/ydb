@@ -158,6 +158,20 @@ void TYsonStructRegistry::InitializeStruct(TStruct* target, const NYT::TSourceLo
     target->Meta_ = meta;
 }
 
+template <CYsonStructDerived TStruct>
+const IYsonStructMeta* TYsonStructRegistry::GetMeta()
+{
+    if constexpr (CYsonStruct<TStruct>) {
+        static const auto meta = New<TStruct>()->GetMeta();
+        return meta;
+    } else if constexpr (CYsonStructLite<TStruct>) {
+        static const auto meta = TStruct().GetMeta();
+        return meta;
+    } else {
+        static_assert(TDependentFalse<TStruct>, "TStruct must be descendant of TYsonStruct or TYsonStructLite");
+    }
+}
+
 template <class TTargetStruct>
 TTargetStruct* TYsonStructRegistry::CachedDynamicCast(const TYsonStructBase* constSource)
 {

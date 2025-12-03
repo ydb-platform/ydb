@@ -187,12 +187,8 @@ struct TFutureTimeoutOptions
 /*!
  *  The resulting value can be accessed by either subscribing (#Subscribe)
  *  for it or retrieving it explicitly (#Get, #TryGet). Also it is possible
- *  to move the value out of the future state (#SubscribeUnique, #GetUnique, #TryGetUnique).
- *  In the latter case, however, at most one extraction is possible;
- *  further attempts to access the value will result in UB.
- *  In particular, at most one call to #SubscribeUnique, #GetUnique, and #TryGetUnique (expect
- *  for calls returning null) must happen to any future state (possibly shared by multiple
- *  TFuture instances).
+ *  to move the value out of the future state
+ *  (by converting to TUniqueFuture via #AsUnique and invoking #Subscribe, #Get, #TryGet).
  */
 template <class T>
 class TFutureBase
@@ -275,13 +271,6 @@ public:
      *  Callback cookies are recycled; don't retry calls to this function.
      */
     void Unsubscribe(TFutureCallbackCookie cookie) const;
-
-    //! Similar to #Subscribe but enables moving the value to the handler.
-    /*!
-     *  Normally at most one such handler could be attached.
-     */
-    // TODO(babenko): deprecated, see YT-26319
-    void SubscribeUnique(TCallback<void(TErrorOr<T>&&)> handler) const;
 
     //! Notifies the producer that the promised value is no longer needed.
     //! Returns |true| if succeeded, |false| is the promise was already set or canceled.
@@ -444,6 +433,13 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Provides the unique-value semantics interface.
+/*!
+ *  Note that at most one value extraction is ever possible;
+ *  further attempts to access the value will result in UB.
+ *  In particular, at most one call to #Subscribe, #Get, and #TryGet (expect
+ *  for calls returning null) must happen to any future state
+ *  (possibly shared by multiple future references).
+ */
 template <class T>
 class [[nodiscard]] TUniqueFuture
     : public TFutureBase<T>

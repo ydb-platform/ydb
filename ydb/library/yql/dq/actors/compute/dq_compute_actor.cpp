@@ -39,7 +39,7 @@ public:
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         const TTaskRunnerFactory& taskRunnerFactory,
         ::NMonitoring::TDynamicCounterPtr taskCounters)
-        : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, true, false, taskCounters)
+        : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, false, false, taskCounters)
         , TaskRunnerFactory(taskRunnerFactory)
     {
         InitializeTask();
@@ -47,6 +47,8 @@ public:
 
     void DoBootstrap() {
         const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
+
+        MemoryQuota = InitMemoryQuota();
 
         TLogFunc logger;
         if (IsDebugLogEnabled(actorSystem)) {

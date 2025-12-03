@@ -3411,7 +3411,7 @@ TPositionHandle TExprContext::AppendPosition(const TPosition& pos) {
     return *inserted.first;
 }
 
-TPosition TExprContext::GetPosition(TPositionHandle handle) const {
+const TPosition& TExprContext::GetPosition(TPositionHandle handle) const {
     YQL_ENSURE(handle.Handle_ < Positions_.size(), "Unknown PositionHandle");
     return Positions_[handle.Handle_];
 }

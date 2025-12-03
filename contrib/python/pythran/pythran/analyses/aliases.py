@@ -14,6 +14,7 @@ import gast as ast
 from copy import deepcopy
 from itertools import product
 import io
+import numpy as np
 
 
 IntrinsicAliases = dict()
@@ -288,7 +289,10 @@ class Aliases(ModuleAnalysis[GlobalDeclarations]):
                 for ra in func.return_alias(args_combination):
                     if isinstance(ra, ast.Subscript):
                         if isinstance(ra.value, ContainerOf):
-                            return_aliases.update(ra.value.containees)
+                            if np.isnan(ra.value.index) or (isnum(ra.slice) and
+                                                            ra.slice.value ==
+                                                            ra.value.index):
+                                return_aliases.update(ra.value.containees)
                             continue
                     return_aliases.add(ra)
             return return_aliases
@@ -681,7 +685,12 @@ class Aliases(ModuleAnalysis[GlobalDeclarations]):
                 def wrap(t, aliases):
                     if isinstance(t, ast.Subscript):
                         alias, wrapped = wrap(t.value, aliases)
-                        return alias, {ContainerOf(wrapped)}
+                        if isnum(t.slice):
+                            return alias, {ContainerOf(wrapped, t.slice.value)}
+                        elif isinstance(t.slice, ast.Slice):
+                            return alias, wrapped
+                        else:
+                            return alias, {ContainerOf(wrapped)}
                     elif isinstance(t, ast.Name):
                         return t, aliases
                     else:

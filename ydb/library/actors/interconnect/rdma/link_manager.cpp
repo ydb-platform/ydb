@@ -29,14 +29,14 @@
 
 template <>
 struct std::less<ibv_gid> {
-    std::size_t operator()(const ibv_gid& a, const ibv_gid& b) const {
+    bool operator()(const ibv_gid& a, const ibv_gid& b) const noexcept {
         return std::tie(a.global.subnet_prefix, a.global.interface_id) <
                std::tie(b.global.subnet_prefix, b.global.interface_id);
     }
 };
 template <>
 struct std::equal_to<ibv_gid> {
-    bool operator()(const ibv_gid& a, const ibv_gid& b) const {
+    bool operator()(const ibv_gid& a, const ibv_gid& b) const noexcept {
         return a.global.interface_id == b.global.interface_id
             && a.global.subnet_prefix == b.global.subnet_prefix;
     }
@@ -118,10 +118,19 @@ public:
                 continue;
             }
 
+            /*
+             * TODO: Add ibv_query_gid_table support into arcadia ibv wrapper (contrib/libs/ibdrv) 
+             * This extension allows to get type of GID index to skip unsupported RoCEv1 
+             */
+
             for (uint8_t portNum = 1; portNum <= devAttrs.phys_port_cnt; portNum++) {
                 ibv_port_attr portAttrs;
                 err = ibv_query_port(ctx, portNum, &portAttrs);
                 if (err == 0) {
+                    if (portAttrs.state != IBV_PORT_ACTIVE) {
+                        continue; //Skip non active ports
+                    }
+
                     for (int gidIndex = 0; gidIndex < portAttrs.gid_tbl_len; gidIndex++ ) {
                         auto ctx = TRdmaCtx::Create(deviceCtx, portNum, gidIndex);
                         if (!ctx) {
@@ -135,6 +144,10 @@ public:
         }
         std::sort(CtxMap.begin(), CtxMap.end(),
             [](const auto& a, const auto& b) {
+                if (std::equal_to<ibv_gid>()(a.first, b.first)) {
+                    // Hack: Most implementations have RoCEv2 after RoCEv1, but we prefer RoCEv2 gid index 
+                    return a.second->GetGidIndex() > b.second->GetGidIndex();
+                }
                 return std::less<ibv_gid>()(a.first, b.first);
             });
 

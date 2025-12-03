@@ -3,8 +3,6 @@
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/statistics/service/service.h>
 
-#include <util/string/vector.h>
-
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
@@ -41,8 +39,8 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
 
         const auto forceTraversalTable = Self->CurrentForceTraversalTable();
         if (forceTraversalTable) {
-            TVector<ui32> columnTags = Scan<ui32>(SplitString(forceTraversalTable->ColumnTags, ","));
-            outRecord.MutableColumnTags()->Add(columnTags.begin(), columnTags.end());
+            outRecord.MutableColumnTags()->Add(
+                forceTraversalTable->ColumnTags.begin(), forceTraversalTable->ColumnTags.end());
         }
 
         for (auto& inNode : HiveRecord.GetNodes()) {

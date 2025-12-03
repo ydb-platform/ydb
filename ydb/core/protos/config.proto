@@ -1546,12 +1546,12 @@ message TImmediateControlsConfig {
         optional uint64 FastSplitSizeThreshold = 9 [(ControlOptions) = {
             Description: "FastSplitSize Threshold",
             MinValue: 100000,
-            MaxValue: 4000000000,
+            MaxValue: 411000000000,
             DefaultValue: 4000000 }];
         optional uint64 FastSplitRowCountThreshold = 10 [(ControlOptions) = {
             Description: "Disable publications of dropping",
             MinValue: 1000,
-            MaxValue: 1000000000,
+            MaxValue: 111000000000,
             DefaultValue: 100000 }];
         optional uint64 FastSplitCpuPercentageThreshold = 11 [(ControlOptions) = {
             Description: "Max Fast split cpu usage",
@@ -1566,17 +1566,17 @@ message TImmediateControlsConfig {
         optional uint64 SplitByLoadMaxShardsDefault = 13 [(ControlOptions) = {
             Description: "Max shards that cant be split by load",
             MinValue: 0,
-            MaxValue: 50,
-            DefaultValue: 10000 }];
+            MaxValue: 10000,
+            DefaultValue: 50 }];
         optional uint64 MergeByLoadMinUptimeSec = 14 [(ControlOptions) = {
             Description: "Min uptime to merge by load in seconds",
             MinValue: 0,
-            MaxValue: 4000000000,
+            MaxValue: 411000000000,
             DefaultValue: 600 }];
         optional uint64 MergeByLoadMinLowLoadDurationSec = 15 [(ControlOptions) = {
             Description: "Min low load duration in sec to merge by load",
             MinValue: 0,
-            MaxValue: 4000000000,
+            MaxValue: 411000000000,
             DefaultValue: 3600 }];
     }
 
@@ -2771,6 +2771,7 @@ message TKafkaProxyConfig {
     optional bool AutoCreateTopicsEnable = 13 [default = false];
     optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
     optional bool AutoCreateConsumersEnable = 15 [default = true];
+    optional string PublicHost = 16;
 }
 
 message TAwsCompatibilityConfig {
@@ -2838,6 +2839,8 @@ message TStatisticsConfig {
     // from many SchemeShards.
     optional uint32 BaseStatsPropagateIntervalSecondsDedicated = 3 [default = 5];
     optional uint32 BaseStatsPropagateIntervalSecondsServerless = 4 [default = 180];
+
+    optional bool EnableBackgroundColumnStatsCollection = 5 [default = false];
 };
 
 message TSystemTabletBackupConfig {

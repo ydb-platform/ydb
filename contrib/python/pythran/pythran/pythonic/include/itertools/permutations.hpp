@@ -30,13 +30,12 @@ namespace itertools
    *
    */
   template <class T, class H>
-  struct permutations_iterator : std::iterator<std::forward_iterator_tag, H,
-                                               ptrdiff_t, H *, H /* no ref*/
-                                               > {
+  struct permutations_iterator
+      : std::iterator<std::forward_iterator_tag, H, ptrdiff_t, H *, H /* no ref*/
+                      > {
 
     // Vector of inputs, contains elements to permute
-    using pool_type = std::vector<typename T::value_type,
-                                  utils::allocator<typename T::value_type>>;
+    using pool_type = std::vector<typename T::value_type, utils::allocator<typename T::value_type>>;
     pool_type pool;
 
     // The current permutation as a dynamic_tuple of index in the pool
@@ -80,12 +79,11 @@ namespace itertools
   };
 
   template <typename T0>
-  _permutations<T0, types::dynamic_tuple<typename T0::value_type>>
-  permutations(T0 iter, long num_elts);
+  _permutations<T0, types::dynamic_tuple<typename T0::value_type>> permutations(T0 iter,
+                                                                                long num_elts);
 
   template <typename T0>
-  _permutations<T0, types::dynamic_tuple<typename T0::value_type>>
-  permutations(T0 iter);
+  _permutations<T0, types::dynamic_tuple<typename T0::value_type>> permutations(T0 iter);
 
   template <typename T0, long N0>
   _permutations<T0, types::array_tuple<typename T0::value_type, (size_t)N0>>
@@ -100,10 +98,8 @@ PYTHONIC_NS_END
 
 template <class E, class T, class H>
 struct __combined<E, pythonic::itertools::_permutations<T, H>> {
-  using type =
-      typename __combined<E,
-                          container<typename pythonic::itertools::_permutations<
-                              T, H>::value_type>>::type;
+  using type = typename __combined<
+      E, container<typename pythonic::itertools::_permutations<T, H>::value_type>>::type;
 };
 
 /* } */

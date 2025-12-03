@@ -17,6 +17,7 @@ namespace NKikimr::NKqp {
         if (CheckpointId) {
             o << ", CheckpointId: " << CheckpointId;
         }
+        o << ", IsStreamingQuery: " << IsStreamingQuery;
         o << "}";
     }
 

@@ -43,7 +43,7 @@ TExprNode::TPtr CheckQLConst(const TExprNode::TPtr& node, const TExprNode::TPtr&
     return node;
 }
 
-TExprNode::TPtr ConvertQLMember(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx, bool allowOptional = false) {
+TExprNode::TPtr ConvertQLMember(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx, bool allowOptional) {
     if (!node->IsCallable("Member")) {
         return nullptr;
     }
@@ -62,7 +62,7 @@ TExprNode::TPtr ConvertQLMember(const TExprNode::TPtr& node, const TExprNode::TP
     return ctx.ChangeChild(*node, 0, std::move(arg));
 }
 
-TExprNode::TPtr ConvertQLComparison(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx, bool allowOptional = false) {
+TExprNode::TPtr ConvertQLComparison(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx, bool allowOptional) {
     YQL_ENSURE(node->ChildrenSize() == 2);
     TExprNode::TPtr childLeft;
     TExprNode::TPtr childRight;
@@ -78,11 +78,13 @@ TExprNode::TPtr ConvertQLComparison(const TExprNode::TPtr& node, const TExprNode
     return ctx.ChangeChildren(*node, {childLeft, childRight});
 }
 
-TExprNode::TPtr ConvertQLSubTree(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx) {
+TExprNode::TPtr ConvertQLSubTree(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx, bool allowOptional = false) {
     if (node->IsCallable({"And", "Or", "Not", "Exists"})) {
         TExprNode::TListType convertedChildren;
+        // TODO: Allow optional inside Exists.
+        // const bool allowOptionalForChildren = allowOptional || node->IsCallable("Exists");
         for (const auto& child : node->ChildrenList()) {
-            const auto converted = ConvertQLSubTree(child, rowArg, newRowArg, ctx);
+            const auto converted = ConvertQLSubTree(child, rowArg, newRowArg, ctx, allowOptional);
             if (!converted) {
                 return nullptr;
             }
@@ -109,13 +111,13 @@ TExprNode::TPtr ConvertQLSubTree(const TExprNode::TPtr& node, const TExprNode::T
         return ctx.ChangeChildren(*node, {convertedComparison, nullValue});
     }
     if (node->IsCallable({"<", "<=", ">", ">=", "==", "!="})) {
-        return ConvertQLComparison(node, rowArg, newRowArg, ctx);
+        return ConvertQLComparison(node, rowArg, newRowArg, ctx, allowOptional);
     }
     if (node->IsCallable("Bool")) {
         return node;
     }
     if (node->IsCallable("Member")) {
-        return ConvertQLMember(node, rowArg, newRowArg, ctx);
+        return ConvertQLMember(node, rowArg, newRowArg, ctx, allowOptional);
     }
     return nullptr;
 }
@@ -128,8 +130,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ExtractQLFilters(TExprB
         return node;
     }
 
-    const auto section = opMap.Input().Item(0);
-    if (NYql::HasAnySetting(opMap.Settings().Ref(), EYtSettingType::QLFilter | EYtSettingType::WeakFields)) {
+    if (NYql::HasAnySetting(opMap.Settings().Ref(), EYtSettingType::WeakFields)) {
+        return node;
+    }
+
+    const auto section = opMap.Input().Item(0).Cast<TYtSection>();
+    if (NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::QLFilter)) {
         return node;
     }
 
@@ -154,22 +160,19 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ExtractQLFilters(TExprB
     TExprNode::TListType qlCompatibleParts;
     TExprNode::TListType otherParts;
     TExprNode::TPtr predicate = optionalIf.Cast().Predicate().Ptr();
-
-    if (!predicate->IsCallable("And")) {
-        const auto converted = ConvertQLSubTree(predicate, rowArg, newRowArg, ctx);
-        if (converted) {
+    auto convertOne = [&] (const TExprNode::TPtr& node) {
+        if (const auto converted = ConvertQLSubTree(node, rowArg, newRowArg, ctx)) {
             qlCompatibleParts.push_back(converted);
         } else {
-            otherParts.push_back(predicate);
+            otherParts.push_back(node);
         }
+    };
+
+    if (!predicate->IsCallable("And")) {
+        convertOne(predicate);
     } else {
         for (const auto& child : predicate->ChildrenList()) {
-            const auto converted = ConvertQLSubTree(child, rowArg, newRowArg, ctx);
-            if (converted) {
-                qlCompatibleParts.push_back(converted);
-            } else {
-                otherParts.push_back(child);
-            }
+            convertOne(child);
         };
     }
 
@@ -189,37 +192,23 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ExtractQLFilters(TExprB
     const auto lambdaNode = ctx.NewLambda(qlCompatiblePredicate->Pos(), ctx.NewArguments(qlCompatiblePredicate->Pos(), {newRowArg}), std::move(qlCompatiblePredicate));
     const auto qlFilter = ctx.NewCallable(flatMap.Cast().Pos(), "YtQLFilter", {typeNode, lambdaNode});
 
-    auto newOpMap = ctx.ChangeChild(opMap.Ref(), TYtMap::idx_Settings, NYql::AddSetting(opMap.Settings().Ref(), EYtSettingType::QLFilter, qlFilter, ctx));
-
-    const bool pruneLambda = State_->Configuration->PruneQLFilterLambda.Get().GetOrElse(DEFAULT_PRUNE_QL_FILTER_LAMBDA);
-    if (pruneLambda) {
-        TExprNode::TPtr prunedPredicate;
-        if (otherParts.empty()) {
-            prunedPredicate = MakeBool<true>(predicate->Pos(), ctx);
-        } else if (otherParts.size() == 1) {
-            prunedPredicate = otherParts.front();
-        } else {
-            prunedPredicate = ctx.NewCallable(predicate->Pos(), "And", std::move(otherParts));
-        }
-        YQL_ENSURE(prunedPredicate);
-
-        const auto newFlatMap = Build<TCoFlatMapBase>(ctx, flatMap.Cast().Pos())
-            .InitFrom(flatMap.Cast())
-            .Lambda()
-                .InitFrom(flatMapLambda.Cast())
-                .Body<TCoOptionalIf>()
-                    .InitFrom(optionalIf.Cast())
-                    .Predicate(prunedPredicate)
-                .Build()
-            .Build()
+    auto newPaths = section.Paths().Ref().ChildrenList();
+    for (auto& path : newPaths) {
+        YQL_ENSURE(path->IsCallable("YtPath"));
+        TYtPath ytPath(path);
+        YQL_ENSURE(ytPath.QLFilter().Maybe<TCoVoid>());
+        path = Build<TYtPath>(ctx, path->Pos())
+            .InitFrom(ytPath)
+            .QLFilter(qlFilter)
+            .Done().Ptr();
+    }
+    auto newSection = ctx.ChangeChild(section.Ref(), TYtSection::idx_Settings, NYql::AddSetting(section.Settings().Ref(), EYtSettingType::QLFilter, {}, ctx));
+    newSection = ctx.ChangeChild(*newSection, TYtSection::idx_Paths, ctx.NewList(section.Paths().Pos(), std::move(newPaths)));
+    auto newSectionList = Build<TYtSectionList>(ctx, opMap.Input().Pos())
+        .Add(newSection)
         .Done().Ptr();
 
-        const TOptimizeExprSettings settings{State_->Types};
-        const TNodeOnNodeOwnedMap remaps{{flatMap.Cast().Raw(), newFlatMap}};
-        const auto status = RemapExpr(newOpMap, newOpMap, remaps, ctx, settings);
-        YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
-    }
-    return newOpMap;
+    return ctx.ChangeChild(opMap.Ref(), TYtMap::idx_Input, std::move(newSectionList));
 }
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::OptimizeQLFilterType(TExprBase node, TExprContext& ctx) const {

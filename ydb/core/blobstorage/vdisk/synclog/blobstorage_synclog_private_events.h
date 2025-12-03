@@ -72,15 +72,17 @@ namespace NKikimr {
             {}
         };
 
-        struct TEvPhantomFlagStorageAddFlagsFromSnapshot
-                : public TEventLocal<TEvPhantomFlagStorageAddFlagsFromSnapshot,
-                                     TEvBlobStorage::EvPhantomFlagStorageAddFlagsFromSnapshot>
+        struct TEvPhantomFlagStorageFinishBuilder
+                : public TEventLocal<TEvPhantomFlagStorageFinishBuilder,
+                                     TEvBlobStorage::EvPhantomFlagStorageFinishBuilder>
         {
-            TEvPhantomFlagStorageAddFlagsFromSnapshot(TPhantomFlags&& flags)
+            TEvPhantomFlagStorageFinishBuilder(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds)
                 : Flags(std::move(flags))
+                , Thresholds(std::move(thresholds))
             {}
 
             TPhantomFlags Flags;
+            TPhantomFlagThresholds Thresholds;
         };
 
         struct TEvPhantomFlagStorageGetSnapshot

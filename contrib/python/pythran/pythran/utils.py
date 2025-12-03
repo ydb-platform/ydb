@@ -105,8 +105,8 @@ def get_variable(assignable):
     ...         ctx=ast.Load()),
     ...     slice=ast.Name('j', ast.Load(), None, None),
     ...     ctx=ast.Load())
-    >>> ast.dump(get_variable(ref))
-    "Name(id='a', ctx=Load())"
+    >>> get_variable(ref).id
+    'a'
     """
     msg = "Only name and subscript can be assigned."
     assert isinstance(assignable, (ast.Name, ast.Subscript)), msg

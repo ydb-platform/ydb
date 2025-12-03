@@ -695,6 +695,13 @@ public:
         const TListJobTracesOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TCheckOperationPermissionResult>, CheckOperationPermission, (
+        const std::string& user,
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NYTree::EPermission permission,
+        const TCheckOperationPermissionOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<NYson::TYsonString>, GetJob, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,

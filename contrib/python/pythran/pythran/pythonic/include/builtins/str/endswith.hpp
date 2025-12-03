@@ -13,8 +13,7 @@ namespace builtins
   {
 
     // TODO : Add implementation for tuple as first argument.
-    bool endswith(types::str const &s, types::str const &suffix, long start = 0,
-                  long end = -1);
+    bool endswith(types::str const &s, types::str const &suffix, long start = 0, long end = -1);
 
     DEFINE_FUNCTOR(pythonic::builtins::str, endswith);
   } // namespace str

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "consumer_offset_tracker.h"
+#include "message_id_deduplicator.h"
 #include "partition_blob_encoder.h"
 #include "partition_compactification.h"
 #include "partition_init.h"
@@ -140,6 +141,8 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitMetaStep;
     friend TInitInfoRangeStep;
     friend TInitDataRangeStep;
+    friend TDeleteKeysStep;
+    friend TInitMessageDeduplicatorStep;
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
     friend TInitFieldsStep;
@@ -208,7 +211,6 @@ private:
                                const TString& errorStr,
                                const TWriteMsg& p,
                                NPersQueue::NErrorCode::EErrorCode errorCode);
-    void ClearOldHead(const ui64 offset, const ui16 partNo);
     void CreateMirrorerActor();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
@@ -800,9 +802,6 @@ private:
     TMessageQueue PendingRequests;
     TMessageQueue QuotaWaitingRequests;
 
-    std::shared_ptr<std::deque<TString>> DeletedKeys;
-    std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
-
     TPartitionBlobEncoder CompactionBlobEncoder; // Compaction zone
     TPartitionBlobEncoder BlobEncoder;           // FastWrite zone
 
@@ -1258,6 +1257,10 @@ private:
     >;
     std::deque<TMLPPendingEvent> MLPPendingEvents;
     ui64 LastNotifiedEndOffset = 0;
+
+    TMessageIdDeduplicator MessageIdDeduplicator;
+    void AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
+    std::optional<ui64> DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset);
 };
 
 inline ui64 TPartition::GetStartOffset() const {

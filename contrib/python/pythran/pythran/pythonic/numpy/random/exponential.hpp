@@ -37,8 +37,7 @@ namespace numpy
 
     inline double exponential(double scale, types::none_type d)
     {
-      return std::exponential_distribution<double>{1 /
-                                                   scale}(details::generator);
+      return std::exponential_distribution<double>{1 / scale}(details::generator);
     }
   } // namespace random
 } // namespace numpy

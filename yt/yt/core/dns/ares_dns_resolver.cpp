@@ -666,6 +666,8 @@ private:
     */
     bool TryEnqueue(std::unique_ptr<TResolveRequest> request)
     {
+        // Fast path: Check if we're shutting down before enqueueing.
+        // This is an optimization to avoid enqueueing requests during shutdown.
         if (ShuttingDown_.load(std::memory_order::relaxed)) {
             YT_LOG_DEBUG(
                 "Canceling request because Ares DNS resolver is shutting down (RequestId: %v)",
@@ -674,12 +676,21 @@ private:
             request->Promise.Set(MakeCanceledError(request->RequestId));
             return false;
         }
-        // <- Concurrent shutdown compelition will cause request to be lost.
-        // Thus we double check after enqueue.
+
+        // NOTE: There is a potential race window here: between the check above
+        // and the enqueue below, shutdown could start. To handle this, we use
+        // a double-check pattern with seq_cst fences that guarantees either:
+        // 1. The post-enqueue check (c) will observe ShuttingDown_==true, OR
+        // 2. The DrainQueue call in Shutdown will observe this enqueued request.
+        // See the detailed memory-ordering proof in comments above for mathematical proof.
 
         Queue_.enqueue(std::move(request)); // (a)
 
+        // Memory fence ensures total ordering with shutdown's fence at (e).
         std::atomic_thread_fence(std::memory_order::seq_cst); // (b)
+
+        // Post-enqueue check: If shutdown started after our enqueue,
+        // we must drain the queue to ensure our request gets canceled.
         if (ShuttingDown_.load(std::memory_order::relaxed)) { // (c)
             DrainQueue();
             return false;

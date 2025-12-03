@@ -7,6 +7,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 namespace {
 
@@ -78,15 +79,63 @@ public:
 
         txState->ClearShardsInProgress();
 
-        // Get main table info
         TPath tablePath = TPath::Init(txState->TargetPathId, context.SS);
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         TTableInfo::TPtr mainTable = context.SS->Tables.at(tablePath.Base()->PathId);
-        
-        // Collect main table shards
+
         TSet<TShardIdx> mainTableShards;
         for (auto& partition : mainTable->GetPartitions()) {
             mainTableShards.insert(partition.ShardIdx);
+        }
+
+        struct TShardIdxHash {
+            size_t operator()(const TShardIdx& idx) const {
+                return idx.Hash();
+            }
+        };
+
+        absl::flat_hash_map<TShardIdx, TPathId, TShardIdxHash> childPathIdByShardIdx;
+
+        { // Fill childPathIdByShardIdx
+            size_t sumSize = 0;
+            for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+                TPath childPath = tablePath.Child(childName);
+
+                if (childPath.IsDeleted() || !childPath->IsTableIndex()) {
+                    continue;
+                }
+
+                for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+                    if (!context.SS->Tables.contains(implTablePathId)) {
+                        continue;
+                    }
+
+                    TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
+                    sumSize += indexTable->GetPartitions().size();
+                }
+            }
+
+            childPathIdByShardIdx.max_load_factor(0.25);
+            childPathIdByShardIdx.reserve(sumSize);
+
+            for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+                TPath childPath = tablePath.Child(childName);
+
+                if (childPath.IsDeleted() || !childPath->IsTableIndex()) {
+                    continue;
+                }
+
+                for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+                    if (!context.SS->Tables.contains(implTablePathId)) {
+                        continue;
+                    }
+
+                    TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
+                    for (const auto& partition : indexTable->GetPartitions()) {
+                        childPathIdByShardIdx[partition.ShardIdx] = implTablePathId;
+                    }
+                }
+            }
         }
 
         Y_ABORT_UNLESS(txState->Shards.size());
@@ -94,35 +143,13 @@ public:
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
+            auto it = childPathIdByShardIdx.find(idx);
+
             TPathId targetPathId = txState->TargetPathId;
-            
-            // If this is not a main table shard, find which index table it belongs to
-            if (mainTableShards.find(idx) == mainTableShards.end()) {
-                // This is an index shard, find its PathId
-                for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-                    TPath childPath = tablePath.Child(childName);
-                    if (childPath.IsDeleted() || !childPath->IsTableIndex()) {
-                        continue;
-                    }
-                    
-                    for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
-                        if (!context.SS->Tables.contains(implTablePathId)) {
-                            continue;
-                        }
-                        
-                        TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
-                        for (auto& partition : indexTable->GetPartitions()) {
-                            if (partition.ShardIdx == idx) {
-                                targetPathId = implTablePathId;
-                                goto found;
-                            }
-                        }
-                    }
-                }
-                found:;
+            if (it != childPathIdByShardIdx.end()) { // means that target is index
+                targetPathId = it->second;
             }
-            
-            // Create truncate message for the specific table (main or index)
+
             TString txBody;
             {
                 auto seqNo = context.SS->StartRound(*txState);
@@ -259,15 +286,15 @@ public:
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
         Y_ABORT_UNLESS(table->GetPartitions().size());
-        
+
         for (auto& shard : table->GetPartitions()) {
             auto shardIdx = shard.ShardIdx;
             context.MemChanges.GrabShard(context.SS, shardIdx);
             context.DbChanges.PersistShard(shardIdx);
-            
+
             Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
             txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::Propose);
-            
+
             context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
         }
 

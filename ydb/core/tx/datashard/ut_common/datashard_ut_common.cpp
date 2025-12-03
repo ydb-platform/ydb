@@ -2879,8 +2879,7 @@ ui64 AsyncTruncateTable(
         const TString& tableName)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpTruncateTable, workingDir);
-    auto* m = request->Record.MutableTransaction()->MutableModifyScheme();
-    auto* op = m->MutableTruncateTable();
+    auto* op = request->Record.MutableTransaction()->MutableModifyScheme()->MutableTruncateTable();
     op->SetTableName(tableName);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);

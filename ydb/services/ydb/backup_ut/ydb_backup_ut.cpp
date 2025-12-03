@@ -1568,7 +1568,9 @@ void TestTransferSettingsArePreserved(
         } else {
             ExecuteQuery(session, "CREATE OBJECT `transfer_secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
         }
-        ExecuteQuery(session, "CREATE USER `transferuser` PASSWORD 'root@builtin';", true);
+        if (config.AuthType == EAuthType::AuthTypePassword) {
+            ExecuteQuery(session, "CREATE USER `transferuser` PASSWORD 'root@builtin';", true);
+        }
     }
 
     const TString& lambdaBodyQuery = !config.ComplexLambda ?
@@ -1610,7 +1612,7 @@ void TestTransferSettingsArePreserved(
             config.FlushInterval.Seconds(),
             (config.AuthType == EAuthType::AuthTypeToken && config.SecretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'transfer_secret'" : ""),
             (config.AuthType == EAuthType::AuthTypeToken && config.SecretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'transfer_secret'" : ""),
-            (config.AuthType == EAuthType::AuthTypePassword && config.SecretType != ESecretType::SecretTypeScheme ? ", USER = 'transferuser', PASSWORD_SECRET_NAME = 'transfer_secret'" : ""),
+            (config.AuthType == EAuthType::AuthTypePassword && config.SecretType == ESecretType::SecretTypeOld ? ", USER = 'transferuser', PASSWORD_SECRET_NAME = 'transfer_secret'" : ""),
             (config.AuthType == EAuthType::AuthTypePassword && config.SecretType == ESecretType::SecretTypeScheme ? ", USER = 'transferuser', PASSWORD_SECRET_PATH = 'transfer_secret'" : "")
         ), NQuery::TTxControl::NoTx()
     ).ExtractValueSync();
@@ -1745,7 +1747,7 @@ void TestExternalDataSourceSettingsArePreserved(
             );
             break;
         } default: {
-            UNIT_ASSERT_C(false, "Unsuppoted test setting");
+            UNIT_ASSERT_C(false, "Unsupported test setting");
         }
     }
 
@@ -3006,6 +3008,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 TestExternalDataSourceBackupRestore(/* secretType */ Nothing(), EAuthType::AuthTypeNone);
                 TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken);
                 TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeAws);
                 TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws);
                 return;
             }
@@ -3271,7 +3274,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         cleanup();
         TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),ESecretType::SecretTypeScheme, IsOlap
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeScheme, IsOlap
         );
     }
 

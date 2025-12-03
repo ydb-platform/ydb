@@ -163,4 +163,4 @@ TString BuildCreateTransferQuery(
         );        
 }
 
-} // NYdb::NDump
+} // namespace NYdb::NDump

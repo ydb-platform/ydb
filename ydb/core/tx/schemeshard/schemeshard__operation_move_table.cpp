@@ -564,7 +564,7 @@ public:
         context.OnComplete.Send(ackTo, std::move(event));
         return false;
     }
-
+    
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         return HandleReplyImpl(ev, context);
     }

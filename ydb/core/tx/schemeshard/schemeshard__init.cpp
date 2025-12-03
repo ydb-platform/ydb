@@ -4712,10 +4712,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     });
 
                     if (buildInfo->IsBuildColumns()) {
-                        // prevent build columns from progress if add columns with defaults is not enabled
+                        // prevent build columns from progress if adding columns with defaults is not enabled
                         if (!Self->EnableAddColumsWithDefaults) {
                             buildInfo->IsBroken = true;
-                            buildInfo->AddIssue(TStringBuilder() << "Add columns with defaults is not enabled");
+                            buildInfo->AddIssue(TStringBuilder() << "Adding columns with defaults is not enabled");
                         }
 
                         if (!Self->PathsById.contains(buildInfo->TablePathId)) {

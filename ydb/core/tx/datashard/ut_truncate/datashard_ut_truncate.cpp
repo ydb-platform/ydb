@@ -1,11 +1,11 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <chrono>
-#include <thread>
+#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NDataShard;
 using namespace NKikimr::Tests;
+using namespace NKikimr::NDataShard::NKqpHelpers;
 
 Y_UNIT_TEST_SUITE(DataShardTruncate) {
 
@@ -290,5 +290,55 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
         UNIT_ASSERT_VALUES_EQUAL(afterSecondaryIndex2, "");
         UNIT_ASSERT_VALUES_EQUAL(afterVectorIndex1, "");
         UNIT_ASSERT_VALUES_EQUAL(afterVectorIndex2, "");
+    }
+
+    Y_UNIT_TEST(TruncateTableDuringSelect) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto edgeSender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_TRACE);
+        InitRoot(server, edgeSender);
+
+        auto opts = TShardedTableOptions()
+            .EnableOutOfOrder(false)
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+                {"value2", "Uint32", false, false}
+            });
+
+        auto [shards, tableId] = CreateShardedTable(server, edgeSender, "/Root", "test_table", opts);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/test_table` (key, value) VALUES (1, 100);
+        )");
+
+        TString sessionId, txId;
+
+        KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+            UPDATE `/Root/test_table` ON (key, value2) VALUES (1, 200);
+        )"));
+
+        auto selectResult = KqpSimpleContinue(runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/test_table`;
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(selectResult, "{ items { uint32_value: 1 } items { uint32_value: 100 } }");
+
+        ui64 truncateTxId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
+        WaitTxNotification(server, edgeSender, truncateTxId);
+
+        auto commitResult = KqpSimpleCommit(runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
+        UNIT_ASSERT_VALUES_EQUAL(commitResult, "ERROR: ABORTED");
+
+        auto afterResult = ReadTable(server, shards, tableId);
+        UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
     }
 }

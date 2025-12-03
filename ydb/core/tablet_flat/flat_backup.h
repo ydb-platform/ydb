@@ -4,7 +4,7 @@
 
 namespace NKikimr::NTable {
 
-class TBackupExclusion : TThrRefBase {
+class TBackupExclusion : public TThrRefBase {
 public:
     using TTableId = ui32;
     using TColumnId = ui32;

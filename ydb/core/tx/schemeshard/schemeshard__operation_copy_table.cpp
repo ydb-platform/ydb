@@ -262,6 +262,8 @@ public:
                 }
 
                 if (context.SS->CdcStreams.contains(txState->CdcPathId)) {
+                    context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
+
                     auto stream = context.SS->CdcStreams.at(txState->CdcPathId);
                     if (stream->AlterData) {
                         context.SS->PersistCdcStream(db, txState->CdcPathId);
@@ -643,9 +645,20 @@ public:
             }
 
             if (!context.SS->CdcStreams.contains(newCdcPathId)) {
-                 auto newStreamInfo = TCdcStreamInfo::Create(rotateOp.GetNewStream().GetStreamDescription());
-                 newStreamInfo->State = TCdcStreamInfo::EState::ECdcStreamStateScan; 
-                 context.SS->CdcStreams[newCdcPathId] = newStreamInfo;
+                context.MemChanges.GrabNewCdcStream(context.SS, newCdcPathId);
+
+                auto newStreamInfo = TCdcStreamInfo::Create(rotateOp.GetNewStream().GetStreamDescription());
+                Y_ABORT_UNLESS(newStreamInfo);
+                
+                newStreamInfo->State = NKikimrSchemeOp::ECdcStreamStateScan; 
+                
+                if (newStreamInfo->AlterData) {
+                    newStreamInfo->AlterData->State = NKikimrSchemeOp::ECdcStreamStateScan;
+                }
+
+                context.SS->CdcStreams[newCdcPathId] = newStreamInfo;
+                
+                context.DbChanges.PersistAlterCdcStream(newCdcPathId); 
             }
 
             context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);

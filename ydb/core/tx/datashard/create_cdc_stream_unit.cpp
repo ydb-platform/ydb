@@ -8,6 +8,7 @@ namespace NDataShard {
 
 class TCreateCdcStreamUnit : public TExecutionUnit {
     THolder<TEvChangeExchange::TEvAddSender> AddSender;
+    THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender; 
 
 public:
     TCreateCdcStreamUnit(TDataShard& self, TPipeline& pipeline)
@@ -68,6 +69,8 @@ public:
                         DataShard.GetCdcStreamHeartbeatManager().AddCdcStream(txc.DB, pathId, newStreamPathId, heartbeatInterval);
                     }
                 }
+
+                RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(oldStreamPathId));
 
                 AddSender.Reset(new TEvChangeExchange::TEvAddSender(
                     pathId, TEvChangeExchange::ESenderType::CdcStream, newStreamPathId
@@ -131,6 +134,10 @@ public:
     }
 
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {
+        if (RemoveSender) {
+            ctx.Send(DataShard.GetChangeSender(), RemoveSender.Release());
+        }
+
         if (AddSender) {
             ctx.Send(DataShard.GetChangeSender(), AddSender.Release());
             DataShard.EmitHeartbeats();

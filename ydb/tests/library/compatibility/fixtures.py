@@ -182,7 +182,7 @@ class MixedClusterFixture:
             for item in tpl
         )
         self.config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
+            erasure=kwargs.pop("erasure", Erasure.MIRROR_3_DC),
             binary_paths=self.all_binary_paths,
             suppress_version_check=not all_versions_numbered,
             **kwargs,

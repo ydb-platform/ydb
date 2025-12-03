@@ -16,7 +16,7 @@ def kikimr(request):
             erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
                 "enable_external_data_sources": True,
-                "enable_streaming_queries": True
+                "enable_streaming_queries": True,
             },
             query_service_config={
                 "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
@@ -25,14 +25,13 @@ def kikimr(request):
                     "external_storage": {
                         "database_connection": {
                             "endpoint": os.getenv("YDB_ENDPOINT"),
-                            "database": os.getenv("YDB_DATABASE")
+                            "database": os.getenv("YDB_DATABASE"),
                         }
                     }
                 }
             },
-            table_service_config={},
             default_clusteradmin="root@builtin",
-            use_in_memory_pdisks=False
+            use_in_memory_pdisks=False,
         )
 
         config.yaml_config["log_config"]["default_level"] = 8

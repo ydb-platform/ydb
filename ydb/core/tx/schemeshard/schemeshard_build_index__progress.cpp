@@ -419,12 +419,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
     modifyScheme.SetInternal(true);
+    modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
 
     auto path = TPath::Init(buildInfo.TablePathId, ss);
     modifyScheme.SetWorkingDir(path.Parent().PathString());
     modifyScheme.MutableAlterTable()->SetName(path.LeafName());
 
-    for(auto& colInfo : buildInfo.BuildColumns) {
+    for (const auto& colInfo : buildInfo.BuildColumns) {
         auto col = modifyScheme.MutableAlterTable()->AddColumns();
         NScheme::TTypeInfo typeInfo;
         TString typeMod;
@@ -1526,18 +1527,6 @@ public:
         case TIndexBuildInfo::EState::Invalid:
             Y_ENSURE(false, "Unreachable");
 
-        case TIndexBuildInfo::EState::AlterMainTable:
-            if (buildInfo.AlterMainTableTxId == InvalidTxId) {
-                AllocateTxId(BuildId);
-            } else if (buildInfo.AlterMainTableTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), AlterMainTablePropose(Self, buildInfo), 0, ui64(BuildId));
-            } else if (!buildInfo.AlterMainTableTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.AlterMainTableTxId)));
-            } else {
-                ChangeState(BuildId, TIndexBuildInfo::EState::Locking);
-                Progress(BuildId);
-            }
-            break;
         case TIndexBuildInfo::EState::Locking:
             if (buildInfo.LockTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
@@ -1546,10 +1535,25 @@ public:
             } else if (!buildInfo.LockTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.LockTxId)));
             } else {
+                if (buildInfo.IsBuildColumns()) {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::AlterMainTable);
+                } else {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
+                }
+                Progress(BuildId);
+            }
+            break;
+        case TIndexBuildInfo::EState::AlterMainTable:
+            if (buildInfo.AlterMainTableTxId == InvalidTxId) {
+                AllocateTxId(BuildId);
+            } else if (buildInfo.AlterMainTableTxStatus == NKikimrScheme::StatusSuccess) {
+                Send(Self->SelfId(), AlterMainTablePropose(Self, buildInfo), 0, ui64(BuildId));
+            } else if (!buildInfo.AlterMainTableTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.AlterMainTableTxId)));
+            } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
                 Progress(BuildId);
             }
-
             break;
         case TIndexBuildInfo::EState::GatheringStatistics:
             ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
@@ -1761,7 +1765,12 @@ public:
             } else if (!buildInfo.DropColumnsTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.DropColumnsTxId)));
             } else {
-                ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
+                auto notApplied = !buildInfo.ApplyTxDone && buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess;
+                if (buildInfo.InitiateTxDone && notApplied) {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
+                } else {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Unlocking);
+                }
                 Progress(BuildId);
             }
             break;
@@ -2485,20 +2494,20 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         switch (const auto state = buildInfo.State; state) {
-        case TIndexBuildInfo::EState::AlterMainTable:
-        {
-            Y_ENSURE(txId == buildInfo.AlterMainTableTxId);
-
-            buildInfo.AlterMainTableTxDone = true;
-            Self->PersistBuildIndexAlterMainTableTxDone(db, buildInfo);
-            break;
-        }
         case TIndexBuildInfo::EState::Locking:
         {
             Y_ENSURE(txId == buildInfo.LockTxId);
 
             buildInfo.LockTxDone = true;
             Self->PersistBuildIndexLockTxDone(db, buildInfo);
+            break;
+        }
+        case TIndexBuildInfo::EState::AlterMainTable:
+        {
+            Y_ENSURE(txId == buildInfo.AlterMainTableTxId);
+
+            buildInfo.AlterMainTableTxDone = true;
+            Self->PersistBuildIndexAlterMainTableTxDone(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::Initiating:
@@ -2651,16 +2660,6 @@ public:
         };
 
         switch (state) {
-        case TIndexBuildInfo::EState::AlterMainTable:
-        {
-            Y_ENSURE(txId == buildInfo.AlterMainTableTxId);
-
-            buildInfo.AlterMainTableTxStatus = record.GetStatus();
-            Self->PersistBuildIndexAlterMainTableTxStatus(db, buildInfo);
-
-            replyOnCreation();
-            break;
-        }
         case TIndexBuildInfo::EState::Locking:
         {
             Y_ENSURE(txId == buildInfo.LockTxId);
@@ -2671,6 +2670,16 @@ public:
             replyOnCreation();
             break;
         }
+        case TIndexBuildInfo::EState::AlterMainTable:
+        {
+            Y_ENSURE(txId == buildInfo.AlterMainTableTxId);
+
+            buildInfo.AlterMainTableTxStatus = record.GetStatus();
+            Self->PersistBuildIndexAlterMainTableTxStatus(db, buildInfo);
+
+            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            break;
+        }
         case TIndexBuildInfo::EState::Initiating:
         {
             Y_ENSURE(txId == buildInfo.InitiateTxId);
@@ -2678,7 +2687,11 @@ public:
             buildInfo.InitiateTxStatus = record.GetStatus();
             Self->PersistBuildIndexInitiateTxStatus(db, buildInfo);
 
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            if (buildInfo.IsBuildColumns()) {
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
+            } else {
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            }
             break;
         }
         case TIndexBuildInfo::EState::DropBuild:
@@ -2703,6 +2716,19 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Applying:
+        {
+            Y_ENSURE(txId == buildInfo.ApplyTxId);
+
+            buildInfo.ApplyTxStatus = record.GetStatus();
+            Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
+
+            if (buildInfo.IsBuildColumns()) {
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
+            } else {
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            }
+            break;
+        }
         case TIndexBuildInfo::EState::Rejection_Applying:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId);
@@ -2724,7 +2750,6 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
-        case TIndexBuildInfo::EState::Rejection_DroppingColumns:
         {
             Y_ENSURE(txId == buildInfo.DropColumnsTxId);
 
@@ -2732,6 +2757,21 @@ public:
             Self->PersistBuildIndexDropColumnsTxStatus(db, buildInfo);
 
             ifErrorMoveTo(TIndexBuildInfo::EState::Cancellation_Applying);
+            break;
+        }
+        case TIndexBuildInfo::EState::Rejection_DroppingColumns:
+        {
+            Y_ENSURE(txId == buildInfo.DropColumnsTxId);
+
+            buildInfo.DropColumnsTxStatus = record.GetStatus();
+            Self->PersistBuildIndexDropColumnsTxStatus(db, buildInfo);
+
+            auto notApplied = !buildInfo.ApplyTxDone && buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess;
+            if (buildInfo.InitiateTxDone && notApplied) {
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
+            } else {
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Cancellation_Applying:

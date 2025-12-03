@@ -39,6 +39,9 @@ namespace NActors::NMon {
     TCgiParameters TEvRemoteHttpInfo::Cgi() const {
         if (ExtendedQuery) {
             TCgiParameters params;
+            for (const auto& kv : ExtendedQuery->GetPostParams()) {
+                params.emplace(kv.GetKey(), kv.GetValue());
+            }
             for (const auto& kv : ExtendedQuery->GetQueryParams()) {
                 params.emplace(kv.GetKey(), kv.GetValue());
             }

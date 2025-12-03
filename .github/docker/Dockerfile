@@ -45,7 +45,7 @@ RUN apt-get update  \
 RUN mkdir -p /root/ydb/bin/ \
     && mkdir -p /ydb_data \
     && mkdir -p /ydb_certs \
-    && ydb version --disable-checks
+    && /ydbwork/out/ydb/apps/ydb/ydb version --disable-checks
 
 COPY main/.github/docker/files/ /
 COPY --from=builder \

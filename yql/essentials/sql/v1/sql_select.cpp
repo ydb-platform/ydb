@@ -1325,8 +1325,9 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
             res.Settings.DiscardPos = settings.DiscardPos;
         } else if (settings.Discard) {
             auto discardPos = Ctx_.TokenPosition(node.GetBlock1().GetToken1());
-            Ctx_.Error(discardPos) << "DISCARD within UNION ALL is only allowed before first subquery";
-            return {};
+            Ctx_.Warning(discardPos, TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
+                out << "DISCARD within UNION ALL is only allowed before first subquery";
+            });
         }
 
         if (placement->IsLastInSelectOp) {

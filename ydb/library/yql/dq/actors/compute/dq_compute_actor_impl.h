@@ -1099,9 +1099,6 @@ protected:
     }
 
     void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr& ev) {
-        if (ev->Cookie) {
-            CA_LOG_W("TEvResumeExecution: ChannelId=" << ev->Cookie << ", Running=" << Running << ", State=" << (int)State);
-        }
         ResumeCookie = ev->Cookie;
 
         ResumeEventScheduled = false;

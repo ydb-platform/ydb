@@ -37,10 +37,6 @@ protected:
         ERunStatus status = TaskRunner->Run();
         TaskRunner->ChannelId = 0;
 
-        if (this->ResumeCookie) {
-            CA_LOG_W("DoExecuteImpl: ChannelId=" << this->ResumeCookie << ", TaksRunner::Run() status=" << (int)status);
-        }
-
         CA_LOG_T("Resume execution, run status: " << status);
 
         if (status != ERunStatus::Finished) {

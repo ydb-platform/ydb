@@ -30,7 +30,7 @@
 // 3.8. NET/IC Inflight == (Output.PopStats.Bytes - Input.PushStats.Bytes)
 // 3.9. We're NOT interested in per channel NET/IC inflight rather in per session (between nodes)
 
-// Guaranteed delivery, ordering and Reconciliation
+// Guaranteed delivery, ordering and reconciliation
 //
 // 1. All messages are numbered sequentially in single node to node session starting from 1
 // 2. Also node maintains monotically increased E
@@ -470,6 +470,7 @@ struct TEvPrivate {
         EvServiceReply,
         EvProcessPending,
         EvSendWaiters,
+        EvReconciliation,
         EvEnd
     };
 
@@ -489,6 +490,12 @@ struct TEvPrivate {
 
     struct TEvSendWaiters : public NActors::TEventLocal<TEvSendWaiters, EvSendWaiters> {
     };
+
+    struct TEvReconciliation : public NActors::TEventLocal<TEvReconciliation, EvReconciliation> {
+        TEvReconciliation(ui64 genMajor, ui64 genMinor) : GenMajor(genMajor), GenMinor(genMinor) {}
+        const ui64 GenMajor;
+        const ui64 GenMinor;
+    };
 };
 
 class TNodeState {
@@ -497,13 +504,12 @@ public:
         : ActorSystem(actorSystem)
         , NodeId(nodeId)
         , Subscribed(false)
-        , GenMajor(1), GenMinor(1)
+        , GenMajor(0), GenMinor(0)
         , MaxInflightBytes(maxInflightBytes)
         , WaitersQueueSize(0)
         , Reconciliation(0)
         , WaiterMessages(0)
     {
-        PeerActorId = MakeChannelServiceActorID(NodeId);
         OutputBufferCount = counters->GetCounter("OutputBuffer/Count", false);
         OutputBufferBytes = counters->GetCounter("OutputBuffer/Bytes", true);
         OutputBufferChunks = counters->GetCounter("OutputBuffer/Chunks", true);
@@ -514,7 +520,6 @@ public:
         InputBufferCount = counters->GetCounter("InputBuffer/Count", false);
         InputBufferBytes = counters->GetCounter("InputBuffer/Bytes", true);
         InputBufferChunks = counters->GetCounter("InputBuffer/Chunks", true);
-        ReconciliationDelay = MinReconciliationDelay;
     }
 
     virtual ~TNodeState();
@@ -537,12 +542,15 @@ public:
     void SendAckWithError(ui64 cookie);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters(ui64 deltaBytes);
-    void RestartSession(bool discovery);
-    void ScheduleReconciliationGuard();
-    void StartDiscovery();
     void Connect(NActors::TActorId& sender, ui64 genMajor);
     virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor, ui64 popBytes);
+
+    void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
+    void StartReconciliation(bool major);
+    void ScheduleReconciliation();
+    void DoReconciliation();
+    void SendDiscovery(NActors::TActorId actorId);
 
     NActors::TActorId NodeActorId;
     mutable std::mutex Mutex;
@@ -585,8 +593,10 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     std::set<ui32> FinishedChannels;
-    TDuration ReconciliationDelay;
-    const TDuration MinReconciliationDelay = TDuration::MilliSeconds(10);
+    TDuration ReconciliationDelay = TDuration::Zero();
+    bool ReReconciliation = false;
+    ui64 ReconciliationCount = 0;
+    const TDuration MinReconciliationDelay = TDuration::MilliSeconds(100);
     const TDuration MaxReconciliationDelay = TDuration::Seconds(10);
 };
 
@@ -1027,6 +1037,7 @@ public:
             hFunc(TEvDqCompute::TEvChannelAckV2, Handle);
             hFunc(TEvDqCompute::TEvChannelUpdateV2, Handle);
             hFunc(TEvPrivate::TEvSendWaiters, Handle);
+            hFunc(TEvPrivate::TEvReconciliation, Handle);
         }
     }
 
@@ -1056,6 +1067,10 @@ public:
 
     void Handle(TEvPrivate::TEvSendWaiters::TPtr& ev) {
         NodeState->HandleSendWaiters(ev);
+    }
+
+    void Handle(TEvPrivate::TEvReconciliation::TPtr& ev) {
+        NodeState->HandleReconciliation(ev);
     }
 
     std::shared_ptr<TNodeState> NodeState;

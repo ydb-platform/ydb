@@ -6,7 +6,7 @@
 namespace NYdb::inline Dev::NReplication {
     class TReplicationDescription;
     class TTransferDescription;
-}
+} // namespace NYdb::NReplication
 
 namespace NYdb::NDump {
 
@@ -24,4 +24,4 @@ TString BuildCreateTransferQuery(
     const TString& name,
     const NReplication::TTransferDescription& desc);
 
-} // NYdb::NDump
+} // namespace NYdb::NDump

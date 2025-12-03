@@ -7,6 +7,7 @@ SRCS(
     table_description.cpp
     table_profiles.cpp
     topic_description.cpp
+    replication_description.cpp
     ydb_convert.cpp
     tx_proxy_status.cpp
 )

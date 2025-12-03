@@ -386,9 +386,9 @@ private:
             metadata.SetVersion(EnableChecksums ? 1 : 0);
             metadata.SetEnablePermissions(exportInfo.EnablePermissions);
 
-            TMaybe< NKikimr::NBackup::TEncryptionIV> iv;
+            TMaybe<NKikimr::NBackup::TEncryptionIV> iv;
             if (exportSettings.has_encryption_settings()) {
-                iv =  NKikimr::NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+                iv = NKikimr::NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
             }
 
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
@@ -412,7 +412,7 @@ private:
             return true;
         }
 
-        TString commonDestinationPrefix =  NKikimr::NBackup::NormalizeExportPrefix(exportSettings.destination_prefix());
+        TString commonDestinationPrefix = NKikimr::NBackup::NormalizeExportPrefix(exportSettings.destination_prefix());
 
         TMaybe<NKikimr::NBackup::TEncryptionIV> iv;
         if (exportSettings.has_encryption_settings()) {

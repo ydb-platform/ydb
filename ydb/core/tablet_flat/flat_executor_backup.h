@@ -96,41 +96,47 @@ public:
         bool operator==(const TFullColumnId& other) const {
             return TableId == other.TableId && ColumnId == other.ColumnId;
         }
+
+        struct THash {
+            ui32 operator()(TFullColumnId id) const {
+                return std::hash<TTableId>()(id.TableId) ^ std::hash<TColumnId>()(id.ColumnId);
+            }
+        };
     };
 
     TExclusion() = default;
 
     bool HasTable(TTableId tableId) const {
-        return std::find(ExcludedTableIds.begin(), ExcludedTableIds.end(), tableId) != ExcludedTableIds.end();
+        return ExcludedTableIds.contains(tableId);
     }
 
     bool HasColumn(TTableId tableId, TColumnId columnId) const {
         TFullColumnId fullColumnId = {tableId, columnId};
-        return std::find(ExcludedColumnIds.begin(), ExcludedColumnIds.end(), fullColumnId) != ExcludedColumnIds.end();
+        return ExcludedColumnIds.contains(fullColumnId);
     }
 
     TExclusion& Merge(const TExclusion& other) {
-        ExcludedTableIds.insert(ExcludedTableIds.end(), other.ExcludedTableIds.begin(), other.ExcludedTableIds.end());
-        ExcludedColumnIds.insert(ExcludedColumnIds.end(), other.ExcludedColumnIds.begin(), other.ExcludedColumnIds.end());
+        ExcludedTableIds.insert(other.ExcludedTableIds.begin(), other.ExcludedTableIds.end());
+        ExcludedColumnIds.insert(other.ExcludedColumnIds.begin(), other.ExcludedColumnIds.end());
         return *this;
     }
 
 private:
     static TExclusion ExcludeTable(TTableId tableId) {
             TExclusion exclusion;
-            exclusion.ExcludedTableIds.push_back(tableId);
+            exclusion.ExcludedTableIds.insert(tableId);
             return exclusion;
     }
 
     static TExclusion ExcludeColumn(TTableId tableId, TColumnId columnId) {
             TExclusion exclusion;
-            exclusion.ExcludedColumnIds.push_back({tableId, columnId});
+            exclusion.ExcludedColumnIds.insert({tableId, columnId});
             return exclusion;
     }
 
 private:
-    std::vector<TTableId> ExcludedTableIds;
-    std::vector<TFullColumnId> ExcludedColumnIds;
+    std::unordered_set<TTableId> ExcludedTableIds;
+    std::unordered_set<TFullColumnId, TFullColumnId::THash> ExcludedColumnIds;
 };
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,

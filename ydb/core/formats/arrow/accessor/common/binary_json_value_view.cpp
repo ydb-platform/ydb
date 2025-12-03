@@ -11,9 +11,9 @@ namespace NKikimr::NArrow::NAccessor {
 
 namespace {
 
-std::string JsonNumberToString(double val) {
+std::optional<std::string> JsonNumberToString(double val) {
     if (std::isnan(val)) {
-        return "null";
+        return std::nullopt;
     }
 
     double integerPart;
@@ -63,8 +63,13 @@ std::optional<TStringBuf> TBinaryJsonValueView::GetScalarOptional() const {
             ScalarView = rootElement.GetString();
             break;
         case NBinaryJson::EEntryType::Number: {
-            ScalarHolder = JsonNumberToString(rootElement.GetNumber());
-            ScalarView = ScalarHolder;
+            auto jsonNumber = JsonNumberToString(rootElement.GetNumber());
+            if (jsonNumber.has_value()) {
+                ScalarHolder = jsonNumber.value();
+                ScalarView = ScalarHolder;
+            } else {
+                return std::nullopt;
+            }
             break;
         }
         case NBinaryJson::EEntryType::BoolFalse: {

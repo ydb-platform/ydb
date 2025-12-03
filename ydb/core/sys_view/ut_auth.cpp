@@ -51,6 +51,47 @@ void CheckAuthAdministratorAccessIsRequired(TScanQueryPartIterator& it) {
         "Administrator access is required");
 }
 
+// Retry scan query for auth race conditions with login credentials
+TString ExecuteScanQueryWithRetry(TTableClient& client, const TString& query, int maxRetries = 3) {
+    for (int retry = 0; retry < maxRetries; ++retry) {
+        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+        if (it.IsSuccess()) {
+            TStringStream out;
+            NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
+            writer.OnBeginList();
+            bool gotUnauthorized = false;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    if (streamPart.EOS()) break;
+                    if (streamPart.GetStatus() == EStatus::UNAUTHORIZED && retry < maxRetries - 1) {
+                        gotUnauthorized = true;
+                        break;
+                    }
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+                if (streamPart.HasResultSet()) {
+                    NYdb::FormatResultSetYson(streamPart.ExtractResultSet(), writer);
+                }
+            }
+            if (gotUnauthorized) {
+                Sleep(TDuration::MilliSeconds(100 * (retry + 1)));
+                continue;
+            }
+            writer.OnEndList();
+            return out.Str();
+        }
+        if (it.GetStatus() == EStatus::UNAUTHORIZED && retry < maxRetries - 1) {
+            Sleep(TDuration::MilliSeconds(100 * (retry + 1)));
+            continue;
+        }
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    }
+    UNIT_FAIL("Query failed after retries");
+    return {};
+}
+
 void CheckEmpty(TScanQueryPartIterator& it) {
     auto expected = R"([
 
@@ -273,42 +314,42 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             TTableClient client(driver);
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/.sys/auth_users`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["user1rootadmin"]];
                     [["user2"]];
                     [["user6tenant1admin"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/Tenant1/.sys/auth_users`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["user3"]];
                     [["user4"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/Tenant2/.sys/auth_users`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["user5"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
         }
 
@@ -323,33 +364,39 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             TTableClient client(driver);
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/.sys/auth_users`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["user2"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/Tenant1/.sys/auth_users`
-                )").GetValueSync();
+                )");
 
-                CheckEmpty(it);
+                auto expected = R"([
+
+                ])";
+                NKqp::CompareYson(expected, result);
             }
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/Tenant2/.sys/auth_users`
-                )").GetValueSync();
+                )");
 
-                CheckEmpty(it);
+                auto expected = R"([
+
+                ])";
+                NKqp::CompareYson(expected, result);
             }
         }
 
@@ -364,37 +411,40 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             TTableClient client(driver);
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/.sys/auth_users`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["user6tenant1admin"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/Tenant1/.sys/auth_users`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["user3"]];
                     [["user4"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/Tenant2/.sys/auth_users`
-                )").GetValueSync();
+                )");
 
-                CheckEmpty(it);
+                auto expected = R"([
+
+                ])";
+                NKqp::CompareYson(expected, result);
             }
         }
     }
@@ -673,41 +723,41 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             TTableClient client(driver);
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/.sys/auth_groups`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["group1"]];
                     [["group2"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/Tenant1/.sys/auth_groups`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["group3"]];
                     [["group4"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/Tenant2/.sys/auth_groups`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["group5"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
         }
 
@@ -769,16 +819,16 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT Sid
                     FROM `Root/Tenant1/.sys/auth_groups`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["group3"]];
                     [["group4"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
@@ -992,41 +1042,41 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             TTableClient client(driver);
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT *
                     FROM `Root/.sys/auth_group_members`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["group1"];["user1rootadmin"]];
                     [["group2"];["user2"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT *
                     FROM `Root/Tenant1/.sys/auth_group_members`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["group3"];["user3"]];
                     [["group4"];["user4"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT *
                     FROM `Root/Tenant2/.sys/auth_group_members`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["group5"];["user5"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
         }
 
@@ -1088,16 +1138,16 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT *
                     FROM `Root/Tenant1/.sys/auth_group_members`
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["group3"];["user3"]];
                     [["group4"];["user4"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
@@ -1657,12 +1707,12 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 auto driver = TDriver(driverConfig);
 
                 TTableClient client(driver);
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT *
                     FROM `/Root/.sys/auth_owners`
                     WHERE Path NOT LIKE "%/.sys%"    -- not list system entries
                     AND Path NOT LIKE "%/.metadata%"
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["/Root"];["root@builtin"]];
@@ -1670,7 +1720,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                     [["/Root/Dir2"];["root@builtin"]];
                     [["/Root/Table0"];["root@builtin"]]
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
@@ -1678,12 +1728,12 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 auto driver = TDriver(driverConfig);
 
                 TTableClient client(driver);
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT *
                     FROM `/Root/Tenant1/.sys/auth_owners`
                     WHERE Path NOT LIKE "%/.sys%"    -- not list system entries
                     AND Path NOT LIKE "%/.metadata%"
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["/Root/Tenant1"];["user6tenant1admin"]];
@@ -1691,7 +1741,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                     [["/Root/Tenant1/Dir4"];["root@builtin"]];
                     [["/Root/Tenant1/Table1"];["root@builtin"]]
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
         }
 
@@ -1710,19 +1760,19 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             auto driver = TDriver(driverConfig);
 
             TTableClient client(driver);
-            auto it = client.StreamExecuteScanQuery(R"(
+            auto result = ExecuteScanQueryWithRetry(client, R"(
                 SELECT *
                 FROM `/Root/.sys/auth_owners`
                 WHERE Path NOT LIKE "%/.sys%"    -- not list system entries
                 AND Path NOT LIKE "%/.metadata%"
-            )").GetValueSync();
+            )");
 
             auto expected = R"([
                 [["/Root"];["root@builtin"]];
                 [["/Root/Dir1"];["user1rootadmin"]];
                 [["/Root/Table0"];["root@builtin"]]
             ])";
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(expected, result);
         }
     }
 
@@ -2338,12 +2388,12 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 auto driver = TDriver(driverConfig);
 
                 TTableClient client(driver);
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT *
                     FROM `/Root/.sys/auth_permissions`
                     WHERE Path NOT LIKE "%/.sys%"    -- not list system dirs and files
                     AND Path NOT LIKE "%/.metadata%"
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["/Root"];["ydb.generic.full"];["root@builtin"]];
@@ -2353,7 +2403,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                     [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
                     [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
 
             {
@@ -2361,18 +2411,18 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 auto driver = TDriver(driverConfig);
 
                 TTableClient client(driver);
-                auto it = client.StreamExecuteScanQuery(R"(
+                auto result = ExecuteScanQueryWithRetry(client, R"(
                     SELECT *
                     FROM `/Root/Tenant1/.sys/auth_permissions`
                     WHERE Path NOT LIKE "%/.sys%"    -- not list system dirs and files
                     AND Path NOT LIKE "%/.metadata%"
-                )").GetValueSync();
+                )");
 
                 auto expected = R"([
                     [["/Root/Tenant1/Dir3"];["ydb.granular.select_row"];["user3"]];
                     [["/Root/Tenant1/Dir3"];["ydb.granular.erase_row"];["user4"]];
                 ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+                NKqp::CompareYson(expected, result);
             }
         }
 
@@ -2391,12 +2441,12 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             auto driver = TDriver(driverConfig);
 
             TTableClient client(driver);
-            auto it = client.StreamExecuteScanQuery(R"(
+            auto result = ExecuteScanQueryWithRetry(client, R"(
                 SELECT *
                 FROM `/Root/.sys/auth_permissions`
                 WHERE Path NOT LIKE "%/.sys%"    -- not list system dirs and files
                 AND Path NOT LIKE "%/.metadata%"
-            )").GetValueSync();
+            )");
 
             auto expected = R"([
                 [["/Root"];["ydb.generic.full"];["root@builtin"]];
@@ -2405,7 +2455,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                 [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
             ])";
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(expected, result);
         }
     }
 

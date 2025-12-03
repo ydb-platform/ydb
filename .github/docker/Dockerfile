@@ -42,10 +42,7 @@ RUN apt-get update  \
     && apt-get install --no-install-recommends -y libidn12 libaio1 jq \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /root/ydb/bin/ \
-    && mkdir -p /ydb_data \
-    && mkdir -p /ydb_certs \
-    && /ydbwork/out/ydb/apps/ydb/ydb version --disable-checks
+RUN mkdir -p /ydb_data && mkdir -p /ydb_certs
 
 COPY main/.github/docker/files/ /
 COPY --from=builder \
@@ -53,6 +50,8 @@ COPY --from=builder \
     /ydbwork/out/ydb/apps/ydb/ydb \
     /ydbwork/out/ydb/public/tools/local_ydb/local_ydb \
     /
+
+RUN /ydb version --disable-checks
 
 # YDB grpc
 EXPOSE ${GRPC_TLS_PORT:-2135}

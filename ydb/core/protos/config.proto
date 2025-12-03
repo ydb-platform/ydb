@@ -2179,7 +2179,7 @@ message TColumnShardConfig {
     optional uint64 BadPortionsLimit = 52;
     optional bool CombineChunksInResult = 54 [default = true];
     optional bool EnableDiagnostics = 55 [default = true];
-    optional bool EnableParallelCompaction = 56 [default = true];
+    optional bool EnableParallelCompaction = 56 [default = false];
 }
 
 message TSchemeShardConfig {

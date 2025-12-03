@@ -997,7 +997,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         blocker.Stop().Unblock();
 
         // We have to skip Rejection_Applying state if Applying failed
-        UNIT_ASSERT_C(!rejectionApplying, "There was no Rejection_Applying state");
+        UNIT_ASSERT_C(!rejectionApplying, "There was Rejection_Applying state");
         // We have to execute DroppingColumns (by Rejection_DroppingColumns) because AlterMainTable was successful
         UNIT_ASSERT_C(rejectionDroppingColumns, "There was no Rejection_DroppingColumns state");
 

@@ -78,7 +78,8 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
     TypeName = columnSchema.GetType();
     StorageId = columnSchema.GetStorageId();
     if (columnSchema.HasColumnFamilyId()) {
-        ColumnFamilyId = columnSchema.GetColumnFamilyId();
+        errors.AddError("Column FAMILY is not supported for column tables");
+        return false;
     }
     if (columnSchema.HasSerializer()) {
         if (!AppData()->FeatureFlags.GetEnableOlapCompression()) {
@@ -170,7 +171,7 @@ void TOlapColumnBase::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescrip
         AFL_VERIFY(DefaultValue.IsCompatibleType(arrowType));
     }
     if (columnSchema.HasColumnFamilyId()) {
-        ColumnFamilyId = columnSchema.GetColumnFamilyId();
+        // TODO: do something?
     }
     if (columnSchema.HasSerializer()) {
         NArrow::NSerialization::TSerializerContainer serializer;
@@ -204,9 +205,7 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
     columnSchema.SetNotNull(NotNullFlag);
     columnSchema.SetStorageId(StorageId);
     *columnSchema.MutableDefaultValue() = DefaultValue.SerializeToProto();
-    if (ColumnFamilyId.has_value()) {
-        columnSchema.SetColumnFamilyId(ColumnFamilyId.value());
-    }
+
     if (Serializer) {
         Serializer.SerializeToProto(*columnSchema.MutableSerializer());
     }
@@ -224,27 +223,7 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
     }
 }
 
-bool TOlapColumnBase::ApplySerializerFromColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
-    if (GetColumnFamilyId().has_value()) {
-        SetSerializer(columnFamilies.GetByIdVerified(GetColumnFamilyId().value())->GetSerializerContainer());
-    } else {
-        TString familyName = "default";
-        const TOlapColumnFamily* columnFamily = columnFamilies.GetByName(familyName);
-
-        if (!columnFamily) {
-            errors.AddError(NKikimrScheme::StatusSchemeError,
-                TStringBuilder() << "Cannot set column family `" << familyName << "` for column `" << GetName() << "`. Family not found");
-            return false;
-        }
-
-        ColumnFamilyId = columnFamily->GetId();
-        SetSerializer(columnFamilies.GetByIdVerified(columnFamily->GetId())->GetSerializerContainer());
-    }
-    return true;
-}
-
-bool TOlapColumnBase::ApplyDiff(
-    const TOlapColumnDiff& diffColumn, const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
+bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
     Y_ABORT_UNLESS(GetName() == diffColumn.GetName());
     if (diffColumn.GetDefaultValue()) {
         auto conclusion = DefaultValue.ParseFromString(*diffColumn.GetDefaultValue(), Type);
@@ -265,23 +244,14 @@ bool TOlapColumnBase::ApplyDiff(
         StorageId = *diffColumn.GetStorageId();
     }
     if (diffColumn.GetColumnFamilyName().has_value()) {
-        TString columnFamilyName = diffColumn.GetColumnFamilyName().value();
-        const TOlapColumnFamily* columnFamily = columnFamilies.GetByName(columnFamilyName);
-        if (!columnFamily) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Cannot alter column family `" << columnFamilyName
-                                                                               << "` for column `" << GetName() << "`. Family not found");
-            return false;
-        }
-        ColumnFamilyId = columnFamily->GetId();
+        errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+            << "Column FAMILY is not supported for column tables");
+        return false;
     }
-
     if (diffColumn.GetSerializer()) {
         Serializer = diffColumn.GetSerializer();
-    } else {
-        if (!columnFamilies.GetColumnFamilies().empty() && !ApplySerializerFromColumnFamily(columnFamilies, errors)) {
-            return false;
-        }
     }
+
     {
         auto result = diffColumn.GetDictionaryEncoding().Apply(DictionaryEncoding);
         if (!result) {

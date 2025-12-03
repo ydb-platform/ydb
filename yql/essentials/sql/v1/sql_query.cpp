@@ -288,8 +288,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (Ctx_.GetYqlSelectMode() != EYqlSelectMode::Disable) {
-                if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
-                    Error() << "YqlSelect is not available before 2025.04";
+                const NYql::TLangVersion langVer = YqlSelectLangVersion();
+                if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
+                    Error() << "YqlSelect is not available before "
+                            << FormatLangVersion(langVer);
                     return false;
                 }
 
@@ -694,7 +696,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (Ctx_.GetYqlSelectMode() != EYqlSelectMode::Disable) {
-                const auto langVer = GetMaxLangVersion();
+                const NYql::TLangVersion langVer = YqlSelectLangVersion();
                 if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
                     Error() << "YqlSelect is not available before "
                             << FormatLangVersion(langVer);
@@ -3591,12 +3593,15 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     }),
     TableElemExt("YqlSelect", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
+
+        const NYql::TLangVersion langVer = YqlSelectLangVersion();
         if (!IsBackwardCompatibleFeatureAvailable(
                 ctx.Settings.LangVer,
-                MakeLangVersion(2025, 04),
+                langVer,
                 ctx.Settings.BackportMode))
         {
-            query.Error() << "YqlSelect is not available before 2025.04";
+            query.Error() << "YqlSelect is not available before "
+                          << FormatLangVersion(langVer);
             return Nothing();
         }
 

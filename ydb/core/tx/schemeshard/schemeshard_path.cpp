@@ -1204,7 +1204,7 @@ const TPath::TChecker& TPath::TChecker::IsStreamingQuery(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
-const TPath::TChecker& TPath::TChecker::Or(const TChecker& (TChecker::* leftFunc)(EStatus status) const, const TChecker& (TChecker::* rightFunc)(EStatus status) const, EStatus status) const {
+const TPath::TChecker& TPath::TChecker::Or(TCheckerMethodPtr leftFunc, TCheckerMethodPtr rightFunc, EStatus status) const {
     if (Failed) {
         return *this;
     }

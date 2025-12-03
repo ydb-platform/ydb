@@ -1,5 +1,5 @@
-#include <numbers>
-#include <ydb/core/statistics/aggregator/analyze_actor.h>
+#include "analyze_actor.h"
+#include "select_builder.h"
 
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/core/statistics/common.h>
@@ -7,127 +7,9 @@
 #include <util/generic/size_literals.h>
 #include <util/string/vector.h>
 
-#include <format>
+#include <numbers>
 
 namespace NKikimr::NStat {
-
-class TSelectBuilder {
-public:
-    ui32 AddBuiltinAggregation(std::optional<TString> columnName, TString aggName) {
-        auto column = TAggColumn{
-            .Seq = static_cast<ui32>(Columns.size()),
-            .ColumnName = std::move(columnName),
-            .AggName = std::move(aggName),
-        };
-        Columns.push_back(std::move(column));
-        return Columns.back().Seq;
-    }
-
-    template<typename... TArgs>
-    ui32 AddUDAFAggregation(TString columnName, const TStringBuf& udafName, TArgs&&... params) {
-        auto factory = AddFactory(udafName);
-
-        // TODO: parameters escaping/binding
-        TString paramsStr = Join(',', params...);
-
-        auto column = TAggColumn{
-            .Seq = static_cast<ui32>(Columns.size()),
-            .ColumnName = std::move(columnName),
-            .UdafFactory = factory,
-            .Params = std::move(paramsStr),
-        };
-        Columns.push_back(std::move(column));
-        return Columns.back().Seq;
-    }
-
-    TString Build(const TStringBuf& table) const {
-        TStringBuilder res;
-        for (const auto& [udaf, factory] : Udaf2Factory) {
-            TStringBuilder paramsStr;
-            for (size_t i = 0; i < factory.ParamCount; ++i) {
-                if (i > 0) {
-                    paramsStr << ",";
-                }
-                paramsStr << "$p" << i;
-            }
-
-            res << std::format(R"($f{0} = ({2}) -> {{ return AggregationFactory(
-        "UDAF",
-        ($item,$parent) -> {{ return Udf(StatisticsInternal::{1}Create, $parent as Depends)($item,{2}) }},
-        ($state,$item,$parent) -> {{ return Udf(StatisticsInternal::{1}AddValue, $parent as Depends)($state, $item) }},
-        StatisticsInternal::{1}Merge,
-        StatisticsInternal::{1}Finalize,
-        StatisticsInternal::{1}Serialize,
-        StatisticsInternal::{1}Deserialize,
-    )
-}};
-)",
-                factory.Id, std::string_view(factory.Udaf), std::string_view(paramsStr));
-        }
-
-        res << "SELECT ";
-        bool first = true;
-        for (const auto& agg : Columns ) {
-            if (first) {
-                first = false;
-            } else {
-                res << ",";
-            }
-            if (agg.UdafFactory) {
-                Y_ABORT_UNLESS(agg.ColumnName);
-                res << "AGGREGATE_BY(" << agg.ColumnName
-                    << "," << "$f" << *agg.UdafFactory << "(" << agg.Params << "))";
-            } else {
-                Y_ABORT_UNLESS(agg.AggName);
-                res << *agg.AggName;
-                if (agg.ColumnName) {
-                    res << "(" << *agg.ColumnName << ")";
-                } else {
-                    res << "(*)";
-                }
-            }
-        }
-
-        res << " FROM `" << table << "`";
-        return res;
-    }
-
-    size_t ColumnCount() const {
-        return Columns.size();
-    }
-
-private:
-    ui32 AddFactory(const TStringBuf& udafName) {
-        // TODO: check UDAF existence, determine paramcount
-        ui32 curId = Udaf2Factory.size();
-        size_t paramCount = 2;
-        auto [it, emplaced] = Udaf2Factory.try_emplace(udafName, curId, udafName, paramCount);
-        return it->second.Id;
-    }
-
-private:
-    struct TFactory {
-        TFactory(ui32 id, const TStringBuf& udaf, size_t paramCount)
-        : Id(id), Udaf(udaf), ParamCount(paramCount)
-        {}
-
-        ui32 Id = 0;
-        TString Udaf;
-        size_t ParamCount = 0;
-    };
-
-    THashMap<TString, TFactory> Udaf2Factory;
-
-    struct TAggColumn {
-        ui32 Seq = 0;
-        std::optional<TString> ColumnName;
-        std::optional<TString> AggName;
-        std::optional<ui32> UdafFactory;
-        TString Params;
-    };
-
-    TVector<TAggColumn> Columns;
-};
 
 class TCMSEval : public IColumnStatisticEval {
     ui64 Width;

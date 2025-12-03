@@ -2959,7 +2959,7 @@ class TCancelScriptExecutionOperationActor : public TActorBootstrapped<TCancelSc
     };
 
 public:
-    // Cancellation pipline:
+    // Cancellation pipeline:
     // 1. Get script execution operation status and:
     //    - Finalize script execution if lease expired or there is not finished finalization
     // 2. If script execution is running now, send cancel request to run script actor [race with script execution finalization and retries]

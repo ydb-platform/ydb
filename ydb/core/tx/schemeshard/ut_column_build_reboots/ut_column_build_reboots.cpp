@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CancelBuild) {
+    Y_UNIT_TEST_WITH_REBOOTS(Cancelling) {
         T t;
         t.GetTestEnvOptions().EnableAddColumsWithDefaults(true);
 
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(RejectBuild) {
+    Y_UNIT_TEST_WITH_REBOOTS(Rejecting) {
         T t;
         t.GetTestEnvOptions().EnableAddColumsWithDefaults(true);
 
@@ -152,6 +152,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
                                     NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}, true)});
             }
 
+            // Set invalid default value to get rejected
             const TString columnName = "default_value";
             Ydb::TypedValue columnDefaultValue;
             columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::JSON);

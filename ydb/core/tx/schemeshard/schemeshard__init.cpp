@@ -4711,8 +4711,23 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         TIndexBuildInfo::FillFromRow(rowset, &buildInfo);
                     });
 
-                    if (!Self->EnableVectorIndex) { // prevent build index from progress
+                    if (buildInfo->IsBuildColumns()) {
+                        // prevent build columns from progress if add columns with defaults is not enabled
+                        if (!Self->EnableAddColumsWithDefaults) {
+                            buildInfo->IsBroken = true;
+                            buildInfo->AddIssue(TStringBuilder() << "Add columns with defaults is not enabled");
+                        }
+
+                        if (!Self->PathsById.contains(buildInfo->TablePathId)) {
+                            buildInfo->IsBroken = true;
+                            buildInfo->AddIssue(TStringBuilder() << "Table path id not found: " << buildInfo->TablePathId.ToString());
+                        }
+                    }
+
+                    // prevent build index from progress
+                    if (buildInfo->IsBuildVectorIndex() && !Self->EnableVectorIndex) {
                         buildInfo->IsBroken = true;
+                        buildInfo->AddIssue(TStringBuilder() << "Vector index is not enabled");
                     }
 
                     // Note: broken build are also added to IndexBuilds

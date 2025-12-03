@@ -14,6 +14,10 @@ using namespace NTableIndex;
 TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
 
+    if (!context.SS->EnableAddColumsWithDefaults) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding columns with defaults is disabled")};
+    }
+
     const auto& op = tx.GetInitiateColumnBuild();
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);

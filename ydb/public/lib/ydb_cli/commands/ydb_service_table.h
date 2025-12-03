@@ -121,7 +121,7 @@ public:
 private:
     TString CollectStatsMode;
     TMaybe<TString> FlameGraphPath;
-    TString TxMode = "no-tx";
+    TString TxMode = "serializable-rw";
     TString QueryType;
     bool BasicStats = false;
     TString DiagnosticsFile;

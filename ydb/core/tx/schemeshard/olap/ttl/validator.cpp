@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/tiering/tier/object.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/base/appdata.h>
 
@@ -127,27 +128,17 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
                 const TString accessKeySecretName = aws.GetAwsAccessKeyIdSecretName();
                 const TString secretKeySecretName = aws.GetAwsSecretAccessKeySecretName();
 
-                TPath accessKeySecretPath = TPath::Resolve(accessKeySecretName, context.SS);
-                if (!accessKeySecretPath.IsResolved() || accessKeySecretPath.IsDeleted()) {
-                    errors.AddError(NKikimrScheme::StatusAccessDenied, 
-                        "Access denied to secret \"" + accessKeySecretName + "\" in external data source \"" + tierPathString + "\"");
-                    return false;
-                }
-
-                if (!accessKeySecretPath->IsSecret()) {
-                    errors.AddError("Object \"" + accessKeySecretName + "\" is not a secret");
-                    return false;
-                }
+                const TString databaseName = tierPath.GetDomainPathString();
                 
-                TPath secretKeySecretPath = TPath::Resolve(secretKeySecretName, context.SS);
-                if (!secretKeySecretPath.IsResolved() || secretKeySecretPath.IsDeleted()) {
-                    errors.AddError(NKikimrScheme::StatusAccessDenied, 
-                        "Access denied to secret \"" + secretKeySecretName + "\" in external data source \"" + tierPathString + "\"");
-                    return false;
-                }
+                TVector<TString> secretNames = {accessKeySecretName, secretKeySecretName};
+                auto userTokenPtr = MakeIntrusiveConst<NACLib::TUserToken>(*context.UserToken);
 
-                if (!secretKeySecretPath->IsSecret()) {
-                    errors.AddError("Object \"" + secretKeySecretName + "\" is not a secret");
+                auto future = NKqp::DescribeSecret(secretNames, userTokenPtr, databaseName, context.Ctx.ActorSystem());
+                auto result = future.GetValue(TDuration::Seconds(10));
+                
+                if (result.Status != Ydb::StatusIds::SUCCESS) {
+                    errors.AddError(NKikimrScheme::StatusAccessDenied, 
+                        "Access denied to secrets in external data source \"" + tierPathString + "\": " + result.Issues.ToOneLineString());
                     return false;
                 }
             }

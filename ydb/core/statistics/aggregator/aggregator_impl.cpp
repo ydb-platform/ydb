@@ -675,6 +675,8 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
                 UpdateForceTraversalTableStatus(
                     TForceTraversalTable::EStatus::AnalyzeStarted, operation.OperationId, operationTable, db);
 
+                // operation.Types field is not used, TAnalyzeActor will determine suitable
+                // statistic types itself.
                 ctx.RegisterWithSameMailbox(new TAnalyzeActor(
                     SelfId(), operation.OperationId, operation.DatabaseName, operationTable.PathId,
                     operationTable.ColumnTags));

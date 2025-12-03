@@ -20,6 +20,7 @@
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
@@ -65,7 +66,6 @@ static constexpr i64 FILE_SPLIT_THRESHOLD = 128 << 20; // 128 MiB
 static constexpr i64 READ_TABLE_RETRIES = 100;
 static const std::string ATTR_ASYNC_REPLICATION = "__async_replication";
 static const std::string ATTR_ASYNC_REPLICA = "__async_replica";
-constexpr TStringBuf TRANSFER_LAMBDA_DEFAULT_NAME = "$__ydb_transfer_lambda";
 
 ////////////////////////////////////////////////////////////////////////////////
 //                               Util
@@ -840,7 +840,7 @@ void BackupReplication(
     NReplication::TReplicationClient replicationClient(driver);
     TMaybe<NReplication::TReplicationDescription> desc;
     VerifyStatusOrSkip(NDump::DescribeReplication(replicationClient, dbPath, desc), "error describing replication");
-    const auto creationQuery = BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
+    const auto creationQuery = NDump::BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateAsyncReplication());
     BackupPermissions(driver, dbPath, fsBackupFolder);
@@ -942,7 +942,7 @@ void BackupTransfer(
     NReplication::TReplicationClient client(driver);
     TMaybe<NReplication::TTransferDescription> desc;
     VerifyStatus(NDump::DescribeTransfer(client, dbPath, desc), "describe transfer");
-    const auto creationTransferQuery = BuildCreateTransferQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
+    const auto creationTransferQuery = NDump::BuildCreateTransferQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
 
     WriteCreationQueryToFile(creationTransferQuery, fsBackupFolder, NDump::NFiles::CreateTransfer());
     BackupPermissions(driver, dbPath, fsBackupFolder);    

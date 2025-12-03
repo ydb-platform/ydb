@@ -215,12 +215,8 @@ public:
         return TTxControl(settings);
     }
 
-    static TTxControl NoTx() {
-        return ImplicitTx();
-    }
-
     // Do not explicitly set the transaction mode. YDB determines the behavior automatically
-    static TTxControl ImplicitTx() {
+    static TTxControl NoTx() {
         return TTxControl();
     }
 

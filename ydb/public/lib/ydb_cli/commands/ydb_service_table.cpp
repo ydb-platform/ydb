@@ -369,7 +369,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
             .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
     config.Opts->AddCharOption('s', "Collect statistics in basic mode").StoreTrue(&BasicStats);
     // Transaction modes description with color highlighting
-    TVector<TString> txModes = {"serializable-rw", "online-ro", "stale-ro", "snapshot-ro", "snapshot-rw", "implicit"};
+    TVector<TString> txModes = {"serializable-rw", "online-ro", "stale-ro", "snapshot-ro", "snapshot-rw", "no-tx"};
     TStringStream txDescription;
     txDescription << "Transaction mode (for generic & data queries). Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -382,8 +382,8 @@ void TCommandExecuteQuery::Config(TConfig& config) {
         }
         txDescription << colors.BoldColor() << mode << colors.OldColor();
     }
-    txDescription << " (" << colors.BoldColor() << "implicit" << colors.OldColor() << " for generic queries only).\n"
-                  << "\"" << colors.BoldColor() << "implicit" << colors.OldColor()
+    txDescription << " (" << colors.BoldColor() << "no-tx" << colors.OldColor() << " for generic queries only).\n"
+                  << "\"" << colors.BoldColor() << "no-tx" << colors.OldColor()
                   << "\" means the CLI does not explicitly set the transaction mode and YDB determines the behavior automatically."
                   << "\nDefault: " << colors.CyanColor() << "\"serializable-rw\"" << colors.OldColor() << ".";
     
@@ -474,6 +474,8 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
             txSettings = NTable::TTxSettings::SnapshotRO();
         } else if (TxMode == "snapshot-rw") {
             txSettings = NTable::TTxSettings::SnapshotRW();
+        } else if (TxMode == "no-tx" || TxMode == "notx") {
+            throw TMisuseException() << "Transaction mode 'no-tx' is only supported for generic queries.";
         } else {
             throw TMisuseException() << "Unknown transaction mode.";
         }
@@ -646,8 +648,8 @@ namespace {
 
     // Configure transaction control based on TxMode
     auto getTxControl = [](const TString& TxMode) -> NQuery::TTxControl {
-        if (TxMode == "implicit" || TxMode == "notx") {
-            return NQuery::TTxControl::ImplicitTx();
+        if (TxMode == "no-tx" || TxMode == "notx") {
+            return NQuery::TTxControl::NoTx();
         }
         
         NQuery::TTxSettings txSettings;

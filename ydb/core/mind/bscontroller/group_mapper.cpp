@@ -1145,7 +1145,7 @@ namespace NKikimr::NBsController {
 
                     prevPosition = position;
                 }
-                s << ")]}\n";
+                s << ")]}";
 
                 // Handle last domain
                 if (!domainAlreadyOccupied) {

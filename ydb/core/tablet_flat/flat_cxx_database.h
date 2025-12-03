@@ -2205,8 +2205,8 @@ inline bool Schema::Precharger<Schema::NoAutoPrecharge>::Precharge(
 }
 
 template <typename SchemaType>
-inline TIntrusiveConstPtr<TBackupExclusion> GenerateBackupExclusion() {
-    auto exclusion = MakeIntrusiveConst<TBackupExclusion>();
+inline TIntrusivePtr<TBackupExclusion> GenerateBackupExclusion() {
+    auto exclusion = MakeIntrusive<TBackupExclusion>();
     SchemaType::TTables::FillBackupExclusion(*exclusion);
     return exclusion;
 }

@@ -20,7 +20,7 @@ namespace NYql {
 using namespace NNodes;
 
 
-class TYtYtflowIntegration: public IYtflowIntegration {
+class TYtYtflowIntegration: public TEmptyYtflowIntegration {
 public:
     TYtYtflowIntegration(TYtState::TWeakPtr state)
         : State_(state)

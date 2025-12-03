@@ -314,6 +314,7 @@ struct TLevel {
             return false;
         }
         if (Portions.size() < 2) {
+            Counters.Portions->SetHeight(Portions.size());
             return false;
         }
         auto height = Intersections.GetMaxCount();

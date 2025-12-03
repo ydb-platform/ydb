@@ -114,7 +114,7 @@ bool TMeteringSink::IsCreated() const {
 
 TString TMeteringSink::GetMeteringJson(const TMeteringSink::FlushParameters& parameters, ui64 quantity,
                                        TInstant start, TInstant end, TInstant now) {
-    MeteringCounter_.fetch_add(1);
+    const ui64 currentMeteringCounterValue = MeteringCounter_.fetch_add(1) + 1;
 
     TStringStream output;
     NJson::TJsonWriter writer(&output, false);
@@ -128,7 +128,7 @@ TString TMeteringSink::GetMeteringJson(const TMeteringSink::FlushParameters& par
                  "-" << Parameters_.YdbDatabaseId <<
                  "-" << Parameters_.TabletId <<
                  "-" << start.MilliSeconds() <<
-                 "-" << GetMeteringCounter());
+                 "-" << currentMeteringCounterValue);
     writer.Write("schema", parameters.Schema);
 
     writer.OpenMap("tags");

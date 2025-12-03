@@ -2,7 +2,6 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
-#include <util/generic/set.h>
 
 namespace NFq {
 
@@ -25,24 +24,25 @@ public:
         , CreateRateLimiterResourceTime(Counters->GetHistogram("CreateRateLimiterResourceMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
         , DeleteRateLimiterResourceTime(Counters->GetHistogram("DeleteRateLimiterResourceMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
     {
-        auto weak = std::weak_ptr<TGRpcConnectionsImpl>(Connections_);
-        auto channelPoolUpdateWrapper = [weak, this]
+        auto weakConnections = std::weak_ptr<TGRpcConnectionsImpl>(Connections_);
+        std::weak_ptr<TPrivateClient::TImpl> self = weak_from_this();
+        auto channelPoolUpdateWrapper = [weakConnections, self]
             (NYdb::NIssue::TIssues&&, EStatus status) mutable {
-            if (status != EStatus::SUCCESS) {
-                return false;
-            }
-            auto connections = weak.lock();
-            if (!connections) {
-                return false;
-            } else {
-                std::vector<std::string> endpoints;
-                {
-                    std::lock_guard lock(KnownEndpointsLock);
-                    endpoints.assign(KnownEndpoints.begin(), KnownEndpoints.end());
-                    KnownEndpoints.clear();
+                if (status != EStatus::SUCCESS) {
+                    return false;
                 }
-                connections->DeleteChannels(endpoints);
+            auto ptr = self.lock();
+            auto connections = weakConnections.lock();
+            if (!ptr || !connections) {
+                return false;
+            } 
+            std::vector<std::string> endpoints;
+            {
+                std::lock_guard lock(ptr->KnownEndpointsLock);
+                endpoints.assign(ptr->KnownEndpoints.begin(), ptr->KnownEndpoints.end());
+                ptr->KnownEndpoints.clear();
             }
+            connections->DeleteChannels(endpoints);
             return true;
         };
         Connections_->AddPeriodicTask(channelPoolUpdateWrapper, PERIODIC_REBALANCE_INTERVAL);
@@ -216,11 +216,8 @@ public:
 
 private:
     void UpdateKnownEndpoints(const std::string& endpoint) {
-        if (KnownEndpoints.contains(endpoint)) {
-            return;
-        }
         std::lock_guard lock(KnownEndpointsLock);
-        KnownEndpoints.insert(endpoint);
+        KnownEndpoints.emplace(endpoint);
     }
 
 private:
@@ -231,7 +228,7 @@ private:
     const NMonitoring::THistogramPtr NodesHealthCheckTime;
     const NMonitoring::THistogramPtr CreateRateLimiterResourceTime;
     const NMonitoring::THistogramPtr DeleteRateLimiterResourceTime;
-    TSet<std::string> KnownEndpoints;
+    std::unordered_set<std::string> KnownEndpoints;
     std::mutex KnownEndpointsLock;
 };
 

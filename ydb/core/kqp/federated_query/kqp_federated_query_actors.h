@@ -11,16 +11,21 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/aclib/aclib.h>
 
+#include <library/cpp/retry/retry_policy.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/hash_multi_map.h>
+
 
 namespace NKikimr::NKqp {
 
 class TDescribeSchemaSecretsService: public NActors::TActorBootstrapped<TDescribeSchemaSecretsService> {
 public:
+    using TRetryPolicy = IRetryPolicy<>;
+
     enum ESecretEvents {
         EvResolveSecret = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        EvResolveSecretRetry,
         EvEnd,
     };
 
@@ -40,11 +45,23 @@ public:
             Y_ENSURE(!Database.empty(), "Database name must be set in secret requests");
         }
 
+        THolder<TEvResolveSecret> MakeCopy() const {
+            return MakeHolder<TEvResolveSecret>(UserToken, Database, SecretNames, Promise);
+        }
+
     public:
         const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         const TString Database;
         const TVector<TString> SecretNames;
         NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Promise;
+    };
+
+    struct TEvResolveSecretRetry : public NActors::TEventLocal<TEvResolveSecretRetry, EvResolveSecretRetry> {
+        TEvResolveSecretRetry(ui64 initialRequestId)
+            : InitialRequestId(initialRequestId)
+        {}
+
+        ui64 InitialRequestId = 0;
     };
 
 private:
@@ -62,9 +79,20 @@ private:
         size_t FilledSecretsCnt = 0;
     };
 
+    struct TRequestContext {
+        THolder<TEvResolveSecret> Request;
+        TRetryPolicy::IRetryState::TPtr RetryState;
+
+        TRequestContext(THolder<TEvResolveSecret> request)
+            : Request(std::move(request))
+        {
+        }
+    };
+
 private:
     STRICT_STFUNC(StateWait,
         hFunc(TEvResolveSecret, HandleIncomingRequest);
+        hFunc(TEvResolveSecretRetry, HandleIncomingRetryRequest);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
         hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeShardResponse);
         hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleNotifyDelete);
@@ -73,6 +101,7 @@ private:
     )
 
     void HandleIncomingRequest(TEvResolveSecret::TPtr& ev);
+    void HandleIncomingRetryRequest(TEvResolveSecretRetry::TPtr& ev);
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
     void HandleNotifyDelete(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
@@ -80,11 +109,12 @@ private:
 
     void FillResponse(const ui64& requestId, const TEvDescribeSecretsResponse::TDescription& response);
     void SaveIncomingRequestInfo(const TEvResolveSecret& ev);
-    void SendSchemeCacheRequests(const TEvResolveSecret& ev);
+    void SendSchemeCacheRequests(const TEvResolveSecret& ev, const ui64 requestId);
     bool LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion);
     bool LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId);
     bool HandleSchemeCacheErrorsIfAny(const ui64& requestId, NSchemeCache::TSchemeCacheNavigate& result);
     void FillResponseIfFinished(const ui64& requestId, const TResponseContext& responseCtx);
+    bool ScheduleSchemeCacheRetry(const ui64& requestId, const TString& unresolvedSecretPath);
 
 public:
     TDescribeSchemaSecretsService() = default;
@@ -104,6 +134,7 @@ public:
 
 private:
     ui64 LastCookie = 0;
+    THashMap<ui64, TRequestContext> RequestsInFlight;
     THashMap<ui64, TResponseContext> ResolveInFlight;
     THashMap<TString, TVersionedSecret> VersionedSecrets;
     THashMap<TString, TActorId> SchemeBoardSubscribers;

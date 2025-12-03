@@ -112,14 +112,24 @@ void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr
     LOG_D("TEvResolveSecret: names=" << JoinSeq(',', ev->Get()->SecretNames) << ", request cookie=" << LastCookie);
 
     if (ev->Get()->SecretNames.empty()) {
-        LOG_W("TEvResolveSecret: request cookie=" << ev->Cookie << ", empty secret names list");
+        LOG_W("TEvResolveSecret: request cookie=" << LastCookie << ", empty secret names list");
         static const auto emptyRequest = TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("empty secret names list") });
         ev->Get()->Promise.SetValue(emptyRequest);
         return;
     }
 
     SaveIncomingRequestInfo(*ev->Get());
-    SendSchemeCacheRequests(*ev->Get());
+    SendSchemeCacheRequests(*ev->Get(), LastCookie);
+    ++LastCookie;
+}
+
+void TDescribeSchemaSecretsService::HandleIncomingRetryRequest(TEvResolveSecretRetry::TPtr& ev) {
+    LOG_D("TEvResolveSecretRetry: initial request cookie=" << ev->Get()->InitialRequestId);
+
+    const auto it = RequestsInFlight.find(ev->Get()->InitialRequestId);
+    Y_ENSURE(it != RequestsInFlight.end(), "Such request cookie was not registered");
+    Y_ENSURE(it->second.Request.Get(), "Initial request was not saved");
+    SendSchemeCacheRequests(*it->second.Request.Get(), ev->Get()->InitialRequestId);
 }
 
 void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -202,6 +212,7 @@ void TDescribeSchemaSecretsService::FillResponse(const ui64& requestId, const TE
     auto respIt = ResolveInFlight.find(requestId);
     respIt->second.Result.SetValue(response);
     ResolveInFlight.erase(respIt);
+    RequestsInFlight.erase(requestId);
 }
 
 void TDescribeSchemaSecretsService::Bootstrap() {
@@ -216,9 +227,11 @@ void TDescribeSchemaSecretsService::SaveIncomingRequestInfo(const TEvResolveSecr
         ctx.Result = ev.Promise;
     }
     ResolveInFlight[LastCookie] = std::move(ctx);
+
+    RequestsInFlight.emplace(LastCookie, TRequestContext(ev.MakeCopy()));
 }
 
-void TDescribeSchemaSecretsService::SendSchemeCacheRequests(const TEvResolveSecret& ev) {
+void TDescribeSchemaSecretsService::SendSchemeCacheRequests(const TEvResolveSecret& ev, const ui64 requestId) {
     const auto userToken = ev.UserToken;
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
     for (const auto& secretName : ev.SecretNames) {
@@ -235,7 +248,7 @@ void TDescribeSchemaSecretsService::SendSchemeCacheRequests(const TEvResolveSecr
     }
     request->DatabaseName = ev.Database;
 
-    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, LastCookie++);
+    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, requestId);
 }
 
 bool TDescribeSchemaSecretsService::LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion) {
@@ -256,15 +269,65 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
         return true;
     }
 
+    bool retryableError = false;
+    TString unresolvedSecretPath;
     for (const auto& entry: result.ResultSet) {
-        if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            const auto secretPath = CanonizePath(entry.Path);
-            LOG_N("TEvNavigateKeySetResult: request cookie=" << requestId << ", unauthorized SchemeCache request for secret=" << secretPath);
-            FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + secretPath + "` not found") }));
+        switch (entry.Status) {
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError: {
+                retryableError = true;
+                unresolvedSecretPath = CanonizePath(entry.Path);
+                break;
+            }
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok: {
+                break;
+            }
+            default: {
+                unresolvedSecretPath = CanonizePath(entry.Path);
+                LOG_N("TEvNavigateKeySetResult: request cookie=" << requestId << ", unauthorized SchemeCache request for secret=" << unresolvedSecretPath);
+                FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + unresolvedSecretPath + "` not found") }));
 
-            return true;
+                return true;
+            }
         }
     }
+
+    if (retryableError) {
+        if (ScheduleSchemeCacheRetry(requestId, unresolvedSecretPath)) {
+            return true;
+        }
+
+        // no more retries
+        LOG_N("TEvNavigateKeySetResult: request cookie=" << requestId << ", retry limit exceeded for secret `" + unresolvedSecretPath + "`");
+        FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::UNAVAILABLE, { NYql::TIssue("Retry limit exceeded for secret `" + unresolvedSecretPath + "`") }));
+
+        return true;
+    }
+
+    return false;
+}
+
+bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& requestId, const TString& unresolvedSecretPath) {
+    auto requestIt = RequestsInFlight.find(requestId);
+    Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " + ToString(requestId));
+
+    if (!requestIt->second.RetryState) {
+        requestIt->second.RetryState = TRetryPolicy::GetExponentialBackoffPolicy(
+            [](){ return ERetryErrorClass::ShortRetry; },
+            /* minDelay */ TDuration::MilliSeconds(100),
+            /* minLongRetryDelay */ TDuration::MilliSeconds(500),
+            /* maxDelay */ TDuration::Seconds(5),
+            /* maxRetries */ 10,
+            /* maxTime */ TDuration::Seconds(10)
+        )->CreateRetryState();
+    }
+
+    if (const auto delay = RequestsInFlight.at(requestId).RetryState->GetNextRetryDelay()) {
+        LOG_N("TEvNavigateKeySetResult: request cookie=" << requestId << ", Secret `" << unresolvedSecretPath
+            << "` not found. Request will be retried due to SchemeCache retryable error in: " << *delay);
+        this->Schedule(*delay, new TEvResolveSecretRetry(requestId));
+        return true;
+    }
+
     return false;
 }
 

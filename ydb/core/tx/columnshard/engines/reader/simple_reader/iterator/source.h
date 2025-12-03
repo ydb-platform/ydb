@@ -196,17 +196,6 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
-    void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
-        auto context = std::static_pointer_cast<TSpecialReadContext>(GetContext());
-        // It means that the scan was aborted. In this case, context called UnregisterActors.
-        if (!context->IsActive()) {
-            return;
-        }
-        NActors::TActivationContext::AsActorContext().Send(
-            context->GetDuplicatesManagerVerified(),
-            new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
-    }
-
     virtual TInternalPathId GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
@@ -216,9 +205,6 @@ public:
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
-
-    virtual NArrow::TSimpleRow GetMinPK() const = 0;
-    virtual NArrow::TSimpleRow GetMaxPK() const = 0;
 
     void Abort() {
         DoAbort();
@@ -233,7 +219,6 @@ public:
 
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
-        result.InsertValue("source_id", GetSourceId());
         result.InsertValue("source_idx", GetSourceIdx());
         result.InsertValue("specific", DoDebugJson());
         return result;
@@ -241,16 +226,17 @@ public:
 
     bool OnIntervalFinished(const ui32 intervalIdx);
 
-    IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
+    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : TBase(type, sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions) {
+        : TBase(type, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
+    {
     }
 
     virtual ~IDataSource() = default;
 };
 
-class TPortionDataSource: public IDataSource {
+class TPortionDataSource: public IDataSource, public NCommon::IPortionDataSource {
 private:
     using TBase = IDataSource;
     const TPortionInfo::TConstPtr Portion;
@@ -404,20 +390,25 @@ public:
         return GetPortionAccessor().GetIndexRawBytes(indexIds, false);
     }
 
-    virtual NArrow::TSimpleRow GetMinPK() const override {
-        return Portion->GetMeta().IndexKeyStart();
-    }
-
-    virtual NArrow::TSimpleRow GetMaxPK() const override {
-        return Portion->GetMeta().IndexKeyEnd();
-    }
-
     const TPortionInfo& GetPortionInfo() const {
         return *Portion;
     }
 
     const TPortionInfo::TConstPtr& GetPortionInfoPtr() const {
         return Portion;
+    }
+
+    void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
+        auto context = std::static_pointer_cast<TSpecialReadContext>(GetContext());
+        if (!context->IsActive()) {
+            return;
+        }
+        NActors::TActivationContext::AsActorContext().Send(
+            context->GetDuplicatesManagerVerified(), new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
+    }
+
+    ui64 GetPortionId() const override {
+        return Portion->GetPortionId();
     }
 
     TPortionDataSource(
@@ -428,7 +419,7 @@ class TAggregationDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
-    const ui64 LastSourceId;
+    const ui32 LastSourceIdx;
     const ui64 LastSourceRecordsCount;
 
     void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
@@ -519,8 +510,8 @@ public:
         return type == NCommon::IDataSource::EType::SimpleAggregation;
     }
 
-    ui64 GetLastSourceId() const {
-        return LastSourceId;
+    ui64 GetLastSourceIdx() const {
+        return LastSourceIdx;
     }
 
     ui64 GetLastSourceRecordsCount() const {
@@ -593,23 +584,14 @@ public:
         return 0;
     }
 
-    virtual NArrow::TSimpleRow GetMinPK() const override {
-        AFL_VERIFY(false);
-        return NArrow::TSimpleRow(nullptr, 0);
-    }
-
-    virtual NArrow::TSimpleRow GetMaxPK() const override {
-        AFL_VERIFY(false);
-        return NArrow::TSimpleRow(nullptr, 0);
-    }
-
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-        : TBase(EType::SimpleAggregation, sources.back()->GetSourceId(), sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
+        : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
               CalcInputRecordsCount(sources), std::nullopt, false)
         , Sources(std::move(sources))
-        , LastSourceId(Sources.back()->GetSourceId())
-        , LastSourceRecordsCount(Sources.back()->GetRecordsCount()) {
+        , LastSourceIdx(Sources.back()->GetSourceIdx())
+        , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
+    {
         AFL_VERIFY(Sources.size());
     }
 };

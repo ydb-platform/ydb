@@ -6,8 +6,8 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 
 std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
-    return std::make_shared<TSourceData>(
-        GetSourceId(), GetSourceIdx(), PathId, GetTabletId(), std::move(Portion), ExtractStart(), ExtractFinish(), context, std::move(Schema));
+    return std::make_shared<TSourceData>(GetSourceIdx(), PathId, GetTabletId(), std::move(Portion), ExtractStart().ExtractValue(),
+        ExtractFinish().ExtractValue(), context, std::move(Schema));
 }
 
 std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(
@@ -19,8 +19,6 @@ std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(
 
 std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNextImpl(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
     auto constructor = PopObjectWithAccessor();
-    constructor.MutableObject().SetIndex(CurrentSourceIdx);
-    ++CurrentSourceIdx;
     std::shared_ptr<NReader::NCommon::IDataSource> result = constructor.MutableObject().Construct(context, constructor.DetachAccessor());
     return result;
 }
@@ -46,7 +44,7 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
             constructors.emplace_back(
                 pathIdTranslator.GetUnifiedByInternalVerified(p->GetPathId()), tabletId, p, p->GetSchema(originalSchemaInfo));
             if (!pkFilter->IsUsed(
-                    constructors.back().GetStart().BuildSortablePosition(), constructors.back().GetFinish().BuildSortablePosition())) {
+                    constructors.back().GetStart().GetValue().BuildSortablePosition(), constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
                 constructors.pop_back();
             }
         }

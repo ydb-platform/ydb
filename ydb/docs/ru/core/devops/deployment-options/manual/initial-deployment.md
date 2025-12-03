@@ -428,7 +428,7 @@ client_certificate_authorization:
 
 Сохраните конфигурационный файл YDB под именем `/opt/ydb/cfg/config.yaml` на каждом сервере кластера.
 
-Более подробная информация по созданию файла конфигурации приведена в разделе [{#T}](../../../devops/configuration-management/configuration-v1/config-settings.md).
+Более подробная информация по созданию файла конфигурации приведена в разделе [{#T}](../../../reference/configuration/index.md).
 
 ## Скопируйте ключи и сертификаты TLS на каждый сервер {#tls-copy-cert}
 

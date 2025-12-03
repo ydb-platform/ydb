@@ -119,7 +119,6 @@ TString BuildCreateReplicationQuery(
     }
 
     TVector<TString> opts(::Reserve(5 /* max options */));
-
     const auto& params = desc.GetConnectionParams();
     AddConnectionOptions(params, opts);
 

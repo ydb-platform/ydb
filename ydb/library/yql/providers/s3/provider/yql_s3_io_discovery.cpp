@@ -705,24 +705,113 @@ private:
                 return false;
             }
 
-            THashSet<TStringBuf> uniqs;
-            for (size_t i = 1; i < partitionedBySetting->ChildrenSize(); ++i) {
-                const auto& column = partitionedBySetting->Child(i);
-                if (!EnsureAtom(*column, ctx)) {
+            if (partitionedBySetting->ChildrenSize() > 2) {
+                THashSet<TStringBuf> uniqs;
+                for (size_t i = 1; i < partitionedBySetting->ChildrenSize(); ++i) {
+                    const auto& column = partitionedBySetting->Child(i);
+                    if (!EnsureAtom(*column, ctx)) {
+                        return false;
+                    }
+                    if (!uniqs.emplace(column->Content()).second) {
+                        ctx.AddError(TIssue(ctx.GetPosition(column->Pos()), TStringBuilder() << "Duplicate partitioned_by column '" << column->Content() << "'"));
+                        return false;
+                    }
+                    partitionedBy.push_back(ToString(column->Content()));
+                }
+            } else {
+                if (!EnsureAtom(partitionedBySetting->Tail(), ctx)) {
                     return false;
                 }
-                if (!uniqs.emplace(column->Content()).second) {
-                    ctx.AddError(TIssue(ctx.GetPosition(column->Pos()), TStringBuilder() << "Duplicate partitioned_by column '" << column->Content() << "'"));
-                    return false;
-                }
-                partitionedBy.push_back(ToString(column->Content()));
 
+                if (partitionedBySetting->Tail().Content().empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), "Expecting non-empty patitioned_by setting"));
+                    return false;
+                }
+
+                std::string partitioningStr;
+                NJson::TJsonValue partitioningJson;
+                TPositionHandle partitioningPos;
+
+                partitioningStr = partitionedBySetting->Tail().Content();
+                partitioningPos = partitionedBySetting->Tail().Pos();
+
+                if (!(partitioningStr.starts_with("['") && partitioningStr.ends_with("']"))) {
+                    partitioningStr = TStringBuilder{} << "['" << partitioningStr << "']";
+                }
+                std::replace(partitioningStr.begin(), partitioningStr.end(), '\'', '\"');
+
+                const TString formattingTip = "partitioned_by setting should be specified in \"['column1', ..., 'columnN']\" format";
+                try {
+                    NJson::ReadJsonTree(partitioningStr, &partitioningJson, /*throwOnError*/ true);
+                } catch (const std::exception& e) {
+                    ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), TStringBuilder() << "Failed to parse partitioned_by as JSON: " << e.what()));
+                    ctx.AddWarning(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), formattingTip));
+                    return false;
+                }
+
+                if (!partitioningJson.IsArray()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), "partitioned_by is not a json array"));
+                    ctx.AddWarning(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), formattingTip));
+                    return false;
+                }
+
+                THashSet<TString> uniqs;
+                for (const auto& value : partitioningJson.GetArray()) {
+                    if (!value.IsString()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), "partitioned_by is not a json array of strings"));
+                        ctx.AddWarning(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), formattingTip));
+                        return false;
+                    }
+                    const TString& column = value.GetString();
+                    if (!uniqs.emplace(column).second) {
+                        ctx.AddError(TIssue(ctx.GetPosition(partitionedBySetting->Pos()), TStringBuilder() << "Duplicate partitioned_by column '" << column << "'"));
+                        return false;
+                    }
+                    partitionedBy.push_back(value.GetString());
+                }
             }
         }
 
         TString projection;
         TPositionHandle projectionPos;
+        if (auto projectionSetting = GetSetting(settings, "projection.enabled")) {
+            std::vector<TExprNode::TPtr> projectionSettings;
+            for (auto& setting : settings.Children()) {
+                if (setting->ChildrenSize() != 0) {
+                    const TStringBuf settingName = setting->Child(0)->Content();
+                    if (settingName.StartsWith("projection") || settingName == "storage.location.template"sv) {
+                        projectionSettings.push_back(setting);
+                    }
+                }
+            }
+
+            std::vector<TString> projectionDictValues;
+            for (const auto& setting : projectionSettings) {
+                if (!EnsureTupleSize(*setting, 2, ctx)) {
+                    return false;
+                }
+
+                if (!EnsureAtom(setting->Tail(), ctx)) {
+                    return false;
+                }
+
+                if (setting->Tail().Content().empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), "Expecting non-empty projection setting"));
+                    return false;
+                }
+
+                projectionDictValues.push_back(TStringBuilder{} << "\"" << setting->Head().Content() << "\": \"" << setting->Tail().Content() << "\"");
+            }
+
+            projection = TStringBuilder{} << "{" << JoinSeq(",", projectionDictValues) << "}";
+            projectionPos = projectionSetting->Head().Pos();
+        }
         if (auto projectionSetting = GetSetting(settings, "projection")) {
+            if (!projection.empty()) {
+                ctx.AddError(TIssue(ctx.GetPosition(projectionSetting->Pos()), "Cannot use both projection syntax at the same time"));
+                return false;
+            }
+
             if (!EnsureTupleSize(*projectionSetting, 2, ctx)) {
                 return false;
             }

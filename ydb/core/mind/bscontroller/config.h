@@ -366,6 +366,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMovePDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TUpdateBridgeGroupInfo& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TReconfigureVirtualGroup& cmd, TStatus& status);
         };
 
     } // NBsController

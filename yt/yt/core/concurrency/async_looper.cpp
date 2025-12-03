@@ -119,7 +119,7 @@ void TAsyncLooper::StartLoop(const TGuard& guard)
         case EState::NotRunning:
             // We have been stopped during the async step
             // -> cancel the future if there is one.
-            YT_LOG_DEBUG("Looper stop occured during the async part");
+            YT_LOG_DEBUG("Looper stop occurred during the async part");
 
             if (future) {
                 future.Cancel(TError("Looper stopped"));
@@ -129,7 +129,7 @@ void TAsyncLooper::StartLoop(const TGuard& guard)
         case EState::Restarting:
             // We have been restarted during the async step
             // -> convert to running.
-            YT_LOG_DEBUG("Looper restart occured during the async part. Next loop will be a clean start");
+            YT_LOG_DEBUG("Looper restart occurred during the async part. Next loop will be a clean start");
 
             State_ = EState::Running;
             break;
@@ -171,7 +171,7 @@ void TAsyncLooper::AfterStart(ui64 epochNumber, const TError& error)
 
         switch (State_) {
             case EState::NotRunning:
-                YT_LOG_DEBUG("Looper stop occured during the intermission between async and sync steps");
+                YT_LOG_DEBUG("Looper stop occurred during the intermission between async and sync steps");
                 // We have been stopped -> bail out.
                 return;
 
@@ -180,7 +180,7 @@ void TAsyncLooper::AfterStart(ui64 epochNumber, const TError& error)
                     // We got restarted during the intermission.
                     // Caller of |Start| will start the new chain
                     // and we just bail out.
-                    YT_LOG_DEBUG("Looper restart occured during the intermission between async and sync steps");
+                    YT_LOG_DEBUG("Looper restart occurred during the intermission between async and sync steps");
                     return;
                 }
                 break;
@@ -230,14 +230,14 @@ void TAsyncLooper::FinishStep()
         case EState::NotRunning:
             // We have been stopped
             // -> bail out.
-            YT_LOG_DEBUG("Looper stop occured during the sync step");
+            YT_LOG_DEBUG("Looper stop occurred during the sync step");
 
             return;
 
         case EState::Restarting:
             // We have been restarted
             // -> start the new chain of loops.
-            YT_LOG_DEBUG("Looper restart occured during the sync step");
+            YT_LOG_DEBUG("Looper restart occurred during the sync step");
 
             State_ = EState::Running;
             StartLoop(guard);

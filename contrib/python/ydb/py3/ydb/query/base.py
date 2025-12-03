@@ -12,6 +12,7 @@ from typing import (
 from .._grpc.grpcwrapper import ydb_query
 from .._grpc.grpcwrapper.ydb_query_public_types import (
     BaseQueryTxMode,
+    ArrowFormatSettings,
 )
 from ..connection import _RpcState as RpcState
 from .. import convert
@@ -53,6 +54,18 @@ class QueryStatsMode(enum.IntEnum):
     BASIC = 20
     FULL = 30
     PROFILE = 40
+
+
+class QuerySchemaInclusionMode(enum.IntEnum):
+    UNSPECIFIED = 0
+    ALWAYS = 1
+    FIRST_ONLY = 2
+
+
+class QueryResultSetFormat(enum.IntEnum):
+    UNSPECIFIED = 0
+    VALUE = 1
+    ARROW = 2
 
 
 class SyncResponseContextIterator(_utilities.SyncResponseIterator):
@@ -139,6 +152,9 @@ def create_execute_query_request(
     syntax: Optional[QuerySyntax],
     exec_mode: Optional[QueryExecMode],
     stats_mode: Optional[QueryStatsMode],
+    schema_inclusion_mode: Optional[QuerySchemaInclusionMode],
+    result_set_format: Optional[QueryResultSetFormat],
+    arrow_format_settings: Optional[ArrowFormatSettings],
     parameters: Optional[dict],
     concurrent_result_sets: Optional[bool],
 ) -> ydb_query.ExecuteQueryRequest:
@@ -146,6 +162,10 @@ def create_execute_query_request(
         syntax = QuerySyntax.YQL_V1 if not syntax else syntax
         exec_mode = QueryExecMode.EXECUTE if not exec_mode else exec_mode
         stats_mode = QueryStatsMode.NONE if stats_mode is None else stats_mode
+        schema_inclusion_mode = (
+            QuerySchemaInclusionMode.ALWAYS if schema_inclusion_mode is None else schema_inclusion_mode
+        )
+        result_set_format = QueryResultSetFormat.VALUE if result_set_format is None else result_set_format
 
         tx_control = None
         if not tx_id and not tx_mode:
@@ -176,6 +196,9 @@ def create_execute_query_request(
             parameters=parameters,
             concurrent_result_sets=concurrent_result_sets,
             stats_mode=stats_mode,
+            schema_inclusion_mode=schema_inclusion_mode,
+            result_set_format=result_set_format,
+            arrow_format_settings=arrow_format_settings,
         )
     except BaseException as e:
         raise issues.ClientInternalError("Unable to prepare execute request") from e

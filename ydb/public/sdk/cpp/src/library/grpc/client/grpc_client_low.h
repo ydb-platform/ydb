@@ -1412,23 +1412,18 @@ private:
     std::mutex JoinMutex_;
 };
 
-gpr_timespec DurationToTimespec(const NYdb::TDeadline::Duration& duration) noexcept;
-
-gpr_timespec DeadlineToTimespec(const NYdb::TDeadline& deadline);
-
 }
 
 template <>
 class grpc::TimePoint<NYdb::TDeadline> {
 public:
-    TimePoint(const NYdb::TDeadline& deadline)
-        : time_(NYdbGrpc::DeadlineToTimespec(deadline))
-    {}
+    TimePoint(const NYdb::TDeadline& deadline);
 
-    gpr_timespec raw_time() const noexcept {
-        return time_;
-    }
+    gpr_timespec raw_time() const noexcept;
 
 private:
+    static gpr_timespec DurationToTimespec(const NYdb::TDeadline::Duration& duration) noexcept;
+    static gpr_timespec DeadlineToTimespec(const NYdb::TDeadline& deadline);
+
     gpr_timespec time_;
 };

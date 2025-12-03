@@ -35,8 +35,7 @@ namespace details
 template <class T, class V>
 bool in(T &&t, V const &v)
 {
-  using RT =
-      typename std::remove_cv<typename std::remove_reference<T>::type>::type;
+  using RT = std::remove_cv_t<std::remove_reference_t<T>>;
   static bool constexpr has_contains = types::has_contains<RT, V>::value;
   return details::in<has_contains>()(std::forward<T>(t), v);
 }

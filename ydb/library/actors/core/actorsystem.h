@@ -321,6 +321,10 @@ namespace NActors {
             return SystemSetup->GetThreadsOptional(poolId);
         }
 
+        auto GetPoolMaxThreadsCount(ui32 poolId) const {
+            return CpuManager->GetExecutorPool(poolId)->GetMaxThreadCount();
+        }
+
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));
         }

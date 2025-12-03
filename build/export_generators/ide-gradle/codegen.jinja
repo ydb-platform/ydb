@@ -58,7 +58,7 @@ tasks.withType<KaptGenerateStubsTask>().configureEach {
 tasks.named("{{ parent_taskvar }}").configure {
     dependsOn({{ taskvar }})
 }
-{%-     else -%}
+{%-     elif not obj['_object_index'] in current_target_object_indexes_with_codegen_dirs -%}
 {{ TopDepends(taskvar) }}
 {%-     endif  -%}
 {%- endmacro -%}

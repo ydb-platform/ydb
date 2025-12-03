@@ -19,10 +19,10 @@
 #include <numeric>
 #include <vector>
 
-#include "arrow/compute/api_aggregate.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/util_internal.h"
-#include "arrow/stl_allocator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/stl_allocator.h"
 
 namespace arrow20 {
 namespace compute {

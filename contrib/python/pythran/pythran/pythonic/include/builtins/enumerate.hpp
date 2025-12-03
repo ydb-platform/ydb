@@ -17,8 +17,7 @@ namespace builtins
     template <class Iterator>
     using enumerate_iterator_base = std::iterator<
         typename std::iterator_traits<Iterator>::iterator_category,
-        types::make_tuple_t<
-            long, typename std::iterator_traits<Iterator>::value_type>>;
+        types::make_tuple_t<long, typename std::iterator_traits<Iterator>::value_type>>;
 
     template <class Iterator>
     struct enumerate_iterator : public enumerate_iterator_base<Iterator> {
@@ -45,9 +44,8 @@ namespace builtins
     template <class Iterable>
     struct enumerate
         : private Iterable, /* to hold a reference on the iterable */
-          public enumerate_iterator<
-              typename Iterable::iterator> /* to be compatible with
-                                              builtins.next*/
+          public enumerate_iterator<typename Iterable::iterator> /* to be compatible with
+                                                                    builtins.next*/
     {
       using iterator = enumerate_iterator<typename Iterable::iterator>;
       using iterator::operator*;
@@ -64,8 +62,7 @@ namespace builtins
   } // namespace details
 
   template <class Iterable>
-  details::enumerate<typename std::remove_cv<
-      typename std::remove_reference<Iterable>::type>::type>
+  details::enumerate<std::remove_cv_t<std::remove_reference_t<Iterable>>>
   enumerate(Iterable &&seq, long first = 0L);
 
   DEFINE_FUNCTOR(pythonic::builtins, enumerate);

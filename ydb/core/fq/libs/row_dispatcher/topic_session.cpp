@@ -60,6 +60,7 @@ struct TEvPrivate {
         EvSendStatistic,
         EvReconnectSession,
         EvExecuteTopicEvent,
+        EvGetEventByTimerEvent,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
@@ -72,11 +73,13 @@ struct TEvPrivate {
     struct TEvExecuteTopicEvent : public NYql::TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
         using TTopicEventBase::TTopicEventBase;
     };
+    struct TEvGetEventByTimerEvent : public TEventLocal<TEvGetEventByTimerEvent, EvGetEventByTimerEvent> {};
 };
 
 constexpr ui64 SendStatisticPeriodSec = 2;
 constexpr ui64 MaxHandledEventsCount = 1000;
 constexpr ui64 MaxHandledEventsSize = 1000000;
+constexpr ui64 GetEventByTimerPeriodSec = 30;
 
 class TTopicSession : public TActorBootstrapped<TTopicSession>, NYql::TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
 private:
@@ -325,7 +328,7 @@ private:
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(const TString& consumerName) const;
     void CreateTopicSession();
     void CloseTopicSession();
-    void SubscribeOnNextEvent();
+    void SubscribeOnNextEvent(bool checkIsWaitingEvents = true);
     void SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void SendData(TClientsInfo& info);
     void FatalError(const TStatus& status);
@@ -333,7 +336,7 @@ private:
     void SendDataArrived(TClientsInfo& client);
     void StopReadSession();
     TString GetSessionId() const;
-    void HandleNewEvents();
+    bool HandleNewEvents();
     TInstant GetMinStartingMessageTimestamp() const;
     void StartClientSession(TClientsInfo& info);
 
@@ -341,6 +344,7 @@ private:
     void Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&);
     void Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&);
     void Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&);
+    void Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&);
     void Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
@@ -361,6 +365,7 @@ private:
         hFunc(NFq::TEvPrivate::TEvCreateSession, Handle);
         hFunc(NFq::TEvPrivate::TEvSendStatistic, Handle);
         hFunc(NFq::TEvPrivate::TEvReconnectSession, Handle);
+        hFunc(NFq::TEvPrivate::TEvGetEventByTimerEvent, Handle);
         hFunc(TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
@@ -377,7 +382,8 @@ private:
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
         IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
-        IgnoreFunc(NFq::TEvPrivate::TEvReconnectSession);,
+        IgnoreFunc(NFq::TEvPrivate::TEvReconnectSession);
+        IgnoreFunc(NFq::TEvPrivate::TEvGetEventByTimerEvent);,
         ExceptionFunc(std::exception, HandleException)
     )
 };
@@ -424,6 +430,7 @@ void TTopicSession::Bootstrap() {
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
         << ", Timeout " << Config.GetTimeoutBeforeStartSession() << " sec");
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
+    Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
 }
 
 void TTopicSession::PassAway() {
@@ -433,8 +440,8 @@ void TTopicSession::PassAway() {
     TBase::PassAway();
 }
 
-void TTopicSession::SubscribeOnNextEvent() {
-    if (!ReadSession || IsWaitingEvents) {
+void TTopicSession::SubscribeOnNextEvent(bool checkIsWaitingEvents) {
+    if (!ReadSession || (checkIsWaitingEvents && IsWaitingEvents)) {
         LOG_ROW_DISPATCHER_TRACE("Skip SubscribeOnNextEvent, has ReadSession: " << (ReadSession ? "true" : "false") << ", IsWaitingEvents: " << IsWaitingEvents);
         return;
     }
@@ -577,12 +584,13 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
     SubscribeOnNextEvent();
 }
 
-void TTopicSession::HandleNewEvents() {
+bool TTopicSession::HandleNewEvents() {
     ui64 handledEventsSize = 0;
+    bool readSomething = false;
 
     for (ui64 i = 0; i < MaxHandledEventsCount; ++i) {
         if (!ReadSession) {
-            return;
+            return false;
         }
         if (Config.GetMaxSessionUsedMemory() && QueuedBytes > Config.GetMaxSessionUsedMemory()) {
             LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << QueuedBytes << " bytes), stop reading from yds");
@@ -592,12 +600,14 @@ void TTopicSession::HandleNewEvents() {
         if (!event) {
             break;
         }
+        readSomething = true;
 
         std::visit(TTopicEventProcessor{*this, LogPrefix, handledEventsSize}, *event);
         if (handledEventsSize >= MaxHandledEventsSize) {
             break;
         }
     }
+    return readSomething;
 }
 
 void TTopicSession::CloseTopicSession() {
@@ -787,11 +797,19 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto formatIt = FormatHandlers.find(handlerSettings);
     if (formatIt == FormatHandlers.end()) {
         auto config = CreateFormatHandlerConfig(Config, FunctionRegistry, CompileServiceActorId, source.GetSkipJsonErrors());
+
+        auto readGroupSubgroup = Counters;
+        for (const auto& sensor : ev->Get()->Record.GetSource().GetTaskSensorLabel()) {
+            readGroupSubgroup = readGroupSubgroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+        }
+        readGroupSubgroup = readGroupSubgroup->GetSubgroup("topic", SanitizeLabel(TopicPath));
+        readGroupSubgroup = readGroupSubgroup->GetSubgroup("read_group", SanitizeLabel(ReadGroup));
+
         formatIt = FormatHandlers.emplace(handlerSettings, CreateTopicFormatHandler(
             ActorContext(),
             config,
             handlerSettings,
-            {.CountersRoot = CountersRoot, .CountersSubgroup = Metrics.PartitionGroup}
+            {.CountersRoot = CountersRoot, .ReadGroupSubgroup = readGroupSubgroup, .CountersSubgroup = Metrics.PartitionGroup}
         )).first;
     }
 
@@ -969,6 +987,21 @@ void TTopicSession::SendStatistics() {
 void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
     SendStatistics();
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
+}
+
+void TTopicSession::Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvGetEventByTimerEvent");
+    // Workaround for a partition reading bug:
+    // In some cases, the partition may stop delivering new events due to missed notifications or lost subscriptions,
+    // causing the session to stall and not receive further data. To address this, we periodically schedule a timer event
+    // (TEvGetEventByTimerEvent) that explicitly triggers reading of new events from the partition. If new data is found,
+    // and the session is waiting for events, we re-subscribe to ensure continuous data flow. This timer-based approach
+    // helps to recover from situations where the normal event-driven mechanism fails to deliver new data.
+    Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
+    bool readSomething = HandleNewEvents();
+    if (readSomething && IsWaitingEvents) {
+        SubscribeOnNextEvent(false);
+    }
 }
 
 bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {

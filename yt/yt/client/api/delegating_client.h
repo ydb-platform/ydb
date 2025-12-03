@@ -573,6 +573,19 @@ public:
         const TListJobsOptions& options),
         (operationIdOrAlias, options))
 
+    DELEGATE_METHOD(TFuture<std::vector<TJobTraceMeta>>, ListJobTraces, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NJobTrackerClient::TJobId jobId,
+        const TListJobTracesOptions& options),
+        (operationIdOrAlias, jobId, options))
+
+    DELEGATE_METHOD(TFuture<TCheckOperationPermissionResult>, CheckOperationPermission, (
+        const std::string& user,
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NYTree::EPermission permission,
+        const TCheckOperationPermissionOptions& options),
+        (user, operationIdOrAlias, permission, options))
+
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetJob, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,

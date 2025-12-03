@@ -391,7 +391,7 @@ protected:
                 return;
             }
 
-            response.AttachmentsFuture.SubscribeUnique(
+            response.AttachmentsFuture.AsUnique().Subscribe(
                 BIND([this, this_ = MakeStrong(this), responseBody = std::move(response.Body)] (TErrorOr<std::vector<TSharedRef>>&& compressedAttachments) {
                     const auto& underlyingContext = this->GetUnderlyingContext();
                     if (compressedAttachments.IsOK()) {

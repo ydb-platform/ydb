@@ -5,6 +5,8 @@
 
 #include <yt/yt/client/table_client/name_table.h>
 
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
 #include <yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
 
 namespace NYT::NApi::NRpcProxy {
@@ -130,7 +132,7 @@ TFuture<TSharedRange<TUnversionedRow>> TRowBatchReader::GetRows()
             }
 
             if (rows.Empty()) {
-                return ExpectEndOfStream(Underlying_).Apply(BIND([=] () mutable {
+                return CheckEndOfStream(Underlying_).Apply(BIND([=] () mutable {
                     return std::move(rows);
                 }));
             }

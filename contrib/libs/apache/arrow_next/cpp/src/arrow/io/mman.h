@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "arrow/util/windows_compatibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_compatibility.h"
 
 #include <errno.h>
 #include <io.h>

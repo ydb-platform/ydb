@@ -10,6 +10,7 @@
 #include <yql/essentials/core/yql_user_data.h>
 #include <yql/essentials/core/layers/remote_layer_provider.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
+#include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/essentials/providers/config/yql_config_provider.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -497,7 +498,8 @@ private:
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
 };
 
-void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags, TMaybe<TString> gatewaysPatch = {});
+TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context);
+
 bool HasFullCapture(const IQReaderPtr& reader);
 
 } // namespace NYql

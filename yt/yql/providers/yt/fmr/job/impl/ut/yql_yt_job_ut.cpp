@@ -24,22 +24,6 @@ TString TableContent_3 = "{\"key\"=\"9\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
                         "{\"key\"=\"11\";\"subkey\"=\"3\";\"value\"=\"q\"};\n"
                         "{\"key\"=\"12\";\"subkey\"=\"4\";\"value\"=\"qzz\"};\n";
 
-// TODO - make better setup to avoid duplication
-
-TString GetBinaryYson(const TString& textYsonContent) {
-    TStringStream binaryYsonInputStream;
-    TStringStream textYsonInputStream(textYsonContent);
-    NYson::ReformatYsonStream(&textYsonInputStream, &binaryYsonInputStream, NYson::EYsonFormat::Binary, ::NYson::EYsonType::ListFragment);
-    return binaryYsonInputStream.ReadAll();
-}
-
-TString GetTextYson(const TString& binaryYsonContent) {
-    TStringStream binaryYsonInputStream(binaryYsonContent);
-    TStringStream textYsonInputStream;
-    NYson::ReformatYsonStream(&binaryYsonInputStream, &textYsonInputStream, NYson::EYsonFormat::Text, ::NYson::EYsonType::ListFragment);
-    return textYsonInputStream.ReadAll();
-}
-
 Y_UNIT_TEST_SUITE(FmrJobTests) {
     Y_UNIT_TEST(DownloadTable) {
         auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");

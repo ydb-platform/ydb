@@ -14,13 +14,11 @@ namespace numpy
     template <class pS>
     types::ndarray<double, pS> random(pS const &shape);
 
-    auto
-    random(long size) -> decltype(random(types::array_tuple<long, 1>{{size}}));
+    auto random(long size) -> decltype(random(types::array_tuple<long, 1>{{size}}));
 
     template <long N>
     auto random(std::integral_constant<long, N>)
-        -> decltype(random(
-            types::array_tuple<std::integral_constant<long, N>, 1>{}))
+        -> decltype(random(types::array_tuple<std::integral_constant<long, N>, 1>{}))
     {
       return random(types::array_tuple<std::integral_constant<long, N>, 1>{});
     }

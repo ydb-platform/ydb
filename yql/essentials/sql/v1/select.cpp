@@ -984,7 +984,7 @@ static bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool ass
 class TReduceSource: public IRealSource {
 public:
     TReduceSource(TPosition pos,
-                  ReduceMode mode,
+                  EReduceMode mode,
                   TSourcePtr source,
                   TVector<TSortSpecificationPtr>&& orderBy,
                   TVector<TNodePtr>&& keys,
@@ -1103,7 +1103,7 @@ public:
 
         TNodePtr processPartitions;
         if (ListCall_) {
-            if (Mode_ != ReduceMode::ByAll) {
+            if (Mode_ != EReduceMode::ByAll) {
                 ctx.Error(Pos_) << "TableRows() must be used only with USING ALL";
                 return nullptr;
             }
@@ -1112,7 +1112,7 @@ public:
             processPartitions = Y("SqlReduce", "partitionStream", BuildQuotedAtom(Pos_, "byAllList", TNodeFlags::Default), Udf_, expr);
         } else {
             switch (Mode_) {
-                case ReduceMode::ByAll: {
+                case EReduceMode::ByAll: {
                     auto columnPtr = Args_[0]->GetColumnName();
                     TNodePtr expr = BuildAtom(Pos_, "partitionStream");
                     if (!columnPtr || *columnPtr != "*") {
@@ -1123,7 +1123,7 @@ public:
                     processPartitions = Y("SqlReduce", "partitionStream", BuildQuotedAtom(Pos_, "byAll", TNodeFlags::Default), Udf_, expr);
                     break;
                 }
-                case ReduceMode::ByPartition: {
+                case EReduceMode::ByPartition: {
                     processPartitions = Y("SqlReduce", "partitionStream", extractKeyLambda, Udf_,
                                           BuildLambda(Pos_, Y("row"), Args_[0]));
                     break;
@@ -1138,7 +1138,7 @@ public:
             sortKeySelector = BuildLambda(Pos_, Y("row"), Y("SqlExtractKey", "row", sortKeySelector));
         }
 
-        auto partitionByKey = Y(!ListCall_ && Mode_ == ReduceMode::ByAll ? "PartitionByKey" : "PartitionsByKeys", "core", extractKeyLambda,
+        auto partitionByKey = Y(!ListCall_ && Mode_ == EReduceMode::ByAll ? "PartitionByKey" : "PartitionsByKeys", "core", extractKeyLambda,
                                 sortDirection, sortKeySelector, BuildLambda(Pos_, Y("partitionStream"), processPartitions));
 
         auto inputLabel = ListCall_ ? "inputRowsList" : "core";
@@ -1190,7 +1190,7 @@ public:
     }
 
 private:
-    ReduceMode Mode_;
+    EReduceMode Mode_;
     TSourcePtr Source_;
     TVector<TSortSpecificationPtr> OrderBy_;
     TVector<TNodePtr> Keys_;
@@ -1203,7 +1203,7 @@ private:
 };
 
 TSourcePtr BuildReduce(TPosition pos,
-                       ReduceMode mode,
+                       EReduceMode mode,
                        TSourcePtr source,
                        TVector<TSortSpecificationPtr>&& orderBy,
                        TVector<TNodePtr>&& keys,
@@ -3009,8 +3009,8 @@ public:
         if (skip) {
             select = Y("Skip", select, Y("Coalesce", skip, Y("Uint64", Q("0"))));
         }
-        static const TString uiMax = ::ToString(std::numeric_limits<ui64>::max());
-        Add("let", "select", Y("Take", select, Y("Coalesce", take, Y("Uint64", Q(uiMax)))));
+        static const TString Max = ::ToString(std::numeric_limits<ui64>::max());
+        Add("let", "select", Y("Take", select, Y("Coalesce", take, Y("Uint64", Q(Max)))));
     }
 
     TPtr DoClone() const final {

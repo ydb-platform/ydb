@@ -2,6 +2,7 @@
 #include "log.h"
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <util/generic/overloaded.h>
 
 namespace NKikimr::NViewer {
 
@@ -1009,6 +1010,7 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     Proto2JsonConfig.WriteNanAsString = true;
     Proto2JsonConfig.DoubleNDigits = 17;
     Proto2JsonConfig.FloatNDigits = 9;
+    Proto2JsonConfig.FloatToStringMode = EFloatToStringMode::PREC_NDIGITS;
     Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), Timeout.MilliSeconds()));
     UseCache = FromStringWithDefault<bool>(params.Get("use_cache"), UseCache);
 }

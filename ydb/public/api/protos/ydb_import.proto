@@ -131,19 +131,23 @@ message ImportFromFsSettings {
              * '/scheme.pb' - object with information about scheme, indexes, etc;
              * '/permissions.pb' - object with information about ACL and owner;
              * '/metadata.json' - object with metadata about the backup.
-           The path in FS is specified relative to base_path.
-           Example: "my_export/table1"
+        The FS path can be either provided explicitly (relative to base_path)
+        Or, if the export contains the database objects list, you may specify the database object name,
+        and the FS prefix will be looked up in the database objects list by the import procedure
         */
-        string source_path = 1 [(required) = true];
+        string source_path = 1;
 
-        // Database path to a table to import to.
-        string destination_path = 2 [(required) = true];
+        // Database path to a database object to import the item to
+        // Resolved relative to the default destination_path
+        // May be omitted if the item's source_path is specified, in this case will be taken equal to it
+        string destination_path = 2;
     }
 
     // Base path on FS where the export is located
-    // Path to the mounted directory in the case of NFS
+    // In the case of NFS, one of the directories in the path must be mounted
     // Must be an absolute path
     // Example: /mnt/exports
+    // SchemaMapping file with the list of objects is read from this path
     string base_path = 1 [(required) = true];
 
     repeated Item items = 2; // Empty collection means import of all export objects
@@ -160,6 +164,15 @@ message ImportFromFsSettings {
 
     // Skip checksum validation during import
     bool skip_checksum_validation = 6;
+
+    // Destination path to restore paths inside database
+    // Default value is database root
+    string destination_path = 7;
+
+    // Settings how data is encrypted.
+    // If encryption_settings field is not specified,
+    // the resulting data is considered not encrypted.
+    Ydb.Export.EncryptionSettings encryption_settings = 8;
 }
 
 message ImportFromFsResult {
@@ -260,6 +273,66 @@ message ListObjectsInS3ExportRequest {
 
 message ListObjectsInS3ExportResponse {
     // operation.result = ListObjectsInS3ExportResult
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListObjectsInFsExportSettings {
+    message Item {
+        // Database object path
+        // Recursive for directories
+        string path = 1;
+    }
+
+    string base_path = 1 [(required) = true];
+    repeated Item items = 2;
+    uint32 number_of_retries = 3;
+
+    // Settings how data is encrypted.
+    // If encryption_settings field is not specified,
+    // the resulting data is considered not encrypted.
+    Ydb.Export.EncryptionSettings encryption_settings = 4;
+}
+
+message ListObjectsInFsExportResult {
+    message Item {
+        /* YDB database objects in S3 are stored in one or more S3 objects (see ydb_export.proto).
+          The S3 object name begins with a prefix, followed by:
+            * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
+            * '/scheme.pb' - object with information about scheme, indexes, etc;
+            * '/permissions.pb' - object with information about ACL and owner;
+            * '/metadata.json' - object with metadata about the backup.
+        */
+        string fs_path = 1;
+        string db_path = 2;
+    }
+
+    repeated Item items = 1;
+
+    // This token allows you to get the next page of results for ListObjectsInFsExport requests,
+    // if the number of results is larger than `page_size` specified in the request.
+    // To get the next page, specify the value of `next_page_token` as a value for
+    // the `page_token` parameter in the next ListObjectsInFsExport request. Subsequent ListObjectsInFsExport
+    // requests will have their own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}
+
+message ListObjectsInFsExportRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    ListObjectsInFsExportSettings settings = 2 [(required) = true];
+
+    // The maximum number of results per page that should be returned. If the number of available
+    // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+    // to get the next page of results in subsequent ListObjectsInFsExport requests.
+    // 0 means that server returns all objects.
+    int64 page_size = 3 [(value) = "<= 10000"];
+
+    // Page token. Set `page_token` to the `next_page_token` returned by a previous ListObjectsInFsExport
+    // request to get the next page of results.
+    string page_token = 4;
+}
+
+message ListObjectsInFsExportResponse {
+    // operation.result = ListObjectsInFsExportResult
     Ydb.Operations.Operation operation = 1;
 }
 

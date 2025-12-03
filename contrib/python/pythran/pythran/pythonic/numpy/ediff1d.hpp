@@ -14,8 +14,8 @@ namespace numpy
   {
     auto arr = asarray(expr);
     long n = arr.flat_size() - 1;
-    types::ndarray<typename E::dtype, types::pshape<long>> out(
-        types::pshape<long>(n), builtins::None);
+    types::ndarray<typename E::dtype, types::pshape<long>> out(types::pshape<long>(n),
+                                                               builtins::None);
     // Compute adjacent difference except for the first element
     std::adjacent_difference(arr.fbegin() + 1, arr.fend(), out.fbegin());
     // First element can be done now

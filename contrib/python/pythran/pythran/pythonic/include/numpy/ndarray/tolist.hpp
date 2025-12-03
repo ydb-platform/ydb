@@ -23,14 +23,12 @@ namespace numpy
     };
 
     template <class T, class pS>
-    typename std::enable_if<std::tuple_size<pS>::value == 1,
-                            types::list<T>>::type
+    std::enable_if_t<std::tuple_size<pS>::value == 1, types::list<T>>
     tolist(types::ndarray<T, pS> const &expr);
 
     template <class T, class pS>
-    typename std::enable_if<
-        std::tuple_size<pS>::value != 1,
-        typename tolist_type<T, std::tuple_size<pS>::value>::type>::type
+    std::enable_if_t<std::tuple_size<pS>::value != 1,
+                     typename tolist_type<T, std::tuple_size<pS>::value>::type>
     tolist(types::ndarray<T, pS> const &expr);
 
     NUMPY_EXPR_TO_NDARRAY0_DECL(tolist);

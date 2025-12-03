@@ -36,7 +36,7 @@
     ],
     "test.test[ErrorFloatFromBinaryStringBitVector]": [
         {
-            "uri": "file://test.test_ErrorFloatFromBinaryStringBitVector_/extracted"
+            "uri": "file://test.test_ErrorFloatFromBinaryStringBitVector_/results.txt"
         }
     ],
     "test.test[ErrorFloatFromBinaryStringEmpty]": [

@@ -13,10 +13,8 @@ namespace numpy
 {
   // list case
   template <class E>
-  typename std::enable_if<
-      !types::is_array<E>::value && !types::is_dtype<E>::value,
-      types::ndarray<typename E::dtype,
-                     types::array_tuple<long, E::value>>>::type
+  std::enable_if_t<!types::is_array<E>::value && !types::is_dtype<E>::value,
+                   types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>>
   copy(E const &v)
   {
     return {v};
@@ -24,17 +22,14 @@ namespace numpy
 
   // scalar / complex case
   template <class E>
-  auto copy(E const &v) ->
-      typename std::enable_if<types::is_dtype<E>::value, E>::type
+  auto copy(E const &v) -> std::enable_if_t<types::is_dtype<E>::value, E>
   {
     return v;
   }
 
   // No copy is required for numpy_expr
   template <class E>
-  auto copy(E &&v) ->
-      typename std::enable_if<types::is_array<E>::value,
-                              decltype(std::forward<E>(v))>::type
+  auto copy(E &&v) -> std::enable_if_t<types::is_array<E>::value, decltype(std::forward<E>(v))>
   {
     return std::forward<E>(v);
   }
@@ -48,8 +43,7 @@ namespace numpy
 
   // transposed ndarray case
   template <class T, class pS>
-  types::numpy_texpr<types::ndarray<T, pS>>
-  copy(types::numpy_texpr<types::ndarray<T, pS>> const &a)
+  types::numpy_texpr<types::ndarray<T, pS>> copy(types::numpy_texpr<types::ndarray<T, pS>> const &a)
   {
     return a.arg.copy();
   }

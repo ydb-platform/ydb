@@ -83,8 +83,7 @@ namespace types
   struct none_data {
     explicit operator bool() const
     {
-      return !static_cast<P const *>(this)->is_none &&
-             static_cast<P const *>(this)->data;
+      return !static_cast<P const *>(this)->is_none && static_cast<P const *>(this)->data;
     }
     operator T const &() const
     {
@@ -95,8 +94,7 @@ namespace types
   struct none_data<P, bool> {
     operator bool() const
     {
-      return !static_cast<P const *>(this)->is_none &&
-             static_cast<P const *>(this)->data;
+      return !static_cast<P const *>(this)->is_none && static_cast<P const *>(this)->data;
     }
   };
   template <class T>
@@ -134,31 +132,28 @@ namespace types
     }
   };
 
-#define NONE_OPERATOR_OVERLOAD(op)                                             \
-  template <class T>                                                           \
-  auto operator op(none<T> const &t0, T const &t1)                             \
-      ->decltype(static_cast<T const &>(t0) op t1)                             \
-  {                                                                            \
-    return static_cast<T const &>(t0) op t1;                                   \
-  }                                                                            \
-                                                                               \
-  template <class T>                                                           \
-  auto operator op(T const &t0, none<T> const &t1)                             \
-      ->decltype(t0 op static_cast<T const &>(t1))                             \
-  {                                                                            \
-    return t0 op static_cast<T const &>(t1);                                   \
-  }                                                                            \
-                                                                               \
-  template <class T>                                                           \
-  auto operator op(none<T> const &t0, none<T> const &t1)                       \
-      ->none<decltype(static_cast<T const &>(t0)                               \
-                          op static_cast<T const &>(t1))>                      \
-  {                                                                            \
-    if (t0.is_none && t1.is_none)                                              \
-      return none_type{};                                                      \
-    else {                                                                     \
-      return {static_cast<T const &>(t0) op static_cast<T const &>(t1)};       \
-    }                                                                          \
+#define NONE_OPERATOR_OVERLOAD(op)                                                                 \
+  template <class T>                                                                               \
+  auto operator op(none<T> const &t0, T const &t1)->decltype(static_cast<T const &>(t0) op t1)     \
+  {                                                                                                \
+    return static_cast<T const &>(t0) op t1;                                                       \
+  }                                                                                                \
+                                                                                                   \
+  template <class T>                                                                               \
+  auto operator op(T const &t0, none<T> const &t1)->decltype(t0 op static_cast<T const &>(t1))     \
+  {                                                                                                \
+    return t0 op static_cast<T const &>(t1);                                                       \
+  }                                                                                                \
+                                                                                                   \
+  template <class T>                                                                               \
+  auto operator op(none<T> const &t0, none<T> const &t1)                                           \
+      ->none<decltype(static_cast<T const &>(t0) op static_cast<T const &>(t1))>                   \
+  {                                                                                                \
+    if (t0.is_none && t1.is_none)                                                                  \
+      return none_type{};                                                                          \
+    else {                                                                                         \
+      return {static_cast<T const &>(t0) op static_cast<T const &>(t1)};                           \
+    }                                                                                              \
   }
 
   NONE_OPERATOR_OVERLOAD(+)
@@ -172,12 +167,12 @@ namespace types
   NONE_OPERATOR_OVERLOAD(<=)
 
   template <class T0, class T1>
-  decltype(operator_::mod(std::declval<T0>(), std::declval<T1>()))
-  operator%(none<T0> const &t0, T1 const &t1);
+  decltype(operator_::mod(std::declval<T0>(), std::declval<T1>())) operator%(none<T0> const &t0,
+                                                                             T1 const &t1);
 
   template <class T0, class T1>
-  decltype(operator_::mod(std::declval<T0>(), std::declval<T1>()))
-  operator%(T0 const &t0, none<T1> const &t1);
+  decltype(operator_::mod(std::declval<T0>(), std::declval<T1>())) operator%(T0 const &t0,
+                                                                             none<T1> const &t1);
 
   template <class T0, class T1>
   none<decltype(operator_::mod(std::declval<T0>(), std::declval<T1>()))>
@@ -213,12 +208,11 @@ namespace std
 {
   /* std::get overload */
   template <size_t I, class T0>
-  auto get(pythonic::types::none<T0> const &t)
-      -> decltype(std::get<I>((T0 const &)t));
+  auto get(pythonic::types::none<T0> const &t) -> decltype(std::get<I>((T0 const &)t));
 
   template <size_t I, class T0>
   struct tuple_element<I, pythonic::types::none<T0>> {
-    using type = typename std::tuple_element<I, T0>::type;
+    using type = std::tuple_element_t<I, T0>;
   };
 
   template <>
@@ -235,51 +229,43 @@ namespace std
 
 template <class T0, class T1>
 struct __combined<pythonic::types::none<T0>, T1> {
-  static_assert(!pythonic::types::is_none<T1>::value,
-                "none of none should'nt exist");
+  static_assert(!pythonic::types::is_none<T1>::value, "none of none should'nt exist");
   using type = pythonic::types::none<typename __combined<T0, T1>::type>;
 };
 
 template <class T0, class T1>
 struct __combined<T1, pythonic::types::none<T0>> {
-  static_assert(!pythonic::types::is_none<T0>::value,
-                "none of none should'nt exist");
+  static_assert(!pythonic::types::is_none<T0>::value, "none of none should'nt exist");
   using type = pythonic::types::none<typename __combined<T0, T1>::type>;
 };
 
 template <class T0, class T1>
 struct __combined<pythonic::types::none<T1>, pythonic::types::none<T0>> {
-  static_assert(!pythonic::types::is_none<T0>::value,
-                "none of none shouldn't exist");
-  static_assert(!pythonic::types::is_none<T1>::value,
-                "none of none shouldn't exist");
+  static_assert(!pythonic::types::is_none<T0>::value, "none of none shouldn't exist");
+  static_assert(!pythonic::types::is_none<T1>::value, "none of none shouldn't exist");
   using type = pythonic::types::none<typename __combined<T0, T1>::type>;
 };
 
 template <class T>
 struct __combined<pythonic::types::none_type, T> {
-  static_assert(!pythonic::types::is_none<T>::value,
-                "none of none shouldn't exist");
+  static_assert(!pythonic::types::is_none<T>::value, "none of none shouldn't exist");
   using type = pythonic::types::none<T>;
 };
 
 template <class T>
 struct __combined<pythonic::types::none_type, pythonic::types::none<T>> {
-  static_assert(!pythonic::types::is_none<T>::value,
-                "none of none shouldn't exist");
+  static_assert(!pythonic::types::is_none<T>::value, "none of none shouldn't exist");
   using type = pythonic::types::none<T>;
 };
 
 template <class T>
 struct __combined<T, pythonic::types::none_type> {
-  static_assert(!pythonic::types::is_none<T>::value,
-                "none of none shouldn't exist");
+  static_assert(!pythonic::types::is_none<T>::value, "none of none shouldn't exist");
   using type = pythonic::types::none<T>;
 };
 template <class T>
 struct __combined<pythonic::types::none<T>, pythonic::types::none_type> {
-  static_assert(!pythonic::types::is_none<T>::value,
-                "none of none shouldn't exist");
+  static_assert(!pythonic::types::is_none<T>::value, "none of none shouldn't exist");
   using type = pythonic::types::none<T>;
 };
 

@@ -1,0 +1,12 @@
+/* postgres can not */
+/* kikimr can not */
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+use plato;
+
+upsert into Output
+select "x" as key;
+
+commit;
+
+select * from Output;

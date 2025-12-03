@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <util/generic/xrange.h>
+#include <util/stream/mem.h>
 #include <library/cpp/streams/bzip2/bzip2.h>
 
 namespace NYdb::NConsoleClient {
@@ -57,13 +58,11 @@ struct TARFile {
         char checksum[8];
         char padding2[356];
 
-        TARFileHeader(const TString& name, ui32 size) {
+        TARFileHeader(const TString& name, ui32 size, TInstant time) {
             memset(this, 0, sizeof(TARFileHeader));
             strcpy(filename, name.c_str());
             strcpy(fileSize, ToOct(size).c_str());
-            auto unixTime = std::chrono::duration_cast<std::chrono::seconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-            strcpy(lastModification, ToOct(unixTime).c_str());
+            strcpy(lastModification, ToOct(time.Seconds()).c_str());
             CalcChecksum();
         }
 
@@ -91,8 +90,8 @@ struct TARFile {
         }
     };
 
-    static void ToStream(IOutputStream& out, const TString& name, const TString& content) {
-        TARFileHeader h(name, content.size());
+    static void ToStream(IOutputStream& out, const TString& name, const TString& content, TInstant time) {
+        TARFileHeader h(name, content.size(), time);
         h.ToStream(out);
         out << content;
         size_t paddingBytes = (512 - (content.size() % 512)) % 512;
@@ -113,13 +112,12 @@ int TCommandClusterStateFetch::Run(TConfig& config) {
 
     TFileOutput out(FileName);
     TBZipCompress compress(&out);
-    TString r = proto.Getresult();
-    if (!r.empty()) {
-        TARFile::ToStream(compress, "result.json", r);
-    }
     for (ui32 i : xrange(proto.blocksSize())) {
         auto& block = proto.Getblocks(i);
-        TARFile::ToStream(compress, block.Getname(), block.Getcontent());
+        TString data = block.Getcontent();
+        TMemoryInput input(data.data(), data.size());
+        TBZipDecompress decompress(&input);
+        TARFile::ToStream(compress, block.Getname(), decompress.ReadAll(), TInstant::Seconds(block.Gettimestamp().seconds()));
     }
     return EXIT_SUCCESS;
 }

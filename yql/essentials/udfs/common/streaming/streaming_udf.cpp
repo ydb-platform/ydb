@@ -181,7 +181,7 @@ public:
         , DelimiterMatcher_(delimiter)
         , DelimiterInput_(delimiter)
         , Buffer_(bufferSizeBytes)
-        , CurReadMode_(ReadMode::Start)
+        , CurReadMode_(EReadMode::Start)
     {
     }
 
@@ -201,9 +201,9 @@ public:
 
             bool receivedYield = false;
 
-            while (Buffer_.CanWrite() && CurReadMode_ != ReadMode::Done && !receivedYield) {
+            while (Buffer_.CanWrite() && CurReadMode_ != EReadMode::Done && !receivedYield) {
                 switch (CurReadMode_) {
-                    case ReadMode::Start: {
+                    case EReadMode::Start: {
                         auto status = ReadNextString();
                         if (status == EFetchStatus::Yield) {
                             receivedYield = true;
@@ -211,25 +211,25 @@ public:
                         }
 
                         CurReadMode_ = (status == EFetchStatus::Ok)
-                                           ? ReadMode::String
-                                           : ReadMode::Done;
+                                           ? EReadMode::String
+                                           : EReadMode::Done;
 
                         break;
                     }
 
-                    case ReadMode::String:
+                    case EReadMode::String:
                         if (CurStringInput_.Exhausted()) {
                             DelimiterInput_.Reset(Delimiter_.data(), Delimiter_.size());
-                            CurReadMode_ = ReadMode::Delimiter;
+                            CurReadMode_ = EReadMode::Delimiter;
                             break;
                         }
 
                         Buffer_.Write(CurStringInput_);
                         break;
 
-                    case ReadMode::Delimiter:
+                    case EReadMode::Delimiter:
                         if (DelimiterInput_.Exhausted()) {
-                            CurReadMode_ = ReadMode::Start;
+                            CurReadMode_ = EReadMode::Start;
                             break;
                         }
 
@@ -241,7 +241,7 @@ public:
                 }
             }
 
-            if (CurReadMode_ == ReadMode::Done) {
+            if (CurReadMode_ == EReadMode::Done) {
                 Buffer_.Finish();
             }
 
@@ -312,7 +312,7 @@ private:
     }
 
 private:
-    enum class ReadMode {
+    enum class EReadMode {
         Start,
         String,
         Delimiter,
@@ -331,7 +331,7 @@ private:
 
     TCyclicRWBuffer Buffer_;
 
-    ReadMode CurReadMode_;
+    EReadMode CurReadMode_;
 };
 
 class TStringListBufferedOutputStream: public IOutputStream {
@@ -719,8 +719,8 @@ private:
 
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Process");
-        return name;
+        static auto Name = TStringRef::Of("Process");
+        return Name;
     }
 
 private:
@@ -765,8 +765,8 @@ private:
 
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("ProcessInline");
-        return name;
+        static auto Name = TStringRef::Of("ProcessInline");
+        return Name;
     }
 
 private:

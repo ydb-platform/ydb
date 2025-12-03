@@ -277,16 +277,17 @@ PyObject* SecureParamCall(PyObject* self, PyObject* args, PyObject* kwargs)
 {
     Y_UNUSED(kwargs);
 
-    struct PyBufDeleter {
+    struct TPyBufDeleter {
         void operator()(Py_buffer* view) {
             PyBuffer_Release(view);
         }
     };
+
     Py_buffer input;
     if (!PyArg_ParseTuple(args, "s*", &input)) {
         return nullptr;
     }
-    std::unique_ptr<Py_buffer, PyBufDeleter> bufPtr(&input);
+    std::unique_ptr<Py_buffer, TPyBufDeleter> bufPtr(&input);
     auto valueBuilder = CastToSecureParam(self)->CastCtx->ValueBuilder;
     NUdf::TStringRef key(static_cast<const char*>(input.buf), input.len);
     PY_TRY {

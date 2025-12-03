@@ -20,19 +20,14 @@ namespace numpy
     }
 
     template <class T>
-    auto isnan(T const &v) ->
-        typename std::enable_if<
-            std::is_floating_point<typename std::decay<T>::type>::value,
-            bool>::type
+    auto isnan(T const &v) -> std::enable_if_t<std::is_floating_point<std::decay_t<T>>::value, bool>
     {
       return std::isnan(v);
     }
 
     template <class T>
-    auto isnan(T const &v) ->
-        typename std::enable_if<
-            !std::is_floating_point<typename std::decay<T>::type>::value,
-            bool>::type
+    auto isnan(T const &v)
+        -> std::enable_if_t<!std::is_floating_point<std::decay_t<T>>::value, bool>
     {
       return false;
     }

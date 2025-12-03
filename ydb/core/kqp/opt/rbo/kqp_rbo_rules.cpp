@@ -67,14 +67,14 @@ TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
     return TExprNode::TPtr();
 }
 
-TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> conjuncts, TExprContext &ctx) {
+TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> conjuncts, TExprContext &ctx, bool pgSyntax) {
     auto arg = Build<TCoArgument>(ctx, pos).Name("lambda_arg").Done();
     TExprNode::TPtr lambda;
 
     if (conjuncts.size() == 1) {
         auto filterInfo = conjuncts[0];
         auto body = ReplaceArg(filterInfo.FilterBody, arg.Ptr(), ctx);
-        if (!filterInfo.FromPg) {
+        if (pgSyntax && !filterInfo.FromPg) {
             body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
         }
 
@@ -89,7 +89,7 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
 
         for (auto c : conjuncts) {
             auto body = ReplaceArg(c.FilterBody, arg.Ptr(), ctx);
-            if (!c.FromPg) {
+            if (pgSyntax && !c.FromPg) {
                 body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
             }
             newConjuncts.push_back(ReplaceArg(body, arg.Ptr(), ctx));
@@ -150,6 +150,43 @@ bool IsNullRejectingPredicate(const TFilterInfo &filter, TExprContext &ctx) {
 namespace NKikimr {
 namespace NKqp {
 
+// Remove extra maps that arrise during translation
+// Identity map that doesn't project can always be removed
+// Identity map that projects maybe a projection operator and can be removed if it doesn't do any extra
+// projections
+
+std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+
+    Y_UNUSED(ctx);
+    Y_UNUSED(props);
+    
+    if (input->Kind != EOperator::Map) {
+        return input;
+    }
+
+    auto map = CastOperator<TOpMap>(input);
+
+    /***
+     * If its a project map, check that it output the same number of columns as the operator below
+     */
+
+    if (map->Project && map->GetOutputIUs().size() != map->GetInput()->GetOutputIUs().size()) {
+        return input;
+    }
+
+    for (auto [toColumn, body] : map->MapElements) {
+        if (! std::holds_alternative<TInfoUnit>(body)) {
+            return input;
+        }
+        auto fromColumn = std::get<TInfoUnit>(body);
+        if (fromColumn != toColumn) {
+            return input;
+        }
+    }
+
+    return map->GetInput();
+}
+
 // Currently we only extract simple expressions where there is only one variable on either side
 
 bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
@@ -176,9 +213,10 @@ bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> &input
                 predicate = predicate->Child(0);
             }
 
-            if (predicate->IsCallable("PgResolvedOp") && predicate->Child(0)->Content() == "=") {
-                auto leftSide = predicate->Child(2);
-                auto rightSide = predicate->Child(3);
+            TExprNode::TPtr leftSide;
+            TExprNode::TPtr rightSide;
+
+            if (TestAndExtractEqualityPredicate(predicate, leftSide, rightSide)) {
 
                 if (leftSide->IsCallable("Member") && rightSide->IsCallable("Member")) {
                     continue;
@@ -489,7 +527,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     auto rightInput = join->GetRightInput();
 
     if (pushLeft.size()) {
-        auto leftLambda = BuildFilterLambdaFromConjuncts(leftInput->Pos, pushLeft, ctx.ExprCtx);
+        auto leftLambda = BuildFilterLambdaFromConjuncts(leftInput->Pos, pushLeft, ctx.ExprCtx, props.PgSyntax);
         leftInput = std::make_shared<TOpFilter>(leftInput, input->Pos, leftLambda);
     }
 
@@ -504,14 +542,14 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
                 }
             }
             if (predicatesForRightSide.size()) {
-                auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx);
+                auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx, props.PgSyntax);
                 rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightLambda);
                 join->JoinKind = "Inner";
             } else {
                 return input;
             }
         } else {
-            auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx);
+            auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx, props.PgSyntax);
             rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightLambda);
         }
     }
@@ -524,7 +562,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     join->Children[1] = rightInput;
 
     if (topLevelPreds.size()) {
-        auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Pos, topLevelPreds, ctx.ExprCtx);
+        auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Pos, topLevelPreds, ctx.ExprCtx, props.PgSyntax);
         output =  std::make_shared<TOpFilter>(join, input->Pos, topFilterLambda);
     } else {
         output = join;
@@ -548,7 +586,7 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
         return false;
     }
 
-    for (auto &child : input->Children) {
+    for (const auto &child : input->Children) {
         if (!child->Props.StageId.has_value()) {
             YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName << " child with unassigned stage";
             return false;
@@ -556,10 +594,11 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
     }
 
     if (input->Kind == EOperator::EmptySource || input->Kind == EOperator::Source) {
+        auto opRead = CastOperator<TOpRead>(input);
         TString readName;
         if (input->Kind == EOperator::Source) {
             auto opRead = CastOperator<TOpRead>(input);
-            auto newStageId = props.StageGraph.AddSourceStage(opRead->GetOutputIUs());
+            auto newStageId = props.StageGraph.AddSourceStage(opRead->Columns, opRead->GetOutputIUs(), opRead->SourceType, opRead->NeedsMap());
             input->Props.StageId = newStageId;
             readName = opRead->Alias;
         } else {
@@ -606,18 +645,24 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
         // If the child operator is a source, it requires its own stage
         // So we have build a new stage for current operator
         if (childOp->Kind == EOperator::Source) {
+            auto opRead = CastOperator<TOpRead>(childOp);
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
-            props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TSourceConnection>());
-        } 
+            std::shared_ptr<TConnection> connection;
+            if (opRead->SourceType == ETableSourceType::Row) {
+                connection.reset(new TSourceConnection());
+            } else {
+                connection.reset(new TUnionAllConnection(false));
+            }
+            props.StageGraph.Connect(prevStageId, newStageId, connection);
+        }
         // If the child operator is not single use, we also need to create a new stage
         // for current operator with a map connection
         else if (!childOp->IsSingleConsumer()) {
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
             props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TMapConnection>(false));
-        }
-        else {
+        } else {
             input->Props.StageId = prevStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";
@@ -662,14 +707,17 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
     return true;
 }
 
-TRuleBasedStage RuleStage1 = TRuleBasedStage(
+TRuleBasedStage RuleStage1 = TRuleBasedStage({std::make_shared<TInlineScalarSubplanRule>()});
+
+TRuleBasedStage RuleStage2 = TRuleBasedStage(
     {
-        std::make_shared<TInlineScalarSubplanRule>(),
+        std::make_shared<TRemoveIdenityMapRule>(),
         std::make_shared<TExtractJoinExpressionsRule>(), 
         std::make_shared<TPushMapRule>(), 
         std::make_shared<TPushFilterRule>()
     });
-TRuleBasedStage RuleStage2 = TRuleBasedStage({std::make_shared<TAssignStagesRule>()});
+
+TRuleBasedStage RuleStage3 = TRuleBasedStage({std::make_shared<TAssignStagesRule>()});
 
 } // namespace NKqp
 } // namespace NKikimr

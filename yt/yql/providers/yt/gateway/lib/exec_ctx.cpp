@@ -114,6 +114,10 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
                     sysColumns.Add(sys);
                 }
             }
+
+            bool useQLFilter = NYql::HasSetting(section.Settings().Ref(), EYtSettingType::QLFilter);
+            TNodeMap<TString> inputQueries;
+
             for (auto path: section.Paths()) {
                 TYtPathInfo pathInfo(path);
                 const TString pathCluster = pathInfo.Table->Cluster;
@@ -140,6 +144,14 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
                 auto spec = pathInfo.GetCodecSpecNode();
                 if (!sysColumns.IsUndefined()) {
                     spec[YqlSysColumnPrefix] = sysColumns;
+                }
+
+                if (useQLFilter && pathInfo.QLFilter) {
+                    auto& inputQuery = inputQueries[pathInfo.QLFilter.Get()];
+                    if (!inputQuery) {
+                        inputQuery = GenerateInputQuery(pathInfo.QLFilter);
+                    }
+                    richYPath.InputQuery(inputQuery);
                 }
 
                 InputTables_.emplace_back(

@@ -9,8 +9,7 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  auto ptp(E const &expr,
-           long axis) -> decltype(max(expr, axis) - min(expr, axis));
+  auto ptp(E const &expr, long axis) -> decltype(max(expr, axis) - min(expr, axis));
 
   template <class E>
   auto ptp(E const &expr) -> decltype(max(expr) - min(expr));

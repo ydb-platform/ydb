@@ -28,8 +28,8 @@ namespace numpy
   } // namespace
 
   template <class E>
-  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>
-  tile(E const &expr, long reps)
+  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>> tile(E const &expr,
+                                                                             long reps)
   {
     size_t n = expr.flat_size();
     types::ndarray<typename E::dtype, types::array_tuple<long, E::value>> out(
@@ -42,15 +42,11 @@ namespace numpy
   }
 
   template <size_t Shift, class R, class S, size_t... Is>
-  types::array_tuple<long, sizeof...(Is)>
-  tile_init_shape(R const &reps, S const &expr_shape,
-                  utils::index_sequence<Is...>)
+  types::array_tuple<long, sizeof...(Is)> tile_init_shape(R const &reps, S const &expr_shape,
+                                                          std::index_sequence<Is...>)
   {
     constexpr size_t M = S::value;
-    return {
-        {(reps[Is] * ((Is < Shift)                           ? 1
-                      : expr_shape.template shape < (Is < M) ? Is
-                                                             : 0 > ()))...}};
+    return {{(reps[Is] * ((Is < Shift) ? 1 : expr_shape.template shape<(Is < M) ? Is : 0>()))...}};
   }
 
   template <class E, size_t N>
@@ -58,15 +54,13 @@ namespace numpy
   tile(E const &expr, types::array_tuple<long, N> const &reps)
   {
     size_t n = expr.flat_size();
-    types::array_tuple<long, N> shape = tile_init_shape<N - E::value>(
-        reps, expr, utils::make_index_sequence<N>());
+    types::array_tuple<long, N> shape =
+        tile_init_shape<N - E::value>(reps, expr, std::make_index_sequence<N>());
 
     long last_rep = (E::value == N) ? std::get<N - 1>(reps) : 1;
-    types::ndarray<typename E::dtype, types::array_tuple<long, N>> out(
-        shape, builtins::None);
+    types::ndarray<typename E::dtype, types::array_tuple<long, N>> out(shape, builtins::None);
     auto out_iter = out.fbegin();
-    _tile(expr.begin(), expr.end(), out_iter, last_rep,
-          utils::int_<E::value>());
+    _tile(expr.begin(), expr.end(), out_iter, last_rep, utils::int_<E::value>());
 
     size_t nreps = out.flat_size() / (n * last_rep);
     for (size_t i = 1; i < nreps; ++i)

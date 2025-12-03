@@ -10,6 +10,10 @@
 
 #include <map>
 
+namespace NKikimr::NScheme {
+    class TTypeInfo;
+}
+
 namespace NKikimr::NArrow {
 
 using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
@@ -105,7 +109,7 @@ NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head
 NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> batch, const ui32 head, const ui32 tail);
 
 NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 position);
-TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position);
+TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position, const NKikimr::NScheme::TTypeInfo* logicalType = nullptr);
 NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui32 position);
 
 std::shared_ptr<arrow::RecordBatch> Reorder(

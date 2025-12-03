@@ -14,6 +14,7 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
     InitShardingInfo(readDescription.TableMetadataAccessor);
     TxId = readDescription.TxId;
     LockId = readDescription.LockId;
+    LockMode = readDescription.LockMode;
     if (LockId) {
         owner->GetOperationsManager().RegisterLock(*LockId, owner->Generation());
         LockSharingInfo = owner->GetOperationsManager().GetLockVerified(*LockId).GetSharingInfo();
@@ -25,11 +26,12 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
     }
 
     ITableMetadataAccessor::TSelectMetadataContext context(owner->GetTablesManager(), owner->GetIndexVerified());
-    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, !!LockId, isPlain);
+    
+    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, isPlain);
     if (!SourcesConstructor) {
         return TConclusionStatus::Fail("cannot build sources constructor for " + readDescription.TableMetadataAccessor->GetTablePath());
     }
-    if (LockId) {
+    if (readDescription.readConflictingPortions) {
         for (auto&& i : SourcesConstructor->GetUncommittedWriteIds()) {
             auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i);
             // we do not need to check our own uncommitted writes
@@ -84,7 +86,7 @@ NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const
 }
 
 void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
-    if (!GetLockId()) {
+    if (!NeedToDetectConflicts()) {
         return;
     }
     const ui64 lock = *GetLockId();
@@ -105,9 +107,10 @@ void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
 }
 
 void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) const {
-    if (!LockId) {
+    if (!NeedToDetectConflicts()) {
         return;
     }
+    
     auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(TableMetadataAccessor->GetPathIdVerified(),
         GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetMaybeConflictingLockIds());
     owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);

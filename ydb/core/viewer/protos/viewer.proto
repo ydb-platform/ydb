@@ -563,7 +563,7 @@ message TNodeInfo {
     optional uint64 ReceiveThroughput = 11;
     optional uint64 SendThroughput = 12;
     optional string PileName = 13;
-    optional float NetworkUtilization = 20; // Sum
+    optional float NetworkUtilization = 20; // Avg
     optional float NetworkUtilizationMin = 21;
     optional float NetworkUtilizationMax = 22;
     optional int64 ClockSkewUs = 30; // Avg
@@ -607,6 +607,33 @@ message TNodesInfo {
     optional bool NoDC = 60;
     optional bool NoRack = 61;
     repeated TNodeBatch OriginalNodeBatches = 62;
+}
+
+message TPeerInfo {
+    NKikimrWhiteboard.TSystemStateInfo SystemState = 20;
+    NKikimrWhiteboard.TNodeStateInfo Forward = 21;
+    NKikimrWhiteboard.TNodeStateInfo Reverse = 22;
+}
+
+message TPeerGroup {
+    string GroupName = 1;
+    uint64 PeerCount = 2;
+}
+
+message TPeersInfo {
+    uint32 Version = 1;
+    optional uint64 TotalPeers = 2;
+    optional uint64 FoundPeers = 3;
+    optional bool NeedFilter = 6;
+    optional bool NeedGroup = 7;
+    optional bool NeedSort = 8;
+    optional bool NeedLimit = 9;
+    repeated string Problems = 10;
+    optional uint64 CachedDataMaxAge = 11;
+    repeated TPeerInfo Peers = 20;
+    repeated TPeerGroup PeerGroups = 30;
+    optional bool NoDC = 60;
+    optional bool NoRack = 61;
 }
 
 enum ENodeType {
@@ -795,6 +822,7 @@ enum EAutocompleteType {
     column = 21;
     index = 22;
     sys_view = 23;
+    streaming_query = 27;
 }
 
 message TQueryAutocomplete {

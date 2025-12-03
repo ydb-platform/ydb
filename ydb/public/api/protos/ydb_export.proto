@@ -126,7 +126,7 @@ message ExportToS3Settings {
     // it is especially useful for custom s3 implementations
     bool disable_virtual_addressing = 12;
 
-    // Database root if not provided.
+    // Defaults to database root if not provided.
     // All object names are calculated and written relative to this path.
     string source_path = 13;
 
@@ -185,18 +185,23 @@ message EncryptionSettings {
 /// File system (FS)
 message ExportToFsSettings {
     message Item {
-        // Database path to a table to be exported
+        // Database path to a table/directory to be exported
         string source_path = 1 [(required) = true];
 
-        /* The tables are exported to one or more files in FS.
-        The files are saved to the destination_path directory. */
-        string destination_path = 2 [(required) = true];
+        /* Tables are exported to one or more files in FS.
+           The path begins with 'destination_path'.
+           If not specified, actual FS path is the default `base_path` concatenated with:
+            * The object path relative to the global `source_path` for a non-encrypted export
+            * The anonymized path for an encrypted export
+        */
+        string destination_path = 2;
     }
 
-    // Base path on FS where to write export
-    // Path to the mounted directory in the case of NFS
+    // Base path on FS where to write all export items
+    // In the case of NFS, one of the directories in the path must be mounted
     // Must be an absolute path
     // Example: /mnt/exports
+    // SchemaMapping file with the list of objects is written to this path
     string base_path = 1 [(required) = true];
     
     // List of items to export
@@ -212,6 +217,15 @@ message ExportToFsSettings {
     // - zstd.
     // - zstd-N, where N is compression level, e.g. zstd-3.
     string compression = 5;
+
+    // Settings for data encryption.
+    // If encryption_settings field is not specified,
+    // the resulting data will not be encrypted.
+    EncryptionSettings encryption_settings = 6;
+
+    // Defaults to database root if not provided.
+    // All object names are calculated and written relative to this path.
+    string source_path = 7;
 }
 
 message ExportToFsResult {

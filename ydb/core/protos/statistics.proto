@@ -119,14 +119,14 @@ message TEvAnalyzeStatusResponse {
 }
 
 // SA -> Shard
-message TEvAnalyzeTable {
+message TEvAnalyzeShard {
     optional bytes OperationId = 1; // unique identifier to match response item
     optional TTable Table = 2;  // analyzed table
     repeated EColumnStatisticType Types = 3; // list of statistics types requested. Empty means asking for all available.
 }
 
 // Shard -> SA
-message TEvAnalyzeTableResponse {
+message TEvAnalyzeShardResponse {
     optional bytes OperationId = 1;
     optional NKikimrProto.TPathID PathId = 2;
     optional fixed64 ShardTabletId = 3;

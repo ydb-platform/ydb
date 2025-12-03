@@ -142,6 +142,11 @@ TEST_F(Describe, TEST_NAME(MetricsLevel)) {
         ASSERT_TRUE(res.IsSuccess());
     };
 
+    auto setRetentionPeriod = [&](std::string topic, TDuration retentionPeriod) {
+        auto res = client.AlterTopic(topic, TAlterTopicSettings().SetRetentionPeriod(retentionPeriod)).GetValueSync();
+        ASSERT_TRUE(res.IsSuccess());
+    };
+
     auto resetMetricsLevel = [&](std::string topic) {
         auto res = client.AlterTopic(topic, TAlterTopicSettings().ResetMetricsLevel()).GetValueSync();
         ASSERT_TRUE(res.IsSuccess());
@@ -195,6 +200,16 @@ TEST_F(Describe, TEST_NAME(MetricsLevel)) {
         Y_ENSURE(checkFlag(topic, MetricsLevelObject));
         setMetricsLevel(topic, MetricsLevelDetailed);
         Y_ENSURE(checkFlag(topic, MetricsLevelDetailed));
+
+        // Altering some other parameter should not change metrics level.
+        setRetentionPeriod(topic, TDuration::Days(1));
+        Y_ENSURE(checkFlag(topic, MetricsLevelDetailed));
+
+        // TODO Prevent setting unsupported metrics level.
+        // setMetricsLevel(topic, -1);
+        // Y_ENSURE(checkFlag(topic, MetricsLevelDetailed));
+        // setMetricsLevel(topic, 8);
+        // Y_ENSURE(checkFlag(topic, MetricsLevelDetailed));
     }
 }
 

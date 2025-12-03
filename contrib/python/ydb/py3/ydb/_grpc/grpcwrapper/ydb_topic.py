@@ -478,18 +478,12 @@ class StreamReadMessage:
             def to_proto(
                 self,
             ) -> ydb_topic_pb2.StreamReadMessage.InitRequest.TopicReadSettings:
-                res = ydb_topic_pb2.StreamReadMessage.InitRequest.TopicReadSettings()
-                res.path = self.path
-                res.partition_ids.extend(self.partition_ids)
-                max_lag = proto_duration_from_timedelta(self.max_lag)
-                if max_lag is not None:
-                    res.max_lag = max_lag
-
-                read_from = proto_timestamp_from_datetime(self.read_from)
-                if read_from is not None:
-                    res.read_from = read_from
-
-                return res
+                return ydb_topic_pb2.StreamReadMessage.InitRequest.TopicReadSettings(
+                    path=self.path,
+                    partition_ids=self.partition_ids,
+                    max_lag=proto_duration_from_timedelta(self.max_lag),
+                    read_from=proto_timestamp_from_datetime(self.read_from),
+                )
 
     @dataclass
     class InitResponse(IFromProto):

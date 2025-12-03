@@ -139,6 +139,10 @@ TDriverConfig& TDriverConfig::SetDatabase(const std::string& database) {
     return *this;
 }
 
+const std::string& TDriverConfig::GetDatabase() const {
+    return Impl_->Database;
+}
+
 TDriverConfig& TDriverConfig::SetCredentialsProviderFactory(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
     Impl_->CredentialsProviderFactory = credentialsProviderFactory;
     return *this;

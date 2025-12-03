@@ -25,9 +25,9 @@
 #include <type_traits>
 #include <utility>
 
-#include "arrow/status.h"
-#include "arrow/util/aligned_storage.h"
-#include "arrow/util/compare.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/aligned_storage.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/compare.h"
 
 namespace arrow20 {
 

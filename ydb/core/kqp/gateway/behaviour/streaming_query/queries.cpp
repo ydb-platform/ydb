@@ -1757,7 +1757,9 @@ private:
         auto& record = ev->Record;
         record.SetTraceId(TStringBuilder() << "streaming-query-" << QueryPath << "-" << State.GetCurrentExecutionId());
         if (const auto& token = Context.GetUserToken()) {
-            record.SetUserToken(token->SerializeAsString());
+            if (const auto& serializedToken = token->GetSerializedToken()) {
+                record.SetUserToken(serializedToken);
+            }
         }
 
         auto& request = *record.MutableRequest();

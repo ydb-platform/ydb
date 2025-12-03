@@ -15,6 +15,8 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
 #include <library/cpp/yt/memory/range.h>
 
 #include <util/system/align.h>

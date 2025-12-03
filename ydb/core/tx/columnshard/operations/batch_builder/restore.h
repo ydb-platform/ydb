@@ -16,6 +16,7 @@ private:
     std::shared_ptr<IMerger> Merger;
     NArrow::TContainerWithIndexes<arrow::RecordBatch> IncomingData;
     const TWritingContext Context;
+    bool ReadOnlyConflicts;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const override;
 
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) override;
@@ -35,7 +36,7 @@ public:
     virtual TDuration GetTimeout() const override;
 
     TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
-        const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context);
+        const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context, const bool readOnlyConflicts);
 };
 
 }   // namespace NKikimr::NOlap

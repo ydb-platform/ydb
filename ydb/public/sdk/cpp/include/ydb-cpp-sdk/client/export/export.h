@@ -26,6 +26,12 @@ struct TExportItemProgress {
     TInstant EndTime;
 };
 
+struct TEncryptionAlgorithm {
+    static const std::string AES_128_GCM;
+    static const std::string AES_256_GCM;
+    static const std::string CHACHA_20_POLY_1305;
+};
+
 /// YT
 struct TExportToYtSettings : public TOperationRequestSettings<TExportToYtSettings> {
     struct TItem {
@@ -79,11 +85,8 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
         UNKNOWN = std::numeric_limits<int>::max(),
     };
 
-    struct TEncryptionAlgorithm {
-        static const std::string AES_128_GCM;
-        static const std::string AES_256_GCM;
-        static const std::string CHACHA_20_POLY_1305;
-    };
+    // For backward compatibility
+    using TEncryptionAlgorithm = NExport::TEncryptionAlgorithm;
 
     struct TItem {
         std::string Src;
@@ -140,6 +143,16 @@ struct TExportToFsSettings : public TOperationRequestSettings<TExportToFsSetting
     FLUENT_SETTING_OPTIONAL(std::string, Description);
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_OPTIONAL(std::string, Compression);
+    FLUENT_SETTING_OPTIONAL(std::string, SourcePath);
+
+    TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {
+        EncryptionAlgorithm_ = algorithm;
+        SymmetricKey_ = key;
+        return *this;
+    }
+
+    std::string EncryptionAlgorithm_;
+    std::string SymmetricKey_;
 };
 
 class TExportToFsResponse : public TOperation {

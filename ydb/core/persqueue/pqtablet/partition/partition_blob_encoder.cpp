@@ -370,6 +370,10 @@ void TPartitionBlobEncoder::ClearPartitionedBlob(const TPartitionId& partitionId
 void TPartitionBlobEncoder::SyncHeadKeys()
 {
     if (!CompactedKeys.empty()) {
+        for (auto& k : HeadKeys) {
+            ScheduleDelete(k);
+        }
+
         HeadKeys.clear();
     }
 }
@@ -392,6 +396,7 @@ void TPartitionBlobEncoder::SyncNewHeadKey()
 
     while (!HeadKeys.empty() && !isLess(HeadKeys.back().Key, NewHeadKey.Key)) {
         // HeadKeys.back >= NewHeadKey
+        ScheduleDelete(HeadKeys.back());
         HeadKeys.pop_back();
     }
 
@@ -552,6 +557,19 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
     AFL_ENSURE(res.second >= size);
     AFL_ENSURE(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo());
     return res;
+}
+
+void TPartitionBlobEncoder::pop_front() {
+    auto& key = DataKeysBody.front();
+    ScheduleDelete(key);
+    BodySize -= key.Size;
+    DataKeysBody.pop_front();
+}
+
+void TPartitionBlobEncoder::ScheduleDelete(TDataKey& key) {
+    if (key.BlobKeyToken->NeedDelete) {
+        DeletedKeys.emplace_back(key.BlobKeyToken);
+    }
 }
 
 //void TPartitionBlobEncoder::Dump() const

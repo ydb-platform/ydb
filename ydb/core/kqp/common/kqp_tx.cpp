@@ -172,8 +172,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
     size_t readPhases = 0;
     bool hasEffects = false;
-    bool hasStreamLookup = false;
-    bool hasVectorResolve = false;
+    bool hasInsert = false;
 
     for (const auto &tx : physicalQuery.GetTransactions()) {
         if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
@@ -194,6 +193,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings));
                     AFL_ENSURE(tx.GetHasEffects() || sinkSettings.GetInconsistentTx());
                     if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                        hasInsert = true;
                         // Insert operations create new read phases,
                         // so in presence of other reads we have to acquire snapshot.
                         // This is unique to INSERT operation, because it can fail.
@@ -215,8 +215,11 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
             }
 
             for (const auto &input : stage.GetInputs()) {
-                hasStreamLookup |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup;
-                hasVectorResolve |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve;
+                if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup
+                        || input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve) {
+                    // We need snapshot for stream lookup, besause it's used for dependent reads
+                    return true;
+                }
             }
 
             for (const auto &tableOp : stage.GetTableOps()) {
@@ -232,22 +235,11 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         return true;
     }
 
-    // We need snapshot for stream lookup, besause it's used for dependent reads
-    if (hasStreamLookup || hasVectorResolve) {
-        return true;
-    }
-
-    if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
-        if (hasEffects && !txCtx.HasTableRead) {
-            YQL_ENSURE(txCtx.HasTableWrite);
-            // Don't need snapshot for WriteOnly transaction.
-            return false;
-        } else if (hasEffects) {
-            YQL_ENSURE(txCtx.HasTableWrite);
-            // ReadWrite transaction => need snapshot
-            return true;
-        }
-        // ReadOnly transaction here
+    if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && hasEffects) {
+        // Avoid acquiring snapshot for WriteOnly transactions.
+        // If there are more than one INSERT, we have to acquiring snapshot,
+        // because INSERT has output (error or no error).
+        return hasInsert ? readPhases > 1 : readPhases > 0;
     }
 
     // We need snapshot when there are multiple table read phases, most

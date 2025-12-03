@@ -58,7 +58,6 @@ YTEST_FIELDS_BASE = (
 YTEST_FIELDS_EXTRA = (
     df.Blob.value,
     df.ParallelTestsInSingleNode.value,
-    df.ParallelTestsInSingleNodeOnYt.value,
     df.ForkMode.from_macro_and_unit,
     df.Size.from_macro_args_and_unit,
     df.Tag.from_macro_args_and_unit,
@@ -859,6 +858,7 @@ def onadd_check_py_imports(fields, unit, *args):
         df.BinaryPath.stripped,
         df.TestRunnerBin.value,
         df.DockerImage.value,
+        df.ParallelTestsInSingleNode.value,
     )
 )
 def onadd_pytest_bin(fields, unit, *args):

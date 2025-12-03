@@ -440,7 +440,7 @@ class YDBWrapper:
     def _execute_with_logging(self, operation_type: str, operation_func: Callable, 
                              query: str = None, table_path: str = None, query_name: str = None) -> Any:
         """Universal method for executing operations with logging"""
-        start_time = time.time()
+        start_time = None
         
         # Log operation start
         self._log("start", f"Executing {operation_type}")
@@ -459,6 +459,8 @@ class YDBWrapper:
         
         try:
             with self.get_driver() as driver:
+                start_time = time.time()
+
                 if operation_type == "scan_query":
                     tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
                     table_client = ydb.TableClient(driver, tc_settings)
@@ -572,7 +574,7 @@ class YDBWrapper:
                 
         except Exception as e:
             end_time = time.time()
-            duration = end_time - start_time
+            duration = end_time - start_time if start_time is not None else 0
             status = "error"
             error = str(e)
             
@@ -682,7 +684,7 @@ class YDBWrapper:
         # Convert to full path for YDB
         full_path = self._make_full_path(table_path)
         
-        start_time = time.time()
+        start_time = None
         total_rows = len(all_rows)
         
         if total_rows == 0:
@@ -701,6 +703,8 @@ class YDBWrapper:
         
         try:
             with self.get_driver() as driver:
+                start_time = time.time()
+                
                 table_client = ydb.TableClient(driver)
                 
                 for batch_num, start_idx in enumerate(range(0, total_rows, batch_size), 1):
@@ -731,7 +735,7 @@ class YDBWrapper:
             )
             
         except Exception as e:
-            duration = time.time() - start_time
+            duration = time.time() - start_time if start_time is not None else 0
             status = "error"
             error = str(e)
             

@@ -88,13 +88,13 @@ public:
     using TChunk = TListChunk<T>;
 
 private:
-    enum Type {
+    enum EType {
         Normal,
         Freezed
     };
 
     void NewNormal(const T* begin1, const T* end1, const T* begin2, const T* end2) {
-        Type_ = Type::Normal;
+        Type_ = EType::Normal;
         ui64 oldLength = (end1 - begin1) + (end2 - begin2);
         ui64 newLength = std::max((oldLength << 1) - 1, (MinChunkSize + sizeof(T) - 1) / sizeof(T) + 1);
         Chunk_ = TChunk::AllocateChunk(newLength);
@@ -102,7 +102,7 @@ private:
         End_ = std::copy(begin2, end2, std::copy(begin1, end1, Begin_));
     }
 
-    TListRepresentation(TChunk* chunk, T* begin, T* end, Type type)
+    TListRepresentation(TChunk* chunk, T* begin, T* end, EType type)
         : Chunk_(chunk)
         , Begin_(begin)
         , End_(end)
@@ -218,7 +218,7 @@ public:
         : Chunk_(nullptr)
         , Begin_(nullptr)
         , End_(nullptr)
-        , Type_(Type::Freezed)
+        , Type_(EType::Freezed)
     {
     }
 
@@ -234,7 +234,7 @@ public:
         , End_(other.End_)
         , Type_(other.Type_)
     {
-        other.Type_ = Type::Freezed;
+        other.Type_ = EType::Freezed;
         if (Chunk_) {
             Chunk_->Ref();
         }
@@ -249,7 +249,7 @@ public:
         other.Chunk_ = nullptr;
         other.Begin_ = nullptr;
         other.End_ = nullptr;
-        other.Type_ = Type::Freezed;
+        other.Type_ = EType::Freezed;
     }
 
     void operator=(const TSelf& other) {
@@ -267,7 +267,7 @@ public:
             End_ = other.End_;
             Type_ = other.Type_;
 
-            other.Type_ = Type::Freezed;
+            other.Type_ = EType::Freezed;
         }
     }
 
@@ -284,11 +284,11 @@ public:
         other.Chunk_ = nullptr;
         other.Begin_ = nullptr;
         other.End_ = nullptr;
-        other.Type_ = Type::Freezed;
+        other.Type_ = EType::Freezed;
     }
 
     inline void FromSingleElement(T&& element) {
-        Type_ = Type::Normal;
+        Type_ = EType::Normal;
         ui64 chunkLength = (MinChunkSize + sizeof(T) - 1) / sizeof(T);
         Chunk_ = TChunk::AllocateChunk(chunkLength);
         Begin_ = Chunk_->DataBegin() + (chunkLength >> 2);
@@ -307,9 +307,9 @@ public:
             FromSingleElement(std::move(element));
             return;
         }
-        if ((that.Type_ == Type::Normal) && (that.Begin_ != that.Chunk_->DataBegin())) {
-            Type_ = Type::Normal;
-            that.Type_ = Type::Freezed;
+        if ((that.Type_ == EType::Normal) && (that.Begin_ != that.Chunk_->DataBegin())) {
+            Type_ = EType::Normal;
+            that.Type_ = EType::Freezed;
             Chunk_ = that.Chunk_;
             Chunk_->Ref();
             Begin_ = that.Begin_;
@@ -326,9 +326,9 @@ public:
             FromSingleElement(std::move(element));
             return;
         }
-        if ((that.Type_ == Type::Normal) && (that.End_ != that.Chunk_->DataEnd())) {
-            Type_ = Type::Normal;
-            that.Type_ = Type::Freezed;
+        if ((that.Type_ == EType::Normal) && (that.End_ != that.Chunk_->DataEnd())) {
+            Type_ = EType::Normal;
+            that.Type_ = EType::Freezed;
             Chunk_ = that.Chunk_;
             Chunk_->Ref();
             Begin_ = that.Begin_;
@@ -360,18 +360,18 @@ public:
     }
 
     TSelf MassPrepend(T* begin, T* end) const {
-        if ((Type_ == Type::Normal) && (Chunk_->DataBegin() + (end - begin) <= Begin_)) {
-            Type_ = Type::Freezed;
-            return TSelf(Chunk_, std::copy_backward(begin, end, Begin_), End_, Type::Normal);
+        if ((Type_ == EType::Normal) && (Chunk_->DataBegin() + (end - begin) <= Begin_)) {
+            Type_ = EType::Freezed;
+            return TSelf(Chunk_, std::copy_backward(begin, end, Begin_), End_, EType::Normal);
         } else {
             return TSelf(begin, end, Begin_, End_);
         }
     }
 
     TSelf MassAppend(T* begin, T* end) const {
-        if ((Type_ == Type::Normal) && (End_ + (end - begin) <= Chunk_->DataEnd())) {
-            Type_ = Type::Freezed;
-            return TSelf(Chunk_, Begin_, std::copy(begin, end, End_), Type::Normal);
+        if ((Type_ == EType::Normal) && (End_ + (end - begin) <= Chunk_->DataEnd())) {
+            Type_ = EType::Freezed;
+            return TSelf(Chunk_, Begin_, std::copy(begin, end, End_), EType::Normal);
         } else {
             return TSelf(Begin_, End_, begin, end);
         }
@@ -389,13 +389,13 @@ public:
             return TSelf(*this);
         }
 
-        if (Type_ == Type::Freezed) {
-            if (right.Type_ == Type::Freezed) {
+        if (Type_ == EType::Freezed) {
+            if (right.Type_ == EType::Freezed) {
                 return TSelf(Begin_, End_, right.Begin_, right.End_);
             } else {
                 return right.MassPrepend(Begin_, End_);
             }
-        } else if ((right.Type_ == Type::Freezed) || (thisLength > rightLength)) {
+        } else if ((right.Type_ == EType::Freezed) || (thisLength > rightLength)) {
             return MassAppend(right.Begin_, right.End_);
         } else {
             return right.MassPrepend(Begin_, End_);
@@ -404,12 +404,12 @@ public:
 
     TSelf SkipFromBegin(ui64 count) const {
         Y_DEBUG_ABORT_UNLESS((count > 0) && (count < GetLength()));
-        return TSelf(Chunk_, Begin_ + count, End_, Type::Freezed);
+        return TSelf(Chunk_, Begin_ + count, End_, EType::Freezed);
     }
 
     TSelf SkipFromEnd(ui64 count) const {
         Y_DEBUG_ABORT_UNLESS((count > 0) && (count < GetLength()));
-        return TSelf(Chunk_, Begin_, End_ - count, Type::Freezed);
+        return TSelf(Chunk_, Begin_, End_ - count, EType::Freezed);
     }
 
     T GetItemByIndex(ui64 index) const {
@@ -425,7 +425,7 @@ private:
     TChunk* Chunk_;
     T* Begin_;
     T* End_;
-    mutable Type Type_;
+    mutable EType Type_;
 };
 
 using TDefaultListRepresentation = TListRepresentation<NUdf::TUnboxedValue>;

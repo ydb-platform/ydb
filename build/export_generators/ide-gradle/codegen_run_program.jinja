@@ -40,10 +40,7 @@ val {{ varprefix }}{{ custom_run['_object_index'] }} = tasks.register<Exec>("{{ 
 {%-                endif %}
 {%             endfor -%}
 {%-        endif -%}
-{#-
-    Не использованы атрибуты
-    custom_run-env="list"
-#}
+{{ Env(custom_run.env) }}
 }
 {%-     endfor -%}
 {%- endif -%}

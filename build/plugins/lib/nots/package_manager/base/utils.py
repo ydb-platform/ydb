@@ -54,13 +54,17 @@ def build_nots_path(build_root: str) -> str:
     home_nots = os.getenv("NOTS_STORE_PATH", os.path.join(home_dir(), ".nots"))
     build_nots = os.path.join(build_root, ".nots")
 
-    try:
-        if not os.path.exists(home_nots):
-            os.makedirs(home_nots)
-        if not os.path.exists(build_nots):
-            os.symlink(home_nots, build_nots)
-    except (OSError, RuntimeError):
+    if os.getenv("NOTS_BUILDER_ISOLATED_STORE", "no") == "yes":
+        # this simulates the behavior of the distbuild
         os.makedirs(build_nots, exist_ok=True)
+    else:
+        try:
+            if not os.path.exists(home_nots):
+                os.makedirs(home_nots)
+            if not os.path.exists(build_nots):
+                os.symlink(home_nots, build_nots)
+        except (OSError, RuntimeError):
+            os.makedirs(build_nots, exist_ok=True)
 
     return build_nots
 

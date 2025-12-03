@@ -318,3 +318,11 @@ class RollingUpgradeAndDowngradeFixture:
             node.start()
             self._wait_for_readiness()
             yield
+
+
+# Starts with a new cluster and downgrades it. Useful for testing new features that may be absent from the previous release.
+class RollingDowngradeAndUpgradeFixture(RollingUpgradeAndDowngradeFixture):
+    @pytest.fixture(autouse=True, params=all_binary_combinations_rolling, ids=all_binary_combinations_ids_rolling)
+    def base_setup(self, request):
+        self.all_binary_paths = request.param[::-1]
+        self.versions = list([path_to_version[path] for path in self.all_binary_paths])

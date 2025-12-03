@@ -16,15 +16,20 @@ using namespace NConcurrency;
 TEST(TSyncExpiringCacheTest, MultipleGet_RaceCondition)
 {
     auto cache = New<TSyncExpiringCache<int, int>>(
-        BIND([] (int x) {
-            Sleep(TDuration::MilliSeconds(1));
-            return x;
-        }),
         TDuration::Seconds(1),
         GetSyncInvoker());
 
-    std::thread thread1([&] { cache->Get(1); });
-    std::thread thread2([&] { cache->Get(1); });
+    auto get = [&] (int key) {
+        return cache->GetOrPut(
+            key,
+            [&] {
+                Sleep(TDuration::MilliSeconds(1));
+                return key;
+            });
+    };
+
+    std::thread thread1([&] { get(1); });
+    std::thread thread2([&] { get(1); });
 
     thread1.join();
     thread2.join();
@@ -33,13 +38,12 @@ TEST(TSyncExpiringCacheTest, MultipleGet_RaceCondition)
 TEST(TSyncExpiringCacheTest, FindSetClear)
 {
     auto cache = New<TSyncExpiringCache<int, int>>(
-        BIND([] (int x) { return x; }),
         TDuration::Seconds(1),
         GetSyncInvoker());
 
     EXPECT_EQ(std::nullopt, cache->Find(1));
 
-    cache->Set(1, 2);
+    cache->Put(1, 2);
 
     EXPECT_EQ(2, cache->Find(1));
 
@@ -51,11 +55,10 @@ TEST(TSyncExpiringCacheTest, FindSetClear)
 TEST(TSyncExpiringCacheTest, SetExpirationTimeout)
 {
     auto cache = New<TSyncExpiringCache<int, int>>(
-        BIND([] (int x) { return x; }),
         TDuration::Seconds(1),
         GetSyncInvoker());
 
-    cache->Set(1, 2);
+    cache->Put(1, 2);
 
     cache->SetExpirationTimeout(TDuration::MilliSeconds(100));
 
@@ -63,7 +66,7 @@ TEST(TSyncExpiringCacheTest, SetExpirationTimeout)
 
     EXPECT_EQ(std::nullopt, cache->Find(1));
 
-    cache->Set(1, 3);
+    cache->Put(1, 3);
 
     cache->SetExpirationTimeout(std::nullopt);
 
@@ -75,15 +78,29 @@ TEST(TSyncExpiringCacheTest, SetExpirationTimeout)
 TEST(TSyncExpiringCacheTest, GetMany)
 {
     auto cache = New<TSyncExpiringCache<int, int>>(
-        BIND([] (int x) { return x; }),
         TDuration::Seconds(1),
         GetSyncInvoker());
 
-    EXPECT_EQ(1, cache->Get({1}));
-    EXPECT_EQ(1, cache->Get({1}));
-    
-    std::vector<int> expected{0, 1, 2};
-    EXPECT_EQ(expected, cache->Get({0, 1, 2}));
+    auto getMany = [&] (const std::vector<int>& keys) {
+        return cache->GetOrPutMany(
+            TRange(keys),
+            [&] (int index) { return keys[index]; });
+    };
+
+    {
+        std::vector<int> expected{1};
+        EXPECT_EQ(expected, getMany({1}));
+    }
+
+    {
+        std::vector<int> expected{1};
+        EXPECT_EQ(expected, getMany({1}));
+    }
+
+    {
+        std::vector<int> expected{0, 1, 2};
+        EXPECT_EQ(expected, getMany({0, 1, 2}));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

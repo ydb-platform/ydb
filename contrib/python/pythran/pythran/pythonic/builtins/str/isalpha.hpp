@@ -16,8 +16,8 @@ namespace builtins
 
     bool isalpha(types::str const &s)
     {
-      return !s.empty() && std::all_of(s.chars().begin(), s.chars().end(),
-                                       (int (*)(int))std::isalpha);
+      return !s.empty() &&
+             std::all_of(s.chars().begin(), s.chars().end(), (int (*)(int))std::isalpha);
     }
   } // namespace str
 } // namespace builtins

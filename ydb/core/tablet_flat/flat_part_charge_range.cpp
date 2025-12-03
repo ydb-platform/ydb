@@ -3,15 +3,20 @@
 
 namespace NKikimr::NTable {
 
-bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
+TPrechargeResult ChargeRange(IPages *env, const TCells key1, const TCells key2,
             const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
             ui64 items, ui64 bytes, bool includeHistory)
 {
-    bool ready = true;
+    TPrechargeResult result = {
+        .Ready = true,
+        .ItemsPrecharged = 0,
+        .BytesPrecharged = 0
+    };
+
     auto pos = run.LowerBound(key1);
 
     if (pos == run.end())
-        return true;
+        return result;
 
     // key1 <= FirstKey
     bool chargeFromSliceFirstRow = TSlice::CompareSearchKeyFirstKey(key1, pos->Slice, keyDefaults) <= 0;
@@ -33,7 +38,10 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
         }
 
         auto r = CreateCharge(env, *pos->Part, tags, includeHistory)->Do(key1r, key2r, row1, row2, keyDefaults, items, bytes);
-        ready &= r.Ready;
+
+        result.Ready &= r.Ready;
+        result.ItemsPrecharged += r.ItemsPrecharged;
+        result.BytesPrecharged += r.BytesPrecharged;
 
         if (cmp >= 0) {
             // key2 <= LastKey
@@ -41,7 +49,17 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
                 // Unfortunately first key > key2 might be at the start of the next slice
                 TRowId firstRow = pos->Slice.BeginRowId();
                 // Precharge the first row main key on the next slice
-                ready &= CreateCharge(env, *pos->Part, { }, false)->Do(firstRow, firstRow, keyDefaults, items, bytes);
+                r = CreateCharge(env, *pos->Part, { }, false)->Do(
+                    firstRow,
+                    firstRow,
+                    keyDefaults,
+                    items,
+                    bytes
+                );
+
+                result.Ready &= r.Ready;
+                result.ItemsPrecharged += r.ItemsPrecharged;
+                result.BytesPrecharged += r.BytesPrecharged;
             }
 
             break;
@@ -52,18 +70,23 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
         ++pos;
     }
 
-    return ready;
+    return result;
 }
 
-bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
+TPrechargeResult ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
             const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
             ui64 items, ui64 bytes, bool includeHistory)
 {
-    bool ready = true;
+    TPrechargeResult result = {
+        .Ready = true,
+        .ItemsPrecharged = 0,
+        .BytesPrecharged = 0
+    };
+
     auto pos = run.LowerBoundReverse(key1);
 
     if (pos == run.end())
-        return true;
+        return result;
 
     // LastKey <= key1
     bool chargeFromSliceLastRow = TSlice::CompareLastKeySearchKey(pos->Slice, key1, keyDefaults) <= 0;
@@ -86,7 +109,10 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
         }
 
         auto r = CreateCharge(env, *pos->Part, tags, includeHistory)->DoReverse(key1r, key2r, row1, row2, keyDefaults, items, bytes);
-        ready &= r.Ready;
+
+        result.Ready &= r.Ready;
+        result.ItemsPrecharged += r.ItemsPrecharged;
+        result.BytesPrecharged += r.BytesPrecharged;
 
         if (pos == run.begin()) {
             break;
@@ -99,7 +125,17 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
                 // Unfortunately first key <= key2 might be at the end of the previous slice
                 TRowId lastRow = pos->Slice.EndRowId() - 1;
                 // Precharge the last row main key on the previous slice
-                ready &= CreateCharge(env, *pos->Part, { }, false)->DoReverse(lastRow, lastRow, keyDefaults, items, bytes);
+                r = CreateCharge(env, *pos->Part, { }, false)->DoReverse(
+                    lastRow,
+                    lastRow,
+                    keyDefaults,
+                    items,
+                    bytes
+                );
+
+                result.Ready &= r.Ready;
+                result.ItemsPrecharged += r.ItemsPrecharged;
+                result.BytesPrecharged += r.BytesPrecharged;
             }
 
             break;
@@ -110,7 +146,7 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
         --pos;
     }
 
-    return ready;
+    return result;
 }
 
 }

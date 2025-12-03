@@ -53,8 +53,8 @@ public:
     }
 
     static TStringRef Name() {
-        static TString name = DigestNames[DigestType];
-        return TStringRef(name);
+        static TString Name = DigestNames[DigestType];
+        return TStringRef(Name);
     }
 
     static bool DeclareSignature(
@@ -170,8 +170,8 @@ using TCityHash = TDigestFunctionUdf<CITY, ui64, [](auto& inputRef, auto init) {
 class TCityHash128: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("CityHash128");
-        return name;
+        static auto Name = TStringRef::Of("CityHash128");
+        return Name;
     }
 
     static bool DeclareSignature(
@@ -235,41 +235,41 @@ SIMPLE_STRICT_UDF(TMd5HalfMix, ui64(TAutoMap<char*>)) {
 }
 
 SIMPLE_STRICT_UDF(TArgon2, char*(TAutoMap<char*>, TAutoMap<char*>)) {
-    const static ui32 outSize = 32;
-    const static NArgonish::TArgon2Factory afactory;
-    const static THolder<NArgonish::IArgon2Base> argon2 = afactory.Create(
+    const static ui32 OutSize = 32;
+    const static NArgonish::TArgon2Factory AFactory;
+    const static THolder<NArgonish::IArgon2Base> Argon2 = AFactory.Create(
         NArgonish::EArgon2Type::Argon2d, 1, 32, 1);
 
     const TStringRef inputRef = args[0].AsStringRef();
     const TStringRef saltRef = args[1].AsStringRef();
-    ui8 out[outSize];
-    argon2->Hash(reinterpret_cast<const ui8*>(inputRef.Data()), inputRef.Size(),
+    ui8 out[OutSize];
+    Argon2->Hash(reinterpret_cast<const ui8*>(inputRef.Data()), inputRef.Size(),
                  reinterpret_cast<const ui8*>(saltRef.Data()), saltRef.Size(),
-                 out, outSize);
-    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), outSize));
+                 out, OutSize);
+    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), OutSize));
 }
 
 SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TBlake2B, char*(TAutoMap<char*>, TOptional<char*>), 1) {
-    const static ui32 outSize = 32;
-    const static NArgonish::TBlake2BFactory bfactory;
+    const static ui32 OutSize = 32;
+    const static NArgonish::TBlake2BFactory BFactory;
     const TStringRef inputRef = args[0].AsStringRef();
 
     THolder<NArgonish::IBlake2Base> blake2b;
     if (args[1]) {
         const TStringRef keyRef = args[1].AsStringRef();
         if (keyRef.Size() == 0) {
-            blake2b = bfactory.Create(outSize);
+            blake2b = BFactory.Create(OutSize);
         } else {
-            blake2b = bfactory.Create(outSize, reinterpret_cast<const ui8*>(keyRef.Data()), keyRef.Size());
+            blake2b = BFactory.Create(OutSize, reinterpret_cast<const ui8*>(keyRef.Data()), keyRef.Size());
         }
     } else {
-        blake2b = bfactory.Create(outSize);
+        blake2b = BFactory.Create(OutSize);
     }
 
-    ui8 out[outSize];
+    ui8 out[OutSize];
     blake2b->Update(inputRef.Data(), inputRef.Size());
-    blake2b->Final(out, outSize);
-    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), outSize));
+    blake2b->Final(out, OutSize);
+    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), OutSize));
 }
 
 SIMPLE_STRICT_UDF(TSipHash, ui64(ui64, ui64, TAutoMap<char*>)) {
@@ -326,8 +326,8 @@ SIMPLE_STRICT_UDF(TFarmHashFingerprint64, ui64(TAutoMap<char*>)) {
 class TFarmHashFingerprint128: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("FarmHashFingerprint128");
-        return name;
+        static auto Name = TStringRef::Of("FarmHashFingerprint128");
+        return Name;
     }
 
     static bool DeclareSignature(
@@ -423,8 +423,8 @@ SIMPLE_STRICT_UDF(TXXH3, ui64(TAutoMap<char*>)) {
 class TXXH3_128: public TBoxedValue { // NOLINT(readability-identifier-naming)
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("XXH3_128");
-        return name;
+        static auto Name = TStringRef::Of("XXH3_128");
+        return Name;
     }
 
     static bool DeclareSignature(const TStringRef& name, TType*, IFunctionTypeInfoBuilder& builder, bool typesOnly) {

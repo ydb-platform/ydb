@@ -19,8 +19,7 @@ namespace builtins
     types::set<T> difference(types::set<T> &&set, Types const &...others);
 
     template <typename... Types>
-    types::empty_set difference(types::empty_set const &set,
-                                Types const &...others);
+    types::empty_set difference(types::empty_set const &set, Types const &...others);
 
     template <typename T>
     types::set<T> difference(types::set<T> const &set);

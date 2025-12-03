@@ -22,15 +22,12 @@ namespace scipy
       template <class T0, class T1>
       double spherical_jn(T0 v, T1 x, bool derivative)
       {
-        assert(v == (long)v &&
-               "only supported for integral value as first arg");
+        assert(v == (long)v && "only supported for integral value as first arg");
         using namespace boost::math::policies;
         if (derivative) {
-          return boost::math::sph_bessel_prime(
-              v, x, make_policy(promote_double<true>()));
+          return boost::math::sph_bessel_prime(v, x, make_policy(promote_double<true>()));
         } else {
-          return boost::math::sph_bessel(v, x,
-                                         make_policy(promote_double<true>()));
+          return boost::math::sph_bessel(v, x, make_policy(promote_double<true>()));
         }
       }
     } // namespace details

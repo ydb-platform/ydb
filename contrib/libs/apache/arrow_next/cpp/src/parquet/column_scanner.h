@@ -27,11 +27,11 @@
 #include <utility>
 #include <vector>
 
-#include "parquet/column_reader.h"
-#include "parquet/exception.h"
-#include "parquet/platform.h"
-#include "parquet/schema.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 namespace parquet20 {
 

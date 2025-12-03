@@ -127,7 +127,7 @@ public:
     }
 
     operator i32() const {
-        Y_ENSURE((Type() == NScheme::NTypeIds::Int32 
+        Y_ENSURE((Type() == NScheme::NTypeIds::Int32
                   || Type() == NScheme::NTypeIds::Date32)
                  && Size() == sizeof(i32), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data()));
@@ -2154,7 +2154,7 @@ inline bool Schema::Precharger<Schema::AutoPrecharge>::Precharge(
         NTable::TRawVals minKey, NTable::TRawVals maxKey,
         NTable::TTagsRef columns, NTable::EDirection direction, ui64 maxRowCount, ui64 maxBytes)
 {
-    return database.Precharge(table, minKey, maxKey, columns, 0, maxRowCount, maxBytes, direction);
+    return database.Precharge(table, minKey, maxKey, columns, 0, maxRowCount, maxBytes, direction).Ready;
 }
 
 template <>

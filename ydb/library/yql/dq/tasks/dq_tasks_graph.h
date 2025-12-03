@@ -388,6 +388,10 @@ public:
     }
 
     void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks, TMaybe<ui64> watermarksIdleTimeoutUs = Nothing()) {
+        if (!enableCheckpoints && !enableWatermarks) {
+            return;
+        }
+
         std::stack<TTaskType*> tasksStack;
         std::vector<bool> processedTasks(GetTasks().size());
         // TODO use toposort instead of Dreadful O(n^2)

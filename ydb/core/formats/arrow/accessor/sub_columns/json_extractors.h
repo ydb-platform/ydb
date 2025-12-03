@@ -24,7 +24,7 @@ protected:
     }
 
     [[nodiscard]] TConclusionStatus AddDataToBuilder(TDataBuilder& dataBuilder, std::deque<std::unique_ptr<IJsonObjectExtractor>>& iterators,
-        const TStringBuf key, NBinaryJson::TEntryCursor& value) const;
+        const TStringBuf key, const NBinaryJson::TEntryCursor& value) const;
 
 public:
     virtual ~IJsonObjectExtractor() = default;

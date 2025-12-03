@@ -114,7 +114,7 @@ TFuture<void> TSchemafulWriter::GetReadyEvent()
     return Result_;
 }
 
-std::optional<TMD5Hash> TSchemafulWriter::GetDigest() const
+std::optional<TRowsDigest> TSchemafulWriter::GetDigest() const
 {
     return std::nullopt;
 }

@@ -64,4 +64,5 @@ enum ETxTypes {
     TXTYPE_STORE_WALLE_TASK = 13                          [(TxTypeOpts) = {Name: "TxStoreWalleTask"}];
     TXTYPE_UPDATE_CONFIG = 14                             [(TxTypeOpts) = {Name: "TxUpdateConfig"}];
     TXTYPE_UPDATE_DOWNTIMES = 15                          [(TxTypeOpts) = {Name: "TxUpdateDowntimes"}];
+    TXTYPE_STORE_FIRST_BOOT_TIMESTAMP = 16                [(TxTypeOpts) = {Name: "TxStoreFirstBootTimestamp"}];
 }

@@ -14,10 +14,9 @@ namespace utils
 #ifdef PYTHRAN_TRACE_ALLOCATION
   extern size_t pythran_allocation_site;
 #define pythran_trace_lineno(n) pythonic::utils::pythran_allocation_site = n;
-#define pythran_trace_allocation(n)                                            \
-  do {                                                                         \
-    fprintf(stderr, ":%d: Allocating %d bytes\n",                              \
-            pythonic::utils::pythran_allocation_site, n);                      \
+#define pythran_trace_allocation(n)                                                                \
+  do {                                                                                             \
+    fprintf(stderr, ":%d: Allocating %d bytes\n", pythonic::utils::pythran_allocation_site, n);    \
   } while (0)
 #else
 #define pythran_trace_lineno(s)

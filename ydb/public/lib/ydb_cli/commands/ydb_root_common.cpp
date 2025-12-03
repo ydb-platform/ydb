@@ -19,6 +19,7 @@
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
@@ -120,7 +121,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     FillConfig(config);
     TClientCommandOptions& opts = *config.Opts;
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
 
     TStringBuilder endpointHelp;
     endpointHelp << "Endpoint to connect. Protocols: "
@@ -450,6 +451,12 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     if (TFsPath(config.ProfileFile).Exists() && !TFsPath(config.ProfileFile).IsFile()) {
         throw TMisuseException() << "\'" << config.ProfileFile << "\' is not a file";
     }
+
+    if (!config.NeedToConnect) {
+        // Do not parse any connection params if we don't need to connect to a database
+        return;
+    }
+
     ProfileManager = CreateProfileManager(config.ProfileFile);
     ParseProfile();
 
@@ -458,9 +465,6 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     }
     if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, !config.OnlyExplicitProfile ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
         MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
-    }
-    if (config.LocalCommand) {
-        return;
     }
     if (IsVerbose()) {
         std::vector<TString> errors = ParseResult->LogConnectionParams([&](const TString& paramName, const TString& value, const TString& sourceText) {

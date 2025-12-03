@@ -356,7 +356,11 @@ namespace NYdb::NConsoleClient {
     int TTopicReader::Run(IOutputStream& output) {
         LastMessageReceivedTs_ = TInstant::Now();
 
-        bool waitForever = (ReaderParams_.Wait());
+        bool waitForever = (ReaderParams_.Wait()) && IsStreamingFormat(ReaderParams_.MessagingFormat());
+        if (ReaderParams_.Wait() && !IsStreamingFormat(ReaderParams_.MessagingFormat())) {
+            Cerr << "Option --wait is ignored because messaging format is not streaming." << Endl;
+        }
+
         TInstant runStartTime = TInstant::Now();
         while ((MessagesLeft_ > 0 || MessagesLeft_ == -1) && !IsInterrupted()) {
             TInstant messageReceiveDeadline = LastMessageReceivedTs_ + TDuration::MilliSeconds(100);
@@ -375,9 +379,6 @@ namespace NYdb::NConsoleClient {
                     if (int status = HandleEvent(event, output); status) {
                         return status;
                     }
-                }
-                if (PartitionsBeingRead_ == 0) {
-                    return EXIT_SUCCESS;
                 }
                 continue;
             }

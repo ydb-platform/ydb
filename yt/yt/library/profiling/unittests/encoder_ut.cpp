@@ -12,7 +12,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TSensorEncoder, Encode)
+TEST(TSensorEncoderTest, Encode)
 {
     // Fill metric registry.
     NMonitoring::TMetricRegistry registry{{{"common", "label"}}};
@@ -149,7 +149,7 @@ TEST(TSensorEncoder, Encode)
     }
 }
 
-TEST(TSensorEncoder, EncodeSameSensorWithDifferentTypes)
+TEST(TSensorEncoderTest, EncodeSameSensorWithDifferentTypes)
 {
     // Fill metric registry.
     NMonitoring::TMetricRegistry registry{{{"common", "label"}}};

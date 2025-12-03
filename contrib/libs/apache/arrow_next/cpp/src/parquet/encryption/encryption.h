@@ -23,9 +23,9 @@
 #include <string>
 #include <utility>
 
-#include "parquet/exception.h"
-#include "parquet/schema.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 namespace parquet20 {
 

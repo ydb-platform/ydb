@@ -6,9 +6,8 @@
 #endif
 
 template <class E>
-typename std::enable_if<
-    types::valid_numop_parameters<typename std::decay<E>::type>::value,
-    types::numpy_expr<NUMPY_UNARY_FUNC_SYM, E>>::type
+std::enable_if_t<types::valid_numop_parameters<std::decay_t<E>>::value,
+                 types::numpy_expr<NUMPY_UNARY_FUNC_SYM, E>>
 NUMPY_UNARY_FUNC_NAME(E &&self);
 
 #undef NUMPY_UNARY_FUNC_NAME

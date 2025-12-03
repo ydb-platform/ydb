@@ -64,6 +64,8 @@ Y_UNIT_TEST(Move) {
     UNIT_ASSERT_VALUES_EQUAL("xyz", t1.GetFieldOrDefault("f3", "xyz"));
 
     const TStructuredToken t2(std::move(t1));
+    t1 = TStructuredToken();
+
     UNIT_ASSERT_VALUES_EQUAL("xxx", t2.GetFieldOrDefault("f1", "xyz"));
     UNIT_ASSERT_VALUES_EQUAL("yyy", t2.GetFieldOrDefault("f2", "xyz"));
     UNIT_ASSERT_VALUES_EQUAL("xyz", t2.GetFieldOrDefault("f3", "xyz"));

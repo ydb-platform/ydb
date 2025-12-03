@@ -209,6 +209,52 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReconfigureVirtualGroup& cmd,
+            TStatus& /*status*/) {
+        if (!cmd.GetName()) {
+            throw TExError() << "TReconfigureVirtualGroup.Name must be set and be nonempty";
+        }
+
+        std::optional<TGroupId> groupId;
+        Groups.ForEach([&](TGroupId key, const TGroupInfo& value) {
+            if (value.VirtualGroupName == cmd.GetName()) {
+                if (groupId) {
+                    throw TExError() << "Duplicate virtual group name";
+                }
+                groupId.emplace(key);
+            }
+        });
+        if (!groupId) {
+            throw TExError() << "Virtual group not found by designated name";
+        }
+
+        TGroupInfo *group = Groups.FindForUpdate(*groupId);
+        if (!group->BlobDepotConfig) {
+            Y_DEBUG_ABORT(); // this should never happen
+            throw TExError() << "Virtual group does not contain BlobDepotConfig";
+        }
+
+        // parse current config
+        NKikimrBlobDepot::TBlobDepotConfig config;
+        bool success = config.ParseFromString(*group->BlobDepotConfig);
+        if (!success) {
+            Y_DEBUG_ABORT();
+            throw TExError() << "Failed to parse BlobDepotConfig";
+        }
+
+        // update fields in current config
+        if (cmd.HasS3BackendSettings()) {
+            config.MutableS3BackendSettings()->CopyFrom(cmd.GetS3BackendSettings());
+        }
+
+        // overwrite the config
+        success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());
+        Y_ABORT_UNLESS(success);
+
+        // start altering machinery
+        group->NeedAlter = true;
+    }
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     class TBlobStorageController::TVirtualGroupSetupMachine : public TActorBootstrapped<TVirtualGroupSetupMachine> {

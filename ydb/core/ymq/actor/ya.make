@@ -5,7 +5,6 @@ SRCS(
     auth_factory.cpp
     auth_mocks.cpp
     auth_multi_factory.cpp
-    attributes_md5.cpp
     change_visibility.cpp
     count_queues.cpp
     cleanup_queue_data.cpp
@@ -79,7 +78,9 @@ PEERDIR(
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
     ydb/core/util
+    ydb/core/ymq/attributes
     ydb/core/ymq/base
+    ydb/core/ymq/error
     ydb/core/ymq/proto
     ydb/core/ymq/queues/common
     ydb/core/ymq/queues/fifo

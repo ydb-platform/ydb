@@ -1003,6 +1003,53 @@ THolder<TClientWriter> TClientBase::CreateClientWriter(
     return ::MakeIntrusive<TNodeTableFragmentWriter>(std::move(stream));
 }
 
+::TIntrusivePtr<ITableFragmentWriter<TYaMRRow>> TClientBase::CreateYaMRFragmentWriter(
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options)
+{
+    auto format = TFormat::YaMRLenval();
+
+    // TODO(achains): Make proper wrapper class with retries and auto ping.
+    auto stream = NDetail::RequestWithRetry<std::unique_ptr<IOutputStreamWithResponse>>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [&] (TMutationId /*mutationId*/) {
+            return RawClient_->WriteTableFragment(cookie, format, options);
+        }
+    );
+
+    return ::MakeIntrusive<TYaMRTableFragmentWriter>(std::move(stream));
+}
+
+::TIntrusivePtr<ITableFragmentWriter<Message>> TClientBase::CreateProtoFragmentWriter(
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options,
+    const Message* prototype)
+{
+    TVector<const ::google::protobuf::Descriptor*> descriptors;
+    descriptors.push_back(prototype->GetDescriptor());
+
+    TFormat format;
+    if (Context_.Config->UseClientProtobuf) {
+        format = TFormat::YsonBinary();
+    } else {
+        format = TFormat::Protobuf({prototype->GetDescriptor()}, Context_.Config->ProtobufFormatWithDescriptors);
+    }
+
+    // TODO(achains): Make proper wrapper class with retries and auto ping.
+    auto stream = NDetail::RequestWithRetry<std::unique_ptr<IOutputStreamWithResponse>>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [&] (TMutationId /*mutationId*/) {
+            return RawClient_->WriteTableFragment(cookie, format, options);
+        }
+    );
+
+    if (Context_.Config->UseClientProtobuf) {
+        return ::MakeIntrusive<TProtoTableFragmentWriter>(std::move(stream), std::move(descriptors));
+    }
+
+    return ::MakeIntrusive<TLenvalProtoTableFragmentWriter>(std::move(stream), std::move(descriptors));
+}
+
 TBatchRequestPtr TClientBase::CreateBatchRequest()
 {
     return MakeIntrusive<TBatchRequest>(TransactionId_, GetParentClientImpl());

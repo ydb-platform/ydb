@@ -18,9 +18,9 @@
 
 #pragma once
 
-#include "arrow/result.h"
-#include "arrow/type_fwd.h"
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
 
 namespace arrow20 {
 class DataType;

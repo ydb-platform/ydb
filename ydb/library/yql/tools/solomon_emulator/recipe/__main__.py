@@ -58,6 +58,7 @@ def start(argv):
     http_endpoint = f"localhost:{http_port}"
     grpc_endpoint = f"localhost:{grpc_port}"
     set_env("SOLOMON_HOST", "localhost")
+    set_env("SOLOMON_HTTP_URL", "http://" + http_endpoint)
     set_env("SOLOMON_HTTP_ENDPOINT", http_endpoint)
     set_env("SOLOMON_GRPC_ENDPOINT", grpc_endpoint)
     set_env("SOLOMON_HTTP_PORT", str(http_port))

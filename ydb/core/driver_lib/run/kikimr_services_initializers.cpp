@@ -641,9 +641,23 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             TIntrusivePtr<TInterconnectProxyCommon> icCommon;
             icCommon.Reset(new TInterconnectProxyCommon);
 
+            NMonitoring::TDynamicCounterPtr interconectCounters = GetServiceCounters(counters, "interconnect");
+
             if (icConfig.GetUseRdma()) {
+                NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT;
+                if (icConfig.HasRdmaCqMode()) {
+                    switch (icConfig.GetRdmaCqMode()) {
+                        case NKikimrConfig::TInterconnectConfig::CQ_EVENT:
+                            rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT;
+                            break;
+                        case NKikimrConfig::TInterconnectConfig::CQ_POLLING:
+                            rdmaCqMode = NInterconnect::NRdma::ECqMode::POLLING;
+                            break;
+                    }
+                }
                 setup->LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
-                    TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1, icConfig.GetRdmaMaxWr()), TMailboxType::ReadAsFilled, interconnectPoolId));
+                    TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1, icConfig.GetRdmaMaxWr(), rdmaCqMode, interconectCounters.Get()),
+                        TMailboxType::ReadAsFilled, interconnectPoolId));
 
                 // Interconnect uses rdma mem pool directly
                 const auto counters = GetServiceCounters(appData->Counters, "utils");
@@ -652,7 +666,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(icCommon->RdmaMemPool);
             }
             icCommon->NameserviceId = nameserviceId;
-            icCommon->MonCounters = GetServiceCounters(counters, "interconnect");
+            icCommon->MonCounters = interconectCounters;
             icCommon->ChannelsConfig = channels;
             icCommon->Settings = settings;
             icCommon->DestructorId = GetDestructActorID();
@@ -1520,7 +1534,7 @@ static TIntrusivePtr<TTabletSetupInfo> CreateTablet(
         }
     }
 
-    tabletSetup = MakeTabletSetupInfo(tabletType, workPoolId, appData->SystemPoolId);
+    tabletSetup = MakeTabletSetupInfo(tabletType, tabletInfo->BootType, workPoolId, appData->SystemPoolId);
 
     if (tabletInfo->TabletType == TTabletTypes::TypeInvalid) {
         tabletInfo->TabletType = tabletType;
@@ -1549,6 +1563,9 @@ void TBootstrapperInitializer::InitializeServices(
                 const bool standby = boot.HasStandBy() && boot.GetStandBy();
                 if (Find(boot.GetNode(), NodeId) != boot.GetNode().end()) {
                     TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(boot.GetInfo()));
+                    if (boot.HasBootType()) {
+                        info->BootType = BootTypeFromProto(boot.GetBootType());
+                    }
 
                     auto tabletType = BootstrapperTypeToTabletType(boot.GetType());
 
@@ -1865,11 +1882,11 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
         }
 
         if (Config.GetKafkaProxyConfig().GetEnableKafkaProxy()) {
-            const auto& kakfaConfig = Config.GetKafkaProxyConfig();
+            const auto& kafkaConfig = Config.GetKafkaProxyConfig();
             TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
             desc->Address = config.GetPublicHost() ? config.GetPublicHost() : address;
-            desc->Port = kakfaConfig.GetListeningPort();
-            desc->Ssl = kakfaConfig.HasSslCertificate();
+            desc->Port = kafkaConfig.GetListeningPort();
+            desc->Ssl = kafkaConfig.HasSslCertificate();
 
             desc->EndpointId = NGRpcService::KafkaEndpointId;
             endpoints.push_back(std::move(desc));
@@ -3091,6 +3108,11 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
                 TMailboxType::HTSwap, appData->UserPoolId
             )
         );
+        const auto &grpcConfig = Config.GetGRpcConfig();
+        const TString &address = grpcConfig.GetHost() && grpcConfig.GetHost() != "[::]" ? grpcConfig.GetHost() : FQDNHostName();
+        auto& kafkaMutableConfig = *Config.MutableKafkaProxyConfig();
+        kafkaMutableConfig.SetPublicHost(grpcConfig.GetPublicHost() ? grpcConfig.GetPublicHost() : address);
+
         setup->LocalServices.emplace_back(
             TActorId(),
             TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),

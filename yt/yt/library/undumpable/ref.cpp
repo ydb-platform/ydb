@@ -10,29 +10,31 @@ namespace NYT {
 
 static constexpr size_t MinUndumpableSize = 64_KB;
 
-struct TUndumpableHolder
+class TUndumpableHolder
     : public TSharedRangeHolder
 {
+public:
     explicit TUndumpableHolder(const TSharedRef& ref)
-        : Underlying(ref.GetHolder())
-        , Mark(MarkUndumpable(const_cast<char*>(ref.Begin()), ref.Size()))
+        : Underlying_(ref.GetHolder())
+        , Mark_(MarkUndumpable(const_cast<char*>(ref.Begin()), ref.Size()))
     { }
 
     ~TUndumpableHolder()
     {
-        if (Mark) {
-            UnmarkUndumpable(Mark);
+        if (Mark_) {
+            UnmarkUndumpable(Mark_);
         }
     }
 
     // TSharedRangeHolder overrides.
     std::optional<size_t> GetTotalByteSize() const override
     {
-        return Underlying->GetTotalByteSize();
+        return Underlying_->GetTotalByteSize();
     }
 
-    const TSharedRangeHolderPtr Underlying;
-    TUndumpableMark* const Mark;
+private:
+    const TSharedRangeHolderPtr Underlying_;
+    TUndumpableMark* const Mark_;
 };
 
 TSharedRef MarkUndumpable(const TSharedRef& ref)

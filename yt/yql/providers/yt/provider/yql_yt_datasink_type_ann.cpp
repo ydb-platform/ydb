@@ -463,14 +463,59 @@ private:
             return TStatus::Error;
         }
 
-        if (meta->IsDynamic && State_->Types->EngineType != EEngineType::Ytflow) {
+        const bool enableDynamicTablesWrite = State_->Configuration->_EnableDynamicTablesWrite.Get(cluster).GetOrElse(false);
+        bool notFlowDynamic = meta->IsDynamic && State_->Types->EngineType != EEngineType::Ytflow;
+        if (notFlowDynamic) {
+            if (!enableDynamicTablesWrite) {
+                ctx.AddError(TIssue(pos, TStringBuilder() <<
+                    "Modification of dynamic table " << outTableInfo.Name.Quote() << " is not supported"));
+                return TStatus::Error;
+            }
+
+            if (mode != EYtWriteMode::Upsert && mode != EYtWriteMode::Renew) {
+                ctx.AddError(TIssue(pos, TStringBuilder() <<
+                    "Modification of dynamic table " << outTableInfo.Name.Quote() << " is supported only by UPSERT or INSERT WITH TRUNCATE"));
+                return TStatus::Error;
+            }
+
+            static const EYtSettingTypes unsupportedSettings = EYtSettingType::CompressionCodec
+                | EYtSettingType::ErasureCodec
+                | EYtSettingType::ReplicationFactor
+                | EYtSettingType::Media
+                | EYtSettingType::PrimaryMedium
+                | EYtSettingType::Expiration
+                | EYtSettingType::KeepMeta
+                | EYtSettingType::MonotonicKeys
+                | EYtSettingType::ColumnGroups
+                | EYtSettingType::SecurityTags;
+
+            for (const auto& setting : settings.Children()) {
+                if (setting->ChildrenSize() != 0) {
+                    auto parsedSetting = FromString<EYtSettingType>(setting->Child(0)->Content());
+                    if (unsupportedSettings.HasFlags(parsedSetting)) {
+                        ctx.AddError(TIssue(pos, TStringBuilder() <<
+                            "Setting " << parsedSetting << " is not supported for dynamic tables"));
+                        return TStatus::Error;
+                    }
+                }
+            }
+        }
+        if (mode == EYtWriteMode::Upsert && !notFlowDynamic) {
             ctx.AddError(TIssue(pos, TStringBuilder() <<
-                "Modification of dynamic table " << outTableInfo.Name.Quote() << " is not supported"));
+                "Modification of static table " << outTableInfo.Name.Quote() << " is supported only by INSERT"));
             return TStatus::Error;
         }
 
-        const bool replaceMeta = !meta->DoesExist || (mode != EYtWriteMode::Append && mode != EYtWriteMode::RenewKeepMeta);
-        bool checkLayout = meta->DoesExist && (mode == EYtWriteMode::Append || mode == EYtWriteMode::RenewKeepMeta || description.IsReplaced);
+        bool insertWithTruncateIntoDynamicTable = (mode == EYtWriteMode::Renew && notFlowDynamic);
+        bool replaceMeta = !meta->DoesExist || (mode != EYtWriteMode::Append
+            && mode != EYtWriteMode::Upsert
+            && !insertWithTruncateIntoDynamicTable
+            && mode != EYtWriteMode::RenewKeepMeta);
+        bool checkLayout = meta->DoesExist && (mode == EYtWriteMode::Append
+            || mode == EYtWriteMode::RenewKeepMeta
+            || mode == EYtWriteMode::Upsert
+            || insertWithTruncateIntoDynamicTable
+            || description.IsReplaced);
 
         if (monotonicKeys && initialWrite && replaceMeta) {
             ctx.AddError(TIssue(pos, TStringBuilder()
@@ -715,8 +760,9 @@ private:
                 if (nextDescription.RowSpecSortReady) {
                     const bool uniqueKeys = nextDescription.RowSpec->UniqueKeys;
                     for (size_t s = from; s < contentRowSpecs.size(); ++s) {
-                        const bool hasSortChanges = nextDescription.RowSpec->MakeCommonSortness(ctx, *contentRowSpecs[s]);
-                        const bool breaksSorting = hasSortChanges || !nextDescription.RowSpec->CompareSortness(*contentRowSpecs[s], false);
+                        const bool hasSortChanges = notFlowDynamic ? false : nextDescription.RowSpec->MakeCommonSortness(ctx, *contentRowSpecs[s]);
+                        const bool breaksSorting = !notFlowDynamic && (hasSortChanges || !nextDescription.RowSpec->CompareSortness(*contentRowSpecs[s], false));
+
                         if (monotonicKeys) {
                             if (breaksSorting) {
                                 ctx.AddError(TIssue(pos, TStringBuilder()
@@ -750,7 +796,12 @@ private:
                                     warning << "unordered";
                                 }
                             } else if (uniqueKeys && !nextDescription.RowSpec->UniqueKeys) {
-                                warning << "Result table content will have non unique keys";
+                                if (meta->IsDynamic && State_->Types->EngineType != EEngineType::Ytflow) {
+                                    nextDescription.RowSpec->UniqueKeys = true;
+                                    warning << "Result write to dynamic table " << outTableInfo.Name.Quote() << " may fail because of non unique keys";
+                                } else {
+                                    warning << "Result table content will have non unique keys";
+                                }
                             }
 
                             if (warning && !ctx.AddWarning(YqlIssue(pos, EYqlIssueCode::TIssuesIds_EIssueCode_YT_SORT_ORDER_CHANGE, warning))) {
@@ -969,6 +1020,10 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtCopy::CallableName() << " cannot be used with range selection"));
                     return TStatus::Error;
                 }
+                if (!path.QLFilter().Maybe<TCoVoid>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtCopy::CallableName() << " cannot be used with QLFilter"));
+                    return TStatus::Error;
+                }
                 auto tableInfo = TYtTableBaseInfo::Parse(path.Table());
                 if (!tableInfo->IsTemp) {
                     ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtCopy::CallableName() << " cannot be used with non-temporary tables"));
@@ -1066,7 +1121,7 @@ private:
 
         auto merge = TYtMerge(input);
 
-        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq | EYtSettingType::QLFilter, ctx)) {
+        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq, ctx)) {
             return TStatus::Error;
         }
 
@@ -1131,7 +1186,7 @@ private:
         }
 
         auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, true,
-            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::SysColumns);
+            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::SysColumns | EYtSettingType::QLFilter);
         if (status.Level != TStatus::Ok) {
             return status;
         }
@@ -1150,8 +1205,7 @@ private:
             | EYtSettingType::BlockInputReady
             | EYtSettingType::BlockInputApplied
             | EYtSettingType::BlockOutputReady
-            | EYtSettingType::BlockOutputApplied
-            | EYtSettingType::QLFilter;
+            | EYtSettingType::BlockOutputApplied;
         if (!ValidateSettings(map.Settings().Ref(), accpeted, ctx)) {
             return TStatus::Error;
         }
@@ -1333,6 +1387,7 @@ private:
         EYtSettingTypes sectionSettings = EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample;
         if (hasMapLambda) {
             sectionSettings |= EYtSettingType::SysColumns;
+            sectionSettings |= EYtSettingType::QLFilter;
         }
         auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, true, sectionSettings);
         if (status.Level != TStatus::Ok) {
@@ -1351,8 +1406,7 @@ private:
             | EYtSettingType::KeySwitch
             | EYtSettingType::MapOutputType
             | EYtSettingType::ReduceInputType
-            | EYtSettingType::NoDq
-            | EYtSettingType::QLFilter;
+            | EYtSettingType::NoDq;
 
         if (hasMapLambda) {
             acceptedSettings |= EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied;

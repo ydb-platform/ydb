@@ -41,8 +41,7 @@ namespace itertools
   } // namespace details
 
   template <typename T0, typename T1 = T0>
-  details::count<typename __combined<T0, T1>::type> count(T0 start,
-                                                          T1 step = 1);
+  details::count<typename __combined<T0, T1>::type> count(T0 start, T1 step = 1);
 
   details::count<long> count();
 
@@ -55,9 +54,8 @@ PYTHONIC_NS_END
 
 template <class E, class T>
 struct __combined<E, pythonic::itertools::details::count<T>> {
-  using type =
-      typename __combined<E, container<typename pythonic::itertools::details::
-                                           count<T>::value_type>>::type;
+  using type = typename __combined<
+      E, container<typename pythonic::itertools::details::count<T>::value_type>>::type;
 };
 
 /* } */

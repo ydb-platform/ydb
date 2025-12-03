@@ -527,6 +527,7 @@ message TYqlCoreConfig {
     optional TActivationPercentage QPlayerActivation = 2;
     optional uint32 QPlayerRobotPercentage = 3 [default = 0];
     optional TActivationPercentage QPlayerFullCaptureActivation = 4;
+    optional bool AlwaysCommitQPlayer = 5;
 }
 
 /////////////////////////////// Sql Core ///////////////////////////////
@@ -542,6 +543,7 @@ message TSqlCoreConfig {
     repeated string NoV0SyntaxErrorForUsers = 3;
 
     repeated string TranslationFlags = 4;
+    repeated TCoreAttr ExtendedTranslationFlags = 5;
 }
 
 /////////////////////////////// Db Tool ///////////////////////////////

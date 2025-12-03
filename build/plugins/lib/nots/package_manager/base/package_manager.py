@@ -93,7 +93,9 @@ class BasePackageManager(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, nm_bundle=False):
+    def create_node_modules(
+        self, yatool_prebuilder_path=None, use_legacy_pnpm_virtual_store=False, local_cli=False, nm_bundle=False
+    ):
         pass
 
     @abstractmethod

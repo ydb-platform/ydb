@@ -352,14 +352,19 @@ def _unwrap_optionality(column):
 
 
 class _ResultSet(object):
-    __slots__ = ("columns", "rows", "truncated", "snapshot", "index")
+    __slots__ = ("columns", "rows", "truncated", "snapshot", "index", "format", "arrow_format_meta", "data")
 
-    def __init__(self, columns, rows, truncated, snapshot=None, index=None):
+    def __init__(
+        self, columns, rows, truncated, snapshot=None, index=None, format=None, arrow_format_meta=None, data=None
+    ):
         self.columns = columns
         self.rows = rows
         self.truncated = truncated
         self.snapshot = snapshot
         self.index = index
+        self.format = format
+        self.arrow_format_meta = arrow_format_meta
+        self.data = data
 
     @classmethod
     def from_message(cls, message, table_client_settings=None, snapshot=None, index=None):
@@ -385,12 +390,32 @@ class _ResultSet(object):
                 column_parser, unwrapped_type = column_info
                 row[column.name] = column_parser(unwrapped_type, value, table_client_settings)
             rows.append(row)
-        return cls(message.columns, rows, message.truncated, snapshot, index)
+
+        from ydb.query import QueryResultSetFormat, ArrowFormatMeta
+
+        result_format = message.format if message.format else QueryResultSetFormat.VALUE
+
+        arrow_meta = None
+        if message.HasField("arrow_format_meta"):
+            arrow_meta = ArrowFormatMeta.from_proto(message.arrow_format_meta)
+
+        data = message.data if message.data else None
+
+        return cls(message.columns, rows, message.truncated, snapshot, index, result_format, arrow_meta, data)
 
     @classmethod
     def lazy_from_message(cls, message, table_client_settings=None, snapshot=None):
+        from ydb.query import QueryResultSetFormat, ArrowFormatMeta
+
         rows = _LazyRows(message.rows, table_client_settings, message.columns)
-        return cls(message.columns, rows, message.truncated, snapshot)
+        result_format = message.format if message.format else QueryResultSetFormat.VALUE
+
+        arrow_meta = None
+        if message.HasField("arrow_format_meta"):
+            arrow_meta = ArrowFormatMeta.from_proto(message.arrow_format_meta)
+
+        data = message.data if message.data else None
+        return cls(message.columns, rows, message.truncated, snapshot, None, result_format, arrow_meta, data)
 
 
 ResultSet = _ResultSet

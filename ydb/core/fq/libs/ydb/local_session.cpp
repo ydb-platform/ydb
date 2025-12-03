@@ -16,13 +16,14 @@ namespace {
 class TTableCreator : public NActors::TActorBootstrapped<TTableCreator> {
 public:
     TTableCreator(
-        const std::string& db,
+        const std::string& /*db*/,
         const std::string& path,
         NYdb::NTable::TTableDescription&& tableDesc,
+        const NACLib::TDiffACL& acl,
         NThreading::TPromise<NYdb::TStatus> promise)
-        : Db(db)
-        , Path(path)
+        : Path(path)
         , TableDesc(std::move(tableDesc))
+        , Acl(acl)
         , Promise(promise) {
     }
 
@@ -33,8 +34,6 @@ public:
         for (const auto& key : TableDesc.GetPrimaryKeyColumns()) {
             keyColumns.push_back(key.c_str());
         }
-        TVector<TString> pathComponents;
-        pathComponents.push_back(Path.c_str());
 
         TVector<NKikimrSchemeOp::TColumnDescription> columns;
         for (const auto& column : TableDesc.GetTableColumns()) {
@@ -58,12 +57,15 @@ public:
         }
         Register(
             NKikimr::CreateTableCreator(
-                pathComponents,
+                NKikimr::SplitPath(Path),
                 columns,
                 keyColumns,
                 NKikimrServices::STREAMS_STORAGE_SERVICE,
                 Nothing(),
-                Db.c_str()
+                {},
+                /* isSystemUser */ true,
+                Nothing(),
+                Acl 
             )
         );
     }
@@ -83,9 +85,9 @@ private:
     )
 
 private:
-    const std::string Db;
-    const std::string Path;
+    const TString Path;
     const NYdb::NTable::TTableDescription TableDesc;
+    NACLib::TDiffACL Acl;
     NThreading::TPromise<NYdb::TStatus> Promise;
 };
 
@@ -127,9 +129,9 @@ struct TLocalSession : public ISession {
         return NThreading::MakeFuture(NYdb::TStatus{NYdb::EStatus::SUCCESS, {}});
     }
 
-    NYdb::TAsyncStatus CreateTable(const TString& db, const TString& path, NYdb::NTable::TTableDescription&& tableDesc) override {
+    NYdb::TAsyncStatus CreateTable(const TString& db, const TString& path, NYdb::NTable::TTableDescription&& tableDesc, const NACLib::TDiffACL& acl) override {
         auto promise = NThreading::NewPromise<NYdb::TStatus>();
-        NActors::TActivationContext::Register(new TTableCreator(db, path, std::move(tableDesc), promise));
+        NActors::TActivationContext::Register(new TTableCreator(db, path, std::move(tableDesc), acl, promise));
         return promise.GetFuture();
     }
 

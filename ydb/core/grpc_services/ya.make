@@ -87,6 +87,7 @@ SRCS(
     rpc_scheme_base.cpp
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
+    rpc_test_shard.cpp
     rpc_view.cpp
     rpc_whoami.cpp
     table_settings.cpp

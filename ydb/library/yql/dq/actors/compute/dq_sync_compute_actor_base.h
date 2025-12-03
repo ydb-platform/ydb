@@ -67,6 +67,7 @@ protected:
         }
 
         TaskRunner.Reset();
+        TBase::DoTerminateImpl();
     }
 
     void InvalidateMeminfo() override {
@@ -76,7 +77,7 @@ protected:
         }
     }
 
-    bool DoHandleChannelsAfterFinishImpl() override final{
+    bool DoHandleChannelsAfterFinishImpl() override final {
         Y_ABORT_UNLESS(this->Checkpoints);
 
         if (this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
@@ -88,7 +89,7 @@ protected:
         return true;  // returns true, when channels were handled synchronously
     }
 
-protected: //TDqComputeActorChannels::ICalbacks
+protected: //TDqComputeActorChannels::ICallbacks
     i64 GetInputChannelFreeSpace(ui64 channelId) const override final {
         const auto* inputChannel = this->InputChannelsMap.FindPtr(channelId);
         YQL_ENSURE(inputChannel, "task: " << this->Task.GetId() << ", unknown input channelId: " << channelId);
@@ -108,6 +109,13 @@ protected: //TDqComputeActorChannels::ICalbacks
             batch.Payload = std::move(channelData.Payload);
             auto guard = TBase::BindAllocator();
             channel->Push(std::move(batch));
+        }
+
+        if (channelData.Proto.HasWatermark()) {
+            Y_ABORT_UNLESS(inputChannel->WatermarksMode != NDqProto::WATERMARKS_MODE_DISABLED);
+            const auto& watermarkRequest = channelData.Proto.GetWatermark();
+            const auto watermark = TInstant::MicroSeconds(watermarkRequest.GetTimestampUs());
+            channel->Push(watermark);
         }
 
         if (channelData.Proto.HasCheckpoint()) {

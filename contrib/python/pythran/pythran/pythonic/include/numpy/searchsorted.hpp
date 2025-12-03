@@ -15,13 +15,12 @@ namespace numpy
 {
 
   template <class T, class U>
-  typename std::enable_if<!types::is_numexpr_arg<T>::value, long>::type
+  std::enable_if_t<!types::is_numexpr_arg<T>::value, long>
   searchsorted(U const &a, T const &v, types::str const &side = "left");
 
   template <class E, class T>
-  typename std::enable_if<
-      types::is_numexpr_arg<E>::value,
-      types::ndarray<long, types::array_tuple<long, E::value>>>::type
+  std::enable_if_t<types::is_numexpr_arg<E>::value,
+                   types::ndarray<long, types::array_tuple<long, E::value>>>
   searchsorted(T const &a, E const &v, types::str const &side = "left");
 
   DEFINE_FUNCTOR(pythonic::numpy, searchsorted);

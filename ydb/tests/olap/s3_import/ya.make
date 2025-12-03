@@ -1,7 +1,7 @@
 PY3TEST()
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 
 TEST_SRCS(
@@ -26,6 +26,7 @@ PEERDIR(
     ydb/public/sdk/python
     ydb/public/sdk/python/enable_v3_new_behavior
     contrib/python/boto3
+    contrib/python/pyarrow
     library/recipes/common
     ydb/tests/olap/common
 )

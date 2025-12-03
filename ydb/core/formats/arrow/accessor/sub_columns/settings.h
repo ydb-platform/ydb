@@ -75,9 +75,11 @@ public:
         return result;
     }
 
-    bool IsSparsed(const ui32 keyUsageCount, const ui32 recordsCount) const {
-        AFL_VERIFY(recordsCount);
-        return keyUsageCount * SparsedDetectorKff < recordsCount;
+    bool IsSparsed(const ui32 /*keyUsageCount*/, const ui32 /*recordsCount*/) const {
+        // TODO: Return when sparsed is fixed
+        // AFL_VERIFY(recordsCount);
+        // return keyUsageCount * SparsedDetectorKff < recordsCount;
+        return false;
     }
 
     template <class TProto>

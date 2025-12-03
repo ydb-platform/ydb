@@ -297,7 +297,7 @@ def main():
                 AND date_window = Date('{date_str}')
             """
             try:
-                results = ydb_wrapper.execute_scan_query(query, query_name=f"get_monitor_data_for_date_{branch}_{date_str}")
+                results = ydb_wrapper.execute_scan_query(query, query_name=f"get_monitor_data_for_date_{branch}")
             except Exception as e:
                 print(f"Error fetching monitor data for {date_str}: {e}")
                 return None

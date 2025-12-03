@@ -1,6 +1,6 @@
 IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
     PY3TEST()
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
     ENV(YDB_ENABLE_COLUMN_TABLES="true")
     ENV(USE_IN_MEMORY_PDISKS=true)
     TEST_SRCS(

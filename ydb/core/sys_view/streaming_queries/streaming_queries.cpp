@@ -285,7 +285,10 @@ public:
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = Database;
-        request->UserToken = UserToken;
+
+        if (UserToken && UserToken->GetSanitizedToken()) {
+            request->UserToken = UserToken;
+        }
 
         request->ResultSet.reserve(Paths.size());
         for (const auto& path : Paths) {

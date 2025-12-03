@@ -182,7 +182,7 @@ void FillFieldMappingsImpl(
     bool listIsOptional,
     bool enableRecursiveRenaming,
     const THashMap<TString, TString>& inverseFieldRenames) {
-    static const THashMap<TString, TString> emptyInverseFieldRenames;
+    static const THashMap<TString, TString> EmptyInverseFieldRenames;
     mappings.resize(fromType->GetMembersCount());
     for (ui32 i = 0; i < fromType->GetMembersCount(); ++i) {
         TString fieldName(fromType->GetMemberName(i));
@@ -222,7 +222,7 @@ void FillFieldMappingsImpl(
                 Nothing(),
                 listIsOptional,
                 enableRecursiveRenaming,
-                enableRecursiveRenaming ? inverseFieldRenames : emptyInverseFieldRenames);
+                enableRecursiveRenaming ? inverseFieldRenames : EmptyInverseFieldRenames);
         }
     }
 }
@@ -482,7 +482,7 @@ void FillOutputMessage(
                                 reflection->AddEnumValue(destination, mapping.Field, item.Get<i32>());
                                 break;
                             case EEnumFormatType::String: {
-                                auto enumValueDescriptor = mapping.Field->enum_type()->FindValueByName(TString(item.AsStringRef()));
+                                auto enumValueDescriptor = mapping.Field->enum_type()->FindValueByName(item.AsStringRef());
                                 if (!enumValueDescriptor) {
                                     enumValueDescriptor = mapping.Field->default_value_enum();
                                 }
@@ -553,7 +553,7 @@ void FillOutputMessage(
                             reflection->SetEnumValue(destination, mapping.Field, cell.Get<i32>());
                             break;
                         case EEnumFormatType::String: {
-                            auto enumValueDescriptor = mapping.Field->enum_type()->FindValueByName(TString(cell.AsStringRef()));
+                            auto enumValueDescriptor = mapping.Field->enum_type()->FindValueByName(cell.AsStringRef());
                             if (!enumValueDescriptor) {
                                 enumValueDescriptor = mapping.Field->default_value_enum();
                             }

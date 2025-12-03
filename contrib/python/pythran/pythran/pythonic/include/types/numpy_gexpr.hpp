@@ -31,8 +31,7 @@ namespace types
 
   template <class T0, class... T>
   struct count_new_axis<T0, T...> {
-    static constexpr size_t value =
-        count_new_axis<T0>::value + count_new_axis<T...>::value;
+    static constexpr size_t value = count_new_axis<T0>::value + count_new_axis<T...>::value;
   };
 
   /* helper to cast slices
@@ -96,16 +95,12 @@ namespace types
     template <class E, class... S>
     auto operator()(E &&expr, S const &...s)
         -> decltype(std::forward<E>(expr).reshape(make_reshape<C>(
-            expr,
-            std::tuple<
-                std::integral_constant<bool, to_slice<S>::is_new_axis>...>()))(
+            expr, std::tuple<std::integral_constant<bool, to_slice<S>::is_new_axis>...>()))(
             to_slice<S>{}(s)...))
 
     {
       return std::forward<E>(expr).reshape(make_reshape<C>(
-          expr,
-          std::tuple<
-              std::integral_constant<bool, to_slice<S>::is_new_axis>...>()))(
+          expr, std::tuple<std::integral_constant<bool, to_slice<S>::is_new_axis>...>()))(
           to_slice<S>{}(s)...);
     }
   };
@@ -113,51 +108,44 @@ namespace types
   template <>
   struct extended_slice<0> {
     template <class E, class... S>
-    auto operator()(E &&expr, long const &s0, S const &...s) ->
-        typename std::enable_if<
-            utils::all_of<std::is_integral<S>::value...>::value,
-            decltype(std::forward<E>(expr)[types::make_tuple(s0, s...)])>::type
+    auto operator()(E &&expr, long const &s0, S const &...s)
+        -> std::enable_if_t<utils::all_of<std::is_integral<S>::value...>::value,
+                            decltype(std::forward<E>(expr)[types::make_tuple(s0, s...)])>
     {
       return std::forward<E>(expr)[types::make_tuple(s0, s...)];
     }
     template <class E, class... S>
-    auto operator()(E &&expr, long const &s0, S const &...s) ->
-        typename std::enable_if<
-            !utils::all_of<std::is_integral<S>::value...>::value,
-            decltype(std::forward<E>(expr)[s0](s...))>::type
+    auto operator()(E &&expr, long const &s0, S const &...s)
+        -> std::enable_if_t<!utils::all_of<std::is_integral<S>::value...>::value,
+                            decltype(std::forward<E>(expr)[s0](s...))>
     {
       return std::forward<E>(expr)[s0](s...);
     }
 
     template <class E, class... S, size_t... Is>
-    numpy_gexpr<typename std::decay<E>::type, normalize_t<S>...>
-    fwd(E &&expr, std::tuple<S...> const &s, utils::index_sequence<Is...>)
+    numpy_gexpr<std::decay_t<E>, normalize_t<S>...> fwd(E &&expr, std::tuple<S...> const &s,
+                                                        std::index_sequence<Is...>)
     {
-      return {std::forward<E>(expr),
-              std::get<Is>(s).normalize(expr.template shape<Is>())...};
+      return {std::forward<E>(expr), std::get<Is>(s).normalize(expr.template shape<Is>())...};
     }
 
     template <class E, class Sp, class... S>
-    typename std::enable_if<
-        is_slice<Sp>::value,
-        numpy_gexpr<E, normalize_t<Sp>, normalize_t<S>...>>::type
+    std::enable_if_t<is_slice<Sp>::value, numpy_gexpr<E, normalize_t<Sp>, normalize_t<S>...>>
     operator()(E &&expr, Sp const &s0, S const &...s)
     {
       return make_gexpr(std::forward<E>(expr), s0, s...);
     }
 
     template <class E, class F, class... S>
-    typename std::enable_if<
-        !is_slice<F>::value,
-        numpy_gexpr<ndarray<typename std::decay<E>::type::dtype,
-                            array_tuple<long, std::decay<E>::type::value>>,
-                    cstride_normalized_slice<1>, normalize_t<S>...>>::type
+    std::enable_if_t<!is_slice<F>::value,
+                     numpy_gexpr<ndarray<typename std::decay_t<E>::dtype,
+                                         array_tuple<long, std::decay_t<E>::value>>,
+                                 cstride_normalized_slice<1>, normalize_t<S>...>>
     operator()(E &&expr, F const &s0, S const &...s)
     {
-      return numpy_vexpr<ndarray<typename std::decay<E>::type::dtype,
-                                 array_tuple<long, std::decay<E>::type::value>>,
-                         F>{std::forward<E>(expr), s0}(
-          fast_contiguous_slice(none_type{}, none_type{}), s...);
+      return numpy_vexpr<
+          ndarray<typename std::decay_t<E>::dtype, array_tuple<long, std::decay_t<E>::value>>, F>{
+          std::forward<E>(expr), s0}(fast_contiguous_slice(none_type{}, none_type{}), s...);
     }
   };
 
@@ -183,8 +171,7 @@ namespace types
 
   template <class T, class... Types>
   struct count_long<T, Types...> {
-    static constexpr size_t value =
-        count_long<T>::value + count_long<Types...>::value;
+    static constexpr size_t value = count_long<T>::value + count_long<Types...>::value;
   };
 
   template <>
@@ -226,21 +213,18 @@ namespace types
   {
 
     template <class T, class Ts, size_t... Is>
-    std::tuple<T, typename std::tuple_element<Is, Ts>::type...>
-    tuple_push_head(T const &val, Ts const &vals, utils::index_sequence<Is...>)
+    std::tuple<T, std::tuple_element_t<Is, Ts>...> tuple_push_head(T const &val, Ts const &vals,
+                                                                   std::index_sequence<Is...>)
     {
-      return std::tuple<T, typename std::tuple_element<Is, Ts>::type...>{
-          val, std::get<Is>(vals)...};
+      return std::tuple<T, std::tuple_element_t<Is, Ts>...>{val, std::get<Is>(vals)...};
     }
 
     template <class T, class Ts>
     auto tuple_push_head(T const &val, Ts const &vals)
-        -> decltype(tuple_push_head(
-            val, vals,
-            utils::make_index_sequence<std::tuple_size<Ts>::value>()))
+        -> decltype(tuple_push_head(val, vals,
+                                    std::make_index_sequence<std::tuple_size<Ts>::value>()))
     {
-      return tuple_push_head(
-          val, vals, utils::make_index_sequence<std::tuple_size<Ts>::value>());
+      return tuple_push_head(val, vals, std::make_index_sequence<std::tuple_size<Ts>::value>());
     }
 
     // this struct is specialized for every type combination && takes care of
@@ -257,89 +241,77 @@ namespace types
     template <class... T0>
     struct merge_gexpr<std::tuple<T0...>, std::tuple<>> {
       template <size_t I, class S>
-      std::tuple<T0...> run(S const &, std::tuple<T0...> const &t0,
-                            std::tuple<>);
-      static_assert(
-          utils::all_of<std::is_same<T0, normalize_t<T0>>::value...>::value,
-          "all slices are normalized");
+      std::tuple<T0...> run(S const &, std::tuple<T0...> const &t0, std::tuple<>);
+      static_assert(utils::all_of<std::is_same<T0, normalize_t<T0>>::value...>::value,
+                    "all slices are normalized");
     };
 
     template <class... T1>
     struct merge_gexpr<std::tuple<>, std::tuple<T1...>> {
       template <size_t I, class S>
-      std::tuple<normalize_t<T1>...> run(S const &, std::tuple<>,
-                                         std::tuple<T1...> const &t1);
+      std::tuple<normalize_t<T1>...> run(S const &, std::tuple<>, std::tuple<T1...> const &t1);
     };
 
     template <class S0, class... T0, class S1, class... T1>
     struct merge_gexpr<std::tuple<S0, T0...>, std::tuple<S1, T1...>> {
       template <size_t I, class S>
-      auto run(S const &s, std::tuple<S0, T0...> const &t0,
-               std::tuple<S1, T1...> const &t1)
-          -> decltype(tuple_push_head(
-              std::get<0>(t0) * std::get<0>(t1),
-              merge_gexpr<std::tuple<T0...>, std::tuple<T1...>>{}
-                  .template run<I + 1>(s, tuple_tail(t0), tuple_tail(t1))))
+      auto run(S const &s, std::tuple<S0, T0...> const &t0, std::tuple<S1, T1...> const &t1)
+          -> decltype(tuple_push_head(std::get<0>(t0) * std::get<0>(t1),
+                                      merge_gexpr<std::tuple<T0...>, std::tuple<T1...>>{}
+                                          .template run<I + 1>(s, tuple_tail(t0), tuple_tail(t1))))
       {
         return tuple_push_head(
             std::get<0>(t0) * std::get<0>(t1),
-            merge_gexpr<std::tuple<T0...>, std::tuple<T1...>>{}
-                .template run<I + 1>(s, tuple_tail(t0), tuple_tail(t1)));
+            merge_gexpr<std::tuple<T0...>, std::tuple<T1...>>{}.template run<I + 1>(
+                s, tuple_tail(t0), tuple_tail(t1)));
       }
       static_assert(
           std::is_same<decltype(std::declval<S0>() * std::declval<S1>()),
-                       normalize_t<decltype(std::declval<S0>() *
-                                            std::declval<S1>())>>::value,
+                       normalize_t<decltype(std::declval<S0>() * std::declval<S1>())>>::value,
           "all slices are normalized");
     };
 
     template <class... T1>
     struct merge_gexpr<std::tuple<>, std::tuple<none_type, T1...>> {
       template <size_t I, class S>
-      auto run(S const &s, std::tuple<> const &t0,
-               std::tuple<none_type, T1...> const &t1)
-          -> decltype(tuple_push_head(
-              std::get<0>(t1), merge_gexpr<std::tuple<>, std::tuple<T1...>>{}
-                                   .template run<I + 1>(s, t0, tuple_tail(t1))))
+      auto run(S const &s, std::tuple<> const &t0, std::tuple<none_type, T1...> const &t1)
+          -> decltype(tuple_push_head(std::get<0>(t1),
+                                      merge_gexpr<std::tuple<>, std::tuple<T1...>>{}
+                                          .template run<I + 1>(s, t0, tuple_tail(t1))))
       {
-        return tuple_push_head(
-            std::get<0>(t1),
-            merge_gexpr<std::tuple<>, std::tuple<T1...>>{}.template run<I + 1>(
-                s, t0, tuple_tail(t1)));
+        return tuple_push_head(std::get<0>(t1),
+                               merge_gexpr<std::tuple<>, std::tuple<T1...>>{}.template run<I + 1>(
+                                   s, t0, tuple_tail(t1)));
       }
     };
 
     template <class S0, class... T0, class... T1>
     struct merge_gexpr<std::tuple<S0, T0...>, std::tuple<none_type, T1...>> {
       template <size_t I, class S>
-      auto run(S const &s, std::tuple<S0, T0...> const &t0,
-               std::tuple<none_type, T1...> const &t1)
-          -> decltype(tuple_push_head(
-              std::get<0>(t1),
-              merge_gexpr<std::tuple<S0, T0...>, std::tuple<T1...>>{}
-                  .template run<I + 1>(s, t0, tuple_tail(t1))))
+      auto run(S const &s, std::tuple<S0, T0...> const &t0, std::tuple<none_type, T1...> const &t1)
+          -> decltype(tuple_push_head(std::get<0>(t1),
+                                      merge_gexpr<std::tuple<S0, T0...>, std::tuple<T1...>>{}
+                                          .template run<I + 1>(s, t0, tuple_tail(t1))))
       {
         return tuple_push_head(
             std::get<0>(t1),
-            merge_gexpr<std::tuple<S0, T0...>, std::tuple<T1...>>{}
-                .template run<I + 1>(s, t0, tuple_tail(t1)));
+            merge_gexpr<std::tuple<S0, T0...>, std::tuple<T1...>>{}.template run<I + 1>(
+                s, t0, tuple_tail(t1)));
       }
     };
 
     template <class... T0, class S1, class... T1>
     struct merge_gexpr<std::tuple<long, T0...>, std::tuple<S1, T1...>> {
       template <size_t I, class S>
-      auto run(S const &s, std::tuple<long, T0...> const &t0,
-               std::tuple<S1, T1...> const &t1)
-          -> decltype(tuple_push_head(
-              std::get<0>(t0),
-              merge_gexpr<std::tuple<T0...>, std::tuple<S1, T1...>>{}
-                  .template run<I>(s, tuple_tail(t0), t1)))
+      auto run(S const &s, std::tuple<long, T0...> const &t0, std::tuple<S1, T1...> const &t1)
+          -> decltype(tuple_push_head(std::get<0>(t0),
+                                      merge_gexpr<std::tuple<T0...>, std::tuple<S1, T1...>>{}
+                                          .template run<I>(s, tuple_tail(t0), t1)))
       {
         return tuple_push_head(
             std::get<0>(t0),
-            merge_gexpr<std::tuple<T0...>, std::tuple<S1, T1...>>{}
-                .template run<I>(s, tuple_tail(t0), t1));
+            merge_gexpr<std::tuple<T0...>, std::tuple<S1, T1...>>{}.template run<I>(
+                s, tuple_tail(t0), t1));
       }
     };
     template <class... T0, class... T1>
@@ -347,102 +319,88 @@ namespace types
       template <size_t I, class S>
       auto run(S const &s, std::tuple<long, T0...> const &t0,
                std::tuple<none_type, T1...> const &t1)
-          -> decltype(tuple_push_head(
-              std::get<0>(t0),
-              merge_gexpr<std::tuple<T0...>, std::tuple<none_type, T1...>>{}
-                  .template run<I>(s, tuple_tail(t0), t1)))
+          -> decltype(tuple_push_head(std::get<0>(t0),
+                                      merge_gexpr<std::tuple<T0...>, std::tuple<none_type, T1...>>{}
+                                          .template run<I>(s, tuple_tail(t0), t1)))
       {
         return tuple_push_head(
             std::get<0>(t0),
-            merge_gexpr<std::tuple<T0...>, std::tuple<none_type, T1...>>{}
-                .template run<I>(s, tuple_tail(t0), t1));
+            merge_gexpr<std::tuple<T0...>, std::tuple<none_type, T1...>>{}.template run<I>(
+                s, tuple_tail(t0), t1));
       }
     };
 
     template <class S0, class... T0, class... T1>
     struct merge_gexpr<std::tuple<S0, T0...>, std::tuple<long, T1...>> {
       template <size_t I, class S>
-      auto run(S const &s, std::tuple<S0, T0...> const &t0,
-               std::tuple<long, T1...> const &t1)
-          -> decltype(tuple_push_head(
-              std::get<0>(t1),
-              merge_gexpr<std::tuple<T0...>, std::tuple<T1...>>{}
-                  .template run<I + 1>(s, tuple_tail(t0), tuple_tail(t1))))
+      auto run(S const &s, std::tuple<S0, T0...> const &t0, std::tuple<long, T1...> const &t1)
+          -> decltype(tuple_push_head(std::get<0>(t1),
+                                      merge_gexpr<std::tuple<T0...>, std::tuple<T1...>>{}
+                                          .template run<I + 1>(s, tuple_tail(t0), tuple_tail(t1))))
       {
         return tuple_push_head(
             std::get<0>(t1) * std::get<0>(t0).step + std::get<0>(t0).lower,
-            merge_gexpr<std::tuple<T0...>, std::tuple<T1...>>{}
-                .template run<I + 1>(s, tuple_tail(t0), tuple_tail(t1)));
+            merge_gexpr<std::tuple<T0...>, std::tuple<T1...>>{}.template run<I + 1>(
+                s, tuple_tail(t0), tuple_tail(t1)));
       }
     };
 
     template <class... T0, class... T1>
     struct merge_gexpr<std::tuple<long, T0...>, std::tuple<long, T1...>> {
       template <size_t I, class S>
-      auto run(S const &s, std::tuple<long, T0...> const &t0,
-               std::tuple<long, T1...> const &t1)
-          -> decltype(tuple_push_head(
-              std::get<0>(t0),
-              merge_gexpr<std::tuple<T0...>, std::tuple<long, T1...>>{}
-                  .template run<I>(s, tuple_tail(t0), t1)))
+      auto run(S const &s, std::tuple<long, T0...> const &t0, std::tuple<long, T1...> const &t1)
+          -> decltype(tuple_push_head(std::get<0>(t0),
+                                      merge_gexpr<std::tuple<T0...>, std::tuple<long, T1...>>{}
+                                          .template run<I>(s, tuple_tail(t0), t1)))
       {
         return tuple_push_head(
             std::get<0>(t0),
-            merge_gexpr<std::tuple<T0...>, std::tuple<long, T1...>>{}
-                .template run<I>(s, tuple_tail(t0), t1));
+            merge_gexpr<std::tuple<T0...>, std::tuple<long, T1...>>{}.template run<I>(
+                s, tuple_tail(t0), t1));
       }
     };
 
     template <class Arg, class... Sp>
-    typename std::enable_if<count_new_axis<Sp...>::value == 0,
-                            numpy_gexpr<Arg, Sp...>>::type
+    std::enable_if_t<count_new_axis<Sp...>::value == 0, numpy_gexpr<Arg, Sp...>>
     _make_gexpr(Arg arg, std::tuple<Sp...> const &t);
 
     template <class Arg, class S, size_t... Is>
-    numpy_gexpr<Arg, typename to_normalized_slice<
-                         typename std::tuple_element<Is, S>::type>::type...>
-    _make_gexpr_helper(Arg arg, S const &s, utils::index_sequence<Is...>);
+    numpy_gexpr<Arg, typename to_normalized_slice<std::tuple_element_t<Is, S>>::type...>
+    _make_gexpr_helper(Arg arg, S const &s, std::index_sequence<Is...>);
 
     template <class Arg, class... Sp>
-    auto _make_gexpr(Arg arg, std::tuple<Sp...> const &s) ->
-        typename std::enable_if<
-            count_new_axis<Sp...>::value != 0,
-            decltype(_make_gexpr_helper(
-                arg.reshape(make_reshape<count_new_axis<Sp...>::value>(
-                    arg, std::tuple<std::integral_constant<
-                             bool, to_slice<Sp>::is_new_axis>...>())),
-                s, utils::make_index_sequence<sizeof...(Sp)>()))>::type;
+    auto _make_gexpr(Arg arg, std::tuple<Sp...> const &s) -> std::enable_if_t<
+        count_new_axis<Sp...>::value != 0,
+        decltype(_make_gexpr_helper(
+            arg.reshape(make_reshape<count_new_axis<Sp...>::value>(
+                arg, std::tuple<std::integral_constant<bool, to_slice<Sp>::is_new_axis>...>())),
+            s, std::make_index_sequence<sizeof...(Sp)>()))>;
 
     template <class Arg, class... S>
     struct make_gexpr {
       template <size_t... Is>
-      numpy_gexpr<Arg, normalize_t<S>...>
-      operator()(Arg arg, std::tuple<S...>, utils::index_sequence<Is...>);
+      numpy_gexpr<Arg, normalize_t<S>...> operator()(Arg arg, std::tuple<S...>,
+                                                     std::index_sequence<Is...>);
       numpy_gexpr<Arg, normalize_t<S>...> operator()(Arg arg, S const &...s);
     };
 
     // this specialization is in charge of merging gexpr
     template <class Arg, class... S, class... Sp>
     struct make_gexpr<numpy_gexpr<Arg, S...> const &, Sp...> {
-      auto operator()(numpy_gexpr<Arg, S...> const &arg, Sp const &...s)
-          -> decltype(_make_gexpr(
-              std::declval<Arg>(),
-              merge_gexpr<std::tuple<S...>, std::tuple<Sp...>>{}
-                  .template run<0>(arg, std::tuple<S...>(),
-                                   std::tuple<Sp...>())))
+      auto operator()(numpy_gexpr<Arg, S...> const &arg, Sp const &...s) -> decltype(_make_gexpr(
+          std::declval<Arg>(), merge_gexpr<std::tuple<S...>, std::tuple<Sp...>>{}.template run<0>(
+                                   arg, std::tuple<S...>(), std::tuple<Sp...>())))
       {
-        return _make_gexpr(
-            arg.arg,
-            merge_gexpr<std::tuple<S...>, std::tuple<Sp...>>{}.template run<0>(
-                arg, arg.slices, std::make_tuple(s...)));
+        return _make_gexpr(arg.arg,
+                           merge_gexpr<std::tuple<S...>, std::tuple<Sp...>>{}.template run<0>(
+                               arg, arg.slices, std::make_tuple(s...)));
       }
     };
   } // namespace details
 
   template <class Arg, class... S>
   auto make_gexpr(Arg &&arg, S const &...s)
-      -> decltype(details::make_gexpr<Arg, S...>{}(std::forward<Arg>(arg),
-                                                   s...));
+      -> decltype(details::make_gexpr<Arg, S...>{}(std::forward<Arg>(arg), s...));
 
   /* type-based compile time overlapping detection: detect if a type may
    *overlap with another
@@ -494,8 +452,7 @@ namespace types
   };
 
   template <class E>
-  struct may_overlap_gexpr<list<E>>
-      : std::integral_constant<bool, !is_dtype<E>::value> {
+  struct may_overlap_gexpr<list<E>> : std::integral_constant<bool, !is_dtype<E>::value> {
   };
 
   template <class E, size_t N, class V>
@@ -526,18 +483,14 @@ namespace types
   };
 
   template <class... Tys, class... oTys, class... S, long stride>
-  struct gexpr_shape<pshape<Tys...>,
-                     pshape<std::integral_constant<long, 1>, oTys...>,
+  struct gexpr_shape<pshape<Tys...>, pshape<std::integral_constant<long, 1>, oTys...>,
                      cstride_normalized_slice<stride>, S...>
-      : gexpr_shape<pshape<Tys..., std::integral_constant<long, 1>>,
-                    pshape<oTys...>, S...> {
+      : gexpr_shape<pshape<Tys..., std::integral_constant<long, 1>>, pshape<oTys...>, S...> {
   };
   template <class... Tys, class... oTys, class... S>
-  struct gexpr_shape<pshape<Tys...>,
-                     pshape<std::integral_constant<long, 1>, oTys...>,
+  struct gexpr_shape<pshape<Tys...>, pshape<std::integral_constant<long, 1>, oTys...>,
                      normalized_slice, S...>
-      : gexpr_shape<pshape<Tys..., std::integral_constant<long, 1>>,
-                    pshape<oTys...>, S...> {
+      : gexpr_shape<pshape<Tys..., std::integral_constant<long, 1>>, pshape<oTys...>, S...> {
   };
 
   template <class... Tys, class oT, class... oTys, class... S>
@@ -564,14 +517,12 @@ namespace types
    */
   template <class Arg, class... S>
   struct numpy_gexpr {
+    static_assert(utils::all_of<std::is_same<S, normalize_t<S>>::value...>::value,
+                  "all slices are normalized");
     static_assert(
-        utils::all_of<std::is_same<S, normalize_t<S>>::value...>::value,
-        "all slices are normalized");
-    static_assert(utils::all_of<(std::is_same<S, long>::value ||
-                                 is_normalized_slice<S>::value)...>::value,
-                  "all slices are valid");
-    static_assert(std::decay<Arg>::type::value >= sizeof...(S),
-                  "slicing respects array shape");
+        utils::all_of<(std::is_same<S, long>::value || is_normalized_slice<S>::value)...>::value,
+        "all slices are valid");
+    static_assert(std::decay_t<Arg>::value >= sizeof...(S), "slicing respects array shape");
 
     // numpy_gexpr is a wrapper for extended sliced array around a numpy
     // expression.
@@ -582,19 +533,14 @@ namespace types
     // through the S... template
     // && compacted values as we know that first S is a slice.
 
-    static_assert(
-        utils::all_of<
-            std::is_same<S, typename std::decay<S>::type>::value...>::value,
-        "no modifiers on slices");
+    static_assert(utils::all_of<std::is_same<S, std::decay_t<S>>::value...>::value,
+                  "no modifiers on slices");
 
-    using dtype = typename std::remove_reference<Arg>::type::dtype;
-    static constexpr size_t value =
-        std::remove_reference<Arg>::type::value - count_long<S...>::value;
+    using dtype = typename std::remove_reference_t<Arg>::dtype;
+    static constexpr size_t value = std::remove_reference_t<Arg>::value - count_long<S...>::value;
 
-    using last_arg_stride_t =
-        decltype(std::declval<Arg>().template strides<sizeof...(S) - 1>());
-    using last_slice_t =
-        typename std::tuple_element<sizeof...(S) - 1, std::tuple<S...>>::type;
+    using last_arg_stride_t = decltype(std::declval<Arg>().template strides<sizeof...(S) - 1>());
+    using last_slice_t = std::tuple_element_t<sizeof...(S) - 1, std::tuple<S...>>;
 
     // It is not possible to vectorize everything. We only vectorize if the
     // last dimension is contiguous, which happens if
@@ -602,36 +548,29 @@ namespace types
     // 2. the size of the gexpr is lower than the dim of arg, || it's the
     // same, but the last slice is contiguous
     static const bool is_vectorizable =
-        std::remove_reference<Arg>::type::is_vectorizable &&
-        (sizeof...(S) < std::remove_reference<Arg>::type::value ||
+        std::remove_reference_t<Arg>::is_vectorizable &&
+        (sizeof...(S) < std::remove_reference_t<Arg>::value ||
          std::is_same<cstride_normalized_slice<1>, last_slice_t>::value);
     static const bool is_flat =
-        std::remove_reference<Arg>::type::is_flat && value == 1 &&
-        utils::all_of<
-            std::is_same<cstride_normalized_slice<1>, S>::value...>::value;
+        std::remove_reference_t<Arg>::is_flat && value == 1 &&
+        utils::all_of<std::is_same<cstride_normalized_slice<1>, S>::value...>::value;
     static const bool is_strided =
-        std::remove_reference<Arg>::type::is_strided ||
+        std::remove_reference_t<Arg>::is_strided ||
         (((sizeof...(S) - count_long<S...>::value) == value) &&
          !std::is_same<cstride_normalized_slice<1>, last_slice_t>::value);
 
     using value_type =
-        typename std::decay<decltype(numpy_iexpr_helper<value>::get(
-            std::declval<numpy_gexpr>(), 1))>::type;
+        std::decay_t<decltype(numpy_iexpr_helper<value>::get(std::declval<numpy_gexpr>(), 1))>;
 
-    using iterator =
-        typename std::conditional<is_strided || value != 1,
-                                  nditerator<numpy_gexpr>, dtype *>::type;
+    using iterator = std::conditional_t<is_strided || value != 1, nditerator<numpy_gexpr>, dtype *>;
     using const_iterator =
-        typename std::conditional<is_strided || value != 1,
-                                  const_nditerator<numpy_gexpr>,
-                                  dtype const *>::type;
+        std::conditional_t<is_strided || value != 1, const_nditerator<numpy_gexpr>, dtype const *>;
 
-    typename std::remove_cv<Arg>::type arg;
+    std::remove_cv_t<Arg> arg;
 
     std::tuple<S...> slices;
 
-    using shape_t =
-        gexpr_shape_t<typename std::remove_reference<Arg>::type::shape_t, S...>;
+    using shape_t = gexpr_shape_t<typename std::remove_reference_t<Arg>::shape_t, S...>;
 
     shape_t _shape;
     dtype *buffer;
@@ -644,10 +583,9 @@ namespace types
     static constexpr types::array_tuple<long, 1> last_stride(...);
 
     sutils::concat_t<types::array_tuple<long, value - 1>,
-                     typename std::conditional<
-                         sizeof...(S) == std::decay<Arg>::type::value,
-                         decltype(last_stride(std::declval<last_slice_t>())),
-                         types::array_tuple<long, 1>>::type>
+                     std::conditional_t<sizeof...(S) == std::decay_t<Arg>::value,
+                                        decltype(last_stride(std::declval<last_slice_t>())),
+                                        types::array_tuple<long, 1>>>
         _strides; // strides
 
     template <size_t I>
@@ -671,11 +609,11 @@ namespace types
     numpy_gexpr(numpy_gexpr<Argp, S...> const &other);
 
     template <size_t J, class Slice>
-    typename std::enable_if<is_normalized_slice<Slice>::value, void>::type
+    std::enable_if_t<is_normalized_slice<Slice>::value, void>
     init_shape(Slice const &s, utils::int_<1>, utils::int_<J>);
 
     template <size_t I, size_t J, class Slice>
-    typename std::enable_if<is_normalized_slice<Slice>::value, void>::type
+    std::enable_if_t<is_normalized_slice<Slice>::value, void>
     init_shape(Slice const &s, utils::int_<I>, utils::int_<J>);
 
     template <size_t J>
@@ -691,16 +629,13 @@ namespace types
 
     friend struct array_base_slicer;
     template <class _Arg, class... _other_classes>
-    friend
-        typename std::enable_if<count_new_axis<_other_classes...>::value == 0,
-                                numpy_gexpr<_Arg, _other_classes...>>::type
-        details::_make_gexpr(_Arg arg, std::tuple<_other_classes...> const &t);
+    friend std::enable_if_t<count_new_axis<_other_classes...>::value == 0,
+                            numpy_gexpr<_Arg, _other_classes...>>
+    details::_make_gexpr(_Arg arg, std::tuple<_other_classes...> const &t);
     template <class _Arg, class _other_classes, size_t... Is>
-    friend numpy_gexpr<_Arg,
-                       typename to_normalized_slice<typename std::tuple_element<
-                           Is, _other_classes>::type>::type...>
-    details::_make_gexpr_helper(_Arg arg, _other_classes const &s,
-                                utils::index_sequence<Is...>);
+    friend numpy_gexpr<
+        _Arg, typename to_normalized_slice<std::tuple_element_t<Is, _other_classes>>::type...>
+    details::_make_gexpr_helper(_Arg arg, _other_classes const &s, std::index_sequence<Is...>);
 
     template <size_t C>
     friend struct extended_slice;
@@ -736,12 +671,10 @@ namespace types
     }
 
     template <class E>
-    typename std::enable_if<may_overlap_gexpr<E>::value, numpy_gexpr &>::type
-    _copy(E const &expr);
+    std::enable_if_t<may_overlap_gexpr<E>::value, numpy_gexpr &> _copy(E const &expr);
 
     template <class E>
-    typename std::enable_if<!may_overlap_gexpr<E>::value, numpy_gexpr &>::type
-    _copy(E const &expr);
+    std::enable_if_t<!may_overlap_gexpr<E>::value, numpy_gexpr &> _copy(E const &expr);
 
     template <class E>
     numpy_gexpr &_copy_restrict(E const &expr);
@@ -755,12 +688,10 @@ namespace types
     numpy_gexpr &operator=(numpy_gexpr<Argp, S...> const &expr);
 
     template <class Op, class E>
-    typename std::enable_if<may_overlap_gexpr<E>::value, numpy_gexpr &>::type
-    update_(E const &expr);
+    std::enable_if_t<may_overlap_gexpr<E>::value, numpy_gexpr &> update_(E const &expr);
 
     template <class Op, class E>
-    typename std::enable_if<!may_overlap_gexpr<E>::value, numpy_gexpr &>::type
-    update_(E const &expr);
+    std::enable_if_t<!may_overlap_gexpr<E>::value, numpy_gexpr &> update_(E const &expr);
 
     template <class E>
     numpy_gexpr &operator+=(E const &expr);
@@ -803,8 +734,7 @@ namespace types
     iterator begin();
     iterator end();
 
-    auto fast(long i) const & -> decltype(numpy_iexpr_helper<value>::get(*this,
-                                                                         i))
+    auto fast(long i) const & -> decltype(numpy_iexpr_helper<value>::get(*this, i))
     {
       return numpy_iexpr_helper<value>::get(*this, i);
     }
@@ -818,22 +748,19 @@ namespace types
     void store(E elt, Indices... indices)
     {
       static_assert(is_dtype<E>::value, "valid store");
-      *(buffer +
-        noffset<value>{}(*this, array_tuple<long, value>{{indices...}})) =
+      *(buffer + noffset<value>{}(*this, array_tuple<long, value>{{indices...}})) =
           static_cast<E>(elt);
     }
     template <class... Indices>
     dtype load(Indices... indices) const
     {
-      return *(buffer +
-               noffset<value>{}(*this, array_tuple<long, value>{{indices...}}));
+      return *(buffer + noffset<value>{}(*this, array_tuple<long, value>{{indices...}}));
     }
     template <class Op, class E, class... Indices>
     void update(E elt, Indices... indices) const
     {
       static_assert(is_dtype<E>::value, "valid store");
-      Op{}(*(buffer +
-             noffset<value>{}(*this, array_tuple<long, value>{{indices...}})),
+      Op{}(*(buffer + noffset<value>{}(*this, array_tuple<long, value>{{indices...}})),
            static_cast<E>(elt));
     }
 
@@ -850,58 +777,52 @@ namespace types
     auto operator()(Sp const &...s) const -> decltype(make_gexpr(*this, s...));
 
     template <class Sp>
-    auto operator[](Sp const &s) const ->
-        typename std::enable_if<is_slice<Sp>::value,
-                                decltype(make_gexpr(*this,
-                                                    (s.lower, s)))>::type;
+    auto operator[](Sp const &s) const
+        -> std::enable_if_t<is_slice<Sp>::value, decltype(make_gexpr(*this, (s.lower, s)))>;
 
     template <size_t M>
-    auto fast(array_tuple<long, M> const &indices)
-        const & -> decltype(nget<M - 1>().fast(*this, indices));
+    auto fast(array_tuple<long, M> const &indices) const & -> decltype(nget<M - 1>().fast(*this,
+                                                                                          indices));
 
     template <size_t M>
-    auto fast(array_tuple<long, M> const &indices)
-        && -> decltype(nget<M - 1>().fast(std::move(*this), indices));
+    auto
+    fast(array_tuple<long, M> const &indices) && -> decltype(nget<M - 1>().fast(std::move(*this),
+                                                                                indices));
 
     template <size_t M>
-    auto operator[](array_tuple<long, M> const &indices)
-        const & -> decltype(nget<M - 1>()(*this, indices));
+    auto operator[](
+        array_tuple<long, M> const &indices) const & -> decltype(nget<M - 1>()(*this, indices));
 
     template <size_t M>
-    auto operator[](array_tuple<long, M> const &indices)
-        && -> decltype(nget<M - 1>()(std::move(*this), indices));
+    auto
+    operator[](array_tuple<long, M> const &indices) && -> decltype(nget<M - 1>()(std::move(*this),
+                                                                                 indices));
 
     template <class F> // indexing through an array of indices -- a view
-    typename std::enable_if<is_numexpr_arg<F>::value &&
-                                !is_array_index<F>::value &&
-                                !std::is_same<bool, typename F::dtype>::value,
-                            numpy_vexpr<numpy_gexpr, F>>::type
+    std::enable_if_t<is_numexpr_arg<F>::value && !is_array_index<F>::value &&
+                         !std::is_same<bool, typename F::dtype>::value,
+                     numpy_vexpr<numpy_gexpr, F>>
     operator[](F const &filter) const
     {
       return {*this, filter};
     }
     template <class F> // indexing through an array of indices -- a view
-    typename std::enable_if<is_numexpr_arg<F>::value &&
-                                !is_array_index<F>::value &&
-                                !std::is_same<bool, typename F::dtype>::value,
-                            numpy_vexpr<numpy_gexpr, F>>::type
+    std::enable_if_t<is_numexpr_arg<F>::value && !is_array_index<F>::value &&
+                         !std::is_same<bool, typename F::dtype>::value,
+                     numpy_vexpr<numpy_gexpr, F>>
     fast(F const &filter) const
     {
       return {*this, filter};
     }
 
     template <class F>
-    typename std::enable_if<
-        is_numexpr_arg<F>::value &&
-            std::is_same<bool, typename F::dtype>::value,
-        numpy_vexpr<numpy_gexpr, ndarray<long, pshape<long>>>>::type
+    std::enable_if_t<is_numexpr_arg<F>::value && std::is_same<bool, typename F::dtype>::value,
+                     numpy_vexpr<numpy_gexpr, ndarray<long, pshape<long>>>>
     fast(F const &filter) const;
 
     template <class F>
-    typename std::enable_if<
-        is_numexpr_arg<F>::value &&
-            std::is_same<bool, typename F::dtype>::value,
-        numpy_vexpr<numpy_gexpr, ndarray<long, pshape<long>>>>::type
+    std::enable_if_t<is_numexpr_arg<F>::value && std::is_same<bool, typename F::dtype>::value,
+                     numpy_vexpr<numpy_gexpr, ndarray<long, pshape<long>>>>
     operator[](F const &filter) const;
     auto operator[](long i) const -> decltype(this->fast(i));
     auto operator[](long i) -> decltype(this->fast(i));
@@ -934,21 +855,16 @@ namespace types
     }
 
     template <class Tp, size_t... Is>
-    auto recast(utils::index_sequence<Is...>)
-        -> decltype(make_gexpr(
-            arg.template recast<Tp>(),
-            recast_slice<sizeof(dtype), sizeof(Tp)>(std::get<Is>(slices))...))
+    auto recast(std::index_sequence<Is...>)
     {
-      return make_gexpr(
-          arg.template recast<Tp>(),
-          recast_slice<sizeof(dtype), sizeof(Tp)>(std::get<Is>(slices))...);
+      return make_gexpr(arg.template recast<Tp>(),
+                        recast_slice<sizeof(dtype), sizeof(Tp)>(std::get<Is>(slices))...);
     }
 
     template <class Tp>
-    auto
-    recast() -> decltype(recast<Tp>(utils::make_index_sequence<sizeof...(S)>()))
+    auto recast()
     {
-      return recast<Tp>(utils::make_index_sequence<sizeof...(S)>());
+      return recast<Tp>(std::make_index_sequence<sizeof...(S)>());
     }
   };
 } // namespace types
@@ -974,8 +890,7 @@ struct assignable<types::numpy_gexpr<Arg, S...>> {
 };
 
 template <class Arg, class... S>
-struct lazy<types::numpy_gexpr<Arg, S...>>
-    : assignable<types::numpy_gexpr<Arg, S...>> {
+struct lazy<types::numpy_gexpr<Arg, S...>> : assignable<types::numpy_gexpr<Arg, S...>> {
 };
 
 PYTHONIC_NS_END
@@ -994,10 +909,8 @@ struct __combined<pythonic::types::numpy_gexpr<Arg, S...>,
   using t0 = pythonic::types::numpy_gexpr<Arg, S...>;
   using t1 = pythonic::types::numpy_gexpr<Argp, Sp...>;
   using type =
-      pythonic::types::ndarray <
-      typename __combined<typename t0::dtype, typename t1::dtype>::type,
-        pythonic::types::array_tuple<
-            long, t0::value<t1::value ? t1::value : t0::value>>;
+      pythonic::types::ndarray < typename __combined<typename t0::dtype, typename t1::dtype>::type,
+        pythonic::types::array_tuple<long, t0::value<t1::value ? t1::value : t0::value>>;
 };
 
 template <class Arg, class... S, class O>
@@ -1005,20 +918,17 @@ struct __combined<pythonic::types::numpy_gexpr<Arg, S...>, O> {
   using type = pythonic::types::numpy_gexpr<Arg, S...>;
 };
 template <class Arg, class... S, class T>
-struct __combined<pythonic::types::list<T>,
-                  pythonic::types::numpy_gexpr<Arg, S...>> {
-  using type = pythonic::types::list<typename __combined<
-      typename pythonic::types::numpy_gexpr<Arg, S...>::value_type, T>::type>;
+struct __combined<pythonic::types::list<T>, pythonic::types::numpy_gexpr<Arg, S...>> {
+  using type = pythonic::types::list<
+      typename __combined<typename pythonic::types::numpy_gexpr<Arg, S...>::value_type, T>::type>;
 };
 template <class Arg, class... S, class T>
-struct __combined<pythonic::types::numpy_gexpr<Arg, S...>,
-                  pythonic::types::list<T>> {
-  using type = pythonic::types::list<typename __combined<
-      typename pythonic::types::numpy_gexpr<Arg, S...>::value_type, T>::type>;
+struct __combined<pythonic::types::numpy_gexpr<Arg, S...>, pythonic::types::list<T>> {
+  using type = pythonic::types::list<
+      typename __combined<typename pythonic::types::numpy_gexpr<Arg, S...>::value_type, T>::type>;
 };
 template <class Arg, class... S>
-struct __combined<pythonic::types::numpy_gexpr<Arg, S...>,
-                  pythonic::types::none_type> {
+struct __combined<pythonic::types::numpy_gexpr<Arg, S...>, pythonic::types::none_type> {
   using type = pythonic::types::none<pythonic::types::numpy_gexpr<Arg, S...>>;
 };
 
@@ -1033,21 +943,18 @@ struct __combined<O &, pythonic::types::numpy_gexpr<Arg, S...>> {
 };
 
 template <class Arg, class... S>
-struct __combined<pythonic::types::none_type,
-                  pythonic::types::numpy_gexpr<Arg, S...>> {
+struct __combined<pythonic::types::none_type, pythonic::types::numpy_gexpr<Arg, S...>> {
   using type = pythonic::types::none<pythonic::types::numpy_gexpr<Arg, S...>>;
 };
 
 /* combined are sorted such that the assigned type comes first */
 template <class Arg, class... S, class T, class pS>
-struct __combined<pythonic::types::numpy_gexpr<Arg, S...>,
-                  pythonic::types::ndarray<T, pS>> {
+struct __combined<pythonic::types::numpy_gexpr<Arg, S...>, pythonic::types::ndarray<T, pS>> {
   using type = pythonic::types::ndarray<T, pS>;
 };
 
 template <class Arg, class... S, class T, class pS>
-struct __combined<pythonic::types::ndarray<T, pS>,
-                  pythonic::types::numpy_gexpr<Arg, S...>> {
+struct __combined<pythonic::types::ndarray<T, pS>, pythonic::types::numpy_gexpr<Arg, S...>> {
   using type = pythonic::types::ndarray<T, pS>;
 };
 

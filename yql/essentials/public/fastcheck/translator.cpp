@@ -1,6 +1,7 @@
 #include "check_runner.h"
 
 #include "settings.h"
+#include "utils.h"
 
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -11,10 +12,36 @@
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
+#include <library/cpp/resource/resource.h>
+
 namespace NYql {
 namespace NFastCheck {
 
 namespace {
+
+NJson::TJsonValue LoadJsonResource(TStringBuf filename) {
+    TString text;
+    Y_ENSURE(NResource::FindExact(filename, &text), filename);
+    return NJson::ReadJsonFastTree(text);
+}
+
+TUdfFilter LoadDefaultUdfFilter() {
+    auto json = LoadJsonResource("udfs_basic.json");
+    return ParseUdfFilter(json);
+}
+
+struct TDefaultUdfFilterLoader {
+    TDefaultUdfFilterLoader()
+        : Data(LoadDefaultUdfFilter())
+    {
+    }
+
+    TUdfFilter Data;
+};
+
+const TUdfFilter& GetDefaultUdfFilter() {
+    return Singleton<TDefaultUdfFilterLoader>()->Data;
+}
 
 class TTranslatorRunner: public TCheckRunnerBase {
 public:
@@ -66,6 +93,11 @@ private:
         settings.AnsiLexer = request.IsAnsiLexer;
         settings.SyntaxVersion = request.SyntaxVersion;
         settings.Flags = TranslationFlags();
+        if (!request.UdfFilter) {
+            settings.UdfFilter = &GetDefaultUdfFilter().Modules;
+        } else {
+            settings.UdfFilter = &request.UdfFilter->Modules;
+        }
 
         switch (request.Mode) {
             case EMode::Default:

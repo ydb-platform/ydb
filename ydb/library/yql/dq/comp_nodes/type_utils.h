@@ -122,11 +122,23 @@ template <typename Payload> struct One {
 
 template <typename Payload> using FetchResult = std::variant<Finish, Yield, One<Payload>>;
 
-template <typename Payload> EFetchResult AsResult(const FetchResult<Payload> var) {
+template <typename Payload> Payload& GetPayload(FetchResult<Payload>& res) {
+    auto* p = std::get_if<One<Payload>>(&res);
+    MKQL_ENSURE(p, "precondition failed");
+    return p->Data;
+}
+
+template <typename Payload> const Payload& GetPayload(const FetchResult<Payload>& res) {
+    auto* p = std::get_if<One<Payload>>(&res);
+    MKQL_ENSURE(p, "precondition failed");
+    return p->Data;
+}
+
+template <typename Payload> EFetchResult AsResult(const FetchResult<Payload>& var) {
     return static_cast<EFetchResult>(int(var.index()) - 1);
 }
 
-template <typename Payload> NYql::NUdf::EFetchStatus AsStatus(const FetchResult<Payload> var) {
+template <typename Payload> NYql::NUdf::EFetchStatus AsStatus(const FetchResult<Payload>& var) {
     int index = var.index();
     switch (index) {
     case 0:

@@ -20,7 +20,7 @@ IF(${YDB_COMPAT_TARGET_REF} != "current")
         OUT_NOAUTO ydbd-target ydbd-target-name
     )
 ELSE()
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
     BUNDLE(
         ydb/apps/ydbd NAME ydbd-target
     )

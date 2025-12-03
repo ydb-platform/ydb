@@ -30,8 +30,7 @@ namespace types
   {
   }
   template <class T, class S>
-  sliced_array<T, S>::sliced_array(sliced_array<T, S> const &s)
-      : _data(s._data), slicing(s.slicing)
+  sliced_array<T, S>::sliced_array(sliced_array<T, S> const &s) : _data(s._data), slicing(s.slicing)
   {
   }
   template <class T, class S>
@@ -41,8 +40,7 @@ namespace types
   }
   template <class T, class S>
   template <class Sn>
-  sliced_array<T, S>::sliced_array(
-      utils::shared_ref<container_type> const &other, Sn const &s)
+  sliced_array<T, S>::sliced_array(utils::shared_ref<container_type> const &other, Sn const &s)
       : _data(other), slicing(s)
   {
   }
@@ -83,8 +81,7 @@ namespace types
 
   // accessor
   template <class T, class S>
-  typename sliced_array<T, S>::const_reference
-  sliced_array<T, S>::fast(long i) const
+  typename sliced_array<T, S>::const_reference sliced_array<T, S>::fast(long i) const
   {
     assert(0 <= i && i < size());
     auto const index = slicing.get(i);
@@ -100,8 +97,7 @@ namespace types
     return (*_data)[index];
   }
   template <class T, class S>
-  typename sliced_array<T, S>::const_reference
-  sliced_array<T, S>::operator[](long i) const
+  typename sliced_array<T, S>::const_reference sliced_array<T, S>::operator[](long i) const
   {
     assert(i < size());
     auto const index = slicing.get(i);
@@ -119,9 +115,8 @@ namespace types
 
   template <class T, class S>
   template <class Sp>
-  typename std::enable_if<
-      is_slice<Sp>::value,
-      sliced_array<T, decltype(std::declval<S>() * std::declval<Sp>())>>::type
+  std::enable_if_t<is_slice<Sp>::value,
+                   sliced_array<T, decltype(std::declval<S>() * std::declval<Sp>())>>
   sliced_array<T, S>::operator[](Sp s) const
   {
     return {_data, slicing * s.normalize(this->size())};
@@ -153,8 +148,7 @@ namespace types
     return std::equal(begin(), end(), other.begin());
   }
   template <class T, class S>
-  inline sliced_array<T, S> &
-  sliced_array<T, S>::operator=(sliced_array<T, S> const &s)
+  inline sliced_array<T, S> &sliced_array<T, S>::operator=(sliced_array<T, S> const &s)
   {
     if (slicing.step == 1) {
       // inserting before erasing in case of self-copy
@@ -211,21 +205,18 @@ namespace types
 #ifdef USE_XSIMD
   template <class T, class S>
   template <class vectorizer>
-  typename sliced_array<T, S>::simd_iterator
-  sliced_array<T, S>::vbegin(vectorizer) const
+  typename sliced_array<T, S>::simd_iterator sliced_array<T, S>::vbegin(vectorizer) const
   {
     return {_data->data() + slicing.lower};
   }
 
   template <class T, class S>
   template <class vectorizer>
-  typename sliced_array<T, S>::simd_iterator
-  sliced_array<T, S>::vend(vectorizer) const
+  typename sliced_array<T, S>::simd_iterator sliced_array<T, S>::vend(vectorizer) const
   {
     using vector_type = typename xsimd::batch<dtype>;
     static const std::size_t vector_size = vector_type::size;
-    return {_data->data() + slicing.lower +
-            long(size() / vector_size * vector_size)};
+    return {_data->data() + slicing.lower + long(size() / vector_size * vector_size)};
   }
 
 #endif
@@ -261,9 +252,8 @@ namespace types
   template <class InputIterator>
   array<T>::array(InputIterator start, InputIterator stop) : _data()
   {
-    if (std::is_same<
-            typename std::iterator_traits<InputIterator>::iterator_category,
-            std::random_access_iterator_tag>::value)
+    if (std::is_same<typename std::iterator_traits<InputIterator>::iterator_category,
+                     std::random_access_iterator_tag>::value)
       _data->reserve(std::distance(start, stop));
     else
       _data->reserve(DEFAULT_CAPACITY);
@@ -289,8 +279,7 @@ namespace types
   }
   template <class T>
   template <class Tp, class S>
-  array<T>::array(sliced_array<Tp, S> const &other)
-      : _data(other.begin(), other.end())
+  array<T>::array(sliced_array<Tp, S> const &other) : _data(other.begin(), other.end())
   {
   }
 
@@ -419,14 +408,12 @@ namespace types
   template <class T>
   bool array<T>::operator<(array<T> const &other) const
   {
-    return std::lexicographical_compare(begin(), end(), other.begin(),
-                                        other.end());
+    return std::lexicographical_compare(begin(), end(), other.begin(), other.end());
   }
   template <class T>
   bool array<T>::operator>(array<T> const &other) const
   {
-    return std::lexicographical_compare(other.begin(), other.end(), begin(),
-                                        end());
+    return std::lexicographical_compare(other.begin(), other.end(), begin(), end());
   }
   template <class T>
   bool array<T>::operator<=(array<T> const &other) const
@@ -488,8 +475,7 @@ namespace types
 
   template <class T>
   template <class Sp>
-  typename std::enable_if<is_slice<Sp>::value, sliced_array<T, Sp>>::type
-  array<T>::operator[](Sp const &s) const
+  std::enable_if_t<is_slice<Sp>::value, sliced_array<T, Sp>> array<T>::operator[](Sp const &s) const
   {
     return {*this, s};
   }
@@ -568,8 +554,7 @@ namespace types
 
   template <class T>
   template <class F>
-  array<typename __combined<T, F>::type>
-  array<T>::operator+(array<F> const &s) const
+  array<typename __combined<T, F>::type> array<T>::operator+(array<F> const &s) const
   {
     array<typename __combined<T, F>::type> clone(size() + s.size());
     std::copy(s.begin(), s.end(), std::copy(begin(), end(), clone.begin()));
@@ -578,12 +563,10 @@ namespace types
 
   template <class T>
   template <class F, class S>
-  array<decltype(std::declval<T>() +
-                 std::declval<typename sliced_array<F, S>::value_type>())>
+  array<decltype(std::declval<T>() + std::declval<typename sliced_array<F, S>::value_type>())>
   array<T>::operator+(sliced_array<F, S> const &s) const
   {
-    array<decltype(std::declval<T>() +
-                   std::declval<typename sliced_array<F, S>::value_type>())>
+    array<decltype(std::declval<T>() + std::declval<typename sliced_array<F, S>::value_type>())>
         clone(size() + len(s));
     std::copy(s.begin(), s.end(), std::copy(begin(), end(), clone.begin()));
     return clone;
@@ -645,8 +628,7 @@ namespace types
   template <class E, size_t L>
   long array<T>::_flat_size(E const &e, utils::int_<L>) const
   {
-    return std::distance(e.begin(), e.end()) *
-           _flat_size(e[0], utils::int_<L - 1>{});
+    return std::distance(e.begin(), e.end()) * _flat_size(e[0], utils::int_<L - 1>{});
   }
   template <class T>
   long array<T>::flat_size() const
@@ -678,8 +660,7 @@ namespace utils
 {
 
   template <class T, class From>
-  void reserve(types::array<T> &l, From const &f,
-               typename From::const_iterator *)
+  void reserve(types::array<T> &l, From const &f, typename From::const_iterator *)
   {
     l.reserve(builtins::len(f));
   }
@@ -690,22 +671,19 @@ PYTHONIC_NS_END
 namespace std
 {
   template <size_t I, class T>
-  typename pythonic::types::array<T>::reference
-  get(pythonic::types::array<T> &t)
+  typename pythonic::types::array<T>::reference get(pythonic::types::array<T> &t)
   {
     return t[I];
   }
 
   template <size_t I, class T>
-  typename pythonic::types::array<T>::const_reference
-  get(pythonic::types::array<T> const &t)
+  typename pythonic::types::array<T>::const_reference get(pythonic::types::array<T> const &t)
   {
     return t[I];
   }
 
   template <size_t I, class T>
-  typename pythonic::types::array<T>::value_type
-  get(pythonic::types::array<T> &&t)
+  typename pythonic::types::array<T>::value_type get(pythonic::types::array<T> &&t)
   {
     return std::move(t)[I];
   }
@@ -739,15 +717,12 @@ PYTHONIC_NS_BEGIN
 template <class T>
 PyObject *to_python<types::array<T>>::convert(types::array<T> const &v)
 {
-  throw types::NotImplementedError(
-      "Pythran cannot efficiently convert array::array values");
+  throw types::NotImplementedError("Pythran cannot efficiently convert array::array values");
 }
 template <class T, class S>
-PyObject *to_python<types::sliced_array<T, S>>::convert(
-    types::sliced_array<T, S> const &v)
+PyObject *to_python<types::sliced_array<T, S>>::convert(types::sliced_array<T, S> const &v)
 {
-  throw types::NotImplementedError(
-      "Pythran cannot efficiently convert array::array values");
+  throw types::NotImplementedError("Pythran cannot efficiently convert array::array values");
 }
 
 PYTHONIC_NS_END

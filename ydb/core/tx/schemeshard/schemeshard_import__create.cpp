@@ -730,13 +730,6 @@ private:
         return path->LastTxId;
     }
 
-    static TString MakeIndexBuildUid(const TImportInfo& importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        const auto& item = importInfo.Items.at(itemIdx);
-
-        return TStringBuilder() << importInfo.Id << "-" << itemIdx << "-" << item.NextIndexIdx;
-    }
-
     void KillChildActors(TImportInfo::TItem& item) {
         if (auto schemeGetter = std::exchange(item.SchemeGetter, {})) {
             Send(schemeGetter, new TEvents::TEvPoisonPill());

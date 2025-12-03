@@ -68,16 +68,25 @@ namespace NActors {
         SendUpdateToWhiteboard();
     }
 
-    std::optional<ui8> TInterconnectSessionTCP::GetXDCFlags() const {
+    std::optional<ui8> TInterconnectSessionTCP::GetXDCFlags() const noexcept {
+        std::optional<ui8> flags;
+        using NInterconnect::NRdma::TQueuePair;
         if (XdcSocket) {
+            flags = TInterconnectProxyTCP::TProxyStats::NONE;
             if (ZcProcessor.ZcStateIsOk()) {
-                return TInterconnectProxyTCP::TProxyStats::MSG_ZERO_COPY_SEND;
-            } else {
-                return TInterconnectProxyTCP::TProxyStats::NONE;
+                *flags |= TInterconnectProxyTCP::TProxyStats::MSG_ZERO_COPY_SEND;
             }
-        } else {
-            return {};
+            if (RdmaQp) {
+                TQueuePair::TQpState res = RdmaQp->GetState(false);
+                TQueuePair::TQpS* qpState = std::get_if<TQueuePair::TQpS>(&res);
+                if (qpState) {
+                    if (TQueuePair::IsRtsState(*qpState)) {
+                        *flags |= TInterconnectProxyTCP::TProxyStats::RDMA_READ;
+                    }
+                }
+            }
         }
+        return flags;
     }
 
     void TInterconnectSessionTCP::CloseInputSession() {

@@ -18,6 +18,10 @@ template <bool Static>
 class TSingletonsConfigBase
 {
 public:
+    TSingletonsConfigBase() = default;
+    TSingletonsConfigBase(const TSingletonsConfigBase&) = delete;
+    TSingletonsConfigBase& operator=(const TSingletonsConfigBase&) = delete;
+
     template <class TConfig>
     TIntrusivePtr<TConfig> TryGetSingletonConfig();
 
@@ -26,6 +30,10 @@ public:
 
     template <class TConfig>
     void SetSingletonConfig(TIntrusivePtr<TConfig> config);
+
+    // Merge all the config pointers from src into self.
+    // If a config is already present, it is overridden.
+    void MergeAllSingletonConfigsFrom(const TSingletonsConfigBase& src);
 
 protected:
     static void RegisterSingletons(

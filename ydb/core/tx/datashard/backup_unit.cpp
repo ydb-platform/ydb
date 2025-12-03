@@ -56,6 +56,10 @@ protected:
 
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToYt(backup, columns)).swap(exp);
+                if (!exp) {
+                    Abort(op, ctx, "Failed to create YT export");
+                    return false;
+                }
             } else {
                 Abort(op, ctx, "Exports to YT are disabled");
                 return false;
@@ -70,6 +74,10 @@ protected:
 
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToS3(backup, columns)).swap(exp);
+                if (!exp) {
+                    Abort(op, ctx, "Failed to create S3 export");
+                    return false;
+                }
             } else {
                 Abort(op, ctx, "Exports to S3 are disabled");
                 return false;

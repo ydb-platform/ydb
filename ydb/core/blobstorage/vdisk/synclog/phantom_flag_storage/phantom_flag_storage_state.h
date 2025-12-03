@@ -17,13 +17,17 @@ namespace NSyncLog {
 
 class TPhantomFlagStorageState {
 public:
-    TPhantomFlagStorageState(const TBlobStorageGroupType& gtype);
+    TPhantomFlagStorageState(TIntrusivePtr<TSyncLogCtx> slCtx);
 
-    void Activate();
+    void StartBuilding();
 
-    void ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec);
-    // Add all DoNotKeep records from cut synclog snapshot
-    void AddFlags(TPhantomFlags flags);
+    // Adds DoNotKeep flags from synclog if needed
+    void ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit);
+
+    // Add all DoNotKeep records from cut synclog snapshot up to sizeLimit
+    // Note: in some obscure cases there may be two active builders simultaneously
+    // It shouldn't make any difference though, we just add more flags
+    void FinishBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds, ui64 sizeLimit);
     void Deactivate();
 
     // TODO: rebuild thresholds structure after restart. Either write it to VDisk log or rebuild from hull snapshot
@@ -32,7 +36,15 @@ public:
     TPhantomFlagStorageSnapshot GetSnapshot() const;
     bool IsActive() const;
 
+    // Process sync data from neighbours, we do it to update Thresholds
     void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
+
+    ui64 EstimateFlagsMemoryConsumption() const;
+    ui64 EstimateThresholdsMemoryConsumption() const;
+
+    void UpdateSyncedMask(const TSyncedMask& newSyncedMask);
+
+    void UpdateMetrics();
 
 private:
     // Adds DoNotKeep flags to storage and Keeps to Thresholds for specified neighbour
@@ -40,11 +52,18 @@ private:
     // Prune Thresholds
     void ProcessBarrierRecordFromNeighbour(ui32 orderNumber, const TBarrierRec* barrierRec);
 
+    void AdjustSize(ui64 sizeLimit);
+    bool AddFlag(const TLogoBlobRec& blobRec);
+
 private:
+    TIntrusivePtr<TSyncLogCtx> SlCtx;
     const TBlobStorageGroupType GType;
     TPhantomFlagThresholds Thresholds;
     TPhantomFlags StoredFlags;
+    ui64 MaxFlagsStoredCount;
+    TSyncedMask SyncedMask;
     bool Active = false;
+    bool Building = false;
 };
 
 } // namespace NSyncLog

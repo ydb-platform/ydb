@@ -60,6 +60,7 @@ SRCS(
     ref_counted_tracker_ut.cpp
     relaxed_mpsc_queue_ut.cpp
     ring_queue_ut.cpp
+    serialize_ut.cpp
     skip_list_ut.cpp
     slab_allocator_ut.cpp
     sliding_window_ut.cpp

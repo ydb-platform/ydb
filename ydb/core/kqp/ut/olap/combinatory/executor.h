@@ -16,6 +16,8 @@ public:
         : Commands(commands) {
     }
     void Execute();
+
+    void Execute(const TKikimrSettings& settings);
 };
 
 }   // namespace NKikimr::NKqp

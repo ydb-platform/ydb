@@ -16,7 +16,7 @@ message TStorageMeta {
         bool CreationInProgress = 4;
     }
 
-    uint64 StorageGeneration = 1;
+    uint64 StorageGeneration = 1;  // Deprecated (currently not used)
     uint64 StorageSize = 2;
     string DomainName = 3;
     map<string, TTenant> Tenants = 4;

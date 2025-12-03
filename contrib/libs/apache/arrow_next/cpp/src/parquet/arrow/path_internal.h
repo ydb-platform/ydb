@@ -23,10 +23,10 @@
 #include <memory>
 #include <vector>
 
-#include "arrow/result.h"
-#include "arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
 
-#include "parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
 
 namespace arrow20 {
 

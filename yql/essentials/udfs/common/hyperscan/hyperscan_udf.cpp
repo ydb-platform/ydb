@@ -79,29 +79,29 @@ public:
     };
 
     static const TStringRef& Name(bool isGrep, THyperscanMatch::EMode mode) {
-        static auto match = TStringRef::Of("Match");
-        static auto grep = TStringRef::Of("Grep");
-        static auto backtrackingMatch = TStringRef::Of("BacktrackingMatch");
-        static auto backtrackingGrep = TStringRef::Of("BacktrackingGrep");
-        static auto multiMatch = TStringRef::Of("MultiMatch");
-        static auto multiGrep = TStringRef::Of("MultiGrep");
+        static auto Match = TStringRef::Of("Match");
+        static auto Grep = TStringRef::Of("Grep");
+        static auto BacktrackingMatch = TStringRef::Of("BacktrackingMatch");
+        static auto BacktrackingGrep = TStringRef::Of("BacktrackingGrep");
+        static auto MultiMatch = TStringRef::Of("MultiMatch");
+        static auto MultiGrep = TStringRef::Of("MultiGrep");
         if (isGrep) {
             switch (mode) {
                 case THyperscanMatch::EMode::NORMAL:
-                    return grep;
+                    return Grep;
                 case THyperscanMatch::EMode::BACKTRACKING:
-                    return backtrackingGrep;
+                    return BacktrackingGrep;
                 case THyperscanMatch::EMode::MULTI:
-                    return multiGrep;
+                    return MultiGrep;
             }
         } else {
             switch (mode) {
                 case THyperscanMatch::EMode::NORMAL:
-                    return match;
+                    return Match;
                 case THyperscanMatch::EMode::BACKTRACKING:
-                    return backtrackingMatch;
+                    return BacktrackingMatch;
                 case THyperscanMatch::EMode::MULTI:
-                    return multiMatch;
+                    return MultiMatch;
             }
         }
 
@@ -258,8 +258,8 @@ public:
     };
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Capture");
-        return name;
+        static auto Name = TStringRef::Of("Capture");
+        return Name;
     }
 
     THyperscanCapture(const TUnboxedValuePod& runConfig, TSourcePosition pos)
@@ -323,8 +323,8 @@ public:
     };
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Replace");
-        return name;
+        static auto Name = TStringRef::Of("Replace");
+        return Name;
     }
 
     THyperscanReplace(const TUnboxedValuePod& runConfig, TSourcePosition pos)

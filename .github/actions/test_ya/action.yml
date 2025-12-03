@@ -71,6 +71,14 @@ inputs:
     type: string
     required: false
     description: "Telegram alert chat"
+  collect_coredumps:
+    type: boolean
+    default: false
+    description: "Collect coredumps via enabling ulimit -c unlimited"
+  pull_number:
+    type: string
+    required: false
+    description: "Pull request number (for workflow_call events)"
 
 outputs:
   success:
@@ -145,11 +153,23 @@ runs:
       id: build
       shell: bash
       env:
+        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
         TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
         GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
         GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
+        PR_NUMBER: ${{ inputs.pull_number }}
       run: |
         set -ex
+        
+        if [ "$COLLECT_COREDUMPS" = "true" ]; then
+          sudo mkdir -p /coredumps
+          sudo chmod 1777 /coredumps
+          echo "/coredumps/%p.%s" | sudo tee /proc/sys/kernel/core_pattern
+          ulimit -c unlimited
+        else
+          ulimit -c 0
+        fi
+
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
@@ -254,13 +274,18 @@ runs:
         echo "::debug::get version"
         ./ya --version
 
-        export YA_MAKE_COMMAND="./ya make ${params[@]}"
+        if [ true = ${{ inputs.run_tests }} ]; then
+            params+=(-A)
+        fi
+        YA_MAKE_COMMAND="./ya make ${params[@]}"
+        GRAPH_PATH=$(realpath graph.json)
+        CONTEXT_PATH=$(realpath context.json)
         if [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
-          ./.github/scripts/graph_compare.py $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
 
@@ -273,7 +298,7 @@ runs:
           fi
 
           git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET=.
+          YA_MAKE_TARGET="ydb"
         else
           YA_MAKE_TARGET=""
           for TARGET in ${{ inputs.build_target }}; do
@@ -281,6 +306,15 @@ runs:
                 YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
              fi
           done
+          if [ true = ${{ inputs.run_tests }} ]; then
+            YA_MAKE_COMMAND+=" --retest"
+          fi
+          CONTEXT_TMP_PATH=$(realpath context_tmp.json)
+          $YA_MAKE_COMMAND -k --cache-tests \
+            --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_TMP_PATH \
+            $YA_MAKE_TARGET
+          # DEVTOOLSSUPPORT-73480
+          cat $CONTEXT_TMP_PATH | jq --slurpfile graph $GRAPH_PATH '.graph=$graph[]' > $CONTEXT_PATH
         fi
 
         # Scripts to checkout from main
@@ -329,8 +363,6 @@ runs:
           params+=(--retest)
         fi
 
-        export YA_MAKE_COMMAND="./ya make ${params[@]}"
-
         YA_MAKE_OUT_DIR=$TMP_DIR/out
 
         YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.txt"
@@ -361,7 +393,11 @@ runs:
             RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
-            RERUN_FAILED_OPT="-X"
+            if [ -z "$GRAPH_PATH" ]; then
+              RERUN_FAILED_OPT="-X"
+            else
+              RERUN_FAILED_OPT=""
+            fi
           fi
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
@@ -371,6 +407,7 @@ runs:
 
           monitor_memory() {
               set +x
+              rm -f ram_usage.txt
               while true; do
                   used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | 
                             awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
@@ -381,9 +418,14 @@ runs:
 
           monitor_memory &
           MONITOR_PID=$!
+          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
+            GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
+          else
+            GRAPH_OPTS=""
+          fi
 
           set +e
-          ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
+          (./ya make ${params[@]} $YA_MAKE_TARGET $GRAPH_OPTS \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
@@ -524,6 +566,10 @@ runs:
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
+          fi
+          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
+              GRAPH_PATH=""
+              CONTEXT_PATH=""
           fi
         done;
 

@@ -469,6 +469,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
     Y_UNIT_TEST(AlterSchemeLimits) {
         TTestWithReboots t;
         t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
+        //INFO: Temporarily this test will not run when EnableAlterDatabase is not set
+        t.GetTestEnvOptions().EnableAlterDatabase(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TSchemeLimits limits;
             limits.MaxShards = 7;
@@ -523,11 +525,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                const auto tenantSchemeShard = TTestTxConfig::FakeHiveTablets;
+                ui64 tenantSchemeShard = 0;
                 // test what the parent knows about the subdomain
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Alice"), {
                     NLs::PathExist,
                     NLs::IsExternalSubDomain("Alice"),
+                    NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
                     NLs::SchemeLimits(limits.AsProto()),
                     NLs::ShardsInsideDomain(3),
                     NLs::PathsInsideDomain(0)

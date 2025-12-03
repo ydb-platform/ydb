@@ -19,13 +19,13 @@
 #include <regex>
 #include <sstream>
 
-#include "arrow/filesystem/path_util.h"
-#include "arrow/filesystem/util_internal.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/string.h"
-#include "arrow/util/uri.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/path_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/uri.h"
 
 namespace arrow20 {
 

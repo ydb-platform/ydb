@@ -29,7 +29,7 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
             if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
                 Self->DeleteStatisticsFromTable();
             } else {
-                Self->FinishTraversal(db);
+                Self->FinishTraversal(db, /*finishAllForceTraversalTables=*/true);
             }
             return true;
         }

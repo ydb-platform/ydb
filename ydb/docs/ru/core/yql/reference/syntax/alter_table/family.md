@@ -43,10 +43,10 @@ ALTER TABLE series_with_families
 
 {% endif %}
 
-Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит тип хранилища на `hdd`:
+Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит тип хранилища на `rot`:
 
 ```yql
-ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
+ALTER TABLE series_with_families ALTER FAMILY default SET DATA "rot";
 ```
 
 {% note info %}

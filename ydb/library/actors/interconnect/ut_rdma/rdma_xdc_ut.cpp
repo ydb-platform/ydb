@@ -1,5 +1,6 @@
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
 
@@ -24,6 +25,16 @@ public:
     void SetUp() override {
         using namespace NRdmaTest;
         if (NRdmaTest::IsRdmaTestDisabled()) {
+            GTestSkip();
+        }
+    }
+};
+
+class XdcRdmaTestCqMode : public ::testing::TestWithParam<NInterconnect::NRdma::ECqMode> {
+public:
+    void SetUp() override {
+        using namespace NRdmaTest;
+        if (IsRdmaTestDisabled()) {
             GTestSkip();
         }
     }
@@ -254,10 +265,10 @@ TEST_F(XdcRdmaTest, SerializeToRope) {
         totalXdcSize += len;
     }
 
-    auto allocRcBuf = [](ui32 size) {
-        return TRcBuf::Uninitialized(size);
-    };
-    auto serializedRope = ev->SerializeToRope(allocRcBuf);
+    auto mempool = NInterconnect::NRdma::CreateSlotMemPool(nullptr);
+
+    auto serializedRope = ev->SerializeToRope(mempool.get());
+
     ASSERT_TRUE(serializedRope.has_value());
     auto rope = serializedRope->ConvertToString();
     // 6 1 -120 39 88x5000 8 123 18 11 104 101 108 108 111 32 119 111 114 108 100
@@ -414,8 +425,12 @@ TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
     UNIT_ASSERT(recieverPtr->WhaitForRecieve(1, 20));
 }
 
-TEST_F(XdcRdmaTest, SendMix) {
-    TTestICCluster cluster(2);
+TEST_P(XdcRdmaTestCqMode, SendMix) {
+    TTestICCluster::Flags flags = TTestICCluster::EMPTY;
+    if (GetParam() == NInterconnect::NRdma::ECqMode::POLLING) {
+        flags = TTestICCluster::RDMA_POLLING_CQ;
+    }
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, flags);
 
     ui32 index = 0;
     auto recieverPtr = new TReceiveActor([&index](TEvTestSerialization::TPtr ev) {
@@ -442,8 +457,12 @@ TEST_F(XdcRdmaTest, SendMix) {
     UNIT_ASSERT(recieverPtr->WhaitForRecieve(numEvents, 20));
 }
 
-TEST_F(XdcRdmaTest, SendMixBig) {
-    TTestICCluster cluster(2);
+TEST_P(XdcRdmaTestCqMode, SendMixBig) {
+    TTestICCluster::Flags flags = TTestICCluster::EMPTY;
+    if (GetParam() == NInterconnect::NRdma::ECqMode::POLLING) {
+        flags = TTestICCluster::RDMA_POLLING_CQ;
+    }
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, flags);
     TEventsForTest events(1000);
 
     auto recieverPtr = new TReceiveActor([&events](TEvTestSerialization::TPtr ev) {
@@ -466,3 +485,21 @@ TEST_F(XdcRdmaTest, SendMixBig) {
     }
     UNIT_ASSERT_VALUES_EQUAL(events.Checks.size(), 0u);
 }
+
+
+INSTANTIATE_TEST_SUITE_P(
+    XdcRdmaTest,
+    XdcRdmaTestCqMode,
+    ::testing::Values(
+        NInterconnect::NRdma::ECqMode::POLLING,
+        NInterconnect::NRdma::ECqMode::EVENT
+    ),
+    [](const testing::TestParamInfo<NInterconnect::NRdma::ECqMode>& info) {
+        switch (info.param) {
+            case NInterconnect::NRdma::ECqMode::POLLING:
+                return "POLLING";
+            case NInterconnect::NRdma::ECqMode::EVENT:
+                return "EVENT"; 
+        }
+    }
+);

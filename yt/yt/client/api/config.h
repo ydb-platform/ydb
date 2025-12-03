@@ -65,6 +65,7 @@ struct TConnectionDynamicConfig
     : public virtual NYTree::TYsonStruct
 {
     NTabletClient::TTableMountCacheDynamicConfigPtr TableMountCache;
+    NTransactionClient::TRemoteTimestampProviderDynamicConfigPtr TimestampProvider;
 
     TExponentialBackoffOptions TabletWriteBackoff;
 

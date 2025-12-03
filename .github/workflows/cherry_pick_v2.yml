@@ -1,0 +1,66 @@
+name: Cherry-pick_v2
+on:
+  workflow_dispatch:
+    inputs:
+      commits_and_prs:
+        type: string
+        default: ""
+        description: |
+          List of commit SHAs or PR numbers to cherry-pick.
+          Can be represented as a full or short commit SHA or a PR number.
+          Separated by space, comma or line end.
+          Example: "sha5682 12345"
+        required: true
+      target_branches:
+        default: ""
+        description: Comma or space separated branches to cherry-pick
+        required: true
+      script_version_sha:
+        type: string
+        description: |
+          (Optional) Commit SHA to use for checking out scripts.
+          If not provided, the default branch will be used.
+        default: ""
+      allow_unmerged:
+        type: boolean
+        default: true
+        description: Allow backporting unmerged PRs (uses commits from PR directly)
+
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+jobs:
+  create-pr:
+    runs-on: [self-hosted, tiny-worker]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.script_version_sha }}
+          sparse-checkout: |
+            .github
+      - name: install packages
+        shell: bash
+        run: |
+          pip install PyGithub==2.5.0 requests
+
+      - name: configure
+        shell: bash
+        run: |
+          git config --global user.name YDBot
+          git config --global user.email ydbot@ydb.tech
+          git config --local github.token ${{ env.GH_TOKEN }}
+
+      - name: run-command
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ env.GH_TOKEN }}
+          GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 ./.github/scripts/cherry_pick_v2.py \
+            --commits="${{ inputs.commits_and_prs }}" \
+            --target-branches="${{ inputs.target_branches }}" \
+            ${{ inputs.allow_unmerged == true && '--allow-unmerged' || '' }}

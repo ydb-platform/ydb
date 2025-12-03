@@ -17,9 +17,9 @@ using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NOpt;
 
-class TKqpPgRewriteTransformer : public TSyncTransformerBase {
+class TKqpRewriteSelectTransformer : public TSyncTransformerBase {
   public:
-    TKqpPgRewriteTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx)
+    TKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx)
         : TypeCtx(typeCtx), KqpCtx(*kqpCtx) {}
 
     // Main method of the transformer
@@ -31,12 +31,12 @@ class TKqpPgRewriteTransformer : public TSyncTransformerBase {
     const TKqpOptimizeContext &KqpCtx;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
-                                                          TTypeAnnotationContext &typeCtx);
+TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
+                                                             TTypeAnnotationContext &typeCtx);
 
 class TKqpNewRBOTransformer : public TSyncTransformerBase {
   public:
-    TKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
+    TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
                           TTypeAnnotationContext &typeCtx,
                           TAutoPtr<IGraphTransformer> rboTypeAnnTransformer, 
                           TAutoPtr<IGraphTransformer> typeAnnTransformer, 
@@ -45,9 +45,10 @@ class TKqpNewRBOTransformer : public TSyncTransformerBase {
         TypeCtx(typeCtx), 
         KqpCtx(*kqpCtx),
           RBO(
-              {// std::make_shared<TRenameStage>(),
+              { std::make_shared<TRuleBasedStage>(RuleStage1),
+                std::make_shared<TRenameStage>(),
                 std::make_shared<TConstantFoldingStage>(),
-               std::make_shared<TRuleBasedStage>(RuleStage1), std::make_shared<TRuleBasedStage>(RuleStage2)},
+                std::make_shared<TRuleBasedStage>(RuleStage2), std::make_shared<TRuleBasedStage>(RuleStage3)},
               kqpCtx, typeCtx, rboTypeAnnTransformer, typeAnnTransformer, peephole, funcRegistry) {}
 
     // Main method of the transformer
@@ -56,11 +57,11 @@ class TKqpNewRBOTransformer : public TSyncTransformerBase {
 
   private:
     TTypeAnnotationContext &TypeCtx;
-    const TKqpOptimizeContext &KqpCtx;
+    TKqpOptimizeContext &KqpCtx;
     TRuleBasedOptimizer RBO;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
                                                       TTypeAnnotationContext &typeCtx,
                                                       TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
                                                       TAutoPtr<IGraphTransformer> typeAnnTransformer,
@@ -80,6 +81,8 @@ class TKqpRBOCleanupTransformer : public TSyncTransformerBase {
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext &typeCtx);
+
+TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, const TKqpOptimizeContext& kqpCtx, bool pgSyntax=false);
 
 } // namespace NKqp
 } // namespace NKikimr

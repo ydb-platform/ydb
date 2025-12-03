@@ -248,7 +248,7 @@ private:
         ev->SetDisableDefaultTimeout(DisableDefaultTimeout);
         ev->SetUserRequestContext(UserRequestContext);
         if (PhysicalGraph) {
-            ev->SetQueryPhysicalGraph(std::move(*PhysicalGraph));
+            ev->SetQueryPhysicalGraph(*PhysicalGraph);
         }
         if (ev->Record.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
             ev->SetProgressStatsPeriod(ProgressStatsPeriod ? ProgressStatsPeriod : TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
@@ -681,7 +681,11 @@ private:
         NYql::IssuesFromMessage(issueMessage, issues);
         Issues.AddIssues(TruncateIssues(issues));
 
-        LOG_I("Script query finished from " << ev->Sender << " " << record.GetYdbStatus() << ", Issues: " << Issues.ToOneLineString());
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            LOG_I("Script query successfully finished from " << ev->Sender << ", Issues: " << Issues.ToOneLineString());
+        } else {
+            LOG_W("Script query failed from " << ev->Sender << " " << record.GetYdbStatus() << ", Issues: " << Issues.ToOneLineString());
+        }
 
         if (record.GetYdbStatus() == Ydb::StatusIds::TIMEOUT) {
             const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig);

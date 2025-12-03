@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         void RunTest(ui32 initialBlobs, ui32 unsyncedBlobs, std::vector<ENodeState> nodeStates) {
             Y_VERIFY(nodeStates.size() == NodeCount);
             const ui64 blobSize = 10;
-            const ui32 unsyncedBatchSize = 10000;
+            const ui32 unsyncedBatchSize = 1000;
             Initialize();
 
             ui64 tabletId = 5000;
@@ -99,6 +99,24 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                     .Step = step,
                 });
                 collectEverything(nullptr, nullptr);
+            }
+
+            Ctest << "Send TEvBaldSyncLog" << Endl;
+            const TIntrusivePtr<TBlobStorageGroupInfo> groupInfo = Env->GetGroupInfo(GroupId);
+            UNIT_ASSERT(groupInfo);
+            for (ui32 orderNumber = 0; orderNumber < groupInfo->Type.BlobSubgroupSize(); ++orderNumber) {
+                const TActorId actorId = groupInfo->GetActorId(orderNumber);
+                const TVDiskID vdiskId = groupInfo->GetVDiskId(orderNumber);
+                const ui32 nodeId = actorId.NodeId();
+                if (nodeStates[nodeId - 1] == ENodeState::Dead) {
+                    continue;
+                }
+                const TActorId edge = Env->Runtime->AllocateEdgeActor(actorId.NodeId());
+                Env->Runtime->WrapInActorContext(edge, [&]{
+                    TActivationContext::Send(new IEventHandle(
+                            actorId, edge, new TEvBlobStorage::TEvVBaldSyncLog(vdiskId, true)));
+                });
+                Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVBaldSyncLogResult>(edge, false);
             }
 
             Ctest << "Set DoNotKeepFlags on second half of blobs" << Endl;
@@ -195,8 +213,10 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             .Erasure = erasure,
             .ControllerNodeId = controllerNodeId,
             .PDiskChunkSize = 32_MB,
+            .EnablePhantomFlagStorage = true,
+            .TinySyncLog = true,
         });
-        ctx.RunTest(1000, 5'500'000, nodeStates);
+        ctx.RunTest(1000, 1000, nodeStates);
     }
 
 

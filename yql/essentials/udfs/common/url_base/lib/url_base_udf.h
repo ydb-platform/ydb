@@ -315,8 +315,8 @@ SIMPLE_UDF_WITH_OPTIONAL_ARGS(TGetSignificantDomain, char*(TAutoMap<char*>, TOpt
                 }
             }
         } else {
-            static const std::set<std::string_view> zones{"com", "net", "org", "co", "gov", "edu"};
-            secondLevelIsZone = zones.count(secondLevel);
+            static const std::set<std::string_view> Zones{"com", "net", "org", "co", "gov", "edu"};
+            secondLevelIsZone = Zones.count(secondLevel);
         }
 
         const auto from = parts[parts.size() - (secondLevelIsZone ? 3U : 2U)].begin();

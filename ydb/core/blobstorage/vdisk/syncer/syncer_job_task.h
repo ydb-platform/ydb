@@ -114,11 +114,16 @@ namespace NKikimr {
             // When Type=EFullRecover we store state here
             ////////////////////////////////////////////////////////////////////////
             struct TFullRecoverInfo {
+                TFullRecoverInfo(NKikimrBlobStorage::EFullSyncProtocol protocol)
+                    : Protocol(protocol)
+                {}
+
                 NKikimrBlobStorage::ESyncFullStage Stage = NKikimrBlobStorage::LogoBlobs;
                 TKeyLogoBlob LogoBlobFrom = TKeyLogoBlob::First();
                 TKeyBlock BlockTabletFrom = TKeyBlock::First();
                 TKeyBarrier BarrierFrom = TKeyBarrier::First();
                 ui64 VSyncFullMsgsReceived = 0;
+                NKikimrBlobStorage::EFullSyncProtocol Protocol;
             };
 
         public:

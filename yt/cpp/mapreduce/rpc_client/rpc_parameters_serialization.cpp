@@ -49,7 +49,7 @@ NObjectClient::EObjectType ToApiObjectType(ENodeType type)
         case NT_MAP:
             return NObjectClient::EObjectType::MapNode;
         case NT_LIST:
-            return NObjectClient::EObjectType::ListNode;
+            THROW_ERROR_EXCEPTION("List nodes are deprecated");
         case NT_FILE:
             return NObjectClient::EObjectType::File;
         case NT_TABLE:

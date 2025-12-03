@@ -259,7 +259,7 @@
                     "gofmt"
                 ]
             },
-            "formula": "build/external_resources/go_tools/go1.24.json"
+            "formula": "build/external_resources/go_tools/go1.25.json"
         },
         "jdk17": {
             "executable": {
@@ -2339,7 +2339,7 @@
         "golang": {
             "params": {
                 "type": "golang",
-                "version": "1.24.6"
+                "version": "1.25.0"
             },
             "platforms": [
                 {

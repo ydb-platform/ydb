@@ -587,11 +587,13 @@ class BridgeSkipper:
             some_failed = False
             succeeded_count = 0
             for command in commands:
-                auth_preview = " ".join(self.ydb_auth_opts) + " " if self.ydb_auth_opts else ""
-                command_str = f"{self.path_to_cli} {auth_preview}-e grpc://{endpoints[0]}:2135 " + " ".join(command)
                 if self.auto_failover:
-                    logger.info(f"Executing command: {command_str}")
-                    result = execute_cli_command(self.path_to_cli, command, endpoints, ydb_auth_opts=self.ydb_auth_opts)
+                    result = execute_cli_command(
+                        self.path_to_cli,
+                        command,
+                        endpoints,
+                        ydb_auth_opts=self.ydb_auth_opts,
+                        print_info=True)
                     if result is None:
                         some_failed = True
                         logger.error(f"Failed to apply command {command}")

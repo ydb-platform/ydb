@@ -4,11 +4,12 @@ from numpy import int8, int16, int32, int64, intp, intc
 from numpy import uint8, uint16, uint32, uint64, uintp, uintc
 from numpy import float64, float32, complex64, complex128
 import numpy
-from pythran.typing import List, Dict, Set, Tuple, NDArray, Pointer, Fun
+from pythran.typing import List, Dict, Set, Tuple, NDArray, Pointer, Fun, Type
 
 PYTYPE_TO_CTYPE_TABLE = {
     numpy.uint: 'npy_uint',
     #
+    bytes: 'pythonic::types::str',  # FIXME: using types::str as backend
     complex: 'std::complex<double>',
     bool: 'bool',
     int: 'long',
@@ -53,8 +54,18 @@ TYPE_TO_SUFFIX = {
 
 def pytype_to_ctype(t):
     """ Python -> pythonic type binding. """
-    if isinstance(t, List):
+    if t in (list, set):
+        return f'pythonic::types::{t.__name__}<void>'
+    elif t is dict:
+        return f'pythonic::types::{t.__name__}<void, void>'
+    elif t is tuple:
+        return f'std::tuple<void>'
+    elif isinstance(t, List):
         return 'pythonic::types::list<{0}>'.format(
+            pytype_to_ctype(t.__args__[0])
+        )
+    elif isinstance(t, Type):
+        return 'pythonic::types::type_t<{0}>'.format(
             pytype_to_ctype(t.__args__[0])
         )
     elif isinstance(t, Set):
@@ -105,8 +116,12 @@ def pytype_to_ctype(t):
 
 def pytype_to_pretty_type(t):
     """ Python -> docstring type. """
-    if isinstance(t, List):
+    if t in (list, set, dict, tuple):
+        return t.__name__
+    elif isinstance(t, List):
         return '{0} list'.format(pytype_to_pretty_type(t.__args__[0]))
+    elif isinstance(t, Type):
+        return '{0} type'.format(pytype_to_pretty_type(t.__args__[0]))
     elif isinstance(t, Set):
         return '{0} set'.format(pytype_to_pretty_type(t.__args__[0]))
     elif isinstance(t, Dict):

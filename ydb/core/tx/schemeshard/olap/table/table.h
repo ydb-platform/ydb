@@ -109,9 +109,9 @@ public:
         Stats.UpdateShardStats(diskSpaceUsageDelta, shardIdx, newStats, now);
     }
 
-    void UpdateTableStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, const TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {
+    void UpdateTableStats(const TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {
         Stats.TableStats[pathId].Aggregated.PartCount = GetColumnShards().size();
-        Stats.UpdateTableStats(diskSpaceUsageDelta, shardIdx, pathId, newStats, now);
+        Stats.UpdateTableStats(shardIdx, pathId, newStats, now);
     }
 
     TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> BuildEntity(const TPathId& pathId, const NOlap::NAlter::TEntityInitializationContext& iContext) const;

@@ -16,7 +16,9 @@ extern const char ByLineFuncName[];
 const char ByLineFuncName[] = "ByLines";
 
 namespace {
-namespace Helper {
+
+namespace NHelper {
+
 template <class TUserType>
 inline bool ConvertToUnboxed(const IValueBuilder& valueBuilder, const TString& curLine, TUnboxedValue& result) {
     Y_UNUSED(valueBuilder);
@@ -58,97 +60,113 @@ struct TypeToTypeName {
         return "Unknown";
     }
 };
+
 template <>
 struct TypeToTypeName<bool> {
     static constexpr const char* Name() {
         return "Bool";
     }
 };
+
 template <>
 struct TypeToTypeName<i8> {
     static constexpr const char* Name() {
         return "Int8";
     }
 };
+
 template <>
 struct TypeToTypeName<ui8> {
     static constexpr const char* Name() {
         return "Uint8";
     }
 };
+
 template <>
 struct TypeToTypeName<i16> {
     static constexpr const char* Name() {
         return "Int16";
     }
 };
+
 template <>
 struct TypeToTypeName<ui16> {
     static constexpr const char* Name() {
         return "Uint16";
     }
 };
+
 template <>
 struct TypeToTypeName<ui32> {
     static constexpr const char* Name() {
         return "Uint32";
     }
 };
+
 template <>
 struct TypeToTypeName<ui64> {
     static constexpr const char* Name() {
         return "Uint64";
     }
 };
+
 template <>
 struct TypeToTypeName<i32> {
     static constexpr const char* Name() {
         return "Int32";
     }
 };
+
 template <>
 struct TypeToTypeName<i64> {
     static constexpr const char* Name() {
         return "Int64";
     }
 };
+
 template <>
 struct TypeToTypeName<float> {
     static constexpr const char* Name() {
         return "Float";
     }
 };
+
 template <>
 struct TypeToTypeName<double> {
     static constexpr const char* Name() {
         return "Double";
     }
 };
+
 template <>
 struct TypeToTypeName<const char*> {
     static constexpr const char* Name() {
         return "String";
     }
 };
+
 template <>
 struct TypeToTypeName<TUtf8> {
     static constexpr const char* Name() {
         return "Utf8";
     }
 };
+
 template <>
 struct TypeToTypeName<TYson> {
     static constexpr const char* Name() {
         return "Yson";
     }
 };
+
 template <>
 struct TypeToTypeName<TJson> {
     static constexpr const char* Name() {
         return "Json";
     }
 };
-} // namespace Helper
+
+} // namespace NHelper
 
 static const ui64 TAKE_UNLIM = -1;
 
@@ -204,12 +222,12 @@ public:
 
 private:
     std::unique_ptr<TStream> DoCreateStream() {
-        static const auto bufferSize = 1 << 12;
+        static const auto BufferSize = 1 << 12;
         TFile file(FilePath_, OpenExisting | RdOnly | Seq);
         if (FileSize_ == Unknown) {
             FileSize_ = file.GetLength();
         }
-        return std::make_unique<TBuffered<TUnbufferedFileInput>>(bufferSize, file);
+        return std::make_unique<TBuffered<TUnbufferedFileInput>>(BufferSize, file);
     }
 
     TString FilePath_;
@@ -274,9 +292,9 @@ private:
         if (!Skip()) {
             return false;
         }
-        if (!Helper::ConvertToUnboxed<TUserType>(ValueBuilder_, CurLine_, value)) {
+        if (!NHelper::ConvertToUnboxed<TUserType>(ValueBuilder_, CurLine_, value)) {
             TStringBuilder sb;
-            sb << "File::ByLines failed to cast string '" << CurLine_ << "' to " << Helper::TypeToTypeName<TUserType>::Name() << Endl;
+            sb << "File::ByLines failed to cast string '" << CurLine_ << "' to " << NHelper::TypeToTypeName<TUserType>::Name() << Endl;
             sb << "- path: " << MetaPtr_->GetFilePath() << Endl;
             sb << "- line: " << CurLineNum_ << Endl;
             TerminateFunc_(sb);
@@ -529,8 +547,8 @@ public:
     }
 
     static const ::NYql::NUdf::TStringRef& Name() {
-        static auto name = ::NYql::NUdf::TStringRef::Of("FolderListFromFile");
-        return name;
+        static auto Name = ::NYql::NUdf::TStringRef::Of("FolderListFromFile");
+        return Name;
     }
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {

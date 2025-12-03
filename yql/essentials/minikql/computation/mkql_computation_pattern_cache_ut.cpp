@@ -831,10 +831,10 @@ Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
 
     {
         auto data = genData();
-        static auto predicate = [](ui64 a) {
+        static auto Predicate = [](ui64 a) {
             return a % 128 == 0;
         };
-        Y_DO_NOT_OPTIMIZE_AWAY(predicate);
+        Y_DO_NOT_OPTIMIZE_AWAY(Predicate);
 
         TDuration total;
         for (ui64 i = 0; i < kIter; ++i) {
@@ -842,7 +842,7 @@ Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
             ui64 acc = 0;
             ui64 count = 0;
             for (ui64 j = 0; j < data.size(); ++j) {
-                if (predicate(data[j])) {
+                if (Predicate(data[j])) {
                     acc += data[j];
                     ++count;
                 }

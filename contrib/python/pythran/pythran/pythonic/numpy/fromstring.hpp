@@ -17,8 +17,7 @@ namespace numpy
 {
   template <class dtype>
   types::ndarray<typename dtype::type, types::pshape<long>>
-  fromstring(types::str const &string, dtype d, long count,
-             types::str const &sep)
+  fromstring(types::str const &string, dtype d, long count, types::kwonly, types::str const &sep)
   {
     if (sep) {
       types::list<typename dtype::type> res(0);
@@ -42,10 +41,8 @@ namespace numpy
       if (count < 0)
         count = string.size();
       types::pshape<long> shape = count;
-      utils::shared_ref<types::raw_array<typename dtype::type>> buffer(
-          std::get<0>(shape));
-      auto const *tstring =
-          reinterpret_cast<typename dtype::type const *>(string.c_str());
+      utils::shared_ref<types::raw_array<typename dtype::type>> buffer(std::get<0>(shape));
+      auto const *tstring = reinterpret_cast<typename dtype::type const *>(string.c_str());
       std::copy(tstring, tstring + std::get<0>(shape), buffer->data);
       return {buffer, shape};
     }

@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
 #include <library/cpp/colorizer/colors.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <library/cpp/yaml/as/tstring.h>
 
 #include <util/string/strip.h>
@@ -290,7 +291,7 @@ bool TClientCommandOption::NeedPrintDefinitionsPriority() const {
 }
 
 void TClientCommandOption::RebuildHelpMessage() {
-    NColorizer::TColors& colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors& colors = NConsoleClient::AutoColors(Cout);
     TStringBuilder helpMessage;
     helpMessage << Help;
     const bool needDefinitionsPriority = ClientOptions->HelpCommandVerbosiltyLevel >= 2 && NeedPrintDefinitionsPriority();

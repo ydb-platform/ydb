@@ -18,22 +18,22 @@ using namespace NNodes;
 
 bool AllowSubsetFieldsForNode(const TExprNode& node, const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const char flag[] = "FieldSubsetEnableMultiusage";
-    return !IsOptimizerDisabled<flag>(*optCtx.Types) || optCtx.IsSingleUsage(node);
+    static const char Flag[] = "FieldSubsetEnableMultiusage";
+    return !IsOptimizerDisabled<Flag>(*optCtx.Types) || optCtx.IsSingleUsage(node);
 }
 
 bool AllowComplexFiltersOverAggregatePushdown(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const char optName[] = "PushdownComplexFiltersOverAggregate";
-    return IsOptimizerEnabled<optName>(*optCtx.Types) &&
-           !IsOptimizerDisabled<optName>(*optCtx.Types) &&
+    static const char OptName[] = "PushdownComplexFiltersOverAggregate";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) &&
+           !IsOptimizerDisabled<OptName>(*optCtx.Types) &&
            optCtx.Types->MaxAggPushdownPredicates > 0;
 }
 
 bool AllowPullUpExtendOverEquiJoin(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const char optName[] = "PullUpExtendOverEquiJoin";
-    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+    static const char OptName[] = "PullUpExtendOverEquiJoin";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 THashSet<TStringBuf> GetAggregationInputKeys(const TCoAggregate& node) {
@@ -249,8 +249,8 @@ bool HaveFieldsSubsetLMap(const TExprNode::TPtr& start, const TExprNode& arg, TS
 }
 
 TExprNode::TPtr LMapSubsetFields(const TCoMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    static const char optName[] = "LMapSubsetFields";
-    if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
+    static const char OptName[] = "LMapSubsetFields";
+    if (IsOptimizerDisabled<OptName>(*optCtx.Types)) {
         return node.Ptr();
     }
     auto itemArg = node.Lambda().Args().Arg(0);
@@ -453,8 +453,8 @@ TExprNode::TPtr FuseJoinTree(TExprNode::TPtr downstreamJoinTree, TExprNode::TPtr
 
 bool IsSuitableToFuseInputMultiLabels(TOptimizeContext &optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const char optName[] = "FuseEquiJoinsInputMultiLabels";
-    return IsOptimizerEnabled<optName>(*optCtx.Types);
+    static const char OptName[] = "FuseEquiJoinsInputMultiLabels";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types);
 }
 
 TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, TExprContext& ctx, TOptimizeContext &optCtx) {
@@ -1125,8 +1125,8 @@ TVector<TExprNode::TPtr> BuildOutputFlattenMembersArg(const TCoEquiJoinInput& in
 }
 
 bool IsPullFlatMapOverJoinMultipleLabelsInputEnabled(TOptimizeContext &optCtx) {
-    static const char optName[] = "PullUpFlatMapOverJoinMultipleLabels";
-    return IsOptimizerEnabled<optName>(*optCtx.Types);
+    static const char OptName[] = "PullUpFlatMapOverJoinMultipleLabels";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types);
 }
 
 bool IsSuitableToPullUpFlatMapInputAssociatedWithLabelList(TCoEquiJoinInput& input, TOptimizeContext& optCtx) {
@@ -1192,7 +1192,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
         return node;
     }
 
-    static const TStringBuf canaryBaseName = YqlCanaryColumnName;
+    static const TStringBuf CanaryBaseName = YqlCanaryColumnName;
 
     THashMap<TStringBuf, THashSet<TStringBuf>> joinKeysByLabel = CollectEquiJoinKeyColumnsByLabel(*joinTree);
     const auto renames = LoadJoinRenameMap(*settings);
@@ -1225,7 +1225,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
 
             auto flatMapInputItem = GetSequenceItemType(flatMap.Input(), false);
             auto structItems = flatMapInputItem->Cast<TStructExprType>()->GetItems();
-            TString canaryName = TStringBuilder() << canaryBaseName << i;
+            TString canaryName = TStringBuilder() << CanaryBaseName << i;
 
             if (input.Scope().Maybe<TCoAtomList>()) {
                 auto list = input.Scope().Cast<TCoAtomList>();
@@ -1292,7 +1292,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
         if (j < toPull.size() && i == toPull[j]) {
             j++;
 
-            const TString canaryName = TStringBuilder() << canaryBaseName << i;
+            const TString canaryName = TStringBuilder() << CanaryBaseName << i;
             const TString fullCanaryName = FullColumnName(label, canaryName);
 
             TCoFlatMapBase flatMap = input.List().Cast<TCoFlatMapBase>();
@@ -1370,7 +1370,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
 
     auto newLambdaBody = ctx.Builder(node->Pos())
         .Callable("Just")
-            .Add(0, ApplyRenames(flattenMembers, renames, *noRenamesResultType, canaryBaseName, ctx))
+            .Add(0, ApplyRenames(flattenMembers, renames, *noRenamesResultType, CanaryBaseName, ctx))
         .Seal()
         .Build();
 
@@ -1784,8 +1784,8 @@ bool CanPushdownOverAggregate(
     TSet<TStringBuf> usedFields;
     // Predicate with HaveFieldsSubset()==true and any usedFields (including empty) can be used for pushdown (for example constant predicates can have empty usedFields).
     if (!HaveFieldsSubset(p, *arg, usedFields, *optCtx.ParentsMap)) {
-        static const char optName[] = "FilterOverAggregateAllFields";
-        const bool canPushdownAll = IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+        static const char OptName[] = "FilterOverAggregateAllFields";
+        const bool canPushdownAll = IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
         if (!canPushdownAll) {
             return false;
         }
@@ -1992,8 +1992,8 @@ TExprNode::TPtr FilterNullMembersToSkipNullMembers(const TCoFlatMapBase& node, T
 }
 
 bool CheckWindowFramesFieldSubset(const TExprNodeList& calcNodes, const TStructExprType& inputItemType, const TTypeAnnotationContext& types) {
-    static const char optName[] = "CheckWindowFramesFieldSubset";
-    if (!IsOptimizerEnabled<optName>(types) || IsOptimizerDisabled<optName>(types)) {
+    static const char OptName[] = "CheckWindowFramesFieldSubset";
+    if (!IsOptimizerEnabled<OptName>(types) || IsOptimizerDisabled<OptName>(types)) {
         return true;
     }
 
@@ -2347,8 +2347,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         }
 
         // Add PruneKeys to EquiJoin
-        static const char optName[] = "EmitPruneKeys";
-        if (!IsOptimizerEnabled<optName>(*optCtx.Types) || IsOptimizerDisabled<optName>(*optCtx.Types)) {
+        static const char OptName[] = "EmitPruneKeys";
+        if (!IsOptimizerEnabled<OptName>(*optCtx.Types) || IsOptimizerDisabled<OptName>(*optCtx.Types)) {
             return node;
         }
         auto equiJoin = TCoEquiJoin(node);

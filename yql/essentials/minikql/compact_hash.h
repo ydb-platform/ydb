@@ -385,6 +385,8 @@ public:
     TListPool(const TListPool&) = delete;
     TListPool(TListPool&& other)
         : TListPoolBase(std::move(other))
+        // TListPoolBase does not moves Pools_ out
+        // NOLINTNEXTLINE(bugprone-use-after-move)
         , Pools_(std::move(other.Pools_))
     {
     }

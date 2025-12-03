@@ -16,8 +16,7 @@ namespace numpy
   asscalar_result_type<typename E::dtype> asscalar(E const &expr)
   {
     if (expr.flat_size() != 1)
-      throw types::ValueError(
-          "can only convert an array  of size 1 to a Python scalar");
+      throw types::ValueError("can only convert an array  of size 1 to a Python scalar");
     return *asarray(expr).fbegin();
   }
 } // namespace numpy

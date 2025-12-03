@@ -6,6 +6,10 @@ namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TLoggerOwner::TLoggerOwner(TSerializableLogger logger)
+    : Logger(std::move(logger))
+{ }
+
 void TLoggerOwner::RegisterMetadata(auto&& registrar)
 {
     PHOENIX_REGISTER_FIELD(1, Logger);

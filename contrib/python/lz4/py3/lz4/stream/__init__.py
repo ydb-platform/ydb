@@ -32,7 +32,7 @@ class LZ4StreamDecompressor:
                     perform decompression using this initial dictionary.
 
             Raises:
-                Exceptions occuring during the context initialization.
+                Exceptions occurring during the context initialization.
 
                 OverflowError: raised if the ``dictionary`` parameter is too large
                     for the LZ4 context.
@@ -73,7 +73,7 @@ class LZ4StreamDecompressor:
                 bytes or bytearray: Decompressed data.
 
             Raises:
-                Exceptions occuring during decompression.
+                Exceptions occurring during decompression.
 
                 ValueError: raised if the source is inconsistent with a finite LZ4
                     stream block chain.
@@ -96,7 +96,7 @@ class LZ4StreamDecompressor:
                 bytes or bytearray: LZ4 compressed data block.
 
             Raises:
-                Exceptions occuring while getting the first block from ``stream``.
+                Exceptions occurring while getting the first block from ``stream``.
 
                 BufferError: raised if the function cannot return a complete LZ4
                     compressed block from the stream (i.e. the stream does not hold
@@ -150,7 +150,7 @@ class LZ4StreamCompressor:
                     perform compression using this initial dictionary.
 
             Raises:
-                Exceptions occuring during the context initialization.
+                Exceptions occurring during the context initialization.
 
                 OverflowError: raised if the ``dictionary`` parameter is too large
                     for the LZ4 context.
@@ -194,7 +194,7 @@ class LZ4StreamCompressor:
                 bytes or bytearray: Compressed data.
 
             Raises:
-                Exceptions occuring during compression.
+                Exceptions occurring during compression.
 
                 OverflowError: raised if the source is too large for being compressed in
                     the given context.

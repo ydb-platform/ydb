@@ -429,7 +429,7 @@ void TSelectRowsCommandBase<
         })
         .Optional(/*init*/ false);
 
-    registrar.template ParameterWithUniversalAccessor<int>(
+    registrar.template ParameterWithUniversalAccessor<std::optional<int>>(
         "expression_builder_version",
         [] (TThis* command) -> auto& {
             return command->Options.ExpressionBuilderVersion;

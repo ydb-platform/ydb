@@ -26,57 +26,43 @@ namespace numpy
   {
 
     template <class T, class pS>
-    types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
-                                           std::complex<T>>::type,
+    types::ndarray<std::enable_if_t<std::is_floating_point<T>::value, std::complex<T>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
-    rfft(types::ndarray<T, pS> const &a, long n = -1, long axis = -1,
-         types::str const &norm = {});
+    rfft(types::ndarray<T, pS> const &a, long n = -1, long axis = -1, types::str const &norm = {});
 
     template <class T, class pS>
-    types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
-                                           std::complex<T>>::type,
+    types::ndarray<std::enable_if_t<std::is_floating_point<T>::value, std::complex<T>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
-    rfft(types::ndarray<T, pS> const &a, types::none_type n, long axis,
-         types::str const &norm);
+    rfft(types::ndarray<T, pS> const &a, types::none_type n, long axis, types::str const &norm);
 
     template <class T, class pS>
-    types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
-                                           std::complex<T>>::type,
+    types::ndarray<std::enable_if_t<std::is_floating_point<T>::value, std::complex<T>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
-    rfft(types::ndarray<T, pS> const &a, long n, long axis,
-         types::none_type norm);
+    rfft(types::ndarray<T, pS> const &a, long n, long axis, types::none_type norm);
 
     template <class T, class pS>
-    types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
-                                           std::complex<T>>::type,
+    types::ndarray<std::enable_if_t<std::is_floating_point<T>::value, std::complex<T>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
     rfft(types::ndarray<T, pS> const &a, types::none_type n, long axis = -1,
          types::none_type norm = types::none_type{});
 
     template <class T, class pS>
-    types::ndarray<typename std::enable_if<std::is_integral<T>::value,
-                                           std::complex<double>>::type,
+    types::ndarray<std::enable_if_t<std::is_integral<T>::value, std::complex<double>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
-    rfft(types::ndarray<T, pS> const &a, long n = -1, long axis = -1,
-         types::str const &norm = {});
+    rfft(types::ndarray<T, pS> const &a, long n = -1, long axis = -1, types::str const &norm = {});
 
     template <class T, class pS>
-    types::ndarray<typename std::enable_if<std::is_integral<T>::value,
-                                           std::complex<double>>::type,
+    types::ndarray<std::enable_if_t<std::is_integral<T>::value, std::complex<double>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
-    rfft(types::ndarray<T, pS> const &a, types::none_type n, long axis,
-         types::str const &norm);
+    rfft(types::ndarray<T, pS> const &a, types::none_type n, long axis, types::str const &norm);
 
     template <class T, class pS>
-    types::ndarray<typename std::enable_if<std::is_integral<T>::value,
-                                           std::complex<double>>::type,
+    types::ndarray<std::enable_if_t<std::is_integral<T>::value, std::complex<double>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
-    rfft(types::ndarray<T, pS> const &a, long n, long axis,
-         types::none_type norm);
+    rfft(types::ndarray<T, pS> const &a, long n, long axis, types::none_type norm);
 
     template <class T, class pS>
-    types::ndarray<typename std::enable_if<std::is_integral<T>::value,
-                                           std::complex<double>>::type,
+    types::ndarray<std::enable_if_t<std::is_integral<T>::value, std::complex<double>>,
                    types::array_tuple<long, std::tuple_size<pS>::value>>
     rfft(types::ndarray<T, pS> const &a, types::none_type n, long axis = -1,
          types::none_type norm = types::none_type{});

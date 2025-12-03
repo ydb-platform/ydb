@@ -32,6 +32,12 @@ void ComputeRequiredProps(TOpRoot &root, ui32 props, TRBOContext &ctx) {
             Y_ENSURE(false, "RBO type annotation failed");
         }
     }
+    if (props & ERuleProperties::RequireMetadata) {
+        root.ComputePlanMetadata(ctx);
+    }
+    if (props & ERuleProperties::RequireStatistics) {
+        root.ComputePlanStatistics(ctx);
+    }
 }
 
 /**
@@ -86,7 +92,7 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) {
     YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
 
-    auto context = TRBOContext(KqpCtx,ctx,TypeCtx, RBOTypeAnnTransformer, FuncRegistry);
+    auto context = TRBOContext(KqpCtx, ctx, TypeCtx, RBOTypeAnnTransformer, FuncRegistry);
 
     for (size_t idx = 0; idx < Stages.size(); idx++) {
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << idx;
@@ -98,7 +104,9 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) 
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-    ComputeRequiredProps(root, ERuleProperties::RequireParents | ERuleProperties::RequireTypes, context);
+    auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetataAndStatistics;
+    ComputeRequiredProps(root, convertProps, context);
+    YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintBasicStatistics);
 
     return ConvertToPhysical(root, context, TypeAnnTransformer, PeepholeTransformer);
 }

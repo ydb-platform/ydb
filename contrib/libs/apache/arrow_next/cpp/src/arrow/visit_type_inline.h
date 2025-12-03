@@ -18,11 +18,11 @@
 
 #pragma once
 
-#include "arrow/extension_type.h"
-#include "arrow/type.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/unreachable.h"
-#include "arrow/visitor_generate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/unreachable.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visitor_generate.h"
 
 namespace arrow20 {
 

@@ -1,5 +1,5 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
@@ -16,7 +16,12 @@ TEST_SRCS(
     unstable_connection.py
 )
 
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 PEERDIR(
     ydb/tests/library

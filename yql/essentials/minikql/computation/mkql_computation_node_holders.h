@@ -653,7 +653,7 @@ private:
     mutable THashMap<TString, TValuePtr> Registry_;
 };
 
-class TDirectArrayHolderInplace: public TComputationValue<TDirectArrayHolderInplace> {
+class TDirectArrayHolderInplace final: public TComputationValue<TDirectArrayHolderInplace> {
 public:
     void* operator new(size_t sz) = delete;
     void* operator new[](size_t sz) = delete;

@@ -113,7 +113,7 @@ private:
 template <typename TProto>
 TString ProtoTextToYson(TSetup& setup, NUdf::TProtoInfo& info, TStringBuf protoText) {
     TProto proto;
-    if (!NProtoBuf::TextFormat::ParseFromString(TString{protoText}, &proto)) {
+    if (!NProtoBuf::TextFormat::ParseFromString(protoText, &proto)) {
         throw yexception() << "Failed to parse proto";
     }
 

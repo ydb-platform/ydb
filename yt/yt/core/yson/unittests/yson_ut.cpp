@@ -334,7 +334,7 @@ TEST(TYsonTest, TYsonStringFromStringBuf)
     EXPECT_EQ(stringBuf, ysonString.ToString());
 }
 
-TEST(TYsonStringMerger, NestedPaths)
+TEST(TYsonStringMergerTest, NestedPaths)
 {
     using namespace std::literals;
     {
@@ -397,7 +397,7 @@ TEST(TYsonStringMerger, NestedPaths)
     }
 }
 
-TEST(TYsonStringMerger, PathWithIndexes)
+TEST(TYsonStringMergerTest, PathWithIndexes)
 {
     using namespace std::literals;
     auto element0YsonStringBuf = TYsonStringBuf{R"({a=1})"sv};
@@ -424,7 +424,7 @@ TEST(TYsonStringMerger, PathWithIndexes)
     EXPECT_TRUE(AreNodesEqual(node, expectedNode));
 }
 
-TEST(TYsonStringMerger, BinaryYsonStrings)
+TEST(TYsonStringMergerTest, BinaryYsonStrings)
 {
     using namespace std::literals;
     auto element0YsonStringBuf = TYsonStringBuf{R"({a=1})"sv};

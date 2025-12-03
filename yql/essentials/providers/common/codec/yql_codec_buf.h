@@ -23,7 +23,8 @@ namespace NCommon {
 class TTimeoutException: public yexception {
 };
 
-struct IBlockReader {
+class IBlockReader {
+public:
     virtual ~IBlockReader() = default;
     virtual void SetDeadline(TInstant deadline) = 0;
 
@@ -32,7 +33,8 @@ struct IBlockReader {
     virtual bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) = 0;
 };
 
-struct IBlockWriter {
+class IBlockWriter {
+public:
     virtual ~IBlockWriter() = default;
 
     virtual void SetRecordBoundaryCallback(std::function<void()> callback) = 0;

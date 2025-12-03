@@ -759,6 +759,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
+        auto settings = TExecDataQuerySettings();
+        settings.OperationTimeout(TDuration::Seconds(120));
+
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT ToDict(
                 ListMap(
@@ -766,7 +769,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                     ($x) -> { RETURN AsTuple($x, $x + 1); }
                 )
             );
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        )"), TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);

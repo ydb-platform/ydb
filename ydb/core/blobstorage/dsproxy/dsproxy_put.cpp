@@ -747,7 +747,13 @@ public:
         TPutImpl::TPutResultVec putResults;
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
             if (!PutImpl.Blobs[blobIdx].Replied && DeadlineMask[blobIdx]) {
-                PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, "Deadline timer hit", putResults);
+                TStringStream str;
+                str << "Deadline timer hit";
+                str << " GroupId# " << Info->GroupID;
+                str << " BlobId# " << PutImpl.Blobs[blobIdx].BlobId.ToString();
+                str << " Deadline# " << PutImpl.Blobs[blobIdx].Deadline.ToString();
+                str << " RequestStartTime# " << RequestStartTime;
+                PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, str.Str(), putResults);
             }
         }
         if (!ReplyAndDieWithLastResponse(putResults)) {

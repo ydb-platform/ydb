@@ -1,5 +1,5 @@
 PY3TEST()
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
     FORK_SUBTESTS()
 
@@ -9,7 +9,12 @@ PY3TEST()
         test_delete_all_after_inserts.py
     )
 
-    SIZE(MEDIUM)
+    IF (SANITIZER_TYPE OR WITH_VALGRIND)
+        SIZE(LARGE)
+        TAG(ya:fat)
+    ELSE()
+        SIZE(MEDIUM)
+    ENDIF()
 
     PEERDIR(
         ydb/tests/library

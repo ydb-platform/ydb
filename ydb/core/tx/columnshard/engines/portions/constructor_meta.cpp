@@ -40,14 +40,14 @@ TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
 
 TPortionMeta TPortionMetaConstructor::Build() {
     AFL_VERIFY(FirstAndLastPK);
-    TMemoryProfileGuard mGuard1("meta_construct/pk");
+    TMemoryProfileGuard mGuard1("meta_construct/pk", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     static TAtomicCounter sumValues = 0;
     static TAtomicCounter sumValuesMeta = 0;
     static TAtomicCounter countValues = 0;
 //    FirstAndLastPK->Reallocate();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", FirstAndLastPK->GetMemorySize())("data_size", FirstAndLastPK->GetDataSize())(
         "sum", sumValues.Add(FirstAndLastPK->GetMemorySize()))("count", countValues.Inc());
-    TMemoryProfileGuard mGuard("meta_construct/others");
+    TMemoryProfileGuard mGuard("meta_construct/others", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(RecordSnapshotMin);
     AFL_VERIFY(RecordSnapshotMax);
     TPortionMeta result(*FirstAndLastPK, *RecordSnapshotMin, *RecordSnapshotMax);
@@ -62,6 +62,7 @@ TPortionMeta TPortionMetaConstructor::Build() {
     result.ColumnBlobBytes = *TValidator::CheckNotNull(ColumnBlobBytes);
     result.IndexRawBytes = *TValidator::CheckNotNull(IndexRawBytes);
     result.IndexBlobBytes = *TValidator::CheckNotNull(IndexBlobBytes);
+    result.NumSlices = *TValidator::CheckNotNull(NumSlices);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", result.GetMemorySize())("data_size", result.GetDataSize())(
         "sum", sumValuesMeta.Add(result.GetMemorySize()))("count", countValues.Inc())("size_of_meta", sizeof(TPortionMeta));
 
@@ -84,6 +85,7 @@ bool TPortionMetaConstructor::LoadMetadata(
     ColumnBlobBytes = TValidator::CheckNotNull(portionMeta.GetColumnBlobBytes());
     IndexRawBytes = portionMeta.GetIndexRawBytes();
     IndexBlobBytes = portionMeta.GetIndexBlobBytes();
+    NumSlices = portionMeta.HasNumSlices() ? portionMeta.GetNumSlices() : 1;
     if (portionMeta.HasPrimaryKeyBordersV1()) {
         FirstAndLastPK = NArrow::TFirstLastSpecialKeys(
             portionMeta.GetPrimaryKeyBordersV1().GetFirst(), portionMeta.GetPrimaryKeyBordersV1().GetLast(), indexInfo.GetReplaceKey());

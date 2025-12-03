@@ -14,8 +14,7 @@ namespace numpy
   namespace impl
   {
     template <class E, class F, class G>
-    typename __combined<F, G>::type where(E const &cond, F const &true_,
-                                          G const &false_)
+    typename __combined<F, G>::type where(E const &cond, F const &true_, G const &false_)
     {
       if (cond)
         return true_;
@@ -37,20 +36,14 @@ namespace types
   struct Dereferencer<numpy::functor::where> {
 
     template <class Ts>
-    auto operator()(Ts const &iters, utils::index_sequence<0, 1, 2>) ->
-        typename std::enable_if<
+    auto operator()(Ts const &iters, std::index_sequence<0, 1, 2>) -> std::enable_if_t<
+        types::is_dtype<
+            std::remove_cv_t<std::remove_reference_t<decltype(*std::get<0>(iters))>>>::value &&
             types::is_dtype<
-                typename std::remove_cv<typename std::remove_reference<
-                    decltype(*std::get<0>(iters))>::type>::type>::value &&
-                types::is_dtype<
-                    typename std::remove_cv<typename std::remove_reference<
-                        decltype(*std::get<1>(iters))>::type>::type>::value &&
-                types::is_dtype<
-                    typename std::remove_cv<typename std::remove_reference<
-                        decltype(*std::get<2>(iters))>::type>::type>::value,
-            decltype(numpy::impl::where(*std::get<0>(iters),
-                                        *std::get<1>(iters),
-                                        *std::get<2>(iters)))>::type
+                std::remove_cv_t<std::remove_reference_t<decltype(*std::get<1>(iters))>>>::value &&
+            types::is_dtype<
+                std::remove_cv_t<std::remove_reference_t<decltype(*std::get<2>(iters))>>>::value,
+        decltype(numpy::impl::where(*std::get<0>(iters), *std::get<1>(iters), *std::get<2>(iters)))>
     {
       if (*std::get<0>(iters))
         return *std::get<1>(iters);
@@ -59,7 +52,7 @@ namespace types
     }
 
     template <class Ts, size_t... I>
-    auto operator()(Ts const &iters, utils::index_sequence<I...>, ...)
+    auto operator()(Ts const &iters, std::index_sequence<I...>, ...)
         -> decltype(numpy::functor::where{}(*std::get<I>(iters)...))
     {
       return numpy::functor::where{}(*std::get<I>(iters)...);

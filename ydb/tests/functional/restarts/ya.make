@@ -17,7 +17,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 DEPENDS(
 )
 

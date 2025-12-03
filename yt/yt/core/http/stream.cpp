@@ -871,7 +871,7 @@ void THttpOutput::OnWriteFinish()
     auto now = TInstant::Now();
     auto stats = Connection_->GetWriteStatistics();
     if (LastProgressLogTime_ + Config_->WriteIdleTimeout < now) {
-        YT_LOG_DEBUG("Writing HTTP message (Requestid: %v, BytesOut: %v, IdleDuration: %v, BusyDuration: %v)",
+        YT_LOG_DEBUG("Writing HTTP message (RequestId: %v, BytesOut: %v, IdleDuration: %v, BusyDuration: %v)",
             RequestId_,
             GetWriteByteCount(),
             stats.IdleDuration - StartStatistics_.IdleDuration,

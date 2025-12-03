@@ -1,0 +1,58 @@
+groups:
+- name: ydb-rules
+  rules:
+  - alert: YDBAuthTicketErrors
+    expr: auth_TicketsErrors > 2
+    for: 1m
+    labels:
+      severity: critical
+      component: ydb
+      subsystem: auth
+      instance: "{{ $labels.instance }}"
+    annotations:
+      summary: "YDB authentication ticket errors on {{ $labels.instance }}"
+      description: |
+        Authentication errors detected in YDB.
+        This may indicate security issues or misconfiguration.
+        - Current error count: {{ $value }}
+        - Instance: {{ $labels.instance }}
+        - Host: {{ $labels.host }}
+  - alert: YDBStorageUsageWarning
+    expr: |
+      (ydb_resources_storage_used_bytes / ydb_resources_storage_limit_bytes) * 100 > 80
+      and ydb_resources_storage_limit_bytes > 0
+    for: 5m
+    labels:
+      severity: warning
+      component: ydb
+      subsystem: storage
+      database: "{{ $labels.database }}"
+    annotations:
+      summary: "High storage usage in YDB database {{ $labels.database }}"
+      description: |
+        Storage usage is above warning threshold.
+        Consider cleaning up old data or increasing storage capacity.
+        - Database: {{ $labels.database }}
+        - Current usage: {{ printf "%.2f" $value }}%
+        - Threshold: 80%
+        - Duration: more than 5 minutes
+  - alert: YDBStorageUsageCritical
+    expr: |
+      (ydb_resources_storage_used_bytes / ydb_resources_storage_limit_bytes) * 100 > 90
+      and ydb_resources_storage_limit_bytes > 0
+    for: 5m
+    labels:
+      severity: critical
+      component: ydb
+      subsystem: storage
+      database: "{{ $labels.database }}"
+    annotations:
+      summary: "Critical storage usage in YDB database {{ $labels.database }}"
+      description: |
+        Storage usage is critically high. Immediate action required!
+        Database may stop accepting writes soon.
+        - Database: {{ $labels.database }}
+        - Current usage: {{ printf "%.2f" $value }}%
+        - Threshold: 90%
+        - Duration: more than 5 minutes
+

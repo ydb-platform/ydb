@@ -197,6 +197,22 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         }
     }
 
+    Y_UNIT_TEST(GetSameValueMultipleTimes) {
+        NKikimr::NKqp::TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        const TString secretName = "/Root/secret-name";
+        const TString secretValue = "secret-value";
+        CreateSchemaSecret(secretName, secretValue, session);
+
+        auto promise = ResolveSecret({secretName, secretName}, kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(2, promise.GetFuture().GetValueSync().SecretValues.size());
+        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[1]);
+    }
+
     Y_UNIT_TEST(FailWithoutGrants) {
         NKikimr::NKqp::TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);

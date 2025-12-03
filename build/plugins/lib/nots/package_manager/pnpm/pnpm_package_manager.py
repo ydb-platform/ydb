@@ -3,7 +3,6 @@ import os
 import shutil
 
 from .constants import (
-    LOCAL_PNPM_INSTALL_HASH_FILENAME,
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
     VIRTUAL_STORE_DIRNAME,
 )
@@ -22,8 +21,6 @@ from ..base.timeit import timeit
 from ..base.utils import (
     b_rooted,
     build_nm_bundle_path,
-    build_nm_path,
-    build_nm_store_path,
     build_pj_path,
     build_pnpm_store_path,
     s_rooted,
@@ -169,7 +166,14 @@ class PnpmPackageManager(BasePackageManager):
         return sha256.hexdigest()
 
     @timeit
-    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, nm_bundle=False, original_lf_path=None):
+    def create_node_modules(
+        self,
+        yatool_prebuilder_path=None,
+        use_legacy_pnpm_virtual_store=False,
+        local_cli=False,
+        nm_bundle=False,
+        original_lf_path=None,
+    ):
         """
         Creates node_modules directory according to the lockfile.
         """
@@ -179,14 +183,16 @@ class PnpmPackageManager(BasePackageManager):
 
         # Pure `tier 0` logic - isolated stores in the `build_root` (works in `distbuild` and `CI autocheck`)
         store_dir = self._get_pnpm_store()
-        virtual_store_dir = self._nm_path(VIRTUAL_STORE_DIRNAME)
+        virtual_store_dir = self._nm_path(VIRTUAL_STORE_DIRNAME) if use_legacy_pnpm_virtual_store else None
+        global_virtual_store_dir = os.path.join(store_dir, "v10", "links")
 
-        self._run_pnpm_install(store_dir, virtual_store_dir, self.build_path, local_cli)
+        self._run_pnpm_install(store_dir, self.build_path, local_cli, virtual_store_dir)
 
-        self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)
-        self._restore_original_lockfile(virtual_store_dir, original_lf_path)
+        self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir or global_virtual_store_dir)
+        self._restore_original_lockfile(original_lf_path, virtual_store_dir)
 
         if nm_bundle:
+            # TODO: how to bundle node_modules with GVS?
             bundle_node_modules(
                 build_root=self.build_root,
                 node_modules_path=self._nm_path(),
@@ -203,7 +209,6 @@ class PnpmPackageManager(BasePackageManager):
 
     Args:
         store_dir (str): Path to the store directory where packages will be stored.
-        virtual_store_dir (str): Path to the virtual store directory.
         cwd (str): Working directory where the command will be executed.
 
     Note:
@@ -212,7 +217,7 @@ class PnpmPackageManager(BasePackageManager):
     """
 
     @timeit
-    def _run_pnpm_install(self, store_dir: str, virtual_store_dir: str, cwd: str, local_cli: bool):
+    def _run_pnpm_install(self, store_dir: str, cwd: str, local_cli: bool, virtual_store_dir: str | None):
         # Use fcntl to lock a temp file
 
         def execute_install_cmd():
@@ -231,28 +236,19 @@ class PnpmPackageManager(BasePackageManager):
                 "--store-dir",
                 store_dir,
                 "--strict-peer-dependencies",
-                "--virtual-store-dir",
-                virtual_store_dir,
             ]
+
+            if virtual_store_dir:
+                install_cmd.extend(["--virtual-store-dir", virtual_store_dir])
+            else:
+                install_cmd.extend(["--config.enableGlobalVirtualStore=true"])
 
             self._exec_command(install_cmd, cwd=cwd)
 
-        if local_cli:
-            files_to_hash = [build_pre_lockfile_path(self.build_path)]
-            paths_to_exist = [build_nm_path(cwd)]
-            hash_file = os.path.join(
-                build_nm_store_path(self.build_root, self.module_path), LOCAL_PNPM_INSTALL_HASH_FILENAME
-            )
-            mutex_file = os.path.join(
-                build_nm_store_path(self.build_root, self.module_path), LOCAL_PNPM_INSTALL_MUTEX_FILENAME
-            )
-            os.makedirs(os.path.dirname(mutex_file), exist_ok=True)
-            execute_cmd_hashed = hashed_by_files(files_to_hash, paths_to_exist, hash_file)(execute_install_cmd)
-            execute_hashed_cmd_exclusively = sync_mutex_file(mutex_file)(execute_cmd_hashed)
-            execute_hashed_cmd_exclusively()
-
-        else:
-            execute_install_cmd()
+        mutex_file = os.path.join(store_dir, LOCAL_PNPM_INSTALL_MUTEX_FILENAME)
+        os.makedirs(os.path.dirname(mutex_file), exist_ok=True)
+        execute_hashed_cmd_exclusively = sync_mutex_file(mutex_file)(execute_install_cmd)
+        execute_hashed_cmd_exclusively()
 
     """
     Calculate inputs, outputs and resources for dependency preparation phase.
@@ -425,13 +421,15 @@ class PnpmPackageManager(BasePackageManager):
         )
 
     @timeit
-    def _restore_original_lockfile(self, virtual_store_dir: str, original_lf_path: str = None):
+    def _restore_original_lockfile(self, original_lf_path: str, virtual_store_dir: str | None):
         original_lf_path = original_lf_path or build_lockfile_path(self.sources_path)
-        vs_lf_path = os.path.join(virtual_store_dir, "lock.yaml")
         build_lf_path = build_lockfile_path(self.build_path)
         build_bkp_lf_path = build_build_backup_lockfile_path(self.build_path)
 
-        shutil.copyfile(original_lf_path, vs_lf_path)
+        if virtual_store_dir:
+            vs_lf_path = os.path.join(virtual_store_dir, "lock.yaml")
+            shutil.copyfile(original_lf_path, vs_lf_path)
+
         shutil.copyfile(build_lf_path, build_bkp_lf_path)
         shutil.copyfile(original_lf_path, build_lf_path)
 

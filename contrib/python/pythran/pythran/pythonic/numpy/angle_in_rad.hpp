@@ -20,8 +20,7 @@ namespace numpy
   namespace wrapper
   {
     template <class T>
-    auto angle_in_rad(T const &t) -> decltype(std::atan2(std::imag(t),
-                                                         std::real(t)))
+    auto angle_in_rad(T const &t) -> decltype(std::atan2(std::imag(t), std::real(t)))
     {
       return std::atan2(std::imag(t), std::real(t));
     }

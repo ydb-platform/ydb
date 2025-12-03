@@ -1494,7 +1494,7 @@ struct TWinPartition {
 /// \todo use few levels of grouping (got from group by cube, etc)
 class WindowFuncSupp {
 public:
-    struct EvalOverWindow {
+    struct TEvalOverWindow {
         TVector<TAggregationPtr> Aggregations;
         TVector<TNodePtr> Functions;
     };
@@ -1503,6 +1503,7 @@ public:
         auto iter = WindowMap_.find(windowName);
         return iter != WindowMap_.end() ? iter->second : 0;
     }
+
     size_t CreateWindowBySpec(const TString& windowName, const TWindowSpecificationPtr& winSpec) {
         Y_UNUSED(windowName);
         auto curPartitions = winSpec->Partitions;
@@ -1544,6 +1545,7 @@ public:
         }
         return *frame;
     }
+
     void AddAggregationFunc(size_t windowId, TAggregationPtr func) {
         Evals_[windowId-1].Aggregations.push_back(func);
     }
@@ -1555,10 +1557,12 @@ public:
     const TVector<TWinPartition>& GetPartitions() {
         return Partitions_;
     }
-    const EvalOverWindow& GetEvals(size_t frameId) {
+
+    const TEvalOverWindow& GetEvals(size_t frameId) {
         YQL_ENSURE(frameId && frameId <= Evals_.size());
         return Evals_[frameId-1];
     }
+
     TNodePtr BuildFrame(TPosition pos, size_t frameId) {
         Y_UNUSED(frameId);
         /// \todo support not default frame
@@ -1568,7 +1572,7 @@ public:
 private:
     TVector<TWinPartition> Partitions_;
     TMap<TString, size_t> WindowMap_;
-    TVector<EvalOverWindow> Evals_;
+    TVector<TEvalOverWindow> Evals_;
 };
 
 TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label, const TNodePtr& ground) {

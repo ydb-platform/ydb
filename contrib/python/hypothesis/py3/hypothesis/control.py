@@ -12,9 +12,9 @@ import inspect
 import math
 import random
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import contextmanager
-from typing import Any, Callable, NoReturn, Optional, Union
+from typing import Any, NoReturn, Optional
 from weakref import WeakKeyDictionary
 
 from hypothesis import Verbosity, settings
@@ -22,7 +22,7 @@ from hypothesis._settings import note_deprecation
 from hypothesis.errors import InvalidArgument, UnsatisfiedAssumption
 from hypothesis.internal.compat import BaseExceptionGroup
 from hypothesis.internal.conjecture.data import ConjectureData
-from hypothesis.internal.observability import TESTCASE_CALLBACKS
+from hypothesis.internal.observability import observability_enabled
 from hypothesis.internal.reflection import get_pretty_function_description
 from hypothesis.internal.validation import check_type
 from hypothesis.reporting import report, verbose_report
@@ -44,8 +44,8 @@ def reject() -> NoReturn:
         )
     where = _calling_function_location("reject", inspect.currentframe())
     if currently_in_test_context():
-        count = current_build_context().data._observability_predicates[where]
-        count["unsatisfied"] += 1
+        counts = current_build_context().data._observability_predicates[where]
+        counts.update_count(condition=False)
     raise UnsatisfiedAssumption(where)
 
 
@@ -62,11 +62,11 @@ def assume(condition: object) -> bool:
             since="2023-09-25",
             has_codemod=False,
         )
-    if TESTCASE_CALLBACKS or not condition:
+    if observability_enabled() or not condition:
         where = _calling_function_location("assume", inspect.currentframe())
-        if TESTCASE_CALLBACKS and currently_in_test_context():
-            predicates = current_build_context().data._observability_predicates
-            predicates[where]["satisfied" if condition else "unsatisfied"] += 1
+        if observability_enabled() and currently_in_test_context():
+            counts = current_build_context().data._observability_predicates[where]
+            counts.update_count(condition=bool(condition))
         if not condition:
             raise UnsatisfiedAssumption(f"failed to satisfy {where}")
     return True
@@ -77,12 +77,11 @@ _current_build_context = DynamicVariable[Optional["BuildContext"]](None)
 
 def currently_in_test_context() -> bool:
     """Return ``True`` if the calling code is currently running inside an
-    :func:`@given <hypothesis.given>` or :ref:`stateful <stateful>` test,
-    ``False`` otherwise.
+    |@given| or :ref:`stateful <stateful>` test, and ``False`` otherwise.
 
     This is useful for third-party integrations and assertion helpers which
-    may be called from traditional or property-based tests, but can only use
-    :func:`~hypothesis.assume` or :func:`~hypothesis.target` in the latter case.
+    may be called from either traditional or property-based tests, and can only
+    use e.g. |assume| or |target| in the latter case.
     """
     return _current_build_context.value is not None
 
@@ -94,32 +93,38 @@ def current_build_context() -> "BuildContext":
     return context
 
 
-class RandomSeeder:
-    def __init__(self, seed):
-        self.seed = seed
-
-    def __repr__(self):
-        return f"RandomSeeder({self.seed!r})"
-
-
-class _Checker:
-    def __init__(self) -> None:
-        self.saw_global_random = False
-
-    def __call__(self, x):
-        self.saw_global_random |= isinstance(x, RandomSeeder)
-        return x
-
-
 @contextmanager
 def deprecate_random_in_strategy(fmt, *args):
-    _global_rand_state = random.getstate()
-    yield (checker := _Checker())
-    if _global_rand_state != random.getstate() and not checker.saw_global_random:
-        # raise InvalidDefinition
+    from hypothesis.internal import entropy
+
+    state_before = random.getstate()
+    yield
+    state_after = random.getstate()
+    if (
+        # there is a threading race condition here with deterministic_PRNG. Say
+        # we have two threads 1 and 2. We start in global random state A, and
+        # deterministic_PRNG sets to global random state B (which is constant across
+        # threads since we seed to 0 unconditionally). Then we might have state
+        # transitions:
+        #
+        #  [1]        [2]
+        # A -> B                           deterministic_PRNG().__enter__
+        #            B ->B                 deterministic_PRNG().__enter__
+        #            state_before = B      deprecate_random_in_strategy.__enter__
+        # B -> A                           deterministic_PRNG().__exit__
+        #            state_after  = A      deprecate_random_in_strategy.__exit__
+        #
+        # where state_before != state_after because a different thread has reset
+        # the global random state.
+        #
+        # To fix this, we track the known random states set by deterministic_PRNG,
+        # and will not note a deprecation if it matches one of those.
+        state_after != state_before
+        and hash(state_after) not in entropy._known_random_state_hashes
+    ):
         note_deprecation(
             "Do not use the `random` module inside strategies; instead "
-            "consider  `st.randoms()`, `st.sampled_from()`, etc.  " + fmt.format(*args),
+            "consider `st.randoms()`, `st.sampled_from()`, etc.  " + fmt.format(*args),
             since="2024-02-05",
             has_codemod=False,
             stacklevel=1,
@@ -132,10 +137,12 @@ class BuildContext:
         data: ConjectureData,
         *,
         is_final: bool = False,
+        wrapped_test: Callable,
     ) -> None:
         self.data = data
         self.tasks: list[Callable[[], Any]] = []
         self.is_final = is_final
+        self.wrapped_test = wrapped_test
 
         # Use defaultdict(list) here to handle the possibility of having multiple
         # functions registered for the same object (due to caching, small ints, etc).
@@ -148,6 +155,7 @@ class BuildContext:
         self,
         obj: object,
         func: object,
+        *,
         args: Sequence[object],
         kwargs: dict[str, object],
     ) -> None:
@@ -164,8 +172,8 @@ class BuildContext:
         kwargs = {}
         for k, s in kwarg_strategies.items():
             start_idx = len(self.data.nodes)
-            with deprecate_random_in_strategy("from {}={!r}", k, s) as check:
-                obj = check(self.data.draw(s, observe_as=f"generate:{k}"))
+            with deprecate_random_in_strategy("from {}={!r}", k, s):
+                obj = self.data.draw(s, observe_as=f"generate:{k}")
             end_idx = len(self.data.nodes)
             kwargs[k] = obj
 
@@ -230,7 +238,7 @@ def note(value: object) -> None:
         report(value)
 
 
-def event(value: str, payload: Union[str, int, float] = "") -> None:
+def event(value: str, payload: str | int | float = "") -> None:
     """Record an event that occurred during this test. Statistics on the number of test
     runs with each event will be reported at the end if you run Hypothesis in
     statistics reporting mode.
@@ -264,7 +272,7 @@ def _event_to_string(event, allowed_types=str):
     return result
 
 
-def target(observation: Union[int, float], *, label: str = "") -> Union[int, float]:
+def target(observation: int | float, *, label: str = "") -> int | float:
     """Calling this function with an ``int`` or ``float`` observation gives it feedback
     with which to guide our search for inputs that will cause an error, in
     addition to all the usual heuristics.  Observations must always be finite.
@@ -287,7 +295,7 @@ def target(observation: Union[int, float], *, label: str = "") -> Union[int, flo
     ``target()`` with any label more than once per test case.
 
     .. note::
-        **The more examples you run, the better this technique works.**
+        The more examples you run, the better this technique works.
 
         As a rule of thumb, the targeting effect is noticeable above
         :obj:`max_examples=1000 <hypothesis.settings.max_examples>`,

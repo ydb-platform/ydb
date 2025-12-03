@@ -6658,9 +6658,9 @@ namespace {
             }
 
             const auto optionName = option->Head().Content();
-            static const THashSet<TStringBuf> supportedOptions =
+            static const THashSet<TStringBuf> SupportedOptions =
                 {"ansi"};
-            if (!supportedOptions.contains(optionName)) {
+            if (!SupportedOptions.contains(optionName)) {
                 ctx.Expr.AddError(
                     TIssue(ctx.Expr.GetPosition(option->Pos()),
                         TStringBuilder() << "Unknown " << input->Content() << "option '" << optionName));
@@ -6718,9 +6718,9 @@ namespace {
             }
 
             const auto optionName = option->Head().Content();
-            static const THashSet<TStringBuf> supportedOptions =
+            static const THashSet<TStringBuf> SupportedOptions =
                 {"ansi", "warnNoAnsi"};
-            if (!supportedOptions.contains(optionName)) {
+            if (!SupportedOptions.contains(optionName)) {
                 ctx.Expr.AddError(
                     TIssue(ctx.Expr.GetPosition(option->Pos()),
                         TStringBuilder() << "Unknown " << input->Content() << "option '" << optionName));

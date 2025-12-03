@@ -32,7 +32,8 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "YtflowReadWrap"},
             "Children": [
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
             ]
         },
         {
@@ -40,7 +41,8 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "YtflowWriteWrap"},
             "Children": [
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
             ]
         },
         {
@@ -99,12 +101,22 @@
             ]
         },
         {
-            "Name": "TYtflowMap",
+            "Name": "TYtflowMapBase",
             "Base": "TYtflowOpBase",
-            "Match": {"Type": "Callable", "Name": "YtflowMap!"},
+            "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 4, "Name": "Lambda", "Type": "TCoLambda"}
             ]
+        },
+        {
+            "Name": "TYtflowMap",
+            "Base": "TYtflowMapBase",
+            "Match": {"Type": "Callable", "Name": "YtflowMap!"}
+        },
+        {
+            "Name": "TYtflowSourceMap",
+            "Base": "TYtflowMapBase",
+            "Match": {"Type": "Callable", "Name": "YtflowSourceMap!"}
         },
         {
             "Name": "TYtflowOutput",

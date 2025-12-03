@@ -62,5 +62,39 @@ TEST(TRangeHelpersTest, Fold)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TRangeHelpersTest, StaticRangeToVector)
+{
+    EXPECT_EQ(StaticRangeTo<std::vector<int>>(1), std::vector<int>{1});
+    auto expected = std::vector<int>{1, 2, 10};
+    auto result = StaticRangeTo<std::vector<int>>(1, 2, 10);
+    EXPECT_EQ(result, expected);
+}
+
+TEST(TRangeHelpersTest, StaticRangeToVectorMoveOnly)
+{
+    auto result = StaticRangeTo<std::vector<std::unique_ptr<int>>>(std::make_unique<int>(1), std::make_unique<int>(2));
+    ASSERT_EQ(std::ssize(result), 2);
+    EXPECT_EQ(*result[0], 1);
+    EXPECT_EQ(*result[1], 2);
+}
+
+TEST(TRangeHelpersTest, TStaticRangeToVector)
+{
+    EXPECT_EQ(static_cast<std::vector<int>>(TStaticRange{1}), std::vector<int>{1});
+    auto expected = std::vector<int>{1, 2, 10};
+    std::vector<int> result = TStaticRange{1, 2, 10};
+    EXPECT_EQ(result, expected);
+}
+
+TEST(TRangeHelpersTest, TStaticRangeToVectorMoveOnly)
+{
+    std::vector<std::unique_ptr<int>> result = TStaticRange(std::make_unique<int>(1), std::make_unique<int>(2));
+    ASSERT_EQ(std::ssize(result), 2);
+    EXPECT_EQ(*result[0], 1);
+    EXPECT_EQ(*result[1], 2);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT

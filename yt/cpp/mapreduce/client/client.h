@@ -308,6 +308,15 @@ private:
     ::TIntrusivePtr<ITableFragmentWriter<TNode>> CreateNodeFragmentWriter(
         const TDistributedWriteTableCookie& cookie,
         const TTableFragmentWriterOptions& options) override;
+
+    ::TIntrusivePtr<ITableFragmentWriter<TYaMRRow>> CreateYaMRFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options) override;
+
+    ::TIntrusivePtr<ITableFragmentWriter<Message>> CreateProtoFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options,
+        const Message* prototype) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

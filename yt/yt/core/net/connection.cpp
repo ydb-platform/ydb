@@ -1960,7 +1960,7 @@ IPacketConnectionPtr CreatePacketConnection(
     const TNetworkAddress& at,
     NConcurrency::IPollerPtr poller)
 {
-    TFileDescriptorGuard fd = CreateUdpSocket();
+    TFileDescriptorGuard fd = CreateUdpSocket(at.GetSockAddr()->sa_family);
     try {
         SetReuseAddrFlag(fd.Get());
         BindSocket(fd.Get(), at);

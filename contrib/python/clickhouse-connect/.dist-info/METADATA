@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: clickhouse-connect
-Version: 0.9.2
+Version: 0.10.0
 Summary: ClickHouse Database Core Driver for Python, Pandas, and Superset
 Home-page: https://github.com/ClickHouse/clickhouse-connect
 Author: ClickHouse Inc.
@@ -15,14 +15,17 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
-Requires-Python: >=3.9,<3.14
+Classifier: Programming Language :: Python :: 3.14
+Requires-Python: >=3.9,<3.15
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: certifi
 Requires-Dist: urllib3>=1.26
 Requires-Dist: pytz
-Requires-Dist: zstandard
-Requires-Dist: lz4
+Requires-Dist: zstandard; python_version < "3.14"
+Requires-Dist: zstandard>=0.25.0; python_version >= "3.14"
+Requires-Dist: lz4; python_version < "3.14"
+Requires-Dist: lz4>=4.4.5; python_version >= "3.14"
 Provides-Extra: sqlalchemy
 Requires-Dist: sqlalchemy<3.0,>=1.4.40; extra == "sqlalchemy"
 Provides-Extra: numpy
@@ -32,7 +35,8 @@ Requires-Dist: pandas; extra == "pandas"
 Provides-Extra: polars
 Requires-Dist: polars>=1.0; extra == "polars"
 Provides-Extra: arrow
-Requires-Dist: pyarrow; extra == "arrow"
+Requires-Dist: pyarrow>=22.0; python_version >= "3.14" and extra == "arrow"
+Requires-Dist: pyarrow; python_version < "3.14" and extra == "arrow"
 Provides-Extra: orjson
 Requires-Dist: orjson; extra == "orjson"
 Provides-Extra: tzlocal
@@ -89,7 +93,7 @@ and **SQLAlchemy Core**.
 
 Supported features include:
 - Basic query execution via SQLAlchemy Core
-- `SELECT` queries with `JOIN`s
+- `SELECT` queries with `JOIN`s, `ARRAY JOIN`, and `FINAL` modifier
 - Lightweight `DELETE` statements
 
 The implementation does not include ORM support and is not intended as a full SQLAlchemy dialect. While it can support

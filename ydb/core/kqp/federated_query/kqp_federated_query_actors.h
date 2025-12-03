@@ -13,6 +13,8 @@
 
 #include <library/cpp/threading/future/future.h>
 
+#include <util/generic/hash_multi_map.h>
+
 namespace NKikimr::NKqp {
 
 class TDescribeSchemaSecretsService: public NActors::TActorBootstrapped<TDescribeSchemaSecretsService> {
@@ -55,7 +57,7 @@ private:
 
     struct TResponseContext {
         using TIncomingOrderId = ui64;
-        THashMap<TString, TIncomingOrderId> Secrets;
+        THashMultiMap<TString, TIncomingOrderId> Secrets;
         NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Result;
         size_t FilledSecretsCnt = 0;
     };

@@ -30,8 +30,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("UnsafeConsumer");
-        return name;
+        static auto Name = TStringRef::Of("UnsafeConsumer");
+        return Name;
     }
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {

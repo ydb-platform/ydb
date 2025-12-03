@@ -44,7 +44,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<NTopic::EMetricsLevel> GetMetricsLevel() const;
 
     private:
-        NTopic::EMetricsLevel MetricsLevel_;
+        TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
     };
 
     class TCommandWithAutoPartitioning {
@@ -109,10 +109,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui64> RetentionStorageMb_;
         TMaybe<ui32> MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
-
-
         TMaybe<ui32> PartitionWriteSpeedKbps_;
-        TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
 
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };

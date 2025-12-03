@@ -50,9 +50,11 @@ private:
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
     void Handle(TEvKeyValue::TEvResponse::TPtr&);
 
-    void HandleOnInit(TEvPQ::TEvProxyResponse::TPtr&);
     void Handle(TEvPQ::TEvProxyResponse::TPtr&);
     void Handle(TEvPQ::TEvError::TPtr&);
+
+    void HandleOnInit(TEvPersQueue::TEvResponse::TPtr&);
+    void Handle(TEvPersQueue::TEvResponse::TPtr&);
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
 
@@ -75,7 +77,7 @@ private:
 
     void CommitIfNeeded();
     void UpdateStorageConfig();
-    
+
     size_t RequiredToFetchMessageCount() const;
     void SendToPQTablet(std::unique_ptr<IEventBase> ev);
 

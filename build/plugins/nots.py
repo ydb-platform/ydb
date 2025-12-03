@@ -55,6 +55,7 @@ class TsTestType(StrEnum):
     PLAYWRIGHT_LARGE = auto()
     TSC_TYPECHECK = auto()
     TS_STYLELINT = auto()
+    TS_BIOME = auto()
 
 
 class UnitType:
@@ -227,6 +228,11 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.Size.from_unit,
         df.TsStylelintConfig.value,
         df.TestFiles.stylesheets,
+        df.NodeModulesBundleFilename.value,
+    ),
+    TsTestType.TS_BIOME: (
+        df.TsBiomeConfig.value,
+        df.TestFiles.ts_biome_srcs,
         df.NodeModulesBundleFilename.value,
     ),
 }
@@ -509,6 +515,7 @@ def on_ts_configure(unit: NotsUnitType) -> None:
     _setup_eslint(unit)
     _setup_tsc_typecheck(unit)
     _setup_stylelint(unit)
+    _setup_biome(unit)
 
 
 def _should_setup_build_env(unit: NotsUnitType) -> bool:
@@ -734,6 +741,52 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
     test_type = TsTestType.TS_STYLELINT
 
     peers = pm.get_local_peers_from_package_json()
+
+    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
+    if deps:
+        unit.ondepends(deps)
+
+    flat_args = (test_type,)
+    spec_args = dict(nm_bundle=constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME)
+
+    dart_record = create_dart_record(
+        TS_TEST_FIELDS_BASE + TS_TEST_SPECIFIC_FIELDS[test_type], unit, flat_args, spec_args
+    )
+
+    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
+    dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
+
+    data = ytest.dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+    unit.set(["TEST_RECIPES_VALUE", recipes_value])
+
+
+@_with_report_configure_error
+def _setup_biome(unit: NotsUnitType) -> None:
+    if not _is_tests_enabled(unit):
+        return
+
+    if unit.get("_TS_BIOME_VALUE") == "no":
+        return
+
+    test_files = df.TestFiles.ts_biome_srcs(unit, (), {})
+    if not test_files:
+        return
+
+    unit.on_peerdir_ts_resource("@biomejs/biome")
+
+    from lib.nots.package_manager import constants
+
+    recipes_value = unit.get("TEST_RECIPES_VALUE")
+    pm = _create_pm(unit)
+    unit.on_setup_install_node_modules_recipe(pm.module_path)
+    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
+
+    test_type = TsTestType.TS_BIOME
+
+    peers = _create_pm(unit).get_local_peers_from_package_json()
 
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
     if deps:

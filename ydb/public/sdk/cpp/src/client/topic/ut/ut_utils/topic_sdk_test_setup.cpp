@@ -213,6 +213,8 @@ NKikimr::Tests::TServerSettings TTopicSdkTestSetup::MakeServerSettings()
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, NActors::NLog::PRI_DEBUG);
     });
 
+    settings.FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
+
     return settings;
 }
 

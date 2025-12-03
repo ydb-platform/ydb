@@ -3,8 +3,6 @@
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/statistics/service/service.h>
 
-#include <util/string/vector.h>
-
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {

@@ -272,6 +272,7 @@ SRCS(
     schemeshard_impl.cpp
     schemeshard_impl.h
     schemeshard_import.cpp
+    schemeshard_import_helpers.cpp
     schemeshard_import__cancel.cpp
     schemeshard_import__create.cpp
     schemeshard_import__forget.cpp

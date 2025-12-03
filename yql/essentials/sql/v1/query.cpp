@@ -2032,7 +2032,7 @@ public:
         if (NAME##Val.IsSet()) {                                                              \
             settings = L(settings, Q(Y(Q(Y_STRINGIZE(set##NAME)), NAME##Val.GetValueSet()))); \
         } else {                                                                              \
-            settings = L(settings, Q(Y(Q(Y_STRINGIZE(reset##NAME)), Y())));                   \
+            settings = L(settings, Q(Y(Q(Y_STRINGIZE(reset##NAME)), Q(Y()))));                \
         }                                                                                     \
     }
 
@@ -3003,6 +3003,7 @@ TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TStr
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR{
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "append"},
+    {EWriteColumnMode::Upsert, "upsert"},
     {EWriteColumnMode::Renew, "renew"}};
 
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapStat{

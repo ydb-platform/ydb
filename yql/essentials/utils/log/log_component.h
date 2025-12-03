@@ -42,7 +42,10 @@ enum class EComponent {
     MaxValue
 };
 
-struct EComponentHelpers {
+class TComponentHelpers {
+public:
+    TComponentHelpers() = delete;
+
     static constexpr int ToInt(EComponent component) {
         return static_cast<int>(component);
     }
@@ -213,14 +216,17 @@ struct EComponentHelpers {
 
     template <typename TFunctor>
     static void ForEach(TFunctor&& f) {
-        static const int minValue = ToInt(EComponent::Default);
-        static const int maxValue = ToInt(EComponent::MaxValue);
+        static const int MinValue = ToInt(EComponent::Default);
+        static const int MaxValue = ToInt(EComponent::MaxValue);
 
-        for (int c = minValue; c < maxValue; c++) {
+        for (int c = MinValue; c < MaxValue; c++) {
             f(FromInt(c));
         }
     }
 };
+
+// TODO(YQL-20086): Migrate YDB to TComponentHelpers
+using EComponentHelpers = TComponentHelpers;
 
 } // namespace NLog
 } // namespace NYql

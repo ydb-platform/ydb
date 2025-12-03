@@ -19,7 +19,7 @@
 #pragma once
 
 #include <cstdint>
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 namespace parquet20 {
 // Abstract class for hash

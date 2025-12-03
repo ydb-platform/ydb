@@ -8,20 +8,17 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class T, class pS>
-  types::list<
-      types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>>
+  types::list<types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>>
   split(types::ndarray<T, pS> const &a, long nb_split);
 
   template <class T, class pS, class I>
-  typename std::enable_if<
+  std::enable_if_t<
       types::is_iterable<I>::value,
-      types::list<types::ndarray<
-          T, types::array_tuple<long, std::tuple_size<pS>::value>>>>::type
+      types::list<types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>>>
   split(types::ndarray<T, pS> const &a, I const &split_mask);
 
   template <class E, class I>
-  types::list<
-      types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>>
+  types::list<types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>>
   split(E const &a, I const &);
 
   DEFINE_FUNCTOR(pythonic::numpy, split);

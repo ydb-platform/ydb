@@ -564,8 +564,10 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             dqInputChannel->Finish();
         }
         TUnboxedValueBatch batch;
+        TMaybe<TInstant> watermark;
         const auto columns = IsWide ? static_cast<TMultiType*>(dqInputChannel->GetInputType())->GetElementsCount() : static_cast<TStructType*>(dqInputChannel->GetInputType())->GetMembersCount();
-        while (dqInputChannel->Pop(batch)) {
+        while (dqInputChannel->Pop(batch, watermark)) {
+            UNIT_ASSERT(watermark.Empty());
             if (IsWide) {
                 if (!batch.ForEachRowWide([this, cb, columns](const NUdf::TUnboxedValue row[], ui32 width) {
                     LOG_D("WideRow:");
@@ -749,7 +751,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             if (watermarkPeriod && packet % watermarkPeriod == 0) {
-                LOG_D("push watermark" << packet);
+                LOG_D("push watermark " << packet);
                 NDqProto::TWatermark watermark;
                 watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
                 dqOutputChannel->Push(std::move(watermark));

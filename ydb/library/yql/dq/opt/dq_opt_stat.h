@@ -147,4 +147,14 @@ bool NeedCalc(NNodes::TExprBase node);
 bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs = true);
 bool IsConstantExprWithParams(const TExprNode::TPtr& input);
 
+TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, TCardinalityHints& hints);
+TCardinalityHints::TCardinalityHint* FindBytesHint(TVector<TString>& labels, TCardinalityHints& hints);
+std::shared_ptr<TOptimizerStatistics> ApplyBytesHints(std::shared_ptr<TOptimizerStatistics>& inputStats,
+    TVector<TString>& labels,
+    TCardinalityHints hints);
+std::shared_ptr<TOptimizerStatistics> ApplyRowsHints(
+    std::shared_ptr<TOptimizerStatistics>& inputStats,
+    TVector<TString>& labels,
+    TCardinalityHints hints);
+
 } // namespace NYql::NDq {

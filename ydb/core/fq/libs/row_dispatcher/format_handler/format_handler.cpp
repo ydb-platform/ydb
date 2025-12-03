@@ -40,7 +40,7 @@ private:
 
     private:
         void Register() {
-            ActiveFormatHandlers = Desc.CountersRoot->GetCounter("ActiveFormatHandlers", false);
+            ActiveFormatHandlers = Desc.ReadGroupSubgroup->GetCounter("ActiveFormatHandlers", false);
 
             ActiveClients = Desc.CountersSubgroup->GetCounter("ActiveClients", false);
         }

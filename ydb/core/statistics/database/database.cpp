@@ -151,11 +151,8 @@ public:
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         Y_UNUSED(issues);
-        auto response = std::make_unique<TEvStatistics::TEvSaveStatisticsQueryResponse>();
-        response->Status = status;
-        response->Issues = std::move(issues);
-        response->Success = (status == Ydb::StatusIds::SUCCESS);
-        response->PathId = PathId;
+        auto response = std::make_unique<TEvStatistics::TEvSaveStatisticsQueryResponse>(
+            status, std::move(issues), PathId);
         Send(Owner, response.release());
     }
 };

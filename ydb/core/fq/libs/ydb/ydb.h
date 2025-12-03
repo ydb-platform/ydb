@@ -2,6 +2,7 @@
 
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
@@ -177,7 +178,8 @@ NThreading::TFuture<NYdb::TStatus> CreateTable(
 NThreading::TFuture<NYdb::TStatus> CreateTable(
     const IYdbConnection::TPtr& ydbConnection,
     const TString& name,
-    NYdb::NTable::TTableDescription&& description);
+    NYdb::NTable::TTableDescription&& description,
+    const NACLib::TDiffACL& acl);
 
 bool IsTableCreated(const NYdb::TStatus& status);
 bool IsTableDeleted(const NYdb::TStatus& status);

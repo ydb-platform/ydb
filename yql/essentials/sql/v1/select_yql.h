@@ -65,6 +65,14 @@ TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
 
 TNodePtr BuildYqlSelect(TPosition position, TYqlSelectArgs&& args);
 
+TNodePtr WrapYqlSelectSubExpr(TNodePtr node);
+
+TNodePtr BuildYqlScalarSubquery(TNodePtr node);
+
+TNodePtr BuildYqlExistsSubquery(TNodePtr node);
+
+TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression);
+
 TNodePtr BuildYqlStatement(TNodePtr node);
 
 } // namespace NSQLTranslationV1

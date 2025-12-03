@@ -122,6 +122,15 @@ public:
         return maybeWriteTable.Cast().World().Ptr();
     }
 
+    TExprNode::TPtr UpdateWriteWorld(const TExprNode::TPtr& write, const TExprNode::TPtr& world, TExprContext& ctx) override {
+        auto maybeWriteTable = TMaybeNode<TYtWriteTable>(write);
+        YQL_ENSURE(maybeWriteTable);
+        return Build<TYtWriteTable>(ctx, write->Pos())
+            .InitFrom(maybeWriteTable.Cast())
+            .World(world)
+            .Done().Ptr();
+    }
+
     TExprNode::TPtr GetWriteContent(const TExprNode& write, TExprContext& /*ctx*/) override {
         auto maybeWriteTable = TMaybeNode<TYtWriteTable>(&write);
         YQL_ENSURE(maybeWriteTable);

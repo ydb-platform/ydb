@@ -12,16 +12,13 @@ namespace operator_
   auto itruediv(A const &a, B &&b) -> decltype(truediv(a, std::forward<B>(b)));
 
   template <class A, class B>
-  auto itruediv(A &a, B &&b) ->
-      typename std::enable_if<
-          std::is_same<A, decltype(truediv(a, std::forward<B>(b)))>::value,
-          A &>::type;
+  auto itruediv(A &a, B &&b)
+      -> std::enable_if_t<std::is_same<A, decltype(truediv(a, std::forward<B>(b)))>::value, A &>;
 
   template <class A, class B>
-  auto itruediv(A &a, B &&b) ->
-      typename std::enable_if<
-          !std::is_same<A, decltype(truediv(a, std::forward<B>(b)))>::value,
-          decltype(truediv(a, std::forward<B>(b)))>::type;
+  auto itruediv(A &a, B &&b)
+      -> std::enable_if_t<!std::is_same<A, decltype(truediv(a, std::forward<B>(b)))>::value,
+                          decltype(truediv(a, std::forward<B>(b)))>;
 
   DEFINE_FUNCTOR(pythonic::operator_, itruediv);
 } // namespace operator_

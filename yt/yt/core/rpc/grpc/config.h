@@ -19,12 +19,30 @@ struct TDispatcherConfig
     int GrpcThreadCount;
     int GrpcEventEngineThreadCount;
 
+    NLogging::ELogLevel GrpcInternalMinLogLevel;
+
+    TDispatcherConfigPtr ApplyDynamic(const TDispatcherDynamicConfigPtr& dynamicConfig) const;
+
     REGISTER_YSON_STRUCT(TDispatcherConfig);
 
     static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TDispatcherConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TDispatcherDynamicConfig
+    : public NYTree::TYsonStruct
+{
+    std::optional<NLogging::ELogLevel> GrpcInternalMinLogLevel;
+
+    REGISTER_YSON_STRUCT(TDispatcherDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TDispatcherDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

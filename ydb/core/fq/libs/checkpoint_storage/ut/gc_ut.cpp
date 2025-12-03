@@ -121,11 +121,11 @@ class TGcTestBase: public NUnitTest::TTestBase {
 
     void Init() {
         CheckpointStorage = NewYdbCheckpointStorage(Config.GetStorage(), CreateEntityIdGenerator("id"), Connection);
-        auto issues = Call<NThreading::TFuture<NYql::TIssues>>([&](){ return CheckpointStorage->Init(); }).GetValueSync();
+        auto issues = Call<NThreading::TFuture<NYql::TIssues>>([&](){ return CheckpointStorage->Init({}); }).GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 
         StateStorage = NewYdbStateStorage(Config, Connection);
-        issues = Call<NThreading::TFuture<NYql::TIssues>>([&](){ return StateStorage->Init();}).GetValueSync();
+        issues = Call<NThreading::TFuture<NYql::TIssues>>([&](){ return StateStorage->Init({});}).GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 
         Fill();

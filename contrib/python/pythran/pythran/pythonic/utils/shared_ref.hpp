@@ -39,8 +39,7 @@ namespace utils
   template <class T>
   template <class... Types>
   shared_ref<T>::shared_ref(Types &&...args)
-      : mem(new(utils::allocate<memory>(1))
-                memory(std::forward<Types>(args)...))
+      : mem(new(utils::allocate<memory>(1)) memory(std::forward<Types>(args)...))
   {
   }
 

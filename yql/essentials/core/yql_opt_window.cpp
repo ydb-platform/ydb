@@ -2396,7 +2396,7 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
     auto rowArg = ctx.NewArgument(pos, "row");
     auto addMembersBody = rowArg;
 
-    static const TStringBuf keyColumnNamePrefix = "_yql_CalcOverWindowJoinKey";
+    static const TStringBuf KeyColumnNamePrefix = "_yql_CalcOverWindowJoinKey";
 
     const TStructExprType* rowTypeWithSession = ctx.MakeType<TStructExprType>(rowItems);
     for (auto& keyColumn : originalKeysWithSession) {
@@ -2405,7 +2405,7 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
         const TTypeAnnotationNode* columnType =
             rowTypeWithSession->GetItems()[*rowTypeWithSession->FindItem(columnName)]->GetItemType();
         if (columnType->HasOptionalOrNull()) {
-            addedColumns.push_back(ctx.NewAtom(pos, TStringBuilder() << keyColumnNamePrefix << addedColumns.size()));
+            addedColumns.push_back(ctx.NewAtom(pos, TStringBuilder() << KeyColumnNamePrefix << addedColumns.size()));
             keyColumns.push_back(addedColumns.back());
 
             TStringBuf newName = addedColumns.back()->Content();
@@ -2457,7 +2457,7 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
         addedColumns.push_back(ctx.NewAtom(pos, SessionParamsMemberName));
 
         if (sessionKeyType->HasOptionalOrNull()) {
-            addedColumns.push_back(ctx.NewAtom(pos, TStringBuilder() << keyColumnNamePrefix << addedColumns.size()));
+            addedColumns.push_back(ctx.NewAtom(pos, TStringBuilder() << KeyColumnNamePrefix << addedColumns.size()));
             preprocessLambda = ctx.Builder(pos)
                 .Lambda()
                     .Param("stream")

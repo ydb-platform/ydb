@@ -405,7 +405,6 @@ private:
 
     void BuildModifyACL(NKikimrSchemeOp::TModifyScheme& modifyScheme) const {
         Y_ABORT_UNLESS(TableAclDiff);
-
         auto& acl = *modifyScheme.MutableModifyACL();
         acl.SetName(TableName());
         acl.SetDiffACL(TableAclDiff->SerializeAsString());

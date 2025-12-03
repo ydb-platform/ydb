@@ -72,4 +72,6 @@ void EnsureSpecDoesntUseNativeYtTypes(const NYT::TNode& spec, TStringBuf tableNa
 
 TIssue MakeIssueFromYtError(const NYT::TYtError& e, TStringBuf what, TPosition pos = {}, bool shortErrors = false);
 
+TString GenerateInputQuery(const TExprNode::TPtr& qlFilterNode);
+
 } // NYql

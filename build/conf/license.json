@@ -333,6 +333,7 @@
             "X11",
             "X11-Lucent",
             "X11-XConsortium-Veillard",
+            "XPP",
             "Zlib",
             "ZPL-2.1"
         ]

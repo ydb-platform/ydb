@@ -14,6 +14,8 @@ private:
     const TStringBuf DataBuffer;
     const bool ForLazyInitialization;
     mutable TAtomicCounter Counter = 0;
+    ui64 PortionId = 0;
+    TString InternalPathId;
 
 protected:
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
@@ -65,6 +67,17 @@ public:
         , Loader(loader)
         , Data(data)
         , ForLazyInitialization(forLazyInitialization) {
+        AFL_VERIFY(Loader);
+    }
+
+    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TString& data,
+        ui64 portionId, const TString& internalPathId, const bool forLazyInitialization = false)
+        : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
+        , Loader(loader)
+        , Data(data)
+        , ForLazyInitialization(forLazyInitialization)
+        , PortionId(portionId)
+        , InternalPathId(internalPathId) {
         AFL_VERIFY(Loader);
     }
 

@@ -14,15 +14,11 @@ namespace numpy
     template <class T>
     bool isnan(std::complex<T> const &v);
     template <class T>
-    auto isnan(T const &v) ->
-        typename std::enable_if<
-            std::is_floating_point<typename std::decay<T>::type>::value,
-            bool>::type;
+    auto isnan(T const &v)
+        -> std::enable_if_t<std::is_floating_point<std::decay_t<T>>::value, bool>;
     template <class T>
-    auto isnan(T const &v) ->
-        typename std::enable_if<
-            !std::is_floating_point<typename std::decay<T>::type>::value,
-            bool>::type;
+    auto isnan(T const &v)
+        -> std::enable_if_t<!std::is_floating_point<std::decay_t<T>>::value, bool>;
   } // namespace wrapper
 
 #define NUMPY_NARY_FUNC_NAME isnan

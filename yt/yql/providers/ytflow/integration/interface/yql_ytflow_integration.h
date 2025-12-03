@@ -30,6 +30,7 @@ public:
 
     virtual TExprNode::TPtr GetReadWorld(const TExprNode& read, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr GetWriteWorld(const TExprNode& write, TExprContext& ctx) = 0;
+    virtual TExprNode::TPtr UpdateWriteWorld(const TExprNode::TPtr& write, const TExprNode::TPtr& world, TExprContext& ctx) = 0;
 
     virtual TExprNode::TPtr GetWriteContent(const TExprNode& write, TExprContext& ctx) = 0;
 

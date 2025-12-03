@@ -1309,7 +1309,7 @@ void SendSignal(const std::vector<int>& pids, const TString& signalName)
 #endif
 }
 
-std::optional<int> FindSignalIdBySignalName(const TString& signalName)
+std::optional<int> FindSignalIdBySignalName(std::string_view signalName)
 {
     static const THashMap<TString, int> SignalNameToNumber{
         { "SIGTERM", SIGTERM },

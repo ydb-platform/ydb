@@ -61,8 +61,9 @@ Y_UNIT_TEST_SUITE(TComputeActorAsyncInputHelperTest) {
         i64 GetFreeSpace() const override{
             return 10;
         }
-        void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, bool finished) override{
+        void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TMaybe<TInstant> watermark, i64 space, bool finished) override{
             batch.clear();
+            Y_UNUSED(watermark);
             Y_UNUSED(space);
             Y_UNUSED(finished);
             return;
@@ -76,7 +77,7 @@ Y_UNIT_TEST_SUITE(TComputeActorAsyncInputHelperTest) {
         helper.AsyncInput = &input;
         TDqComputeActorMetrics metrics{NMonitoring::TDynamicCounterPtr{}};
         TDqComputeActorWatermarks watermarks("");
-        auto result = helper.PollAsyncInput(metrics, watermarks, 20);
+        auto result = helper.PollAsyncInput(metrics, &watermarks, 20);
         UNIT_ASSERT(result && EResumeSource::CAPollAsync == *result);
     }
 }

@@ -19,6 +19,8 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
+#include <yt/yt/core/rpc/dispatcher.h>
+
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
@@ -987,6 +989,7 @@ public:
     explicit TImpl(TAddressResolverConfigPtr config)
         : TAsyncExpiringCache(
             config,
+            NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker(),
             /*logger*/ {},
             DnsProfiler().WithPrefix("/resolve_cache"))
     {

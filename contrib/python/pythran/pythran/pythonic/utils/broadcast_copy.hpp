@@ -43,21 +43,18 @@ namespace utils
 
   template <>
   struct _broadcast_copy<fast_novectorize, 0, 0> {
-    template <class E, class F, class SelfIndices, class OtherIndices,
-              size_t... Is>
-    void helper(E &&self, F const &other, SelfIndices &&self_indices,
-                OtherIndices &&other_indices, utils::index_sequence<Is...>)
+    template <class E, class F, class SelfIndices, class OtherIndices, size_t... Is>
+    void helper(E &&self, F const &other, SelfIndices &&self_indices, OtherIndices &&other_indices,
+                std::index_sequence<Is...>)
     {
       std::forward<E>(self).store(
-          (typename std::decay<E>::type::dtype)other.load(
-              (long)std::get<Is>(other_indices)...),
+          (typename std::decay_t<E>::dtype)other.load((long)std::get<Is>(other_indices)...),
           (long)std::get<Is>(self_indices)...);
     }
     template <class E, class F>
     void operator()(E &&self, F const &other)
     {
-      return (*this)(std::forward<E>(self), other, std::tuple<>(),
-                     std::tuple<>());
+      return (*this)(std::forward<E>(self), other, std::tuple<>(), std::tuple<>());
     }
 
     template <class E, class F, class SelfIndices, class OtherIndices>
@@ -65,8 +62,7 @@ namespace utils
                     OtherIndices &&other_indices)
     {
       helper(std::forward<E>(self), other, self_indices, other_indices,
-             utils::make_index_sequence<std::tuple_size<
-                 typename std::decay<SelfIndices>::type>::value>());
+             std::make_index_sequence<std::tuple_size<std::decay_t<SelfIndices>>::value>());
     }
   };
   template <size_t N>
@@ -74,28 +70,23 @@ namespace utils
     template <class E, class F>
     void operator()(E &&self, F const &other)
     {
-      return (*this)(std::forward<E>(self), other, std::tuple<>(),
-                     std::tuple<>());
+      return (*this)(std::forward<E>(self), other, std::tuple<>(), std::tuple<>());
     }
     template <class E, class F, class SelfIndices, class OtherIndices>
     void operator()(E &&self, F const &other, SelfIndices &&self_indices,
                     OtherIndices &&other_indices)
     {
-      long const other_size =
-          other.template shape<std::decay<E>::type::value - N>();
-      long const self_size =
-          self.template shape<std::decay<E>::type::value - N>();
+      long const other_size = other.template shape<std::decay<E>::type::value - N>();
+      long const self_size = self.template shape<std::decay<E>::type::value - N>();
       if (self_size == other_size)
         for (long i = 0; i < self_size; ++i)
           _broadcast_copy<fast_novectorize, N - 1, 0>{}(
-              std::forward<E>(self), other,
-              std::tuple_cat(self_indices, std::make_tuple(i)),
+              std::forward<E>(self), other, std::tuple_cat(self_indices, std::make_tuple(i)),
               std::tuple_cat(other_indices, std::make_tuple(i)));
       else
         for (long i = 0; i < self_size; ++i)
           _broadcast_copy<fast_novectorize, N - 1, 0>{}(
-              std::forward<E>(self), other,
-              std::tuple_cat(self_indices, std::make_tuple(i)),
+              std::forward<E>(self), other, std::tuple_cat(self_indices, std::make_tuple(i)),
               std::tuple_cat(other_indices, std::make_tuple(0)));
     }
   };
@@ -105,21 +96,18 @@ namespace utils
     template <class E, class F>
     void operator()(E &&self, F const &other)
     {
-      return (*this)(std::forward<E>(self), other, std::tuple<>(),
-                     std::tuple<>());
+      return (*this)(std::forward<E>(self), other, std::tuple<>(), std::tuple<>());
     }
     template <class E, class F, class SelfIndices, class OtherIndices>
     void operator()(E &&self, F const &other, SelfIndices &&self_indices,
                     OtherIndices &&other_indices)
     {
-      using broadcaster = typename std::conditional<
-          types::is_dtype<F>::value,
-          types::broadcast<F, typename std::decay<E>::type::dtype>,
-          types::broadcasted<F>>::type;
-      _broadcast_copy<fast_novectorize, N, D - 1>{}(
-          std::forward<E>(self), broadcaster(other),
-          std::forward<SelfIndices>(self_indices),
-          std::forward<OtherIndices>(other_indices));
+      using broadcaster = std::conditional_t<types::is_dtype<F>::value,
+                                             types::broadcast<F, typename std::decay_t<E>::dtype>,
+                                             types::broadcasted<F>>;
+      _broadcast_copy<fast_novectorize, N, D - 1>{}(std::forward<E>(self), broadcaster(other),
+                                                    std::forward<SelfIndices>(self_indices),
+                                                    std::forward<OtherIndices>(other_indices));
     }
   };
 
@@ -179,8 +167,7 @@ namespace utils
     const long other_size = other.size();
     const long vbound = other_size / vN;
 
-    for (auto iter = vectorizer::vbegin(self), end = iter + vbound; iter != end;
-         ++iter, ++oiter) {
+    for (auto iter = vectorizer::vbegin(self), end = iter + vbound; iter != end; ++iter, ++oiter) {
       iter.store(*oiter);
     }
 
@@ -212,8 +199,7 @@ namespace utils
     template <class E, class F>
     void operator()(E &&self, F const &other)
     {
-      return vbroadcast_copy<types::vectorizer_nobroadcast>(
-          std::forward<E>(self), other);
+      return vbroadcast_copy<types::vectorizer_nobroadcast>(std::forward<E>(self), other);
     }
   };
 
@@ -243,8 +229,7 @@ namespace utils
   };
 
   template <class E, class F, size_t N, int D, bool vector_form>
-  E &broadcast_copy_helper(E &self, F const &other,
-                           std::integral_constant<bool, true>,
+  E &broadcast_copy_helper(E &self, F const &other, std::integral_constant<bool, true>,
                            std::integral_constant<bool, false>)
   {
     static_assert(D >= 0, "downcasting already happened");
@@ -261,8 +246,7 @@ namespace utils
   }
 
   template <class E, class F, size_t N, int D, bool vector_form>
-  E &broadcast_copy_helper(E &self, F const &other,
-                           std::integral_constant<bool, true>,
+  E &broadcast_copy_helper(E &self, F const &other, std::integral_constant<bool, true>,
                            std::integral_constant<bool, true>)
   {
     if (D == 0) {
@@ -270,14 +254,12 @@ namespace utils
       return self;
     } else {
       return broadcast_copy_helper<E, F, N, D, vector_form>(
-          self, other, std::integral_constant<bool, true>(),
-          std::integral_constant<bool, false>{});
+          self, other, std::integral_constant<bool, true>(), std::integral_constant<bool, false>{});
     }
   }
 
   template <class E, class F, size_t N, int D, bool vector_form, bool plain>
-  E &broadcast_copy_helper(E &self, F const &other,
-                           std::integral_constant<bool, false>,
+  E &broadcast_copy_helper(E &self, F const &other, std::integral_constant<bool, false>,
                            std::integral_constant<bool, plain> is_plain)
   {
     auto reshaped = other.reshape(sutils::getshape(self));
@@ -298,10 +280,8 @@ namespace utils
   E &broadcast_copy(E &self, F const &other)
   {
     return broadcast_copy_helper<E, F, N, D, vector_form>(
-        self, other, std::integral_constant<bool, (D >= 0)>(),
-        std::integral_constant < bool,
-        std::decay<E>::type::is_flat
-                &&is_flat<typename std::decay<F>::type>::value > {});
+        self, other, std::integral_constant<bool, (D >= 0)>(), std::integral_constant < bool,
+        std::decay<E>::type::is_flat &&is_flat<std::decay_t<F>>::value > {});
   }
 
   /* update
@@ -359,10 +339,9 @@ namespace utils
 
   template <class Op>
   struct _broadcast_update<Op, fast_novectorize, 0, 0> {
-    template <class E, class F, class SelfIndices, class OtherIndices,
-              size_t... Is>
-    void helper(E &&self, F const &other, SelfIndices &&self_indices,
-                OtherIndices &&other_indices, utils::index_sequence<Is...>)
+    template <class E, class F, class SelfIndices, class OtherIndices, size_t... Is>
+    void helper(E &&self, F const &other, SelfIndices &&self_indices, OtherIndices &&other_indices,
+                std::index_sequence<Is...>)
     {
       self.template update<Op>(other.load((long)std::get<Is>(other_indices)...),
                                (long)std::get<Is>(self_indices)...);
@@ -370,8 +349,7 @@ namespace utils
     template <class E, class F>
     void operator()(E &&self, F const &other)
     {
-      return (*this)(std::forward<E>(self), other, std::tuple<>(),
-                     std::tuple<>());
+      return (*this)(std::forward<E>(self), other, std::tuple<>(), std::tuple<>());
     }
 
     template <class E, class F, class SelfIndices, class OtherIndices>
@@ -379,8 +357,7 @@ namespace utils
                     OtherIndices &&other_indices)
     {
       helper(std::forward<E>(self), other, self_indices, other_indices,
-             utils::make_index_sequence<std::tuple_size<
-                 typename std::decay<SelfIndices>::type>::value>());
+             std::make_index_sequence<std::tuple_size<std::decay_t<SelfIndices>>::value>());
     }
   };
 
@@ -389,28 +366,23 @@ namespace utils
     template <class E, class F>
     void operator()(E &&self, F const &other)
     {
-      return (*this)(std::forward<E>(self), other, std::tuple<>(),
-                     std::tuple<>());
+      return (*this)(std::forward<E>(self), other, std::tuple<>(), std::tuple<>());
     }
     template <class E, class F, class SelfIndices, class OtherIndices>
     void operator()(E &&self, F const &other, SelfIndices &&self_indices,
                     OtherIndices &&other_indices)
     {
-      auto const other_size =
-          other.template shape<std::decay<E>::type::value - N>();
-      auto const self_size =
-          self.template shape<std::decay<E>::type::value - N>();
+      auto const other_size = other.template shape<std::decay<E>::type::value - N>();
+      auto const self_size = self.template shape<std::decay<E>::type::value - N>();
       if (self_size == other_size)
         for (long i = 0; i < self_size; ++i)
           _broadcast_update<Op, fast_novectorize, N - 1, 0>{}(
-              std::forward<E>(self), other,
-              std::tuple_cat(self_indices, std::make_tuple(i)),
+              std::forward<E>(self), other, std::tuple_cat(self_indices, std::make_tuple(i)),
               std::tuple_cat(other_indices, std::make_tuple(i)));
       else
         for (long i = 0; i < self_size; ++i)
           _broadcast_update<Op, fast_novectorize, N - 1, 0>{}(
-              std::forward<E>(self), other,
-              std::tuple_cat(self_indices, std::make_tuple(i)),
+              std::forward<E>(self), other, std::tuple_cat(self_indices, std::make_tuple(i)),
               std::tuple_cat(other_indices, std::make_tuple(0)));
     }
   };
@@ -419,20 +391,17 @@ namespace utils
     template <class E, class F>
     void operator()(E &&self, F const &other)
     {
-      return (*this)(std::forward<E>(self), other, std::tuple<>(),
-                     std::tuple<>());
+      return (*this)(std::forward<E>(self), other, std::tuple<>(), std::tuple<>());
     }
     template <class E, class F, class SelfIndices, class OtherIndices>
     void operator()(E &&self, F const &other, SelfIndices &&self_indices,
                     OtherIndices &&other_indices)
     {
-      using broadcaster = typename std::conditional<
-          types::is_dtype<F>::value,
-          types::broadcast<F, typename std::decay<E>::type::dtype>,
-          types::broadcasted<F>>::type;
+      using broadcaster = std::conditional_t<types::is_dtype<F>::value,
+                                             types::broadcast<F, typename std::decay_t<E>::dtype>,
+                                             types::broadcasted<F>>;
       _broadcast_update<Op, fast_novectorize, N, D - 1>{}(
-          std::forward<E>(self), broadcaster(other),
-          std::forward<SelfIndices>(self_indices),
+          std::forward<E>(self), broadcaster(other), std::forward<SelfIndices>(self_indices),
           std::forward<OtherIndices>(other_indices));
     }
   };
@@ -493,8 +462,7 @@ namespace utils
     template <class... Args>
     void operator()(Args &&...args)
     {
-      vbroadcast_update<Op, types::vectorizer_nobroadcast>(
-          std::forward<Args>(args)...);
+      vbroadcast_update<Op, types::vectorizer_nobroadcast>(std::forward<Args>(args)...);
     }
   };
 
@@ -517,8 +485,7 @@ namespace utils
     void operator()(E &self, F const &other)
     {
       if (utils::no_broadcast_vectorize(other))
-        _broadcast_update<Op, types::vectorizer_nobroadcast, N, D>{}(self,
-                                                                     other);
+        _broadcast_update<Op, types::vectorizer_nobroadcast, N, D>{}(self, other);
       else
         _broadcast_update<Op, types::vectorizer, N, D>{}(self, other);
     }

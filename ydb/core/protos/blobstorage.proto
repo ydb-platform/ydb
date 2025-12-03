@@ -979,6 +979,7 @@ message TEvVDefragResult {
 message TEvVBaldSyncLog {
     optional NKikimrBlobStorage.TVDiskID VDiskID = 1;
     optional bool NotifyIfNotReady = 2;
+    optional bool DropChunksExplicitly = 3;
 }
 
 message TEvVBaldSyncLogResult {

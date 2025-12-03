@@ -101,7 +101,7 @@ protected:
             auto mode = NTable::ELookup::GreaterOrEqualThan;
             auto iter = db.Iterate(TABLE_ID, {}, tags, mode);
 
-            if (!db.Precharge(TABLE_ID, {}, {}, tags, 0, -1, -1))
+            if (!db.Precharge(TABLE_ID, {}, {}, tags, 0, -1, -1).Ready)
                 return false;
 
             while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {

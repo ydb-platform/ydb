@@ -25,6 +25,7 @@
 #include <yt/yt/core/rpc/public.h>
 
 #include <yt/yt/core/concurrency/async_stream.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 #include <yt/yt/core/concurrency/poller.h>
 #include <yt/yt/core/concurrency/scheduler.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>

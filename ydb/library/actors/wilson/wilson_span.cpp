@@ -1,6 +1,7 @@
 #include "wilson_span.h"
 #include "wilson_uploader.h"
 #include <util/system/backtrace.h>
+#include <util/generic/overloaded.h>
 #include <google/protobuf/text_format.h>
 #include <ydb/library/actors/core/actorsystem.h>
 

@@ -15,8 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/json/object_parser.h"
-#include "arrow/json/rapidjson_defs.h"  // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/object_parser.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/rapidjson_defs.h"  // IWYU pragma: keep
 
 #include <rapidjson/document.h>
 

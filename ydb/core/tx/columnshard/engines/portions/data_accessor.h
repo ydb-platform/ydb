@@ -64,7 +64,7 @@ public:
     }
 
     TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> BuildRecordBatch(const TColumnLoader& loader) const;
-    std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader, ui64 portionId, const TString& internalPathId) const;
 };
 
 class TPreparedColumn {
@@ -91,7 +91,7 @@ public:
         AFL_VERIFY(Loader);
     }
 
-    std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleForSeqAccess() const;
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleForSeqAccess(ui64 portionId, const TString& internalPathId) const;
     TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> AssembleAccessor() const;
 };
 
@@ -152,7 +152,7 @@ public:
         , RowsCount(rowsCount) {
     }
 
-    TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
+    TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds, ui64 portionId, const TString& internalPathId) const;
 };
 
 class TColumnAssemblingInfo {
@@ -211,6 +211,7 @@ private:
     TPortionInfo::TConstPtr PortionInfo;
     std::optional<std::vector<TColumnRecord>> Records;
     std::optional<std::vector<TIndexChunk>> Indexes;
+    std::optional<std::vector<ui32>> SliceBorderOffsets;
 
     template <class TChunkInfo>
     static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
@@ -560,6 +561,12 @@ public:
     };
 
     std::vector<TReadPage> BuildReadPages(const ui64 memoryLimit, const std::set<ui32>& entityIds) const;
+
+    ui32 GetSliceOffsetRows(const ui32 sliceBorderIdx) const {
+        AFL_VERIFY(SliceBorderOffsets);
+        AFL_VERIFY(sliceBorderIdx < SliceBorderOffsets->size())("idx", sliceBorderIdx)("size", SliceBorderOffsets->size());
+        return (*SliceBorderOffsets)[sliceBorderIdx];
+    }
 };
 
 }   // namespace NKikimr::NOlap

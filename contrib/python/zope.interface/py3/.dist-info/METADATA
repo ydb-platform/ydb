@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: zope.interface
-Version: 8.0.1
+Version: 8.1.1
 Summary: Interfaces for Python
 Home-page: https://github.com/zopefoundation/zope.interface
 Author: Zope Foundation and Contributors
@@ -13,16 +13,16 @@ Classifier: License :: OSI Approved :: Zope Public License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Framework :: Zope :: 3
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 Description-Content-Type: text/x-rst
 License-File: LICENSE.txt
 Provides-Extra: docs
@@ -85,6 +85,21 @@ For detailed documentation, please see https://zopeinterface.readthedocs.io/en/l
 =========
  Changes
 =========
+
+8.1.1 (2025-11-15)
+==================
+
+- Fix the GitHub workflow for publishing wheels, which failed for Linux/arm64.
+  (`#348 <https://github.com/zopefoundation/zope.interface/issues/348>`_)
+
+
+8.1 (2025-11-10)
+================
+
+- Drop support for Python 3.9.
+
+- Add support for Python 3.14.
+
 
 8.0.1 (2025-09-25)
 ==================

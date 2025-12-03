@@ -9,16 +9,19 @@ namespace NKikimr::NCms {
 
 struct Schema : NIceDb::Schema {
     struct Param : Table<1> {
+        static constexpr ui32 Key = 1;
+
         struct ID : Column<1, NScheme::NTypeIds::Uint32> {};
         struct NextPermissionID : Column<2, NScheme::NTypeIds::Uint64> {};
         struct NextRequestID : Column<3, NScheme::NTypeIds::Uint64> {};
         struct NextNotificationID : Column<4, NScheme::NTypeIds::Uint64> {};
         struct Config : Column<5, NScheme::NTypeIds::String> { using Type = NKikimrCms::TCmsConfig; };
         struct LastLogRecordTimestamp : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct FirstBootTimestamp : Column<7, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, NextPermissionID, NextRequestID, NextNotificationID,
-            Config, LastLogRecordTimestamp>;
+            Config, LastLogRecordTimestamp, FirstBootTimestamp>;
     };
 
     struct Permission : Table<2> {

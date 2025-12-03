@@ -208,13 +208,13 @@ private:
         const TString* userName,
         bool derivative)
     {
-        static const TString USER("user");
-        static const TString USER_ABSOLUTE("user_absolute");
-        static const TString TOTAL("total");
+        static const TString User("user");
+        static const TString UserAbsolute("user_absolute");
+        static const TString Total("total");
 
-        const TString& userGroup = derivative ? USER : USER_ABSOLUTE;
+        const TString& userGroup = derivative ? User : UserAbsolute;
         return Sensors_
-            ->GetSubgroup(userGroup, userName ? *userName : TOTAL)
+            ->GetSubgroup(userGroup, userName ? *userName : Total)
             ->GetNamedCounter(labelName, labelValue, derivative);
     }
 

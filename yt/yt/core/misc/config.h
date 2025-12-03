@@ -114,10 +114,12 @@ DEFINE_REFCOUNTED_TYPE(THistogramDigestConfig)
 struct TAdaptiveHedgingManagerConfig
     : public virtual NYTree::TYsonStruct
 {
+    // COMPAT(akozhikhov): Drop with old hedging manager.
     //! Percentage of primary requests that should have a hedging counterpart.
     //! Null is for disabled hedging.
     std::optional<double> MaxBackupRequestRatio;
 
+    // COMPAT(akozhikhov): Drop with old hedging manager.
     //! Period for hedging delay tuning and profiling.
     TDuration TickPeriod;
 
@@ -125,6 +127,14 @@ struct TAdaptiveHedgingManagerConfig
     double HedgingDelayTuneFactor;
     TDuration MinHedgingDelay;
     TDuration MaxHedgingDelay;
+
+    //! These two parameters below limit ratio of secondary to primary requests.
+    //! Hedging manager will accumulate up to |MaxTokenCount| amount of tokens.
+    //! Each secondary request consumes one token, and each primary request adds up |SecondaryRequestRatio|,
+    //! i.e. |SecondaryRequestRatio| value of 0.1 will allow 10 percent of total requests to be hedged.
+    //! If |SecondaryRequestRatio| is null hedging is disabled.
+    int MaxTokenCount;
+    std::optional<double> SecondaryRequestRatio;
 
     REGISTER_YSON_STRUCT(TAdaptiveHedgingManagerConfig);
 

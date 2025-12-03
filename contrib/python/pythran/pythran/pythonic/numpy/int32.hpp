@@ -33,5 +33,29 @@ namespace numpy
 #include "pythonic/types/numpy_nary_expr.hpp"
 } // namespace numpy
 PYTHONIC_NS_END
+#ifdef ENABLE_PYTHON_MODULE
+
+#include "numpy/arrayscalars.h"
+#include "pythonic/python/core.hpp"
+
+PYTHONIC_NS_BEGIN
+
+inline PyObject *to_python<numpy::functor::int32>::convert(numpy::functor::int32 const &c)
+{
+  return (PyObject *)&PyInt32ArrType_Type;
+}
+
+inline bool from_python<numpy::functor::int32>::is_convertible(PyObject *obj)
+{
+  return obj == (PyObject *)&PyInt32ArrType_Type;
+}
+
+inline numpy::functor::int32 from_python<numpy::functor::int32>::convert(PyObject *obj)
+{
+  return {};
+}
+
+PYTHONIC_NS_END
+#endif
 
 #endif

@@ -2127,7 +2127,7 @@ void TestMessageByYPath(const TYPath& path)
     EXPECT_EQ("", result.TailPath);
 }
 
-TEST(TResolveProtobufElementByYPath, Message)
+TEST(TResolveProtobufElementByYPathTest, Message)
 {
     TestMessageByYPath<NYT::NYson::NProto::TMessage>("");
     TestMessageByYPath<NYT::NYson::NProto::TNestedMessage>("/nested_message1");
@@ -2150,7 +2150,7 @@ void TestScalarByYPath(const TYPath& path, FieldDescriptor::Type type)
         std::get<std::unique_ptr<TProtobufScalarElement>>(result.Element)->Type);
 }
 
-TEST(TResolveProtobufElementByYPath, Scalar)
+TEST(TResolveProtobufElementByYPathTest, Scalar)
 {
     TestScalarByYPath("/uint32_field", FieldDescriptor::TYPE_UINT32);
     TestScalarByYPath("/repeated_int32_field/123", FieldDescriptor::TYPE_INT32);
@@ -2170,7 +2170,7 @@ void TestAttributeDictionaryByYPath(const TYPath& path, const TYPath& headPath)
     EXPECT_EQ(path.substr(headPath.length()), result.TailPath);
 }
 
-TEST(TResolveProtobufElementByYPath, AttributeDictionary)
+TEST(TResolveProtobufElementByYPathTest, AttributeDictionary)
 {
     TestAttributeDictionaryByYPath("/attributes", "/attributes");
 }
@@ -2188,7 +2188,7 @@ void TestAnyByYPath(const TYPath& path, const TYPath& headPath)
     EXPECT_EQ(path.substr(headPath.length()), result.TailPath);
 }
 
-TEST(TResolveProtobufElementByYPath, Any)
+TEST(TResolveProtobufElementByYPathTest, Any)
 {
     TestAnyByYPath<NYT::NYson::NProto::TMessage>("/yson_field", "/yson_field");
     TestAnyByYPath<NYT::NYson::NProto::TMessage>("/yson_field/abc", "/yson_field");
@@ -2212,7 +2212,7 @@ void TestRepeatedByYPath(const TYPath& path)
     EXPECT_EQ("", result.TailPath);
 }
 
-TEST(TResolveProtobufElementByYPath, Repeated)
+TEST(TResolveProtobufElementByYPathTest, Repeated)
 {
     TestRepeatedByYPath("/repeated_int32_field");
     TestRepeatedByYPath("/nested_message1/repeated_int32_field");
@@ -2234,7 +2234,7 @@ void TestMapByYPath(const TYPath& path, int expectedUnderlyingKeyProtoType)
     EXPECT_TRUE(std::holds_alternative<std::unique_ptr<ValueElementType>>((*map)->Element));
 }
 
-TEST(TResolveProtobufElementByYPath, Map)
+TEST(TResolveProtobufElementByYPathTest, Map)
 {
     TestMapByYPath<TProtobufScalarElement>("/string_to_int32_map", FieldDescriptor::TYPE_STRING);
     TestMapByYPath<TProtobufScalarElement>("/int32_to_int32_map", FieldDescriptor::TYPE_INT32);
@@ -2248,7 +2248,7 @@ TEST(TResolveProtobufElementByYPath, Map)
 #define DO(path, errorPath) \
     EXPECT_YPATH({ResolveProtobufElementByYPath(ReflectProtobufMessageType<NYT::NYson::NProto::TMessage>(), path);}, errorPath);
 
-TEST(TResolveProtobufElementByYPath, Failure)
+TEST(TResolveProtobufElementByYPathTest, Failure)
 {
     DO("/repeated_int32_field/1/2", "/repeated_int32_field/1")
     DO("/repeated_int32_field/ 1/2", "/repeated_int32_field/ 1")
@@ -2267,28 +2267,28 @@ TEST(TResolveProtobufElementByYPath, Failure)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TProtobufEnums, FindValueByLiteral)
+TEST(TProtobufEnumsTest, FindValueByLiteral)
 {
     static const auto* type = ReflectProtobufEnumType(NYT::NYson::NProto::EColor_descriptor());
     ASSERT_EQ(std::nullopt, FindProtobufEnumValueByLiteral<NYT::NYson::NProto::EColor>(type, "zzz"));
     ASSERT_EQ(NYT::NYson::NProto::Color_Red, FindProtobufEnumValueByLiteral<NYT::NYson::NProto::EColor>(type, "red"));
 }
 
-TEST(TProtobufEnums, FindLiteralByValue)
+TEST(TProtobufEnumsTest, FindLiteralByValue)
 {
     static const auto* type = ReflectProtobufEnumType(NYT::NYson::NProto::EColor_descriptor());
     ASSERT_EQ("red", FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::Color_Red));
     ASSERT_EQ(TStringBuf(), FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::EColor(666)));
 }
 
-TEST(TProtobufEnums, FindValueByLiteralWithAlias)
+TEST(TProtobufEnumsTest, FindValueByLiteralWithAlias)
 {
     static const auto* type = ReflectProtobufEnumType(NYT::NYson::NProto::EFlag_descriptor());
     ASSERT_EQ(NYT::NYson::NProto::Flag_True, FindProtobufEnumValueByLiteral<NYT::NYson::NProto::EFlag>(type, "true"));
     ASSERT_EQ(NYT::NYson::NProto::Flag_True, FindProtobufEnumValueByLiteral<NYT::NYson::NProto::EFlag>(type, "yes"));
 }
 
-TEST(TProtobufEnums, FindLiteralByValueWithAlias)
+TEST(TProtobufEnumsTest, FindLiteralByValueWithAlias)
 {
     static const auto* type = ReflectProtobufEnumType(NYT::NYson::NProto::EFlag_descriptor());
     ASSERT_EQ("true", FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::Flag_True));
@@ -2296,7 +2296,7 @@ TEST(TProtobufEnums, FindLiteralByValueWithAlias)
     ASSERT_EQ("true", FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::Flag_AnotherYes));
 }
 
-TEST(TProtobufEnums, ConvertToProtobufEnumValueUntyped)
+TEST(TProtobufEnumsTest, ConvertToProtobufEnumValueUntyped)
 {
     static const auto* type = ReflectProtobufEnumType(NYT::NYson::NProto::EColor_descriptor());
     EXPECT_EQ(

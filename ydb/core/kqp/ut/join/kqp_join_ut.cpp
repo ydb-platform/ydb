@@ -554,6 +554,28 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         );
     }
 
+    Y_UNIT_TEST(LeftJoinPushdownPredicate_SqlIn) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        auto result = session.ExecuteDataQuery(Q_(R"(
+            SELECT t3.Key, t3.Value FROM `/Root/Join1_2` AS t2
+            LEFT JOIN `/Root/Join1_3` AS t3
+            ON t2.Fk3 = t3.Key
+            WHERE t3.Value in [1004, 1005, 1006];
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(
+            R"([
+                [["Name4"];[1004]]
+            ])",
+            FormatResultSetYson(result.GetResultSet(0))
+        );
+    }
+
     Y_UNIT_TEST(LeftJoinPushdownPredicate_NoPushdown) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

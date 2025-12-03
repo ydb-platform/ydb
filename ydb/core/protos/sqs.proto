@@ -41,6 +41,10 @@ message TMessageAttribute {
     optional bytes  BinaryValue = 4;
 }
 
+message TMessageAttributes {
+    repeated TMessageAttribute Attributes = 1;
+}
+
 message TQueueTag {
     optional string Key = 1;
     optional string Value = 2;

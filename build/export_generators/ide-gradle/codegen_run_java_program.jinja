@@ -104,8 +104,9 @@ val {{ varprefix }}{{ run['_object_index'] }} = tasks.register<JavaExec>("{{ var
 {%-                else %}
     outputs.files({{ PatchRoots(out, false, run['_object_index']) }})
 {%-                endif -%}
-{%-            endfor %}
-{%         endif %}
+{%-            endfor -%}
+{%-        endif -%}
+{{ Env(run.env) }}
 }
 {%-     endfor -%}
 {%- endif -%}

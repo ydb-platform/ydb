@@ -185,12 +185,13 @@ class TScriptExecutionsTablesCreator : public NTableCreator::TMultiTableCreator 
     using TBase = NTableCreator::TMultiTableCreator;
 
 public:
-    explicit TScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags)
+    explicit TScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags, ui64 generation)
         : TBase({
             GetScriptExecutionsCreator(featureFlags),
             GetScriptExecutionLeasesCreator(featureFlags),
             GetScriptResultSetsCreator(featureFlags)
         })
+        , Generation(generation)
     {}
 
 private:
@@ -293,9 +294,12 @@ private:
     }
 
     void OnTablesCreated(bool success, NYql::TIssues issues) override  {
-        Send(Owner, new TEvScriptExecutionsTablesCreationFinished(success, std::move(issues)));
+        Send(Owner, new TEvScriptExecutionsTablesCreationFinished(success, std::move(issues)), 0, Generation);
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), new TEvStartScriptExecutionBackgroundChecks());
     }
+
+private:
+    const ui64 Generation = 0;
 };
 
 Ydb::Query::ExecMode GetExecModeFromAction(NKikimrKqp::EQueryAction action) {
@@ -372,8 +376,8 @@ public:
             DECLARE $lease_state AS Int32;
             DECLARE $execution_meta_ttl AS Interval;
             DECLARE $retry_state AS JsonDocument;
-            DECLARE $user_sid AS Text;
-            DECLARE $user_group_sids AS JsonDocument;
+            DECLARE $user_sid AS Optional<Text>;
+            DECLARE $user_group_sids AS Optional<JsonDocument>;
             DECLARE $parameters AS String;
             DECLARE $graph_compressed AS Optional<String>;
             DECLARE $graph_compression_method AS Optional<Text>;
@@ -400,7 +404,13 @@ public:
             );
         )";
 
-        const auto token = NACLib::TUserToken(Request.GetUserToken());
+        std::optional<TString> userSID;
+        std::optional<TString> userGroupSIDs;
+        if (Request.HasUserToken()) {
+            const NACLib::TUserToken token(Request.GetUserToken());
+            userSID = token.GetUserSID();
+            userGroupSIDs = SequenceToJsonString(token.GetGroupSIDs());
+        }
 
         std::optional<TString> graphCompressionMethod;
         std::optional<TString> graphCompressed;
@@ -447,10 +457,10 @@ public:
                 .Int32(static_cast<i32>(ELeaseState::ScriptRunning))
                 .Build()
             .AddParam("$user_sid")
-                .Utf8(token.GetUserSID())
+                .OptionalUtf8(userSID)
                 .Build()
             .AddParam("$user_group_sids")
-                .JsonDocument(SequenceToJsonString(token.GetGroupSIDs()))
+                .OptionalJsonDocument(userGroupSIDs)
                 .Build()
             .AddParam("$parameters")
                 .String(SerializeParameters())
@@ -1008,10 +1018,9 @@ public:
                 }
             }
 
-            queryRequest.SetUserToken(NACLib::TUserToken(
-                result.ColumnParser("user_token").GetOptionalUtf8().value_or(""),
-                userGroupSids
-            ).SerializeAsString());
+            if (const std::optional<TString>& userSID = result.ColumnParser("user_token").GetOptionalUtf8()) {
+                queryRequest.SetUserToken(NACLib::TUserToken(*userSID, userGroupSids).SerializeAsString());
+            }
 
             if (const auto serializedParameters = result.ColumnParser("parameters").GetOptionalString()) {
                 NJson::TJsonValue value;
@@ -3831,7 +3840,7 @@ public:
                 script_sinks,
                 script_secret_names,
                 retry_state,
-                graph_compressed
+                graph_compressed IS NOT NULL AS has_graph
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -3962,12 +3971,9 @@ public:
             OperationTtl = GetDuration(meta.GetOperationTtl());
             LeaseDuration = GetDuration(meta.GetLeaseDuration());
 
-            if (meta.GetSaveQueryPhysicalGraph()) {
+            if (meta.GetSaveQueryPhysicalGraph() && !result.ColumnParser("has_graph").GetBool()) {
                 // Disable retries if state not saved
-                const auto& graph = result.ColumnParser("graph_compressed").GetOptionalString();
-                if (!graph) {
-                    RetryState.ClearRetryPolicyMapping();
-                }
+                RetryState.ClearRetryPolicyMapping();
             }
         }
 
@@ -4848,12 +4854,13 @@ public:
 
         const TCompressor compressor(*compressionMethod);
         const auto& graph = compressor.Decompress(*graphCompressed);
-
-        if (!PhysicalGraph.ParseFromString(graph)) {
+        NKikimrKqp::TQueryPhysicalGraph graphProto;
+        if (!graphProto.ParseFromString(graph)) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Query physical graph is corrupted");
             return;
         }
 
+        PhysicalGraph = std::move(graphProto);
         Finish();
     }
 
@@ -4864,7 +4871,7 @@ public:
 private:
     const TString Database;
     const TString ExecutionId;
-    NKikimrKqp::TQueryPhysicalGraph PhysicalGraph;
+    std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     i64 LeaseGeneration = 0;
 };
 
@@ -4879,8 +4886,8 @@ IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, c
     return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, counters, maxRunTime, leaseDuration);
 }
 
-IActor* CreateScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags) {
-    return new TScriptExecutionsTablesCreator(featureFlags);
+IActor* CreateScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags, ui64 generation) {
+    return new TScriptExecutionsTablesCreator(featureFlags, generation);
 }
 
 IActor* CreateForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {

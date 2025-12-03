@@ -12,15 +12,12 @@ namespace numpy
   namespace random
   {
     template <class pS>
-    types::ndarray<double, pS> lognormal(double mean, double sigma,
-                                         pS const &shape);
+    types::ndarray<double, pS> lognormal(double mean, double sigma, pS const &shape);
 
     auto lognormal(double mean, double sigma, long size)
-        -> decltype(lognormal(mean, sigma,
-                              types::array_tuple<long, 1>{{size}}));
+        -> decltype(lognormal(mean, sigma, types::array_tuple<long, 1>{{size}}));
 
-    double lognormal(double mean = 0.0, double sigma = 1.0,
-                     types::none_type size = {});
+    double lognormal(double mean = 0.0, double sigma = 1.0, types::none_type size = {});
 
     DEFINE_FUNCTOR(pythonic::numpy::random, lognormal);
   } // namespace random

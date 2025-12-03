@@ -1,6 +1,7 @@
 #include "dq_tasks_runner.h"
 #include "dq_tasks_counters.h"
 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
 
@@ -24,6 +25,7 @@
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_watermark.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <util/generic/scope.h>
@@ -141,16 +143,24 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
 
 #define LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
 
-NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
-    TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory, TDqMeteringStats::TInputStatsMeter stats,
-    TInstant& startTs, bool& inputConsumed, NUdf::IPgBuilder* pgBuilder)
-{
+NUdf::TUnboxedValue DqBuildInputValue(
+    const NDqProto::TTaskInput& inputDesc,
+    const NKikimr::NMiniKQL::TType* type,
+    TVector<IDqInput::TPtr>&& inputs,
+    const THolderFactory& holderFactory,
+    TDqMeteringStats::TInputStatsMeter stats,
+    TInstant& startTs,
+    bool& inputConsumed,
+    NUdf::IPgBuilder* pgBuilder,
+    NKikimr::NMiniKQL::TWatermark* watermark,
+    TDqComputeActorWatermarks* watermarksTracker
+) {
     switch (inputDesc.GetTypeCase()) {
         case NYql::NDqProto::TTaskInput::kSource:
             Y_ABORT_UNLESS(inputs.size() == 1);
             [[fallthrough]];
         case NYql::NDqProto::TTaskInput::kUnionAll:
-            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputConsumed);
+            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputConsumed, watermark, watermarksTracker);
         case NYql::NDqProto::TTaskInput::kMerge: {
             const auto& protoSortCols = inputDesc.GetMerge().GetSortColumns();
             TVector<TSortColumnInfo> sortColsInfo;
@@ -246,6 +256,7 @@ public:
         , Settings(settings)
         , LogFunc(logFunc)
         , AllocatedHolder(std::make_optional<TAllocatedHolder>())
+        , WatermarksTracker(Settings.WatermarksTracker)
     {
         Stats = std::make_unique<TDqTaskRunnerStats>();
         Stats->CreateTs = TInstant::Now();
@@ -628,16 +639,49 @@ public:
             auto entryNode = AllocatedHolder->ProgramParsed.CompGraph->GetEntryPoint(i, false);
             if (entryNode) {
                 if (transform) {
-                    transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, {}, Stats->StartTs, InputConsumed, PgBuilder_.get());
+                    transform->TransformInput = DqBuildInputValue(
+                        inputDesc,
+                        transform->TransformInputType,
+                        std::move(inputs),
+                        holderFactory,
+                        {},
+                        Stats->StartTs,
+                        InputConsumed,
+                        PgBuilder_.get(),
+                        &Watermark,
+                        WatermarksTracker
+                    );
                     inputs.clear();
                     inputs.emplace_back(transform->TransformOutput);
-                    entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
-                        CreateInputUnionValue(transform->TransformOutput->GetInputType(), std::move(inputs), holderFactory,
-                            {inputStats, transform->TransformOutputType}, Stats->StartTs, InputConsumed));
+                    entryNode->SetValue(
+                        AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
+                        CreateInputUnionValue(
+                            transform->TransformOutput->GetInputType(),
+                            std::move(inputs),
+                            holderFactory,
+                            {inputStats, transform->TransformOutputType},
+                            Stats->StartTs,
+                            InputConsumed,
+                            &Watermark,
+                            WatermarksTracker
+                        )
+                    );
                 } else {
-                    entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
-                        DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory,
-                            {inputStats, entry->InputItemTypes[i]}, Stats->StartTs, InputConsumed, PgBuilder_.get()));
+                    entryNode->SetValue(
+                        AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
+                        DqBuildInputValue(
+                            inputDesc,
+                            entry->InputItemTypes[i],
+                            std::move(inputs),
+                            holderFactory,
+                            {inputStats, entry->InputItemTypes[i]},
+                            Stats->StartTs,
+                            InputConsumed,
+                            PgBuilder_.get(),
+                            &Watermark,
+                            WatermarksTracker
+                        )
+                    );
                 }
             } else {
                 // In some cases we don't need input. For example, for joining EmptyIterator with table.
@@ -1000,6 +1044,16 @@ private:
                     return ERunStatus::Finished;
                 }
                 case NUdf::EFetchStatus::Yield: {
+                    // only for sync ca
+                    if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
+                        const auto watermark = WatermarksTracker->GetPendingWatermark();
+                        WatermarksTracker->PopPendingWatermark();
+
+                        Y_DEBUG_ABORT_UNLESS(watermark.Defined());
+                        NDqProto::TWatermark watermarkRequest;
+                        watermarkRequest.SetTimestampUs(watermark->MicroSeconds());
+                        AllocatedHolder->Output->Consume(std::move(watermarkRequest));
+                    }
                     return ERunStatus::PendingInput;
                 }
             }
@@ -1064,6 +1118,7 @@ private:
 
     std::optional<TAllocatedHolder> AllocatedHolder;
     NKikimr::NMiniKQL::TWatermark Watermark;
+    TDqComputeActorWatermarks* WatermarksTracker;
 
     bool TaskHasEffects = false;
 

@@ -3,14 +3,15 @@ UNITTEST_FOR(ydb/library/yql/dq/actors/compute)
 IF (NOT OS_WINDOWS)
 SRCS(
     dq_async_compute_actor_ut.cpp
+    dq_sync_compute_actor_ut.cpp
 )
 ELSE()
 # TTestActorRuntimeBase(..., true) seems broken on windows
 ENDIF()
 
 SRCS(
-    dq_compute_actor_ut.cpp
     dq_compute_actor_async_input_helper_ut.cpp
+    dq_compute_actor_channels_ut.cpp
     dq_compute_issues_buffer_ut.cpp
     dq_source_watermark_tracker_ut.cpp
     mock_lookup_factory.cpp

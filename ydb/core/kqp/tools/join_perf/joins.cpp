@@ -29,7 +29,7 @@ TVector<TString> GenerateStringKeyColumn(i32 size, i32 seed) {
 
 template <typename KeyType>
 NKikimr::NMiniKQL::TJoinDescription
-PrepareDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup, TVector<KeyType> leftKeys, TVector<KeyType> rightKeys) {
+PrepareDescription(NKikimr::NMiniKQL::TDqSetup<false, true>* setup, TVector<KeyType> leftKeys, TVector<KeyType> rightKeys) {
     const int leftSize = std::ssize(leftKeys);
     const int rightSize = std::ssize(rightKeys);
     NKikimr::NMiniKQL::TJoinDescription descr;
@@ -63,7 +63,7 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
     for (auto keyType : params.KeyTypes) {
         for (auto flavour : params.Flavours) {
             for (auto tableSizes : params.Preset.Sizes) {
-                NKikimr::NMiniKQL::TDqSetup<false> setup{NKikimr::NMiniKQL::GetPerfTestFactory()};
+                NKikimr::NMiniKQL::TDqSetup<false, true> setup{NKikimr::NMiniKQL::GetPerfTestFactory()};
                 Y_ABORT_IF(flavour == ETestedInputFlavour::kLittleRightTable && params.Scale < 128,
                            "little right table preset requires scale to be at least 128");
                 tableSizes.Left *= params.Scale;

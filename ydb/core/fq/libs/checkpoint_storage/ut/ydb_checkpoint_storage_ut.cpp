@@ -48,7 +48,7 @@ public:
         auto ydbConnectionPtr = CreateSdkYdbConnection(checkpointStorageConfig, credFactory, driver);
         Storage = NewYdbCheckpointStorage(checkpointStorageConfig, entityIdGenerator, ydbConnectionPtr);
 
-        auto issues = Storage->Init().GetValueSync();
+        auto issues = Storage->Init({}).GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
     }
 

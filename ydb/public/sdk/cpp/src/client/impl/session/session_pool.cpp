@@ -14,7 +14,7 @@ namespace NSessionPool {
 
 using namespace NThreading;
 
-constexpr ui64 KEEP_ALIVE_RANDOM_FRACTION = 4;
+constexpr std::uint64_t KEEP_ALIVE_RANDOM_FRACTION = 4;
 static const TStatus CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT = TStatus(
     TPlainStatus(
         EStatus::CLIENT_RESOURCE_EXHAUSTED,
@@ -33,10 +33,10 @@ TStatus GetStatus(const TStatus& status) {
 TDuration RandomizeThreshold(TDuration duration) {
     TDuration::TValue value = duration.GetValue();
     if (KEEP_ALIVE_RANDOM_FRACTION) {
-        const i64 randomLimit = value / KEEP_ALIVE_RANDOM_FRACTION;
+        const std::int64_t randomLimit = value / KEEP_ALIVE_RANDOM_FRACTION;
         if (randomLimit < 2)
             return duration;
-        value += static_cast<i64>(RandomNumber<ui64>(randomLimit));
+        value += static_cast<std::int64_t>(RandomNumber<std::uint64_t>(randomLimit));
     }
     return TDuration::FromValue(value);
 }
@@ -53,18 +53,17 @@ bool IsSessionCloseRequested(const TStatus& status) {
     return false;
 }
 
-TSessionPool::TWaitersQueue::TWaitersQueue(ui32 maxQueueSize, TDuration maxWaitSessionTimeout)
+TSessionPool::TWaitersQueue::TWaitersQueue(std::uint32_t maxQueueSize)
     : MaxQueueSize_(maxQueueSize)
-    , MaxWaitSessionTimeout_(maxWaitSessionTimeout)
 {
 }
 
-bool TSessionPool::TWaitersQueue::TryPush(std::unique_ptr<IGetSessionCtx>& p) {
+IGetSessionCtx* TSessionPool::TWaitersQueue::TryPush(std::unique_ptr<IGetSessionCtx>& p) {
     if (Waiters_.size() < MaxQueueSize_) {
-        Waiters_.insert(std::make_pair(TInstant::Now(), std::move(p)));
-        return true;
+        auto it = Waiters_.insert(std::make_pair(p->GetDeadline(), std::move(p)));
+        return it->second.get();
     }
-    return false;
+    return nullptr;
 }
 
 std::unique_ptr<IGetSessionCtx> TSessionPool::TWaitersQueue::TryGet() {
@@ -77,11 +76,12 @@ std::unique_ptr<IGetSessionCtx> TSessionPool::TWaitersQueue::TryGet() {
     return result;
 }
 
-void TSessionPool::TWaitersQueue::GetOld(TInstant now, std::vector<std::unique_ptr<IGetSessionCtx>>& oldWaiters) {
+void TSessionPool::TWaitersQueue::GetOld(TDeadline deadline, std::vector<std::unique_ptr<IGetSessionCtx>>& oldWaiters) {
     auto it = Waiters_.begin();
     while (it != Waiters_.end()) {
-        if (now < it->first + MaxWaitSessionTimeout_)
+        if (deadline < it->first) {
             break;
+        }
 
         oldWaiters.emplace_back(std::move(it->second));
 
@@ -89,12 +89,12 @@ void TSessionPool::TWaitersQueue::GetOld(TInstant now, std::vector<std::unique_p
     }
 }
 
-ui32 TSessionPool::TWaitersQueue::Size() const {
+std::uint32_t TSessionPool::TWaitersQueue::Size() const {
     return Waiters_.size(); 
 }
 
 
-TSessionPool::TSessionPool(ui32 maxActiveSessions)
+TSessionPool::TSessionPool(std::uint32_t maxActiveSessions)
     : Closed_(false)
     , WaitersQueue_(maxActiveSessions * 10)
     , ActiveSessions_(0)
@@ -134,8 +134,9 @@ void TSessionPool::GetSession(std::unique_ptr<IGetSessionCtx> ctx)
 
         if (MaxActiveSessions_ == 0 || ActiveSessions_ < MaxActiveSessions_) {
             IncrementActiveCounterUnsafe();
-        } else if (WaitersQueue_.TryPush(ctx)) {
+        } else if (auto* ctxPtr = WaitersQueue_.TryPush(ctx)) {
             sessionSource = TSessionSource::Waiter;
+            ctxPtr->ScheduleOnDeadlineWaiterCleanup();
         } else {
             sessionSource = TSessionSource::Error;
         }
@@ -150,7 +151,7 @@ void TSessionPool::GetSession(std::unique_ptr<IGetSessionCtx> ctx)
     }
 
     if (sessionSource == TSessionSource::Waiter) {
-        // Nothing to do here
+        // ctxPtr->ScheduleOnDeadlineWaiterCleanup() is called after TryPush
     } else if (sessionSource == TSessionSource::Error) {
         FakeSessionsCounter_.Inc();
         ctx->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);
@@ -192,6 +193,22 @@ bool TSessionPool::CheckAndFeedWaiterNewSession(bool active) {
 
     getSessionCtx->ReplyNewSession();
     return true;
+}
+
+void TSessionPool::ClearOldWaiters() {
+    std::lock_guard guard(Mtx_);
+
+    std::vector<std::unique_ptr<IGetSessionCtx>> oldWaiters;
+    WaitersQueue_.GetOld(TDeadline::Now(), oldWaiters);
+
+    for (auto& waiter : oldWaiters) {
+        FakeSessionsCounter_.Inc();
+        waiter->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);
+    }
+
+    if (!oldWaiters.empty()) {
+        UpdateStats();
+    }
 }
 
 bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
@@ -267,23 +284,25 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakC
             // moreover it is unsafe to touch this ptr!
             return false;
         } else {
-            auto keepAliveBatchSize = PERIODIC_ACTION_BATCH_SIZE;
+            auto sessionCountToProcess = PERIODIC_ACTION_BATCH_SIZE;
             std::vector<std::unique_ptr<TKqpSessionCommon>> sessionsToTouch;
-            sessionsToTouch.reserve(keepAliveBatchSize);
+            sessionsToTouch.reserve(sessionCountToProcess);
             std::vector<std::unique_ptr<TKqpSessionCommon>> sessionsToDelete;
-            sessionsToDelete.reserve(keepAliveBatchSize);
+            sessionsToDelete.reserve(sessionCountToProcess);
             std::vector<std::unique_ptr<IGetSessionCtx>> waitersToReplyError;
-            waitersToReplyError.reserve(keepAliveBatchSize);
-            const auto now = TInstant::Now();
+            waitersToReplyError.reserve(sessionCountToProcess);
+            const auto now = TDeadline::Now();
+            const auto nowUtil = TInstant::Now();
             {
                 std::lock_guard guard(Mtx_);
                 {
                     auto& sessions = Sessions_;
 
                     auto it = sessions.begin();
-                    while (it != sessions.end() && keepAliveBatchSize--) {
-                        if (now < it->second->GetTimeToTouchFast())
+                    while (it != sessions.end() && sessionCountToProcess--) {
+                        if (nowUtil < it->second->GetTimeToTouchFast()) {
                             break;
+                        }
 
                         if (deletePredicate(it->second.get(), sessions.size())) {
                             it->second->UpdateServerCloseHandler(nullptr);
@@ -329,16 +348,16 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakC
     return periodicCb;
 }
 
-i64 TSessionPool::GetActiveSessions() const {
+std::int64_t TSessionPool::GetActiveSessions() const {
     std::lock_guard guard(Mtx_);
     return ActiveSessions_;
 }
 
-i64 TSessionPool::GetActiveSessionsLimit() const {
+std::int64_t TSessionPool::GetActiveSessionsLimit() const {
     return MaxActiveSessions_;
 }
 
-i64 TSessionPool::GetCurrentPoolSize() const {
+std::int64_t TSessionPool::GetCurrentPoolSize() const {
     std::lock_guard guard(Mtx_);
     return Sessions_.size();
 }

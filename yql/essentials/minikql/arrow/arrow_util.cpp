@@ -31,8 +31,8 @@ std::shared_ptr<arrow::Scalar> UnwrapScalar(std::shared_ptr<arrow::Scalar> scala
 }
 
 std::shared_ptr<arrow::Buffer> MakeEmptyBuffer() {
-    static constexpr ui8 data alignas(ArrowAlignment)[1]{};
-    return std::make_shared<arrow::Buffer>(data, 0);
+    static constexpr ui8 Data alignas(ArrowAlignment)[1]{};
+    return std::make_shared<arrow::Buffer>(Data, 0);
 }
 
 } // namespace NKikimr::NMiniKQL

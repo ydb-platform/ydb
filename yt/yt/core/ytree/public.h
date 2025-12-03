@@ -6,6 +6,8 @@
 
 #include <yt/yt/core/rpc/public.h>
 
+#include <yt/yt/core/misc/mpl.h>
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -20,11 +22,56 @@ class TAttributeFilter;
 class TAttributeFilter;
 
 struct IYsonStructMeta;
+struct IYsonStructParameter;
 class TYsonStructBase;
+class TYsonStruct;
 class TYsonStructLite;
+
+struct TYsonStructTraverseContext {
+    const IYsonStructParameter* Parameter;
+    NYPath::TYPath Path;
+};
+using TYsonStructParameterVisitor = std::function<void(const TYsonStructTraverseContext&)>;
+
+template <class T>
+concept CEnum = TEnumTraits<T>::IsEnum;
+
+template <class T>
+concept CNullable = NMpl::IsSpecialization<T, std::unique_ptr> ||
+    NMpl::IsSpecialization<T, std::shared_ptr> ||
+    NMpl::IsSpecialization<T, std::optional> ||
+    NMpl::IsSpecialization<T, NYT::TIntrusivePtr>;
 
 template <class T>
 concept CYsonStructDerived = std::derived_from<T, TYsonStructBase>;
+
+// TODO(mikari): revise naming
+template <class T>
+concept CYsonStruct = std::derived_from<T, TYsonStruct>;
+
+template <class T>
+concept CYsonStructLite = std::derived_from<T, TYsonStructLite>;
+
+template <class T>
+concept CTuple = requires {
+    std::tuple_size<T>::value;
+} && !CYsonStructDerived<T>;
+
+template <class T>
+concept CStringLike = std::is_same_v<std::decay_t<T>, std::string> ||
+    std::is_same_v<std::decay_t<T>, std::string_view> ||
+    std::is_same_v<std::decay_t<T>, TString> ||
+    std::is_same_v<std::decay_t<T>, TStringBuf>;
+
+// To remove ambiguous behaviour for std::array.
+// std::array is handling as tuple
+template <class T>
+concept CList = std::ranges::range<T> && !CTuple<T> && !CStringLike<T> && !CYsonStructDerived<T>;
+
+template <class T>
+concept CDict = CList<T> && NMpl::CMapping<T> && !CYsonStructDerived<T>;
+
+////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_STRUCT(INode)
 using IConstNodePtr = TIntrusivePtr<const INode>;

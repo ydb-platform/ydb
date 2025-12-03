@@ -12,6 +12,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_table.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sql.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
@@ -143,7 +144,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         cliVersion.clear();
     }
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     Cout << "Welcome to YDB CLI";
     if (!cliVersion.empty()) {
         Cout << " " << colors.BoldColor() << cliVersion << colors.OldColor() ;

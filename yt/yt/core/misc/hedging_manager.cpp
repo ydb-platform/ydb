@@ -1,8 +1,6 @@
 #include "hedging_manager.h"
 #include "config.h"
 
-#include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////

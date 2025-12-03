@@ -223,7 +223,12 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
     TGetPointsCountResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        TString issues = response.Issues.ToOneLineString();
+        return TGetPointsCountResponse(TStringBuilder() << "Monitoring api points count response: " << response.Issues.ToOneLineString() <<
+            ", internal code: " << static_cast<int>(response.CurlResponseCode));
+    }
+
+    if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
+        TString issues = response.Content.data();
 
         for (const auto& whitelistIssue : whitelistIssues) {
             if (issues.find(whitelistIssue) != issues.npos) {
@@ -232,11 +237,6 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
             }
         }
 
-        return TGetPointsCountResponse(TStringBuilder() << "Monitoring api points count response: " << issues <<
-            ", internal code: " << static_cast<int>(response.CurlResponseCode));
-    }
-
-    if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
         return TGetPointsCountResponse(TStringBuilder{} << "Monitoring api points count response: " << response.Content.data() <<
             ", internal code: " << response.Content.HttpResponseCode);
     }
@@ -640,8 +640,6 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("data");
-
-        builder.AddUrlParam("projectId", GetProjectId());
 
         const auto& ds = Settings.GetDownsampling();
         NJsonWriter::TBuf w;

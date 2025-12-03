@@ -39,10 +39,22 @@ void TSensorEncoder::Close()
 { }
 
 void TSensorEncoder::OnStreamBegin()
-{ }
+{
+    Cubes_.clear();
+    CommonTagIds_.clear();
+    TagRegistry_ = TTagRegistry();
+}
 
 void TSensorEncoder::OnStreamEnd()
-{ }
+{
+    for (auto& [_, cube] : Cubes_) {
+        std::visit(
+            [] (auto&& cube) {
+                cube.FinishIteration();
+            },
+            cube);
+    }
+}
 
 void TSensorEncoder::OnCommonTime(TInstant /*time*/)
 { }
@@ -96,6 +108,11 @@ void TSensorEncoder::OnLabelsEnd()
                 THROW_ERROR_EXCEPTION("Unsupported metric type %Qv", ToString(SensorContext_->Type));
         }
         cube = Cubes_.FindPtr(SensorContext_->Name);
+        std::visit(
+            [] (auto&& cube) {
+                cube.StartIteration();
+            },
+            *cube);
     }
 
     SensorContext_->Cube = cube;

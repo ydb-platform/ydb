@@ -11,7 +11,7 @@ A {{ ydb-short-name }} cluster runs multiple Hives:
 
 When a node registers, it informs Hive of the types of tablets and the number of tablets that can be run on it.
 
-## Resource Usage Metrics
+## Resource Usage Metrics {#resources}
 
 Hive evaluates resource usage to evenly distribute tablets across nodes. For each tablet, the usage of four types of resources is tracked:
 
@@ -24,11 +24,11 @@ Additionally, to determine overloaded nodes, YDB uses memory consumption and pro
 
 Resource usage information is used for choosing a node for a tablet. For example, if Hive has information only on the CPU consumption of a tablet, it tries to find a node with the lowest CPU load. If information on multiple resources is available, the highest of the resource usage values is used.
 
-## Autobalancing
+## Autobalancing {#autobalancing}
 
 At certain moments, Hive may start an auto-balancing process that moves tablets between nodes to improve load distribution. The situations when autobalancing occurs are listed below. The auto-balancer works iteratively, making decisions about moving tablets one at a time. It selects the most loaded node, chooses a tablet that runs on this node using weighted randomness, and chooses a more suitable node for it. This process is repeated until balance is restored. The way node load is determined depends on the type of balancing. For example, in case of CPU consumption imbalance, CPU usage is used. For uneven distribution of column-oriented tables, the number of tablets is used instead.
 
-### Resource Usage Imbalance
+### Resource Usage Imbalance {#scatter}
 
 To quantify the balance of resource usage, Hive uses the *Scatter* metric, which is calculated separately for each resource using the following formula:
 
@@ -38,15 +38,14 @@ $\mathrm{MaxUsage}$ and $\mathrm{MinUsage}$ are, respectively, the maximum and m
 
 The maximum value of $Scatter$ across different resources is available as the [sensor](../devops/observability/monitoring.md) `Hive/MAX(BalanceScatter)` in the `tablets` subgroup.
 
-### Node Overload
+### Node Overload {#emergency}
 
 Overloaded nodes can negatively affect {{ ydb-short-name }} performance. CPU overload raises latencies, and consuming all memory can cause the node to crash with an out-of-memory error. The balancer is triggered when the load of one node exceeds 90% while the load on another node falls below 70%.
 
 The maximum resource usage on a node is reported by the `Hive/MAX(BalanceUsageMax)` [sensor](../devops/observability/monitoring.md)  in the `tablets` subgroup.
 
-### Even Distribution for a Specific Object
+### Even Distribution for a Specific Object {#imbalance}
 
 For tablets that use the Counter resource, the evenness of tablet distribution for each object (each table) is tracked in the form of the `ObjectImbalance` metric, similar to the $Scatter$ described above. Restarting nodes may break the balance in tablet distribution and trigger balancing.
 
 The maximum value of `ObjectImbalance` across different objects is reported by the `Hive/MAX(BalanceObjectImbalance)` [sensor](../devops/observability/monitoring.md) in the `tablets` subgroup.
-

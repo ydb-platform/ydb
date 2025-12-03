@@ -530,7 +530,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Extend(TExprBase node, 
             paths.assign(1, path);
         }
 
-        if (paths.size() == 1 && paths.front().Columns().Maybe<TCoVoid>() && paths.front().Ranges().Maybe<TCoVoid>()) {
+        if (paths.size() == 1 && paths.front().Columns().Maybe<TCoVoid>() && paths.front().Ranges().Maybe<TCoVoid>() && paths.front().QLFilter().Maybe<TCoVoid>()) {
             return allAreTables
                 ? paths.front().Table()
                 : Build<TYtTableContent>(ctx, extend.Pos())
@@ -675,7 +675,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Length(TExprBase node, 
         YQL_ENSURE(read.Input().Size() == 1);
         TYtSection section = read.Input().Item(0);
         bool needMaterialize = NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Sample)
-            || AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>() || TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic; });
+            || AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>() || TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic; });
         for (auto s: section.Settings()) {
             switch (FromString<EYtSettingType>(s.Name().Value())) {
             case EYtSettingType::Take:
@@ -856,7 +856,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ResPull(TExprBase node,
         {}, ctx, State_,
         TCopyOrTrivialMapOpts().SetTryKeepSortness(keepSorted).SetSectionUniq(section.Ref().GetConstraint<TDistinctConstraintNode>()).SetConstraints(read.Ref().GetConstraintSet()));
 
-    auto newData = path.Columns().Maybe<TCoVoid>() && path.Ranges().Maybe<TCoVoid>()
+    auto newData = path.Columns().Maybe<TCoVoid>() && path.Ranges().Maybe<TCoVoid>() && path.QLFilter().Maybe<TCoVoid>()
         ? path.Table()
         : Build<TCoRight>(ctx, resPull.Pos())
             .Input<TYtReadTable>()
@@ -920,9 +920,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TransientOpWithSettings
         res = ctx.ChangeChild(*res, TYtTransientOpBase::idx_World,
             ApplySyncListToWorld(res->ChildPtr(TYtTransientOpBase::idx_World), syncList, ctx));
     }
-    // Transform YtCopy to YtMerge in case of ranges
+    // Transform YtCopy to YtMerge in case of ranges and QLFilter
     if (op.Maybe<TYtCopy>()) {
-        if (AnyOf(updatedSections.front().Cast<TYtSection>().Paths(), [](TYtPath path) { return !path.Ranges().Maybe<TCoVoid>(); })) {
+        if (AnyOf(updatedSections.front().Cast<TYtSection>().Paths(), [](TYtPath path) { return !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>(); })) {
             res = ctx.RenameNode(*res, TYtMerge::CallableName());
         }
     }

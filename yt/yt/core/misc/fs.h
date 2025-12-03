@@ -47,31 +47,31 @@ void RemoveRecursive(const TString& path);
 void Rename(const TString& source, const TString& destination);
 
 //! Returns name of file.
-TString GetFileName(const TString& path);
+TString GetFileName(std::string_view path);
 
 //! Returns extension of file.
-TString GetFileExtension(const TString& path);
+TString GetFileExtension(std::string_view path);
 
 //! Returns name of file without extension.
-TString GetFileNameWithoutExtension(const TString& path);
+TString GetFileNameWithoutExtension(std::string_view path);
 
 //! Returns path of directory containing the file.
-TString GetDirectoryName(const TString& path);
+TString GetDirectoryName(std::string_view path);
 
 //! Returns the absolute path for the given (possibly relative) path.
-TString GetRealPath(const TString& path);
+TString GetRealPath(std::string_view path);
 
 //! Checks that given path is relative and points somewhere inside the root directory.
-bool IsPathRelativeAndInvolvesNoTraversal(const TString& path);
+bool IsPathRelativeAndInvolvesNoTraversal(std::string_view path);
 
 //! Combines two strings into a path. Returns second path if it is absolute.
-TString CombinePaths(const TString& path1, const TString& path2);
+TString CombinePaths(std::string_view path1, std::string_view path2);
 
 //! Appends second path to the first one, handling delimiters.
-TString JoinPaths(const TString& path1, const TString& path2);
+TString JoinPaths(std::string_view path1, std::string_view path2);
 
 //! Combines a bunch of strings into a path.
-TString CombinePaths(const std::vector<TString>& paths);
+TString CombinePaths(const std::vector<std::string>& paths);
 
 //! Deletes all files with extension #TempFileSuffix in a given directory.
 void CleanTempFiles(const TString& path);
@@ -83,13 +83,13 @@ std::vector<TString> EnumerateFiles(const TString& path, int depth = 1, bool sor
 std::vector<TString> EnumerateDirectories(const TString& path, int depth = 1);
 
 //! Returns path to `to` relative to `from`.
-TString GetRelativePath(const TString& from, const TString& to);
+TString GetRelativePath(std::string_view from, std::string_view to);
 
 //! Returns path to `path` relative to working directory.
-TString GetRelativePath(const TString& path);
+TString GetRelativePath(std::string_view path);
 
 //! Returns the shortest among absolute and relative to working directory path to `path`.
-TString GetShortestPath(const TString& path);
+TString GetShortestPath(std::string_view path);
 
 //! Describes total, free, and available space on a disk drive.
 struct TDiskSpaceStatistics
@@ -133,7 +133,7 @@ i64 GetDirectorySize(
 void Touch(const TString& path);
 
 //! Converts all path separators to platform path separators.
-TString NormalizePathSeparators(const TString& path);
+TString NormalizePathSeparators(std::string_view path);
 
 //! Sets permissions for a file.
 void SetPermissions(const TString& path, int permissions);

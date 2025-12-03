@@ -8,7 +8,7 @@
 #include <util/datetime/base.h>
 #include <util/string/printf.h>
 
-namespace NYql::DateTime {
+namespace NYql::NDateTime {
 
 constexpr size_t MAX_TIMEZONE_NAME_LEN = 64;
 
@@ -207,4 +207,9 @@ TInstant DoAddMonths(TInstant current, i64 months, const NUdf::IDateBuilder& bui
 
 TInstant DoAddYears(TInstant current, i64 years, const NUdf::IDateBuilder& builder);
 
+} // namespace NYql::NDateTime
+
+// TODO(YQL-20086): Migrate YDB to NYql::NDateTime
+namespace NYql::DateTime { // NOLINT(readability-identifier-naming)
+using namespace NYql::NDateTime;
 } // namespace NYql::DateTime

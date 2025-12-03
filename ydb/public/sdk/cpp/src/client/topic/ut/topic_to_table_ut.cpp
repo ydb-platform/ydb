@@ -83,6 +83,32 @@ Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_21,  0, 2, 10);
 Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_22,  0, 0, 10);
 Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_23,  0, 2,  0);
 
+Y_UNIT_TEST_F(The_TxWriteInfo_Is_Deleted_After_The_Immediate_Transaction, TFixtureTable)
+{
+    CreateTopic("topic_A");
+
+    auto session = CreateSession();
+
+    auto tx = session->BeginTx();
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", tx.get());
+    RestartPQTablet("topic_A", 0);
+    session->CommitTx(*tx, EStatus::SUCCESS);
+
+    tx = session->BeginTx();
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", tx.get());
+    RestartPQTablet("topic_A", 0);
+    session->CommitTx(*tx, EStatus::SUCCESS);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+    UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
+
+    CheckTabletKeys("topic_A");
+
+    WaitForTheTabletToDeleteTheWriteInfo("topic_A", 0);
+}
+
 Y_UNIT_TEST_F(WriteToTopic_Demo_24_Table, TFixtureTable)
 {
     TestWriteToTopic24();

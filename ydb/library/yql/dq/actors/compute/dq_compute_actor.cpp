@@ -39,7 +39,7 @@ public:
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         const TTaskRunnerFactory& taskRunnerFactory,
         ::NMonitoring::TDynamicCounterPtr taskCounters)
-        : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, true, false, taskCounters)
+        : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, false, false, taskCounters)
         , TaskRunnerFactory(taskRunnerFactory)
     {
         InitializeTask();
@@ -47,6 +47,8 @@ public:
 
     void DoBootstrap() {
         const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
+
+        MemoryQuota = InitMemoryQuota();
 
         TLogFunc logger;
         if (IsDebugLogEnabled(actorSystem)) {
@@ -62,7 +64,9 @@ public:
         auto wakeupCallback = [actorSystem, selfId]() {
             actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         };
-        auto errorCallback = [this](const TString& error){ SendError(error); };
+        auto errorCallback = [actorSystem, selfId](const TString& error) {
+            actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
+        };
         TDqTaskRunnerExecutionContext execCtx(TxId, std::move(wakeupCallback), std::move(errorCallback));
         PrepareTaskRunner(execCtx);
 

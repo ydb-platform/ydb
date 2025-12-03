@@ -134,8 +134,8 @@ std::unordered_set<std::string_view> FindUsedVars(const TExprNode::TPtr& params)
     }
 
     const auto defines = params->Child(4);
-    static constexpr size_t defineLambdasStartPos = 3;
-    for (const auto& define : defines->Children() | std::views::drop(defineLambdasStartPos)) {
+    static constexpr size_t DefineLambdasStartPos = 3;
+    for (const auto& define : defines->Children() | std::views::drop(DefineLambdasStartPos)) {
         const auto lambda = TCoLambda(define);
         const auto varsArg = lambda.Args().Arg(1).Ptr();
         const auto lambdaBody = lambda.Body().Ptr();

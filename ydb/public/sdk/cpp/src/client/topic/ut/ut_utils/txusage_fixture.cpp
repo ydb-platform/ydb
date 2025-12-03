@@ -1149,6 +1149,42 @@ void TFixture::SendLongTxLockStatus(const NActors::TActorId& actorId,
     runtime.SendToPipe(tabletId, actorId, event.release());
 }
 
+void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const std::string& topicName,
+                                                    std::uint32_t partition)
+{
+    auto& runtime = Setup->GetRuntime();
+    NActors::TActorId edge = runtime.AllocateEdgeActor();
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
+
+    for (int i = 0; i < 20; ++i) {
+        auto request = std::make_unique<NKikimr::TEvKeyValue::TEvRequest>();
+        request->Record.SetCookie(12345);
+        request->Record.AddCmdRead()->SetKey("_txinfo");
+
+        auto& runtime = Setup->GetRuntime();
+
+        runtime.SendToPipe(tabletId, edge, request.release());
+        auto response = runtime.GrabEdgeEvent<NKikimr::TEvKeyValue::TEvResponse>();
+
+        UNIT_ASSERT(response->Record.HasCookie());
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadResultSize(), 1);
+
+        auto& read = response->Record.GetReadResult(0);
+
+        NKikimrPQ::TTabletTxInfo info;
+        UNIT_ASSERT(info.ParseFromString(read.GetValue()));
+
+        if (info.TxWritesSize() == 0) {
+            return;
+        }
+
+        std::this_thread::sleep_for(100ms);
+    }
+
+    UNIT_FAIL("TTabletTxInfo.TxWrites is expected to be empty");
+}
+
 void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const NActors::TActorId& actorId,
                                                     std::uint64_t tabletId,
                                                     const NPQ::TWriteId& writeId)

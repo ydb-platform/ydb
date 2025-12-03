@@ -2,6 +2,8 @@
 
 #include "private.h"
 
+#include <yt/yt/client/table_client/public.h>
+
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/transaction.h>
 
@@ -175,7 +177,7 @@ public:
             }));
     }
 
-    std::optional<TMD5Hash> GetDigest() const override
+    std::optional<TRowsDigest> GetDigest() const override
     {
         return std::nullopt;
     }

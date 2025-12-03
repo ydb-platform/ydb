@@ -195,6 +195,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                 }
                             }
                             std::exception_ptr lineageError;
+                            typeCtx->CorrectLineage = true;
                             try {
                                 calculatedLineage = CalculateLineage(*input, *typeCtx, ctx, false);
                             } catch (const std::exception& e) {
@@ -217,7 +218,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                 }
                                 YQL_LOG(INFO) << "Lineage replay is the same";
                             }
-                            if (typeCtx->QContext && typeCtx->QContext.CanWrite() && typeCtx->CorrectLineage) {
+                            if (typeCtx->QContext && typeCtx->QContext.CanWrite() && *typeCtx->CorrectLineage) {
                                 typeCtx->QContext.GetWriter()->Put({LineageComponent, LineageResultLabel}, calculatedLineage).GetValueSync();
                                 YQL_LOG(INFO) << "Lineage is saved to QStorage";
                             }
@@ -322,9 +323,9 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
                         try {
                             // normalize is needed to check correctness of lineage output, e.g. if column-wise lineage section is empty, normalization will fail
                             NormalizeLineage(*lineageOut);
-                            typeCtx->EnableStandaloneLineage = true;
+                            typeCtx->CorrectStandaloneLineage = true;
                         } catch (const std::exception& e) {
-                            typeCtx->EnableStandaloneLineage = false;
+                            typeCtx->CorrectStandaloneLineage = false;
                             YQL_LOG(INFO) << "Skip saving to QStorageLineage as lineage is incorrect: "
                                           << e.what()
                                           << ", calculated lineage: "
@@ -332,7 +333,7 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
                             return IGraphTransformer::TStatus::Ok;
                         }
                         typeCtx->QContext.GetWriter()->Put({LineageComponent, StandaloneLineageLabel}, *lineageOut).GetValueSync();
-                        YQL_LOG(INFO) << "Lineage is saved to QStorage";
+                        YQL_LOG(INFO) << "Standalone Lineage is saved to QStorage";
                     }
                 }
                 return IGraphTransformer::TStatus::Ok;

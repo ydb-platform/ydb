@@ -709,6 +709,16 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
     }
     return response;
 }
+bool TLoginProvider::CanDecodeToken(const TString& token) {
+    try {
+        jwt::decoded_jwt decoded_token = jwt::decode(token);
+    } catch (const std::invalid_argument& e) {
+        return false;
+    } catch (const std::runtime_error& e) {
+        return false;
+    }
+    return true;
+}
 
 TString TLoginProvider::GetTokenAudience(const TString& token) {
     try {

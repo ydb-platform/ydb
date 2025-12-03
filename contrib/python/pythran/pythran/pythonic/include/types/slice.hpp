@@ -62,8 +62,7 @@ namespace types
 
     normalized_slice operator*(normalized_slice const &other) const;
     template <long stride>
-    normalized_slice
-    operator*(cstride_normalized_slice<stride> const &other) const;
+    normalized_slice operator*(cstride_normalized_slice<stride> const &other) const;
     normalized_slice operator*(slice const &other) const;
     template <long stride>
     normalized_slice operator*(cstride_slice<stride> const &other) const;
@@ -112,19 +111,16 @@ namespace types
 
     normalized_slice operator*(normalized_slice const &other) const;
     template <long other_stride>
-    typename std::conditional<(stride < 256 && other_stride < 256),
-                              cstride_normalized_slice<stride * other_stride>,
-                              normalized_slice>::type
+    std::conditional_t<(stride < 256 && other_stride < 256),
+                       cstride_normalized_slice<stride * other_stride>, normalized_slice>
     operator*(cstride_normalized_slice<other_stride> const &other) const;
 
     normalized_slice operator*(slice const &other) const;
     template <long other_stride>
-    typename std::conditional<(stride < 256 && other_stride < 256),
-                              cstride_normalized_slice<stride * other_stride>,
-                              normalized_slice>::type
+    std::conditional_t<(stride < 256 && other_stride < 256),
+                       cstride_normalized_slice<stride * other_stride>, normalized_slice>
     operator*(cstride_slice<other_stride> const &other) const;
-    cstride_normalized_slice
-    operator*(fast_contiguous_slice const &other) const;
+    cstride_normalized_slice operator*(fast_contiguous_slice const &other) const;
 
     long size() const;
     inline long get(long i) const;
@@ -146,8 +142,8 @@ namespace types
     slice operator*(slice const &other) const;
 
     template <long other_stride>
-    typename std::conditional<(stride < 256 && other_stride < 256),
-                              cstride_slice<stride * other_stride>, slice>::type
+    std::conditional_t<(stride < 256 && other_stride < 256), cstride_slice<stride * other_stride>,
+                       slice>
     operator*(cstride_slice<other_stride> const &other) const;
 
     cstride_slice operator*(fast_contiguous_slice const &other) const;
@@ -231,15 +227,14 @@ namespace types
   struct is_normalized_slice<normalized_slice> : std::true_type {
   };
   template <long stride>
-  struct is_normalized_slice<cstride_normalized_slice<stride>>
-      : std::true_type {
+  struct is_normalized_slice<cstride_normalized_slice<stride>> : std::true_type {
   };
 
   template <class S>
   using normalize_t = typename normalized<S>::type;
 
   template <class S>
-  typename std::enable_if<!is_slice<S>::value, S>::type normalize(S s, long n)
+  std::enable_if_t<!is_slice<S>::value, S> normalize(S s, long n)
   {
     if (s < 0)
       s += n;
@@ -286,8 +281,8 @@ namespace types
       return s;
   }
   template <class I0, class I1>
-  fast_contiguous_slice adapt_slice(fast_contiguous_slice const &s,
-                                    I0 const &index0, I1 const &index1)
+  fast_contiguous_slice adapt_slice(fast_contiguous_slice const &s, I0 const &index0,
+                                    I1 const &index1)
   {
     if ((long)index0 != (long)index1)
       return {0, 1};
@@ -296,8 +291,7 @@ namespace types
   }
 
   template <class S>
-  typename std::enable_if<is_slice<S>::value, std::ostream &>::type
-  operator<<(std::ostream &os, S const &s);
+  std::enable_if_t<is_slice<S>::value, std::ostream &> operator<<(std::ostream &os, S const &s);
 } // namespace types
 namespace builtins
 {

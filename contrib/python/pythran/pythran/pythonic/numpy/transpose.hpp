@@ -16,8 +16,8 @@ namespace numpy
   namespace
   {
     template <class T, class pS, class O, class Indices, class S, class Perm>
-    O const *_transposer(types::ndarray<T, pS> &expr, O const *iter,
-                         Indices &indices, S const &shape, Perm const &perm,
+    O const *_transposer(types::ndarray<T, pS> &expr, O const *iter, Indices &indices,
+                         S const &shape, Perm const &perm,
                          utils::int_<std::tuple_size<pS>::value - 1>)
     {
       for (long i = 0, n = shape[std::tuple_size<pS>::value - 1]; i < n; ++i) {
@@ -28,25 +28,21 @@ namespace numpy
       return iter;
     }
 
-    template <class T, class pS, class O, class Indices, class S, class Perm,
-              size_t I>
-    typename std::enable_if<std::tuple_size<pS>::value - 1 != I,
-                            O const *>::type
-    _transposer(types::ndarray<T, pS> &expr, O const *iter, Indices &indices,
-                S const &shape, Perm const &perm, utils::int_<I>)
+    template <class T, class pS, class O, class Indices, class S, class Perm, size_t I>
+    std::enable_if_t<std::tuple_size<pS>::value - 1 != I, O const *>
+    _transposer(types::ndarray<T, pS> &expr, O const *iter, Indices &indices, S const &shape,
+                Perm const &perm, utils::int_<I>)
     {
       for (long i = 0, n = shape[I]; i < n; ++i) {
         indices[perm[I]] = i;
-        iter =
-            _transposer(expr, iter, indices, shape, perm, utils::int_<I + 1>());
+        iter = _transposer(expr, iter, indices, shape, perm, utils::int_<I + 1>());
       }
       indices[perm[I]] = 0;
       return iter;
     }
     template <class T, class pS>
     types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
-    _transposer(types::ndarray<T, pS> const &a,
-                long const l[std::tuple_size<pS>::value])
+    _transposer(types::ndarray<T, pS> const &a, long const l[std::tuple_size<pS>::value])
     {
       auto shape = sutils::getshape(a);
       types::array_tuple<long, std::tuple_size<pS>::value> shp;
@@ -57,8 +53,8 @@ namespace numpy
       for (std::size_t i = 0; i < std::tuple_size<pS>::value; ++i)
         perm[l[i]] = i;
 
-      types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
-          new_array(shp, builtins::None);
+      types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>> new_array(
+          shp, builtins::None);
 
       auto const *iter = a.buffer;
       types::array_tuple<long, std::tuple_size<pS>::value> indices;
@@ -69,11 +65,9 @@ namespace numpy
   } // namespace
 
   template <class T, class pS>
-  typename std::enable_if<
-      (std::tuple_size<pS>::value > 2),
-      types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>>::
-      type
-      transpose(types::ndarray<T, pS> const &a)
+  std::enable_if_t<(std::tuple_size<pS>::value > 2),
+                   types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>>
+  transpose(types::ndarray<T, pS> const &a)
   {
     long t[std::tuple_size<pS>::value];
     for (unsigned long i = 0; i < std::tuple_size<pS>::value; ++i)
@@ -83,8 +77,7 @@ namespace numpy
 
   template <class T, class pS, size_t M>
   types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
-  transpose(types::ndarray<T, pS> const &a,
-            types::array_tuple<long, M> const &t)
+  transpose(types::ndarray<T, pS> const &a, types::array_tuple<long, M> const &t)
   {
     static_assert(std::tuple_size<pS>::value == M, "axes don't match array");
 

@@ -2655,8 +2655,9 @@ namespace NKikimr {
     {
         TEvVBaldSyncLog() = default;
 
-        TEvVBaldSyncLog(const TVDiskID &vdisk) {
+        TEvVBaldSyncLog(const TVDiskID &vdisk, bool dropChunksExplicitly = false) {
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
+            Record.SetDropChunksExplicitly(dropChunksExplicitly);
         }
     };
 
@@ -2921,7 +2922,7 @@ namespace NKikimr {
         TEvVSyncFull(const TSyncState &syncState, const TVDiskID &sourceVDisk, const TVDiskID &targetVDisk,
                 ui64 cookie, NKikimrBlobStorage::ESyncFullStage stage,
                 const TLogoBlobID &logoBlobFrom, ui64 blockTabletFrom, const TKeyBarrier &barrierFrom,
-                NKikimrBlobStorage::EFullSyncProtocol protocol = NKikimrBlobStorage::EFullSyncProtocol::UnorderedData);
+                NKikimrBlobStorage::EFullSyncProtocol protocol = NKikimrBlobStorage::EFullSyncProtocol::Legacy);
 
         bool IsInitial() const {
             return Record.GetCookie() == 0;
@@ -2943,23 +2944,25 @@ namespace NKikimr {
 
         TEvVSyncFullResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TSyncState &syncState,
                 ui64 cookie, const TInstant &now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel, NKikimrBlobStorage::EFullSyncProtocol protocol)
             : TEvVResultBasePB(now, counterPtr, histoPtr, channel)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             Record.SetCookie(cookie);
             SyncStateFromSyncState(syncState, Record.MutableSyncState());
+            Record.SetProtocol(protocol);
         }
 
         TEvVSyncFullResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, ui64 cookie,
                 const TInstant &now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel, NKikimrBlobStorage::EFullSyncProtocol protocol)
             : TEvVResultBasePB(now, counterPtr, histoPtr, channel)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             Record.SetCookie(cookie);
+            Record.SetProtocol(protocol);
         }
 
         TString ToString() const override {

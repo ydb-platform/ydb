@@ -134,10 +134,9 @@ struct TCosineSimilarity : TMetric<TCoord> {
     {
         const auto r = CosineImpl<TRes>(reinterpret_cast<const TCoord*>(cluster),
                                         reinterpret_cast<const TCoord*>(embedding), dimensions);
-        // sqrt(ll) * sqrt(rr) computed instead of sqrt(ll * rr) to avoid precision issues
-        const auto norm = std::sqrt(r.LL) * std::sqrt(r.RR);
+        const auto norm = std::sqrt(r.LL * r.RR);
         const TRes similarity = norm != 0 ? static_cast<TRes>(r.LR) / static_cast<TRes>(norm) : 0;
-        return -similarity;
+        return 1-similarity;
     }
 };
 
@@ -345,6 +344,35 @@ public:
         return false;
     }
 
+    void FindClusters(TArrayRef<const char> embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        if (!IsExpectedSize(embedding)) {
+            return;
+        }
+        clusters.clear();
+        for (ui32 i = 0; const auto& cluster : Clusters) {
+            auto cl = std::make_pair(i, (double)TMetric::Distance(cluster.data(), embedding.data(), Dimensions));
+            auto it = std::lower_bound(clusters.begin(), clusters.end(), cl, [](const std::pair<ui32, double>& a, const std::pair<ui32, double>& b) {
+                return a.second < b.second;
+            });
+            if (clusters.size() < n) {
+                clusters.insert(it, cl);
+            } else if (it != clusters.end()) {
+                clusters.insert(it, cl);
+                clusters.pop_back();
+            }
+            ++i;
+        }
+        if (skipRatio > 0 && clusters.size() > 1) {
+            double thresh = (clusters[0].second < 0 ? clusters[0].second/skipRatio : clusters[0].second*skipRatio);
+            for (ui32 i = 1; i < clusters.size(); i++) {
+                if (clusters[i].second > thresh) {
+                    clusters.resize(i);
+                    break;
+                }
+            }
+        }
+    }
+
     std::optional<ui32> FindCluster(TArrayRef<const char> embedding) override {
         if (!IsExpectedSize(embedding)) {
             return {};
@@ -367,7 +395,7 @@ public:
         return FindCluster(row.at(embeddingPos).AsRef());
     }
 
-    double CalcDistance(const TStringBuf a, const TStringBuf b) override {
+    double CalcDistance(TArrayRef<const char> a, TArrayRef<const char> b) override {
         return TMetric::Distance(a.data(), b.data(), Dimensions);
     }
 
@@ -628,6 +656,31 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, 
     }
 
     return !error;
+}
+
+void FilterOverlapRows(TVector<TSerializedCellVec>& rows, size_t distancePos, ui32 overlapClusters, double overlapRatio) {
+    if (rows.size() <= 1) {
+        return;
+    }
+    std::sort(rows.begin(), rows.end(), [&](const TSerializedCellVec& a, const TSerializedCellVec& b) {
+        auto da = a.GetCells().at(distancePos).AsValue<double>();
+        auto db = b.GetCells().at(distancePos).AsValue<double>();
+        return da < db;
+    });
+    if (rows.size() > overlapClusters) {
+        rows.resize(overlapClusters);
+    }
+    if (overlapRatio > 0) {
+        auto thresh = rows[0].GetCells().at(distancePos).AsValue<double>();
+        thresh = (thresh < 0 ? thresh/overlapRatio : thresh*overlapRatio);
+        for (size_t i = 1; i < rows.size(); i++) {
+            auto d = rows[i].GetCells().at(distancePos).AsValue<double>();
+            if (d > thresh) {
+                rows.resize(i);
+                break;
+            }
+        }
+    }
 }
 
 }

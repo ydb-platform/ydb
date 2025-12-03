@@ -26,13 +26,16 @@ void AddRowToLevel(TBufferData& buffer, TClusterId parent, TClusterId child, con
 void AddRowToData(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> sourcePk,
     TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel);
 
+void AddRowToDataWithForeign(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> sourcePk,
+    TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isForeign, double distance, bool isPostingLevel);
+
 TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
-    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
-    ui32& dataPos, NTable::TTag& embeddingTag);
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, bool forBuild, NTable::TPos& embeddingPos,
+    NTable::TPos& dataPos, NTable::TPos* isForeignPos = nullptr);
 
 std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
     const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
-    const google::protobuf::RepeatedPtrField<TProtoStringType>& pkColumns = {});
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& pkColumns = {}, bool withForeignFlag = false);
 
 class TSampler {
     struct TProbability {

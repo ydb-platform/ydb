@@ -23,35 +23,44 @@ namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
 /*
- * TReshuffleKMeansScan performs a post-processing step in a distributed K-means pipeline.
- * It reassigns data points to given clusters and uploads the reshuffled results.
- * It scans either a MAIN or BUILD table shard, while the output rows go to the BUILD or POSTING table.
+ * TFilterKMeansScan copies rows from an intermediate build table with more than
+ * <OverlapClusters> overlapping clusters to another build or posting table with
+ * UP TO <OverlapClusters> overlapping clusters.
+ * This is needed because, when overlapping clusters in the index are enabled,
+ * at levels > 1, rows are first added to <OverlapClusters^2> nearest clusters,
+ * and we need to select only <OverlapClusters> of them.
+ *
+ * This scan takes a BUILD table and writes output to BUILD or POSTING table.
+ * (!) Please note that the scan uses the source table in a different form than other scans:
+ * __ydb_parent column is expected to be in the end of its primary key rather than
+ * the beginning.
+ *
+ * Source columns: <PK columns>, __ydb_parent, __ydb_foreign, __ydb_distance, <data columns>
+ * Build destination columns: __ydb_parent, <PK columns>, __ydb_foreign, <data columns in the same order>
+ * Posting destination columns: __ydb_parent, <PK columns>, <data columns in the same order>
  *
  * Request:
- * - The client sends TEvReshuffleKMeansRequest with:
- *   - Parent: ID of the scanned cluster
- *     - If Parent=0, the entire table shard is scanned
- *   - Child, serving as the base ID for the new cluster IDs computed in this local stage
- *   - Clusters: list of centroids to which input rows will be reassigned
+ * - The client sends TEvFilterKMeansRequest with:
  *   - Upload mode (MAIN_TO_BUILD, MAIN_TO_POSTING, BUILD_TO_BUILD or BUILD_TO_POSTING)
  *     determining input and output layouts
- *   - The embedding column name and additional data columns to be used for K-means
  *   - Name of the target table for row results ("posting" or "build")
+ *   - SkipFirstKey, SkipLastKey
  *
  * Execution Flow:
- * - TReshuffleKMeansScan scans the relevant input shard range
- * - For each input row:
- *   - The closest cluster (from the provided centroids) is determined
- *   - The row is annotated with a new Child+cluster index ID
- *   - The row and any specified data columns are written to the output table
+ * - TFilterKMeansScan scans the whole input shard
+ * - If SkipFirstKey is specified in the request:
+ *   - Rows with <PK columns> equal to the beginning of the table range are copied to the response protobuf.
+ * - If SkipLastKey is specified in the request:
+ *   - Rows with <PK columns> equal to the end of the table range are copied to the response protobuf.
+ * - For all other input rows, namely, for every primary key combination:
+ *   - Top <OverlapClusters> rows with minimal __ydb_distance are selected, except
+ *     rows with __ydb_distance[i] larger than __ydb_distance[0]*OverlapRatio
+ *   - Selected rows are copied to the output table
  */
 
-class TReshuffleKMeansScan: public TActor<TReshuffleKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TFilterKMeansScan: public TActor<TFilterKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
-
-    NTableIndex::NKMeans::TClusterId Parent = 0;
-    NTableIndex::NKMeans::TClusterId Child = 0;
 
     EState UploadState;
 
@@ -69,70 +78,106 @@ protected:
 
     TBufferData* OutputBuf = nullptr;
 
-    const ui32 Dimensions = 0;
-    NTable::TPos EmbeddingPos = 0;
-    NTable::TPos DataPos = 1;
     const ui32 OverlapClusters = 0;
     const double OverlapRatio = 0;
     bool OutForeign = false;
-    bool InForeign = false;
-    NTable::TPos IsForeignPos = 0;
+    NTable::TPos DistancePos = 0;
+    NTable::TPos DataPos = 0;
+
+    TSerializedCellVec FirstIndexKey;
+    TSerializedCellVec LastIndexKey;
+    TVector<TSerializedCellVec> FirstKeyRows;
+    TVector<TSerializedCellVec> LastKeyRows;
+    TVector<TSerializedCellVec> LastRows;
+    ui32 KeyColumnCount = 0;
 
     ui32 RetryCount = 0;
 
     const TIndexBuildScanSettings ScanSettings;
+    bool SkipFirstKey = false;
+    bool SkipLastKey = false;
 
     TTags ScanTags;
 
     TUploadStatus UploadStatus;
 
     TActorId ResponseActorId;
-    TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse> Response;
+    TAutoPtr<TEvDataShard::TEvFilterKMeansResponse> Response;
 
     bool IsExhausted = false;
-
-    std::unique_ptr<IClusters> Clusters;
-    std::vector<std::pair<ui32, double>> TmpClusters;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
-        return NKikimrServices::TActivity::RESHUFFLE_KMEANS_SCAN_ACTOR;
+        return NKikimrServices::TActivity::FILTER_KMEANS_SCAN_ACTOR;
     }
 
-    TReshuffleKMeansScan(ui64 tabletId, const TUserTable& table, TLead&& lead,
-        const NKikimrTxDataShard::TEvReshuffleKMeansRequest& request,
-        const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response,
-        std::unique_ptr<IClusters>&& clusters)
+    TFilterKMeansScan(ui64 tabletId, const TUserTable& table,
+        const NKikimrTxDataShard::TEvFilterKMeansRequest& request,
+        const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvFilterKMeansResponse>&& response)
         : TActor(&TThis::StateWork)
-        , Parent(request.GetParent())
-        , Child(request.GetChild())
         , UploadState(request.GetUpload())
-        , Lead(std::move(lead))
         , TabletId(tabletId)
         , BuildId(request.GetId())
         , Uploader(request.GetScanSettings())
-        , Dimensions(request.GetSettings().vector_dimension())
         , OverlapClusters(request.GetOverlapClusters() ? request.GetOverlapClusters() : 1)
         , OverlapRatio(request.GetOverlapRatio())
         , ScanSettings(request.GetScanSettings())
+        , SkipFirstKey(request.GetSkipFirstKey())
+        , SkipLastKey(request.GetSkipLastKey())
         , ResponseActorId(responseActorId)
         , Response(std::move(response))
-        , Clusters(std::move(clusters))
     {
         LOG_I("Create " << Debug());
 
-        const bool toBuild = (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
-            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD);
-        InForeign = OverlapClusters > 1 && (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
-            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING);
-        OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
+        OutForeign = (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD);
 
-        const auto& embedding = request.GetEmbeddingColumn();
-        const auto& data = request.GetDataColumns();
-        ScanTags = MakeScanTags(table, embedding, data, toBuild, EmbeddingPos, DataPos, InForeign ? &IsForeignPos : nullptr);
-        Lead.SetTags(ScanTags);
-        OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data, {}, OutForeign));
+        TTags scanTags;
+        scanTags.push_back(UINT32_MAX); // Distance column will be put here
+        DataPos = 1;
+
+        auto outputTypes = std::make_shared<NTxProxy::TUploadTypes>();
+        Ydb::Type type;
+        {
+            type.set_type_id(NTableIndex::NKMeans::ClusterIdType);
+            outputTypes->emplace_back(NTableIndex::NKMeans::ParentColumn, type);
+        }
+
+        for (const auto& it : table.Columns) {
+            if (it.second.IsKey) {
+                KeyColumnCount++;
+                if (it.second.Name != NTableIndex::NKMeans::ParentColumn) {
+                    NScheme::ProtoFromTypeInfo(it.second.Type, type);
+                    outputTypes->emplace_back(it.second.Name, type);
+                }
+            }
+        }
+
+        for (const auto& it : table.Columns) {
+            if (it.second.IsKey) {
+                continue;
+            } else if (it.second.Name == NTableIndex::NKMeans::DistanceColumn) {
+                // The only special column we need is __ydb_distance
+                scanTags[0] = it.first;
+                DistancePos = 0;
+            } else if (it.second.Name == NTableIndex::NKMeans::IsForeignColumn) {
+                // __ydb_foreign is copied to data, but only in BUILD_TO_BUILD mode
+                if (OutForeign) {
+                    scanTags.push_back(it.first);
+                    NScheme::ProtoFromTypeInfo(it.second.Type, type);
+                    outputTypes->emplace_back(it.second.Name, type);
+                }
+            } else {
+                // All other columns are simply copied to data
+                scanTags.push_back(it.first);
+                NScheme::ProtoFromTypeInfo(it.second.Type, type);
+                outputTypes->emplace_back(it.second.Name, type);
+            }
+        }
+
+        Lead.To({}, NTable::ESeek::Lower);
+        Lead.SetTags(scanTags);
+        OutputBuf = Uploader.AddDestination(request.GetOutputName(), outputTypes);
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
@@ -159,12 +204,19 @@ public:
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
+        for (auto& row: FirstKeyRows) {
+            record.AddFirstKeyRows(TSerializedCellVec::Serialize(row.GetCells()));
+        }
+        for (auto& row: LastKeyRows) {
+            record.AddLastKeyRows(TSerializedCellVec::Serialize(row.GetCells()));
+        }
+
         Uploader.Finish(record, status);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_N("Done " << Debug() << " " << ToShortDebugString(Response->Record));
         } else {
-            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_E("Failed " << Debug() << " " << ToShortDebugString(Response->Record));
         }
         Send(ResponseActorId, Response.Release());
 
@@ -225,6 +277,9 @@ public:
         LOG_T("Exhausted " << Debug());
 
         IsExhausted = true;
+        if (LastIndexKey) {
+            FinishKey(true);
+        }
 
         // call Seek to wait uploads
         return EScan::Reset;
@@ -278,76 +333,64 @@ protected:
 
     TString Debug() const
     {
-        return TStringBuilder() << "TReshuffleKMeansScan TabletId: " << TabletId << " Id: " << BuildId
-            << " Parent: " << Parent << " Child: " << Child
-            << " " << Clusters->Debug()
+        return TStringBuilder() << "TFilterKMeansScan TabletId: " << TabletId << " Id: " << BuildId
             << " " << Uploader.Debug();
     }
 
     void Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        switch (UploadState) {
-            case EState::UPLOAD_MAIN_TO_BUILD:
-                FeedMainToBuild(key, row);
-                break;
-            case EState::UPLOAD_MAIN_TO_POSTING:
-                FeedMainToPosting(key, row);
-                break;
-            case EState::UPLOAD_BUILD_TO_BUILD:
-                FeedBuildToBuild(key, row);
-                break;
-            case EState::UPLOAD_BUILD_TO_POSTING:
-                FeedBuildToPosting(key, row);
-                break;
-            default:
-                Y_ENSURE(false);
-        }
-    }
-
-    void FeedRow(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
-        TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
-    {
-        Clusters->FindClusters(row.at(EmbeddingPos).AsRef(), TmpClusters, OverlapClusters, OverlapRatio);
-        if (OutForeign) {
-            bool foreign = false;
-            if (InForeign) {
-                foreign = row.at(IsForeignPos).AsValue<bool>();
+        TVector<TCell> fullRow(key.begin(), key.end());
+        fullRow.insert(fullRow.end(), row.begin(), row.end());
+        auto pk = key.Slice(0, key.size()-1);
+        if (SkipFirstKey) {
+            if (!FirstIndexKey) {
+                FirstIndexKey = TSerializedCellVec(pk);
+                FirstKeyRows.push_back(TSerializedCellVec(fullRow));
+                return;
             }
-            for (auto& [pos, distance]: TmpClusters) {
-                AddRowToDataWithForeign(*OutputBuf, Child + pos, sourcePk, dataColumns, origKey, foreign, distance, isPostingLevel);
-                foreign = true;
-            }
-        } else {
-            for (auto& [pos, _]: TmpClusters) {
-                AddRowToData(*OutputBuf, Child + pos, sourcePk, dataColumns, origKey, isPostingLevel);
+            if (TCellVectorsEquals{}(pk, FirstIndexKey.GetCells())) {
+                FirstKeyRows.push_back(TSerializedCellVec(fullRow));
+                return;
+            } else {
+                // first key skipping is finished
+                SkipFirstKey = false;
+                FirstIndexKey = {};
             }
         }
+        if (LastIndexKey && !TCellVectorsEquals{}(pk, LastIndexKey.GetCells())) {
+            FinishKey(false);
+        }
+        if (!LastIndexKey) {
+            LastIndexKey = TSerializedCellVec(pk);
+        }
+        LastRows.push_back(TSerializedCellVec(fullRow));
     }
 
-    void FeedMainToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FinishKey(bool last)
     {
-        FeedRow(row, key, row.Slice(DataPos), key, false);
-    }
-
-    void FeedMainToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
-    {
-        FeedRow(row, key, row.Slice(DataPos), key, true);
-    }
-
-    void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
-    {
-        FeedRow(row, key.Slice(1), row.Slice(DataPos), key, false);
-    }
-
-    void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
-    {
-        FeedRow(row, key.Slice(1), row.Slice(DataPos), key, true);
+        if (last && SkipLastKey) {
+            LastKeyRows = std::move(LastRows);
+        } else if (LastRows.size() > 0) {
+            NKikimr::NKMeans::FilterOverlapRows(LastRows, KeyColumnCount+DistancePos, OverlapClusters, OverlapRatio);
+            TVector<TCell> pk(KeyColumnCount);
+            for (auto& row: LastRows) {
+                const auto& cells = row.GetCells();
+                auto origKey = cells.Slice(0, KeyColumnCount);
+                pk[0] = origKey.at(KeyColumnCount-1);
+                for (size_t i = 0; i < KeyColumnCount-1; i++) {
+                    pk[i+1] = origKey.at(i);
+                }
+                OutputBuf->AddRow(pk, cells.Slice(KeyColumnCount+DataPos), origKey);
+            }
+        }
+        LastIndexKey = {};
+        LastRows.clear();
     }
 };
 
-class TDataShard::TTxHandleSafeReshuffleKMeansScan final: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxHandleSafeFilterKMeansScan final: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxHandleSafeReshuffleKMeansScan(TDataShard* self, TEvDataShard::TEvReshuffleKMeansRequest::TPtr&& ev)
+    TTxHandleSafeFilterKMeansScan(TDataShard* self, TEvDataShard::TEvFilterKMeansRequest::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev))
     {
@@ -364,15 +407,15 @@ public:
     }
 
 private:
-    TEvDataShard::TEvReshuffleKMeansRequest::TPtr Ev;
+    TEvDataShard::TEvFilterKMeansRequest::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext&)
+void TDataShard::Handle(TEvDataShard::TEvFilterKMeansRequest::TPtr& ev, const TActorContext&)
 {
-    Execute(new TTxHandleSafeReshuffleKMeansScan(this, std::move(ev)));
+    Execute(new TTxHandleSafeFilterKMeansScan(this, std::move(ev)));
 }
 
-void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx)
+void TDataShard::HandleSafe(TEvDataShard::TEvFilterKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
     auto& request = ev->Get()->Record;
     const ui64 id = request.GetId();
@@ -382,11 +425,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
-        auto response = MakeHolder<TEvDataShard::TEvReshuffleKMeansResponse>();
+        auto response = MakeHolder<TEvDataShard::TEvFilterKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TReshuffleKMeansScan TabletId: " << TabletID()
-            << " " << ToShortDebugString(request)
+        LOG_N("Starting TFilterKMeansScan TabletId: " << TabletID()
+            << " " << request.ShortDebugString()
             << " row version " << rowVersion);
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -403,9 +446,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_E("Rejecting TReshuffleKMeansScan bad request TabletId: " << TabletID()
-                    << " " << ToShortDebugString(request)
-                    << " with response " << response->Record.ShortDebugString());
+                LOG_E("Rejecting TFilterKMeansScan bad request TabletId: " << TabletID()
+                    << " " << request.ShortDebugString()
+                    << " with response " << ToShortDebugString(response->Record));
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {
@@ -439,72 +482,34 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
             }
         }
 
-        if (request.GetUpload() != NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
-            && request.GetUpload() != NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING
-            && request.GetUpload() != NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
+        if (request.GetUpload() != NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
             && request.GetUpload() != NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
         {
             badRequest("Wrong upload");
         }
 
-        const auto parent = request.GetParent();
-        NTable::TLead lead;
-        if (parent == 0) {
-            if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
-                || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
-            {
-                badRequest("Wrong upload for zero parent");
-            }
-            lead.To({}, NTable::ESeek::Lower);
-        } else if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
-            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING)
-        {
-            badRequest("Wrong upload for non-zero parent");
-        } else {
-            TCell from, to;
-            const auto range = CreateRangeFrom(userTable, request.GetParent(), from, to);
-            if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
-                badRequest(TStringBuilder() << " requested range doesn't intersect with table range");
-            }
-            lead = CreateLeadFrom(range);
+        if (request.GetOverlapClusters() <= 1) {
+            badRequest("OverlapClusters should be > 1");
+        }
+        if (request.GetOverlapRatio() < 0) {
+            badRequest("OverlapRatio should be >= 0");
         }
 
         if (!request.GetOutputName()) {
             badRequest(TStringBuilder() << "Empty output table name");
         }
 
-        auto tags = GetAllTags(userTable);
-        if (!tags.contains(request.GetEmbeddingColumn())) {
-            badRequest(TStringBuilder() << "Unknown embedding column: " << request.GetEmbeddingColumn());
-        }
-        for (auto dataColumn : request.GetDataColumns()) {
-            if (!tags.contains(dataColumn)) {
-                badRequest(TStringBuilder() << "Unknown data column: " << dataColumn);
-            }
-        }
-
-        // 3. Validating vector index settings
-        TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error);
-        if (!clusters) {
-            badRequest(error);
-        } else if (request.ClustersSize() < 1) {
-            badRequest("Should be requested for at least one cluster");
-        } else if (!clusters->SetClusters(TVector<TString>{request.GetClusters().begin(), request.GetClusters().end()})) {
-            badRequest("Clusters have invalid format");
-        }
-
         if (trySendBadRequest()) {
             return;
         }
 
-        TAutoPtr<NTable::IScan> scan = new TReshuffleKMeansScan(
-            TabletID(), userTable, std::move(lead), request, ev->Sender, std::move(response), std::move(clusters)
+        TAutoPtr<NTable::IScan> scan = new TFilterKMeansScan(
+            TabletID(), userTable, request, ev->Sender, std::move(response)
         );
 
         StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
     } catch (const std::exception& exc) {
-        FailScan<TEvDataShard::TEvReshuffleKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TReshuffleKMeansScan");
+        FailScan<TEvDataShard::TEvFilterKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TFilterKMeansScan");
     }
 }
 

@@ -3,6 +3,8 @@
 #include "schemeshard__operation_base.h"
 #include "schemeshard__operation_common.h"
 
+#include <ydb/core/base/table_index.h>
+
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_W(stream) LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -13,6 +15,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch(state) {
         case TTxState::Waiting:
+            return TTxState::ConfigureParts;
+        case TTxState::ConfigureParts:
             return TTxState::Propose;
         case TTxState::Propose:
             return TTxState::Done;
@@ -24,6 +28,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch(state) {
         case TTxState::Waiting:
+        case TTxState::ConfigureParts:
+            return MakeHolder<TConfigureParts>(OperationId, Transaction);
         case TTxState::Propose:
             return MakeHolder<TFinalizationPropose>(OperationId, Transaction);
         case TTxState::Done:
@@ -32,6 +38,172 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             return nullptr;
         }
     }
+
+    class TConfigureParts: public TSubOperationState {
+    private:
+        TOperationId OperationId;
+        TTxTransaction Transaction;
+
+        TString DebugHint() const override {
+            return TStringBuilder()
+                << "TIncrementalRestoreFinalize TConfigureParts"
+                << " operationId: " << OperationId;
+        }
+
+    public:
+        TConfigureParts(TOperationId id, const TTxTransaction& tx)
+            : OperationId(id), Transaction(tx)
+        {
+            IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        }
+
+        bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+            TTabletId ssId = context.SS->SelfTabletId();
+
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       DebugHint() << " HandleReply TEvProposeTransactionResult"
+                                   << ", at schemeshard: " << ssId
+                                   << ", message: " << ev->Get()->Record.ShortDebugString());
+
+            return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+        }
+
+        bool ProgressState(TOperationContext& context) override {
+            TTabletId ssId = context.SS->SelfTabletId();
+
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       DebugHint() << " ProgressState"
+                                   << ", at schemeshard: " << ssId);
+
+            TTxState* txState = context.SS->FindTx(OperationId);
+            Y_ABORT_UNLESS(txState);
+
+            const auto& finalize = Transaction.GetIncrementalRestoreFinalize();
+
+            // Collect all index impl tables that need schema version updates
+            THashSet<TPathId> implTablesToUpdate;
+            CollectIndexImplTables(finalize, context, implTablesToUpdate);
+
+            if (implTablesToUpdate.empty()) {
+                LOG_I(DebugHint() << " No index impl tables to update, skipping ConfigureParts");
+                return true;
+            }
+
+            // Prepare AlterData for each table and add shards to txState
+            NIceDb::TNiceDb db(context.GetDB());
+            txState->ClearShardsInProgress();
+
+            for (const auto& tablePathId : implTablesToUpdate) {
+                if (!context.SS->Tables.contains(tablePathId)) {
+                    LOG_W(DebugHint() << " Table not found: " << tablePathId);
+                    continue;
+                }
+
+                auto table = context.SS->Tables.at(tablePathId);
+                
+                // Create AlterData if it doesn't exist
+                if (!table->AlterData) {
+                    // Create minimal AlterData just to bump schema version
+                    auto alterData = MakeIntrusive<TTableInfo::TAlterTableInfo>();
+                    alterData->AlterVersion = table->AlterVersion + 1;
+                    alterData->NextColumnId = table->NextColumnId;
+                    alterData->Columns = table->Columns;
+                    alterData->KeyColumnIds = table->KeyColumnIds;
+                    alterData->IsBackup = table->IsBackup;
+                    alterData->IsRestore = table->IsRestore;
+                    alterData->TableDescriptionFull = table->TableDescription;
+                    
+                    table->PrepareAlter(alterData);
+                } else {
+                    // Increment AlterVersion if AlterData already exists
+                    table->AlterData->AlterVersion = table->AlterVersion + 1;
+                }
+                
+                LOG_I(DebugHint() << " Preparing ALTER for table " << tablePathId 
+                      << " version: " << table->AlterVersion << " -> " << table->AlterData->AlterVersion);
+
+                // Add all shards of this table to txState
+                for (const auto& shard : table->GetPartitions()) {
+                    auto shardIdx = shard.ShardIdx;
+                    if (!txState->ShardsInProgress.contains(shardIdx)) {
+                        txState->Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
+                        txState->ShardsInProgress.insert(shardIdx);
+                        
+                        LOG_I(DebugHint() << " Added shard " << shardIdx 
+                              << " (tablet: " << context.SS->ShardInfos[shardIdx].TabletID << ") to txState");
+                    }
+                }
+            }
+
+            context.SS->PersistTxState(db, OperationId);
+
+            // Send ALTER TABLE transactions to all datashards
+            for (const auto& shard : txState->Shards) {
+                auto shardIdx = shard.Idx;
+                auto datashardId = context.SS->ShardInfos[shardIdx].TabletID;
+
+                LOG_I(DebugHint() << " Propose ALTER to datashard " << datashardId 
+                      << " shardIdx: " << shardIdx << " txid: " << OperationId);
+
+                const auto seqNo = context.SS->StartRound(*txState);
+                
+                // Find which table this shard belongs to
+                TPathId tablePathId;
+                for (const auto& pathId : implTablesToUpdate) {
+                    auto table = context.SS->Tables.at(pathId);
+                    for (const auto& partition : table->GetPartitions()) {
+                        if (partition.ShardIdx == shardIdx) {
+                            tablePathId = pathId;
+                            break;
+                        }
+                    }
+                    if (tablePathId) break;
+                }
+
+                if (!tablePathId) {
+                    LOG_W(DebugHint() << " Could not find table for shard " << shardIdx);
+                    continue;
+                }
+
+                const auto txBody = context.SS->FillAlterTableTxBody(tablePathId, shardIdx, seqNo);
+                auto event = context.SS->MakeDataShardProposal(tablePathId, OperationId, txBody, context.Ctx);
+                context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
+            }
+
+            txState->UpdateShardsInProgress();
+            return false;
+        }
+
+    private:
+        void CollectIndexImplTables(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize,
+                                   TOperationContext& context,
+                                   THashSet<TPathId>& implTables) {
+            for (const auto& tablePath : finalize.GetTargetTablePaths()) {
+                // Check if this path looks like an index implementation table
+                TString indexImplTableSuffix = TString("/") + NTableIndex::ImplTable;
+                if (!tablePath.Contains(indexImplTableSuffix)) {
+                    continue;
+                }
+
+                TPath path = TPath::Resolve(tablePath, context.SS);
+                if (!path.IsResolved()) {
+                    LOG_W("CollectIndexImplTables: Table not resolved: " << tablePath);
+                    continue;
+                }
+
+                if (path.Base()->PathType != NKikimrSchemeOp::EPathType::EPathTypeTable) {
+                    continue;
+                }
+
+                TPathId implTablePathId = path.Base()->PathId;
+                if (context.SS->Tables.contains(implTablePathId)) {
+                    implTables.insert(implTablePathId);
+                    LOG_I("CollectIndexImplTables: Found index impl table: " << tablePath 
+                          << " pathId: " << implTablePathId);
+                }
+            }
+        }
+    };
 
     class TFinalizationPropose: public TSubOperationState {
     private:
@@ -59,6 +231,9 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             Y_ABORT_UNLESS(txState);
 
             const auto& finalize = Transaction.GetIncrementalRestoreFinalize();
+
+            // Sync schema versions for restored indexes before releasing path states
+            SyncIndexSchemaVersions(finalize, context);
 
             // Release all affected path states to EPathStateNoChanges
             TVector<TPathId> pathsToNormalize;
@@ -96,6 +271,76 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         }
 
     private:
+        void SyncIndexSchemaVersions(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize,
+                                     TOperationContext& context) {
+            LOG_I("SyncIndexSchemaVersions: Starting schema version sync for restored indexes");
+            LOG_I("SyncIndexSchemaVersions: Processing " << finalize.GetTargetTablePaths().size() << " target table paths");
+            
+            NIceDb::TNiceDb db(context.GetDB());
+
+            // Iterate through all target table paths and finalize their alters
+            for (const auto& tablePath : finalize.GetTargetTablePaths()) {
+                // Check if this path looks like an index implementation table
+                TString indexImplTableSuffix = TString("/") + NTableIndex::ImplTable;
+                if (!tablePath.Contains(indexImplTableSuffix)) {
+                    continue;
+                }
+
+                TPath path = TPath::Resolve(tablePath, context.SS);
+                if (!path.IsResolved()) {
+                    LOG_W("SyncIndexSchemaVersions: Table not resolved: " << tablePath);
+                    continue;
+                }
+
+                if (path.Base()->PathType != NKikimrSchemeOp::EPathType::EPathTypeTable) {
+                    continue;
+                }
+
+                TPathId implTablePathId = path.Base()->PathId;
+                if (!context.SS->Tables.contains(implTablePathId)) {
+                    LOG_W("SyncIndexSchemaVersions: Table not found: " << implTablePathId);
+                    continue;
+                }
+
+                auto table = context.SS->Tables.at(implTablePathId);
+                if (!table->AlterData) {
+                    LOG_W("SyncIndexSchemaVersions: No AlterData for table: " << implTablePathId);
+                    continue;
+                }
+
+                // Finalize the alter - this commits AlterData to the main table state
+                LOG_I("SyncIndexSchemaVersions: Finalizing ALTER for table " << implTablePathId
+                      << " version: " << table->AlterVersion << " -> " << table->AlterData->AlterVersion);
+                
+                table->FinishAlter();
+                context.SS->PersistTableAltered(db, implTablePathId, table);
+                
+                // Clear describe path caches and publish to scheme board
+                context.SS->ClearDescribePathCaches(path.Base());
+                context.OnComplete.PublishToSchemeBoard(OperationId, implTablePathId);
+                
+                LOG_I("SyncIndexSchemaVersions: Finalized schema version for: " << tablePath);
+
+                // Also update the parent index version
+                TPath indexPath = path.Parent();
+                if (indexPath.IsResolved() && indexPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
+                    TPathId indexPathId = indexPath.Base()->PathId;
+                    if (context.SS->Indexes.contains(indexPathId)) {
+                        auto oldVersion = context.SS->Indexes[indexPathId]->AlterVersion;
+                        context.SS->Indexes[indexPathId]->AlterVersion += 1;
+                        context.SS->PersistTableIndexAlterVersion(db, indexPathId, context.SS->Indexes[indexPathId]);
+                        
+                        LOG_I("SyncIndexSchemaVersions: Index AlterVersion incremented from "
+                              << oldVersion << " to " << context.SS->Indexes[indexPathId]->AlterVersion);
+                        
+                        context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
+                    }
+                }
+            }
+            
+            LOG_I("SyncIndexSchemaVersions: Finished schema version sync");
+        }
+
         void CollectPathsToNormalize(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize, 
                                    TOperationContext& context,
                                    TVector<TPathId>& pathsToNormalize) {

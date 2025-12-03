@@ -224,7 +224,10 @@ public:
 
             srcTable->AlterVersion += 1;
 
-            context.SS->PersistTableAlterVersion(db, srcPathId, table);
+            context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
+
+            // Sync child indexes to match the new version
+            NCdcStreamState::SyncChildIndexes(srcPath, srcTable->AlterVersion, OperationId, context, db);
 
             context.SS->ClearDescribePathCaches(srcPath);
             context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
@@ -393,9 +396,13 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsTable()
-                .NotUnderTheSameOperation(OperationId.GetTxId())
-                .NotUnderOperation();
+                .IsTable();
+
+            if (!Transaction.GetCreateTable().GetAllowUnderSameOperation()) {
+                checks
+                    .NotUnderTheSameOperation(OperationId.GetTxId())
+                    .NotUnderOperation();
+            }
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {
@@ -798,6 +805,8 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, sequences));
     }
 
+    // Process indexes: always create index structure, but skip impl table copies if OmitIndexes is set
+    // (impl tables are handled separately by CreateConsistentCopyTables for incremental backups with CDC)
     for (auto& child: srcPath.Base()->GetChildren()) {
         auto name = child.first;
         auto pathId = child.second;
@@ -840,6 +849,11 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             }
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+        }
+
+        // Skip impl table copies if OmitIndexes is set (handled by CreateConsistentCopyTables for incremental backups)
+        if (copying.GetOmitIndexes()) {
+            continue;
         }
 
         for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {

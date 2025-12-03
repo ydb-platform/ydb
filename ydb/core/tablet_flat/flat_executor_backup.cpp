@@ -1,3 +1,4 @@
+#include "flat_backup.h"
 #include "flat_boot_cookie.h"
 #include "flat_dbase_apply.h"
 #include "flat_dbase_scheme.h"
@@ -149,7 +150,7 @@ public:
 
     TSnapshotWriter(TActorId owner, const TFsPath& path,
                     const THashMap<ui32, TScheme::TTableInfo>& tables,
-                    TAutoPtr<TSchemeChanges> schema, TIntrusiveConstPtr<TExclusion> exclusion)
+                    TAutoPtr<TSchemeChanges> schema, const TBackupExclusion& exclusion)
         : Owner(owner)
         , SnapshotPath(path.Child("snapshot"))
         , Schema(schema)
@@ -194,7 +195,7 @@ public:
                 return ReplyAndDie(false, TStringBuilder() << "Failed to create table snapshot file " << tablePath << ": " << e.what());
             }
 
-            if (Exclusion->HasTable(tableId)) {
+            if (Exclusion.HasTable(tableId)) {
                 ScanDone(tableId); // empty table, no scan here
             }
         }
@@ -286,13 +287,13 @@ private:
     TFile SchemaFile;
     TAutoPtr<TSchemeChanges> Schema;
 
-    TIntrusiveConstPtr<TExclusion> Exclusion;
+    const TBackupExclusion& Exclusion;
 };
 
 class TBackupSnapshotScan : public IScan, public TActor<TBackupSnapshotScan> {
 public:
     TBackupSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, TColumn>& columns,
-                        TIntrusiveConstPtr<TExclusion> exclusion)
+                        const TBackupExclusion& exclusion)
         : TActor(&TThis::StateWork)
         , SnapshotWriter(snapshotWriter)
         , TableId(tableId)
@@ -326,7 +327,7 @@ public:
 
         for (const auto& info : Scheme->Cols) {
             const auto& column = Columns.at(info.Tag);
-            if (Exclusion->HasColumn(TableId, column.Id)) {
+            if (Exclusion.HasColumn(TableId, column.Id)) {
                 continue;
             }
 
@@ -385,7 +386,7 @@ private:
     TActorId SnapshotWriter;
     ui32 TableId;
     THashMap<ui32, TColumn> Columns;
-    TIntrusiveConstPtr<TExclusion> Exclusion;
+    const TBackupExclusion& Exclusion;
 
     TBuffer Buffer;
     bool InFlight = false;
@@ -397,7 +398,7 @@ public:
     using TOps = TArrayRef<const TUpdateOp>;
 
     TChangelogSerializer(NJsonWriter::TBuf& writer, const TScheme& schema,
-                         const TExclusion& exclusion, const std::function<void()>& beginCommit)
+                         const TBackupExclusion& exclusion, const std::function<void()>& beginCommit)
         : Writer(writer)
         , Schema(schema)
         , Exclusion(exclusion)
@@ -520,11 +521,6 @@ public:
         // ignore
     }
 
-    void DoLockRowTx(ui32, ELockMode, TKeys, ui64)
-    {
-        // ignore
-    }
-
     void Finalize()
     {
         if (HasChanges) {
@@ -535,7 +531,7 @@ public:
 private:
     NJsonWriter::TBuf& Writer;
     const TScheme& Schema;
-    const TExclusion& Exclusion;
+    const TBackupExclusion& Exclusion;
 
     bool HasChanges = false;
     std::function<void()> BeginCommit;
@@ -562,7 +558,7 @@ class TChangelogWriter : public TActorBootstrapped<TChangelogWriter> {
     };
 public:
     TChangelogWriter(TActorId owner, const TFsPath& path, const TScheme& schema,
-                     TIntrusiveConstPtr<TExclusion> exclusion)
+                     const TBackupExclusion& exclusion)
         : Owner(owner)
         , ChangelogPath(path.Child("changelog.json"))
         , Schema(schema)
@@ -678,7 +674,7 @@ public:
         if (dataUpdate) {
             try {
                 dataUpdate = NPageCollection::TSlicer::Lz4()->Decode(dataUpdate);
-                TChangelogSerializer serializer(b, Schema, *Exclusion, beginCommit);
+                TChangelogSerializer serializer(b, Schema, Exclusion, beginCommit);
                 NRedo::TPlayer<TChangelogSerializer> redoPlayer(serializer);
                 redoPlayer.Replay(dataUpdate);
                 serializer.Finalize();
@@ -739,7 +735,7 @@ private:
     TFile ChangelogFile;
 
     TScheme Schema;
-    TIntrusiveConstPtr<TExclusion> Exclusion;
+    const TBackupExclusion& Exclusion;
 
     TBuffer Buffer;
     ui64 ExpectedFlushCookie = 0;
@@ -748,7 +744,7 @@ private:
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                              const THashMap<ui32, TScheme::TTableInfo>& tables,
                              TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
-                             TAutoPtr<TSchemeChanges> schema, TIntrusiveConstPtr<TExclusion> exclusion)
+                             TAutoPtr<TSchemeChanges> schema, const TBackupExclusion& exclusion)
 {
     if (config.HasFilesystem()) {
         TString tabletTypeName = TTabletTypes::EType_Name(tabletType);
@@ -765,14 +761,14 @@ IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletB
 }
 
 IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, TColumn>& columns,
-                          TIntrusiveConstPtr<TExclusion> exclusion)
+                          const TBackupExclusion& exclusion)
 {
     return new TBackupSnapshotScan(snapshotWriter, tableId, columns, exclusion);
 }
 
 IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                               TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
-                              const TScheme& schema, TIntrusiveConstPtr<TExclusion> exclusion)
+                              const TScheme& schema, const TBackupExclusion& exclusion)
 {
     if (config.HasFilesystem()) {
         TString tabletTypeName = TTabletTypes::EType_Name(tabletType);

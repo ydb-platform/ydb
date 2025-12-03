@@ -1,7 +1,7 @@
 #pragma once
 
+#include <ydb/core/tablet_flat/flat_backup.h>
 #include <ydb/core/tablet_flat/flat_database.h>
-#include <ydb/core/tablet_flat/flat_executor_backup.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/core/base/blobstorage_common.h>
 
@@ -19,7 +19,7 @@ namespace NIceDb {
 using TToughDb = NTable::TDatabase;
 using NTable::TUpdateOp;
 using NTable::ELookup;
-using TBackupExclusion = NTabletFlatExecutor::NBackup::TExclusion;
+using NTable::TBackupExclusion;
 
 class TTypeValue : public TRawTypeValue {
 public:
@@ -752,11 +752,9 @@ struct Schema {
                 return std::is_same<T, OtherT>::value != 0;
             }
 
-            static TBackupExclusion GenerateBackupExclusion() {
+            static void FillBackupExclusion(TBackupExclusion& exclusion) {
                 if constexpr (std::is_same<typename T::BackupPolicy, NoBackup>::value) {
-                    return TBackupExclusion::ExcludeColumn(TableId, T::ColumnId);
-                } else {
-                    return {};
+                    exclusion.AddColumn(TableId, T::ColumnId);
                 }
             }
         };
@@ -776,10 +774,9 @@ struct Schema {
                 return TableColumns<T>::HaveColumn(columnId) || TableColumns<Ts...>::HaveColumn(columnId);
             }
 
-            static TBackupExclusion GenerateBackupExclusion() {
-                auto head = TableColumns<T>::GenerateBackupExclusion();
-                auto tail = TableColumns<Ts...>::GenerateBackupExclusion();
-                return tail.Merge(head);
+            static void FillBackupExclusion(TBackupExclusion& exclusion) {
+                TableColumns<T>::FillBackupExclusion(exclusion);
+                TableColumns<Ts...>::FillBackupExclusion(exclusion);
             }
         };
 
@@ -2125,10 +2122,9 @@ struct Schema {
             return SchemaTables<Type>::HaveTable(tableId) || SchemaTables<Types...>::HaveTable(tableId);
         }
 
-        static TBackupExclusion GenerateBackupExclusion() {
-            auto head = SchemaTables<Type>::GenerateBackupExclusion();
-            auto tail = SchemaTables<Types...>::GenerateBackupExclusion();
-            return tail.Merge(head);
+        static void FillBackupExclusion(TBackupExclusion& exclusion) {
+            SchemaTables<Type>::FillBackupExclusion(exclusion);
+            SchemaTables<Types...>::FillBackupExclusion(exclusion);
         }
     };
 
@@ -2178,11 +2174,9 @@ struct Schema {
             return Type::TableId == tableId;
         }
 
-        static TBackupExclusion GenerateBackupExclusion() {
+        static void FillBackupExclusion(TBackupExclusion& exclusion) {
             if constexpr (std::is_same_v<typename Type::BackupPolicy, NoBackup>) {
-                return TBackupExclusion::ExcludeTable(Type::TableId);
-            } else {
-                return Type::TColumns::GenerateBackupExclusion();
+                exclusion.AddTable(Type::TableId);
             }
         }
     };
@@ -2210,7 +2204,9 @@ inline bool Schema::Precharger<Schema::NoAutoPrecharge>::Precharge(
 
 template <typename SchemaType>
 inline TBackupExclusion GenerateBackupExclusion() {
-    return SchemaType::TTables::GenerateBackupExclusion();
+    TBackupExclusion exclusion;
+    SchemaType::TTables::FillBackupExclusion(exclusion);
+    return exclusion;
 }
 
 class TNiceDb {

@@ -4631,7 +4631,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Metadata>()) {
-                        item.Metadata = NKikimr::NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
+                        item.Metadata = NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Changefeeds>()) {
@@ -4652,7 +4652,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.SrcPrefix = rowset.GetValueOrDefault<Schema::ImportItems::SrcPrefix>(TString());
                     item.SrcPath = rowset.GetValueOrDefault<Schema::ImportItems::SrcPath>(TString());
                     if (rowset.HaveValue<Schema::ImportItems::EncryptionIV>()) {
-                        item.ExportItemIV = NKikimr::NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
+                        item.ExportItemIV = NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
                     }
 
                     if (item.WaitTxId != InvalidTxId) {

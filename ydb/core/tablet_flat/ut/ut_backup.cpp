@@ -495,10 +495,22 @@ struct TEnv : public TMyEnvBase {
         Env.GetAppData().SystemTabletBackupConfig.MutableFilesystem()->SetPath(Env.GetTempDir());
     }
 
+    template<typename TSchema>
+    class TDummy : public NFake::TDummy {
+        using TBase = NFake::TDummy;
+    public:
+        using TBase::TBase;
+
+        const NTable::TBackupExclusion& BackupExclusion() const override {
+            static const NTable::TBackupExclusion exclusion = NIceDb::GenerateBackupExclusion<TSchema>();
+            return exclusion;
+        }
+    };
+
     void FireDummyTablet(ui32 flags = 0) override
     {
         FireTablet(Edge, Tablet, [this, &flags](const TActorId &tablet, TTabletStorageInfo *info) {
-            return new NFake::TDummy(tablet, info, Edge, flags, NIceDb::GenerateBackupExclusion<TSchema>());
+            return new TDummy<TSchema>(tablet, info, Edge, flags);
         });
 
         WaitFor<NFake::TEvReady>();

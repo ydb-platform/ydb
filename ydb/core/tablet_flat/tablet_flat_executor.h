@@ -1,7 +1,6 @@
 #pragma once
 #include "defs.h"
 
-#include "flat_executor_backup.h"
 #include "flat_scan_iface.h"
 #include "util_fmt_abort.h"
 
@@ -21,6 +20,7 @@ class TTabletCountersBase;
 namespace NTable {
     class TDatabase;
     class TScheme;
+    class TBackupExclusion;
 }
 
 namespace NTabletFlatExecutor {
@@ -525,7 +525,7 @@ namespace NFlatExecutorSetup {
         virtual void OnFollowerDataUpdated();
 
         virtual bool NeedBackup() const;
-        virtual NBackup::TExclusion BackupExclusion() const;
+        virtual const NTable::TBackupExclusion& BackupExclusion() const;
 
         // create transaction?
     protected:

@@ -380,15 +380,15 @@ private:
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
             const auto databaseRoot = CanonizePath(Self->RootPathElements);
 
-            NKikimr::NBackup::TMetadata metadata;
+            NBackup::TMetadata metadata;
             // to do: enable view checksum validation
             constexpr bool EnableChecksums = false;
             metadata.SetVersion(EnableChecksums ? 1 : 0);
             metadata.SetEnablePermissions(exportInfo.EnablePermissions);
 
-            TMaybe<NKikimr::NBackup::TEncryptionIV> iv;
+            TMaybe<NBackup::TEncryptionIV> iv;
             if (exportSettings.has_encryption_settings()) {
-                iv = NKikimr::NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+                iv = NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
             }
 
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
@@ -412,13 +412,13 @@ private:
             return true;
         }
 
-        TString commonDestinationPrefix = NKikimr::NBackup::NormalizeExportPrefix(exportSettings.destination_prefix());
+        TString commonDestinationPrefix = NBackup::NormalizeExportPrefix(exportSettings.destination_prefix());
 
-        TMaybe<NKikimr::NBackup::TEncryptionIV> iv;
+        TMaybe<NBackup::TEncryptionIV> iv;
         if (exportSettings.has_encryption_settings()) {
-            iv = NKikimr::NBackup::TEncryptionIV::Generate();
+            iv = NBackup::TEncryptionIV::Generate();
             exportInfo.ExportMetadata.SetIV(iv->GetBinaryString());
-            exportInfo.ExportMetadata.SetEncryptionAlgorithm(NKikimr::NBackup::NormalizeEncryptionAlgorithmName(exportSettings.encryption_settings().encryption_algorithm()));
+            exportInfo.ExportMetadata.SetEncryptionAlgorithm(NBackup::NormalizeEncryptionAlgorithmName(exportSettings.encryption_settings().encryption_algorithm()));
         }
 
         if (!exportSettings.compression().empty()) {
@@ -436,13 +436,13 @@ private:
             if (exportPath.StartsWith(sourcePathRoot)) {
                 exportPath = exportPath.substr(sourcePathRoot.size() + 1); // cut all prefix + '/'
             }
-            exportPath = NKikimr::NBackup::NormalizeItemPath(exportPath); // Path without leading slash
+            exportPath = NBackup::NormalizeItemPath(exportPath); // Path without leading slash
             schemaMappingItem.SetSourcePath(exportPath);
 
             TString destinationPrefix;
             if (!exportItem.destination_prefix().empty()) {
                 TString& itemPrefix = *exportItem.mutable_destination_prefix();
-                destinationPrefix = itemPrefix = NKikimr::NBackup::NormalizeItemPrefix(itemPrefix);
+                destinationPrefix = itemPrefix = NBackup::NormalizeItemPrefix(itemPrefix);
             } else {
                 std::stringstream itemPrefix;
                 if (exportSettings.has_encryption_settings()) {
@@ -457,7 +457,7 @@ private:
             exportItem.set_destination_prefix(TStringBuilder() << commonDestinationPrefix << '/' << destinationPrefix);
 
             if (iv) {
-                schemaMappingItem.SetIV(NKikimr::NBackup::TEncryptionIV::Combine(*iv, NKikimr::NBackup::EBackupFileType::Metadata, itemIndex, 0).GetBinaryString());
+                schemaMappingItem.SetIV(NBackup::TEncryptionIV::Combine(*iv, NBackup::EBackupFileType::Metadata, itemIndex, 0).GetBinaryString());
             }
         }
         if (!exportSettings.SerializeToString(&exportInfo.Settings)) {

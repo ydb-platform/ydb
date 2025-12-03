@@ -30,9 +30,6 @@ def kikimr(request):
                     }
                 }
             },
-            table_service_config={
-                "enable_watermarks": True,
-            },
             default_clusteradmin="root@builtin",
             use_in_memory_pdisks=False,
         )

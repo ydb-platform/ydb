@@ -3,7 +3,7 @@ PY3TEST()
     TAG(ya:manual)
 
     SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
     ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
     ENV(NEMESIS_BINARY="ydb/tests/tools/nemesis/driver/nemesis")
 

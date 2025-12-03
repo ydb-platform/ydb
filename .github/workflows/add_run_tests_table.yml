@@ -1,15 +1,13 @@
-name: Add backport table to PR
+name: Add run tests table to PR
 
 on:
   pull_request_target:
     types:
-      - closed
-    branches:
-      - main
+      - opened
   workflow_dispatch:
     inputs:
       pr_number:
-        description: 'Pull Request number to add backport table to'
+        description: 'Pull Request number to add run tests table to'
         required: true
         type: number
 
@@ -21,8 +19,8 @@ env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
 
 jobs:
-  add-backport-table:
-    name: Add backport table to merged PR
+  add-run-tests-table:
+    name: Add run tests table to PR
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: >
       (
@@ -30,16 +28,13 @@ jobs:
       ) ||
       (
         github.event_name == 'pull_request_target' &&
-        github.event.pull_request.merged == true &&
-        github.event.pull_request.base.ref == 'main' &&
-        vars.SHOW_BACKPORT_IN_PR == 'TRUE'
+        vars.SHOW_RUN_TESTS_IN_PR == 'TRUE'
       )
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || 'main' }}
           fetch-depth: 1
           sparse-checkout: |
             .github
@@ -49,15 +44,14 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install PyGithub
 
-      - name: Add backport table to PR
+      - name: Add run tests table to PR
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_WORKSPACE: ${{ github.workspace }}
           APP_DOMAIN: ${{ vars.APP_DOMAIN }}
-          SHOW_BACKPORT_IN_PR: ${{ vars.SHOW_BACKPORT_IN_PR }}
           PR_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_number || '' }}
         run: |
-          python3 ./.github/scripts/add_backport_table.py
+          python3 ./.github/scripts/add_run_tests_table.py
 

@@ -4,6 +4,7 @@
 #include "partition.h"
 #include "partition_compactification.h"
 #include "partition_util.h"
+#include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 
@@ -1245,21 +1246,14 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
     auto subGroup = GetServiceCounters(counters, "pqproxy|writeTimeLag");
     InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
         subGroup, labels, {{"sensor", "TimeLags" + suffix}}, "Interval",
-        TVector<std::pair<ui64, TString>>{
-            {100, "100ms"}, {200, "200ms"}, {500, "500ms"}, {1000, "1000ms"},
-            {2000, "2000ms"}, {5000, "5000ms"}, {10'000, "10000ms"}, {30'000, "30000ms"},
-            {60'000, "60000ms"}, {180'000,"180000ms"}, {9'999'999, "999999ms"}}, true));
+        SLOW_LATENCY_MS_INTERVALS, true));
 
 
     subGroup = GetServiceCounters(counters, "pqproxy|writeInfo");
     {
         std::unique_ptr<TPercentileCounter> percentileCounter(new TPercentileCounter(
             subGroup, labels, {{"sensor", "MessageSize" + suffix}}, "Size",
-            TVector<std::pair<ui64, TString>>{
-                {1_KB, "1kb"}, {5_KB, "5kb"}, {10_KB, "10kb"},
-                {20_KB, "20kb"}, {50_KB, "50kb"}, {100_KB, "100kb"}, {200_KB, "200kb"},
-                {512_KB, "512kb"},{1024_KB, "1024kb"}, {2048_KB,"2048kb"}, {5120_KB, "5120kb"},
-                {10240_KB, "10240kb"}, {65536_KB, "65536kb"}, {999'999'999, "99999999kb"}}, true));
+            SIZE_KB_INTERVALS, true));
 
         MessageSize.Setup(IsSupportive(), std::move(percentileCounter));
     }
@@ -1294,22 +1288,14 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
             new NKikimr::NPQ::TPercentileCounter(
                 GetServiceCounters(counters, "pqproxy|topicWriteQuotaWait"), labels,
                     {{"sensor", "TopicWriteQuotaWait" + suffix}}, "Interval",
-                        TVector<std::pair<ui64, TString>>{
-                            {0, "0ms"}, {1, "1ms"}, {5, "5ms"}, {10, "10ms"},
-                            {20, "20ms"}, {50, "50ms"}, {100, "100ms"}, {500, "500ms"},
-                            {1000, "1000ms"}, {2500, "2500ms"}, {5000, "5000ms"},
-                            {10'000, "10000ms"}, {9'999'999, "999999ms"}}, true)
+                        FAST_LATENCY_MS_INTERVALS, true)
         );
     }
 
     PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(GetServiceCounters(counters, "pqproxy|partitionWriteQuotaWait"),
             labels, {{"sensor", "PartitionWriteQuotaWait" + suffix}}, "Interval",
-                TVector<std::pair<ui64, TString>>{
-                    {0, "0ms"}, {1, "1ms"}, {5, "5ms"}, {10, "10ms"},
-                    {20, "20ms"}, {50, "50ms"}, {100, "100ms"}, {500, "500ms"},
-                    {1000, "1000ms"}, {2500, "2500ms"}, {5000, "5000ms"},
-                    {10'000, "10000ms"}, {9'999'999, "999999ms"}}, true)
+                FAST_LATENCY_MS_INTERVALS, true)
     );
 }
 
@@ -1341,11 +1327,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), {},
                         subgroups, "bin",
-                        TVector<std::pair<ui64, TString>>{
-                            {100, "100"}, {200, "200"}, {500, "500"},
-                            {1000, "1000"}, {2000, "2000"}, {5000, "5000"},
-                            {10'000, "10000"}, {30'000, "30000"}, {60'000, "60000"},
-                            {180'000,"180000"}, {9'999'999, "999999"}}, true));
+                        SLOW_LATENCY_INTERVALS, true));
 
     }
     subgroups.back().second = "topic.write.message_size_bytes";
@@ -1353,12 +1335,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         std::unique_ptr<TPercentileCounter> percentileCounter(new TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), {},
             subgroups, "bin",
-            TVector<std::pair<ui64, TString>>{
-                {1024, "1024"}, {5120, "5120"}, {10'240, "10240"},
-                {20'480, "20480"}, {51'200, "51200"}, {102'400, "102400"},
-                {204'800, "204800"}, {524'288, "524288"},{1'048'576, "1048576"},
-                {2'097'152,"2097152"}, {5'242'880, "5242880"}, {10'485'760, "10485760"},
-                {67'108'864, "67108864"}, {999'999'999, "99999999"}}, true));
+            SIZE_INTERVALS, true));
         MessageSize.Setup(IsSupportive(), std::move(percentileCounter));
     }
 
@@ -1460,11 +1437,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
             new NKikimr::NPQ::TPercentileCounter(
                 NPersQueue::GetCountersForTopic(counters, IsServerless), {},
                             subgroups, "bin",
-                            TVector<std::pair<ui64, TString>>{
-                                {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
-                                {20, "20"}, {50, "50"}, {100, "100"}, {500, "500"},
-                                {1000, "1000"}, {2500, "2500"}, {5000, "5000"},
-                                {10'000, "10000"}, {9'999'999, "999999"}}, true)
+                            FAST_LATENCY_INTERVALS, true)
         );
         subgroups.pop_back();
     }
@@ -1473,11 +1446,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups, "bin",
-                        TVector<std::pair<ui64, TString>>{
-                            {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
-                            {20, "20"}, {50, "50"}, {100, "100"}, {500, "500"},
-                            {1000, "1000"}, {2500, "2500"}, {5000, "5000"},
-                            {10'000, "10000"}, {9'999'999, "999999"}}, true)
+            FAST_LATENCY_INTERVALS, true)
     );
 }
 

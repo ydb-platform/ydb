@@ -82,7 +82,7 @@ protected:
     const double OverlapRatio = 0;
     bool OutForeign = false;
     NTable::TPos DistancePos = 0;
-    ui32 DataPos = 0;
+    NTable::TPos DataPos = 0;
 
     TSerializedCellVec FirstIndexKey;
     TSerializedCellVec LastIndexKey;

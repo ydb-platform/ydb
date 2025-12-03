@@ -48,7 +48,7 @@ protected:
     const TActorId ResponseActorId;
 
     TTags ScanTags;
-    ui32 EmbeddingPos = 0;
+    NTable::TPos EmbeddingPos = 0;
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
@@ -86,7 +86,7 @@ public:
         InForeign = request.GetSkipOverlapForeign();
 
         const auto& embedding = request.GetEmbeddingColumn();
-        ui32 dataPos = 0;
+        NTable::TPos dataPos = 0;
         ScanTags = MakeScanTags(table, embedding, {}, false, EmbeddingPos, dataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
     }

@@ -83,8 +83,8 @@ void AddRowToDataWithForeign(TBufferData& buffer, TClusterId parent, TArrayRef<c
 }
 
 TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
-    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, bool forBuild, ui32& embeddingPos,
-    ui32& dataPos, ui32* isForeignPos)
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, bool forBuild, NTable::TPos& embeddingPos,
+    NTable::TPos& dataPos, NTable::TPos* isForeignPos)
 {
     auto tags = GetAllTags(table);
     TTags result;

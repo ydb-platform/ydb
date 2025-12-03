@@ -50,7 +50,7 @@ protected:
     const TSerializedTableRange RequestedRange;
     const ui64 K;
     bool SkipForeign = false;
-    ui32 IsForeignPos = 0;
+    NTable::TPos IsForeignPos = 0;
 
     ui64 TabletId = 0;
     ui64 BuildId = 0;
@@ -90,7 +90,7 @@ public:
     {
         LOG_I("Create " << Debug());
 
-        ui32 pos = 0;
+        NTable::TPos pos = 0;
         for (const auto& col: request.GetColumns()) {
             if (col == NTableIndex::NKMeans::IsForeignColumn) {
                 SkipForeign = true;
@@ -145,7 +145,7 @@ public:
                 return EScan::Feed;
             }
             TVector<TCell> cells;
-            ui32 pos = 0;
+            NTable::TPos pos = 0;
             for (const auto& cell: *row) {
                 if (pos != IsForeignPos) {
                     cells.push_back(cell);

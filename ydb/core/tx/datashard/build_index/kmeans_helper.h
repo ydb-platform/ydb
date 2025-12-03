@@ -32,8 +32,8 @@ void AddRowToDataWithForeign(TBufferData& buffer, TClusterId parent, TArrayRef<c
     TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isForeign, double distance, bool isPostingLevel);
 
 TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
-    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, bool forBuild, ui32& embeddingPos,
-    ui32& dataPos, ui32* isForeignPos = nullptr);
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, bool forBuild, NTable::TPos& embeddingPos,
+    NTable::TPos& dataPos, NTable::TPos* isForeignPos = nullptr);
 
 std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
     const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,

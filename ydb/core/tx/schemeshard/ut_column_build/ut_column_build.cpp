@@ -351,11 +351,10 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](auto& ev) {
             auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
-            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
-                cancellationApplying = true;
-            }
             if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
                 cancellationDroppingColumns = true;
+            } else if (cancellationDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                cancellationApplying = true;
             }
             return false;
         });
@@ -444,11 +443,10 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](auto& ev) {
             auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
-            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
-                rejectionApplying = true;
-            }
             if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
                 rejectionDroppingColumns = true;
+            } else if (rejectionDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                rejectionApplying = true;
             }
             return false;
         });
@@ -856,12 +854,10 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
                 auto& op = *modifyScheme.MutableInitiateColumnBuild();
                 // set invalid table name to fail the operation
                 op.SetTable("");
-            }
-            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
-                rejectionApplying = true;
-            }
-            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
+            } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
                 rejectionDroppingColumns = true;
+            } else if (rejectionDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                rejectionApplying = true;
             }
             return false;
         });
@@ -919,11 +915,10 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> applyingBlocker(runtime, [&](auto& ev) {
             auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
-            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
-                rejectionApplying = true;
-            }
             if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
                 rejectionDroppingColumns = true;
+            } else if (rejectionDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                rejectionApplying = true;
             }
             return false;
         });
@@ -980,13 +975,10 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
                 auto& op = *modifyScheme.MutableApplyIndexBuild();
                 // set invalid snapshot tx id to fail the operation
                 op.SetSnapshotTxId(ui64(InvalidTxId));
-            }
-
-            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
-                rejectionApplying = true;
-            }
-            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
+            } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
                 rejectionDroppingColumns = true;
+            } else if (rejectionDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                rejectionApplying = true;
             }
             return false;
         });
@@ -1045,12 +1037,10 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
                 // set invalid name to fail the operation
                 op.SetName("");
                 firstLock = false;
-            }
-            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild) {
-                rejectionApplying = true;
-            }
-            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
+            } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
                 rejectionDroppingColumns = true;
+            } else if (rejectionDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild) {
+                rejectionApplying = true;
             }
             return false;
         });

@@ -68,7 +68,7 @@ TString ExecuteScanQueryWithRetry(TTableClient& client, const TString& query, in
                         gotUnauthorized = true;
                         break;
                     }
-                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    UNIT_ASSERT_C(false, streamPart.GetIssues().ToString());
                     break;
                 }
                 if (streamPart.HasResultSet()) {

@@ -216,7 +216,7 @@ TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMetering
 
         CurrentUsedStorage_ = 0;
 
-        const TStringBuf schemaName = HasAppData() && AppDataVerified().FeatureFlags.GetUseYdsTopicStorageMetering()
+        const TStringBuf schemaName = AppData()->FeatureFlags.GetUseYdsTopicStorageMetering()
             ? "yds.serverless.v1"sv
             : "ydb.serverless.v1"sv;
         return TMeteringSink::FlushParameters(

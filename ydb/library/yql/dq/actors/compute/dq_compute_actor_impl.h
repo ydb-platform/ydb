@@ -329,7 +329,7 @@ protected:
             hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
             hFunc(TEvPrivate::TEvAsyncOutputError, HandleAsyncOutputError);
             hFunc(TEvPrivate::TEvCheckIdleness, HandleCheckIdleness);
-            hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
+            hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage);
             default: {
                 CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
                 InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");

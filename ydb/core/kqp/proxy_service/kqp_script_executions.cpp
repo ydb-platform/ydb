@@ -3204,7 +3204,7 @@ private:
         if (status == Ydb::StatusIds::SUCCESS) {
             KQP_PROXY_LOG_D("Reply success, issues: " << Issues.ToOneLineString());
         } else {
-            KQP_PROXY_LOG_W("Reply filed, status: " << status << ", issues: " << Issues.ToOneLineString());
+            KQP_PROXY_LOG_W("Reply failed, status: " << status << ", issues: " << Issues.ToOneLineString());
         }
 
         Send(Request->Sender, new TEvCancelScriptExecutionOperationResponse(status, std::move(Issues)));

@@ -35,8 +35,6 @@ void TCommandWorkloadSqsRunRead::Config(TConfig& config) {
     config.Opts->AddLongOption('e', "endpoint", "AWS queue endpoint.")
         .DefaultValue("sqs.yandex.net:8771")
         .StoreResult(&Scenario.EndPoint);
-    config.Opts->AddLongOption("dlq", "DLQ name.").Optional().StoreResult(&Scenario.DlqQueueName);
-    config.Opts->AddLongOption("dlq-endpoint", "DLQ endpoint.").Optional().StoreResult(&Scenario.DlqEndPoint);
     config.Opts->AddLongOption("error-messages-rate", "Error messages rate.")
         .Optional()
         .ManualDefaultValueDescription(

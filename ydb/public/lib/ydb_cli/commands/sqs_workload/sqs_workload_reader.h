@@ -20,7 +20,7 @@ struct TSqsWorkloadReaderParams {
     std::shared_ptr<size_t> StartedCount;
     ui32 Concurrency;
     ui32 BatchSize;
-    std::optional<ui32> ErrorMessagesRate;
+    TMaybe<ui32> ErrorMessagesRate;
     TDuration HandleMessageDelay;
     TDuration VisibilityTimeout;
 };

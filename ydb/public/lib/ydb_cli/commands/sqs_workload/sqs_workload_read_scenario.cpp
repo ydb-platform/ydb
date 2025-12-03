@@ -11,25 +11,6 @@ namespace NYdb::NConsoleClient {
 int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
     InitSqsClient();
 
-    if (DlqEndPoint && DlqQueueName) {
-        Aws::SQS::Model::SetQueueAttributesRequest setQueueAttributesRequest;
-        setQueueAttributesRequest.SetQueueUrl(fmt::format("http://{}/{}", *DlqEndPoint, *DlqQueueName).c_str());
-        // TODO: DLQ
-        // Aws::String redrivePolicy = fmt::format("{{ \"deadLetterTargetArn\": \"arn:aws:sqs:{}:{}:{}\" }}", Region,
-        // Account, *DlqQueueName); setQueueAttributesRequest.SetAttributes({
-        //     { Aws::SQS::Model::QueueAttributeName::RedrivePolicy, redrivePolicy }
-        // });
-        auto setQueueAttributesOutcome = SqsClient->SetQueueAttributes(setQueueAttributesRequest);
-        if (!setQueueAttributesOutcome.IsSuccess()) {
-            Log->Write(
-                ELogPriority::TLOG_ERR,
-                TStringBuilder() << "Error setting queue attributes: "
-                                 << setQueueAttributesOutcome.GetError().GetMessage()
-            );
-            return EXIT_FAILURE;
-        }
-    }
-
     TSqsWorkloadReaderParams params{
         .TotalSec = TotalSec,
         .QueueName = QueueName,

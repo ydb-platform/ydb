@@ -21,6 +21,9 @@ class WorkloadConfig:
     COVER_MAX_COLUMNS = 2
     ALLOWED_SECONDARY_INDEXES_COUNT = [1, 2, 3, 8, 16]
     
+    # Column types
+    ALLOWED_COLUMN_TYPES = ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64", "Utf8", "String", "Bool"]
+    
     # Data generation constants
     MAX_PRIMARY_KEY_VALUE = 100  # update the same rows
     MAX_OPERATIONS = 4
@@ -58,9 +61,10 @@ class IndexInfo:
 
 class TableInfo:
     """Table information"""
-    def __init__(self, primary_key_size: int, indexes: List[IndexInfo]):
+    def __init__(self, primary_key_size: int, indexes: List[IndexInfo], column_types: List[str] = None):
         self.primary_key_size = primary_key_size
         self.indexes = indexes
+        self.column_types = column_types
 
 
 class WorkloadStats:
@@ -112,6 +116,9 @@ class WorkloadSecondaryIndex(WorkloadBase):
         primary_key_size = random.randint(1, WorkloadConfig.PRIMARY_KEY_MAX_COLUMNS)
         indexes = []
         
+        # Generate random column types
+        column_types = [random.choice(WorkloadConfig.ALLOWED_COLUMN_TYPES) for _ in range(WorkloadConfig.COLUMNS)]
+        
         # Generate secondary indexes
         for _ in range(random.choice(WorkloadConfig.ALLOWED_SECONDARY_INDEXES_COUNT)):
             columns = self._generate_index_columns(primary_key_size)
@@ -123,7 +130,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
                 cover=cover
             ))
         
-        return TableInfo(primary_key_size, indexes)
+        return TableInfo(primary_key_size, indexes, column_types)
     
     def _generate_index_columns(self, primary_key_size: int) -> List[int]:
         """Generate columns for a secondary index"""
@@ -162,8 +169,8 @@ class WorkloadSecondaryIndex(WorkloadBase):
         """Create a single table with its secondary indexes"""
         table_path = self.get_table_path(table_name)
         
-        # Generate column definitions
-        columns = [f"{col} Uint64" for col in self._column_names]
+        # Generate column definitions with random types
+        columns = [f"{col} {table_info.column_types[i]}" for i, col in enumerate(self._column_names)]
         
         # Generate primary key columns
         pk_columns = [self._column_names[i] for i in range(table_info.primary_key_size)]
@@ -257,23 +264,34 @@ class WorkloadSecondaryIndex(WorkloadBase):
         self.verify_table(table_name, table_info)
         self.drop_table(table_name)
 
-    def _get_batch(self, pk_size: int, pk_only: bool) -> List[List[int]]:
+    def _get_batch(self, pk_size: int, pk_only: bool, table_info: TableInfo = None) -> List[List[Any]]:
         """Generate a batch of rows for operations"""
         batch_rows = []
         rows_count = random.randint(1, WorkloadConfig.MAX_ROWS_PER_OPERATION)
         
         for _ in range(rows_count):
             row = []
-            for i in range(WorkloadConfig.COLUMNS):
-                if i < pk_size:
-                    # Primary key columns
-                    row.append(random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE))
-                elif not pk_only:
-                    # Non-primary key columns
-                    row.append(random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE))
+            for i in range(WorkloadConfig.COLUMNS if not pk_only else pk_size):
+                row.append(self._generate_value_by_type(table_info.column_types[i]))
             batch_rows.append(row)
         
         return batch_rows
+    
+    def _generate_value_by_type(self, column_type: str) -> Union[int, bool, str]:
+        """Generate a value based on column type"""
+        if column_type in ["Uint8", "Uint32", "Uint64"]:
+            return random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE)
+        elif column_type in ["Int8", "Int32", "Int64"]:
+            return random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE)
+        elif column_type == "Bool":
+            return random.choice([True, False])
+        elif column_type in ["Utf8", "String"]:
+            # Generate a random string of lowercase latin letters
+            length = random.randint(1, 100)
+            return ''.join(random.choice([chr(i) for i in range(ord('a'), ord('z'))]) for _ in range(length))
+        else:
+            # Default to Uint64 range for any unexpected type
+            return random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE)
     
     def _run_operations(self, table: str, table_info: TableInfo) -> None:
         """Execute a batch of operations on the specified table"""
@@ -327,11 +345,11 @@ class WorkloadSecondaryIndex(WorkloadBase):
     def _insert_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
         """Generate INSERT operation SQL"""
         table_path = self.get_table_path(table)
-        batch_rows = self._get_batch(table_info.primary_key_size, False)
+        batch_rows = self._get_batch(table_info.primary_key_size, False, table_info)
         
         values_list = []
         for row in batch_rows:
-            values = [str(value) for value in row]
+            values = [self._format_value_by_type(value, table_info.column_types[i]) for i, value in enumerate(row)]
             values_list.append(f"({', '.join(values)})")
         
         return f"""
@@ -342,11 +360,11 @@ class WorkloadSecondaryIndex(WorkloadBase):
     def _upsert_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
         """Generate UPSERT operation SQL"""
         table_path = self.get_table_path(table)
-        batch_rows = self._get_batch(table_info.primary_key_size, False)
+        batch_rows = self._get_batch(table_info.primary_key_size, False, table_info)
         
         values_list = []
         for row in batch_rows:
-            values = [str(value) for value in row]
+            values = [self._format_value_by_type(value, table_info.column_types[i]) for i, value in enumerate(row)]
             values_list.append(f"({', '.join(values)})")
         
         return f"""
@@ -357,11 +375,11 @@ class WorkloadSecondaryIndex(WorkloadBase):
     def _replace_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
         """Generate REPLACE operation SQL"""
         table_path = self.get_table_path(table)
-        batch_rows = self._get_batch(table_info.primary_key_size, False)
+        batch_rows = self._get_batch(table_info.primary_key_size, False, table_info)
         
         values_list = []
         for row in batch_rows:
-            values = [str(value) for value in row]
+            values = [self._format_value_by_type(value, table_info.column_types[i]) for i, value in enumerate(row)]
             values_list.append(f"({', '.join(values)})")
         
         return f"""
@@ -372,7 +390,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
     def _update_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
         """Generate UPDATE operation SQL"""
         table_path = self.get_table_path(table)
-        batch = self._get_batch(table_info.primary_key_size, False)
+        batch = self._get_batch(table_info.primary_key_size, False, table_info)
         pk_size = table_info.primary_key_size
         
         # Generate primary key values
@@ -383,10 +401,18 @@ class WorkloadSecondaryIndex(WorkloadBase):
         update_values = batch[0][pk_size:]
         
         # Generate SET clause
-        set_clause = [f"{col} = {val}" for col, val in zip(update_columns, update_values)]
+        set_clause = []
+        for i, (col, val) in enumerate(zip(update_columns, update_values)):
+            col_type = table_info.column_types[pk_size + i]
+            formatted_val = self._format_value_by_type(val, col_type)
+            set_clause.append(f"{col} = {formatted_val}")
         
         # Generate WHERE clause for primary key
-        where_clause = [f"{self._column_names[i]} = {pk_values[i]}" for i in range(pk_size)]
+        where_clause = []
+        for i in range(pk_size):
+            col_type = table_info.column_types[i]
+            formatted_val = self._format_value_by_type(pk_values[i], col_type)
+            where_clause.append(f"{self._column_names[i]} = {formatted_val}")
         
         return f"""
             UPDATE `{table_path}`
@@ -398,10 +424,14 @@ class WorkloadSecondaryIndex(WorkloadBase):
         """Generate DELETE operation SQL"""
         table_path = self.get_table_path(table)
         pk_size = table_info.primary_key_size
-        pk_values = self._get_batch(pk_size, True)[0]
+        pk_values = self._get_batch(pk_size, True, table_info)[0]
         
         # Generate WHERE clause for primary key
-        where_clause = [f"{self._column_names[i]} = {pk_values[i]}" for i in range(pk_size)]
+        where_clause = []
+        for i in range(pk_size):
+            col_type = table_info.column_types[i]
+            formatted_val = self._format_value_by_type(pk_values[i], col_type)
+            where_clause.append(f"{self._column_names[i]} = {formatted_val}")
         
         return f"""
             DELETE FROM `{table_path}`
@@ -411,11 +441,11 @@ class WorkloadSecondaryIndex(WorkloadBase):
     def _update_on_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
         """Generate UPDATE ON operation SQL"""
         table_path = self.get_table_path(table)
-        batch_rows = self._get_batch(table_info.primary_key_size, False)
+        batch_rows = self._get_batch(table_info.primary_key_size, False, table_info)
         
         values_list = []
         for row in batch_rows:
-            values = [str(value) for value in row]
+            values = [self._format_value_by_type(value, table_info.column_types[i]) for i, value in enumerate(row)]
             values_list.append(f"({', '.join(values)})")
         
         return f"""
@@ -427,19 +457,35 @@ class WorkloadSecondaryIndex(WorkloadBase):
         """Generate DELETE ON operation SQL"""
         table_path = self.get_table_path(table)
         pk_size = table_info.primary_key_size
-        batch_rows = self._get_batch(pk_size, True)
+        batch_rows = self._get_batch(pk_size, True, table_info)
         
         pk_columns = self._column_names[:pk_size]
         
         values_list = []
         for row in batch_rows:
-            values = [str(row[i]) for i in range(pk_size)]
+            values = []
+            for i in range(pk_size):
+                col_type = table_info.column_types[i]
+                formatted_val = self._format_value_by_type(row[i], col_type)
+                values.append(formatted_val)
             values_list.append(f"({', '.join(values)})")
         
         return f"""
             DELETE FROM `{table_path}` ON ({', '.join(pk_columns)})
             VALUES {', '.join(values_list)};
         """
+    
+    def _format_value_by_type(self, value: Any, column_type: str) -> str:
+        """Format a value based on its column type for SQL queries"""
+        if column_type in ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64"]:
+            return str(value)
+        elif column_type == "Bool":
+            return "true" if value else "false"
+        elif column_type in ["Utf8", "String"]:
+            return f"'{value}'"
+        else:
+            # Default to string representation
+            return str(value)
     
     def verify_table(self, table_name: str, table_info: TableInfo) -> None:
         """Verify data consistency between main table and its index tables"""

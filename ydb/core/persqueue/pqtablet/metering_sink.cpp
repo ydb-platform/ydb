@@ -171,9 +171,12 @@ const TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMe
 
         CurrentUsedStorage_ = 0;
 
+        const TStringBuf schemaName = AppData()->FeatureFlags.GetUseYdsTopicStorageMetering()
+            ? "yds.serverless.v1"sv
+            : "ydb.serverless.v1"sv;
         return TMeteringSink::FlushParameters(
             "used_storage",
-            "ydb.serverless.v1",
+            ToString(schemaName),
             "byte*second",
             quantity
         ).withTags({

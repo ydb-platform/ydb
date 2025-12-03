@@ -44,6 +44,8 @@ public:
 
     void UpdateSyncedMask(const TSyncedMask& newSyncedMask);
 
+    void UpdateMetrics();
+
 private:
     // Adds DoNotKeep flags to storage and Keeps to Thresholds for specified neighbour
     void ProcessBlobRecordFromNeighbour(ui32 orderNumber, const TLogoBlobRec* blobRec);
@@ -58,6 +60,7 @@ private:
     const TBlobStorageGroupType GType;
     TPhantomFlagThresholds Thresholds;
     TPhantomFlags StoredFlags;
+    ui64 MaxFlagsStoredCount;
     TSyncedMask SyncedMask;
     bool Active = false;
     bool Building = false;

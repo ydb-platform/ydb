@@ -31,6 +31,7 @@ public:
     TPhantomFlags Sift(const TPhantomFlags& flags, const TSyncedMask& syncedMask);
     ui64 EstimatedMemoryConsumption() const;
     void Merge(TPhantomFlagThresholds&& other);
+    void Clear();
 
 private:
     using TGenStep = std::pair<ui32, ui32>;

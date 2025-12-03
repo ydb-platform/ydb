@@ -232,10 +232,23 @@ size_t TStorage::Compact() {
             RemoveMessage(it->first, message);
             it = SlowMessages.erase(it);
             ++removed;
+            ++Metrics.TotalDeletedByRetentionMessageCount;
         }
 
         while (!Messages.empty() && canRemove(Messages.front())) {
             auto& message = Messages.front();
+
+            switch (message.GetStatus()) {
+                case EMessageStatus::Unprocessed:
+                case EMessageStatus::Locked:
+                case EMessageStatus::Delayed:
+                    ++Metrics.TotalDeletedByRetentionMessageCount;
+                    break;
+                case EMessageStatus::Committed:
+                case EMessageStatus::DLQ:
+                    break;
+            }
+
             RemoveMessage(FirstOffset, message);
             Messages.pop_front();
             ++FirstOffset;
@@ -273,8 +286,8 @@ size_t TStorage::Compact() {
 }
 
 void TStorage::RemoveMessage(ui64 offset, const TMessage& message) {
-    AFL_ENSURE(Metrics.InflyMessageCount > 0);
-    --Metrics.InflyMessageCount;
+    AFL_ENSURE(Metrics.InflightMessageCount > 0);
+    --Metrics.InflightMessageCount;
     switch(message.GetStatus()) {
         case EMessageStatus::Unprocessed:
             AFL_ENSURE(Metrics.UnprocessedMessageCount > 0);
@@ -367,7 +380,7 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
 
     Batch.AddNewMessage(offset);
 
-    ++Metrics.InflyMessageCount;
+    ++Metrics.InflightMessageCount;
     if (deadlineDelta) {
         ++Metrics.DelayedMessageCount;
         Batch.AddChange(offset);
@@ -580,6 +593,7 @@ bool TStorage::DoCommit(ui64 offset) {
                 Batch.AddChange(offset);
                 ++Metrics.CommittedMessageCount;
             }
+
             AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
             --Metrics.UnprocessedMessageCount;
             break;
@@ -604,6 +618,7 @@ bool TStorage::DoCommit(ui64 offset) {
                 Batch.AddChange(offset);
                 ++Metrics.CommittedMessageCount;
             }
+
             AFL_ENSURE(Metrics.DelayedMessageCount > 0)("o", offset);
             --Metrics.DelayedMessageCount;
             break;
@@ -620,11 +635,13 @@ bool TStorage::DoCommit(ui64 offset) {
             break;
     }
 
+    ++Metrics.TotalCommittedMessageCount;
+
     if (slowZone) {
         SlowMessages.erase(offset);
         Batch.DeleteFromSlow(offset);
-        AFL_ENSURE(Metrics.InflyMessageCount > 0)("o", offset);
-        --Metrics.InflyMessageCount;
+        AFL_ENSURE(Metrics.InflightMessageCount > 0)("o", offset);
+        --Metrics.InflightMessageCount;
     } else {
         message->SetStatus(EMessageStatus::Committed);
         message->DeadlineDelta = 0;
@@ -836,7 +853,7 @@ TString TStorage::DebugString() const {
     sb << " DLQQueue [" << JoinRange(", ", DLQQueue.begin(), DLQQueue.end()) << "]";
     sb << " DLQMessages [" << JoinRange(", ", DLQMessages.begin(), DLQMessages.end()) << "]";
     sb << " Metrics {"
-        << "Infly: " << Metrics.InflyMessageCount << ", "
+        << "Inflight: " << Metrics.InflightMessageCount << ", "
         << "Unprocessed: " << Metrics.UnprocessedMessageCount << ", "
         << "Locked: " << Metrics.LockedMessageCount << ", "
         << "LockedGroups: " << Metrics.LockedMessageGroupCount << ", "

@@ -186,7 +186,7 @@ struct TUtils {
         auto ometrics = other.Storage.GetMetrics();
         auto metrics = Storage.GetMetrics();
 
-        UNIT_ASSERT_VALUES_EQUAL(ometrics.InflyMessageCount, metrics.InflyMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.InflightMessageCount, metrics.InflightMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.UnprocessedMessageCount, metrics.UnprocessedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.LockedMessageCount, metrics.LockedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.LockedMessageGroupCount, metrics.LockedMessageGroupCount);
@@ -205,7 +205,7 @@ Y_UNIT_TEST(NextFromEmptyStorage) {
     UNIT_ASSERT(!result.has_value());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -221,7 +221,7 @@ Y_UNIT_TEST(CommitToEmptyStorage) {
     UNIT_ASSERT(!result);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -237,7 +237,7 @@ Y_UNIT_TEST(UnlockToEmptyStorage) {
     UNIT_ASSERT(!result);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -253,7 +253,7 @@ Y_UNIT_TEST(ChangeDeadlineEmptyStorage) {
     UNIT_ASSERT(!result);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -286,7 +286,7 @@ Y_UNIT_TEST(AddMessageToEmptyStorage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -317,7 +317,7 @@ Y_UNIT_TEST(AddNotFirstMessageToEmptyStorage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -356,7 +356,7 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -379,7 +379,7 @@ Y_UNIT_TEST(AddMessageWithDelay) {
     UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(137));
 
     auto& metrics = utils.Storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -406,7 +406,7 @@ Y_UNIT_TEST(AddMessageWithBigDelay) {
     UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Hours(12)); // max deadline
 
     auto& metrics = utils.Storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -433,7 +433,7 @@ Y_UNIT_TEST(AddMessageWithZeroDelay) {
     UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
 
     auto& metrics = utils.Storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -468,7 +468,7 @@ Y_UNIT_TEST(AddMessageWithDelay_Unlock) {
     UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
 
     auto& metrics = utils.Storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
@@ -508,7 +508,7 @@ Y_UNIT_TEST(NextWithoutKeepMessageOrderStorage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -528,7 +528,7 @@ Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
     UNIT_ASSERT_VALUES_EQUAL(*result, 3);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
@@ -555,7 +555,7 @@ Y_UNIT_TEST(NextWithWriteRetentionPeriod) {
     UNIT_ASSERT_VALUES_EQUAL(*result, 4);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -579,7 +579,7 @@ Y_UNIT_TEST(NextWithInfinityRetentionPeriod) {
     UNIT_ASSERT_VALUES_EQUAL(*result, 3);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -602,7 +602,7 @@ Y_UNIT_TEST(SkipLockedMessage) {
     UNIT_ASSERT_C(!result.has_value(), "The message already locked");
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -631,7 +631,7 @@ Y_UNIT_TEST(SkipLockedMessageGroups) {
     UNIT_ASSERT_VALUES_EQUAL(*result, 5);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 3);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 3);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 2);
@@ -670,7 +670,7 @@ Y_UNIT_TEST(CommitLockedMessage_WithoutKeepMessageOrder) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -694,7 +694,7 @@ Y_UNIT_TEST(CommitLockedMessage_WithKeepMessageOrder) {
     UNIT_ASSERT(result);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -725,7 +725,7 @@ Y_UNIT_TEST(CommitUnlockedMessage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -762,7 +762,7 @@ Y_UNIT_TEST(CommitCommittedMessage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -799,7 +799,7 @@ Y_UNIT_TEST(UnlockLockedMessage_WithoutKeepMessageOrder) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -822,7 +822,7 @@ Y_UNIT_TEST(UnlockLockedMessage_WithKeepMessageOrder) {
     UNIT_ASSERT(result);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -839,7 +839,7 @@ Y_UNIT_TEST(UnlockUnlockedMessage) {
     UNIT_ASSERT(!result);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -875,7 +875,7 @@ Y_UNIT_TEST(UnlockCommittedMessage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -957,7 +957,7 @@ Y_UNIT_TEST(EmptyStorageSerialization) {
         UNIT_ASSERT_VALUES_EQUAL(storage.GetBaseWriteTimestamp().Seconds(), 0);
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -1064,7 +1064,7 @@ Y_UNIT_TEST(StorageSerialization) {
         UNIT_ASSERT(it == storage.end());
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 4);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 4);
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
@@ -1121,7 +1121,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Unlocked) {
 
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -1185,7 +1185,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Locked) {
         UNIT_ASSERT(it == storage.end());
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
@@ -1242,7 +1242,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
         UNIT_ASSERT(it == storage.end());
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -1369,7 +1369,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
         UNIT_ASSERT(it == storage.end());
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -1470,7 +1470,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
         UNIT_ASSERT(it == storage.end());
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 2);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 2);
@@ -1527,7 +1527,7 @@ Y_UNIT_TEST(CompactStorage_ByCommittedOffset) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 3);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 3);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 2); // offsets 4 and 6
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -1571,7 +1571,7 @@ Y_UNIT_TEST(CompactStorage_ByRetention) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1); // offset 5
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -1611,7 +1611,7 @@ Y_UNIT_TEST(CompactStorage_ByDeadline) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -1664,7 +1664,7 @@ Y_UNIT_TEST(CompactStorage_WithDLQ) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -1704,7 +1704,7 @@ Y_UNIT_TEST(ProccessDeadlines) {
     }
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 4);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 4);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 3); // offsets 4 and 5 and 6
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1); // offset 3
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
@@ -1942,7 +1942,7 @@ Y_UNIT_TEST(SlowZone_CommitToFast) {
 
     utils.AssertSlowZone({0, 1});
     // Compaction removed the message with offset 2
-    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 7);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageCount, 7);
 
     utils.AssertLoad();
 }
@@ -1972,7 +1972,7 @@ Y_UNIT_TEST(SlowZone_Retention_1message) {
 
     utils.AssertSlowZone({1});
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 7);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageCount, 7);
 
     utils.AssertLoad();
 }
@@ -1989,7 +1989,7 @@ Y_UNIT_TEST(SlowZone_Retention_2message) {
 
     utils.AssertSlowZone({});
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 6);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageCount, 6);
 
     utils.AssertLoad();
 }
@@ -2006,7 +2006,7 @@ Y_UNIT_TEST(SlowZone_Retention_3message) {
 
     utils.AssertSlowZone({});
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 3);
-    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 5);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageCount, 5);
 
     utils.AssertLoad();
 }
@@ -2024,7 +2024,7 @@ Y_UNIT_TEST(ChangeDeadLetterPolicy_Delete) {
     utils.Begin();
     utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().CommittedMessageCount, 1);
     utils.End();
 
@@ -2044,7 +2044,7 @@ Y_UNIT_TEST(ChangeDeadLetterPolicy_Unspecified) {
     utils.Begin();
     utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().UnprocessedMessageCount, 1);
     utils.End();
 

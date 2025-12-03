@@ -13,7 +13,7 @@ class TDuration;
 namespace NKikimr::NPQ::NMLP {
 
 struct TMetrics {
-    size_t InflyMessageCount = 0;
+    size_t InflightMessageCount = 0;
     size_t UnprocessedMessageCount = 0;
     size_t LockedMessageCount = 0;
     size_t LockedMessageGroupCount = 0;
@@ -22,7 +22,11 @@ struct TMetrics {
     size_t DeadlineExpiredMessageCount = 0;
     size_t DLQMessageCount = 0;
 
+    size_t TotalCommittedMessageCount = 0;
+    size_t TotalMovedToDLQMessageCount = 0;
     size_t TotalScheduledToDLQMessageCount = 0;
+    size_t TotalPurgedMessageCount = 0;
+    size_t TotalDeletedByRetentionMessageCount = 0;
 };
 
 // MLP не работает если включена компактифкация по ключу!!! (иначе не понятно как прореживать скомпакченные значения)

@@ -32,11 +32,13 @@ public:
 
     virtual void RemoveEmptyClusters() = 0;
 
+    virtual void FindClusters(TArrayRef<const char> embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) = 0;
+
     virtual std::optional<ui32> FindCluster(TArrayRef<const char> embedding) = 0;
 
     virtual std::optional<ui32> FindCluster(TArrayRef<const TCell> row, ui32 embeddingPos) = 0;
 
-    virtual double CalcDistance(const TStringBuf a, const TStringBuf b) = 0;
+    virtual double CalcDistance(TArrayRef<const char> a, TArrayRef<const char> b) = 0;
 
     virtual void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight = 1) = 0;
 
@@ -53,5 +55,6 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error);
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
 bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, const TString& value, TString& error);
+void FilterOverlapRows(TVector<TSerializedCellVec>& rows, size_t distancePos, ui32 overlapClusters, double overlapRatio);
 
 }

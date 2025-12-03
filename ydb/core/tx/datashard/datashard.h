@@ -356,6 +356,9 @@ namespace TEvDataShard {
         EvPrefixKMeansRequest,
         EvPrefixKMeansResponse,
 
+        EvFilterKMeansRequest,
+        EvFilterKMeansResponse,
+
         EvRecomputeKMeansRequest,
         EvRecomputeKMeansResponse,
 
@@ -1557,6 +1560,18 @@ namespace TEvDataShard {
         : public TEventPB<TEvPrefixKMeansResponse,
                           NKikimrTxDataShard::TEvPrefixKMeansResponse,
                           TEvDataShard::EvPrefixKMeansResponse> {
+    };
+
+    struct TEvFilterKMeansRequest
+        : public TEventPB<TEvFilterKMeansRequest,
+                          NKikimrTxDataShard::TEvFilterKMeansRequest,
+                          TEvDataShard::EvFilterKMeansRequest> {
+    };
+
+    struct TEvFilterKMeansResponse
+        : public TEventPB<TEvFilterKMeansResponse,
+                          NKikimrTxDataShard::TEvFilterKMeansResponse,
+                          TEvDataShard::EvFilterKMeansResponse> {
     };
 
     struct TEvIncrementalRestoreResponse

@@ -256,4 +256,12 @@ TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexRespo
     return copy.ShortDebugString();
 }
 
+TString ToShortDebugString(const NKikimrTxDataShard::TEvFilterKMeansResponse& record) {
+    auto copy = record;
+    // keys are not human readable and contain user data
+    copy.ClearFirstKeyRows();
+    copy.ClearLastKeyRows();
+    return copy.ShortDebugString();
+}
+
 }

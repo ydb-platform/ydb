@@ -18,6 +18,7 @@ namespace NKikimrTxDataShard {
     class TEvRecomputeKMeansResponse;
     class TEvSampleKResponse;
     class TEvValidateUniqueIndexResponse;
+    class TEvFilterKMeansResponse;
 }
 
 namespace NKikimr {
@@ -64,6 +65,10 @@ inline constexpr const char* PostingTable = "indexImplPostingTable";
 
 inline constexpr const char* BuildSuffix0 = "0build";
 inline constexpr const char* BuildSuffix1 = "1build";
+inline constexpr auto IsForeignType = Ydb::Type::BOOL;
+inline constexpr const char* IsForeignColumn = "__ydb_foreign";
+inline constexpr auto DistanceType = Ydb::Type::DOUBLE;
+inline constexpr const char* DistanceColumn = "__ydb_distance";
 
 // Prefix table
 inline constexpr const char* PrefixTable = "indexImplPrefixTable";
@@ -84,6 +89,7 @@ TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansRequest& 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansResponse& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexResponse& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvFilterKMeansResponse& record);
 
 }
 }

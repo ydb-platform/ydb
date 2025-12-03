@@ -63,8 +63,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
     }
 
     static TString DoRecomputeKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent,
-                                     const std::vector<TString>& level,
-                                     VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric)
+        const std::vector<TString>& level, VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric, bool withForeign = false)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -97,6 +96,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
                 settings.set_metric(metric);
                 *rec.MutableSettings() = settings;
 
+                rec.SetSkipOverlapForeign(withForeign);
+
                 rec.SetParent(parent);
                 *rec.MutableClusters() = {level.begin(), level.end()};
                 rec.SetEmbeddingColumn("embedding");
@@ -126,30 +127,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         }
 
         return data;
-    }
-
-    static void CreateMainTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options)
-    {
-        options.AllowSystemColumnNames(false);
-        options.Columns({
-            {"key", "Uint32", true, true},
-            {"embedding", "String", false, false},
-            {"data", "String", false, false},
-        });
-        CreateShardedTable(server, sender, "/Root", "table-main", options);
-    }
-
-    static void CreateBuildTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options,
-                                 const char* name)
-    {
-        options.AllowSystemColumnNames(true);
-        options.Columns({
-            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
-            {"key", "Uint32", true, true},
-            {"embedding", "String", false, false},
-            {"data", "String", false, false},
-        });
-        CreateShardedTable(server, sender, "/Root", name, options);
     }
 
     Y_UNIT_TEST(BadRequest) {
@@ -263,7 +240,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
 
     }
 
-    Y_UNIT_TEST(BuildTable) {
+    Y_UNIT_TEST_TWIN(BuildTable, WithForeign) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -280,36 +257,48 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         TShardedTableOptions options;
         options.Shards(1);
 
-        CreateBuildTable(server, sender, options, "table-main");
         // Upsert some initial values
-        ExecSQL(server, sender,
-                R"(
-        UPSERT INTO `/Root/table-main`
-            (__ydb_parent, key, embedding, data)
-        VALUES )"
-                "(10, 1, \"\x30\x30\3\", \"one\"),"
-                "(10, 2, \"\x31\x28\3\", \"two\"),"
-                "(10, 3, \"\x29\x31\3\", \"three\"),"
-                "(10, 4, \"\x20\x40\3\", \"four\"),"
-                "(11, 5, \"\x15\x40\3\", \"five\"),"
-                "(11, 6, \"\x10\x40\3\", \"six\");");
+        if (WithForeign) {
+            CreateBuildTableWithForeignIn(server, sender, options, "table-main");
+            ExecSQL(server, sender, "UPSERT INTO `/Root/table-main` "
+                "(__ydb_parent, key, __ydb_foreign, embedding, data) VALUES "
+                "(10, 1, false, \"\x30\x30\2\", \"one\"),"
+                "(11, 1, true,  \"\x30\x30\2\", \"one\"),"
+                "(10, 2, false, \"\x31\x28\2\", \"two\"),"
+                "(10, 3, false, \"\x29\x31\2\", \"three\"),"
+                "(10, 4, false, \"\x20\x40\2\", \"four\"),"
+                "(11, 5, false, \"\x15\x40\2\", \"five\"),"
+                "(11, 6, false, \"\x10\x40\2\", \"six\");"
+            );
+        } else {
+            CreateBuildTable(server, sender, options, "table-main");
+            ExecSQL(server, sender, "UPSERT INTO `/Root/table-main` "
+                "(__ydb_parent, key, embedding, data) VALUES "
+                "(10, 1, \"\x30\x30\2\", \"one\"),"
+                "(10, 2, \"\x31\x28\2\", \"two\"),"
+                "(10, 3, \"\x29\x31\2\", \"three\"),"
+                "(10, 4, \"\x20\x40\2\", \"four\"),"
+                "(11, 5, \"\x15\x40\2\", \"five\"),"
+                "(11, 6, \"\x10\x40\2\", \"six\");");
+        }
 
-        std::vector<TString> level = { "\x30\x30\3", "\x20\x40\3" };
+        // Check that clusters are always the same and not affected by the row with __ydb_foreign=true
+        std::vector<TString> level = { "\x30\x30\2", "\x20\x40\2" };
 
-        auto recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\3 size = 3\ncluster = \x20\x40\3 size = 1\n");
+        auto recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN, WithForeign);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x20\x40\2 size = 1\n");
 
-        recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\3 size = 3\ncluster = \x20\x40\3 size = 1\n");
+        recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN, WithForeign);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x20\x40\2 size = 1\n");
 
-        recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x30\x2C\3 size = 2\ncluster = \x24\x38\3 size = 2\n");
+        recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_INNER_PRODUCT, WithForeign);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x30\x2C\2 size = 2\ncluster = \x24\x38\2 size = 2\n");
 
-        recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_COSINE);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\3 size = 3\ncluster = \x20\x40\3 size = 1\n");
+        recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_COSINE, WithForeign);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x20\x40\2 size = 1\n");
 
-        recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\3 size = 3\ncluster = \x20\x40\3 size = 1\n");
+        recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE, WithForeign);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x20\x40\2 size = 1\n");
     }
 
     Y_UNIT_TEST(EmptyCluster) {

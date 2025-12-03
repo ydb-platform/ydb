@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/types/binary_json/read.h>
+#include <util/generic/ylimits.h>
 
 #include <limits>
 #include <cmath>
@@ -10,7 +11,7 @@ namespace NKikimr::NArrow::NAccessor {
 
 namespace {
 
-std::string JsonIntegerToString(double val) {
+std::string JsonNumberToString(double val) {
     if (std::isnan(val)) {
         return "null";
     }
@@ -24,7 +25,7 @@ std::string JsonIntegerToString(double val) {
     static constexpr double minD = static_cast<double>(std::numeric_limits<i64>::min());
     static constexpr double maxD = MaxFloor<i64>();
 
-    if (val >= minD && val <= maxD) {
+    if (minD <= val && val <= maxD) {
         return std::to_string(static_cast<i64>(val));
     }
 
@@ -62,7 +63,7 @@ std::optional<TStringBuf> TBinaryJsonValueView::GetScalarOptional() const {
             ScalarView = rootElement.GetString();
             break;
         case NBinaryJson::EEntryType::Number: {
-            ScalarHolder = JsonIntegerToString(rootElement.GetNumber());
+            ScalarHolder = JsonNumberToString(rootElement.GetNumber());
             ScalarView = ScalarHolder;
             break;
         }

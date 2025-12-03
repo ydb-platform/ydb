@@ -87,20 +87,20 @@
 - Через requirements.yaml
 
   ```bash
-  $ cat <<EOF > requirements.yaml
+  cat <<EOF > requirements.yaml
   roles: []
   collections:
     - name: git+https://github.com/ydb-platform/ydb-ansible
       type: git
       version: latest
   EOF
-  $ ansible-galaxy install -r requirements.yaml
+  ansible-galaxy install -r requirements.yaml
   ```
 
 - Однократно
 
   ```bash
-  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
+  ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
   ```
 
 {% endlist %}
@@ -454,8 +454,6 @@ all:
           subject_terms:
           - short_name: "O"
             values: ["YDB"]
-          - short_name: "CN"
-            values: ["YDB CA"]
   query_service_config:
     generic:
       connector:

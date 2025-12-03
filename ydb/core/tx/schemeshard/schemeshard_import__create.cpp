@@ -275,7 +275,7 @@ private:
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const TString& dstPath = settings.items(itemIdx).destination_path();
             if (dstPath) {
-                if (!dstPaths.insert(NBackup::NormalizeItemPath(dstPath)).second) {
+                if (!dstPaths.insert(NKikimr::NBackup::NormalizeItemPath(dstPath)).second) {
                     explain = TStringBuilder() << "Duplicate destination_path: " << dstPath;
                     return false;
                 }
@@ -289,8 +289,8 @@ private:
             }
 
             auto& item = importInfo.Items.emplace_back(dstPath);
-            item.SrcPrefix = NBackup::NormalizeExportPrefix(settings.items(itemIdx).source_prefix());
-            item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
+            item.SrcPrefix = NKikimr::NBackup::NormalizeExportPrefix(settings.items(itemIdx).source_prefix());
+            item.SrcPath = NKikimr::NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
         }
 
         return true;

@@ -111,6 +111,10 @@ namespace NFlatExecutorSetup {
                 return false;
         }
     }
+
+    NBackup::TExclusion ITablet::BackupExclusion() const {
+        return {}; // everything is included in backup
+    }
 }
 
 }}

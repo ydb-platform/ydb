@@ -71,8 +71,6 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
                 itTable.second.EraseCacheMinRows,
                 itTable.second.EraseCacheMaxBytes);
 
-        delta.SetNoBackup(table, itTable.second.NoBackup);
-
         // N.B. must be last for compatibility with older versions :(
         delta.SetByKeyFilter(table, itTable.second.ByKeyFilter);
         delta.SetColdBorrow(table, itTable.second.ColdBorrow);
@@ -371,16 +369,6 @@ TAlter& TAlter::SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 max
         delta.SetEraseCacheMinRows(minRows);
         delta.SetEraseCacheMaxBytes(maxBytes);
     }
-
-    return ApplyLastRecord();
-}
-
-TAlter& TAlter::SetNoBackup(ui32 tableId, bool noBackup)
-{
-    TAlterRecord &delta = *Log.AddDelta();
-    delta.SetDeltaType(TAlterRecord::SetTable);
-    delta.SetTableId(tableId);
-    delta.SetNoBackup(noBackup);
 
     return ApplyLastRecord();
 }

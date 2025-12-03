@@ -5141,23 +5141,24 @@ void TExecutor::StartBackup() {
     TTabletTypes::EType tabletType = Owner->TabletType();
     const auto& scheme = Database->GetScheme();
     const auto& tables = scheme.Tables;
+    auto exclusion = MakeIntrusiveConst<NBackup::TExclusion>(Owner->BackupExclusion());
 
     auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
-        tabletId, Generation0, scheme.GetSnapshot());
+        tabletId, Generation0, scheme.GetSnapshot(), exclusion);
     auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), backupConfig, tabletType,
-        tabletId, Generation0, scheme);
+        tabletId, Generation0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
         CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
 
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         for (const auto& [tableId, table] : tables) {
-            if (table.NoBackup) {
+            if (exclusion->HasTable(tableId)) {
                 continue;
             }
 
             auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
-            QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns), 0, opts);
+            QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion), 0, opts);
         }
     }
 }

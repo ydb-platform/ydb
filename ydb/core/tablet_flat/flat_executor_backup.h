@@ -8,6 +8,10 @@
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/config.pb.h>
 
+namespace NKikimr::NIceDb {
+    struct Schema;
+}
+
 namespace NKikimr::NTabletFlatExecutor::NBackup {
 
 enum EEv {
@@ -78,13 +82,67 @@ struct TEvChangelogFailed : public TEventLocal<TEvChangelogFailed, EvChangelogFa
     TString Error;
 };
 
+class TExclusion : public TThrRefBase {
+    friend struct NKikimr::NIceDb::Schema;
+
+public:
+    using TTableId = ui32;
+    using TColumnId = ui32;
+
+    struct TFullColumnId {
+        TTableId TableId;
+        TColumnId ColumnId;
+
+        bool operator==(const TFullColumnId& other) const {
+            return TableId == other.TableId && ColumnId == other.ColumnId;
+        }
+    };
+
+    TExclusion() = default;
+
+    bool HasTable(TTableId tableId) const {
+        return std::find(ExcludedTableIds.begin(), ExcludedTableIds.end(), tableId) != ExcludedTableIds.end();
+    }
+
+    bool HasColumn(TTableId tableId, TColumnId columnId) const {
+        TFullColumnId fullColumnId = {tableId, columnId};
+        return std::find(ExcludedColumnIds.begin(), ExcludedColumnIds.end(), fullColumnId) != ExcludedColumnIds.end();
+    }
+
+    TExclusion& Merge(const TExclusion& other) {
+        ExcludedTableIds.insert(ExcludedTableIds.end(), other.ExcludedTableIds.begin(), other.ExcludedTableIds.end());
+        ExcludedColumnIds.insert(ExcludedColumnIds.end(), other.ExcludedColumnIds.begin(), other.ExcludedColumnIds.end());
+        return *this;
+    }
+
+private:
+    static TExclusion ExcludeTable(TTableId tableId) {
+            TExclusion exclusion;
+            exclusion.ExcludedTableIds.push_back(tableId);
+            return exclusion;
+    }
+
+    static TExclusion ExcludeColumn(TTableId tableId, TColumnId columnId) {
+            TExclusion exclusion;
+            exclusion.ExcludedColumnIds.push_back({tableId, columnId});
+            return exclusion;
+    }
+
+private:
+    std::vector<TTableId> ExcludedTableIds;
+    std::vector<TFullColumnId> ExcludedColumnIds;
+};
+
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                              const THashMap<ui32, NTable::TScheme::TTableInfo>& tables,
                              TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
-                             TAutoPtr<NTable::TSchemeChanges> schema);
-NTable::IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, NTable::TColumn>& columns);
+                             TAutoPtr<NTable::TSchemeChanges> schema, TIntrusiveConstPtr<TExclusion> exclusion);
+
+NTable::IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, NTable::TColumn>& columns,
+                                  TIntrusiveConstPtr<TExclusion> exclusion);
 
 IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                               TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
-                              const NTable::TScheme& schema);
+                              const NTable::TScheme& schema, TIntrusiveConstPtr<TExclusion> exclusion);
+
 } // NKikimr::NTabletFlatExecutor::NBackup

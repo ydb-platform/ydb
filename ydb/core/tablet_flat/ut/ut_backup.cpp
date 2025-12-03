@@ -16,9 +16,10 @@ struct TSchema : NIceDb::Schema {
         struct Value : Column<2, NScheme::NTypeIds::Uint32> { };
         struct BinaryValue : Column<3, NScheme::NTypeIds::String> { };
         struct DefaultValue : Column<4, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 42; };
+        struct NoBackupColumn : Column<5, NScheme::NTypeIds::Uint32> { using BackupPolicy = NoBackup; };
 
         using TKey = TableKey<Key>;
-        using TColumns = TableColumns<Key, Value, BinaryValue, DefaultValue>;
+        using TColumns = TableColumns<Key, Value, BinaryValue, DefaultValue, NoBackupColumn>;
     };
 
     struct CompositePKData : Table<3> {
@@ -49,11 +50,12 @@ struct TNewColumnSchema : NIceDb::Schema {
         struct Value : Column<2, NScheme::NTypeIds::Uint32> { };
         struct BinaryValue : Column<3, NScheme::NTypeIds::String> { };
         struct DefaultValue : Column<4, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 42; };
+        struct NoBackupColumn : Column<5, NScheme::NTypeIds::Uint32> { using BackupPolicy = NoBackup; };
 
-        struct NewColumn : Column<5, NScheme::NTypeIds::Uint32> { };
+        struct NewColumn : Column<100, NScheme::NTypeIds::Uint32> { };
 
         using TKey = TableKey<Key>;
-        using TColumns = TableColumns<Key, Value, BinaryValue, DefaultValue, NewColumn>;
+        using TColumns = TableColumns<Key, Value, BinaryValue, DefaultValue, NoBackupColumn, NewColumn>;
     };
 
     struct CompositePKData : Table<3> {
@@ -300,6 +302,33 @@ struct TxWriteTwoColumns : public ITransaction {
     }
 }; // TxWriteTwoColumns
 
+struct TxWriteTwoColumnsNoBackupColumn : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+    const ui32 Value;
+    const ui32 NoBackupColumnValue;
+
+    TxWriteTwoColumnsNoBackupColumn(TActorId owner, ui64 key, ui32 value, ui32 noBackupColumnValue)
+        : Owner(owner)
+        , Key(key)
+        , Value(value)
+        , NoBackupColumnValue(noBackupColumnValue)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        db.Table<TSchema::Data>().Key(Key)
+            .Update<TSchema::Data::Value, TSchema::Data::NoBackupColumn>(Value, NoBackupColumnValue);
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TxWriteTwoColumnsNoBackupColumn
+
 struct TTxReplaceRow : public ITransaction {
     const TActorId Owner;
     const ui64 Key;
@@ -353,6 +382,56 @@ struct TxWriteNewColumn : public ITransaction {
         ctx.Send(Owner, new NFake::TEvResult);
     }
 }; // TxWriteNewColumn
+
+struct TTxWriteNoBackupTable : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+    const ui32 Value;
+
+    TTxWriteNoBackupTable(TActorId owner, ui64 key, ui32 value)
+        : Owner(owner)
+        , Key(key)
+        , Value(value)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        db.Table<TSchema::NoBackupTable>().Key(Key)
+            .Update<TSchema::NoBackupTable::Value>(Value);
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TTxWriteNoBackupTable
+
+struct TTxWriteNoBackupColumn : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+    const ui32 Value;
+
+    TTxWriteNoBackupColumn(TActorId owner, ui64 key, ui32 value)
+        : Owner(owner)
+        , Key(key)
+        , Value(value)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        db.Table<TSchema::Data>().Key(Key)
+            .Update<TSchema::Data::NoBackupColumn>(Value);
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TTxWriteNoBackupColumn
 
 struct TTxCountRows : public ITransaction {
     enum EEv {
@@ -441,6 +520,15 @@ struct TEnv : public TMyEnvBase {
         Env.GetAppData().SystemTabletBackupConfig.MutableFilesystem()->SetPath(Env.GetTempDir());
     }
 
+    void FireDummyTablet(ui32 flags = 0) override
+    {
+        FireTablet(Edge, Tablet, [this, &flags](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new NFake::TDummy(tablet, info, Edge, flags, NIceDb::GenerateBackupExclusion<TSchema>());
+        });
+
+        WaitFor<NFake::TEvReady>();
+    }
+
     template<typename T = TSchema>
     void InitSchema() {
         SendSync(new NFake::TEvExecute{ new TTxInitSchema<T>(Edge) });
@@ -485,6 +573,11 @@ struct TEnv : public TMyEnvBase {
         WaitFor<NFake::TEvResult>();
     }
 
+    void WriteTwoColumnsNoBackupColumn(ui64 key, ui32 value, ui32 noBackupColumnValue) {
+        SendAsync(new NFake::TEvExecute{ new TxWriteTwoColumnsNoBackupColumn(Edge, key, value, noBackupColumnValue) });
+        WaitFor<NFake::TEvResult>();
+    }
+
     void ReplaceRow(ui64 key, ui32 value) {
         SendAsync(new NFake::TEvExecute{ new TTxReplaceRow(Edge, key, value) });
         WaitFor<NFake::TEvResult>();
@@ -501,6 +594,16 @@ struct TEnv : public TMyEnvBase {
         WaitFor<NFake::TEvResult>();
     }
 
+    void WriteNoBackupTable(ui64 key, ui32 value) {
+        SendAsync(new NFake::TEvExecute{ new TTxWriteNoBackupTable(Edge, key, value) });
+        WaitFor<NFake::TEvResult>();
+    }
+
+    void WriteNoBackupColumn(ui64 key, ui32 value) {
+        SendAsync(new NFake::TEvExecute{ new TTxWriteNoBackupColumn(Edge, key, value) });
+        WaitFor<NFake::TEvResult>();
+    }
+
     ui64 CountRows() {
         SendAsync(new NFake::TEvExecute{ new TTxCountRows(Edge) });
 
@@ -508,11 +611,6 @@ struct TEnv : public TMyEnvBase {
         Env.GrabEdgeEventRethrow<TTxCountRows::TEvResult>(handle);
 
         return handle->Get<TTxCountRows::TEvResult>()->Count;
-    }
-
-    void WriteNoBackupTable(ui64 key, ui32 value) {
-        SendAsync(new NFake::TEvExecute{ new TTxWriteNoBackupTable(Edge, key, value) });
-        WaitFor<NFake::TEvResult>();
     }
 
     void RestartTabletInRecoveryMode()
@@ -615,7 +713,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             return path.Basename() == "schema.json";
         });
 
-        UNIT_ASSERT(tables.size() == 2);
+        UNIT_ASSERT(tables.size() == 3);
 
         for (const auto& table : tables) {
             TString content = TFileInput(table).ReadAll();
@@ -686,7 +784,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             return path.Basename() == "schema.json";
         });
 
-        UNIT_ASSERT(tables.size() == 2);
+        UNIT_ASSERT(tables.size() == 3);
 
         {
             auto table = snapshotDir.Child("Data.json");
@@ -706,6 +804,13 @@ Y_UNIT_TEST_SUITE(Backup) {
             UNIT_ASSERT_C(table.Exists(), "CompositePKData table isn't created");
             TString content = TFileInput(table).ReadAll();
             UNIT_ASSERT_VALUES_EQUAL(content, R"({"Key":1,"SubKey":2,"Value":10})""\n");
+        }
+
+        {
+            auto table = snapshotDir.Child("NoBackupTable.json");
+            UNIT_ASSERT_C(table.Exists(), "NoBackupTable table isn't created");
+            TString content = TFileInput(table).ReadAll();
+            UNIT_ASSERT(content.empty());
         }
     }
 
@@ -1222,6 +1327,137 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         UNIT_ASSERT_VALUES_EQUAL(env.CountRows(), 0);
     }
+
+    Y_UNIT_TEST(NoBackupTable) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data to NoBackupTable" << Endl;
+        env.WriteNoBackupTable(1, 10);
+        env.WriteNoBackupTable(2, 10);
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        env.WaitChangelogFlush();
+
+        TString changelogContent = TFileInput(changelog).ReadAll();
+        auto changelogLines = StringSplitter(changelogContent).Split('\n').SkipEmpty();
+        UNIT_ASSERT_VALUES_EQUAL_C(changelogLines.Count(), 1, "Must contain only schema changes commit");
+        UNIT_ASSERT_C(changelogContent.Contains(R"("table_name":"NoBackupTable")"), "Changelog doesn't contain NoBackupTable schema changes");
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        genDirs.clear();
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto snapshotDir = genDirs.back().Child("snapshot");
+        UNIT_ASSERT_C(snapshotDir.Exists(), "Snapshot dir isn't created");
+
+        auto noBackupTable = snapshotDir.Child("NoBackupTable.json");
+        UNIT_ASSERT_C(noBackupTable.Exists(), "NoBackupTable table isn't created");
+        TString noBackupTableContent = TFileInput(noBackupTable).ReadAll();
+        UNIT_ASSERT(noBackupTableContent.empty());
+
+        auto schema = snapshotDir.Child("schema.json");
+        UNIT_ASSERT_C(schema.Exists(), "Schema file isn't created");
+        auto schemaContent = TFileInput(schema).ReadAll();
+        UNIT_ASSERT_C(schemaContent.Contains(R"("table_name":"NoBackupTable")"), "Snapshot doesn't contain NoBackupTable schema");
+    }
+
+    Y_UNIT_TEST(NoBackupColumn) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data to NoBackupColumn" << Endl;
+        env.WriteNoBackupColumn(1, 10);
+        env.WriteTwoColumnsNoBackupColumn(2, 20, 20);
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        env.WaitChangelogFlush();
+
+        TString changelogContent = TFileInput(changelog).ReadAll();
+        auto changelogLines = StringSplitter(changelogContent).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT_VALUES_EQUAL_C(changelogLines.size(), 2, "Must contain only two commits");
+        UNIT_ASSERT_C(
+            changelogLines[0].Contains(R"("column_name":"NoBackupColumn")"),
+            "Changelog doesn't contain NoBackupColumn schema changes");
+        UNIT_ASSERT_VALUES_EQUAL(
+            changelogLines[1],
+            R"({"step":4,"data_changes":[{"table":"Data","op":"upsert","Key":2,"Value":20}]})"
+        );
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        genDirs.clear();
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto snapshotDir = genDirs.back().Child("snapshot");
+        UNIT_ASSERT_C(snapshotDir.Exists(), "Snapshot dir isn't created");
+
+        auto table = snapshotDir.Child("Data.json");
+        UNIT_ASSERT_C(table.Exists(), "Data table isn't created");
+        TString tableContent = TFileInput(table).ReadAll();
+        UNIT_ASSERT_VALUES_EQUAL(
+            tableContent,
+            R"({"Key":1,"Value":null,"BinaryValue":null,"DefaultValue":null})""\n"
+            R"({"Key":2,"Value":20,"BinaryValue":null,"DefaultValue":null})""\n"
+        );
+
+        auto schema = snapshotDir.Child("schema.json");
+        UNIT_ASSERT_C(schema.Exists(), "Schema file isn't created");
+
+        auto schemaContent = TFileInput(schema).ReadAll();
+        UNIT_ASSERT_C(schemaContent.Contains(R"("column_name":"NoBackupColumn")"), "Snapshot doesn't contain NoBackupColumn schema");
+    }
 }
 
-} // namespace NKikimr::NBackup
+} // namespace NKikimr::NTabletFlatExecutor::NBackup

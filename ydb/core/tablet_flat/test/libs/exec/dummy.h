@@ -28,6 +28,7 @@ namespace NFake {
         using ELnLev = NUtil::ELnLev;
         using TInfo = TTabletStorageInfo;
         using TEvDead = TEvTablet::TEvTabletDead;
+        using TBackupExclusion = NTabletFlatExecutor::NBackup::TExclusion;
 
         enum class EFlg : ui32 {
             Comp    = 0x01,
@@ -36,11 +37,12 @@ namespace NFake {
         };
 
         TDummy(const TActorId &tablet, TInfo *info, const TActorId& owner,
-                ui32 flags = 0 /* ORed EFlg enum */)
+                ui32 flags = 0 /* ORed EFlg enum */, TBackupExclusion&& exclusion = {})
             : TActor(&TDummy::Inbox, NKikimrServices::TActivity::FAKE_ENV_A)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , Owner(owner)
             , Flags(flags)
+            , Exclusion(std::move(exclusion))
         {
         }
 
@@ -157,9 +159,15 @@ namespace NFake {
                 Send(Owner, new NFake::TEvSnapshotBackedUp());
         }
 
+        TBackupExclusion BackupExclusion() const override
+        {
+            return Exclusion;
+        }
+
     private:
         TActorId Owner;
         const ui32 Flags = 0;
+        TBackupExclusion Exclusion;
         EState State = EState::Boot;
     };
 

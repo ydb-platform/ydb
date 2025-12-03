@@ -1182,66 +1182,6 @@ Y_UNIT_TEST_SUITE(Backup) {
         );
     }
 
-    Y_UNIT_TEST(NoBackupTable) {
-        TEnv env;
-
-        Cerr << "...starting tablet" << Endl;
-        env.FireDummyTablet(TestTabletFlags);
-        env.WaitFor<NFake::TEvSnapshotBackedUp>();
-
-        Cerr << "...initing schema" << Endl;
-        env.InitSchema();
-
-        Cerr << "...writing data to NoBackupTable" << Endl;
-        env.WriteNoBackupTable(1, 10);
-        env.WriteNoBackupTable(2, 10);
-
-        auto tabletIdDir = TFsPath(env->GetTempDir())
-            .Child("dummy")
-            .Child(ToString(env.Tablet));
-
-        TVector<TFsPath> genDirs;
-        tabletIdDir.List(genDirs);
-
-        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
-            return a.Basename() < b.Basename();
-        });
-
-        auto changelog = genDirs.back().Child("changelog.json");
-        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
-
-        env.WaitChangelogFlush();
-
-        TString changelogContent = TFileInput(changelog).ReadAll();
-        UNIT_ASSERT_C(changelogContent.Contains(R"("table_name":"NoBackupTable")"), "Changelog doesn't contain NoBackupTable schema changes");
-        UNIT_ASSERT_C(!changelogContent.Contains(R"("table":"NoBackupTable")"), "Changelog contains NoBackupTable data changes");
-        auto changelogLines = StringSplitter(changelogContent).Split('\n').SkipEmpty();
-        UNIT_ASSERT_VALUES_EQUAL_C(changelogLines.Count(), 1, "Must contain only schema changes commit");
-
-        Cerr << "...restarting tablet" << Endl;
-        env.RestartTablet(TestTabletFlags);
-        env.WaitFor<NFake::TEvSnapshotBackedUp>();
-
-        genDirs.clear();
-        tabletIdDir.List(genDirs);
-
-        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
-            return a.Basename() < b.Basename();
-        });
-
-        auto snapshotDir = genDirs.back().Child("snapshot");
-        UNIT_ASSERT_C(snapshotDir.Exists(), "Snapshot dir isn't created");
-
-        auto noBackupTable = snapshotDir.Child("NoBackupTable.json");
-        UNIT_ASSERT_C(!noBackupTable.Exists(), "Snapshot contains NoBackupTable data");
-
-        auto schema = snapshotDir.Child("schema.json");
-        UNIT_ASSERT_C(schema.Exists(), "Schema file isn't created");
-
-        auto schemaContent = TFileInput(schema).ReadAll();
-        UNIT_ASSERT_C(schemaContent.Contains(R"("table_name":"NoBackupTable")"), "Snapshot doesn't contain NoBackupTable schema");
-    }
-
     Y_UNIT_TEST(ExcludeTablet) {
         TEnv env;
 

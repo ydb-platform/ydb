@@ -1322,6 +1322,7 @@ TExprNode::TPtr KiBuildResult(TExprBase node, const TString& cluster, TExprConte
                 .Value(resFill.Data())
                 .Columns(GetResultColumns(resFill, ctx))
                 .RowsLimit().Build(GetResultRowsLimit(resFill))
+                .Discard().Build(GetResultDiscard(resFill) ? "true" : "false")
                 .Build()
             .Build()
         .Effects()

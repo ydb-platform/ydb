@@ -8,6 +8,31 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
+namespace {
+
+std::string JsonIntegerToString(double val) {
+    if (std::isnan(val)) {
+        return "null";
+    }
+
+    double integerPart;
+    double fractionPart = std::modf(val, &integerPart);
+    if (!(fractionPart == 0.0)) {
+        return std::to_string(val);
+    }
+
+    static constexpr double minD = static_cast<double>(std::numeric_limits<i64>::min());
+    static constexpr double maxD = MaxFloor<i64>();
+
+    if (val >= minD && val <= maxD) {
+        return std::to_string(static_cast<i64>(val));
+    }
+
+    return std::to_string(val);
+}
+
+} // namespace
+
 TBinaryJsonValueView::TBinaryJsonValueView(const TStringBuf& rawValue)
     : RawValue(rawValue) {
     if (!RawValue.empty()) {
@@ -37,13 +62,7 @@ std::optional<TStringBuf> TBinaryJsonValueView::GetScalarOptional() const {
             ScalarView = rootElement.GetString();
             break;
         case NBinaryJson::EEntryType::Number: {
-            const double val = rootElement.GetNumber();
-            double integer;
-            if (val < std::numeric_limits<i64>::min() || val > std::numeric_limits<i64>::max() || modf(val, &integer)) {
-                ScalarHolder = ToString(val);
-            } else {
-                ScalarHolder = ToString((i64)integer);
-            }
+            ScalarHolder = JsonIntegerToString(rootElement.GetNumber());
             ScalarView = ScalarHolder;
             break;
         }

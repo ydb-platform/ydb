@@ -263,11 +263,13 @@ hosts:
     data_center: 'zone-d'
     rack: '3'
 domains_config:
-  default_users:
-  - name: "root"
-    password: ""
-  default_access:
-  - "+(F):root"
+  security_config:
+    enforce_user_token_requirement: true
+    default_users:
+      - name: "root"
+        password: ""
+    default_access:
+      - "+(F):root"
   domain:
   - name: Root
     storage_pool_types:
@@ -385,6 +387,13 @@ grpc_config:
     ca: "/opt/ydb/certs/ca.crt"
     services_enabled:
     - legacy
+client_certificate_authorization:
+  request_client_certificate: true
+  client_certificate_definitions:
+    - member_groups: ["registerNode@cert"]
+      subject_terms:
+      - short_name: "O"
+        values: ["YDB"]
 ```
 
 Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN на актуальные в разделах `hosts` и `blob_storage_config`.
@@ -419,7 +428,7 @@ grpc_config:
 
 Сохраните конфигурационный файл YDB под именем `/opt/ydb/cfg/config.yaml` на каждом сервере кластера.
 
-Более подробная информация по созданию файла конфигурации приведена в разделе [{#T}](../../../devops/configuration-management/configuration-v2/config-settings.md).
+Более подробная информация по созданию файла конфигурации приведена в разделе [{#T}](../../../devops/configuration-management/configuration-v1/config-settings.md).
 
 ## Скопируйте ключи и сертификаты TLS на каждый сервер {#tls-copy-cert}
 
@@ -494,6 +503,14 @@ sudo chmod 700 /opt/ydb/certs
 
 {% endlist %}
 
+После запуска статических узлов проверьте их работоспособность через встроенный веб-интерфейс {{ ydb-short-name }} (Embedded UI):
+
+1. Откройте в браузере адрес `https://<node.ydb.tech>:8765`, где `<node.ydb.tech>` - FQDN сервера, на котором запущен любой статический узел;
+2. Перейдите на вкладку **Nodes**;
+3. Убедитесь, что в списке отображаются все 3 статических узла.
+
+![Ручная установка, запущенные статические узлы](../_assets/manual_installation_1.png)
+
 ## Инициализируйте кластер {#initialize-cluster}
 
 Операция инициализации кластера осуществляет настройку набора статических узлов, перечисленных в конфигурационном файле кластера, для хранения данных {{ ydb-short-name }}.
@@ -502,9 +519,17 @@ sudo chmod 700 /opt/ydb/certs
 
 На одном из серверов хранения в составе кластера выполните команды:
 
+Сначала получите авторизационный токен для регистрации запросов. Для этого выполните приведённую ниже команду.
+
+```bash
+/opt/ydb/bin/ydb --ca-file ca.crt -e grpcs://`hostname -f`:2135 -d /Root --user root --no-password auth get-token -f > auth_token
+```
+
+Инициализируйте кластер используя полученный токен
+
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
     admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
 echo $?
 ```
@@ -523,7 +548,7 @@ echo $?
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
     admin database /Root/testdb create ssd:8
 echo $?
 ```
@@ -616,55 +641,12 @@ echo $?
 
 Запустите дополнительные динамические узлы на других серверах для масштабирования и обеспечения отказоустойчивости базы данных.
 
-## Включение аутентификации и настройка учетных записей (опционально) {#security-setup}
-
-После инициализации кластера и создания базы данных, кластер работает в режиме, разрешающем доступ без аутентификации (`enforce_user_token_requirement: false`). Для производственных инсталляций рекомендуется включить обязательную проверку аутентификации и настроить учетные записи.
-
-При первоначальной установке кластера {{ ydb-short-name }} автоматически создается учетная запись `root` с пустым паролем, а также стандартный набор групп пользователей, описанный в разделе [{#T}](../../../security/builtin-security.md).
-
-### Включение обязательной аутентификации
-
-1. Получите аутентификационный токен для встроенной учетной записи `root`. На данном этапе пароль еще не задан:
-
-    ```bash
-    ydb --ca-file ca.crt -e grpcs://<node1.ydb.tech>:2135 -d /Root \
-            --user root --no-password auth get-token --force > token-file
-    ```
-
-1. Получите текущую конфигурацию из кластера и сохраните ее в файл `secure_config.yaml`:
-
-    ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 --token-file token-file  \
-        admin cluster config fetch > secure_config.yaml
-    ```
-
-   Откройте файл `secure_config.yaml` и измените в нем значение флага `enforce_user_token_requirement` на `true`:
-
-    ```yaml
-    security_config:
-        enforce_user_token_requirement: true
-        ...
-    ```
-
-1. Примените новую конфигурацию в кластер с помощью команды `replace`, используя полученный ранее токен:
-
-    ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 --token-file token-file \
-        admin cluster config replace -f secure_config.yaml
-    ```
-
-1. Перезапустите узлы кластера для применения конфигурации.
-
-    Параметр `enforce_user_token_requirement` вступает в силу только после перезапуска узлов. Выполните процедуру [rolling restart](../../../reference/ydbops/rolling-restart-scenario.md) для всех статических узлов кластера.
-
-### Первоначальная настройка учетных записей
-
-Теперь, когда кластер работает в режиме с обязательной аутентификацией, настройте учетные записи.
+## Настройка учетных записей {#security-setup}
 
 1. Установите пароль для учетной записи `root`, используя полученный ранее токен:
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file token-file \
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file auth_token \
         yql -s 'ALTER USER root PASSWORD "passw0rd"'
     ```
 

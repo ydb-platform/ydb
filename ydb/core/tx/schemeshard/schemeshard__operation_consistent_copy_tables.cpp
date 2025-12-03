@@ -1,5 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_rotate_cdc_stream.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/path.h>
@@ -78,7 +79,9 @@ bool CreateConsistentCopyTables(
     TOperationId nextId,
     const TTxTransaction& tx,
     TOperationContext& context,
-    TVector<ISubOperation::TPtr>& result)
+    TVector<ISubOperation::TPtr>& result,
+    const THashMap<TString, TString>& streamsToRotate,
+    const TString& newStreamName)
 {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
 
@@ -170,6 +173,47 @@ bool CreateConsistentCopyTables(
                                 CopyTableTask(srcPath, dstPath, descr),
                                 sequences));
         }
+
+        if (auto it = streamsToRotate.find(srcStr); it != streamsToRotate.end()) {
+            const TString& oldStreamName = it->second;
+
+            NKikimrSchemeOp::TRotateCdcStream rotateOp;
+            rotateOp.SetTableName(srcPath.LeafName());
+            rotateOp.SetOldStreamName(oldStreamName);
+            
+            auto& newStream = *rotateOp.MutableNewStream();
+            newStream.SetTableName(srcPath.LeafName());
+            auto& streamDesc = *newStream.MutableStreamDescription();
+            streamDesc.SetName(newStreamName);
+            streamDesc.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+            streamDesc.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+
+            auto rotateTx = TransactionTemplate(srcPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream);
+            rotateTx.MutableRotateCdcStream()->CopyFrom(rotateOp);
+            rotateTx.SetInternal(true);
+            
+            auto rotateParts = CreateRotateCdcStream(NextPartId(nextId, result), rotateTx, context);
+            result.insert(result.end(), rotateParts.begin(), rotateParts.end());
+        }
+
+
+        // TPath dstPath = TPath::Resolve(dstStr, context.SS);
+        // TPath dstParentPath = dstPath.Parent();
+
+        // THashSet<TString> sequences = GetLocalSequences(context, srcPath);
+
+        // if (descr.HasTargetPathTargetState()) {
+        //     result.push_back(CreateCopyTable(
+        //                         NextPartId(nextId, result),
+        //                         CopyTableTask(srcPath, dstPath, descr),
+        //                         sequences,
+        //                         descr.GetTargetPathTargetState()));
+        // } else {
+        //     result.push_back(CreateCopyTable(
+        //                         NextPartId(nextId, result),
+        //                         CopyTableTask(srcPath, dstPath, descr),
+        //                         sequences));
+        // }
 
         for (const auto& child: srcPath.Base()->GetChildren()) {
             const auto& name = child.first;
@@ -263,9 +307,7 @@ void AddCopySequences(TOperationId nextId, const TTxTransaction& tx, TOperationC
 
 TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     TVector<ISubOperation::TPtr> result;
-
-    CreateConsistentCopyTables(nextId, tx, context, result);
-
+    CreateConsistentCopyTables(nextId, tx, context, result, {}, "");
     return result;
 }
 

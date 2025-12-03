@@ -72,6 +72,8 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     
     TString streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
 
+    THashMap<TString, TString> streamsToRotate;
+
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.GetPath());
@@ -84,8 +86,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         auto& relativeItemPath = paths.second;
         desc.SetDstPath(JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName(), tx.GetBackupBackupCollection().GetTargetDir(), relativeItemPath}));
         
-        // For incremental backups, always omit indexes from table copy (backed up separately via CDC)
-        // For full backups, respect the OmitIndexes configuration
         if (incrBackupEnabled) {
             desc.SetOmitIndexes(true);
         } else {
@@ -96,15 +96,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         desc.SetAllowUnderSameOperation(true);
 
         if (incrBackupEnabled) {
-            NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
-            createCdcStreamOp.SetTableName(item.GetPath());
-            auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
-            streamDescription.SetName(streamName);
-            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
-            streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
-
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
-            
             {
                 auto checks = sPath.Check();
                 checks
@@ -117,14 +109,35 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     return result;
                 }
             }
-            
-            NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
 
-            desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
+            bool streamExists = false;
+            TString existingStreamName;
+            for (const auto& [name, childPathId] : sPath.Base()->GetChildren()) {
+                if (name.EndsWith("_continuousBackupImpl") && !context.SS->PathsById.at(childPathId)->Dropped()) {
+                    streamExists = true;
+                    existingStreamName = name;
+                    break;
+                }
+            }
+
+            if (streamExists) {
+                streamsToRotate[item.GetPath()] = existingStreamName;
+            } else {
+                NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
+                createCdcStreamOp.SetTableName(item.GetPath());
+                auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
+                streamDescription.SetName(streamName);
+                streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+                streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+
+                NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
+
+                desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
+            }
         }
     }
 
-    if (!CreateConsistentCopyTables(opId, modifyScheme, context, result)) {
+    if (!CreateConsistentCopyTables(opId, modifyScheme, context, result, streamsToRotate, streamName)) {
         return result;
     }
 

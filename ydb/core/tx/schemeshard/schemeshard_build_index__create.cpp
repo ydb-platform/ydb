@@ -200,12 +200,7 @@ public:
 
         Self->PersistCreateBuildIndex(db, *buildInfo);
 
-        if (buildInfo->IsBuildColumns()) {
-            buildInfo->State = TIndexBuildInfo::EState::AlterMainTable;
-        } else {
-            Y_ASSERT(buildInfo->IsBuildIndex());
-            buildInfo->State = TIndexBuildInfo::EState::Locking;
-        }
+        buildInfo->State = TIndexBuildInfo::EState::Locking;
 
         Self->PersistBuildIndexState(db, *buildInfo);
 

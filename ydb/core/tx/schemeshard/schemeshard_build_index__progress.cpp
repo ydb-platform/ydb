@@ -2746,7 +2746,11 @@ public:
             buildInfo.UnlockTxStatus = record.GetStatus();
             Self->PersistBuildIndexUnlockTxStatus(db, buildInfo);
 
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            if (buildInfo.IsBuildColumns()) {
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
+            } else {
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Cancellation_DroppingColumns:

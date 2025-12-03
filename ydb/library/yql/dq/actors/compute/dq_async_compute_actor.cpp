@@ -162,8 +162,8 @@ private:
     const IDqAsyncOutputBuffer* GetSinkBuffer(ui64 id, const TAsyncOutputInfoBase& info) {
         return info.Buffer ? info.Buffer.Get() : TaskRunnerStats.GetSink(id);
     }
-                    ;
-    void MonitoringExtras(TStringStream& html) {
+
+    void MonitoringExtra(TStringStream& html) {
         html << "<h3>Common</h3>";
         html << "Cookie: " << Cookie << "<br />";
         html << "MkqlMemoryLimit: " << MkqlMemoryLimit << "<br />";

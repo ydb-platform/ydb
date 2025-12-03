@@ -174,7 +174,6 @@ void TPhantomFlagStorageState::UpdateSyncedMask(const TSyncedMask& newSyncedMask
 }
 
 void TPhantomFlagStorageState::UpdateMetrics() {
-    SlCtx->PhantomFlagStorageGroup.SyncedMask() = SyncedMask.to_ullong();
     SlCtx->PhantomFlagStorageGroup.IsPhantomFlagStorageActive() = Active;
     SlCtx->PhantomFlagStorageGroup.IsPhantomFlagStorageBuilding() = Building;
     SlCtx->PhantomFlagStorageGroup.StoredFlagsCount() = StoredFlags.size();

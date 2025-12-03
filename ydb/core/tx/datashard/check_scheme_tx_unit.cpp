@@ -785,17 +785,28 @@ bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *act
         return false;
     }
 
-    const auto &snap = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc().GetSendSnapshot();
-    ui64 tableId = snap.GetTableId_Deprecated();
-    if (snap.HasTableId()) {
-        Y_ENSURE(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
-        tableId = snap.GetTableId().GetTableId();
-    }
-    Y_ENSURE(DataShard.GetUserTables().contains(tableId));
+    const auto& op = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc();
 
-    const auto &notice = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice();
-    if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc")) {
-        return false;
+    if (op.HasSendSnapshot()) {
+        const auto& snap = op.GetSendSnapshot();
+        ui64 tableId = snap.GetTableId_Deprecated();
+        if (snap.HasTableId()) {
+            Y_ENSURE(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
+            tableId = snap.GetTableId().GetTableId();
+        }
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
+    }
+
+    if (op.HasRotateCdcStreamNotice()) {
+        const auto& notice = op.GetRotateCdcStreamNotice();
+        if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc (Rotate)")) {
+            return false;
+        }
+    } else {
+        const auto& notice = op.GetCreateCdcStreamNotice();
+        if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc (Create)")) {
+            return false;
+        }
     }
 
     return true;

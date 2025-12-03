@@ -346,6 +346,7 @@ message TTableDescription {
     optional bool AllowUnderSameOperation = 44 [default = false];
     // Create only as-well. Used for CopyTable to create table in desired state instead of default
     optional EPathState PathState = 46;
+    optional TRotateCdcStream RotateSrcCdcStream = 47;
 }
 
 message TDictionaryEncodingSettings {
@@ -1282,6 +1283,7 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     optional bool AllowUnderSameOperation = 7 [default = false];
 
     optional NKikimrSchemeOp.EPathState TargetPathTargetState = 8;
+    optional TRotateCdcStream RotateSrcCdcStream = 9; 
 }
 
 message TConsistentTableCopyingConfig {

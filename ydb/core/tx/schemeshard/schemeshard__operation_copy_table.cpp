@@ -120,14 +120,44 @@ public:
             // Send "SendParts" transaction to source datashard
             NKikimrTxDataShard::TFlatSchemeTransaction oldShardTx;
             context.SS->FillSeqNo(oldShardTx, seqNo);
+
             if (txState->CdcPathId != InvalidPathId) {
                 auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
-                NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
+
+                TPathId oldStreamId = InvalidPathId;
+                TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
+                for (const auto& [name, id] : srcPath.Base()->GetChildren()) {
+                    if (context.SS->CdcStreams.contains(id)) {
+                        auto stream = context.SS->CdcStreams.at(id);
+                        if (stream->AlterData && stream->AlterData->State == TCdcStreamInfo::EState::ECdcStreamStateDisabled) {
+                            oldStreamId = id;
+                            break;
+                        }
+                    }
+                }
+
+                if (oldStreamId != InvalidPathId) {
+                    auto& notice = *combined.MutableRotateCdcStreamNotice();
+                    txState->SourcePathId.ToProto(notice.MutablePathId());
+                    oldStreamId.ToProto(notice.MutableOldStreamPathId());
+                    
+                    auto newStreamInfo = context.SS->CdcStreams.at(txState->CdcPathId);
+                    TString newStreamName = "unknown"; 
+                    for (const auto& [name, id] : srcPath.Base()->GetChildren()) {
+                         if (id == txState->CdcPathId) newStreamName = name;
+                    }
+
+                    context.SS->DescribeCdcStream(txState->CdcPathId, newStreamName, newStreamInfo, *notice.MutableNewStreamDescription());
+                    notice.SetTableSchemaVersion(context.SS->Tables.at(txState->SourcePathId)->AlterVersion + 1);
+                } else {
+                    NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
+                }
             } else {
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *oldShardTx.MutableSendSnapshot());
                 oldShardTx.SetReadOnly(true);
             }
+
             auto srcEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, oldShardTx.SerializeAsString(), context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, srcDatashardId, srcShardIdx, srcEvent.Release());
         }
@@ -213,21 +243,58 @@ public:
         context.SS->ClearDescribePathCaches(parentDir);
         context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
-        if (txState->CdcPathId != InvalidPathId) {
-            TPathId srcPathId = txState->SourcePathId;
-
-            Y_ABORT_UNLESS(context.SS->PathsById.contains(srcPathId));
+        TPathId srcPathId = txState->SourcePathId;
+        if (srcPathId != InvalidPathId && context.SS->PathsById.contains(srcPathId)) {
             auto srcPath = context.SS->PathsById.at(srcPathId);
-
-            Y_ABORT_UNLESS(context.SS->Tables.contains(srcPathId));
-            auto srcTable = context.SS->Tables.at(srcPathId);
-
-            srcTable->AlterVersion += 1;
-
-            context.SS->PersistTableAlterVersion(db, srcPathId, table);
+            
+            srcPath->PathState = TPathElement::EPathState::EPathStateNoChanges;
+            srcPath->LastTxId = InvalidTxId;
+            context.SS->PersistPath(db, srcPathId);
 
             context.SS->ClearDescribePathCaches(srcPath);
             context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
+
+            if (txState->CdcPathId != InvalidPathId) {
+                if (context.SS->Tables.contains(srcPathId)) {
+                    auto srcTable = context.SS->Tables.at(srcPathId);
+                    srcTable->AlterVersion += 1;
+                    context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
+                }
+
+                if (context.SS->CdcStreams.contains(txState->CdcPathId)) {
+                    context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
+
+                    auto stream = context.SS->CdcStreams.at(txState->CdcPathId);
+                    if (stream->AlterData) {
+                        context.SS->PersistCdcStream(db, txState->CdcPathId);
+                        stream->FinishAlter(); 
+                    }
+                }
+
+                for (const auto& [name, id] : srcPath->GetChildren()) {
+                    if (id == txState->CdcPathId) continue;
+
+                    if (context.SS->CdcStreams.contains(id)) {
+                        auto stream = context.SS->CdcStreams.at(id);
+                        auto streamPath = context.SS->PathsById.at(id);
+                        
+                        if (stream->AlterData && streamPath->LastTxId == OperationId.GetTxId()) {
+                            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                                "TCopyTable HandleReply: Finalizing rotation for OLD stream " << name << " id " << id);
+
+                            context.SS->PersistCdcStream(db, id);
+                            stream->FinishAlter();
+                            
+                            streamPath->PathState = TPathElement::EPathState::EPathStateNoChanges;
+                            streamPath->LastTxId = InvalidTxId; 
+                            
+                            context.SS->PersistPath(db, streamPath->PathId);
+                            context.SS->ClearDescribePathCaches(streamPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, id);
+                        }
+                    }
+                }
+            }
         }
 
         context.SS->ClearDescribePathCaches(path);
@@ -330,6 +397,23 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+        if (Transaction.GetCreateTable().HasRotateSrcCdcStream()) {
+            const auto& rot = Transaction.GetCreateTable().GetRotateSrcCdcStream();
+            const TString& oldName = rot.GetOldStreamName();
+            const TString& newName = rot.GetNewStream().GetStreamDescription().GetName();
+            
+            TPath src = TPath::Resolve(Transaction.GetCreateTable().GetCopyFromTable(), context.SS);
+            TPath oldP = src.Child(oldName);
+            TPath newP = src.Child(newName);
+
+            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "DEBUG_ROTATION: OpId# " << OperationId
+                << " OldName: " << oldName 
+                << " OldExists: " << oldP.IsResolved() << " (Deleted: " << oldP.IsDeleted() << ")"
+                << " NewName: " << newName 
+                << " NewExists: " << newP.IsResolved());
+        }
+        
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const TString& parentPath = Transaction.GetWorkingDir();
@@ -513,6 +597,89 @@ public:
 
         const bool omitFollowers = schema.GetOmitFollowers();
 
+        TPathId rotationNewStreamId = InvalidPathId; 
+
+        if (Transaction.GetCreateTable().HasRotateSrcCdcStream()) {
+            const auto& rotateOp = Transaction.GetCreateTable().GetRotateSrcCdcStream();
+            const TString& oldStreamName = rotateOp.GetOldStreamName();
+            const TString& newStreamName = rotateOp.GetNewStream().GetStreamDescription().GetName();
+
+            TPath oldStreamPath = srcPath.Child(oldStreamName);
+            {
+                auto checks = oldStreamPath.Check();
+                checks.NotEmpty().IsResolved().NotDeleted().IsCdcStream();
+                if (!checks) {
+                    result->SetError(checks.GetStatus(), checks.GetError());
+                    return result;
+                }
+            }
+
+            TPath newStreamPath = srcPath.Child(newStreamName);
+            TPathId newCdcPathId = InvalidPathId;
+
+            if (newStreamPath.IsResolved()) {
+                 if (newStreamPath.Base()->CreateTxId != OperationId.GetTxId()) {
+                      result->SetError(NKikimrScheme::StatusAlreadyExists, "Stream already exists (and belongs to another tx)");
+                      return result;
+                 }
+                 
+                 newCdcPathId = newStreamPath.Base()->PathId;
+                 
+            } else {
+                 auto checks = newStreamPath.Check();
+                 checks.NotEmpty().NotResolved();
+                 if (!checks) {
+                    result->SetError(checks.GetStatus(), checks.GetError());
+                    return result;
+                 }
+                 
+                 newCdcPathId = context.SS->AllocatePathId();
+                 
+                 context.MemChanges.GrabNewPath(context.SS, newCdcPathId);
+                 context.MemChanges.GrabNewCdcStream(context.SS, newCdcPathId);
+                 
+                 newStreamPath.MaterializeLeaf(owner, newCdcPathId);
+                 newStreamPath.Base()->PathState = TPathElement::EPathState::EPathStateCreate;
+                 newStreamPath.Base()->CreateTxId = OperationId.GetTxId();
+                 newStreamPath.Base()->LastTxId = OperationId.GetTxId();
+                 newStreamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
+                 
+                 context.DbChanges.PersistPath(newCdcPathId);
+                 context.DbChanges.PersistAlterCdcStream(newCdcPathId);
+            }
+
+            if (!context.SS->CdcStreams.contains(newCdcPathId)) {
+                context.MemChanges.GrabNewCdcStream(context.SS, newCdcPathId);
+
+                auto newStreamInfo = TCdcStreamInfo::Create(rotateOp.GetNewStream().GetStreamDescription());
+                Y_ABORT_UNLESS(newStreamInfo);
+                
+                newStreamInfo->State = NKikimrSchemeOp::ECdcStreamStateScan; 
+                
+                if (newStreamInfo->AlterData) {
+                    newStreamInfo->AlterData->State = NKikimrSchemeOp::ECdcStreamStateScan;
+                }
+
+                context.SS->CdcStreams[newCdcPathId] = newStreamInfo;
+                
+                context.DbChanges.PersistAlterCdcStream(newCdcPathId); 
+            }
+
+            context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
+            context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
+
+            auto oldStreamInfo = context.SS->CdcStreams.at(oldStreamPath.Base()->PathId);
+            auto streamAlter = oldStreamInfo->CreateNextVersion();
+            streamAlter->State = TCdcStreamInfo::EState::ECdcStreamStateDisabled;
+            oldStreamPath.Base()->PathState = TPathElement::EPathState::EPathStateAlter;
+            oldStreamPath.Base()->LastTxId = OperationId.GetTxId();
+
+            context.DbChanges.PersistPath(oldStreamPath.Base()->PathId);
+            context.DbChanges.PersistAlterCdcStream(oldStreamPath.Base()->PathId);
+
+            rotationNewStreamId = newCdcPathId;
+        }
+
         PrepareScheme(&schema, name, srcTableInfo, context);
         schema.SetIsBackup(isBackup);
 
@@ -626,6 +793,9 @@ public:
         srcPath.Base()->LastTxId = OperationId.GetTxId();
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCopyTable, newTable->PathId, srcPath.Base()->PathId);
+        if (rotationNewStreamId != InvalidPathId) {
+            txState.CdcPathId = rotationNewStreamId;
+        }
         txState.State = TTxState::CreateParts;
         if (Transaction.HasCreateCdcStream()) {
             txState.CdcPathId = srcPath.Base()->PathId;

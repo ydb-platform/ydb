@@ -1,6 +1,6 @@
 #Docs @blinkov TEAM:@ydb-platform/docs
 /*.md @ydb-platform/docs
-/ydb/docs/ @ydb-platform/docs
+/ydb/docs/ @ydb-platform/docs 
 
 #YQL @vitstn @ydb-platform/yql
 /ydb/library/yql/ @ydb-platform/yql

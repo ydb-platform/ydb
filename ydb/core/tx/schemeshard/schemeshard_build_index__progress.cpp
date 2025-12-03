@@ -559,10 +559,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
     columnBuild->SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     columnBuild->SetBuildIndexId(ui64(buildInfo.Id));
 
-    auto* settings = columnBuild->MutableSettings();
-    settings->SetTable(TPath::Init(buildInfo.TablePathId, ss).PathString());
-
-    buildInfo.SerializeToProto(ss, settings);
+    buildInfo.SerializeToProto(ss, columnBuild->MutableSettings());
 
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "DropColumnsPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());

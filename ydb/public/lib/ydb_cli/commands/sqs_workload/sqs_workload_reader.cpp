@@ -19,7 +19,6 @@ namespace NYdb::NConsoleClient {
 namespace {
 
 constexpr auto kWaitTimeSeconds = 15;
-// constexpr auto kSleepTimeMs = 1;
 
 }  // namespace
 
@@ -124,8 +123,6 @@ void TSqsWorkloadReader::RunLoop(const TSqsWorkloadReaderParams& params, TInstan
                 OnMessageReceived(params, sqsClient, request, outcome);
             }
         );
-
-        // std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
     }
 }
 

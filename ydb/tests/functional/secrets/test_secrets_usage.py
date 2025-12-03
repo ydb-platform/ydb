@@ -4,9 +4,15 @@ import logging
 import os
 import time
 
-from .conftest import run_with_assert, create_user, provide_grants, create_secrets, DATABASE, USE_SECRET_GRANTS
-from ydb.tests.oss.ydb_sdk_import import ydb
-# move ydb from here
+from .conftest import (
+    run_with_assert,
+    create_user,
+    provide_grants,
+    create_secrets,
+    write_message_to_topic,
+    DATABASE,
+    USE_SECRET_GRANTS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -278,72 +284,138 @@ def test_success_external_data_table(db_fixture, ydb_cluster):
 
 def test_migration_to_new_secrets_in_external_data_source(db_fixture, ydb_cluster):
     user1_config = create_user(ydb_cluster, db_fixture, "user1")
-
     provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])
 
-    # create secrets
     secret_name1 = 's3_access_key'
     secret_name2 = 's3_secret_key'
-    run_with_assert(
-        user1_config,
-        f"""
-        CREATE OBJECT {secret_name1} (TYPE SECRET) WITH value = 'minio';
-        CREATE OBJECT {secret_name2} (TYPE SECRET) WITH value = 'minio';
-        CREATE SECRET `{secret_name1}` WITH ( value='minio' );
-        CREATE SECRET `{secret_name2}` WITH ( value='minio' );""",
-    )
-
-    # create eds and successfully read from it
-    s3_endpoint, _, _, s3_bucket = setup_s3()
     eds_name = "s3_source"
-    run_with_assert(
-        user1_config,
-        get_eds_with_many_secrets(
-            secret_name1,
-            secret_name2,
-            s3_location=f"{s3_endpoint}/{s3_bucket}",
-            eds_name=f"{eds_name}",
-            schema_secrets=False,
-            create_or_replace=False,
-        ),
-    )
+    s3_endpoint, _, _, s3_bucket = setup_s3()
+    s3_location = f"{s3_endpoint}/{s3_bucket}"
 
-    read_from_eds_query = f"""
-        SELECT * FROM {eds_name}.`file.txt` WITH (
-            FORMAT = "raw",
-            SCHEMA = ( Data String )
-        );"""
-    result_sets = run_with_assert(user1_config, read_from_eds_query)
-    data = result_sets[0].rows[0]['Data']
-    assert isinstance(data, bytes) and data.decode() == 'Hello S3!'
+    def create_old_and_new_secrets(secret_name1, secret_name2):
+        run_with_assert(
+            user1_config,
+            f"""
+            CREATE OBJECT {secret_name1} (TYPE SECRET) WITH value = 'minio';
+            CREATE OBJECT {secret_name2} (TYPE SECRET) WITH value = 'minio';
+            CREATE SECRET `{secret_name1}` WITH ( value='minio' );
+            CREATE SECRET `{secret_name2}` WITH ( value='minio' );""",
+        )
 
-    # drop secret objects
+    def create_eds(eds_name, secret_name1, secret_name2, s3_location):
+        run_with_assert(
+            user1_config,
+            get_eds_with_many_secrets(
+                secret_name1,
+                secret_name2,
+                s3_location,
+                eds_name=eds_name,
+                schema_secrets=False,
+                create_or_replace=False,
+            ),
+        )
+
+    def read_from_eds(eds_name, expected_error=None):
+        read_from_eds_query = f"""
+            SELECT * FROM {eds_name}.`file.txt` WITH (
+                FORMAT = "raw",
+                SCHEMA = ( Data String )
+            );"""
+        if expected_error is None:
+            result_sets = run_with_assert(user1_config, read_from_eds_query)
+            data = result_sets[0].rows[0]['Data']
+            assert isinstance(data, bytes) and data.decode() == 'Hello S3!'
+        else:
+            run_with_assert(user1_config, read_from_eds_query, expected_error)
+
+    def drop_old_secrets(secret_name1, secret_name2):
+        run_with_assert(
+            user1_config,
+            f"""
+            DROP OBJECT {secret_name1} (TYPE SECRET);
+            DROP OBJECT {secret_name2} (TYPE SECRET);""",
+        )
+
+    def change_eds_secrets_via_create_or_replace(eds_name, secret_name1, secret_name2, s3_location):
+        run_with_assert(
+            user1_config,
+            get_eds_with_many_secrets(
+                secret_name1,
+                secret_name2,
+                s3_location,
+                eds_name,
+                schema_secrets=True,
+                create_or_replace=True,
+            ),
+        )
+
+    create_old_and_new_secrets(secret_name1, secret_name2)
+    create_eds(eds_name, secret_name1, secret_name2, s3_location)
+    read_from_eds(eds_name)
+    drop_old_secrets(secret_name1, secret_name2)
+    read_from_eds(eds_name, expected_error=f"secret with name \\'{secret_name1}\\' not found")
+    change_eds_secrets_via_create_or_replace(eds_name, secret_name1, secret_name2, s3_location)
+    read_from_eds(eds_name)
+
+
+def _create_old_and_new_secrets(user1_config, secret_name):
     run_with_assert(
         user1_config,
         f"""
-        DROP OBJECT {secret_name1} (TYPE SECRET);
-        DROP OBJECT {secret_name2} (TYPE SECRET);""",
+        CREATE OBJECT {secret_name} (TYPE SECRET) WITH value = '';
+        CREATE SECRET `{secret_name}` WITH ( value='' );""",
     )
 
-    # fail to read from external data source
-    result_sets = run_with_assert(user1_config, read_from_eds_query, f"secret with name \\'{secret_name1}\\' not found")
 
-    # change eds and successfully read from it
+def _wait_for_rows_count(user1_config, table_name, expected_rows_count, wait_for_the_first_success):
+    # wait_for_the_first_success=True means that the expected rows count will happen as soon as possible (errors might happen while waiting)
+    # wait_for_the_first_success=False means that the expected rows count should not be changed within time
+    tries_count = 0
+    actual_rows_count = None
+    while tries_count < 5:
+        read_from_table = f"SELECT * FROM `{table_name}`;"
+        try:
+            result_sets = run_with_assert(user1_config, read_from_table)
+            if len(result_sets[0].rows) == expected_rows_count:
+                if wait_for_the_first_success:
+                    return True
+            else:
+                assert False, f'Unexpected number of rows in table: {len(result_sets[0].rows)}'
+            actual_rows_count = len(result_sets[0].rows)
+        except Exception as e:
+            if not wait_for_the_first_success:
+                assert False, f'Unexpected exception: {str(e)}'
+
+        tries_count += 1
+        time.sleep(1)
+
+    if wait_for_the_first_success:
+        assert False, f'Unexpected number of rows in table: {actual_rows_count}'
+    else:
+        # Means that the expected row count is maintained for all tries
+        return True
+
+
+def _break_auth_by_removing_old_secret(user1_config, object_type, object_name, secret_name):
     run_with_assert(
         user1_config,
-        get_eds_with_many_secrets(
-            secret_name1,
-            secret_name2,
-            s3_location=f"{s3_endpoint}/{s3_bucket}",
-            eds_name=f"{eds_name}",
-            schema_secrets=True,
-            create_or_replace=True,
-        ),
+        f"""
+        ALTER {object_type} `{object_name}` SET (STATE = "Paused");
+        DROP OBJECT {secret_name} (TYPE SECRET);
+        ALTER {object_type} `{object_name}` SET (STATE = "StandBy");
+        """,
     )
 
-    result_sets = run_with_assert(user1_config, read_from_eds_query)
-    data = result_sets[0].rows[0]['Data']
-    assert isinstance(data, bytes) and data.decode() == 'Hello S3!'
+
+def _fix_auth_with_new_secret(user1_config, object_type, object_name, secret_name):
+    run_with_assert(
+        user1_config,
+        f"""
+        ALTER {object_type} `{object_name}` SET (STATE = "Paused");
+        ALTER {object_type} `{object_name}` SET (PASSWORD_SECRET_PATH = "{secret_name}");
+        ALTER {object_type} `{object_name}` SET (STATE = "StandBy");
+        """,
+    )
 
 
 def test_migration_to_new_secrets_in_async_replication(db_fixture, ydb_cluster):
@@ -351,218 +423,136 @@ def test_migration_to_new_secrets_in_async_replication(db_fixture, ydb_cluster):
 
     provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table", "ydb.granular.alter_schema"])
 
-    # setup table for replication
     table_name = 'table'
-    run_with_assert(
-        user1_config,
-        f"""
-        CREATE TABLE `{table_name}` (Key Uint64, PRIMARY KEY (Key));""",
-    )
-    run_with_assert(
-        user1_config,
-        f"""
-        INSERT INTO `{table_name}` (Key) VALUES (1);""",
-    )
-
-    # create secrets
-    secret_name = 'userPassword'
-    run_with_assert(
-        user1_config,
-        f"""
-        CREATE OBJECT {secret_name} (TYPE SECRET) WITH value = '';
-        CREATE SECRET `{secret_name}` WITH ( value='' );""",
-    )
-
-    # create async replication...
     replica_name = 'replica'
     replication_name = 'replication'
-    run_with_assert(
-        user1_config,
-        f"""
-            CREATE ASYNC REPLICATION `{replication_name}` FOR `{table_name}` AS `{replica_name}` WITH (
-                CONNECTION_STRING="grpc://{ydb_cluster.nodes[1].host}:{ydb_cluster.nodes[1].port}/?database={DATABASE}",
-                USER = "user1",
-                PASSWORD_SECRET_NAME = "{secret_name}"
-            );
-        """,
-    )
+    connection_string = f"grpc://{ydb_cluster.nodes[1].host}:{ydb_cluster.nodes[1].port}/?database={DATABASE}"
+    secret_name = 'userPassword'
+    rows_cnt = 0
 
-    # ... and successfully read from it
-    def wait_for_rows_count(expected_rows_count, wait_for_the_first_success=True):
-        # wait_for_the_first_success=True means that we expect that the expected rows count will happen as soon as possible (errors might happen while waiting)
-        # wait_for_the_first_success=False means that expected rows count should not be changed within time
-        tries_count = 0
-        while tries_count < 5:
-            read_from_replica = f"SELECT * FROM `{replica_name}`;"
-            try:
-                result_sets = run_with_assert(user1_config, read_from_replica)
-                if len(result_sets[0].rows) == expected_rows_count:
-                    if wait_for_the_first_success:
-                        return
-                else:
-                    assert False, 'Unexpected result'
-            except Exception as e:
-                if not wait_for_the_first_success:
-                    assert False, f'Unexpected result: {str(e)}'
+    def create_table_for_replication(table_name):
+        run_with_assert(
+            user1_config,
+            f'CREATE TABLE `{table_name}` (Key Uint64, PRIMARY KEY (Key));',
+        )
 
-            tries_count += 1
-            time.sleep(1)
+    def insert_one_row_into_table(table_name, rows_cnt):
+        run_with_assert(
+            user1_config,
+            f'INSERT INTO `{table_name}` (Key) VALUES ({rows_cnt});',
+        )
+        return rows_cnt + 1
 
-        if wait_for_the_first_success:
-            assert False, 'Looks like replication does not work as expected'
+    def create_async_replication_with_old_secret(
+        replication_name, replica_name, table_name, connection_string, secret_name
+    ):
+        run_with_assert(
+            user1_config,
+            f"""
+                CREATE ASYNC REPLICATION `{replication_name}` FOR `{table_name}` AS `{replica_name}` WITH (
+                    CONNECTION_STRING="{connection_string}",
+                    USER = "user1",
+                    PASSWORD_SECRET_NAME = "{secret_name}"
+                );
+            """,
+        )
 
-    wait_for_rows_count(1)
+    def assert_replication_has_processed_all_changes(user1_config, replica_name, rows_cnt):
+        _wait_for_rows_count(user1_config, replica_name, rows_cnt, wait_for_the_first_success=True)
 
-    # break the auth
-    run_with_assert(
-        user1_config,
-        f"""
-        ALTER ASYNC REPLICATION `{replication_name}` SET (STATE = "PAUSED");
-        DROP OBJECT {secret_name} (TYPE SECRET);
-        ALTER ASYNC REPLICATION `{replication_name}` SET (STATE = "StandBy");
-        """,
-    )
+    def assert_replication_has_skipped_the_last_change(user1_config, replica_name, rows_cnt):
+        _wait_for_rows_count(user1_config, replica_name, rows_cnt, wait_for_the_first_success=False)
 
-    # assert that replication is broken - new rows will not be replicated
-    run_with_assert(
-        user1_config,
-        f"""
-        INSERT INTO `{table_name}` (Key) VALUES (2);
-        """,
-    )
-    wait_for_rows_count(1, wait_for_the_first_success=False)
-
-    # create new secret and fix the auth
-    run_with_assert(
-        user1_config,
-        f"""
-        ALTER ASYNC REPLICATION `{replication_name}` SET (STATE = "PAUSED");
-        ALTER ASYNC REPLICATION `{replication_name}` SET (PASSWORD_SECRET_PATH = "{secret_name}");
-        ALTER ASYNC REPLICATION `{replication_name}` SET (STATE = "StandBy");
-        """,
-    )
-    wait_for_rows_count(2)
+    create_table_for_replication(table_name)
+    rows_cnt = insert_one_row_into_table(table_name, rows_cnt)
+    _create_old_and_new_secrets(user1_config, secret_name)
+    create_async_replication_with_old_secret(replication_name, replica_name, table_name, connection_string, secret_name)
+    assert_replication_has_processed_all_changes(user1_config, replica_name, rows_cnt)
+    _break_auth_by_removing_old_secret(user1_config, "ASYNC REPLICATION", replication_name, secret_name)
+    rows_cnt = insert_one_row_into_table(table_name, rows_cnt)
+    assert_replication_has_skipped_the_last_change(user1_config, replica_name, rows_cnt - 1)
+    _fix_auth_with_new_secret(user1_config, "ASYNC REPLICATION", replication_name, secret_name)
+    assert_replication_has_processed_all_changes(user1_config, replica_name, rows_cnt)
 
 
 def test_migration_to_new_secrets_in_transfer(db_fixture, ydb_cluster):
     user1_config = create_user(ydb_cluster, db_fixture, "user1")
+    provide_grants(
+        db_fixture,
+        "user1",
+        DATABASE,
+        [
+            "ydb.granular.create_table",
+            'ydb.granular.describe_schema',
+            "ydb.granular.create_queue",
+            "ydb.granular.alter_schema",
+        ],
+    )
 
-    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table", 'ydb.granular.describe_schema', "ydb.granular.create_queue", "ydb.granular.alter_schema"])
-
-    # create secrets
     secret_name = 'userPassword'
-    run_with_assert(
-        user1_config,
-        f"""
-        CREATE OBJECT {secret_name} (TYPE SECRET) WITH value = '';
-        CREATE SECRET `{secret_name}` WITH ( value='' );""",
-    )
-
-    # setup table
     table_name = 'table'
-    run_with_assert(
-        user1_config,
-        f"""
-            CREATE TABLE {table_name} (
-                partition Uint32 NOT NULL,
-                offset Uint64 NOT NULL,
-                message Utf8,
-                PRIMARY KEY (partition, offset)
-            );
-        """,
-    )
-
-    # setup topic
     topic_name = 'topic'
-    run_with_assert(
-        user1_config,
-        f"""
-            CREATE TOPIC {topic_name};
-        """,
-    )
-
-    # create transfer
-    lmb = '''
-        $l = ($x) -> {
-            return [
-                <|
-                    partition:CAST($x._partition AS Uint32),
-                    offset:CAST($x._offset AS Uint64),
-                    message:CAST($x._data AS Utf8)
-                |>
-            ];
-        };
-    '''
     transfer_name = 'transfer'
-    create_transfer_query = f"""
-            {lmb}
+    connection_string = f"grpc://{ydb_cluster.nodes[1].host}:{ydb_cluster.nodes[1].port}/?database={DATABASE}"
+    messages_cnt = 0
 
-            CREATE TRANSFER {transfer_name}
-            FROM {topic_name} TO {table_name} USING $l
-            WITH (
-                CONNECTION_STRING="grpc://{ydb_cluster.nodes[1].host}:{ydb_cluster.nodes[1].port}/?database={DATABASE}",
-                FLUSH_INTERVAL = Interval('PT1S'),
-                BATCH_SIZE_BYTES = 10,
-                USER = "user1",
-                PASSWORD_SECRET_NAME = "{secret_name}"
-            );
-        """
-    run_with_assert(user1_config, create_transfer_query)
+    def create_table(table_name):
+        run_with_assert(
+            user1_config,
+            f"""
+                CREATE TABLE {table_name} (
+                    partition Uint32 NOT NULL,
+                    offset Uint64 NOT NULL,
+                    message Utf8,
+                    PRIMARY KEY (partition, offset)
+                );
+            """,
+        )
 
-    # write to transfer...
-    with ydb.Driver(user1_config) as driver:
-        with driver.topic_client.writer(topic_name, producer_id="producer-id") as writer:
-            writer.write(ydb.TopicWriterMessage(f"message-{time.time()}"))
+    def create_topic(topic_name):
+        run_with_assert(user1_config, f'CREATE TOPIC {topic_name};')
 
-    # ... and successfully read from the table
-    def wait_for_rows_count(expected_rows_count, wait_for_the_first_success=True):
-        # wait_for_the_first_success=True means that we expect that the expected rows count will happen as soon as possible (errors might happen while waiting)
-        # wait_for_the_first_success=False means that expected rows count should not be changed within time
-        tries_count = 0
-        while tries_count < 5:
-            read_from_table_query = f"SELECT * FROM `{table_name}`;"
-            try:
-                result_sets = run_with_assert(user1_config, read_from_table_query)
-                if len(result_sets[0].rows) == expected_rows_count:
-                    if wait_for_the_first_success:
-                        return
-                else:
-                    assert False, 'Unexpected result'
-            except Exception as e:
-                if not wait_for_the_first_success:
-                    assert False, f'Unexpected result: {str(e)}'
+    def create_transfer(transfer_name, topic_name, table_name, connection_string, secret_name):
+        lmb = '''
+            $l = ($x) -> {
+                return [
+                    <|
+                        partition:CAST($x._partition AS Uint32),
+                        offset:CAST($x._offset AS Uint64),
+                        message:CAST($x._data AS Utf8)
+                    |>
+                ];
+            };
+        '''
+        create_transfer_query = f"""
+                {lmb}
 
-            tries_count += 1
-            time.sleep(1)
+                CREATE TRANSFER {transfer_name}
+                FROM {topic_name} TO {table_name} USING $l
+                WITH (
+                    CONNECTION_STRING="{connection_string}",
+                    FLUSH_INTERVAL = Interval('PT1S'),
+                    BATCH_SIZE_BYTES = 10,
+                    USER = "user1",
+                    PASSWORD_SECRET_NAME = "{secret_name}"
+                );
+            """
+        run_with_assert(user1_config, create_transfer_query)
 
-        if wait_for_the_first_success:
-            assert False, 'Looks like transfer does not work as expected'
+    def assert_transfer_has_processed_all_changes(user1_config, table_name, rows_cnt):
+        _wait_for_rows_count(user1_config, table_name, rows_cnt, wait_for_the_first_success=True)
 
-    wait_for_rows_count(1)
+    def assert_transfer_has_skipped_the_last_change(user1_config, table_name, rows_cnt):
+        _wait_for_rows_count(user1_config, table_name, rows_cnt, wait_for_the_first_success=False)
 
-    # break the auth
-    run_with_assert(
-        user1_config,
-        f"""
-        ALTER TRANSFER `{transfer_name}` SET (STATE = "PAUSED");
-        DROP OBJECT {secret_name} (TYPE SECRET);
-        ALTER TRANSFER `{transfer_name}` SET (STATE = "StandBy");
-        """,
-    )
-
-    # assert that replication is broken - new messages will not be transfered
-    with ydb.Driver(user1_config) as driver:
-        with driver.topic_client.writer(topic_name, producer_id="producer-id") as writer:
-            writer.write(ydb.TopicWriterMessage(f"message-{time.time()}"))
-    wait_for_rows_count(1, wait_for_the_first_success=False)
-
-    # create new secret and fix the auth
-    run_with_assert(
-        user1_config,
-        f"""
-        ALTER TRANSFER `{transfer_name}` SET (STATE = "PAUSED");
-        ALTER TRANSFER `{transfer_name}` SET (PASSWORD_SECRET_PATH = "{secret_name}");
-        ALTER TRANSFER `{transfer_name}` SET (STATE = "StandBy");
-        """,
-    )
-    wait_for_rows_count(2)
+    _create_old_and_new_secrets(user1_config, secret_name)
+    create_table(table_name)
+    create_topic(topic_name)
+    create_transfer(transfer_name, topic_name, table_name, connection_string, secret_name)
+    messages_cnt = write_message_to_topic(user1_config, topic_name, messages_cnt)
+    assert_transfer_has_processed_all_changes(user1_config, table_name, messages_cnt)
+    _break_auth_by_removing_old_secret(user1_config, "TRANSFER", transfer_name, secret_name)
+    messages_cnt = write_message_to_topic(user1_config, topic_name, messages_cnt)
+    assert_transfer_has_skipped_the_last_change(user1_config, table_name, messages_cnt - 1)
+    _fix_auth_with_new_secret(user1_config, "TRANSFER", transfer_name, secret_name)
+    assert_transfer_has_processed_all_changes(user1_config, table_name, messages_cnt)

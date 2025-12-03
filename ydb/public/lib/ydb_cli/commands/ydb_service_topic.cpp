@@ -179,14 +179,6 @@ namespace NYdb::NConsoleClient {
             }
             return TDuration::Seconds(hours * 3600); // using floating-point ctor with saturation
         }
-
-        TDuration ParseDuration(TStringBuf str) {
-            StripInPlace(str);
-            if (!str.empty() && !IsAsciiAlpha(str.back())) {
-                throw TMisuseException() << "Duration must ends with a unit name (ex. 'h' for hours, 's' for seconds)";
-            }
-            return TDuration::Parse(str);
-        }
     }
 
     void TCommandWithSupportedCodecs::AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NYdb::NTopic::ECodec>& supportedCodecs) {
@@ -645,6 +637,26 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("availability-period", "Duration for which uncommited data in topic is retained (ex. '72h', '1440m')")
             .Optional()
             .StoreMappedResult(&AvailabilityPeriod_, ParseDuration);
+        config.Opts->AddLongOption("consumer-type", "Consumer type")
+            .DefaultValue("streaming")
+            .StoreResult(&ConsumerType_);
+        config.Opts->AddLongOption("keep-messages-order", "Keep messages order")
+            .Optional()
+            .DefaultValue(false)
+            .StoreResult(&KeepMessagesOrder_);
+        config.Opts->AddLongOption("default-processing-timeout", "Default processing timeout")
+            .Optional()
+            .StoreMappedResult(&DefaultProcessingTimeout_, ParseDuration);
+        config.Opts->AddLongOption("dlq-max-processing-attempts", "Max processing attempts for DLQ")
+            .Optional()
+            .StoreResult(&DlqMaxProcessingAttempts_);
+        config.Opts->AddLongOption("dlq-enabled", "Is DLQ enabled")
+            .Optional()
+            .DefaultValue(false)
+            .StoreResult(&DlqEnabled_);
+        config.Opts->AddLongOption("dlq-queue-name", "DLQ queue name")
+            .Optional()
+            .StoreResult(&DlqQueueName_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -677,6 +689,40 @@ namespace NYdb::NConsoleClient {
         consumerSettings.SetImportant(IsImportant_);
         if (AvailabilityPeriod_.Defined()) {
             consumerSettings.AvailabilityPeriod(*AvailabilityPeriod_);
+        }
+
+        if (ConsumerType_ == "shared") {
+            consumerSettings.ConsumerType(NTopic::EConsumerType::Shared);
+        } else if (ConsumerType_ == "streaming") {
+            consumerSettings.ConsumerType(NTopic::EConsumerType::Streaming);
+        } else {
+            throw TMisuseException() << "Invalid consumer type: " << ConsumerType_ << ". Valid types: shared, streaming";
+        }
+
+        consumerSettings.KeepMessagesOrder((KeepMessagesOrder_.Defined() && *KeepMessagesOrder_));
+        if (DefaultProcessingTimeout_.Defined()) {
+            consumerSettings.DefaultProcessingTimeout(*DefaultProcessingTimeout_);
+        }
+
+        if (DlqMaxProcessingAttempts_.Defined() || DlqEnabled_.Defined() || DlqQueueName_.Defined()) {
+            NYdb::NTopic::TDeadLetterPolicySettings dlqSettings;
+            dlqSettings.Enabled(DlqEnabled_.Defined() && *DlqEnabled_);
+            
+            NYdb::NTopic::TDeadLetterPolicyConditionSettings conditionSettings;
+            if (DlqMaxProcessingAttempts_.Defined()) {
+                conditionSettings.MaxProcessingAttempts(*DlqMaxProcessingAttempts_);
+            }
+        
+            dlqSettings.Condition(conditionSettings);
+            
+            if (DlqQueueName_.Defined()) {
+                dlqSettings.Action(NTopic::EDeadLetterAction::Move);
+                dlqSettings.DeadLetterQueue(*DlqQueueName_);
+            } else {
+                dlqSettings.Action(NTopic::EDeadLetterAction::Delete);
+            }
+                        
+            consumerSettings.DeadLetterPolicy(dlqSettings);
         }
 
         readRuleSettings.AppendAddConsumers(consumerSettings);

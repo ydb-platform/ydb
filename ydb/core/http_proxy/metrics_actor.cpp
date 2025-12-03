@@ -67,7 +67,7 @@ namespace NKikimr::NHttpProxy {
             group = group->GetSubgroup(ev->Get()->Labels[i].first, ev->Get()->Labels[i].second);
         }
         auto counter = group->GetNamedHistogram(ev->Get()->Labels.back().first, ev->Get()->Labels.back().second,
-                                                    NMonitoring::ExplicitHistogram({100, 200, 500, 1000, 2000, 5000, 10000, 30000}));
+                                                    NMonitoring::ExplicitHistogram({10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000}));
         counter->Collect(ev->Get()->Value, ev->Get()->Count);
     }
 

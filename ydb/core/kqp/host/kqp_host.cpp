@@ -1344,8 +1344,9 @@ private:
                 break;
             }
         }
-        // let dml queries pass through because of backward compatibility
-        if (SessionCtx->Query().Type != EKikimrQueryType::Dml && hasDiscardWarning) {
+        
+        // only query will throw error to save the backward compatibility
+        if (SessionCtx->Query().Type == EKikimrQueryType::Query && hasDiscardWarning) {
             ctx.AddError(YqlIssue(TPosition(), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
                 << "DISCARD can only be used at the top level, not inside subqueries"));
             return result;

@@ -3418,21 +3418,20 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
         TVector<TString> invalidQueries = {
             "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)",
             "SELECT * FROM `/Root/EightShard` WHERE Key IN (DISCARD SELECT 1)",
-            // "SELECT 1 UNION ALL (DISCARD SELECT 2)"
+            "SELECT 1 UNION ALL (DISCARD SELECT 2)"
         };
         // todo: "SELECT 1 UNION ALL (DISCARD SELECT 2)" breaks on backward compability test in this code, but in old all is okay
-        // todo: llm said about result binding where one result depends on the another. think about usecase with discard
         TVector<TString> invalidQueriesForDml = {
             "SELECT 1 UNION ALL DISCARD SELECT 2"
         };
 
-        // for (const auto& query : queries) {
-        //     auto result = db.ExecuteQuery(query,
-        //             NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        //     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
-        //         "DISCARD SELECT should return no result sets for query: " << query);
-        // }
+        for (const auto& query : queries) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "DISCARD SELECT should return no result sets for query: " << query);
+        }
         {
             auto multiLineQuery = R"(SELECT 1; DISCARD SELECT 2; DISCARD SELECT COUNT(*) FROM `/Root/EightShard`;
                         SELECT MIN(Key) FROM `/Root/TwoShard`)";
@@ -3444,32 +3443,32 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
                 "expect 2 result sets, got " << result.GetResultSets().size() << " instead");
         }
 
-        // for (const auto& query : Concatenate(invalidQueries, invalidQueriesForDml)) {
-        //     auto result = db.ExecuteQuery(query,
-        //             NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        //     UNIT_ASSERT_C(!result.IsSuccess(),
-        //         "Query should fail: " << query);
-        //     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-        //         "DISCARD");
-        // }
+        for (const auto& query : Concatenate(invalidQueries, invalidQueriesForDml)) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                "Query should fail: " << query);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "DISCARD");
+        }
         // backward compability test: dml
-        // {
-        //     auto session = tableClient.CreateSession().GetValueSync().GetSession();
-        //     for (auto& query : Concatenate(queries, invalidQueries)) {
-        //         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).ExtractValueSync();
-        //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        //         UNIT_ASSERT_C(result.GetResultSets().size() > 0,
-        //             "DISCARD SELECT should return result sets for dml (backward compability) but got: " << result.GetResultSets().size() << " for query " << query);
-        //     }
-        // }
-        // // backward compability test: scan
-        // for (auto& query : Concatenate(queries, invalidQueries)) {
-        //     auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
-        //     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        //     auto collected = CollectStreamResult(it);
-        //     UNIT_ASSERT_C(!collected.ResultSetYson.empty(),
-        //         "DISCARD SELECT should return result sets for Scan query (backward compatibility), got empty for query: " << query);
-        // }
+        {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            for (auto& query : Concatenate(queries, invalidQueries)) {
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.GetResultSets().size() > 0,
+                    "DISCARD SELECT should return result sets for dml (backward compability) but got: " << result.GetResultSets().size() << " for query " << query);
+            }
+        }
+        // backward compability test: scan
+        for (auto& query : Concatenate(queries, invalidQueries)) {
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto collected = CollectStreamResult(it);
+            UNIT_ASSERT_C(!collected.ResultSetYson.empty(),
+                "DISCARD SELECT should return result sets for Scan query (backward compatibility), got empty for query: " << query);
+        }
 
     }
 
@@ -3617,10 +3616,19 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
         )", 1, "DISCARD with empty result");
 
         ExecuteQueryAndCheckResultSets(db, R"(
+            SELECT 3;
             DISCARD SELECT * FROM (SELECT Key FROM `/Root/EightShard` WHERE Key > 100);
-            SELECT 1
-        )", 1, "DISCARD with subquery");
-
+            DISCARD SELECT 1;
+            SELECT COUNT(*) FROM `/Root/TwoShard`;
+        )", 2, "DISCARD with subquery");
+        {
+            auto result = ExecuteQueryAndCheckResultSets(db, R"(
+                DISCARD SELECT * FROM `/Root/EightShard` LIMIT 5;
+                SELECT COUNT(*) as cnt FROM `/Root/TwoShard`;
+                DISCARD SELECT Key FROM `/Root/EightShard` WHERE Key < 200;
+                SELECT MIN(Key) as min_key FROM `/Root/EightShard`
+            )", 2, "Data Executor only");
+        }
         {
             auto result = ExecuteQueryAndCheckResultSets(db, "SELECT 1; DISCARD SELECT 2; SELECT 3; DISCARD SELECT 4; SELECT 5; DISCARD SELECT 6; SELECT 7", 4, "Many transactions (> 2)");
             auto resultValues = std::vector{1, 3, 5, 7};

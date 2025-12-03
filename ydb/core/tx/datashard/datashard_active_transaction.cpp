@@ -531,7 +531,7 @@ bool TActiveTransaction::BuildSchemeTx()
         count++;
     }
 
-    return count > 0;
+    return count == 1;
 }
 
 bool TActiveTransaction::BuildSnapshotTx()

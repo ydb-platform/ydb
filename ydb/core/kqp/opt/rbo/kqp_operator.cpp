@@ -19,7 +19,7 @@ void DFS(int vertex, TVector<int> &sortedStages, THashSet<int> &visited, const T
     sortedStages.push_back(vertex);
 }
 
-TExprNode::TPtr AddRenames(TExprNode::TPtr input, const TStageGraph::TSourceStageTraits& sourceStagesTraits, TExprContext &ctx) {
+TExprNode::TPtr AddRenames(TExprNode::TPtr input, const TStageGraph::TSourceStageTraits& sourceStagesTraits, TExprContext& ctx) {
     if (sourceStagesTraits.Renames.empty()) {
         return input;
     }
@@ -197,7 +197,8 @@ TInfoUnit::TInfoUnit(TString name, bool scalarContext) : ScalarContext(scalarCon
 
 TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
                                                       TExprContext &ctx) {
-    if (FromSourceStage) {
+    // FIXME: This code is the same for all connection, put it in base class.
+    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
@@ -213,7 +214,8 @@ TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage
 
 TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
                                                 TExprContext &ctx) {
-    if (FromSourceStage) {
+    // FIXME: This code is the same for all connection, put it in base class.
+    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
@@ -229,7 +231,8 @@ TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TPos
 
 TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
                                                      TExprContext &ctx) {
-    if (FromSourceStage) {
+    // FIXME: This code is the same for all connection, put it in base class.
+    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
@@ -243,18 +246,18 @@ TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage,
     // clang-format on
 }
 
-TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                                    TExprContext &ctx) {
-    TVector<TCoAtom> keyColumns;
-
-    if (FromSourceStage) {
+TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
+                                                    TExprContext& ctx) {
+    // FIXME: This code is the same for all connection, put it in base class.
+    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
 
-    for (auto k : Keys) {
+    TVector<TCoAtom> keyColumns;
+    for (const auto& k : Keys) {
         TString columnName;
-        if (FromSourceStage || k.Alias == "") {
+        if (FromSourceStageStorageType != NYql::EStorageType::NA || k.Alias == "") {
             columnName = k.ColumnName;
         } else {
             columnName = "_alias_" + k.Alias + "." + k.ColumnName;
@@ -276,9 +279,9 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
     // clang-format on
 }
 
-TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                                TExprContext &ctx) {
-    if (FromSourceStage) {
+TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
+                                                  TExprContext& ctx) {
+    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
@@ -312,8 +315,8 @@ TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, T
     return inputStage;
 }
 
-std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(int &stageInputCounter, TExprNode::TPtr &node,
-                                                                            TExprContext &ctx, int fromStage) {
+std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(int& stageInputCounter, TExprNode::TPtr& node,
+                                                                            TExprContext& ctx, int fromStage) {
     TString inputName = "input_arg" + std::to_string(stageInputCounter++);
     YQL_CLOG(TRACE, CoreDq) << "Created stage argument " << inputName;
     auto arg = Build<TCoArgument>(ctx, node->Pos()).Name(inputName).Done().Ptr();
@@ -417,7 +420,7 @@ TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node->Pos(
     }
 
     Alias = alias;
-    SourceType = opSource.SourceType().StringValue() == "Row" ? ETableSourceType::Row : ETableSourceType::Column;
+    StorageType = opSource.SourceType().StringValue() == "Row" ? NYql::EStorageType::RowStorage : NYql::EStorageType::ColumnStorage;
     TableCallable = opSource.Table().Ptr();
     Pos = node->Pos();
 }
@@ -446,6 +449,10 @@ void TOpRead::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
     }
 }
 
+NYql::EStorageType TOpRead::GetTableStorageType() {
+    return StorageType;
+}
+
 TString TOpRead::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     auto res = TStringBuilder();
@@ -458,8 +465,8 @@ TString TOpRead::ToString(TExprContext& ctx) {
         }
     }
     res << "])";
-    TString sourceType = SourceType == ETableSourceType::Row ? "Row" : "Column";
-    res << " (SourceType: " << sourceType << ")";
+    const TString storageType = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
+    res << " (StorageType: " << storageType << ")";
     return res;
 }
 

@@ -123,15 +123,15 @@ public:
 
 private:
     static TExclusion ExcludeTable(TTableId tableId) {
-            TExclusion exclusion;
-            exclusion.ExcludedTableIds.insert(tableId);
-            return exclusion;
+        TExclusion exclusion;
+        exclusion.ExcludedTableIds.insert(tableId);
+        return exclusion;
     }
 
     static TExclusion ExcludeColumn(TTableId tableId, TColumnId columnId) {
-            TExclusion exclusion;
-            exclusion.ExcludedColumnIds.insert({tableId, columnId});
-            return exclusion;
+        TExclusion exclusion;
+        exclusion.ExcludedColumnIds.insert({tableId, columnId});
+        return exclusion;
     }
 
 private:

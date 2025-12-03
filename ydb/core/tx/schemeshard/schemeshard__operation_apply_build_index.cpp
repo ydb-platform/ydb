@@ -178,28 +178,30 @@ ISubOperation::TPtr DropBuildColumn(TOperationId id, const TTxTransaction& tx, T
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild);
 
     auto config = tx.GetDropColumnBuild();
-    TString tablePath = config.GetSettings().GetTable();
 
-    TPath table = TPath::Resolve(tablePath, context.SS);
+    const TPath tablePath = TPath::Resolve(config.GetSettings().GetTable(), context.SS);
     {
-        auto checks = table.Check();
+        const auto checks = tablePath.Check();
         checks
+            .IsAtLocalSchemeShard()
             .NotEmpty()
             .IsResolved()
             .NotDeleted()
             .IsTable()
             .NotUnderDeleting()
-            .NotUnderOperation();
+            .NotUnderOperation()
+            .NotAsyncReplicaTable()
+            .IsCommonSensePath();
 
         if (!checks) {
             return CreateReject(id, checks.GetStatus(), checks.GetError());
         }
     }
 
-    auto mainTableAlter = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+    auto mainTableAlter = TransactionTemplate(tablePath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
     *mainTableAlter.MutableLockGuard() = tx.GetLockGuard();
     auto op = mainTableAlter.MutableAlterTable();
-    op->SetName(table.LeafName());
+    op->SetName(tablePath.LeafName());
 
     for (const auto& col : config.GetSettings().Getcolumn()) {
         auto colInfo = op->AddDropColumns();

@@ -20,16 +20,19 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
 
     const auto& op = tx.GetInitiateColumnBuild();
 
-    const auto table = TPath::Resolve(op.GetTable(), context.SS);
+    const auto tablePath = TPath::Resolve(op.GetTable(), context.SS);
     {
-        auto checks = table.Check();
+        const auto checks = tablePath.Check();
         checks
+            .IsAtLocalSchemeShard()
             .NotEmpty()
             .IsResolved()
             .NotDeleted()
             .IsTable()
             .NotUnderDeleting()
-            .NotUnderOperation();
+            .NotUnderOperation()
+            .NotAsyncReplicaTable()
+            .IsCommonSensePath();
 
         if (!checks) {
             return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
@@ -40,12 +43,12 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
 
     // altering version of the table.
     {
-        auto outTx = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
+        auto outTx = TransactionTemplate(tablePath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
         *outTx.MutableLockGuard() = tx.GetLockGuard();
         outTx.SetInternal(tx.GetInternal());
 
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
-        snapshot.SetTableName(table.LeafName());
+        snapshot.SetTableName(tablePath.LeafName());
 
         result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
     }

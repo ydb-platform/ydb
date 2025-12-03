@@ -140,6 +140,8 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str
             <th>Stress type</th>
     """
     # Group nodes by host
+
+    all_nodes = set([node_host for run_result in execution_result.stress_util_runs.values() for node_host in run_result.node_runs.keys()])
     all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True)
     hosts_to_nodes = {}
     for node in all_cluster_nodes:
@@ -148,7 +150,7 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str
         hosts_to_nodes[node.host].append(node)
 
     # For each host, take the first node as representative
-    unique_hosts = sorted(hosts_to_nodes.keys())
+    unique_hosts = sorted(all_nodes)
     # Add combined columns for each host
     if unique_hosts:
         for host in unique_hosts:

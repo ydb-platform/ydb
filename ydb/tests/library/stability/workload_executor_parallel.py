@@ -3,6 +3,7 @@ import logging
 import time as time_module
 import pytest
 
+from ydb.tests.library.stability.healthcheck.healthcheck_reporter import HealthCheckReporter
 from ydb.tests.library.stability.utils.results_models import StressUtilDeployResult, StressUtilTestResults
 from ydb.tests.library.stability.build_report import create_parallel_allure_report
 from ydb.tests.library.stability.utils.collect_errors import ErrorsCollector
@@ -30,6 +31,7 @@ class ParallelWorkloadTestBase:
         get_external_param(
             "yaml-config",
             ""))  # Path to yaml configuration
+    event_process_mode: str = get_external_param('event_process_mode', None)  # one of: save, send, both
 
     @pytest.fixture(autouse=True, scope="session")
     def binary_deployer(self) -> StressUtilDeployer:
@@ -37,6 +39,16 @@ class ParallelWorkloadTestBase:
             "/tmp/stress_binaries/"
         )
         return StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config)
+
+    @pytest.fixture(autouse=True, scope="session")
+    def health_checker_daemon(self, binary_deployer: StressUtilDeployer):
+        if self.event_process_mode is not None:
+            reporter = HealthCheckReporter(binary_deployer.hosts)
+            reporter.start_healthchecks()
+            yield reporter
+            reporter.stop_healthchecks()
+        else:
+            yield None
 
     @pytest.fixture(autouse=True, scope="session")
     def stress_executor(self) -> StressRunExecutor:

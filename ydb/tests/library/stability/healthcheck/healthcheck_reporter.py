@@ -1,0 +1,63 @@
+import json
+import logging
+import subprocess
+import threading
+import time
+import traceback
+import requests
+import os
+from ydb.tests.library.stability.utils.utils import unpack_resource
+
+
+class HealthCheckReporter():
+    def __init__(self, hosts: list[str]):
+        self.stop = False
+        self.healthcheck_thread: threading.Thread = None
+        self.ydb_path = os.path.join(os.getcwd(), 'ydb_cli_hc')
+        self.hosts = hosts
+        unpack_resource('ydb_cli', self.ydb_path)
+
+    def start_healthchecks(self):
+        self.healthcheck_thread = threading.Thread(target=self.__execute_healthcheck_thr, args=())
+        self.healthcheck_thread.start()
+
+    def stop_healthchecks(self):
+        self.stop = True
+        if self.healthcheck_thread:
+            self.healthcheck_thread.join(10)
+
+    def __execute_healthcheck_thr(self):
+        while self.stop is False:
+            try:
+                self.__publish_healthcheck_results(self.__execute_healthcheck())
+            except Exception as e:
+                logging.error(f"Error in healthcheck thread: {e}")
+            time.sleep(5)
+
+    def __execute_healthcheck(self):
+        results = {}
+        for host in self.hosts:
+            try:
+                cmd = [f'{self.ydb_path}', '--endpoint', f'grpc://{host}:2135', 'monitoring', 'healthcheck', '--format', 'json']
+                result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+                results[host] = json.loads(result.stdout)
+            except Exception:
+                logging.error(f"Failed to execute healthcheck for {host}: {traceback.format_exc()}")
+        return results
+
+    def __publish_healthcheck_results(self, results):
+        for host, host_result in results.items():
+            target_url = f"http://{host}:3124/write"
+            host_metric = {
+                "labels": {
+                    "sensor": "test_metric",
+                    "name": 'ydb_healthcheck_status',
+                    "self_check_result": host_result['self_check_result'],
+                },
+                "value": 1
+            }
+            payload = {
+                "metrics": [host_metric]
+            }
+            headers = {'Content-Type': 'application/json'}
+            requests.post(target_url, json=payload, headers=headers, timeout=5)

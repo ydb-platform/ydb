@@ -354,10 +354,10 @@ class StressRunExecutor:
                 # Build and execute command
                 with allure.step("Execute workload command"):
                     # Disable buffering to ensure output capture
-                    cmd = f"stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
+                    cmd = f"export YDB_STRESS_UTIL_EVENT_PROCESS_MODE=send;stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
 
                     run_timeout = (
-                        run_config["duration"] + 150
+                        run_config["duration"] + 600
                     )  # Add buffer for completion
 
                     allure.attach(

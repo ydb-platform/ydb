@@ -3,6 +3,7 @@ import ydb
 import time
 import threading
 
+from ydb.tests.stress.common.publish_metrics import assert_exception
 from ydb.tests.stress.common.common import WorkloadBase
 
 
@@ -126,11 +127,13 @@ class WorkloadRunner:
     def __exit__(self, exc_type, exc_value, traceback):
         self._cleanup()
 
+    @assert_exception
     def _cleanup(self):
         print(f"Cleaning up {self.tables_prefix}...")
         deleted = self.client.remove_recursively(self.tables_prefix)
         print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
 
+    @assert_exception
     def run(self):
         stop = threading.Event()
         workloads = [

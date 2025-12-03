@@ -9,6 +9,7 @@ PY3_LIBRARY()
 
     PEERDIR (
         ydb/tests/library/stability/utils
+        ydb/tests/library/stability/healthcheck
     )
 
 END()

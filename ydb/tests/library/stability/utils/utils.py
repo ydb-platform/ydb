@@ -1,5 +1,7 @@
 from typing import Any, Optional
+from library.python import resource
 import yatest.common
+import stat
 import os
 import library.python.svn_version as vcs
 
@@ -49,3 +51,12 @@ def get_self_version() -> str:
         str: Version string in format "branch.commit_hash"
     """
     return f'{(vcs.svn_branch() if vcs.svn_branch() else vcs.svn_tag()).split('/')[-1]}.{vcs.commit_id()[0:7]}'
+
+
+def unpack_resource(name, target_path):
+    res = resource.find(name)
+    with open(target_path, "wb") as f:
+        f.write(res)
+
+    st = os.stat(target_path)
+    os.chmod(target_path, st.st_mode | stat.S_IEXEC)

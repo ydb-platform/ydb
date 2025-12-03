@@ -13,6 +13,8 @@ export PYTHONWARNINGS=ignore
 export YDB_INITSCRIPTS_DIR=${YDB_INITSCRIPTS_DIR:-/init.d}
 export YDB_PREINITSCRIPTS_DIR=${YDB_PREINITSCRIPTS_DIR:-/preinit.d}
 
+# Disable checking newest versions of YDB CLI
+/ydb version --disable-checks
 # Create and activate a YDB profile for simplified commands
 /ydb config profile create local \
     --endpoint grpcs://localhost:${GRPC_TLS_PORT} \

@@ -2,15 +2,9 @@
 
 #include <util/generic/hash_set.h>
 
-namespace NKikimr::NIceDb {
-    struct Schema;
-}
-
 namespace NKikimr::NTable {
 
-class TBackupExclusion {
-    friend struct NKikimr::NIceDb::Schema;
-
+class TBackupExclusion : TThrRefBase {
 public:
     using TTableId = ui32;
     using TColumnId = ui32;

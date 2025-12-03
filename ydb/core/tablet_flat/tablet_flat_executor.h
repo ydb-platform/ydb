@@ -525,7 +525,7 @@ namespace NFlatExecutorSetup {
         virtual void OnFollowerDataUpdated();
 
         virtual bool NeedBackup() const;
-        virtual const NTable::TBackupExclusion& BackupExclusion() const;
+        virtual TIntrusiveConstPtr<NTable::TBackupExclusion> BackupExclusion() const;
 
         // create transaction?
     protected:

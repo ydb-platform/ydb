@@ -85,13 +85,13 @@ struct TEvChangelogFailed : public TEventLocal<TEvChangelogFailed, EvChangelogFa
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                              const THashMap<ui32, NTable::TScheme::TTableInfo>& tables,
                              TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
-                             TAutoPtr<NTable::TSchemeChanges> schema, const NTable::TBackupExclusion& exclusion);
+                             TAutoPtr<NTable::TSchemeChanges> schema, TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
 
 NTable::IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, NTable::TColumn>& columns,
-                                  const NTable::TBackupExclusion& exclusion);
+                                  TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
 
 IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                               TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
-                              const NTable::TScheme& schema, const NTable::TBackupExclusion& exclusion);
+                              const NTable::TScheme& schema, TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
 
 } // NKikimr::NTabletFlatExecutor::NBackup

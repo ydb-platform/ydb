@@ -5142,7 +5142,7 @@ void TExecutor::StartBackup() {
     TTabletTypes::EType tabletType = Owner->TabletType();
     const auto& scheme = Database->GetScheme();
     const auto& tables = scheme.Tables;
-    const auto& exclusion = Owner->BackupExclusion();
+    auto exclusion = Owner->BackupExclusion();
 
     auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
         tabletId, Generation0, scheme.GetSnapshot(), exclusion);
@@ -5154,7 +5154,7 @@ void TExecutor::StartBackup() {
 
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         for (const auto& [tableId, table] : tables) {
-            if (exclusion.HasTable(tableId)) {
+            if (exclusion && exclusion->HasTable(tableId)) {
                 continue;
             }
 

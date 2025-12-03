@@ -501,9 +501,8 @@ struct TEnv : public TMyEnvBase {
     public:
         using TBase::TBase;
 
-        const NTable::TBackupExclusion& BackupExclusion() const override {
-            static const NTable::TBackupExclusion exclusion = NIceDb::GenerateBackupExclusion<TSchema>();
-            return exclusion;
+        TIntrusiveConstPtr<NTable::TBackupExclusion> BackupExclusion() const override {
+            return NIceDb::GenerateBackupExclusion<TSchema>();
         }
     };
 

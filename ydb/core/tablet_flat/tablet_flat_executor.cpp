@@ -113,9 +113,8 @@ namespace NFlatExecutorSetup {
         }
     }
 
-    const NTable::TBackupExclusion& ITablet::BackupExclusion() const {
-        static const NTable::TBackupExclusion empty;
-        return empty; // everything is included in backup
+    TIntrusiveConstPtr<NTable::TBackupExclusion> ITablet::BackupExclusion() const {
+        return nullptr; // everything is included in backup
     }
 }
 

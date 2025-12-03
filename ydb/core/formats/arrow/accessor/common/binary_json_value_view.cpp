@@ -26,7 +26,7 @@ std::optional<std::string> JsonNumberToString(double val) {
     static constexpr double maxD = MaxFloor<i64>();
 
     if (minD <= val && val <= maxD) {
-        return std::to_string(static_cast<i64>(val));
+        return std::to_string(static_cast<i64>(integerPart));
     }
 
     return std::to_string(val);

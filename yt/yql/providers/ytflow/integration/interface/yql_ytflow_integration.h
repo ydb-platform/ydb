@@ -1,8 +1,14 @@
 #pragma once
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/mkql_node.h>
+
+#include <yt/yql/providers/ytflow/integration/mkql_interface/yql_ytflow_lookup_provider.h>
 
 #include <util/generic/maybe.h>
+#include <util/generic/strbuf.h>
+#include <util/generic/vector.h>
 
 
 namespace google::protobuf {
@@ -11,6 +17,11 @@ class Any;
 
 } // namespace google::protobuf
 
+namespace NYql::NCommon {
+
+struct TMkqlBuildContext;
+
+} // namespace NYql::NCommon
 
 namespace NYql {
 
@@ -30,6 +41,15 @@ public:
     virtual TMaybe<bool> CanWrite(const TExprNode& write, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr WrapWrite(const TExprNode::TPtr& write, TExprContext& ctx) = 0;
 
+    // Nothing if callable doesn't support lookup reads
+    // false if callable supports lookup reads and there are some errors (they are added to ctx),
+    // true if callable supports lookup reads and no issues occurred.
+    virtual TMaybe<bool> CanLookupRead(
+        const TExprNode& read,
+        const TVector<TStringBuf>& keys,
+        ERowSelectionMode rowSelectionMode,
+        TExprContext& ctx) = 0;
+
     virtual TExprNode::TPtr GetReadWorld(const TExprNode& read, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr GetWriteWorld(const TExprNode& write, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr UpdateWriteWorld(const TExprNode::TPtr& write, const TExprNode::TPtr& world, TExprContext& ctx) = 0;
@@ -41,6 +61,9 @@ public:
 
     virtual void FillSinkSettings(
         const TExprNode& sink, ::google::protobuf::Any& settings, TExprContext& ctx) = 0;
+
+    virtual NKikimr::NMiniKQL::TRuntimeNode BuildLookupSourceArgs(
+        const TExprNode& read, NCommon::TMkqlBuildContext& ctx) = 0;
 };
 
 } // namespace NYql

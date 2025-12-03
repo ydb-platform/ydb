@@ -419,7 +419,8 @@ class TPartitionsLocationActor : public TPQInternalSchemaActor<TPartitionsLocati
                                                                TGetPartitionsLocationRequest,
                                                                TEvPQProxy::TEvPartitionLocationResponse>
                                , public TDescribeTopicActorImpl
-                               , public TCdcStreamCompatible {
+                               , public TCdcStreamCompatible
+                               , public NActors::IActorExceptionHandler {
 
 using TBase = TPQInternalSchemaActor<TPartitionsLocationActor, TGetPartitionsLocationRequest,
                                      TEvPQProxy::TEvPartitionLocationResponse>;
@@ -450,6 +451,8 @@ public:
     void Reply(const TActorContext&) override {};
 
     void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) override;
+    bool OnUnhandledException(const std::exception& exc) override;
+
 private:
     THashSet<ui64> PartitionIds;
 };

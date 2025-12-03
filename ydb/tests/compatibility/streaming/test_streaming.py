@@ -4,7 +4,9 @@ import os
 import pytest
 import time
 
+from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.harness.kikimr_port_allocator import KikimrPortManagerPortAllocator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -13,9 +15,14 @@ from ydb.tests.tools.datastreams_helpers.data_plane import write_stream, read_st
 logger = logging.getLogger(__name__)
 
 
+@pytest.fixture
+def enable_watermarks(request):
+    return getattr(request, 'param', True)
+
+
 class StreamingTestBase:
-    def setup_cluster(self):
-        logger.debug(f"setup_cluster, versions {self.versions}")
+    def setup_cluster(self, enable_watermarks: bool):
+        logger.debug(f"setup_cluster, versions {self.versions}, {enable_watermarks=}")
 
         if min(self.versions) < (25, 4):
             logger.debug("skip test, only available since 25-4")
@@ -23,11 +30,28 @@ class StreamingTestBase:
 
         os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
         os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "15"
+
+        erasure = None if enable_watermarks else Erasure.MIRROR_3_DC  # TODO: Erasure.MIRROR_3_DC
+        port_allocator = KikimrPortManagerPortAllocator()
+        query_service_config = {
+            "streaming_queries": {
+                "external_storage": {
+                    "database_connection": {
+                        "endpoint": f"localhost:{port_allocator.get_node_port_allocator(1).grpc_port}",
+                        "database": "/Root",
+                    },
+                },
+            },
+        } if enable_watermarks else None
+
         yield from super().setup_cluster(
+            erasure=erasure,
             extra_feature_flags={
                 "enable_external_data_sources": True,
                 "enable_streaming_queries": True,
             },
+            port_allocator=port_allocator,
+            query_service_config=query_service_config,
             additional_log_configs={
                 'KQP_COMPUTE': LogLevels.TRACE,
                 'STREAMS_CHECKPOINT_COORDINATOR': LogLevels.TRACE,
@@ -37,7 +61,7 @@ class StreamingTestBase:
                 'KQP_EXECUTOR': LogLevels.DEBUG,
             },
             table_service_config={
-                "enable_watermarks": True,
+                "enable_watermarks": enable_watermarks,
             },
         )
 
@@ -53,30 +77,38 @@ class StreamingTestBase:
             """
             session_pool.execute_with_retries(query)
 
-    def create_external_data_source(self):
-        logger.debug("create_external_data_source")
+    def create_external_data_source(self, enable_watermarks: bool):
+        logger.debug(f"create_external_data_source, {enable_watermarks=}")
+
         endpoint = f"localhost:{self.cluster.nodes[1].port}"
+        shared_reading = str(enable_watermarks).lower()
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
                 CREATE EXTERNAL DATA SOURCE source_name WITH (
                     SOURCE_TYPE="Ydb",
                     LOCATION="{endpoint}",
                     DATABASE_NAME="{self.database_path}",
-                    SHARED_READING="false",
-                    AUTH_METHOD="NONE");
+                    SHARED_READING="{shared_reading}",
+                    AUTH_METHOD="NONE"
+                );
             """
             session_pool.execute_with_retries(query)
 
-    def create_streaming_query(self):
-        logger.debug("create_streaming_query")
+    def create_streaming_query(self, enable_watermarks: bool):
+        logger.debug(f"create_streaming_query, {enable_watermarks=}")
+
         with ydb.QuerySessionPool(self.driver) as session_pool:
+            max_tasks_per_stage = 'PRAGMA ydb.MaxTasksPerStage = "1";' if enable_watermarks else ""
+            watermarks = ', WATERMARK AS (CAST(time AS Timestamp) - Interval("PT1M"))' if enable_watermarks else ""
             query = f"""
                 CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                {max_tasks_per_stage}
                 $input = (
                     SELECT * FROM
                         source_name.`{self.input_topic}` WITH (
                             FORMAT = 'json_each_row',
                             SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL)
+                            {watermarks}
                         )
                 );
                 $filtered = (SELECT * FROM $input WHERE level == 'error');
@@ -100,11 +132,15 @@ class StreamingTestBase:
             """
             session_pool.execute_with_retries(query)
 
-    def create_simple_streaming_query(self):
-        logger.debug("create_simple_streaming_query")
+    def create_simple_streaming_query(self, enable_watermarks: bool):
+        logger.debug(f"create_simple_streaming_query, {enable_watermarks=}")
+
         with ydb.QuerySessionPool(self.driver) as session_pool:
+            max_tasks_per_stage = 'PRAGMA ydb.MaxTasksPerStage = "1";' if enable_watermarks else ""
+            watermarks = ', WATERMARK AS (CAST(time AS Timestamp) - Interval("PT1M"))' if enable_watermarks else ""
             query = f"""
                 CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                {max_tasks_per_stage}
                 $input = (
                     SELECT
                         *
@@ -112,6 +148,7 @@ class StreamingTestBase:
                         source_name.`{self.input_topic}` WITH (
                             FORMAT = 'json_each_row',
                             SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL)
+                            {watermarks}
                         )
                 );
 
@@ -165,28 +202,30 @@ class StreamingTestBase:
 
 class TestStreamingMixedCluster(StreamingTestBase, MixedClusterFixture):
     @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-        yield from self.setup_cluster()
+    def setup(self, enable_watermarks: bool):
+        yield from self.setup_cluster(enable_watermarks)
 
     @link_test_case("#27924")
-    def test_mixed_cluster(self):
+    @pytest.mark.parametrize('enable_watermarks', [True, False], indirect=True)
+    def test_mixed_cluster(self, enable_watermarks: bool):
         self.create_topics()
-        self.create_external_data_source()
-        self.create_streaming_query()
+        self.create_external_data_source(enable_watermarks)
+        self.create_streaming_query(enable_watermarks)
         self.do_test_part1()
         self.do_test_part2()
 
 
 class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-        yield from self.setup_cluster()
+    def setup(self, enable_watermarks: bool):
+        yield from self.setup_cluster(enable_watermarks)
 
     @link_test_case("#27924")
-    def test_restart_to_another_version(self):
+    @pytest.mark.parametrize('enable_watermarks', [True, False], indirect=True)
+    def test_restart_to_another_version(self, enable_watermarks: bool):
         self.create_topics()
-        self.create_external_data_source()
-        self.create_streaming_query()
+        self.create_external_data_source(enable_watermarks)
+        self.create_streaming_query(enable_watermarks)
         self.do_test_part1()
         self.change_cluster_version()
         self.do_test_part2()
@@ -194,14 +233,15 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
 
 class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-        yield from self.setup_cluster()
+    def setup(self, enable_watermarks: bool):
+        yield from self.setup_cluster(enable_watermarks)
 
     @link_test_case("#27924")
-    def test_rolling_upgrage(self):
+    @pytest.mark.parametrize('enable_watermarks', [True, False], indirect=True)
+    def test_rolling_upgrade(self, enable_watermarks: bool):
         self.create_topics()
-        self.create_external_data_source()
-        self.create_simple_streaming_query()
+        self.create_external_data_source(enable_watermarks)
+        self.create_simple_streaming_query(enable_watermarks)
 
         for _ in self.roll():  # every iteration is a step in rolling upgrade process
             #

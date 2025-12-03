@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class Workload():
-    def __init__(self, endpoint, database, duration, partitions_count, prefix):
+    def __init__(self, endpoint: str, database: str, duration: int, partitions_count: int, prefix: str, enable_watermarks: bool):
         self.database = database
         self.endpoint = endpoint
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
@@ -22,6 +22,7 @@ class Workload():
         self.consumer_name = 'consumer_name'
         self.partitions_count = partitions_count
         self.receive_message_timeout_sec = 1
+        self.enable_watermarks = enable_watermarks
         logger.info("Workload::init")
 
     def create_topics(self):
@@ -45,27 +46,31 @@ class Workload():
 
     def create_external_data_source(self):
         logger.info("Workload::create_external_data_source")
-        self.pool.execute_with_retries(
-            f"""
+        shared_reading = str(self.enable_watermarks).lower()
+        query = f"""
                 CREATE EXTERNAL DATA SOURCE `{self.prefix}/source_name` WITH (
                     SOURCE_TYPE="Ydb",
                     LOCATION="{self.endpoint}",
                     DATABASE_NAME="{self.database}",
-                    SHARED_READING="false",
-                    AUTH_METHOD="NONE");
+                    SHARED_READING="{shared_reading}",
+                    AUTH_METHOD="NONE"
+                );
             """
-        )
+        self.pool.execute_with_retries(query)
 
     def create_streaming_query(self):
         logger.info("Workload::create_streaming_query")
-        self.pool.execute_with_retries(
-            f"""
+        max_tasks_per_stage = 'PRAGMA ydb.MaxTasksPerStage = "1";' if self.enable_watermarks else ""
+        watermarks = ', WATERMARK AS (CAST(time AS Timestamp) - Interval("PT1M"))' if self.enable_watermarks else ""
+        query = f"""
                 CREATE STREAMING QUERY `{self.prefix}/query_name` AS DO BEGIN
+                {max_tasks_per_stage}
                 $input = (
                     SELECT * FROM
                         `{self.prefix}/source_name`.`{self.input_topic}` WITH (
                             FORMAT = 'json_each_row',
                             SCHEMA (time Uint64 NOT NULL, level String NOT NULL)
+                            {watermarks}
                         )
                 );
                 $filtered = (SELECT * FROM $input WHERE level = 'error');
@@ -85,7 +90,7 @@ class Workload():
                 SELECT * FROM $json;
                 END DO;
             """
-        )
+        self.pool.execute_with_retries(query)
 
     def check_status(self):
         result_sets = self.pool.execute_with_retries(f"SELECT Status FROM `.sys/streaming_queries` WHERE Path = '{self.database}/{self.prefix}/query_name'")

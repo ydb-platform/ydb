@@ -259,6 +259,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
+        testHelper.GetKikimr().GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_TRACE);
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
 
         olapHelper.CreateTestOlapTable();

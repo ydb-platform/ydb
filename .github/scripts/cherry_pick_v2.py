@@ -519,9 +519,6 @@ def process_branch(
         try:
             cherry_pick_cmd = ['cherry-pick', '--allow-empty']
             if is_merge:
-                # For GitHub merge commits: Parent 1 = base branch (main), Parent 2 = feature branch
-                # Using -m 1: git computes diff (Parent 2 - Parent 1) = (feature - base) = changes from feature branch
-                # This is exactly what we need for backport - apply changes from feature branch
                 cherry_pick_cmd.extend(['-m', '1'])
                 logger.info(f"Commit {commit_sha[:7]} is a merge commit, using -m 1 to get changes from feature branch")
             

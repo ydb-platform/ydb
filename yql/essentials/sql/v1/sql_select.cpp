@@ -1366,7 +1366,15 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
     if (node.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis1) {
         return SelectKind(node.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1(), selectPos, placement);
     } else {
-        return SelectKind(node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2(), selectPos, placement);
+        // propagate error only for discard to save backward compatibility
+        TMaybe<TSelectKindPlacement> parenthesisPlacement;
+        if (placement.Defined()) {
+            parenthesisPlacement = TSelectKindPlacement{
+                .IsFirstInSelectOp = placement->IsFirstInSelectOp,
+                .IsLastInSelectOp = true
+            };
+        }
+        return SelectKind(node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2(), selectPos, parenthesisPlacement);
     }
 }
 

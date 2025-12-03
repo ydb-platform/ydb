@@ -3425,6 +3425,12 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
             "SELECT 1 UNION ALL DISCARD SELECT 2"
         };
 
+        // INTO RESULT в скобках - эти запросы должны работать (backward compatibility)
+        TVector<TString> intoResultQueries = {
+            "SELECT 1 UNION ALL (SELECT 2 INTO RESULT foo)",
+            "SELECT 1 UNION ALL (SELECT 2 INTO RESULT foo) UNION ALL SELECT 3"
+        };
+
         for (const auto& query : queries) {
             auto result = db.ExecuteQuery(query,
                     NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -3441,6 +3447,14 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 2,
                 "expect 2 result sets, got " << result.GetResultSets().size() << " instead");
+        }
+
+        // INTO RESULT в скобках - проверка backward compatibility
+        for (const auto& query : intoResultQueries) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "INTO RESULT in parentheses should work (backward compatibility): " << query << ", error: " << result.GetIssues().ToString());
         }
 
         for (const auto& query : Concatenate(invalidQueries, invalidQueriesForDml)) {

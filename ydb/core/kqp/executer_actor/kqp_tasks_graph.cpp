@@ -338,10 +338,7 @@ void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TCon
         auto& originTask = GetTask(originTaskId);
         auto& taskOutput = originTask.Outputs[outputIdx];
 
-        bool shouldSkipChannel = !result.HasQueryResultIndex() && 
-                                 isFinalTx &&
-                                 (hasAnyQueryResultIndex || tx->ResultsSize() == 1);
-        
+        bool shouldSkipChannel = !result.HasQueryResultIndex() && isFinalTx;
         if (shouldSkipChannel) {
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER,
                 "[DISCARD_INDEX] BuildResultChannels: SKIP physical_index=" << i

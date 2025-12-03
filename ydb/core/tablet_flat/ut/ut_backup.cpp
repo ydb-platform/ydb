@@ -477,31 +477,6 @@ struct TTxCountRows : public ITransaction {
     }
 }; // TTxCountRows
 
-struct TTxWriteNoBackupTable : public ITransaction {
-    const TActorId Owner;
-    const ui64 Key;
-    const ui32 Value;
-
-    TTxWriteNoBackupTable(TActorId owner, ui64 key, ui32 value)
-        : Owner(owner)
-        , Key(key)
-        , Value(value)
-    {}
-
-    bool Execute(TTransactionContext &txc, const TActorContext &) override {
-        NIceDb::TNiceDb db(txc.DB);
-
-        db.Table<TSchema::NoBackupTable>().Key(Key)
-            .Update<TSchema::NoBackupTable::Value>(Value);
-
-        return true;
-    }
-
-    void Complete(const TActorContext &ctx) override {
-        ctx.Send(Owner, new NFake::TEvResult);
-    }
-}; // TTxWriteNoBackupTable
-
 struct TRecoveryStarter : public NFake::TStarter {
     using TBase = NFake::TStarter;
 

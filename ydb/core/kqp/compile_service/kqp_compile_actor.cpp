@@ -677,6 +677,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
         kqpConfig.FilterPushdownOverJoinOptionalSide = true;
         kqpConfig.YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
         kqpConfig.YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
+        kqpConfig.YqlCoreOptimizerFlags.insert("sqlinwithnothingornull");
     }
 
     switch(serviceConfig.GetDefaultHashShuffleFuncType()) {

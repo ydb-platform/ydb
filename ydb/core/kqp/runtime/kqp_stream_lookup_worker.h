@@ -80,7 +80,7 @@ public:
     virtual bool AllRowsProcessed() = 0;
     virtual bool HasPendingResults() = 0;
     virtual void ResetRowsProcessing(ui64 readId) = 0;
-    virtual std::optional<TString> IsOverloaded() = 0;
+    virtual std::optional<TString> IsOverloaded(size_t maxRowsProcessing) = 0;
 
 protected:
     const NMiniKQL::TTypeEnvironment& TypeEnv;

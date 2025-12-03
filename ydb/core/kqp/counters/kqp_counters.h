@@ -409,6 +409,8 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorRetries;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorFails;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupIteratorTotalQuotaBytesInFlight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupIteratorTotalQuotaBytesExceeded;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
 
     // Sink write counters
@@ -436,6 +438,7 @@ public:
     NMonitoring::THistogramPtr BufferActorPrepareLatencyHistogram;
     NMonitoring::THistogramPtr BufferActorCommitLatencyHistogram;
     NMonitoring::THistogramPtr BufferActorFlushLatencyHistogram;
+    NMonitoring::THistogramPtr BufferActorRollbackLatencyHistogram;
 
     NMonitoring::THistogramPtr ForwardActorWritesSizeHistogram;
     NMonitoring::THistogramPtr ForwardActorWritesLatencyHistogram;

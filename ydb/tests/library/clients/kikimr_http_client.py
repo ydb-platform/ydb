@@ -177,3 +177,13 @@ class SwaggerClient(object):
         return self.__http_get_and_parse_json(
             "/json/nodes", timeout=self.__timeout
         )
+
+    def storage_groups(self, **kwargs):
+        return self.__http_get_and_parse_json(
+            "/storage/groups", timeout=self.__timeout, **kwargs
+        )
+
+    def pdisk_info_detailed(self, node_id, pdisk_id):
+        return self.__http_get_and_parse_json(
+            "/pdisk/info", node_id=str(node_id), pdisk_id=str(pdisk_id), timeout=self.__timeout
+        )

@@ -23,6 +23,8 @@ namespace NPrivate {
         virtual const TString& GetLogPrefix() const = 0;
         virtual ~ILogPrefixBase() = default;
     };
+
+    void IncrementUnhandledExceptionCounter(const NActors::TActorContext& ctx);
 };
 
 template<typename TDerived>
@@ -44,6 +46,7 @@ public:
         LOG_C("unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
                 << TBackTrace::FromCurrentException().PrintToString());
 
+        NPrivate::IncrementUnhandledExceptionCounter(this->ActorContext());
         TDerived& self = static_cast<TDerived&>(*this);
         self.Send(TabletActorId, new NActors::TEvents::TEvPoison());
         self.PassAway();

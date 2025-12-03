@@ -24,15 +24,6 @@ public:
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet != nullptr) {
             NIceDb::TNiceDb db(txc.DB);
-            if (msg->Status == NKikimrProto::OK) {
-                if (tablet->State == ETabletState::BlockStorage) {
-                    db.Table<Schema::Tablet>().Key(tablet->Id).Update(NIceDb::TUpdate<Schema::Tablet::State>(ETabletState::ReadyToWork));
-                } else if (tablet->State == ETabletState::Deleting) {
-                    for (TFollowerTabletInfo& follower : tablet->Followers) {
-                        follower.InitiateStop(SideEffects);
-                    }
-                }
-            }
             if (msg->Status == NKikimrProto::OK
                     || msg->Status == NKikimrProto::ALREADY
                     || msg->Status == NKikimrProto::RACE
@@ -42,9 +33,13 @@ public:
                     if (msg->Status != NKikimrProto::EReplyStatus::OK) {
                         BLOG_W("THive::TTxBlockStorageResult Complete status was " << NKikimrProto::EReplyStatus_Name(msg->Status) << " for TabletId " << tablet->Id);
                     }
+                    for (TFollowerTabletInfo& follower : tablet->Followers) {
+                        follower.InitiateStop(SideEffects);
+                    }
                     SideEffects.Send(Self->SelfId(), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
                 } else {
                     tablet->State = ETabletState::ReadyToWork;
+                    db.Table<Schema::Tablet>().Key(tablet->Id).Update(NIceDb::TUpdate<Schema::Tablet::State>(ETabletState::ReadyToWork));
                     if (tablet->IsBootingSuppressed()) {
                         // Use best effort to kill currently running tablet
                         SideEffects.Register(CreateTabletKiller(TabletId, /* nodeId */ 0, tablet->KnownGeneration));

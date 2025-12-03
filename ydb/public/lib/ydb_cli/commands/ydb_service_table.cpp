@@ -1,6 +1,7 @@
 #include "ydb_service_table.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
@@ -10,7 +11,6 @@
 
 #include <library/cpp/json/json_prettifier.h>
 #include <library/cpp/json/json_writer.h>
-#include <library/cpp/colorizer/colors.h>
 
 #include <google/protobuf/util/json_util.h>
 
@@ -372,7 +372,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     TVector<TString> txModes = {"serializable-rw", "online-ro", "stale-ro", "snapshot-ro", "snapshot-rw", "no-tx"};
     TStringStream txDescription;
     txDescription << "Transaction mode (for generic & data queries). Available options: ";
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     bool printComma = false;
     for (const auto& mode : txModes) {
         if (printComma) {

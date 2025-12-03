@@ -270,11 +270,19 @@ struct TDeserializerWithOffset {
 };
 
 void SerializeMetrics(const TMetrics& metrics, NKikimrPQ::TMLPMetrics& storedMetrics) {
+    storedMetrics.SetTotalCommittedMessageCount(metrics.TotalCommittedMessageCount);
+    storedMetrics.SetTotalMovedToDLQMessageCount(metrics.TotalMovedToDLQMessageCount);
     storedMetrics.SetTotalScheduledToDLQMessageCount(metrics.TotalScheduledToDLQMessageCount);
+    storedMetrics.SetTotalPurgedMessageCount(metrics.TotalPurgedMessageCount);
+    storedMetrics.SetTotalDeletedByRetentionMessageCount(metrics.TotalDeletedByRetentionMessageCount);
 }
 
 void DeserializeMetrics(TMetrics& metrics, const NKikimrPQ::TMLPMetrics& storedMetrics) {
+    metrics.TotalCommittedMessageCount = storedMetrics.GetTotalCommittedMessageCount();
+    metrics.TotalMovedToDLQMessageCount = storedMetrics.GetTotalMovedToDLQMessageCount();
     metrics.TotalScheduledToDLQMessageCount = storedMetrics.GetTotalScheduledToDLQMessageCount();
+    metrics.TotalPurgedMessageCount = storedMetrics.GetTotalPurgedMessageCount();
+    metrics.TotalDeletedByRetentionMessageCount = storedMetrics.GetTotalDeletedByRetentionMessageCount();
 }
 
 }

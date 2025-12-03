@@ -409,6 +409,8 @@ bool TStorage::MarkDLQMoved(TDLQMessage message) {
 
     DLQQueue.pop_front();
 
+    ++Metrics.TotalMovedToDLQMessageCount;
+
     auto it = DLQMessages.find(message.Offset);
     if (it == DLQMessages.end() || it->second < message.SeqNo) {
         // message removed or message queued second time after changed dead letter policy
@@ -596,6 +598,7 @@ bool TStorage::DoCommit(ui64 offset) {
 
             AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
             --Metrics.UnprocessedMessageCount;
+            ++Metrics.TotalCommittedMessageCount;
             break;
         case EMessageStatus::Locked:
             if (!slowZone) {
@@ -605,6 +608,7 @@ bool TStorage::DoCommit(ui64 offset) {
 
             AFL_ENSURE(Metrics.LockedMessageCount > 0)("o", offset);
             --Metrics.LockedMessageCount;
+            ++Metrics.TotalCommittedMessageCount;
             if (KeepMessageOrder && message->HasMessageGroupId) {
                 if (LockedMessageGroupsId.erase(message->MessageGroupIdHash)) {
                     AFL_ENSURE(Metrics.LockedMessageGroupCount > 0)("o", offset);
@@ -621,6 +625,7 @@ bool TStorage::DoCommit(ui64 offset) {
 
             AFL_ENSURE(Metrics.DelayedMessageCount > 0)("o", offset);
             --Metrics.DelayedMessageCount;
+            ++Metrics.TotalCommittedMessageCount;
             break;
         case EMessageStatus::Committed:
             return false;
@@ -634,8 +639,6 @@ bool TStorage::DoCommit(ui64 offset) {
             --Metrics.DLQMessageCount;
             break;
     }
-
-    ++Metrics.TotalCommittedMessageCount;
 
     if (slowZone) {
         SlowMessages.erase(offset);

@@ -194,6 +194,12 @@ struct TUtils {
         UNIT_ASSERT_VALUES_EQUAL(ometrics.CommittedMessageCount, metrics.CommittedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.DeadlineExpiredMessageCount, metrics.DeadlineExpiredMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.DLQMessageCount, metrics.DLQMessageCount);
+
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.TotalCommittedMessageCount, metrics.TotalCommittedMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.TotalMovedToDLQMessageCount, metrics.TotalMovedToDLQMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.TotalScheduledToDLQMessageCount, metrics.TotalScheduledToDLQMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.TotalPurgedMessageCount, metrics.TotalPurgedMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.TotalDeletedByRetentionMessageCount, metrics.TotalDeletedByRetentionMessageCount);
     }
 };
 

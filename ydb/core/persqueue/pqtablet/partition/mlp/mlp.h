@@ -25,7 +25,7 @@ struct TMetrics {
     size_t TotalCommittedMessageCount = 0;
     size_t TotalMovedToDLQMessageCount = 0;
     size_t TotalScheduledToDLQMessageCount = 0;
-    size_t TotalPurgedMessageCount = 0;
+    size_t TotalPurgedMessageCount = 0; // TODO MLP
     size_t TotalDeletedByRetentionMessageCount = 0;
 };
 

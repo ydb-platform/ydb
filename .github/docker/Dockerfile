@@ -51,8 +51,6 @@ COPY --from=builder \
     /ydbwork/out/ydb/public/tools/local_ydb/local_ydb \
     /
 
-RUN /ydb version --disable-checks
-
 # YDB grpc
 EXPOSE ${GRPC_TLS_PORT:-2135}
 EXPOSE ${GRPC_PORT:-2136}

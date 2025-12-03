@@ -467,12 +467,12 @@ def test_migration_to_new_secrets_in_async_replication(db_fixture, ydb_cluster):
     rows_cnt = insert_one_row_into_table(table_name, rows_cnt)
     _create_old_and_new_secrets(user1_config, secret_name)
     create_async_replication_with_old_secret(replication_name, replica_name, table_name, connection_string, secret_name)
-    assert_replication_has_processed_all_changes(user1_config, replica_name, rows_cnt)
+    assert_replication_has_processed_all_changes(db_fixture, replica_name, rows_cnt)
     _break_auth_by_removing_old_secret(user1_config, "ASYNC REPLICATION", replication_name, secret_name)
     rows_cnt = insert_one_row_into_table(table_name, rows_cnt)
-    assert_replication_has_skipped_the_last_change(user1_config, replica_name, rows_cnt - 1)
+    assert_replication_has_skipped_the_last_change(db_fixture, replica_name, rows_cnt - 1)
     _fix_auth_with_new_secret(user1_config, "ASYNC REPLICATION", replication_name, secret_name)
-    assert_replication_has_processed_all_changes(user1_config, replica_name, rows_cnt)
+    assert_replication_has_processed_all_changes(db_fixture, replica_name, rows_cnt)
 
 
 def test_migration_to_new_secrets_in_transfer(db_fixture, ydb_cluster):

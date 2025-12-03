@@ -131,6 +131,28 @@ def create_pr_source(pull: Any, allow_unmerged: bool, logger) -> Source:
     )
 
 
+def is_merge_commit(repo, commit_sha: str, logger) -> Optional[bool]:
+    """Checks if a commit is a merge commit using GitHub API"""
+    try:
+        commit = repo.get_commit(commit_sha)
+        return commit.parents and len(commit.parents) > 1
+    except Exception as e:
+        logger.debug(f"Error checking merge commit via API: {e}")
+        return None
+
+
+def is_merge_commit_git(repo_path: str, commit_sha: str, logger) -> bool:
+    """Checks if a commit is a merge commit using git command"""
+    try:
+        result = run_git(repo_path, ['cat-file', '-p', commit_sha], logger, check=False)
+        if result.returncode == 0:
+            parent_count = sum(1 for line in result.stdout.splitlines() if line.startswith('parent '))
+            return parent_count > 1
+    except Exception:
+        pass
+    return False
+
+
 def detect_conflicts(repo_path: str, logger) -> List[ConflictInfo]:
     """Detects conflicts from git status"""
     conflict_files = []
@@ -486,10 +508,24 @@ def process_branch(
     # Cherry-pick each commit
     for commit_sha in commit_shas:
         logger.info("Cherry-picking commit: %s", commit_sha[:7])
-        # Fetch commit to ensure it's available locally (needed for unmerged PRs)
+        # Check if commit is a merge commit via API (works before fetch)
+        is_merge = is_merge_commit(repo, commit_sha, logger)
+        # Fetch commit to ensure it's available locally
         run_git(repo_path, ['fetch', 'origin', commit_sha], logger, check=False)
+        # If API check didn't work, try git command after fetch
+        if is_merge is None:
+            is_merge = is_merge_commit_git(repo_path, commit_sha, logger)
+        
         try:
-            result = run_git(repo_path, ['cherry-pick', '--allow-empty', commit_sha], logger, check=False)
+            cherry_pick_cmd = ['cherry-pick', '--allow-empty']
+            if is_merge:
+                # For GitHub merge commits: Parent 1 = base branch (main), Parent 2 = feature branch
+                # Using -m 1: git computes diff (Parent 2 - Parent 1) = (feature - base) = changes from feature branch
+                # This is exactly what we need for backport - apply changes from feature branch
+                cherry_pick_cmd.extend(['-m', '1'])
+                logger.info(f"Commit {commit_sha[:7]} is a merge commit, using -m 1 to get changes from feature branch")
+            
+            result = run_git(repo_path, cherry_pick_cmd + [commit_sha], logger, check=False)
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
             
             if result.returncode != 0:

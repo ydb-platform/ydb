@@ -133,3 +133,21 @@ TEST(TDeduplicatorTest, AddTwoMessages_DifferentTime_DifferentBucket) {
     scenario.AssertWALLoad();
 }
 
+TEST(TDeduplicatorTest, AddManyMessages_SameTime_DifferentBucket) {
+    TestScenario scenario;
+
+    for (size_t i = 0; i < 999; ++i) {
+        EXPECT_FALSE(scenario.AddMessage(TStringBuilder() << "message" << i, i).has_value());
+    }
+    scenario.CreateWAL();
+
+    for (size_t i = 999; i < 2000; ++i) {
+        EXPECT_FALSE(scenario.AddMessage(TStringBuilder() << "message" << i, i).has_value());
+    }
+    scenario.CreateWAL();
+
+    EXPECT_EQ(scenario.WALs.size(), 2ul);
+
+    scenario.AssertWALLoad();
+}
+

@@ -10,9 +10,11 @@ namespace NKikimr::NPQ {
 
 namespace {
 
+constexpr TDuration MaxDeduplicationWindow = TDuration::Minutes(5);
 constexpr TDuration BucketSize = TDuration::Seconds(1);
-// Maximum deduplication IDs to keep in memory: assumes ~1000 msg/sec for 5 minute window
-constexpr ui64 MaxDeduplicationIDs = TDuration::Minutes(5).Seconds() * 1000;
+constexpr size_t MaxRPS = 1000;
+constexpr size_t MaxBucketCount = MaxDeduplicationWindow.MilliSeconds() / BucketSize.MilliSeconds();
+constexpr ui64 MaxDeduplicationIDs = MaxDeduplicationWindow.Seconds() * MaxRPS;
 
 TInstant Trim(TInstant value) {
     return TInstant::MilliSeconds(value.MilliSeconds() / BucketSize.MilliSeconds() * BucketSize.MilliSeconds());
@@ -71,7 +73,7 @@ size_t TMessageIdDeduplicator::Compact() {
         ++removed;
     }
 
-    while (!WALKeys.empty() && WALKeys.front().ExpirationTime <= now) {
+    while (!WALKeys.empty() && (WALKeys.front().ExpirationTime <= now || WALKeys.size() > MaxBucketCount)) {
         WALKeys.pop_front();
     }
 
@@ -136,7 +138,7 @@ std::optional<TString> TMessageIdDeduplicator::SerializeTo(NKikimrPQ::TMessageDe
         return std::nullopt;
     }
 
-    const bool sameBucket = CurrentBucket.StartTime > Queue.back().ExpirationTime - BucketSize;
+    const bool sameBucket = (CurrentBucket.StartTime > Queue.back().ExpirationTime - BucketSize) && (Queue.size() - CurrentBucket.StartMessageIndex <= MaxBucketCount);
     size_t startIndex = sameBucket ? CurrentBucket.StartMessageIndex : CurrentBucket.LastWrittenMessageIndex;
     if (startIndex == Queue.size()) {
         return std::nullopt;

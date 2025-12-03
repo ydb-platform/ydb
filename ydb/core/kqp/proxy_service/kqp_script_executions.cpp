@@ -2857,7 +2857,7 @@ public:
         // Script execution info
         if (NYdb::TResultSetParser result(ResultSets[0]); result.TryNextRow()) {
             if (!result.ColumnParser("operation_status").GetOptionalInt32() || result.ColumnParser("finalization_status").GetOptionalInt32()) {
-                return Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Can not reset retry state when operation is running or not finalized");
+                return Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Can not reset retray state then operation is running or not finalized");
             }
 
             if (const auto& serializedRetryState = result.ColumnParser("retry_state").GetOptionalJsonDocument()) {
@@ -2876,7 +2876,7 @@ public:
         if (NYdb::TResultSetParser result(ResultSets[1]); result.TryNextRow()) {
             if (const auto leaseState = result.ColumnParser("lease_state").GetOptionalInt32()) {
                 if (static_cast<ELeaseState>(*leaseState) != ELeaseState::WaitRetry) {
-                    return Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Can not reset retry state when operation is running or not finalized");
+                    return Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Can not reset retry state then operation is running or not finalized");
                 }
 
                 DropLease = true;

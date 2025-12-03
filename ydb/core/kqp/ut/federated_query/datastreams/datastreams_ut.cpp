@@ -939,13 +939,13 @@ protected:
 
 class TTestTopicLoader : public TActorBootstrapped<TTestTopicLoader> {
 public:
-    TTestTopicLoader(const TString& endpoint, const TString& database, const TString& topic, NThreading::TFuture<void> future)
+    TTestTopicLoader(const TString& endpoint, const TString& database, const TString& topic, NThreading::TFuture<void> feature)
         : Client(TDriver(TDriverConfig()
             .SetEndpoint(endpoint)
             .SetDatabase(database)
         ))
         , WriteSession(Client.CreateWriteSession(NTopic::TWriteSessionSettings().Path(topic)))
-        , Future(future)
+        , Feature(feature)
         , Message(1_KB, 'x')
     {}
 
@@ -960,7 +960,7 @@ public:
     }
 
     void WriteMessages() {
-        if (Future.HasValue() || Timeout <= TInstant::Now()) {
+        if (Feature.HasValue() || Timeout <= TInstant::Now()) {
             PassAway();
             WriteSession->Close(TDuration::Zero());
             return;
@@ -992,7 +992,7 @@ public:
 private:
     NTopic::TTopicClient Client;
     const std::shared_ptr<NTopic::IWriteSession> WriteSession;
-    const NThreading::TFuture<void> Future;
+    const NThreading::TFuture<void> Feature;
     const TString Message;
     const TInstant Timeout = TInstant::Now() + TDuration::Seconds(60);
 };

@@ -290,8 +290,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
             length = random.randint(1, 100)
             return ''.join(random.choice([chr(i) for i in range(ord('a'), ord('z'))]) for _ in range(length))
         else:
-            # Default to Uint64 range for any unexpected type
-            return random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE)
+            raise Exception(f"Unknown type {column_type}")
     
     def _run_operations(self, table: str, table_info: TableInfo) -> None:
         """Execute a batch of operations on the specified table"""

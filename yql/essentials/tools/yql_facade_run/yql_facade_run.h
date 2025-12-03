@@ -9,6 +9,7 @@
 #include <yql/essentials/core/yql_user_data.h>
 #include <yql/essentials/core/facade/yql_facade.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
+#include <yql/essentials/core/layers/remote_layer_provider.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -81,6 +82,7 @@ public:
     TString Token;
     ui64 MemLimit = 0;
     EQPlayerMode QPlayerMode = EQPlayerMode::None;
+    EQPlayerCaptureMode QPlayerCaptureMode = EQPlayerCaptureMode::None;
     TString OperationId;
     TQContext QPlayerContext;
 
@@ -223,6 +225,10 @@ public:
         return RunOptions_;
     }
 
+    void AddRemoteLayersFactory(std::function<std::pair<TString, NLayers::IRemoteLayerProviderPtr>()>&& factory) {
+        RemoteLayersFactories_.emplace_back(std::move(factory));
+    }
+
 protected:
     virtual int DoMain(int argc, const char* argv[]);
     virtual int DoRun(TProgramFactory& factory);
@@ -233,6 +239,7 @@ private:
     std::vector<std::function<NFS::IDownloaderPtr()>> FsDownloadFactories_;
     std::vector<std::function<TDataProviderInitializer()>> ProviderFactories_;
     std::vector<std::function<IUrlListerPtr()>> UrlListerFactories_;
+    std::vector<std::function<std::pair<TString, NLayers::IRemoteLayerProviderPtr>()>> RemoteLayersFactories_;
     THashMap<TString, TString> ClusterMapping_;
     THolder<TFileStorageConfig> FileStorageConfig_;
     TFileStoragePtr FileStorage_;

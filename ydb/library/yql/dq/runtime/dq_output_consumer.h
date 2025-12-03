@@ -26,6 +26,7 @@ public:
     virtual void Consume(NKikimr::NUdf::TUnboxedValue&& value) = 0;
     virtual void WideConsume(NKikimr::NUdf::TUnboxedValue values[], ui32 count) = 0;
     virtual void Consume(NDqProto::TCheckpoint&& checkpoint) = 0;
+    virtual void Consume(NDqProto::TWatermark&& watermark) = 0;
     virtual void Finish() = 0;
     virtual TString DebugString() {
         return "";

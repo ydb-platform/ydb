@@ -1,0 +1,3 @@
+SELECT
+    SimplePg::date_trunc('minute', DateTime('2015-01-01T02:03:04Z'))
+;

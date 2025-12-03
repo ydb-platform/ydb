@@ -174,7 +174,6 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvTerminateFromFetcher: " << ev->Sender << "/" << SelfId();
     TBase::InternalError(ev->Get()->GetStatusCode(), ev->Get()->GetIssues());
     State = ev->Get()->GetState();
-    DoTerminateImpl();
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
@@ -283,7 +282,9 @@ void TKqpScanComputeActor::DoBootstrap() {
     auto wakeupCallback = [actorSystem, selfId]() {
         actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     };
-    auto errorCallback = [this](const TString& error){ SendError(error); };
+    auto errorCallback = [actorSystem, selfId](const TString& error) {
+        actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
+    };
     TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
 
     ComputeCtx.AddTableScan(0, Meta, GetStatsMode());

@@ -2,6 +2,8 @@
 
 #include "tokenizer.h"
 
+#include <yt/yt/core/misc/error.h>
+
 namespace NYT::NYPath {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -54,6 +56,14 @@ bool IsPathPointingToAttributes(const TYPath& path)
         }
     }
     return false;
+}
+
+TError TryGetShouldNotPointToAttributesError(const TYPath& path)
+{
+    if (IsPathPointingToAttributes(path)) {
+        return TError("Requested path should not point to attributes (i.e. contain @)");
+    }
+    return TError();
 }
 
 TYPath StripAttributes(const TYPath& path)

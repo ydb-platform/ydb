@@ -30,7 +30,8 @@ enum EOptimizerNodeKind: ui32 {
  * It records a pointer to statistics and records the current cost of the
  * operator tree, rooted at this node
  */
-struct IBaseOptimizerNode {
+class IBaseOptimizerNode {
+public:
     EOptimizerNodeKind Kind;
     TOptimizerStatistics Stats;
 
@@ -38,6 +39,7 @@ struct IBaseOptimizerNode {
         : Kind(k)
     {
     }
+
     IBaseOptimizerNode(EOptimizerNodeKind k, TOptimizerStatistics s)
         : Kind(k)
         , Stats(std::move(s))
@@ -120,19 +122,23 @@ struct TJoinAlgoHints {
 };
 
 struct TJoinOrderHints {
-    struct ITreeNode {
-        enum _: ui32 {
+    class ITreeNode {
+    public:
+        enum EKind: ui32 {
             Relation,
             Join
         };
 
         virtual TVector<TString> Labels() = 0;
+
         bool IsRelation() {
             return Type == Relation;
         }
+
         bool IsJoin() {
             return Type == Join;
         }
+
         virtual ~ITreeNode() = default;
 
         ui32 Type;
@@ -369,7 +375,8 @@ struct TJoinOptimizerNode: public IBaseOptimizerNode {
     virtual void Print(std::stringstream& stream, int ntabs = 0);
 };
 
-struct IOptimizerNew {
+class IOptimizerNew {
+public:
     using TPtr = std::shared_ptr<IOptimizerNew>;
     IProviderContext& Pctx;
 
@@ -385,6 +392,11 @@ struct IOptimizerNew {
 
 struct TExprContext;
 
+struct TCBOSettings {
+    ui32 MaxDPhypDPTableSize = 100000;
+    ui32 ShuffleEliminationJoinNumCutoff = 14;
+};
+
 class IOptimizerFactory: private TNonCopyable {
 public:
     using TPtr = std::shared_ptr<IOptimizerFactory>;
@@ -392,10 +404,7 @@ public:
 
     virtual ~IOptimizerFactory() = default;
 
-    struct TNativeSettings {
-        ui32 MaxDPhypDPTableSize = 100000;
-    };
-    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TNativeSettings& settings) const = 0;
+    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TCBOSettings& settings) const = 0;
 
     struct TPGSettings {
         TLogger Logger = [](const TString&) {};

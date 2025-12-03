@@ -9,6 +9,8 @@
 #include <ydb/library/actors/interconnect/rdma/events.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
 
+#include <contrib/libs/ibdrv/include/infiniband/verbs.h>
+
 using namespace NActors;
 
 namespace NInterconnect::NRdma {
@@ -224,10 +226,18 @@ private:
     TCqFactory CqFactory;
 };
 
-NActors::IActor* CreateCqActor(int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counters) {
-    return new TCqActor([maxCqe, maxWr, counters](const TRdmaCtx* ctx) {
-        return CreateSimpleCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), maxCqe, maxWr, counters);
-    });
+NActors::IActor* CreateCqActor(int maxCqe, int maxWr, ECqMode mode, NMonitoring::TDynamicCounters* counters) {
+    switch (mode) {
+        case NInterconnect::NRdma::ECqMode::POLLING:
+            return new TCqActor([maxCqe, maxWr, counters](const TRdmaCtx* ctx) {
+                return CreateSimpleCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), maxCqe, maxWr, counters);
+            });
+
+        case NInterconnect::NRdma::ECqMode::EVENT:
+            return new TCqActor([maxCqe, maxWr, counters](const TRdmaCtx* ctx) {
+                return CreateSimpleEventDrivenCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), maxCqe, maxWr, counters);
+            });
+    }
 }
 
 NActors::TActorId MakeCqActorId() {

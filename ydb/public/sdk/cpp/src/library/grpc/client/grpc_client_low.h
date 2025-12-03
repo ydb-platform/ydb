@@ -4,6 +4,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
+#include <ydb/public/sdk/cpp/src/library/time/time.h>
+
 #include <util/thread/factory.h>
 #include <util/string/builder.h>
 #include <grpcpp/grpcpp.h>
@@ -24,8 +26,7 @@
  * This file contains low level logic for grpc
  * This file should not be used in high level code without special reason
  */
-namespace NYdbGrpc {
-inline namespace Dev {
+namespace NYdbGrpc::inline Dev {
 
 const size_t DEFAULT_NUM_THREADS = 2;
 
@@ -198,40 +199,14 @@ using TAdvancedResponseCallback = std::function<void (const grpc::ClientContext&
 struct TCallMeta {
     std::shared_ptr<grpc::CallCredentials> CallCredentials;
     std::vector<std::pair<std::string, std::string>> Aux;
-    std::variant<TDuration, TInstant> Timeout; // timeout as duration from now or time point in future
+    std::variant<std::monostate, NYdb::TDeadline, NYdb::TDeadline::Duration> Timeout; // timeout as duration from now or time point in future
 };
 
 class TGRpcRequestProcessorCommon {
 protected:
-    void ApplyMeta(const TCallMeta& meta) {
-        for (const auto& rec : meta.Aux) {
-            Context.AddMetadata(NYdb::TStringType{rec.first}, NYdb::TStringType{rec.second});
-        }
-        if (meta.CallCredentials) {
-            Context.set_credentials(meta.CallCredentials);
-        }
-        if (const TDuration* timeout = std::get_if<TDuration>(&meta.Timeout)) {
-            if (*timeout) {
-                auto deadline = gpr_time_add(
-                        gpr_now(GPR_CLOCK_MONOTONIC),
-                        gpr_time_from_micros(timeout->MicroSeconds(), GPR_TIMESPAN));
-                Context.set_deadline(deadline);
-            }
-        } else if (const TInstant* deadline = std::get_if<TInstant>(&meta.Timeout)) {
-            if (*deadline) {
-                Context.set_deadline(gpr_time_from_micros(deadline->MicroSeconds(), GPR_CLOCK_MONOTONIC));
-            }
-        }
-    }
+    void ApplyMeta(const TCallMeta& meta);
 
-    void GetInitialMetadata(std::unordered_multimap<std::string, std::string>* metadata) {
-        for (const auto& [key, value] : Context.GetServerInitialMetadata()) {
-            metadata->emplace(
-                std::string(key.begin(), key.end()),
-                std::string(value.begin(), value.end())
-            );
-        }
-    }
+    void GetInitialMetadata(std::unordered_multimap<std::string, std::string>* metadata);
 
     grpc::Status Status;
     grpc::ClientContext Context;
@@ -1438,4 +1413,17 @@ private:
 };
 
 }
-}
+
+template <>
+class grpc::TimePoint<NYdb::TDeadline> {
+public:
+    TimePoint(const NYdb::TDeadline& deadline);
+
+    gpr_timespec raw_time() const noexcept;
+
+private:
+    static gpr_timespec DurationToTimespec(const NYdb::TDeadline::Duration& duration) noexcept;
+    static gpr_timespec DeadlineToTimespec(const NYdb::TDeadline& deadline);
+
+    gpr_timespec time_;
+};

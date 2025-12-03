@@ -456,7 +456,7 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TLsmLevelGroup)
             {
-                COUNTER_INIT_PRIVATE(SstNum, false);
+                COUNTER_INIT(SstNum, false);
                 COUNTER_INIT(NumItems, false);
                 COUNTER_INIT(NumItemsInplaced, false);
                 COUNTER_INIT(NumItemsHuge, false);
@@ -477,7 +477,7 @@ public:                                                                         
         ///////////////////////////////////////////////////////////////////////////////////
         class TLsmAllLevelsStat {
         public:
-            static constexpr ui32 MaxCounterLevels = 20;
+            static constexpr ui32 MaxCounterLevels = 24;
 
             TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
             // per-level information
@@ -1000,6 +1000,34 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TPhantomFlagStorageGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TPhantomFlagStorageGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TPhantomFlagStorageGroup)
+            {
+                COUNTER_INIT(BuilderReadsFromDisk, true);
+                COUNTER_INIT(BuilderReadsFromDiskBytes, true);
+
+                COUNTER_INIT(IsPhantomFlagStorageActive, false);
+                COUNTER_INIT(IsPhantomFlagStorageBuilding, false);
+                COUNTER_INIT(StoredFlagsCount, false);
+                COUNTER_INIT(StoredFlagsMemoryConsumption, false);
+                COUNTER_INIT(ThresholdsMemoryConsumption, false);
+                COUNTER_INIT(SyncedMask, false);
+            }
+            COUNTER_DEF(BuilderReadsFromDisk);
+            COUNTER_DEF(BuilderReadsFromDiskBytes);
+
+            COUNTER_DEF(IsPhantomFlagStorageActive);
+            COUNTER_DEF(IsPhantomFlagStorageBuilding);
+            COUNTER_DEF(StoredFlagsCount);
+            COUNTER_DEF(StoredFlagsMemoryConsumption);
+            COUNTER_DEF(ThresholdsMemoryConsumption);
+            COUNTER_DEF(SyncedMask);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TFullSyncGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TFullSyncGroup : public TBase {
@@ -1013,6 +1041,5 @@ public:                                                                         
             COUNTER_DEF(UnorderedDataProtocolActorsCreated);
             COUNTER_DEF(UnorderedDataProtocolActorsTerminated);
         };
-
     } // NMonGroup
 } // NKikimr

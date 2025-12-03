@@ -16,6 +16,9 @@ std::pair<TYPath, TString> DirNameAndBaseName(const TYPath& path);
 //! Check if path contains attribute designation by looking for @ token in it.
 bool IsPathPointingToAttributes(const TYPath& path);
 
+//! Returns an error if path points to attributes (as determined by IsPathPointingToAttributes).
+TError TryGetShouldNotPointToAttributesError(const TYPath& path);
+
 //! Eliminates path suffix after the @ token, if it exists.
 TYPath StripAttributes(const TYPath& path);
 

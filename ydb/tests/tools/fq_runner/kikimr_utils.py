@@ -126,7 +126,7 @@ class DefaultConfigExtension(ExtensionPoint):
         kikimr.control_plane.config_generator.yaml_config['metering_config'] = {
             'metering_file_path': 'metering.bill'}
 
-        solomon_endpoint = os.environ.get('SOLOMON_URL')
+        solomon_endpoint = os.environ.get('SOLOMON_HTTP_URL')
         if solomon_endpoint is not None:
             kikimr.compute_plane.fq_config['common']['monitoring_endpoint'] = solomon_endpoint
         kikimr.control_plane.fq_config['common']['show_query_timeline'] = True

@@ -22,6 +22,9 @@ struct TImportConv: public TOperationConv<NKikimrImport::TImport> {
         case NKikimrImport::TImport::kImportFromS3Settings:
             NOperationId::AddOptionalValue(operationId, "kind", "s3");
             break;
+        case NKikimrImport::TImport::kImportFromFsSettings:
+            NOperationId::AddOptionalValue(operationId, "kind", "fs");
+            break;
         default:
             Y_DEBUG_ABORT("Unknown import kind");
             break;
@@ -53,6 +56,9 @@ struct TImportConv: public TOperationConv<NKikimrImport::TImport> {
         switch (in.GetSettingsCase()) {
         case NKikimrImport::TImport::kImportFromS3Settings:
             Fill<ImportFromS3Metadata, ImportFromS3Result>(operation, in, ClearEncryptionKey(in.GetImportFromS3Settings()));
+            break;
+        case NKikimrImport::TImport::kImportFromFsSettings:
+            Fill<ImportFromFsMetadata, ImportFromFsResult>(operation, in, in.GetImportFromFsSettings());
             break;
         default:
             Y_DEBUG_ABORT("Unknown import kind");

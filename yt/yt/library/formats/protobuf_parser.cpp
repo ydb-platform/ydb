@@ -241,7 +241,7 @@ public:
         , Description_(std::move(description))
         , TableIndex_(tableIndex)
         , RootChildColumnIds_(Description_->CreateRootChildColumnIds(ValueConsumer_->GetNameTable()))
-        , RootChildOutputFlags_(RootChildColumnIds_.size()) //Description_->GetTableType()->Children.size())
+        , RootChildOutputFlags_(RootChildColumnIds_.size()) // Description_->GetTableType()->Children.size())
         // NB. We use ColumnConsumer_ to generate yson representation of complex types we don't want additional
         // conversions so we use Positional mode.
         // At the same time we use OtherColumnsConsumer_ to feed yson passed by users.

@@ -1,3 +1,16 @@
+* Added the `--tx-mode` option to the `ydb sql` command.
+* Added `snapshot-ro` and `snapshot-rw` transaction modes to `ydb table query execute` and `ydb sql` commands.
+* Added `NO_COLOR` environment variable support to disable ANSI colors in YDB CLI (no-color.org)
+* Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output .tar.bz2 file.
+* Added a simple progress bar for non-interactive stderr.
+* Added a new `omit-indexes` property to the `--item` option of the `ydb tools copy` command, allowing tables to be copied without their indexes.
+* Fixed a bug where the `ydb tools restore` command could crash with an `mutex lock failure (Invalid argument)` error due to an internal race condition.
+* The `ydb workload vector` now supports the `import files` subcommand to populate the table from CSV or parquet files.
+* Named expression-containing view restoration and restoration of views that access secondary indexes have been fixed.
+
+## 2.27.0 ##
+
+* Added a new `--exclude` option to the `ydb import s3` command, allowing objects to be excluded from the operation if their names match a pattern.
 * Added a new `ydb admin cluster state fetch` command to collect information about cluster nodes state and metrics.
 * Fixed a bug with no consumer creation for transfers with absolute topic paths when no CONNECTION_STRING is provided.
 * Added transfer objects support to the `ydb tools dump` and `ydb tools restore` commands.

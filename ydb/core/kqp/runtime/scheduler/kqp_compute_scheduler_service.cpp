@@ -118,6 +118,7 @@ public:
                 // TODO: Scheduler->UpdatePool(…);
             }
         } else {
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Trying to remove unknown pool: " << databaseId << "/" << poolId);
             // TODO: the removing message for unknown pool - should we check?
         }
     }
@@ -137,7 +138,9 @@ public:
     }
 
     void Handle(TEvRemoveQuery::TPtr& ev) {
-        Scheduler->RemoveQuery(ev->Get()->Query);
+        if (!Scheduler->RemoveQuery(ev->Get()->QueryId)) {
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Trying to remove unknown query: " << ev->Get()->QueryId);
+        }
     }
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
@@ -230,7 +233,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
     }
 }
 
-TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs) {
+TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs) {
     Y_ENSURE(!poolId.empty());
 
     TWriteGuard lock(Mutex);
@@ -253,14 +256,16 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const T
     return query;
 }
 
-void TComputeScheduler::RemoveQuery(const TQueryPtr& query) {
-    Y_ENSURE(query);
-
+bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId) {
     TWriteGuard lock(Mutex);
-    const auto& queryId = std::get<NHdrf::TQueryId>(query->GetId());
 
-    Y_ENSURE(Queries.erase(queryId));
-    query->GetParent()->RemoveQuery(queryId);
+    if (auto queryIt = Queries.find(queryId); queryIt != Queries.end()) {
+        queryIt->second->GetParent()->RemoveQuery(queryId);
+        Queries.erase(queryIt);
+        return true;
+    }
+
+    return false;
 }
 
 void TComputeScheduler::UpdateFairShare(bool allowFairShareOverlimit) {

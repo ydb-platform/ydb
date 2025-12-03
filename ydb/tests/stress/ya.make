@@ -13,10 +13,13 @@ RECURSE(
     s3_backups
     scheme_board
     show_create/view
+    show_create/table
     simple_queue
     statistics_workload
+    testshard_workload
     topic
     topic_kafka
     transfer
     viewer
+    streaming
 )

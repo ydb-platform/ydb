@@ -3,6 +3,7 @@ PY3TEST()
 TEST_SRCS(
     conftest.py
     test_ydb_backup.py
+    test_ydb_common.py
     test_ydb_flame_graph.py
     test_ydb_impex.py
     test_ydb_recursive_remove.py
@@ -10,9 +11,10 @@ TEST_SRCS(
     test_ydb_scripting.py
     test_ydb_sql.py
     test_ydb_table.py
+    test_ydb_tools.py
 )
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 

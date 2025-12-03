@@ -617,6 +617,9 @@ namespace {
                 );
                 YQL_ENSURE(result);
                 request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(strategy);
+            } else if (name == "setMetricsLevel") {
+                auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_metrics_level(metricsLevel);
             }
         }
     }
@@ -683,6 +686,11 @@ namespace {
                 );
                 YQL_ENSURE(result);
                 request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->set_set_strategy(strategy);
+            } else if (name == "setMetricsLevel") {
+                auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_set_metrics_level(metricsLevel);
+            } else if (name == "resetMetricsLevel") {
+                request->mutable_reset_metrics_level();
             }
         }
     }
@@ -813,7 +821,7 @@ namespace {
             } else if (name == "token") {
                 dstSettings.EnsureOAuthToken().Token =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "token_secret_name") {
+            } else if (name == "token_secret_name" || name == "token_secret_path") {
                 dstSettings.EnsureOAuthToken().TokenSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "user") {
@@ -822,7 +830,7 @@ namespace {
             } else if (name == "password") {
                 dstSettings.EnsureStaticCredentials().Password =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "password_secret_name") {
+            } else if (name == "password_secret_name" || name == "password_secret_path") {
                 dstSettings.EnsureStaticCredentials().PasswordSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "service_account_id") {
@@ -831,7 +839,7 @@ namespace {
             } else if (name == "initial_token") {
                 dstSettings.EnsureIamCredentials().InitialToken.Token =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "initial_token_secret_name") {
+            } else if (name == "initial_token_secret_name" || name == "initial_token_secret_path") {
                 dstSettings.EnsureIamCredentials().InitialToken.TokenSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "resource_id") {
@@ -1019,6 +1027,13 @@ namespace {
                 if (!TryFromString(value, dstSettings.IncrementalBackupEnabled)) {
                     ctx.AddError(TIssue(ctx.GetPosition(pos),
                         "INCREMENTAL_BACKUP_ENABLED must be true or false"));
+                    return false;
+                }
+            } else if (name == "omit_indexes") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (!TryFromString(value, dstSettings.OmitIndexes)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos),
+                        "OMIT_INDEXES must be true or false"));
                     return false;
                 }
             } else if (name == "storage") {

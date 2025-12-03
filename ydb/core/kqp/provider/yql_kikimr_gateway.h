@@ -263,12 +263,31 @@ struct TIndexDescription {
                 }
                 return true;
             case EType::GlobalFulltext:
-                return true;
+                const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+                YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
+                const auto& settings = fulltextDesc->GetSettings();
+                if (settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT) {
+                    // Only FLAT fulltext index update is supported at the moment
+                    return true;
+                }
+                return false;
         }
     }
 
     std::span<const std::string_view> GetImplTables() const {
-        return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
+        switch (Type) {
+            case EType::GlobalSync:
+            case EType::GlobalSyncUnique:
+            case EType::GlobalAsync:
+            case EType::GlobalSyncVectorKMeansTree:
+                return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
+            case EType::GlobalFulltext:
+                const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+                YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
+                const auto& settings = fulltextDesc->GetSettings();
+                return NKikimr::NTableIndex::GetFulltextImplTables(settings.layout());
+        }
+        return {};
     }
 };
 
@@ -507,6 +526,9 @@ enum class ESourceType : ui32 {
     ExternalDataSource = 2
 };
 
+struct TKikimrTableMetadata;
+typedef TIntrusivePtr<TKikimrTableMetadata> TKikimrTableMetadataPtr;
+
 struct TExternalSource {
     ESourceType SourceType = ESourceType::Unknown;
     TString Type;
@@ -522,6 +544,7 @@ struct TExternalSource {
     TString Token;
     NKikimrSchemeOp::TAuth DataSourceAuth;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
+    TKikimrTableMetadataPtr UnderlyingExternalSourceMetadata;
 };
 
 enum EMetaSerializationType : ui64 {
@@ -1052,7 +1075,8 @@ struct TAnalyzeSettings {
 };
 
 struct TBackupCollectionSettings {
-    bool IncrementalBackupEnabled;
+    bool IncrementalBackupEnabled = false;
+    bool OmitIndexes = false;
 };
 
 struct TCreateBackupCollectionSettings {
@@ -1099,8 +1123,6 @@ struct TKikimrListPathItem {
     TString Name;
     bool IsDirectory;
 };
-
-typedef TIntrusivePtr<TKikimrTableMetadata> TKikimrTableMetadataPtr;
 
 template<typename TResult>
 class IKikimrAsyncResult : public TThrRefBase {

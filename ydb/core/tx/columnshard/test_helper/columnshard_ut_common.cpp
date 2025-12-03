@@ -29,13 +29,15 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
     //    runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NLog::PRI_DEBUG);
+
 
     NOlap::TSchemaCachesManager::DropCaches();
 
     ui32 domainId = 0;
     ui32 planResolution = 500;
 
-    TAppPrepare app;
+    TAppPrepare app(std::make_shared<TDataShardExportFactory>());
 
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds("dc-1", domainId, FAKE_SCHEMESHARD_TABLET_ID, planResolution,
         std::vector<ui64>{ TDomainsInfo::MakeTxCoordinatorIDFixed(1) }, std::vector<ui64>{},

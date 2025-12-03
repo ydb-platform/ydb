@@ -6,6 +6,7 @@ FORK_SUBTESTS()
 
 PEERDIR(
     contrib/restricted/nlohmann_json
+    library/cpp/string_utils/url
     ydb/library/actors/http
     ydb/library/grpc/server
     ydb/library/grpc/server/actors

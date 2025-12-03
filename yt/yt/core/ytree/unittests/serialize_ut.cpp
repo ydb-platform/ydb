@@ -150,6 +150,22 @@ TEST(TCustomTypeSerializationTest, TInstant)
         TestDeserialization<TDuration, i64>(value, 100500);
         TestDeserialization<TDuration, ui64>(value, 100500U);
         TestDeserialization<TDuration, TString>(value, "100.5s");
+
+        TestDeserialization<TDuration, double>(TDuration::MicroSeconds(500), 0.5);
+    }
+    {
+        constexpr auto testException = [](auto source) {
+            auto yson = ConvertToYsonString(source, NYson::EYsonFormat::Text);
+            EXPECT_THROW(PullParserConvert<TDuration>(yson), std::exception) << "Yson: " << yson.ToString();
+            EXPECT_THROW(ConvertTo<TDuration>(ConvertTo<INodePtr>(yson)), std::exception) << "Yson: " << yson.ToString();
+        };
+
+        testException(-1.0);
+        testException(NAN);
+
+        testException(-1LL);
+
+        testException("-10s");
     }
 }
 

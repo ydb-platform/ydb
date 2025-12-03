@@ -176,7 +176,7 @@ public:
         }
         return GetPortionResult()
             .PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent)
-            .AssembleToGeneralContainer(seqColumns);
+            .AssembleToGeneralContainer(seqColumns, GetPortionResult().GetPortionInfo().GetPortionId(), GetPortionResult().GetPortionInfo().GetPathId().DebugString());
     }
 
     std::vector<TBlobInfo>& MutableBlobs() {

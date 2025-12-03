@@ -44,6 +44,37 @@ message TScopeId {
     optional fixed64 X2 = 2;
 }
 
+// Represent credential to perform RDMA transaction
+message TRdmaCred {
+    required fixed64 Address = 1;
+    required uint64 Size = 2;
+    required fixed32 Rkey = 3;
+}
+
+message TRdmaCreds {
+    repeated TRdmaCred Creds = 1;
+}
+
+message TRdmaHandshake {
+    required uint32 QpNum = 1; // Queie pair num
+    required fixed64 SubnetPrefix = 3;
+    required fixed64 InterfaceId = 4;
+    required uint32 MtuIndex = 5; // MTU index according to ibverbs specification
+    // Type of supported verbs
+    oneof Verb {
+        TRdmaCred Read = 6;
+    }
+    // Perform additional software checksum for rdma events
+    optional bool RdmaChecksum = 11;
+}
+
+message TRdmaHandshakeReadAck {
+    oneof Status {
+        fixed32 Digest = 1; // set in case of OK, contains checksum of read RDMA region
+        string Err = 2;     // set in case of error, contains explanation of remote read error
+    }
+}
+
 message THandshakeRequest {
     required uint64 Protocol = 1;
 
@@ -86,6 +117,8 @@ message THandshakeRequest {
         optional bytes Value = 2;
     }
     repeated TKeyValuePair Params = 26; // extra params for connection validation
+
+    optional TRdmaHandshake RdmaHandshake = 27; // Perform outgoing RDMA handshake
 }
 
 message THandshakeSuccess {
@@ -119,6 +152,11 @@ message THandshakeSuccess {
         optional bytes Value = 2;
     }
     repeated TKeyValuePair Params = 18; // extra params for connection validation
+
+    oneof RdmaHandshake {
+        TRdmaHandshake QpPrepared = 19; // Set and containts QP of incomming handshaker
+        string RdmaErr = 20;
+    }
 }
 
 message THandshakeReply {

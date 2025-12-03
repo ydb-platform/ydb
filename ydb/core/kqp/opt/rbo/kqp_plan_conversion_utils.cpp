@@ -1,4 +1,6 @@
 #include "kqp_plan_conversion_utils.h"
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -6,12 +8,52 @@ namespace NKqp {
 using namespace NYql;
 using namespace NNodes;
 
+TExprNode::TPtr PlanConverter::RemoveScalarSubplans(TExprNode::TPtr node) {
+    auto lambda = TCoLambda(node);
+    auto lambdaBody = lambda.Body().Ptr();
+
+    auto exprSublinks = FindNodes(lambdaBody, [](const TExprNode::TPtr& n){return n->IsCallable("KqpExprSublink");});
+    if (exprSublinks.empty()) {
+        return node;
+    }
+    else {
+        TNodeOnNodeOwnedMap replaceMap;
+
+        for (auto link : exprSublinks) {
+            auto sublinkVar = TInfoUnit("_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++), true);
+            auto member = Build<TCoMember>(Ctx, lambda.Pos())
+                    .Struct(lambda.Args().Arg(0).Ptr())
+                    .Name<TCoAtom>().Value(sublinkVar.GetFullName()).Build()
+                    .Done().Ptr();
+            replaceMap[link.Get()] = member;
+            auto subplan = ExprNodeToOperator(TKqpExprSublink(link).Expr().Ptr());
+            PlanProps.ScalarSubplans.Add(sublinkVar, subplan);
+        }
+
+        TOptimizeExprSettings settings(&TypeCtx);
+        TExprNode::TPtr newLambdaBody;
+        RemapExpr(lambdaBody, newLambdaBody, replaceMap, Ctx, settings);
+
+        return Build<TCoLambda>(Ctx, lambda.Pos())
+            .Args(lambda.Args())
+            .Body(newLambdaBody)
+            .Done().Ptr();
+    }
+}
+
 TOpRoot PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     auto opRoot = TKqpOpRoot(node);
     auto rootInput = ExprNodeToOperator(opRoot.Input().Ptr());
-    auto res = TOpRoot(rootInput, node->Pos());
+    TVector<TString> columnOrder;
+
+    for (auto c : opRoot.ColumnOrder()) {
+        columnOrder.push_back(c.StringValue());
+    }
+
+    auto res = TOpRoot(rootInput, node->Pos(), columnOrder);
     res.Node = node;
     res.PlanProps = PlanProps;
+    res.PlanProps.PgSyntax = std::stoi(opRoot.PgSyntax().StringValue());
     return res;
 }
 
@@ -62,8 +104,10 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
             mapElements.push_back(std::make_pair(iu, fromIU));
         } else {
             auto element = mapElement.Cast<TKqpOpMapElementLambda>();
-            if (element.Lambda().Body().Maybe<TCoMember>().Name().Maybe<TCoAtom>()) {
-                auto member = element.Lambda().Body().Cast<TCoMember>();
+            // case lambda ($arg) { member $arg `name }
+            if (auto maybeMember = element.Lambda().Body().Maybe<TCoMember>();
+                maybeMember && maybeMember.Cast().Struct().Ptr() == element.Lambda().Args().Arg(0).Ptr()) {
+                auto member = maybeMember.Cast();
                 auto name = member.Name().Cast<TCoAtom>();
                 auto fromIU = TInfoUnit(name.StringValue());
                 mapElements.push_back(std::make_pair(iu, fromIU));
@@ -78,7 +122,9 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr node) {
     auto opFilter = TKqpOpFilter(node);
     auto input = ExprNodeToOperator(opFilter.Input().Ptr());
-    return std::make_shared<TOpFilter>(input, node->Pos(), opFilter.Lambda().Ptr());
+    auto lambda = opFilter.Lambda().Ptr();
+    auto newLambda = RemoveScalarSubplans(lambda);
+    return std::make_shared<TOpFilter>(input, node->Pos(), newLambda);
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) {
@@ -161,8 +207,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr
     for (const auto& traits : opAggregate.AggregationTraitsList()) {
         const auto originalColName = TInfoUnit(TString(traits.OriginalColName()));
         const auto aggFuncName = TString(traits.AggregationFunction());
-        const auto resultColName = TInfoUnit(TString(traits.ResultColName()));
-        TOpAggregationTraits opAggTraits(originalColName, aggFuncName, resultColName);
+        TOpAggregationTraits opAggTraits(originalColName, aggFuncName);
         opAggTraitsList.push_back(opAggTraits);
     }
 
@@ -171,7 +216,8 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr
         keyColumns.push_back(TInfoUnit(TString(keyColumn)));
     }
 
-    return std::make_shared<TOpAggregate>(input, opAggTraitsList, keyColumns, EAggregationPhase::Final, node->Pos());
+    const bool distinctAll = opAggregate.DistinctAll() == "True" ? true : false;
+    return std::make_shared<TOpAggregate>(input, opAggTraitsList, keyColumns, EAggregationPhase::Final, distinctAll, node->Pos());
 }
 
 } // namespace NKqp

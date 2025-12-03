@@ -6,10 +6,10 @@ namespace NYT::NFormats {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const std::string YtTypeMetadataKey = "YtType";
-static const std::string YtTypeMetadataValueEmptyStruct = "emptyStruct";
-static const std::string YtTypeMetadataValueNestedOptional = "nestedOptional";
-static const std::string YtTypeMetadataValueYson = "yson";
+inline const std::string YTTypeMetadataKey("YtType");
+inline const std::string YTTypeMetadataValueEmptyStruct("emptyStruct");
+inline const std::string YTTypeMetadataValueNestedOptional("nestedOptional");
+inline const std::string YTTypeMetadataValueYson("yson");
 
 ////////////////////////////////////////////////////////////////////////////////
 

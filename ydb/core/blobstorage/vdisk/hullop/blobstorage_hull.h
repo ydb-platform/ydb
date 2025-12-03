@@ -5,7 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
-#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 
 namespace NKikimr {
 

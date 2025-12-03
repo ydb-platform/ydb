@@ -150,4 +150,9 @@
 
 # These headers belong to libc++, yet certain contribs depend libc++ internal structure.
 - includes:
+  - __memory/addressof.h
+  - __utility/as_const.h
+  - __utility/forward.h
+  - __utility/forward_like.h
+  - __utility/move.h
   - __utility/swap.h

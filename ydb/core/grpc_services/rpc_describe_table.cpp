@@ -59,7 +59,7 @@ public:
         }
 
         auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        navigate->DatabaseName = CanonizePath(Request_->GetDatabaseName().GetOrElse(""));
+        navigate->DatabaseName = Request_->GetDatabaseName().GetOrElse("");
         auto& entry = navigate->ResultSet.emplace_back();
         entry.Path = paths;
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;

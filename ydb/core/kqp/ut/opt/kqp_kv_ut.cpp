@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         TString largeValue(1_MB, 'L');
-        
+
         NYdb::TValueBuilder rows;
         rows.BeginList();
         for (int i = 0; i < 10; i++) {
@@ -435,13 +435,13 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
         WaitForCompaction(server, tableName);
 
-        ui32 blobRequestCount = 0; 
+        ui32 blobRequestCount = 0;
 
         auto holder = server->GetRuntime()->AddObserver<TEvBlobStorage::TEvGet>([&blobRequestCount](TEvBlobStorage::TEvGet::TPtr& ev) {
             const auto& msg = ev->Get();
             for (size_t i = 0; i < msg->QuerySize; i++) {
                 const auto& id = msg->Queries[i].Id;
-                
+
                 if (id.BlobSize() == 1_MB + 8 /** ext blob meta */) {
                     blobRequestCount++;
                     break;
@@ -468,7 +468,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 10);
 
         UNIT_ASSERT(parser.TryNextRow());
-        
+
         UNIT_ASSERT_VALUES_EQUAL(UseExtBlobsPrecharge ? 2 : 10, blobRequestCount);
     }
 
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
         auto result = GetValue(kikimr, session.CreateTable(tableName, builder.Build()));
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        
+
         NYdb::TValueBuilder rows;
         rows.BeginList();
         for (int i = 0; i < 10; i++) {
@@ -542,12 +542,23 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         }
         keys.EndList();
 
-        auto selectResult = GetValue(kikimr, db.ReadRows(tableName, keys.Build()));
+        auto future = kikimr.RunInThreadPool([&]{
+            return db.ReadRows(tableName, keys.Build()).ExtractValueSync();
+        });
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&](IEventHandle&) {
+            return cancelCount >= 1;
+        });
+
+        kikimr.GetTestServer().GetRuntime()->DispatchEvents(opts);
+
+        auto selectResult = kikimr.GetTestServer().GetRuntime()->WaitFuture(future);
 
         UNIT_ASSERT(!selectResult.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(cancelCount, 1);
     }
-    
+
     TVector<::ReadRowsPgParam> readRowsPgParams
     {
         {.TypeId = BOOLOID, .TypeMod={}, .ValueContent="t"},
@@ -785,7 +796,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             TString issues = upsertResult.GetIssues().ToString();
             UNIT_ASSERT_C(issues.Contains("Type mismatch, got type Uint64 for column Key35, but expected Decimal(35,10)"), issues);
         }
-        
+
         // Bad case: upsert Decimal to Uin64 column
         {
             NYdb::TValueBuilder rows;
@@ -862,7 +873,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
             auto upsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
             UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
-        }         
+        }
 
         // Bad case: lookup by Uint64 value in Decimal key
         {
@@ -913,7 +924,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
                 [
                     [["0.123456789"];["0.123456789"];["0.123456789"];["0.123456789"];[0u]];
                     [["1.123456789"];["1000.123456789"];["10.123456789"];["1000000.123456789"];[1u]];
-                    [["2.123456789"];["2000.123456789"];["20.123456789"];["2000000.123456789"];[2u]]        
+                    [["2.123456789"];["2000.123456789"];["20.123456789"];["2000000.123456789"];[2u]]
                 ]
             )", TString{res});
         }
@@ -932,7 +943,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
             auto res = FormatResultSetYson(selectResult.GetResultSet());
             CompareYson(R"([[["inf"];["inf"];["inf"];["inf"];[999999999u]];])", TString{res});
-        }        
+        }
     }
 
     Y_UNIT_TEST(ReadRows_Nulls) {

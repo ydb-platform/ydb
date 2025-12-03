@@ -25,6 +25,12 @@ multiline with double at: @@@@
 text@@;
 SELECT "foo"u, '[1;2]'y, @@{"a":null}@@j;
 
+SELECT @@xX{"json":"json"}Xx@@
+
+SELECT 'singleline
+but \'
+multiline';
+
 INSERT INTO @tmp WITH TRUNCATE;
 
 CREATE TABLE t (id Uint64 PRIMARY KEY (id)) WITH (
@@ -61,6 +67,8 @@ SELECT
     CAST(255 AS Uint8),
     CAST(256 AS Uint8) IS NULL;
 
+SELECT Uint64("1");
+
 DEFINE SUBQUERY $dict() AS
     SELECT name, age FROM people;
 END DEFINE;
@@ -76,12 +84,10 @@ SELECT
   t.list[7]
 FROM my_table AS t;
 
-PRAGMA AutoCommit;
-PRAGMA TablePathPrefix = "home/yql";
-PRAGMA Warning("disable", "1101");
-
 SELECT ListCreate(OptionalType(DataType("String")));
 $match = Re2::Match("[ax]+\\d");
+
+SELECT Yson::Parse("");
 
 $py = Python3::foo(@@#py
 from yql.typing import *
@@ -96,3 +102,20 @@ def foo(
     """
     return x + y.a + z
 @@);
+
+SELECT 1;
+
+$r = (
+    PROCESS $r USING Streaming::ProcessInline(
+        TableRows(),
+        @@#!/usr/bin/env bash
+        # Feel free to use any other common interpreter in she-bang or bring
+        # your own in attached file
+
+        awk $1 '{ printf "%05d %s\n", NF-1, $0; }' | sed -e 's/n/N/g'
+        # Prepends zero-padded count of "n" letters to each row
+        # then replaces all "n" with "N"
+        @@,
+        ["-Fn"]
+    )
+);

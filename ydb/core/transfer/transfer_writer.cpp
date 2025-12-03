@@ -51,6 +51,7 @@ private:
         Become(&TThis::StateGetTableScheme);
 
         auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = Database;
         request->ResultSet.emplace_back(MakeNavigateEntry(TablePathId, TNavigate::OpTable));
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
     }
@@ -137,9 +138,9 @@ private:
         DefaultTablePath = JoinPath(entry.Path);
 
         if (entry.Kind == TNavigate::KindColumnTable) {
-            TableState = CreateColumnTableState(SelfId(), result);
+            TableState = CreateColumnTableState(SelfId(), Database, result);
         } else {
-            TableState = CreateRowTableState(SelfId(), result);
+            TableState = CreateRowTableState(SelfId(), Database, result);
         }
 
         CompileTransferLambda();

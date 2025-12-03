@@ -118,6 +118,10 @@ public:
         ModuleChecker_ = moduleChecker;
     }
 
+    void SetUseCanonicalLibrarySuffix(bool use) {
+        UseCanonicalLibrarySuffix_ = use;
+    }
+
     void RegisterPackage(const TString& package) override;
     bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
     const TExportTable* GetModule(const TString& module) const override;
@@ -138,6 +142,7 @@ private:
     THashMap<TString, TLibraryCohesion> FilterLibsByVersion() const;
     static TString ExtractPackageNameFromModule(TStringBuf moduleName);
     TString SubstParameters(const TString& str);
+    bool IsSExpr(bool isYql, bool isYqls, const TString& body) const;
 
 private:
     const NSQLTranslation::TTranslators Translators_;
@@ -159,6 +164,7 @@ private:
     const bool OptimizeLibraries_;
     THolder<TExprContext::TFreezeGuard> FreezeGuard_;
     TString FileAliasPrefix_;
+    bool UseCanonicalLibrarySuffix_ = false;
     TSet<TString> UsedSuffixes_;
 };
 
@@ -216,11 +222,11 @@ public:
 
     TString Find(const TString&) const;
 
-    TVector<TOrderedItem>::const_pointer begin() const {
+    TVector<TOrderedItem>::const_iterator begin() const {
         return Order_.cbegin();
     }
 
-    TVector<TOrderedItem>::const_pointer end() const {
+    TVector<TOrderedItem>::const_iterator end() const {
         return Order_.cend();
     }
 
@@ -444,6 +450,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool StrictTableProps = true;
     bool JsonQueryReturnsJsonDocument = false;
     bool YsonCastToString = true;
+    bool CaseInsensitiveNamedArgs = false;
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
@@ -474,7 +481,9 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool EarlyExpandSeq = true;
     bool DirectRowDependsOn = true;
     bool EnableLineage = false;
-    bool CorrectLineage = true;
+    bool EnableStandaloneLineage = false;
+    TMaybe<bool> CorrectLineage;
+    TMaybe<bool> CorrectStandaloneLineage;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;

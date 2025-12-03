@@ -3,6 +3,7 @@
 #include <yt/yt/client/api/connection.h>
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/distributed_table_session.h>
+#include <yt/yt/client/api/distributed_file_session.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
 #include <yt/yt/client/api/journal_writer.h>
@@ -688,6 +689,19 @@ public:
         const TListJobsOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<std::vector<TJobTraceMeta>>, ListJobTraces, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NJobTrackerClient::TJobId jobId,
+        const TListJobTracesOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TCheckOperationPermissionResult>, CheckOperationPermission, (
+        const std::string& user,
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NYTree::EPermission permission,
+        const TCheckOperationPermissionOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<NYson::TYsonString>, GetJob, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
@@ -899,9 +913,29 @@ public:
         const TDistributedWriteSessionFinishOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TDistributedWriteFileSessionWithCookies>, StartDistributedWriteFileSession, (
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteFileSessionStartOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, PingDistributedWriteFileSession, (
+        const TSignedDistributedWriteFileSessionPtr& session,
+        const TDistributedWriteFileSessionPingOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, FinishDistributedWriteFileSession, (
+        const TDistributedWriteFileSessionWithResults& sessionWithResults,
+        const TDistributedWriteFileSessionFinishOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (
         const TSignedWriteFragmentCookiePtr& cookie,
         const TTableFragmentWriterOptions& options),
+        (override));
+
+    MOCK_METHOD(IFileFragmentWriterPtr, CreateFileFragmentWriter, (
+        const TSignedWriteFileFragmentCookiePtr& cookie,
+        const TFileFragmentWriterOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TSignedShuffleHandlePtr>, StartShuffle, (

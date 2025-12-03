@@ -17,9 +17,6 @@ namespace NKikimr::NSchemeShard {
 
 inline constexpr auto ClusterIdTypeId = NScheme::NTypeIds::Uint64;
 
-// TODO: support utf-8 in fulltext index
-inline constexpr auto TokenTypeId = NScheme::NTypeIds::String;
-
 struct Schema : NIceDb::Schema {
     struct Paths : Table<1> {
         struct Id :                    Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
@@ -1567,6 +1564,14 @@ struct Schema : NIceDb::Schema {
 
         struct CpuTimeUsProcessed : Column<13, NScheme::NTypeIds::Uint64> {};
 
+        // For fulltext indexes
+        struct DocCount : Column<14, NScheme::NTypeIds::Uint64> {};
+        struct TotalDocLength : Column<15, NScheme::NTypeIds::Uint64> {};
+        struct FirstToken : Column<16, NScheme::NTypeIds::String> {};
+        struct LastToken : Column<17, NScheme::NTypeIds::String> {};
+        struct FirstTokenRows : Column<18, NScheme::NTypeIds::Uint64> {};
+        struct LastTokenRows : Column<19, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<Id, OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
             Id,
@@ -1581,7 +1586,13 @@ struct Schema : NIceDb::Schema {
             BytesProcessed,
             ReadRowsProcessed,
             ReadBytesProcessed,
-            CpuTimeUsProcessed
+            CpuTimeUsProcessed,
+            DocCount,
+            TotalDocLength,
+            FirstToken,
+            LastToken,
+            FirstTokenRows,
+            LastTokenRows
         >;
     };
 

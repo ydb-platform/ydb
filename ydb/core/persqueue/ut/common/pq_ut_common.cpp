@@ -1,6 +1,5 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
-#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>

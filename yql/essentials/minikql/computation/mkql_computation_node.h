@@ -155,6 +155,8 @@ private:
 };
 
 class IArrowKernelComputationNode;
+class IComputationExternalNode;
+using TComputationExternalNodePtrSet = std::unordered_set<IComputationExternalNode*, std::hash<IComputationExternalNode*>, std::equal_to<IComputationExternalNode*>, TMKQLAllocator<IComputationExternalNode*>>;
 
 class IComputationNode {
 public:
@@ -168,16 +170,37 @@ public:
 
     virtual NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const = 0;
 
-    virtual IComputationNode* AddDependence(const IComputationNode* node) = 0;
+    // In the context "X depends on Y" this method adds node "X"
+    // (i.e. the argument node) as the *dependent* (the thing
+    // relying on smth) for the node "Y "(i.e. this). It's the
+    // complement for the AddDependency method below.
+    virtual IComputationNode* AddDependent(const IComputationNode* node) = 0;
+    // In the context "X depends on Y" this method adds node "Y"
+    // (i.e. the argument node) as the *dependency* for the node
+    // "X "(i.e. this). It's the complement for the AddDependent
+    // method above.
+    virtual void AddDependency(const IComputationNode* node) const = 0;
+    // In the context "X owns Y" this method adds node "X" (i.e.
+    // this) as the owner of the *external* node "Y" (i.e. the
+    // argument node). It's the complement for the SetOwner method
+    // defined for IComputationExternalNode.
+    virtual void AddOwned(IComputationExternalNode* node) const = 0;
 
     virtual const IComputationNode* GetSource() const = 0;
 
     virtual void RegisterDependencies() const = 0;
 
     virtual ui32 GetIndex() const = 0;
-    virtual void CollectDependentIndexes(const IComputationNode* owner, TIndexesMap& dependencies) const = 0;
-    virtual ui32 GetDependencyWeight() const = 0;
-    virtual ui32 GetDependencesCount() const = 0;
+    virtual void CollectDependentIndexes(const IComputationNode* owner, TIndexesMap& dependents) const = 0;
+    virtual void CollectUpvalues(TComputationExternalNodePtrSet& upvalues) const = 0;
+    virtual TComputationExternalNodePtrSet GetUpvalues() const = 0;
+    virtual ui32 GetDependentWeight() const = 0;
+    virtual ui32 GetDependentsCount() const = 0;
+    // FIXME: Remove this method, when all the clients will be
+    // migrated to the renamed analogue GetDependentsCount.
+    ui32 GetDependencesCount() const {
+        return GetDependentsCount();
+    }
 
     virtual bool IsTemporaryValue() const = 0;
 
@@ -225,6 +248,39 @@ public:
     virtual void InvalidateValue(TComputationContext& compCtx) const = 0;
 };
 
+using TComputationExternalNodePtrVector = std::vector<IComputationExternalNode*, TMKQLAllocator<IComputationExternalNode*>>;
+
+class TComputationUpvalues {
+    using TUnboxedValueVector = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue>>;
+
+public:
+    TComputationUpvalues(TComputationContext& ctx, IComputationNode* lambdaNode,
+                         const TComputationExternalNodePtrVector& argNodes);
+
+    inline explicit operator bool() const {
+        return !UpvalueNodes_.empty();
+    }
+    void SetUpvalues(TComputationContext& ctx) const;
+    void RestoreUpvalues(TComputationContext& ctx) const;
+
+private:
+    // Vector with upvalue comp nodes (i.e. set of transitively
+    // non-owned external computation nodes) to be set prior to
+    // the callable invocation and restored later.
+    TComputationExternalNodePtrVector UpvalueNodes_;
+    // Vector with the closed upvalues (i.e. comp node values,
+    // obtained within the context of the callable definition).
+    // These values have to be set as the corresponding upvalue
+    // cоmp nodes before the callable invocation to restore the
+    // valid context.
+    TUnboxedValueVector ClosedUpvalues_;
+    // Mutable vector with the current values of the corresponding
+    // upvalue comp nodes. These values have to be preserved from
+    // these nodes before the callable invocation and restored
+    // back when the invocation finishes.
+    mutable TUnboxedValueVector PreservedUpvalues_;
+};
+
 using TDatumProvider = std::function<arrow::Datum()>;
 
 TDatumProvider MakeDatumProvider(const arrow::Datum& datum);
@@ -252,7 +308,6 @@ struct TArrowKernelsTopology {
 
 using TComputationNodePtrVector = std::vector<IComputationNode*, TMKQLAllocator<IComputationNode*>>;
 using TComputationWideFlowNodePtrVector = std::vector<IComputationWideFlowNode*, TMKQLAllocator<IComputationWideFlowNode*>>;
-using TComputationExternalNodePtrVector = std::vector<IComputationExternalNode*, TMKQLAllocator<IComputationExternalNode*>>;
 using TConstComputationNodePtrVector = std::vector<const IComputationNode*, TMKQLAllocator<const IComputationNode*>>;
 using TComputationNodePtrDeque = std::deque<IComputationNode::TPtr, TMKQLAllocator<IComputationNode::TPtr>>;
 using TComputationNodeOnNodeMap = std::unordered_map<const IComputationNode*, IComputationNode*, std::hash<const IComputationNode*>, std::equal_to<const IComputationNode*>, TMKQLAllocator<std::pair<const IComputationNode* const, IComputationNode*>>>;

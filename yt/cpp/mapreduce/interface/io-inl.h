@@ -1015,6 +1015,37 @@ inline TTableWriterPtr<T> IIOClient::CreateTableWriter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <>
+inline ITableFragmentWriterPtr<TNode> IIOClient::CreateTableFragmentWriter<TNode>(
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options)
+{
+    return CreateNodeFragmentWriter(cookie, options);
+}
+
+template <>
+inline ITableFragmentWriterPtr<TYaMRRow> IIOClient::CreateTableFragmentWriter<TYaMRRow>(
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options)
+{
+    return CreateYaMRFragmentWriter(cookie, options);
+}
+
+template <class T>
+inline ITableFragmentWriterPtr<T> IIOClient::CreateTableFragmentWriter(
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options)
+{
+    if constexpr (TIsBaseOf<Message, T>::Value) {
+        auto prototype = std::make_unique<T>();
+        return CreateProtoFragmentWriter(cookie, options, prototype.get());
+    } else {
+        static_assert(TDependentFalse<T>, "Unsupported type for table fragment writer");
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <typename T>
 TTableReaderPtr<T> CreateConcreteProtobufReader(TTableReader<Message>* reader)
 {

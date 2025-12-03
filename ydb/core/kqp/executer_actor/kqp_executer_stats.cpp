@@ -372,6 +372,8 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
     for (auto& [_, f] : Filters) f.Resize(taskCount);
     for (auto& [_, a] : Aggregations) a.Resize(taskCount);
 
+    for (auto& [_, m] : Mkql) m.resize(taskCount);
+
     MaxMemoryUsage.Resize(taskCount);
     Finished.resize(taskCount);
 }
@@ -666,6 +668,24 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
                 default:
                     break;
             }
+        }
+    }
+
+    for (const auto& mkqlStat : taskStats.GetMkqlStats()) {
+        if (const auto& name = mkqlStat.GetName()) {
+            std::vector<ui64>* stats = nullptr;
+            const auto value = mkqlStat.GetValue();
+            if (value) {
+                stats = &Mkql.emplace(name, TaskCount).first->second;
+            } else if (auto it = Mkql.find(name); it != Mkql.end()) {
+                stats = &it->second;
+            } else {
+                continue;
+            }
+
+            AFL_ENSURE(stats);
+            AFL_ENSURE(index < stats->size());
+            (*stats)[index] = value;
         }
     }
 
@@ -1055,6 +1075,9 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
         auto& tableStats = *GetOrCreateTableAggrStats(stageStats, tableStat.GetTablePath());
         UpdateAggr(tableStats.MutableReadRows(), tableStat.GetReadRows());
         UpdateAggr(tableStats.MutableReadBytes(), tableStat.GetReadBytes());
+    }
+    for (const auto& mkqlStat : task.GetMkqlStats()) {
+        UpdateAggr(&(*stageStats->MutableMkql())[mkqlStat.GetName()], mkqlStat.GetValue());
     }
 }
 
@@ -1673,6 +1696,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 aggrStat.SetOperatorId(id);
                 ExportAggStats(a.Bytes, *aggrStat.MutableBytes());
                 ExportAggStats(a.Rows, *aggrStat.MutableRows());
+            }
+            for (auto& [id, m] : stageStat.Mkql) {
+                ExportAggStats(m, (*stageStats.MutableMkql())[id]);
             }
         }
     }

@@ -57,7 +57,15 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
     TVector<TExprBase> effects;
     effects.emplace_back(tableDelete);
 
+    const bool isSink = NeedSinks(table, kqpCtx);
+    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
+
     for (const auto& [tableNode, indexDesc] : indexes) {
+        if (useStreamIndex
+                && (indexDesc->Type == TIndexDescription::EType::GlobalSync
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+            continue;
+        }
         THashSet<TStringBuf> indexTableColumnsSet;
         TVector<TStringBuf> indexTableColumns;
 
@@ -75,10 +83,11 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
         auto deleteIndexKeys = project(indexTableColumns);
 
         switch (indexDesc->Type) {
-            case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalAsync:
+                AFL_ENSURE(false);
+            case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalSyncUnique: {
-                // deleteIndexKeys are already correct 
+                // deleteIndexKeys are already correct
                 break;
             }
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
@@ -92,17 +101,8 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 break;
             }
             case TIndexDescription::EType::GlobalFulltext: {
-                // For fulltext indexes, we need to tokenize the text from the rows being deleted
-                // and then delete the corresponding token rows from the index table
-                auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, del.Pos())
-                    .Connection<TDqCnUnionAll>()
-                        .Output()
-                            .Stage(ReadTableToStage(deleteIndexKeys, ctx))
-                            .Index().Build("0")
-                            .Build()
-                        .Build()
-                    .Done();
-                deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet, indexTableColumns, /*includeDataColumns=*/false,
+                // For fulltext indexes, we need to tokenize the text and create deleted rows
+                deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet, indexTableColumns, /*includeDataColumns=*/false,
                     del.Pos(), ctx);
                 break;
             }
@@ -133,7 +133,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, del.Table().Path());
     const auto& pk = table.Metadata->KeyColumnNames;
 
-    const auto indexes = BuildSecondaryIndexVector(table, del.Pos(), ctx);
+    const auto indexes = BuildAffectedIndexTables(table, del.Pos(), ctx);
     YQL_ENSURE(indexes);
 
     // Skip lookup means that the input already has all required columns and we only need to project them

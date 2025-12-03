@@ -21,6 +21,7 @@
 #include <limits>
 #include <type_traits>
 
+#include "y_absl/base/config.h"
 #include "y_absl/meta/type_traits.h"
 #include "y_absl/random/internal/fast_uniform_bits.h"
 #include "y_absl/random/internal/generate_real.h"

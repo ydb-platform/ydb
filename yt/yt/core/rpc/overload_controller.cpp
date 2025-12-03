@@ -588,7 +588,7 @@ private:
             configIndex[std::pair(methodConfig->Service, methodConfig->Method)] = methodConfig;
         }
 
-        auto getConfig = [&configIndex] (TStringBuf service, TStringBuf method) {
+        auto getConfig = [&configIndex] (TStringBuf service, TStringBuf method, int maxWindow) {
             auto it = configIndex.find(std::pair(service, method));
             if (it != configIndex.end()) {
                 return it->second;
@@ -597,6 +597,7 @@ private:
             auto defaultConfig = New<TServiceMethodConfig>();
             defaultConfig->Service = service;
             defaultConfig->Method = method;
+            defaultConfig->MaxWindow = maxWindow;
             return defaultConfig;
         };
 
@@ -605,7 +606,7 @@ private:
                 auto& controller = controllers[std::pair(method.Service, method.Method)];
 
                 if (!controller) {
-                    auto methodConfig = getConfig(method.Service, method.Method);
+                    auto methodConfig = getConfig(method.Service, method.Method, method.MaxWindow);
                     auto controllerProfiler = profiler
                         .WithTag("yt_service", method.Service)
                         .WithTag("method", method.Method);

@@ -108,17 +108,22 @@ void TKafkaProduceActor::CleanWriters(const TActorContext& ctx) {
     const auto earliestAllowedTs = ctx.Now() - WRITER_EXPIRATION_INTERVAL;
 
     for (auto& [topicPath, partitionWriters] : NonTransactionalWriters) {
-        for (auto it = partitionWriters.begin(); it != partitionWriters.end(); ++it) {
-            if (it->second.LastAccessed < earliestAllowedTs) {
-                CleanWriter({topicPath, it->first}, it->second.ActorId);
-                partitionWriters.erase(it);
+        auto itPartWriters = partitionWriters.begin();
+        while (itPartWriters != partitionWriters.end()) {
+            auto itCopy = itPartWriters++;
+            if (itCopy->second.LastAccessed < earliestAllowedTs) {
+                CleanWriter({topicPath, itCopy->first}, itCopy->second.ActorId);
+                partitionWriters.erase(itCopy);
             }
         }
     }
-    for (auto it = TransactionalWriters.begin(); it != TransactionalWriters.end(); ++it) {
-        if (it->second.LastAccessed < earliestAllowedTs) {
-            CleanWriter(it->first, it->second.ActorId);
-            TransactionalWriters.erase(it);
+
+    auto itTransWriters = TransactionalWriters.begin();
+    while (itTransWriters != TransactionalWriters.end()) {
+        auto itCopy = itTransWriters++;
+        if (itCopy->second.LastAccessed < earliestAllowedTs) {
+            CleanWriter(itCopy->first, itCopy->second.ActorId);
+            TransactionalWriters.erase(itCopy);
         }
     }
 
@@ -184,10 +189,11 @@ void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TP
 
     auto it = NonTransactionalWriters.find(path);
     if (it != NonTransactionalWriters.end()) {
-        for(auto& [_, writer] : it->second) {
+        auto itCopy = it++;
+        for(auto& [_, writer] : itCopy->second) {
             Send(writer.ActorId, new TEvents::TEvPoison());
         }
-        NonTransactionalWriters.erase(it);
+        NonTransactionalWriters.erase(itCopy);
     }
     for (auto& [topicPartition, writer] : TransactionalWriters) {
         if (topicPartition.TopicPath == path) {
@@ -622,7 +628,7 @@ void TKafkaProduceActor::ProcessInitializationRequests(const TActorContext& ctx)
         request->ResultSet.emplace_back(entry);
     }
 
-    request->DatabaseName = CanonizePath(Context->DatabasePath);
+    request->DatabaseName = Context->DatabasePath;
 
     ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release()));
 }

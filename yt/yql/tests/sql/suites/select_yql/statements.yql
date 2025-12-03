@@ -1,0 +1,15 @@
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    *
+FROM
+    plato.Input
+;
+
+SELECT
+    *
+FROM
+    plato.Input
+;

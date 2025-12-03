@@ -695,6 +695,7 @@ public:
     bool EncodeQuantum() {
         const ui64 endTime = GetCycleCountFast() + DurationToCycles(MaxQuantumDuration);
         bool firstIteration = true;
+        IRcBufAllocator* const allocator = TlsActivationContext->ActorSystem()->GetRcBufAllocator();
         while (Min(BlobsEncrypted, BlobsSplit) < PutImpl.Blobs.size()) {
             if (!firstIteration && endTime <= GetCycleCountFast()) {
                 return false;
@@ -713,7 +714,8 @@ public:
             } else { // BlobsSplit < BlobsEncrypted -- then we split it
                 auto& blob = PutImpl.Blobs[BlobsSplit];
                 const auto crcMode = static_cast<TErasureType::ECrcMode>(blob.BlobId.CrcMode());
-                if (ErasureSplit(crcMode, Info->Type, blob.Buffer, PartSets[BlobsSplit], &ErasureSplitContext)) {
+                if (ErasureSplit(crcMode, Info->Type, blob.Buffer, PartSets[BlobsSplit],
+                        &ErasureSplitContext, allocator)) {
                     ++BlobsSplit;
                     ErasureSplitContext = TErasureSplitContext::Init(MaxBytesToSplitAtOnce);
                 }
@@ -745,7 +747,13 @@ public:
         TPutImpl::TPutResultVec putResults;
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
             if (!PutImpl.Blobs[blobIdx].Replied && DeadlineMask[blobIdx]) {
-                PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, "Deadline timer hit", putResults);
+                TStringStream str;
+                str << "Deadline timer hit";
+                str << " GroupId# " << Info->GroupID;
+                str << " BlobId# " << PutImpl.Blobs[blobIdx].BlobId.ToString();
+                str << " Deadline# " << PutImpl.Blobs[blobIdx].Deadline.ToString();
+                str << " RequestStartTime# " << RequestStartTime;
+                PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, str.Str(), putResults);
             }
         }
         if (!ReplyAndDieWithLastResponse(putResults)) {

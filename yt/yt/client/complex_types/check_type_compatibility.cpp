@@ -2,9 +2,12 @@
 
 #include <yt/yt/client/table_client/logical_type.h>
 
-using namespace NYT::NTableClient;
-
 namespace NYT::NComplexTypes {
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+using namespace NYT::NTableClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -12,11 +15,11 @@ using TCompatibilityPair = std::pair<ESchemaCompatibility, TError>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static TCompatibilityPair CheckTypeCompatibilityImpl(
+TCompatibilityPair CheckTypeCompatibilityImpl(
     const TComplexTypeFieldDescriptor& oldDescriptor,
     const TComplexTypeFieldDescriptor& newDescriptor);
 
-static const TCompatibilityPair& MinCompatibility(const TCompatibilityPair& lhs, const TCompatibilityPair& rhs)
+const TCompatibilityPair& MinCompatibility(const TCompatibilityPair& lhs, const TCompatibilityPair& rhs)
 {
     if (lhs.first <= rhs.first) {
         return lhs;
@@ -25,7 +28,7 @@ static const TCompatibilityPair& MinCompatibility(const TCompatibilityPair& lhs,
     }
 }
 
-static TCompatibilityPair CreateResultPair(
+TCompatibilityPair CreateResultPair(
     ESchemaCompatibility compatibility,
     const TComplexTypeFieldDescriptor& oldDescriptor,
     const TComplexTypeFieldDescriptor& newDescriptor)
@@ -53,7 +56,7 @@ DEFINE_ENUM(ESimpleTypeClass,
 );
 
 template <ESimpleTypeClass typeClass>
-static int GetSimpleTypeRank(ESimpleLogicalValueType type)
+int GetSimpleTypeRank(ESimpleLogicalValueType type)
 {
     if constexpr (typeClass == ESimpleTypeClass::Int) {
         switch (type) {
@@ -106,7 +109,7 @@ static int GetSimpleTypeRank(ESimpleLogicalValueType type)
 }
 
 template <ESimpleTypeClass typeClass>
-static constexpr ESchemaCompatibility CheckCompatibilityUsingClass(ESimpleLogicalValueType oldType, ESimpleLogicalValueType newType)
+constexpr ESchemaCompatibility CheckCompatibilityUsingClass(ESimpleLogicalValueType oldType, ESimpleLogicalValueType newType)
 {
     int oldRank = GetSimpleTypeRank<typeClass>(oldType);
     if (oldRank <= 0) {
@@ -127,7 +130,7 @@ static constexpr ESchemaCompatibility CheckCompatibilityUsingClass(ESimpleLogica
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static TCompatibilityPair CheckTypeCompatibilitySimple(
+TCompatibilityPair CheckTypeCompatibilitySimple(
     const TComplexTypeFieldDescriptor& oldDescriptor,
     const TComplexTypeFieldDescriptor& newDescriptor)
 {
@@ -358,25 +361,7 @@ TCompatibilityPair CheckDecimalTypeCompatibility(
     }
 }
 
-std::pair<TComplexTypeFieldDescriptor, int> UnwrapOptionalAndTagged(const TComplexTypeFieldDescriptor& descriptor)
-{
-    int nesting = 0;
-    auto current = descriptor;
-    while (true) {
-        const auto metatype = current.GetType()->GetMetatype();
-        if (metatype == ELogicalMetatype::Optional) {
-            ++nesting;
-            current = current.OptionalElement();
-        } else if (metatype == ELogicalMetatype::Tagged) {
-            current = current.TaggedElement();
-        } else {
-            break;
-        }
-    }
-    return {current, nesting};
-}
-
-static TCompatibilityPair CheckTypeCompatibilityImpl(
+TCompatibilityPair CheckTypeCompatibilityImpl(
     const TComplexTypeFieldDescriptor& oldDescriptor,
     const TComplexTypeFieldDescriptor& newDescriptor)
 {
@@ -442,6 +427,28 @@ static TCompatibilityPair CheckTypeCompatibilityImpl(
             return CheckDecimalTypeCompatibility(oldDescriptor, newDescriptor);
     }
     THROW_ERROR_EXCEPTION("Internal error; unexpected metatype: %Qlv", oldMetatype);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
+
+std::pair<TComplexTypeFieldDescriptor, int> UnwrapOptionalAndTagged(const TComplexTypeFieldDescriptor& descriptor)
+{
+    int nesting = 0;
+    auto current = descriptor;
+    while (true) {
+        const auto metatype = current.GetType()->GetMetatype();
+        if (metatype == ELogicalMetatype::Optional) {
+            ++nesting;
+            current = current.OptionalElement();
+        } else if (metatype == ELogicalMetatype::Tagged) {
+            current = current.TaggedElement();
+        } else {
+            break;
+        }
+    }
+    return {current, nesting};
 }
 
 TCompatibilityPair CheckTypeCompatibility(

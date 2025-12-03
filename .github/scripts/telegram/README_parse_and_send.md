@@ -15,15 +15,13 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
   --team-channels '{"teams": {"team-name": {"responsible": ["@user1", "@user2"], "channel": "channel-name"}}, "channels": {"channel-name": "123456789/1"}}' \
   --bot-token "YOUR_BOT_TOKEN"
 
-# With custom YDB settings
+# With plots enabled
 python .github/scripts/telegram/parse_and_send_team_issues.py \
   --on-mute-change-update \
   --file "formatted_results.txt" \
   --team-channels '{"teams": {"team-name": {"responsible": ["@user1"], "channel": "channel-name"}}, "channels": {"channel-name": "123456789/1"}}' \
   --bot-token "YOUR_BOT_TOKEN" \
-  --ydb-endpoint "grpcs://ydb.serverless.yandexcloud.net:2135" \
-  --ydb-database "/ru-central1/b1g8ejbrie0sfh5k0j2j/etn8l4e3hbti8k4n5g2e" \
-  --ydb-credentials "path/to/credentials.json"
+  --include-plots
 
 # Dry run (show messages without sending)
 python .github/scripts/telegram/parse_and_send_team_issues.py \
@@ -49,17 +47,13 @@ Send weekly or monthly trend reports with statistics and charts:
 python .github/scripts/telegram/parse_and_send_team_issues.py \
   --period-update week \
   --team-channels '{"default_channel": "main_channel", "teams": {"team-name": {"responsible": ["@user1"], "channel": "main_channel"}}, "channels": {"main_channel": "123456789/1"}}' \
-  --bot-token "YOUR_BOT_TOKEN" \
-  --ydb-endpoint "grpcs://ydb.serverless.yandexcloud.net:2135" \
-  --ydb-database "/ru-central1/b1g8ejbrie0sfh5k0j2j/etn8l4e3hbti8k4n5g2e"
+  --bot-token "YOUR_BOT_TOKEN"
 
 # Monthly trend updates with debug plots
 python .github/scripts/telegram/parse_and_send_team_issues.py \
   --period-update month \
   --team-channels '{"default_channel": "main_channel", "teams": {"team-name": {"responsible": ["@user1"], "channel": "main_channel"}}, "channels": {"main_channel": "123456789/1"}}' \
   --bot-token "YOUR_BOT_TOKEN" \
-  --ydb-endpoint "grpcs://ydb.serverless.yandexcloud.net:2135" \
-  --ydb-database "/ru-central1/b1g8ejbrie0sfh5k0j2j/etn8l4e3hbti8k4n5g2e" \
   --debug-plots-dir "/path/to/debug/plots" \
   --dry-run
 ```
@@ -84,9 +78,8 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
 - `--retry-delay` - Delay between retry attempts in seconds (default: 10)
 
 ### YDB Statistics
-- `--ydb-endpoint` - YDB database endpoint (or use YDB_ENDPOINT env var)
-- `--ydb-database` - YDB database path (or use YDB_DATABASE env var)
-- `--ydb-credentials` - Path to YDB service account credentials JSON file (or use YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS env var)
+**Note:** YDB connection is automatically configured via `YDBWrapper` using the config file (`.github/config/ydb_qa_config.json`). No manual connection parameters are needed.
+
 - `--no-stats` - Skip fetching muted tests statistics from YDB (only for --on-mute-change-update)
 - `--include-plots` - Include trend plots in messages (requires matplotlib)
 - `--debug-plots-dir` - Directory to save debug plot files (enables debug mode)
@@ -189,9 +182,9 @@ The `--team-channels` parameter expects a JSON configuration:
 
 - `TELEGRAM_BOT_TOKEN` - Telegram bot token
 - `TEAM_CHANNELS` - Team channels configuration JSON
-- `YDB_ENDPOINT` - YDB database endpoint
-- `YDB_DATABASE` - YDB database path
-- `YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` - Path to YDB credentials file
+- `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` - Path to YDB service account credentials (automatically set by GitHub Actions)
+
+**Note:** YDB connection settings are configured via `.github/config/ydb_qa_config.json`. The script uses `YDBWrapper` which automatically loads configuration from this file.
 
 ## Team Blacklist
 
@@ -246,8 +239,6 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
   --period-update week \
   --team-channels '{"default_channel": "main_channel", "teams": {"team-name": {"responsible": ["@user1"], "channel": "main_channel"}}, "channels": {"main_channel": "123456789/1"}}' \
   --bot-token "YOUR_BOT_TOKEN" \
-  --ydb-endpoint "grpcs://ydb.serverless.yandexcloud.net:2135" \
-  --ydb-database "/ru-central1/b1g8ejbrie0sfh5k0j2j/etn8l4e3hbti8k4n5g2e" \
   --debug-plots-dir "/path/to/debug/plots"
 
 # Monthly trend updates (dry run)
@@ -255,7 +246,5 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
   --period-update month \
   --team-channels '{"default_channel": "main_channel", "teams": {"team-name": {"responsible": ["@user1"], "channel": "main_channel"}}, "channels": {"main_channel": "123456789/1"}}' \
   --bot-token "YOUR_BOT_TOKEN" \
-  --ydb-endpoint "grpcs://ydb.serverless.yandexcloud.net:2135" \
-  --ydb-database "/ru-central1/b1g8ejbrie0sfh5k0j2j/etn8l4e3hbti8k4n5g2e" \
   --dry-run
 ```

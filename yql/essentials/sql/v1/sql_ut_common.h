@@ -206,58 +206,58 @@ Y_UNIT_TEST(FamilyKeywordNotReservedForNames) {
 }
 
 Y_UNIT_TEST(ResetKeywordNotReservedForNames) {
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE RESET (RESET Uint32, PRIMARY KEY (RESET));").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; SELECT RESET FROM RESET").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE RESET (RESET Uint32, PRIMARY KEY (RESET));").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT RESET FROM RESET").IsOk());
 }
 
 Y_UNIT_TEST(SyncKeywordNotReservedForNames) {
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE SYNC (SYNC Uint32, PRIMARY KEY (SYNC));").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; SELECT SYNC FROM SYNC").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE SYNC (SYNC Uint32, PRIMARY KEY (SYNC));").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT SYNC FROM SYNC").IsOk());
 }
 
 Y_UNIT_TEST(AsyncKeywordNotReservedForNames) {
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE ASYNC (ASYNC Uint32, PRIMARY KEY (ASYNC));").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; SELECT ASYNC FROM ASYNC").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE ASYNC (ASYNC Uint32, PRIMARY KEY (ASYNC));").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT ASYNC FROM ASYNC").IsOk());
 }
 
 Y_UNIT_TEST(DisableKeywordNotReservedForNames) {
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE DISABLE (DISABLE Uint32, PRIMARY KEY (DISABLE));").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; SELECT DISABLE FROM DISABLE").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE DISABLE (DISABLE Uint32, PRIMARY KEY (DISABLE));").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT DISABLE FROM DISABLE").IsOk());
 }
 
 Y_UNIT_TEST(ChangefeedKeywordNotReservedForNames) {
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE CHANGEFEED (CHANGEFEED Uint32, PRIMARY KEY (CHANGEFEED));").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; SELECT CHANGEFEED FROM CHANGEFEED").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE CHANGEFEED (CHANGEFEED Uint32, PRIMARY KEY (CHANGEFEED));").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT CHANGEFEED FROM CHANGEFEED").IsOk());
 }
 
 Y_UNIT_TEST(ReplicationKeywordNotReservedForNames) {
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE REPLICATION (REPLICATION Uint32, PRIMARY KEY (REPLICATION));").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; SELECT REPLICATION FROM REPLICATION").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE REPLICATION (REPLICATION Uint32, PRIMARY KEY (REPLICATION));").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT REPLICATION FROM REPLICATION").IsOk());
 }
 
 Y_UNIT_TEST(TransferKeywordNotReservedForNames) {
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE TRANSFER (TRANSFER Uint32, PRIMARY KEY (TRANSFER));").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; SELECT TRANSFER FROM TRANSFER").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE TRANSFER (TRANSFER Uint32, PRIMARY KEY (TRANSFER));").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT TRANSFER FROM TRANSFER").IsOk());
 }
 
 Y_UNIT_TEST(SecondsKeywordNotReservedForNames) {
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE SECONDS (SECONDS Uint32, PRIMARY KEY (SECONDS));").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; SELECT SECONDS FROM SECONDS").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE SECONDS (SECONDS Uint32, PRIMARY KEY (SECONDS));").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT SECONDS FROM SECONDS").IsOk());
 }
 
 Y_UNIT_TEST(MillisecondsKeywordNotReservedForNames) {
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE MILLISECONDS (MILLISECONDS Uint32, PRIMARY KEY (MILLISECONDS));").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; SELECT MILLISECONDS FROM MILLISECONDS").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE MILLISECONDS (MILLISECONDS Uint32, PRIMARY KEY (MILLISECONDS));").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT MILLISECONDS FROM MILLISECONDS").IsOk());
 }
 
 Y_UNIT_TEST(MicrosecondsKeywordNotReservedForNames) {
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE MICROSECONDS (MICROSECONDS Uint32, PRIMARY KEY (MICROSECONDS));").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; SELECT MICROSECONDS FROM MICROSECONDS").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE MICROSECONDS (MICROSECONDS Uint32, PRIMARY KEY (MICROSECONDS));").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT MICROSECONDS FROM MICROSECONDS").IsOk());
 }
 
 Y_UNIT_TEST(NanosecondsKeywordNotReservedForNames) {
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE NANOSECONDS (NANOSECONDS Uint32, PRIMARY KEY (NANOSECONDS));").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; SELECT NANOSECONDS FROM NANOSECONDS").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE NANOSECONDS (NANOSECONDS Uint32, PRIMARY KEY (NANOSECONDS));").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT NANOSECONDS FROM NANOSECONDS").IsOk());
 }
 
 Y_UNIT_TEST(Jubilee) {
@@ -272,14 +272,14 @@ Y_UNIT_TEST(QualifiedAsteriskBefore) {
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        static bool seenStar = false;
+        static bool SeenStar = false;
         if (word == "FlattenMembers") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table."));
         } else if (word == "SqlProjectItem") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("megahelpful_len")));
-            UNIT_ASSERT_VALUES_EQUAL(seenStar, true);
+            UNIT_ASSERT_VALUES_EQUAL(SeenStar, true);
         } else if (word == "SqlProjectStarItem") {
-            seenStar = true;
+            SeenStar = true;
         }
     };
     TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("SqlProjectItem"), 0}, {TString("SqlProjectStarItem"), 0}};
@@ -296,14 +296,14 @@ Y_UNIT_TEST(QualifiedAsteriskAfter) {
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        static bool seenStar = false;
+        static bool SeenStar = false;
         if (word == "FlattenMembers") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table."));
         } else if (word == "SqlProjectItem") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("megahelpful_len")));
-            UNIT_ASSERT_VALUES_EQUAL(seenStar, false);
+            UNIT_ASSERT_VALUES_EQUAL(SeenStar, false);
         } else if (word == "SqlProjectStarItem") {
-            seenStar = true;
+            SeenStar = true;
         }
     };
     TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("SqlProjectItem"), 0}, {TString("SqlProjectStarItem"), 0}};
@@ -1066,7 +1066,7 @@ Y_UNIT_TEST(AlterObjectWithFeatures) {
 }
 
 Y_UNIT_TEST(AlterObjectNoFeatures) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; ALTER OBJECT secretId (TYPE SECRET);");
+    NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER OBJECT secretId (TYPE SECRET);");
     UNIT_ASSERT(!res.Root);
 }
 
@@ -1143,7 +1143,7 @@ Y_UNIT_TEST(DropObjectIfExists) {
 }
 
 Y_UNIT_TEST(PrimaryKeyParseCorrect) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32, Subkey Int64, Value String, PRIMARY KEY (Key, Subkey));");
+    NYql::TAstParseResult res = SqlToYql("USE ydb; CREATE TABLE tableName (Key Uint32, Subkey Int64, Value String, PRIMARY KEY (Key, Subkey));");
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -1161,7 +1161,7 @@ Y_UNIT_TEST(PrimaryKeyParseCorrect) {
 }
 
 Y_UNIT_TEST(AlterDatabaseAst) {
-    NYql::TAstParseResult request = SqlToYql("USE plato; ALTER DATABASE `/Root/test` OWNER TO user1;");
+    NYql::TAstParseResult request = SqlToYql("USE ydb;   ALTER DATABASE `/Root/test` OWNER TO user1;");
     UNIT_ASSERT_C(request.IsOk(), request.Issues.ToString());
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -1177,7 +1177,7 @@ Y_UNIT_TEST(AlterDatabaseAst) {
 }
 
 Y_UNIT_TEST(AlterDatabaseSetting) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; ALTER DATABASE `/Root/test` SET (key1 = 1);");
+    NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER DATABASE `/Root/test` SET (key1 = 1);");
     UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
 
     TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
@@ -1194,7 +1194,7 @@ Y_UNIT_TEST(AlterDatabaseSetting) {
 }
 
 Y_UNIT_TEST(AlterDatabaseSettings) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; ALTER DATABASE `/Root/test` SET (key1 = 1, key2 = \"2\", key3 = true);");
+    NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER DATABASE `/Root/test` SET (key1 = 1, key2 = \"2\", key3 = true);");
     UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
 
     TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
@@ -1216,7 +1216,7 @@ Y_UNIT_TEST(AlterDatabaseSettings) {
 Y_UNIT_TEST(CreateTableDublicateOptions) {
     {
         NYql::TAstParseResult req = SqlToYql(R"sql(
-                USE plato;
+                USE ydb;
                 CREATE TABLE tbl (
                     k Uint64,
                     v Utf8 NOT NULL NOT NULL,
@@ -1230,7 +1230,7 @@ Y_UNIT_TEST(CreateTableDublicateOptions) {
 
     {
         NYql::TAstParseResult req = SqlToYql(R"sql(
-                USE plato;
+                USE ydb;
                 CREATE TABLE tbl (
                     k Uint64,
                     v Utf8 (NOT NULL, NOT NULL),
@@ -1244,7 +1244,7 @@ Y_UNIT_TEST(CreateTableDublicateOptions) {
 
     {
         NYql::TAstParseResult req = SqlToYql(R"sql(
-                USE plato;
+                USE ydb;
                 CREATE TABLE tbl (
                     k Uint64,
                     v Uint64 DEFAULT 0 DEFAULT 1,
@@ -1258,7 +1258,7 @@ Y_UNIT_TEST(CreateTableDublicateOptions) {
 
     {
         NYql::TAstParseResult req = SqlToYql(R"sql(
-                USE plato;
+                USE ydb;
                 CREATE TABLE tbl (
                     k Uint64,
                     v Uint64 (DEFAULT 1, DEFAULT 0),
@@ -1272,7 +1272,7 @@ Y_UNIT_TEST(CreateTableDublicateOptions) {
 
     {
         NYql::TAstParseResult req = SqlToYql(R"sql(
-                USE plato;
+                USE ydb;
                 CREATE TABLE tbl (
                     k Uint64,
                     v Utf8 FAMILY family_large FAMILY family_large,
@@ -1294,7 +1294,7 @@ Y_UNIT_TEST(CreateTableDublicateOptions) {
 
     {
         NYql::TAstParseResult req = SqlToYql(R"sql(
-                USE plato;
+                USE ydb;
                 CREATE TABLE tbl (
                     k Uint64,
                     v Utf8 (FAMILY family_large, FAMILY family_large),
@@ -1317,7 +1317,7 @@ Y_UNIT_TEST(CreateTableDublicateOptions) {
 
 Y_UNIT_TEST(CreateTableFamilyAndNotNullInOrder) {
     NYql::TAstParseResult familyBeforeConstraint = SqlToYql(R"sql(
-            USE plato;
+            USE ydb;
             CREATE TABLE tbl (
                 k Uint64,
                 v Utf8 FAMILY family_large NOT NULL,
@@ -1349,7 +1349,7 @@ Y_UNIT_TEST(CreateTableFamilyAndNotNullInOrder) {
 
 Y_UNIT_TEST(CreateTableFamilyAndNotNullReversed) {
     NYql::TAstParseResult familyAfterConstraint = SqlToYql(R"sql(
-            USE plato;
+            USE ydb;
             CREATE TABLE tbl (
                 k Uint64,
                 v Utf8 NOT NULL FAMILY family_large,
@@ -1382,7 +1382,7 @@ Y_UNIT_TEST(CreateTableFamilyAndNotNullReversed) {
 Y_UNIT_TEST(CreateTableNotNullInsideDefault) {
     {
         NYql::TAstParseResult req = SqlToYql(R"sql(
-                USE plato;
+                USE ydb;
                 CREATE TABLE tbl (
                     k Uint64,
                     v Bool DEFAULT false NOT NULL,
@@ -1396,7 +1396,7 @@ Y_UNIT_TEST(CreateTableNotNullInsideDefault) {
 
     {
         NYql::TAstParseResult req = SqlToYql(R"sql(
-                USE plato;
+                USE ydb;
                 CREATE TABLE tbl (
                     k Uint64,
                     v Bool DEFAULT (false + true NOT NULL),
@@ -1410,7 +1410,7 @@ Y_UNIT_TEST(CreateTableNotNullInsideDefault) {
 
     {
         NYql::TAstParseResult req = SqlToYql(R"sql(
-                USE plato;
+                USE ydb;
                 CREATE TABLE tbl (
                     k Uint64,
                     v Bool DEFAULT (NULL NOT NULL),
@@ -1425,7 +1425,7 @@ Y_UNIT_TEST(CreateTableNotNullInsideDefault) {
 
 Y_UNIT_TEST(CreateTableDefaultAndNotNullInOrderWithComma) {
     NYql::TAstParseResult defaultBeforeConstraint = SqlToYql(R"sql(
-            USE plato;
+            USE ydb;
             CREATE TABLE tbl (
                 k Uint64,
                 v Bool (DEFAULT false, NOT NULL),
@@ -1449,7 +1449,7 @@ Y_UNIT_TEST(CreateTableDefaultAndNotNullInOrderWithComma) {
 
 Y_UNIT_TEST(CreateTableDefaultAndNotNullReversed) {
     NYql::TAstParseResult defaultAfterConstraint = SqlToYql(R"sql(
-            USE plato;
+            USE ydb;
             CREATE TABLE tbl (
                 k Uint64,
                 v Uint64 NOT NULL DEFAULT 0,
@@ -1542,7 +1542,7 @@ Y_UNIT_TEST(CreateTableNullablePgTypeAstCorrect) {
 }
 
 Y_UNIT_TEST(CreateTableNullPkColumnsAreAllowed) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32, primary key(a));");
+    NYql::TAstParseResult res = SqlToYql("USE ydb; CREATE TABLE t (a int32, primary key(a));");
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -1559,7 +1559,7 @@ Y_UNIT_TEST(CreateTableNullPkColumnsAreAllowed) {
 }
 
 Y_UNIT_TEST(CreateTableNotNullPkColumnsAreIdempotentAstCorrect) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32 not null, primary key(a));");
+    NYql::TAstParseResult res = SqlToYql("USE ydb; CREATE TABLE t (a int32 not null, primary key(a));");
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -1576,7 +1576,7 @@ Y_UNIT_TEST(CreateTableNotNullPkColumnsAreIdempotentAstCorrect) {
 }
 
 Y_UNIT_TEST(CreateTableWithIfNotExists) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE IF NOT EXISTS t (a int32, primary key(a));");
+    NYql::TAstParseResult res = SqlToYql("USE ydb; CREATE TABLE IF NOT EXISTS t (a int32, primary key(a));");
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -1593,7 +1593,7 @@ Y_UNIT_TEST(CreateTableWithIfNotExists) {
 }
 
 Y_UNIT_TEST(CreateTempTable) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TEMP TABLE t (a int32, primary key(a));");
+    NYql::TAstParseResult res = SqlToYql("USE ydb; CREATE TEMP TABLE t (a int32, primary key(a));");
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -1610,7 +1610,7 @@ Y_UNIT_TEST(CreateTempTable) {
 }
 
 Y_UNIT_TEST(CreateTemporaryTable) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TEMPORARY TABLE t (a int32, primary key(a));");
+    NYql::TAstParseResult res = SqlToYql("USE ydb; CREATE TEMPORARY TABLE t (a int32, primary key(a));");
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -1627,17 +1627,32 @@ Y_UNIT_TEST(CreateTemporaryTable) {
 }
 
 Y_UNIT_TEST(CreateTableWithoutTypes) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a, primary key(a));");
+    NYql::TAstParseResult res = SqlToYql("USE ydb; CREATE TABLE t (a, primary key(a));");
     UNIT_ASSERT(!res.Root);
 }
 
 Y_UNIT_TEST(CreateTableAsSelectWithTypes) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32, primary key(a)) AS SELECT * FROM ts;");
+    NYql::TAstParseResult res = SqlToYql("USE ydb; CREATE TABLE t (a int32, primary key(a)) AS SELECT * FROM ts;");
     UNIT_ASSERT(!res.Root);
 }
 
+Y_UNIT_TEST(CreateTableWithOrderBy) {
+    const auto res = SqlToYql("USE plato; CREATE TABLE t (a text, b bytes, order by(b asc, a desc));");
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    const TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__('('orderby '('('"b" '0) '('"a" '1))))__"));
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write!"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
 Y_UNIT_TEST(CreateTableAsSelect) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a, b, primary key(a)) AS SELECT * FROM ts;");
+    NYql::TAstParseResult res = SqlToYql("USE ydb; CREATE TABLE t (a, b, primary key(a)) AS SELECT * FROM ts;");
     UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -1647,7 +1662,7 @@ Y_UNIT_TEST(CreateTableAsSelect) {
         }
         if (word == "Read!") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                       line.find(R"__((Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"ts")))))__"));
+                                       line.find(R"__((Read! world (DataSource '"ydb" '"ydb") (Key '('table (String '"ts"))) (Void) '()))__"));
         }
     };
 
@@ -1659,7 +1674,7 @@ Y_UNIT_TEST(CreateTableAsSelect) {
 }
 
 Y_UNIT_TEST(CreateTableAsSelectOnlyPrimary) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (primary key(a)) AS SELECT * FROM ts;");
+    NYql::TAstParseResult res = SqlToYql("USE ydb; CREATE TABLE t (primary key(a)) AS SELECT * FROM ts;");
     UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -1669,7 +1684,7 @@ Y_UNIT_TEST(CreateTableAsSelectOnlyPrimary) {
         }
         if (word == "Read!") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                       line.find(R"__((Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"ts")))))__"));
+                                       line.find(R"__((Read! world (DataSource '"ydb" '"ydb") (Key '('table (String '"ts"))))__"));
         }
     };
 
@@ -2779,7 +2794,8 @@ Y_UNIT_TEST(JoinByUdf) {
                "from T1 as a\n"
                "join T2 as b\n"
                "on Yson::SerializeJsonEncodeUtf8(a.align)=b.align;";
-    UNIT_ASSERT(SqlToYql(req).IsOk());
+    auto res = SqlToYql(req);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
 
 Y_UNIT_TEST(EscapedIdentifierAsLambdaArg) {
@@ -2858,7 +2874,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOptional) {
 
 Y_UNIT_TEST(CompactionPolicyParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
-        R"( USE plato;
+        R"( USE ydb;
                 CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
                 WITH ( COMPACTION_POLICY = "SomeCompactionPreset" );)");
     UNIT_ASSERT(res.Root);
@@ -2878,7 +2894,7 @@ Y_UNIT_TEST(CompactionPolicyParseCorrect) {
 
 Y_UNIT_TEST(AutoPartitioningBySizeParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
-        R"( USE plato;
+        R"( USE ydb;
                 CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
                 WITH ( AUTO_PARTITIONING_BY_SIZE = ENABLED );)");
     UNIT_ASSERT(res.Root);
@@ -2898,7 +2914,7 @@ Y_UNIT_TEST(AutoPartitioningBySizeParseCorrect) {
 
 Y_UNIT_TEST(UniformPartitionsParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
-        R"( USE plato;
+        R"( USE ydb;
                 CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
                 WITH ( UNIFORM_PARTITIONS = 16 );)");
     UNIT_ASSERT(res.Root);
@@ -2918,7 +2934,7 @@ Y_UNIT_TEST(UniformPartitionsParseCorrect) {
 
 Y_UNIT_TEST(DateTimeTtlParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
-        R"( USE plato;
+        R"( USE ydb;
                 CREATE TABLE tableName (Key Uint32, CreatedAt Timestamp, PRIMARY KEY (Key))
                 WITH (TTL = Interval("P1D") On CreatedAt);)");
     UNIT_ASSERT(res.Root);
@@ -2940,7 +2956,7 @@ Y_UNIT_TEST(DateTimeTtlParseCorrect) {
 
 Y_UNIT_TEST(IntTtlParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
-        R"( USE plato;
+        R"( USE ydb;
                 CREATE TABLE tableName (Key Uint32, CreatedAt Uint32, PRIMARY KEY (Key))
                 WITH (TTL = Interval("P1D") On CreatedAt AS SECONDS);)");
     UNIT_ASSERT(res.Root);
@@ -2964,7 +2980,7 @@ Y_UNIT_TEST(IntTtlParseCorrect) {
 
 Y_UNIT_TEST(TtlTieringParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
-        R"( USE plato;
+        R"( USE ydb;
                 CREATE TABLE tableName (Key Uint32, CreatedAt Uint32, PRIMARY KEY (Key))
                 WITH (TTL =
                         Interval("P1D") TO EXTERNAL DATA SOURCE Tier1,
@@ -3036,7 +3052,7 @@ Y_UNIT_TEST(TtlTieringWithOtherActionsParseCorrect) {
 
 Y_UNIT_TEST(TieringParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
-        R"( USE plato;
+        R"( USE ydb;
                 CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
                 WITH ( TIERING = 'my_tiering' );)");
     UNIT_ASSERT(res.Root);
@@ -3056,7 +3072,7 @@ Y_UNIT_TEST(TieringParseCorrect) {
 
 Y_UNIT_TEST(StoreExternalBlobsParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
-        R"( USE plato;
+        R"( USE ydb;
                 CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
                 WITH ( STORE_EXTERNAL_BLOBS = ENABLED );)");
     UNIT_ASSERT(res.Root);
@@ -3076,7 +3092,7 @@ Y_UNIT_TEST(StoreExternalBlobsParseCorrect) {
 
 Y_UNIT_TEST(ExternalDataChannelsCountParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
-        R"( USE plato;
+        R"( USE ydb;
                 CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
                 WITH ( EXTERNAL_DATA_CHANNELS_COUNT = 7 );)");
     UNIT_ASSERT(res.Root);
@@ -3095,7 +3111,7 @@ Y_UNIT_TEST(ExternalDataChannelsCountParseCorrect) {
 }
 
 Y_UNIT_TEST(DefaultValueColumn2) {
-    auto res = SqlToYql(R"( use plato;
+    auto res = SqlToYql(R"( use ydb;
             $lambda = () -> {
                 RETURN CAST(RandomUuid(2) as String)
             };
@@ -3128,7 +3144,7 @@ Y_UNIT_TEST(DefaultValueColumn2) {
 }
 
 Y_UNIT_TEST(DefaultValueColumn3) {
-    auto res = SqlToYql(R"( use plato;
+    auto res = SqlToYql(R"( use ydb;
 
             CREATE TABLE tableName (
                 database_id Utf8,
@@ -3143,7 +3159,7 @@ Y_UNIT_TEST(DefaultValueColumn3) {
 }
 
 Y_UNIT_TEST(DefaultValueColumn) {
-    auto res = SqlToYql(R"( use plato;
+    auto res = SqlToYql(R"( use ydb;
             CREATE TABLE tableName (
                 Key Uint32 FAMILY cold DEFAULT 5,
                 Value String FAMILY default DEFAULT "empty",
@@ -3181,7 +3197,7 @@ Y_UNIT_TEST(DefaultValueColumn) {
 }
 
 Y_UNIT_TEST(ChangefeedParseCorrect) {
-    auto res = SqlToYql(R"( USE plato;
+    auto res = SqlToYql(R"( USE ydb;
             CREATE TABLE tableName (
                 Key Uint32, PRIMARY KEY (Key),
                 CHANGEFEED feedName WITH (
@@ -3442,62 +3458,62 @@ Y_UNIT_TEST(SmartParenInGroupByClause) {
 }
 
 Y_UNIT_TEST(AlterTableRenameToIsCorrect) {
-    UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table RENAME TO moved").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table RENAME TO moved").IsOk());
 }
 
 Y_UNIT_TEST(AlterTableAddDropColumnIsCorrect) {
-    UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table ADD COLUMN addc uint64, DROP COLUMN dropc, ADD addagain uint64").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table ADD COLUMN addc uint64, DROP COLUMN dropc, ADD addagain uint64").IsOk());
 }
 
 Y_UNIT_TEST(AlterTableSetTTLIsCorrect) {
-    UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (TTL = Interval(\"PT3H\") ON column)").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (TTL = Interval(\"PT3H\") ON column AS SECONDS)").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table SET (TTL = Interval(\"PT3H\") ON column)").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table SET (TTL = Interval(\"PT3H\") ON column AS SECONDS)").IsOk());
 }
 
 Y_UNIT_TEST(AlterTableSetTieringIsCorrect) {
-    UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (TIERING = 'my_tiering')").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table SET (TIERING = 'my_tiering')").IsOk());
 }
 
 Y_UNIT_TEST(AlterTableAddChangefeedIsCorrect) {
-    UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'json')").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'json')").IsOk());
 }
 
 Y_UNIT_TEST(AlterTableAlterChangefeedIsCorrect) {
-    UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table ALTER CHANGEFEED feed DISABLE").IsOk());
-    ExpectFailWithError("USE plato; ALTER TABLE table ALTER CHANGEFEED feed SET (FORMAT = 'proto');",
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table ALTER CHANGEFEED feed DISABLE").IsOk());
+    ExpectFailWithError("USE ydb;   ALTER TABLE table ALTER CHANGEFEED feed SET (FORMAT = 'proto');",
                         "<main>:1:57: Error: FORMAT alter is not supported\n");
 }
 
 Y_UNIT_TEST(AlterTableDropChangefeedIsCorrect) {
-    UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table DROP CHANGEFEED feed").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table DROP CHANGEFEED feed").IsOk());
 }
 
 Y_UNIT_TEST(AlterTableSetPartitioningIsCorrect) {
-    UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (AUTO_PARTITIONING_BY_SIZE = DISABLED)").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table SET (AUTO_PARTITIONING_BY_SIZE = DISABLED)").IsOk());
 }
 
 Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
 #if ANTLR_VER == 3
-    ExpectFailWithFuzzyError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)",
+    ExpectFailWithFuzzyError("USE ydb;   ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)",
                              "<main>:1:40: Error: with: alternative is not implemented yet: \\d+:\\d+: global_index\\n");
 #else
-    ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)",
+    ExpectFailWithError("USE ydb;   ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)",
                         "<main>:1:40: Error: with: alternative is not implemented yet: \n");
 #endif
 }
 
 Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
 #if ANTLR_VER == 3
-    ExpectFailWithFuzzyError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
+    ExpectFailWithFuzzyError("USE ydb;   ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
                              "<main>:1:40: Error: local: alternative is not implemented yet: \\d+:\\d+: local_index\\n");
 #else
-    ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
+    ExpectFailWithError("USE ydb;   ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
                         "<main>:1:40: Error: local: alternative is not implemented yet: \n");
 #endif
 }
 
 Y_UNIT_TEST(CreateTableAddIndexGlobalUnique) {
-    NYql::TAstParseResult result = SqlToYql(R"sql(USE plato;
+    NYql::TAstParseResult result = SqlToYql(R"sql(USE ydb;
             CREATE TABLE table (
                 pk INT32 NOT NULL,
                 col String,
@@ -3518,7 +3534,7 @@ Y_UNIT_TEST(CreateTableAddIndexGlobalUnique) {
 }
 
 Y_UNIT_TEST(CreateTableAddIndexGlobalUniqueSync) {
-    NYql::TAstParseResult result = SqlToYql(R"sql(USE plato;
+    NYql::TAstParseResult result = SqlToYql(R"sql(USE ydb;
             CREATE TABLE table (
                 pk INT32 NOT NULL,
                 col String,
@@ -3540,7 +3556,7 @@ Y_UNIT_TEST(CreateTableAddIndexGlobalUniqueSync) {
 
 Y_UNIT_TEST(CreateTableAddIndexGlobalUniqueAsync) {
 #if ANTLR_VER == 3
-    ExpectFailWithFuzzyError(R"sql(USE plato;
+    ExpectFailWithFuzzyError(R"sql(USE ydb;
             CREATE TABLE table (
                 pk INT32 NOT NULL,
                 col String,
@@ -3549,7 +3565,7 @@ Y_UNIT_TEST(CreateTableAddIndexGlobalUniqueAsync) {
                 )sql",
                              "<main>:5:41: Error: unique: alternative is not implemented yet: \\d+:\\d+: global_index\\n");
 #else
-    ExpectFailWithError(R"sql(USE plato;
+    ExpectFailWithError(R"sql(USE ydb;
             CREATE TABLE table (
                 pk INT32 NOT NULL,
                 col String,
@@ -3561,7 +3577,7 @@ Y_UNIT_TEST(CreateTableAddIndexGlobalUniqueAsync) {
 }
 
 Y_UNIT_TEST(AlterTableAddIndexGlobalUnique) {
-    NYql::TAstParseResult result = SqlToYql(R"sql(USE plato;
+    NYql::TAstParseResult result = SqlToYql(R"sql(USE ydb;
             ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE ON(col))sql");
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
     UNIT_ASSERT(result.Root);
@@ -3577,7 +3593,7 @@ Y_UNIT_TEST(AlterTableAddIndexGlobalUnique) {
 }
 
 Y_UNIT_TEST(AlterTableAddIndexGlobalUniqueSync) {
-    NYql::TAstParseResult result = SqlToYql(R"sql(USE plato;
+    NYql::TAstParseResult result = SqlToYql(R"sql(USE ydb;
             ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE SYNC ON(col))sql");
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
     UNIT_ASSERT(result.Root);
@@ -3594,18 +3610,18 @@ Y_UNIT_TEST(AlterTableAddIndexGlobalUniqueSync) {
 
 Y_UNIT_TEST(AlterTableAddIndexGlobalUniqueAsync) {
 #if ANTLR_VER == 3
-    ExpectFailWithFuzzyError(R"sql(USE plato;
+    ExpectFailWithFuzzyError(R"sql(USE ydb;
             ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE ASYNC ON(col))sql",
                              "<main>:2:59: Error: unique: alternative is not implemented yet: \\d+:\\d+: global_index\\n");
 #else
-    ExpectFailWithError(R"sql(USE plato;
+    ExpectFailWithError(R"sql(USE ydb;
             ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE ASYNC ON(col))sql",
                         "<main>:2:59: Error: unique: alternative is not implemented yet: \n");
 #endif
 }
 
 Y_UNIT_TEST(CreateTableAddIndexVector) {
-    const auto result = SqlToYql(R"sql(USE plato;
+    const auto result = SqlToYql(R"sql(USE ydb;
             CREATE TABLE table (
                 pk INT32 NOT NULL,
                 col String,
@@ -3618,7 +3634,7 @@ Y_UNIT_TEST(CreateTableAddIndexVector) {
 }
 
 Y_UNIT_TEST(AlterTableAddIndexVector) {
-    const auto result = SqlToYql(R"sql(USE plato;
+    const auto result = SqlToYql(R"sql(USE ydb;
             ALTER TABLE table ADD INDEX idx
                 GLOBAL USING vector_kmeans_tree
                 ON (col) COVER (col)
@@ -3629,7 +3645,7 @@ Y_UNIT_TEST(AlterTableAddIndexVector) {
 
 Y_UNIT_TEST(AlterTableAddIndexDifferentSettings) {
     // index settings and their types are checked in KQP
-    const auto result = SqlToYql(R"sql(USE plato;
+    const auto result = SqlToYql(R"sql(USE ydb;
             ALTER TABLE table ADD INDEX idx
                 GLOBAL USING vector_kmeans_tree
                 ON (col) COVER (col)
@@ -3649,44 +3665,44 @@ Y_UNIT_TEST(AlterTableAddIndexDuplicatedSetting) {
 }
 
 Y_UNIT_TEST(AlterTableAddIndexUnknownSubtype) {
-    ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL USING unknown ON (col)",
+    ExpectFailWithError("USE ydb;   ALTER TABLE table ADD INDEX idx GLOBAL USING unknown ON (col)",
                         "<main>:1:57: Error: UNKNOWN index subtype is not supported\n");
 }
 
 Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {
-    const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 10");
+    const auto result = SqlToYql("USE ydb;   ALTER TABLE table ALTER INDEX index SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 10");
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
 Y_UNIT_TEST(AlterTableAlterIndexSetMultiplePartitioningSettings) {
-    const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET "
+    const auto result = SqlToYql("USE ydb;   ALTER TABLE table ALTER INDEX index SET "
                                  "(AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10)");
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
 Y_UNIT_TEST(AlterTableAlterIndexResetPartitioningIsNotSupported) {
-    ExpectFailWithError("USE plato; ALTER TABLE table ALTER INDEX index RESET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT)",
+    ExpectFailWithError("USE ydb;   ALTER TABLE table ALTER INDEX index RESET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT)",
                         "<main>:1:55: Error: AUTO_PARTITIONING_MIN_PARTITIONS_COUNT reset is not supported\n");
 }
 
 Y_UNIT_TEST(AlterTableAlterIndexSetReadReplicasSettingsUncompatIsCorrect) {
-    const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET READ_REPLICAS_SETTINGS \"PER_AZ:1\"");
+    const auto result = SqlToYql("USE ydb;   ALTER TABLE table ALTER INDEX index SET READ_REPLICAS_SETTINGS \"PER_AZ:1\"");
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
 Y_UNIT_TEST(AlterTableAlterIndexSetReadReplicasSettingsCompatIsCorrect) {
-    const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\")");
+    const auto result = SqlToYql("USE ydb;   ALTER TABLE table ALTER INDEX index SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\")");
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
 Y_UNIT_TEST(AlterTableAlterIndexResetReadReplicasSettingsIsNotSupported) {
-    ExpectFailWithError("USE plato; ALTER TABLE table ALTER INDEX index RESET (READ_REPLICAS_SETTINGS)",
+    ExpectFailWithError("USE ydb;   ALTER TABLE table ALTER INDEX index RESET (READ_REPLICAS_SETTINGS)",
                         "<main>:1:55: Error: READ_REPLICAS_SETTINGS reset is not supported\n");
 }
 
 Y_UNIT_TEST(AlterTableAlterColumnDropNotNullAstCorrect) {
     auto reqDropNotNull = SqlToYql(R"sql(
-            USE plato;
+            USE ydb;
             CREATE TABLE tableName (
                 id Uint32,
                 val Uint32 NOT NULL,
@@ -3713,7 +3729,7 @@ Y_UNIT_TEST(AlterTableAlterColumnDropNotNullAstCorrect) {
 
 Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
     auto reqSetNotNull = SqlToYql(R"sql(
-            USE plato;
+            USE ydb;
             CREATE TABLE tableName (
                 id Uint32,
                 val Uint32,
@@ -3740,12 +3756,12 @@ Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
 
 Y_UNIT_TEST(AlterSequence) {
     UNIT_ASSERT(SqlToYql(R"(
-            USE plato;
+            USE ydb;
             ALTER SEQUENCE sequence START WITH 10 INCREMENT 2 RESTART WITH 5;
         )")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"(
-            USE plato;
+            USE ydb;
             ALTER SEQUENCE sequence INCREMENT 2;
         )")
                     .IsOk());
@@ -3755,17 +3771,17 @@ Y_UNIT_TEST(AlterSequence) {
         )")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"(
-            USE plato;
+            USE ydb;
             ALTER SEQUENCE sequence RESTART START 1000;
         )")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"(
-            USE plato;
+            USE ydb;
             ALTER SEQUENCE IF EXISTS sequence INCREMENT 1000 START 100 RESTART;
         )")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"(
-            USE plato;
+            USE ydb;
             ALTER SEQUENCE IF EXISTS sequence RESTART 1000 START WITH 100 INCREMENT BY 7;
         )")
                     .IsOk());
@@ -3773,57 +3789,57 @@ Y_UNIT_TEST(AlterSequence) {
 
 Y_UNIT_TEST(AlterSequenceIncorrect) {
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence START WITH 10 INCREMENT 2 RESTART WITH 5 RESTART;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE sequence START WITH 10 INCREMENT 2 RESTART WITH 5 RESTART;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:75: Error: Restart value defined more than once\n");
     }
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence START WITH 10 INCREMENT 2 START 100 RESTART WITH 5;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE sequence START WITH 10 INCREMENT 2 START 100 RESTART WITH 5;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:60: Error: Start value defined more than once\n");
     }
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence INCREMENT BY 7 START WITH 10 INCREMENT 2 RESTART WITH 5 RESTART;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE sequence INCREMENT BY 7 START WITH 10 INCREMENT 2 RESTART WITH 5 RESTART;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:62: Error: Increment defined more than once\n");
     }
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 100 START WITH 10 INCREMENT 2 RESTART WITH 5;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE sequence RESTART WITH 100 START WITH 10 INCREMENT 2 RESTART WITH 5;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:77: Error: Restart value defined more than once\n");
     }
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 1234234543563435151456 START WITH 10 INCREMENT 2;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE sequence RESTART WITH 1234234543563435151456 START WITH 10 INCREMENT 2;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:49: Error: Failed to parse number from string: 1234234543563435151456, number limit overflow\n");
     }
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 1 START WITH 9223372036854775817 INCREMENT 4;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE sequence RESTART WITH 1 START WITH 9223372036854775817 INCREMENT 4;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Start value: 9223372036854775817 cannot be greater than max value: 9223372036854775807\n");
     }
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 9223372036854775827 START WITH 5 INCREMENT 4;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE sequence RESTART WITH 9223372036854775827 START WITH 5 INCREMENT 4;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Restart value: 9223372036854775827 cannot be greater than max value: 9223372036854775807\n");
     }
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 1 START WITH 4 INCREMENT 0;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE sequence RESTART WITH 1 START WITH 4 INCREMENT 0;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Increment must not be zero\n");
     }
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 0 START WITH 4 INCREMENT 1;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE sequence RESTART WITH 0 START WITH 4 INCREMENT 1;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Restart value: 0 cannot be less than min value: 1\n");
     }
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 1 START WITH 0 INCREMENT 1;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE sequence RESTART WITH 1 START WITH 0 INCREMENT 1;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Start value: 0 cannot be less than min value: 1\n");
     }
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence RESTART WITH 1 START WITH 1 INCREMENT 9223372036854775837;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE sequence RESTART WITH 1 START WITH 1 INCREMENT 9223372036854775837;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Increment: 9223372036854775837 cannot be greater than max value: 9223372036854775807\n");
     }
@@ -3831,7 +3847,7 @@ Y_UNIT_TEST(AlterSequenceIncorrect) {
 
 Y_UNIT_TEST(AlterSequenceCorrect) {
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE sequence START WITH 10 INCREMENT 2 RESTART WITH 5;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE sequence START WITH 10 INCREMENT 2 RESTART WITH 5;");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -3852,7 +3868,7 @@ Y_UNIT_TEST(AlterSequenceCorrect) {
     }
 
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE IF EXISTS sequence INCREMENT 2 RESTART;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE IF EXISTS sequence INCREMENT 2 RESTART;");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -3871,7 +3887,7 @@ Y_UNIT_TEST(AlterSequenceCorrect) {
     }
 
     {
-        NYql::TAstParseResult res = SqlToYql("USE plato; ALTER SEQUENCE IF EXISTS sequence START 10 INCREMENT BY 2;");
+        NYql::TAstParseResult res = SqlToYql("USE ydb;   ALTER SEQUENCE IF EXISTS sequence START 10 INCREMENT BY 2;");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -3992,37 +4008,74 @@ Y_UNIT_TEST(AllowGroupByWithParens) {
     UNIT_ASSERT(elementStat["Aggregate"] == 1);
 }
 
-Y_UNIT_TEST(CreateAsyncReplicationParseCorrect) {
-    auto req = R"(
-            USE plato;
-            CREATE ASYNC REPLICATION MyReplication
-            FOR table1 AS table2, table3 AS table4
-            WITH (
-                CONNECTION_STRING = "grpc://localhost:2135/?database=/MyDatabase",
-                ENDPOINT = "localhost:2135",
-                DATABASE = "/MyDatabase",
-                CA_CERT = "-----BEGIN CERTIFICATE-----"
-            );
-        )";
-    auto res = SqlToYql(req);
+Y_UNIT_TEST(CreateAsyncReplicationParseGeneralCorrect) {
+    const auto req = R"sql(
+        USE plato;
+        CREATE ASYNC REPLICATION MyReplication
+        FOR table1 AS table2, table3 AS table4
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/MyDatabase",
+            ENDPOINT = "localhost:2135",
+            DATABASE = "/MyDatabase",
+            CA_CERT = "-----BEGIN CERTIFICATE-----",
+            TOKEN_SECRET_NAME = "token_secret_name",
+            PASSWORD_SECRET_PATH = "password_secret_path",
+            INITIAL_TOKEN_SECRET_PATH = "initial_token_secret_path"
+        );
+    )sql";
+    const auto res = SqlToYql(req);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "MyReplication");
+            UNIT_ASSERT_STRING_CONTAINS(line, "create");
+            UNIT_ASSERT_STRING_CONTAINS(line, "table1");
+            UNIT_ASSERT_STRING_CONTAINS(line, "table2");
+            UNIT_ASSERT_STRING_CONTAINS(line, "table3");
+            UNIT_ASSERT_STRING_CONTAINS(line, "table4");
+            UNIT_ASSERT_STRING_CONTAINS(line, "connection_string");
+            UNIT_ASSERT_STRING_CONTAINS(line, "grpc://localhost:2135/?database=/MyDatabase");
+            UNIT_ASSERT_STRING_CONTAINS(line, "endpoint");
+            UNIT_ASSERT_STRING_CONTAINS(line, "localhost:2135");
+            UNIT_ASSERT_STRING_CONTAINS(line, "database");
+            UNIT_ASSERT_STRING_CONTAINS(line, "/MyDatabase");
+            UNIT_ASSERT_STRING_CONTAINS(line, "ca_cert");
+            UNIT_ASSERT_STRING_CONTAINS(line, "-----BEGIN CERTIFICATE-----");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"token_secret_name");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"password_secret_path");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"initial_token_secret_path");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationParseSecretPathsCorrect) {
+    const auto req = R"sql(
+        USE plato; PRAGMA TablePathPrefix = "/PathPrefix";
+        CREATE ASYNC REPLICATION MyReplication
+        FOR table AS table
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/MyDatabase",
+            ENDPOINT = "localhost:2135",
+            DATABASE = "/MyDatabase",
+            TOKEN_SECRET_PATH = "/token_secret_path",
+            PASSWORD_SECRET_NAME = "password_secret_name",
+            INITIAL_TOKEN_SECRET_PATH = "initial_token_secret_path"
+        );
+    )sql";
+    const auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("create"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table1"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table2"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table3"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table4"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("connection_string"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("grpc://localhost:2135/?database=/MyDatabase"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("endpoint"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("localhost:2135"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("database"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/MyDatabase"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ca_cert"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("-----BEGIN CERTIFICATE-----"));
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"/token_secret_path");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"password_secret_name");
+            UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/initial_token_secret_path");
         }
     };
 
@@ -4033,25 +4086,54 @@ Y_UNIT_TEST(CreateAsyncReplicationParseCorrect) {
 }
 
 Y_UNIT_TEST(CreateAsyncReplicationUnsupportedSettings) {
-    auto reqTpl = R"(
-            USE plato;
-            CREATE ASYNC REPLICATION MyReplication
-            FOR table1 AS table2, table3 AS table4
-            WITH (
-                %s = "%s"
-            )
-        )";
-
-    auto settings = THashMap<TString, TString>{
+    const auto settings = THashMap<TString, TString>{
         {"STATE", "DONE"},
         {"FAILOVER_MODE", "FORCE"},
     };
 
     for (const auto& [k, v] : settings) {
-        auto req = Sprintf(reqTpl, k.c_str(), v.c_str());
-        auto res = SqlToYql(req);
+        const auto res = SqlToYql(std::format(
+            R"sql(
+                USE plato;
+                CREATE ASYNC REPLICATION MyReplication
+                FOR table1 AS table2, table3 AS table4
+                WITH (
+                    {} = "{}"
+                )
+            )sql",
+            k.c_str(),
+            v.c_str()));
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), Sprintf("<main>:6:%zu: Error: %s is not supported in CREATE\n", 20 + k.size(), k.c_str()));
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), std::format("<main>:6:{}: Error: {} is not supported in CREATE\n", 24 + k.size(), k.c_str()));
+    }
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationMutuallyExclusiveSettings) {
+    static const TVector<std::pair<TString, TString>> MutuallyExclusiveSettings = {
+        {"TOKEN_SECRET_NAME", "TOKEN_SECRET_PATH"},
+        {"PASSWORD_SECRET_NAME", "PASSWORD_SECRET_PATH"},
+        {"INITIAL_TOKEN_SECRET_NAME", "INITIAL_TOKEN_SECRET_PATH"},
+    };
+
+    for (const auto& [name, path] : MutuallyExclusiveSettings) {
+        const auto res = SqlToYql(std::format(
+            R"sql(
+                USE plato;
+                CREATE ASYNC REPLICATION MyReplication
+                FOR table1 AS table2, table3 AS table4
+                WITH (
+                    {} = "",
+                    {} = ""
+                )
+            )sql",
+            name.c_str(),
+            path.c_str()));
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(
+            Err2Str(res),
+            std::format(
+                "<main>:7:{}: Error: {} and {} are mutually exclusive\n",
+                24 + name.size(), name.c_str(), path.c_str()));
     }
 }
 
@@ -4070,26 +4152,80 @@ Y_UNIT_TEST(AsyncReplicationInvalidCommitInterval) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:35: Error: Literal of Interval type is expected for COMMIT_INTERVAL\n");
 }
 
-Y_UNIT_TEST(AlterAsyncReplicationParseCorrect) {
-    auto req = R"(
-            USE plato;
-            ALTER ASYNC REPLICATION MyReplication
-            SET (
-                STATE = "DONE",
-                FAILOVER_MODE = "FORCE"
-            );
-        )";
+Y_UNIT_TEST(AlterAsyncReplicationGeneralParsingCorrect) {
+    auto req = R"sql(
+        USE plato;
+        ALTER ASYNC REPLICATION MyReplication
+        SET (
+            STATE = "DONE",
+            FAILOVER_MODE = "FORCE"
+        );
+    )sql";
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alter"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("state"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("DONE"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("failover_mode"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("FORCE"));
+            UNIT_ASSERT_STRING_CONTAINS(line, "MyReplication");
+            UNIT_ASSERT_STRING_CONTAINS(line, "alter");
+            UNIT_ASSERT_STRING_CONTAINS(line, "state");
+            UNIT_ASSERT_STRING_CONTAINS(line, "DONE");
+            UNIT_ASSERT_STRING_CONTAINS(line, "failover_mode");
+            UNIT_ASSERT_STRING_CONTAINS(line, "FORCE");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationSecretsWithoutTablePathPrefixParsingCorrect) {
+    auto req = R"sql(
+        USE plato;
+        ALTER ASYNC REPLICATION MyReplication
+        SET (
+            TOKEN_SECRET_NAME = "foo_secret",
+            PASSWORD_SECRET_PATH = "bar_secret",
+            INITIAL_TOKEN_SECRET_PATH = "/baz_secret"
+        );
+    )sql";
+    auto res = SqlToYql(req);
+    UNIT_ASSERT(res.Root);
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"foo_secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"bar_secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"/baz_secret");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationSecretsWithTablePathPrefixParsingCorrect) {
+    auto req = R"sql(
+        USE plato; PRAGMA TablePathPrefix = "/PathPrefix";
+        ALTER ASYNC REPLICATION MyReplication
+            SET(
+                TOKEN_SECRET_NAME = "foo_secret",
+                PASSWORD_SECRET_PATH = "bar_secret",
+                INITIAL_TOKEN_SECRET_PATH = "/baz_secret"
+            );
+    )sql";
+    auto res = SqlToYql(req);
+    UNIT_ASSERT(res.Root);
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"foo_secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/bar_secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"/baz_secret");
         }
     };
 
@@ -4100,15 +4236,7 @@ Y_UNIT_TEST(AlterAsyncReplicationParseCorrect) {
 }
 
 Y_UNIT_TEST(AlterAsyncReplicationSettings) {
-    auto reqTpl = R"(
-            USE plato;
-            ALTER ASYNC REPLICATION MyReplication
-            SET (
-                %s = "%s"
-            )
-        )";
-
-    auto settings = THashMap<TString, TString>{
+    const auto settings = THashMap<TString, TString>{
         {"connection_string", "grpc://localhost:2135/?database=/MyDatabase"},
         {"endpoint", "localhost:2135"},
         {"database", "/MyDatabase"},
@@ -4117,12 +4245,21 @@ Y_UNIT_TEST(AlterAsyncReplicationSettings) {
         {"user", "user"},
         {"password", "bar"},
         {"password_secret_name", "bar_secret_name"},
+        {"initial_token_secret_path", "baz_secret_path"},
         {"ca_cert", "-----BEGIN CERTIFICATE-----"},
     };
 
     for (const auto& [k, v] : settings) {
-        auto req = Sprintf(reqTpl, k.c_str(), v.c_str());
-        auto res = SqlToYql(req);
+        const auto res = SqlToYql(std::format(
+            R"sql(
+                USE plato;
+                ALTER ASYNC REPLICATION MyReplication
+                SET (
+                    {} = "{}"
+                )
+            )sql",
+            k.c_str(),
+            v.c_str()));
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [&k, &v](const TString& word, const TString& line) {
@@ -4159,6 +4296,33 @@ Y_UNIT_TEST(AlterAsyncReplicationUnsupportedSettings) {
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:87: Error: COMMIT_INTERVAL is not supported in ALTER\n");
+    }
+    {
+        static const TVector<std::pair<TString, TString>> MutuallyExclusiveSettings = {
+            {"TOKEN_SECRET_NAME", "TOKEN_SECRET_PATH"},
+            {"PASSWORD_SECRET_NAME", "PASSWORD_SECRET_PATH"},
+            {"INITIAL_TOKEN_SECRET_NAME", "INITIAL_TOKEN_SECRET_PATH"},
+        };
+
+        for (const auto& [name, path] : MutuallyExclusiveSettings) {
+            const auto res = SqlToYql(std::format(
+                R"sql(
+                    USE plato;
+                    ALTER ASYNC REPLICATION MyReplication
+                    SET (
+                        {} = "",
+                        {} = ""
+                    )
+                )sql",
+                name.c_str(),
+                path.c_str()));
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(
+                Err2Str(res),
+                std::format(
+                    "<main>:6:{}: Error: {} and {} are mutually exclusive\n",
+                    28 + name.size(), name.c_str(), path.c_str()));
+        }
     }
 }
 
@@ -4263,8 +4427,8 @@ Y_UNIT_TEST(LinearAsColumnOrType) {
 }
 
 Y_UNIT_TEST(CreateTableTrailingComma) {
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);").IsOk());
-    UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32,);").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; CREATE TABLE tableName (Key Uint32,);").IsOk());
 }
 
 Y_UNIT_TEST(BetweenSymmetric) {
@@ -4445,11 +4609,11 @@ Y_UNIT_TEST(CreateSecretIncorrect) {
 
 Y_UNIT_TEST(AlterSecret) {
     UNIT_ASSERT(SqlToYql(R"sql(
-            USE plato; ALTER SECRET `secret-name` WITH (value = "secret-value");
+            USE ydb;   ALTER SECRET `secret-name` WITH (value = "secret-value");
         )sql")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"sql(
-            USE plato; ALTER SECRET `secret-name` WITH (value = "");
+            USE ydb;   ALTER SECRET `secret-name` WITH (value = "");
         )sql")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"sql(
@@ -4482,7 +4646,7 @@ Y_UNIT_TEST(AlterSecretWithDeclare) {
 
 Y_UNIT_TEST(AlterSecretCorrect) {
     auto res = SqlToYql(R"sql(
-            USE plato; ALTER SECRET `secret-name` WITH (value = "secret-value");
+            USE ydb;   ALTER SECRET `secret-name` WITH (value = "secret-value");
         )sql");
     UNIT_ASSERT(res.IsOk());
 
@@ -4500,7 +4664,7 @@ Y_UNIT_TEST(AlterSecretCorrect) {
 Y_UNIT_TEST(AlterSecretIncorrect) {
     { // no value
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; ALTER SECRET `secret-name`;
+                USE ydb;   ALTER SECRET `secret-name`;
             )sql");
         UNIT_ASSERT(!res.Root);
 #if ANTLR_VER == 3
@@ -4511,35 +4675,35 @@ Y_UNIT_TEST(AlterSecretIncorrect) {
     }
     { // value is not a string
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; ALTER SECRET `secret-name` WITH (value = true);
+                USE ydb;   ALTER SECRET `secret-name` WITH (value = true);
             )sql");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:69: Error: Unsupported type for parameter: VALUE. String (or named expression with type String) was expected\n");
     }
     { // value is set twice
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; ALTER SECRET `secret-name` WITH (value = "value1", value = "value2");
+                USE ydb;   ALTER SECRET `secret-name` WITH (value = "value1", value = "value2");
             )sql");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:79: Error: Duplicate parameter: VALUE\n");
     }
     { // inherit_permissions is set
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; ALTER SECRET `secret-name` WITH (value = "value", inherit_permissions = FALSE);
+                USE ydb;   ALTER SECRET `secret-name` WITH (value = "value", inherit_permissions = FALSE);
             )sql");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:28: Error: parameter INHERIT_PERMISSIONS is not supported for alter operation\n");
     }
     { // unknown parameter
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; ALTER SECRET `secret-name` WITH (value = "secret-value", abc = "abc");
+                USE ydb;   ALTER SECRET `secret-name` WITH (value = "secret-value", abc = "abc");
             )sql");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:85: Error: Unknown parameter: ABC\n");
     }
     { // temporal object in secret name
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; ALTER SECRET @tmp WITH (value = "abc");
+                USE ydb;   ALTER SECRET @tmp WITH (value = "abc");
             )sql");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:42: Error: '@' is not allowed prefix for secret name\n");
@@ -4678,9 +4842,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 Y_UNIT_TEST(UdfSyntaxSugarMissingCall) {
     auto req = "SELECT Udf(DateTime::FromString, \"foo\" as RunConfig);";
     auto res = SqlToYql(req);
-    TString a1 = Err2Str(res);
-    TString a2("<main>:1:8: Error: Abstract Udf Node can't be used as a part of expression.\n");
-    UNIT_ASSERT_NO_DIFF(a1, a2);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:1:8: Error: Abstract Udf Node can't be used as a part of expression.");
 }
 
 Y_UNIT_TEST(UdfSyntaxSugarIsNotCallable) {
@@ -5136,6 +5298,18 @@ Y_UNIT_TEST(SelectJoinEmptyCorrNames) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:45: Error: At least one correlation name is required in join\n");
 }
 
+Y_UNIT_TEST(SelectJoinSameTables) {
+    NYql::TAstParseResult res = SqlToYql("Select a.key FROM plato.Input JOIN plato.Input ON Input.key == Input.subkey\n");
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:61: Error: JOIN: different correlation names are required for joined tables\n");
+}
+
+Y_UNIT_TEST(SelectJoinSameCorrLabels) {
+    NYql::TAstParseResult res = SqlToYql("Select a.key FROM plato.Input as a JOIN plato.Input1 as a ON a.key == a.subkey\n");
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:68: Error: JOIN: different correlation names are required for joined tables\n");
+}
+
 Y_UNIT_TEST(SelectJoinSameCorrNames) {
     NYql::TAstParseResult res = SqlToYql("SELECT Input.key FROM plato.Input JOIN plato.Input1 ON Input.key == Input.subkey\n");
     UNIT_ASSERT(!res.Root);
@@ -5439,7 +5613,13 @@ Y_UNIT_TEST(ReplaceIntoMapReduce) {
 Y_UNIT_TEST(UpsertIntoMapReduce) {
     NYql::TAstParseResult res = SqlToYql("UPSERT INTO plato.Output SELECT key FROM plato.Input");
     UNIT_ASSERT(!res.Root);
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: UPSERT INTO is not supported for yt tables\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: UPSERT is not available before language version 2025.04\n");
+
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    res = SqlToYqlWithSettings("UPSERT INTO plato.Output SELECT key FROM plato.Input", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
 
 Y_UNIT_TEST(UpdateMapReduce) {
@@ -6439,13 +6619,13 @@ Y_UNIT_TEST(HandleNestedSmartParensInGroupBy) {
 }
 
 Y_UNIT_TEST(ErrRenameWithAddColumn) {
-    ExpectFailWithError("USE plato; ALTER TABLE table RENAME TO moved, ADD COLUMN addc uint64",
+    ExpectFailWithError("USE ydb;   ALTER TABLE table RENAME TO moved, ADD COLUMN addc uint64",
                         "<main>:1:40: Error: RENAME TO can not be used together with another table action\n");
 }
 
 Y_UNIT_TEST(ErrAddColumnAndRename) {
     // FIXME: fix positions in ALTER TABLE
-    ExpectFailWithError("USE plato; ALTER TABLE table ADD COLUMN addc uint64, RENAME TO moved",
+    ExpectFailWithError("USE ydb;   ALTER TABLE table ADD COLUMN addc uint64, RENAME TO moved",
                         "<main>:1:46: Error: RENAME TO can not be used together with another table action\n");
 }
 
@@ -6475,7 +6655,7 @@ Y_UNIT_TEST(ModifyPermissionsWithoutCluster) {
 
 Y_UNIT_TEST(ReservedRoleNames) {
     ExpectFailWithError("USE plato; CREATE USER current_User;", "<main>:1:24: Error: System role CURRENT_USER can not be used here\n");
-    ExpectFailWithError("USE plato; ALTER USER current_User RENAME TO Current_role", "<main>:1:46: Error: System role CURRENT_ROLE can not be used here\n");
+    ExpectFailWithError("USE ydb;   ALTER USER current_User RENAME TO Current_role", "<main>:1:46: Error: System role CURRENT_ROLE can not be used here\n");
     UNIT_ASSERT(SqlToYql("USE plato; DROP GROUP IF EXISTS a, b, c, current_User;").IsOk());
 }
 
@@ -7676,6 +7856,149 @@ Y_UNIT_TEST(CreateExternalDataSourceWithAuthNone) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(CreateEDSWithSecretFromName) {
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="my-bucket",
+            AUTH_METHOD="BASIC",
+            LOGIN="foo_login",
+            PASSWORD_SECRET_NAME="foo_secret"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"password_secret_name\" '\"foo_secret\"");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateEDSWithSecretFromPathWitoutTablePathPrefix) {
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="my-bucket",
+            AUTH_METHOD="BASIC",
+            LOGIN="foo_login",
+            PASSWORD_SECRET_PATH="foo_secret"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"password_secret_path\" '\"foo_secret\"");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateEDSWithSecretsFromNameAndPathForOneSecretType) {
+    // paths and names are mutually exclusive settings for one secret type, so fail is expected
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="my-bucket",
+            AUTH_METHOD="BASIC",
+            LOGIN="foo_login",
+            PASSWORD_SECRET_NAME="foo_secret",
+            PASSWORD_SECRET_PATH="baz_secret"
+        );
+    )sql");
+    UNIT_ASSERT_C(!res.Root, res.Issues.ToString());
+    UNIT_ASSERT_NO_DIFF(
+        Err2Str(res),
+        "<main>:9:34: Error: Usage secrets of different types is not allowed: "
+        "PASSWORD_SECRET_NAME and PASSWORD_SECRET_PATH are set\n");
+}
+
+Y_UNIT_TEST(CreateEDSWithSecretsFromNameAndPathForDifferentSecretTypes) {
+    // paths and names are mutually exclusive settings for different secret types (they can not be mixed), so fail is expected
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="my-bucket",
+            AUTH_METHOD="AWS",
+            AWS_ACCESS_KEY_ID_SECRET_PATH="/foo_secret",
+            AWS_SECRET_ACCESS_KEY_SECRET_NAME="bar_secret",
+            AWS_REGION="ru-central-1"
+        );
+    )sql");
+    UNIT_ASSERT_C(!res.Root, res.Issues.ToString());
+    UNIT_ASSERT_NO_DIFF(
+        Err2Str(res),
+        "<main>:9:24: Error: Usage secrets of different types is not allowed: "
+        "AWS_SECRET_ACCESS_KEY_SECRET_NAME and AWS_ACCESS_KEY_ID_SECRET_PATH are set\n");
+}
+
+Y_UNIT_TEST(CreateEDSWithSecretsFromNameWithTablePathPrefix) {
+    // pragma should not influence on the name setting
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato; PRAGMA TablePathPrefix='/PathPrefix';
+        CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="my-bucket",
+            AUTH_METHOD="BASIC",
+            LOGIN="foo_login",
+            PASSWORD_SECRET_NAME="foo_secret"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"password_secret_name\" '\"foo_secret\"");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateEDSWithTwoSecretsFromPathWithTablePathPrefix) {
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato; PRAGMA TablePathPrefix='/PathPrefix';
+        CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="my-bucket",
+            AUTH_METHOD="AWS",
+            AWS_ACCESS_KEY_ID_SECRET_PATH="/foo_secret",
+            AWS_SECRET_ACCESS_KEY_SECRET_PATH="bar_secret",
+            AWS_REGION="ru-central-1"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"/foo_secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/bar_secret");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
 Y_UNIT_TEST(CreateExternalDataSourceWithAuthServiceAccount) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
@@ -7842,7 +8165,7 @@ Y_UNIT_TEST(CreateExternalDataSourceIfNotExists) {
                     AUTH_METHOD="NONE"
                 );
             )sql");
-    UNIT_ASSERT(res.Root);
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
@@ -7979,7 +8302,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     AUTH_METHOD="SERVICE_ACCOUNT",
                     SERVICE_ACCOUNT_ID="s1"
                 );
-            )sql", "<main>:7:40: Error: SERVICE_ACCOUNT_SECRET_NAME requires key\n");
+            )sql", "<main>:7:40: Error: A value must be provided for either SERVICE_ACCOUNT_SECRET_NAME or SERVICE_ACCOUNT_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -7999,7 +8322,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     AUTH_METHOD="BASIC",
                     LOGIN="admin"
                 );
-            )sql", "<main>:7:27: Error: PASSWORD_SECRET_NAME requires key\n");
+            )sql", "<main>:7:27: Error: A value must be provided for either PASSWORD_SECRET_NAME or PASSWORD_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -8033,7 +8356,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     LOGIN="admin",
                     PASSWORD_SECRET_NAME="secret_name"
                 );
-            )sql", "<main>:9:42: Error: SERVICE_ACCOUNT_SECRET_NAME requires key\n");
+            )sql", "<main>:9:42: Error: A value must be provided for either SERVICE_ACCOUNT_SECRET_NAME or SERVICE_ACCOUNT_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -8057,7 +8380,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     SERVICE_ACCOUNT_SECRET_NAME="sa_secret_name",
                     LOGIN="admin"
                 );
-            )sql", "<main>:9:27: Error: PASSWORD_SECRET_NAME requires key\n");
+            )sql", "<main>:9:27: Error: A value must be provided for either PASSWORD_SECRET_NAME or PASSWORD_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -8068,7 +8391,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key_name",
                     AWS_REGION="ru-central-1"
                 );
-            )sql", "<main>:8:32: Error: AWS_ACCESS_KEY_ID_SECRET_NAME requires key\n");
+            )sql", "<main>:8:32: Error: A value must be provided for either AWS_ACCESS_KEY_ID_SECRET_NAME or AWS_ACCESS_KEY_ID_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -8079,7 +8402,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     AWS_ACCESS_KEY_ID_SECRET_NAME="secred_id_name",
                     AWS_REGION="ru-central-1"
                 );
-            )sql", "<main>:8:32: Error: AWS_SECRET_ACCESS_KEY_SECRET_NAME requires key\n");
+            )sql", "<main>:8:32: Error: A value must be provided for either AWS_SECRET_ACCESS_KEY_SECRET_NAME or AWS_SECRET_ACCESS_KEY_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -8475,6 +8798,9 @@ Y_UNIT_TEST(CreateTopicSimple) {
     TestQuery(R"(
             CREATE TOPIC topic1 WITH (metering_mode = "str_value", partition_count_limit = 123, retention_period = Interval('PT1H'));
         )");
+    TestQuery(R"(
+            CREATE TOPIC topic1 WITH (metrics_level = 3);
+        )");
 }
 
 Y_UNIT_TEST(CreateTopicConsumer) {
@@ -8500,7 +8826,13 @@ Y_UNIT_TEST(AlterTopicSimple) {
             ALTER TOPIC topic1 SET (retention_storage_mb = 3, partition_count_limit = 50);
         )");
     TestQuery(R"(
+            ALTER TOPIC topic1 SET (metrics_level = 2);
+        )");
+    TestQuery(R"(
             ALTER TOPIC topic1 RESET (supported_codecs, retention_period);
+        )");
+    TestQuery(R"(
+            ALTER TOPIC topic1 RESET (metrics_level);
         )");
     TestQuery(R"(
             ALTER TOPIC topic1 RESET (partition_write_speed_bytes_per_second),
@@ -8549,6 +8881,10 @@ Y_UNIT_TEST(TopicBadRequests) {
         )", false,
               {"3:58: Error: Literal of Interval type is expected for retention"});
     TestQuery(R"(
+            CREATE TOPIC topic1 WITH (metrics_level = "1");
+        )", false,
+              {"3:55: Error: METRICS_LEVEL value should be an integer"});
+    TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons1 WITH (important = false));
         )", false,
               {"3:59: Error: Consumer cons1 defined more than once"});
@@ -8560,6 +8896,10 @@ Y_UNIT_TEST(TopicBadRequests) {
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (important = false, important = true));
         )", false,
               {"3:86: Error: IMPORTANT specified multiple times in CONSUMER statement for single consumer"});
+    TestQuery(R"(
+            ALTER TOPIC topic1 SET (metrics_level = "1");
+        )", false,
+              {"3:53: Error: METRICS_LEVEL value should be an integer"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER cons1, ALTER CONSUMER cons1 RESET (important);
         )", false,
@@ -9398,7 +9738,7 @@ Y_UNIT_TEST(AtPoint) {
 
 Y_UNIT_TEST_SUITE(ColumnFamily) {
 Y_UNIT_TEST(CompressionLevelCorrectUsage) {
-    NYql::TAstParseResult res = SqlToYql(R"( use plato;
+    NYql::TAstParseResult res = SqlToYql(R"( use ydb;
             CREATE TABLE tableName (
                 Key Uint32 FAMILY default,
                 Value String FAMILY family1,
@@ -9415,7 +9755,7 @@ Y_UNIT_TEST(CompressionLevelCorrectUsage) {
                 )
             );
         )");
-    UNIT_ASSERT(res.IsOk());
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
     UNIT_ASSERT(res.Issues.Size() == 0);
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
@@ -9483,7 +9823,7 @@ Y_UNIT_TEST(FieldCompressionLevelIsNotInteger) {
 }
 
 Y_UNIT_TEST(FieldCacheModeCorrectUsage) {
-    NYql::TAstParseResult res = SqlToYql(R"sql( use plato;
+    NYql::TAstParseResult res = SqlToYql(R"sql( use ydb;
             CREATE TABLE tableName (
                 Key Uint32 FAMILY default,
                 Value String FAMILY family1,
@@ -9649,6 +9989,140 @@ $__ydb_transfer_lambda = ($x) -> {
 
     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, programm.find(expected));
 }
+
+Y_UNIT_TEST(CreateWithSecretsWithoutTablePathPrefix) {
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        use plato;
+        SELECT * FROM Input;
+
+        $b = ($x) -> { return $x; };
+
+        CREATE TRANSFER `TransferName`
+            FROM `TopicName` TO `TableName`
+            USING ($x) -> {
+                return $b($x);
+            }
+            WITH (
+                TOKEN_SECRET_NAME = "foo_secret",
+                PASSWORD_SECRET_PATH = "bar_secret"
+            );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "settings") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"foo_secret"); // names remain unchanged
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"bar_secret"); // paths remain unchanged
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("settings"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["settings"]);
+}
+
+Y_UNIT_TEST(CreateWithSecretsWithTablePathPrefix) {
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        use plato;
+        PRAGMA TablePathPrefix = "/PathPrefix";
+        SELECT * FROM Input;
+
+        $b = ($x) -> { return $x; };
+
+        CREATE TRANSFER `TransferName`
+            FROM `TopicName` TO `TableName`
+            USING ($x) -> {
+                return $b($x);
+            }
+            WITH (
+                TOKEN_SECRET_NAME = "foo_secret",
+                PASSWORD_SECRET_PATH = "bar_secret",
+                INITIAL_TOKEN_SECRET_PATH = "/baz_secret"
+            );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "settings") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"foo_secret");           // names remain unchanged
+            UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/bar_secret"); // paths are adjusted if not absolute
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"/baz_secret");          // absolute paths remain unchanged
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("settings"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["settings"]);
+}
+
+Y_UNIT_TEST(CreateWithSecretsWithNameAndPath) {
+    // these are mutually exclusive settings
+    const auto requestTemplate = R"sql(
+        USE plato;
+        SELECT * FROM Input;
+
+        $b = ($x) -> { return $x; };
+
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> {
+            return $b($x);
+        }
+        WITH (
+            %s = "",
+            %s = ""
+        );
+    )sql";
+
+    static const TVector<std::pair<TString, TString>> MutuallyExclusiveSettings = {
+        {"TOKEN_SECRET_NAME", "TOKEN_SECRET_PATH"},
+        {"PASSWORD_SECRET_NAME", "PASSWORD_SECRET_PATH"},
+        {"INITIAL_TOKEN_SECRET_NAME", "INITIAL_TOKEN_SECRET_PATH"},
+    };
+
+    for (const auto& settings : MutuallyExclusiveSettings) {
+        auto req = Sprintf(requestTemplate, settings.first.c_str(), settings.second.c_str());
+        auto res = SqlToYql(req);
+        UNIT_ASSERT_C(!res.IsOk(), Err2Str(res));
+        UNIT_ASSERT_NO_DIFF(
+            Err2Str(res),
+            std::format(
+                "<main>:14:{}: Error: {} and {} are mutually exclusive\n",
+                16 + settings.first.size(), settings.first.c_str(), settings.second.c_str()));
+    }
+}
+
+Y_UNIT_TEST(AlterWithSecretsWithTablePathPrefix) {
+    const NYql::TAstParseResult res = SqlToYql(R"sql(
+        use plato;
+        PRAGMA TablePathPrefix = "/PathPrefix";
+        ALTER TRANSFER `TransferName`
+            SET (
+                TOKEN_SECRET_NAME = "foo_secret",
+                PASSWORD_SECRET_PATH = "bar_secret",
+                INITIAL_TOKEN_SECRET_PATH = "/baz_secret"
+            );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "settings") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"foo_secret");           // names remain unchanged
+            UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/bar_secret"); // paths are adjusted if not absolute
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"/baz_secret");          // absolute paths remain unchanged
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("settings"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["settings"]);
+}
+
 } // Y_UNIT_TEST_SUITE(Transfer)
 
 Y_UNIT_TEST_SUITE(MatchRecognizeMeasuresAggregation) {
@@ -9689,7 +10163,7 @@ Y_UNIT_TEST(AsWindowFunction) {
 Y_UNIT_TEST_SUITE(OlapPartitionCount) {
 Y_UNIT_TEST(CorrectUsage) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
-            USE plato;
+            USE ydb;
             CREATE TABLE `mytable` (id Uint32, PRIMARY KEY (id))
             PARTITION BY HASH(id)
             WITH (STORE = COLUMN, PARTITION_COUNT = 8);
@@ -9700,7 +10174,7 @@ Y_UNIT_TEST(CorrectUsage) {
 
 Y_UNIT_TEST(UseWithoutColumnStore) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
-            USE plato;
+            USE ydb;
             CREATE TABLE `mytable` (id Uint32, PRIMARY KEY (id))
             WITH (PARTITION_COUNT = 8);
         )sql");
@@ -9777,7 +10251,7 @@ Y_UNIT_TEST(SingleArg) {
 } // Y_UNIT_TEST_SUITE(AggregationPhases)
 
 Y_UNIT_TEST_SUITE(Watermarks) {
-Y_UNIT_TEST(Insert) {
+Y_UNIT_TEST(InsertAs) {
     const auto stmt = R"sql(
 USE plato;
 
@@ -9789,7 +10263,7 @@ WITH(
     SCHEMA(
         ts Timestamp,
     ),
-    WATERMARK AS (ts)
+    WATERMARK AS (CAST(ts AS TImestamp))
 );
 )sql";
     const auto& res = SqlToYql(stmt);
@@ -9797,7 +10271,7 @@ WITH(
     UNIT_ASSERT(res.IsOk());
 }
 
-Y_UNIT_TEST(Select) {
+Y_UNIT_TEST(SelectAs) {
     const auto stmt = R"sql(
 USE plato;
 
@@ -9808,7 +10282,45 @@ WITH(
     SCHEMA(
         ts Timestamp,
     ),
-    WATERMARK AS (ts)
+    WATERMARK AS (CAST(ts AS TImestamp))
+);
+)sql";
+    const auto& res = SqlToYql(stmt);
+    Err2Str(res, EDebugOutput::ToCerr);
+    UNIT_ASSERT(res.IsOk());
+}
+Y_UNIT_TEST(InsertEquals) {
+    const auto stmt = R"sql(
+USE plato;
+
+INSERT INTO Output
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK = CAST(ts AS TImestamp)
+);
+)sql";
+    const auto& res = SqlToYql(stmt);
+    Err2Str(res, EDebugOutput::ToCerr);
+    UNIT_ASSERT(res.IsOk());
+}
+
+Y_UNIT_TEST(SelectEquals) {
+    const auto stmt = R"sql(
+USE plato;
+
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK = CAST(ts AS TImestamp)
 );
 )sql";
     const auto& res = SqlToYql(stmt);
@@ -9958,7 +10470,7 @@ Y_UNIT_TEST(HopStartEndWithGroupByWithoutHopping) {
 Y_UNIT_TEST_SUITE(StreamingQuery) {
 Y_UNIT_TEST(CreateStreamingQueryBasic) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
-USE plato;
+USE ydb;
 CREATE TABLE test (Key Int32 NOT NULL, PRIMARY KEY (Key));
 -- Some comment
 CREATE STREAMING QUERY MyQuery AS DO BEGIN
@@ -10183,7 +10695,7 @@ Y_UNIT_TEST(CreateStreamingQueryWithBadArguments) {
 
 Y_UNIT_TEST(AlterStreamingQuerySetQuery) {
     NYql::TAstParseResult res = SqlToYql(TStringBuilder() << R"sql(
-USE plato;
+USE ydb;
 CREATE TABLE test (Key Int32 NOT NULL, PRIMARY KEY (Key));
 -- Some comment
 ALTER STREAMING QUERY MyQuery AS DO )sql" << "\r" << R"sql(BEGIN
@@ -10718,9 +11230,34 @@ Y_UNIT_TEST(LangVer) {
         "YqlSelect is not available before 2025.04");
 }
 
+Y_UNIT_TEST(AutoTopLevel) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        USE plato;
+        SELECT * FROM my_table VIEW my_view;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AutoSubquery) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        USE plato;
+        SELECT * FROM my_table
+        WHERE a IN (SELECT a FROM my_table VIEW my_view);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(Minimal) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10735,7 +11272,7 @@ Y_UNIT_TEST(Minimal) {
 
 Y_UNIT_TEST(Expr) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10756,7 +11293,7 @@ Y_UNIT_TEST(Expr) {
 
 Y_UNIT_TEST(ResultColumnLabel) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10769,9 +11306,56 @@ Y_UNIT_TEST(ResultColumnLabel) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
 }
 
+Y_UNIT_TEST(Asterisk) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT * FROM (VALUES (1));
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {
+        {TString("YqlSelect"), 0},
+        {TString("YqlStar"), 0},
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlStar"], 1);
+}
+
+Y_UNIT_TEST(AsteriskInvalidLeft) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT *, a FROM (VALUES (1)) AS x(a);
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToOneLineString(),
+        "Unable to use plain '*' with other projection items");
+}
+
+Y_UNIT_TEST(AsteriskInvalidRight) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, * FROM (VALUES (1)) AS x(a);
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToOneLineString(),
+        "Unable to use plain '*' with other projection items");
+}
+
 Y_UNIT_TEST(FromAnonValues) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10790,7 +11374,7 @@ Y_UNIT_TEST(FromAnonValues) {
 
 Y_UNIT_TEST(FromValues) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    settings.LangVer = NYql::GetMaxLangVersion();
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'force';
@@ -10807,6 +11391,230 @@ Y_UNIT_TEST(FromValues) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlValuesList"], 1);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlColumnRef"], 1);
+}
+
+Y_UNIT_TEST(FromTableWithImmediateCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, b FROM plato.Input;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {
+        {TString("YqlSelect"), 0},
+        {TString("Read!"), 0},
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+}
+
+Y_UNIT_TEST(Where) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, b FROM plato.Input WHERE a < 10;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {
+        {TString("YqlSelect"), 0},
+        {TString("YqlWhere"), 0},
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlWhere"], 1);
+}
+
+Y_UNIT_TEST(FromSubquery) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT * FROM (SELECT 1 as a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {
+        {TString("YqlSelect"), 0},
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+}
+
+Y_UNIT_TEST(Join2) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT id FROM xx JOIN yy ON xx.id = yy.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(AsteriskJoin) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT * FROM xx JOIN yy ON xx.id = yy.id;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToOneLineString(),
+        "YqlSelect unsupported: JOIN with an asterisk projection");
+}
+
+Y_UNIT_TEST(QualifiedAsteriskJoin) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT xx.* FROM xx JOIN yy ON xx.id = yy.id;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToOneLineString(),
+        "YqlSelect unsupported: an_id DOT ASTERISK");
+}
+
+Y_UNIT_TEST(Join2Alias) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT id
+        FROM xx AS x
+        JOIN yy AS y ON x.id = y.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(Join3) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT id
+        FROM xx AS x
+        JOIN yy AS y ON x.id = y.id
+        JOIN zz AS z ON y.id = z.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(Join3Mix) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT id
+        FROM (VALUES (1)) AS x(id)
+        JOIN (SELECT * FROM yy) AS y ON x.id = y.id
+        JOIN zz AS z ON y.id = z.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(OrderBy) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a
+        FROM (VALUES (1, 2)) AS x(a, b)
+        ORDER BY a ASC, b DESC;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(LimitOffset) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 LIMIT 2 OFFSET 3;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(CorrelatedProjection) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT (SELECT a) FROM (VALUES (1)) AS x(a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(InSubqueryProjection) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT (1 IN (SELECT 1))
+        FROM (VALUES (1)) AS x(a)
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(InSubqueryWhere) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a
+        FROM (VALUES (1, 10)) AS x(a, b)
+        WHERE b IN (
+            SELECT y.b / 10 FROM (VALUES (1, 100)) AS y(a, b));
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(ExistsSubqueryWhere) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::GetMaxLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a
+        FROM (VALUES (1, 10)) AS x(a, b)
+        WHERE EXISTS (
+            SELECT y.b / 10
+            FROM (VALUES (1, 100)) AS y(a, b)
+            WHERE x.a == y.a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {
+        {TString("YqlSelect"), 0},
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 4);
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)

@@ -11,4 +11,7 @@ public:
 };
 
 using IRemoteLayerProviderPtr = TIntrusivePtr<IRemoteLayerProvider>;
+
+IRemoteLayerProviderPtr MakeDummyRemoteLayerProvider(TString errorMessage);
+
 } // namespace NYql::NLayers

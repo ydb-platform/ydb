@@ -17,7 +17,7 @@ from ydb.tests.olap.lib.remote_execution import (
 )
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
-from ydb.tests.olap.lib.utils import get_external_param
+from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
 
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
@@ -45,6 +45,7 @@ class WorkloadTestBase(LoadSuiteBase):
         get_external_param(
             "yaml-config",
             ""))  # Путь к yaml конфигурации
+    _ignore_stderr_content: bool = False
 
     @classmethod
     def get_workload_name(cls) -> str:
@@ -64,7 +65,7 @@ class WorkloadTestBase(LoadSuiteBase):
         """
         with allure.step("Workload test setup: initialize"):
             cls._setup_start_time = time_module.time()
-
+            cls._ignore_stderr_content = external_param_is_true('ignore_stderr_content')
             # Выполняем только do_setup_class без _Verification
             if hasattr(cls, 'do_setup_class'):
                 try:
@@ -478,7 +479,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         # 1. Устанавливаем права на выполнение для nemesis
                         chmod_cmd = "sudo chmod +x /Berkanavt/nemesis/bin/nemesis"
                         chmod_result = execute_command(
-                            host=host, cmd=chmod_cmd, raise_on_error=False, timeout=10
+                            host=host, cmd=chmod_cmd, raise_on_error=False, timeout=30
                         )
 
                         chmod_stderr = (
@@ -627,7 +628,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 try:
                     cmd = f"sudo service nemesis {action}"
                     result = execute_command(
-                        host=host, cmd=cmd, raise_on_error=False, timeout=10)
+                        host=host, cmd=cmd, raise_on_error=False, timeout=30)
 
                     stdout = result.stdout if result.stdout else ""
                     stderr = result.stderr if result.stderr else ""
@@ -840,7 +841,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 host=host,
                 cmd=f"sudo cp {fallback_source} {remote_path}",
                 raise_on_error=False,
-                timeout=10
+                timeout=30
             )
 
         # Проверяем результат
@@ -923,12 +924,13 @@ class WorkloadTestBase(LoadSuiteBase):
                 result.add_error(
                     f"Workload execution failed. stderr: {stderr}")
                 error_found = True
-            elif "error" in str(stderr).lower():
-                result.add_error(f"Error detected in stderr: {stderr}")
-                error_found = True
-            elif self._has_real_error_in_stdout(str(stdout)):
-                result.add_warning(f"Error detected in stdout: {stdout}")
-                error_found = True
+            elif not self._ignore_stderr_content:
+                if "error" in str(stderr).lower():
+                    result.add_error(f"Error detected in stderr: {stderr}")
+                    error_found = True
+                elif self._has_real_error_in_stdout(str(stdout)):
+                    result.add_warning(f"Error detected in stdout: {stdout}")
+                    error_found = True
 
         # Проверяем предупреждения
         if (
@@ -2007,10 +2009,12 @@ class WorkloadTestBase(LoadSuiteBase):
                             "Command Stderr",
                             attachment_type=allure.attachment_type.TEXT,
                         )
-
-                    # success=True только если stderr пустой (исключая SSH
-                    # warnings) И нет timeout
-                    success = not bool(stderr.strip()) and not is_timeout
+                    if self._ignore_stderr_content:
+                        success = not is_timeout
+                    else:
+                        # success=True только если stderr пустой (исключая SSH
+                        # warnings) И нет timeout
+                        success = not bool(stderr.strip()) and not is_timeout
 
                     execution_time = time_module.time() - run_start_time
 

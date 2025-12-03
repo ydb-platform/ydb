@@ -1,11 +1,9 @@
 #include "yql_expr.h"
 #include <library/cpp/testing/unittest/registar.h>
-
+#include <yql/essentials/utils/limiting_allocator.h>
 #include <util/string/hex.h>
 
 namespace NYql {
-
-Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 
 static TAstParseResult ParseAstWithCheck(const TStringBuf& s) {
     TAstParseResult res = ParseAst(s);
@@ -37,6 +35,8 @@ static bool ParseAndCompile(const TString& program) {
     exprCtx.IssueManager.GetIssues().PrintTo(Cout);
     return result;
 }
+
+Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 
 Y_UNIT_TEST(TestNoReturn1) {
     auto s = "(\n"
@@ -129,7 +129,7 @@ Y_UNIT_TEST(TestArbitraryAtom) {
 
     auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
     TAstNode* xValue = ast.Root->GetChild(0)->GetChild(1)->GetChild(1);
-    UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "0123456789ABCDEF");
+    UNIT_ASSERT_STRINGS_EQUAL(HexEncode(xValue->GetContent()), "0123456789ABCDEF");
     UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::ArbitraryContent);
 }
 
@@ -149,7 +149,7 @@ Y_UNIT_TEST(TestBinaryAtom) {
 
     auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
     TAstNode* xValue = ast.Root->GetChild(0)->GetChild(2)->GetChild(1);
-    UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "FEDCBA9876543210");
+    UNIT_ASSERT_STRINGS_EQUAL(HexEncode(xValue->GetContent()), "FEDCBA9876543210");
     UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::BinaryContent);
 }
 
@@ -1213,6 +1213,28 @@ Y_UNIT_TEST(ParametersDifferentTypes) {
     UNIT_ASSERT(TString::npos != disassembled.find("(declare $Group (DataType 'Uint32))"));
     UNIT_ASSERT(TString::npos != disassembled.find("(declare $Name (OptionalType (DataType 'String)))"));
 }
+
+Y_UNIT_TEST(MemoryLimit) {
+    TStringBuilder b;
+    b << "(\n";
+    b << "(let x (Int32 '0))\n";
+    for (ui32 i = 0; i < 100; ++i) {
+        b << "(let x (+ x (Int32 '" << i << ")))\n";
+    }
+    b << "(return x)\n";
+    b << ")\n";
+
+    TAstParseResult astRes = ParseAstWithCheck(b);
+    TExprContext exprCtx;
+    TExprNode::TPtr exprRoot;
+    CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
+
+    auto tinyAlloc = MakeLimitingAllocator(10000, TDefaultAllocator::Instance());
+    TConvertToAstSettings settings;
+    settings.Allocator = tinyAlloc.get();
+    UNIT_ASSERT_EXCEPTION(ConvertToAst(*exprRoot, exprCtx, settings), std::runtime_error);
+}
+
 } // Y_UNIT_TEST_SUITE(TConvertToAst)
 
 } // namespace NYql

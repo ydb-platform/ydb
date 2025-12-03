@@ -63,6 +63,7 @@ struct Schema : NIceDb::Schema {
         struct LocksAcquired            : Column<28, NScheme::NTypeIds::Uint64> {};
         struct LocksWholeShard          : Column<29, NScheme::NTypeIds::Uint64> {};
         struct LocksBroken              : Column<30, NScheme::NTypeIds::Uint64> {};
+        struct TxCompleteLag            : Column<31, NScheme::NTypeIds::Interval> {};
 
         using TKey = TableKey<OwnerId, PathId, PartIdx, FollowerId>;
         using TColumns = TableColumns<
@@ -95,7 +96,8 @@ struct Schema : NIceDb::Schema {
             FollowerId,
             LocksAcquired,
             LocksWholeShard,
-            LocksBroken
+            LocksBroken,
+            TxCompleteLag
             >;
     };
 

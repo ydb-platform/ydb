@@ -1,5 +1,6 @@
 #include "mirrorer.h"
 
+#include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
@@ -41,6 +42,7 @@ TMirrorer::TMirrorer(
     , Config(config)
 {
     Counters.Populate(counters);
+    Counters.ResetCounters();
 }
 
 void TMirrorer::Bootstrap(const TActorContext& ctx) {
@@ -50,10 +52,6 @@ void TMirrorer::Bootstrap(const TActorContext& ctx) {
     ctx.Schedule(UPDATE_COUNTERS_INTERVAL, new TEvPQ::TEvUpdateCounters);
 
     if (AppData(ctx)->Counters) {
-        TVector<std::pair<ui64, TString>> lagsIntervals{{100, "100ms"}, {200, "200ms"}, {500, "500ms"},
-                                                                       {1000, "1000ms"}, {2000, "2000ms"}, {5000, "5000ms"}, {10000, "10000ms"},
-                                                                       {30000, "30000ms"}, {60000, "60000ms"}, {180000,"180000ms"}, {9999999, "999999ms"}};
-
         auto counters = AppData(ctx)->Counters;
         TString suffix = IsLocalDC ? "Remote" : "Internal";
         MirrorerErrors = NKikimr::NPQ::TMultiCounter(
@@ -64,7 +62,7 @@ void TMirrorer::Bootstrap(const TActorContext& ctx) {
             GetServiceCounters(counters, "pqproxy|mirrorWriteTimeLag"),
             GetLabels(TopicConverter),
             {{"sensor", "TimeLags" + suffix}},
-            "Interval", lagsIntervals, true
+            "Interval", SLOW_LATENCY_MS_INTERVALS, true
         ));
         InitTimeoutCounter = NKikimr::NPQ::TMultiCounter(
             GetServiceCounters(counters, "pqproxy|writeSession"),
@@ -239,6 +237,8 @@ void TMirrorer::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext&
 void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorContext& ctx) {
     ctx.Schedule(UPDATE_COUNTERS_INTERVAL, new TEvPQ::TEvUpdateCounters);
     ctx.Send(PartitionActor, new TEvPQ::TEvMirrorerCounters(Counters));
+    Counters.Cumulative().ResetCounters();
+    Counters.Percentile().ResetCounters();
 
     if (ctx.Now() - LastStateLogTimestamp > LOG_STATE_INTERVAL) {
         LastStateLogTimestamp = ctx.Now();

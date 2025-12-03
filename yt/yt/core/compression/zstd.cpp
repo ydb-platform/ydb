@@ -213,7 +213,12 @@ EZstdFrameType DetectZstdFrameType(TRef buffer)
     return EZstdFrameType::Unknown;
 }
 
-std::optional<i64> FindLastZstdSyncTagOffset(TRef buffer, i64 bufferStartOffset)
+namespace {
+
+std::optional<i64> FindZstdSyncTagOffsetImpl(
+    TRef buffer,
+    i64 bufferStartOffset,
+    bool breakOnFound)
 {
     std::optional<i64> result;
     auto currentBufferStr = TStringBuf(buffer.data(), buffer.size());
@@ -232,11 +237,32 @@ std::optional<i64> FindLastZstdSyncTagOffset(TRef buffer, i64 bufferStartOffset)
         ui64 tagOffsetExpected = bufferStartOffset + (tag - buffer.data());
         if (tagOffset == tagOffsetExpected) {
             result = tagOffset;
+            if (breakOnFound) {
+                break;
+            }
         }
 
         currentBufferStr.remove_prefix(tagPos + ZstdSyncTagPrefix.size());
     }
     return result;
+}
+
+} // namespace
+
+std::optional<i64> FindFirstZstdSyncTagOffset(TRef buffer, i64 bufferStartOffset)
+{
+    return FindZstdSyncTagOffsetImpl(
+        buffer,
+        bufferStartOffset,
+        /*breakOnFound*/ true);
+}
+
+std::optional<i64> FindLastZstdSyncTagOffset(TRef buffer, i64 bufferStartOffset)
+{
+    return FindZstdSyncTagOffsetImpl(
+        buffer,
+        bufferStartOffset,
+        /*breakOnFound*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -13,7 +13,6 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
-#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -411,11 +410,7 @@ public:
         : TBase(operationName, queryPath)
         , Database(database)
         , UserToken(userToken)
-    {
-        if (UserToken && UserToken->GetSerializedToken().empty()) {
-            UserToken->SaveSerializationInfo();
-        }
-    }
+    {}
 
     void Bootstrap() {
         LOG_D("Bootstrap. Database: " << Database);
@@ -470,19 +465,11 @@ protected:
         return ScheduleRetry({NYql::TIssue(message)}, longDelay);
     }
 
-    TIntrusiveConstPtr<NACLib::TUserToken> GetUserToken() const {
-        if (!UserToken) {
-            return nullptr;
-        }
-
-        return MakeIntrusiveConst<NACLib::TUserToken>(*UserToken);
-    }
-
 protected:
     const TString Database;
+    const std::optional<NACLib::TUserToken> UserToken;
 
 private:
-    std::optional<NACLib::TUserToken> UserToken;
     TRetryPolicy::IRetryState::TPtr RetryState;
 };
 
@@ -564,8 +551,11 @@ protected:
         LOG_D("Describe streaming query in database: " << Database);
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-        request->DatabaseName = CanonizePath(Database);
-        request->UserToken = GetUserToken();
+        request->DatabaseName = Database;
+
+        if (UserToken && UserToken->GetSanitizedToken()) {
+            request->UserToken = MakeIntrusiveConst<NACLib::TUserToken>(*UserToken);
+        }
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
@@ -763,8 +753,8 @@ protected:
         *event->Record.MutableTransaction()->MutableModifyScheme() = SchemeTx;
         event->Record.SetDatabaseName(Database);
 
-        if (const auto token = GetUserToken()) {
-            event->Record.SetUserToken(token->GetSerializedToken());
+        if (UserToken) {
+            event->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         Send(MakeTxProxyID(), std::move(event));
@@ -1713,8 +1703,8 @@ private:
         if (!State.GetPreviousExecutionIds().empty() && !StateLoaded) {
             StateLoaded = true;
             const auto& executionId = *State.GetPreviousExecutionIds().rbegin();
-            const auto& fetcherId = Register(CreateGetScriptExecutionPhysicalGraphActor(SelfId(), Context.GetDatabase(), executionId));
-            LOG_D("Load previous query state from execution: " << executionId << " with fetcher " << fetcherId);
+            SendToKqpProxy(std::make_unique<TEvGetScriptExecutionPhysicalGraph>(Context.GetDatabase(), executionId));
+            LOG_D("Load previous query state from execution: " << executionId);
             return;
         }
 
@@ -1756,11 +1746,20 @@ private:
         ev->ForgetAfter = TDuration::Max();
         ev->Generation = PreviousGeneration + 1;
         ev->CheckpointId = State.GetCheckpointId();
+        ev->StreamingQueryPath = QueryPath;
+
+        if (const auto statsPeriod = AppData()->QueryServiceConfig.GetProgressStatsPeriodMs()) {
+            ev->ProgressStatsPeriod = TDuration::MilliSeconds(statsPeriod);
+        } else {
+            ev->ProgressStatsPeriod = TDuration::Seconds(1);
+        }
 
         auto& record = ev->Record;
         record.SetTraceId(TStringBuilder() << "streaming-query-" << QueryPath << "-" << State.GetCurrentExecutionId());
         if (const auto& token = Context.GetUserToken()) {
-            record.SetUserToken(token->SerializeAsString());
+            if (const auto& serializedToken = token->GetSerializedToken()) {
+                record.SetUserToken(serializedToken);
+            }
         }
 
         auto& request = *record.MutableRequest();
@@ -2185,7 +2184,7 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_D("Bootstrap. Fetch config");
+        LOG_D("Bootstrap");
 
         TBase::Become(&TDerived::StateFunc);
         DescribeQuery("start handling");
@@ -2204,7 +2203,7 @@ public:
         }
 
         SchemeInfo = ev->Get()->Info;
-        if (Context.GetUserToken() && SchemeInfo && SchemeInfo->SecurityObject) {
+        if (Context.GetUserToken() && Context.GetUserToken()->GetSerializedToken() && SchemeInfo && SchemeInfo->SecurityObject) {
             if (const auto& securityObject = *SchemeInfo->SecurityObject; !securityObject.CheckAccess(Access, *Context.GetUserToken())) {
                 LOG_W("Access denied for " << Context.GetUserToken()->GetUserSID() << ", access: " << Access);
 
@@ -2523,7 +2522,10 @@ private:
         CHECK_STATUS(validator.SaveRequired(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
         CHECK_STATUS(validator.SaveDefault(EName::Run, "true", &TPropertyValidator::ValidateBool));
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, NResourcePool::DEFAULT_POOL_ID));
-        CHECK_STATUS(validator.Save(EName::QueryTextRevision, ToString(1)));
+        CHECK_STATUS(validator.Save(
+            EName::QueryTextRevision,
+            ToString(SchemeInfo ? TStreamingQuerySettings().FromProto(SchemeInfo->Properties).QueryTextRevision + 1 : 1)
+        ));
 
         return validator.Finish();
     }

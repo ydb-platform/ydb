@@ -2312,7 +2312,7 @@ message TBackupCollectionDescription {
     }
 
     message TIncrementalBackupConfig {
-
+        optional bool OmitIndexes = 1 [default = false];
     }
 
     oneof Entries {
@@ -2326,6 +2326,8 @@ message TBackupCollectionDescription {
     oneof Storage {
         google.protobuf.Empty Cluster = 7;
     }
+
+    optional bool OmitIndexes = 9 [default = false];
 }
 
 message TBackupBackupCollection {

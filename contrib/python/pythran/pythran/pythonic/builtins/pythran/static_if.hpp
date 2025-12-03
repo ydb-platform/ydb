@@ -14,8 +14,7 @@ namespace builtins
   {
 
     template <class T, class F0, class F1>
-    auto static_if(T const &cond, F0 f0,
-                   F1 f1) -> decltype(details::static_if<T>{cond}(f0, f1))
+    auto static_if(T const &cond, F0 f0, F1 f1) -> decltype(details::static_if<T>{cond}(f0, f1))
     {
       return details::static_if<T>{cond}(f0, f1);
     }

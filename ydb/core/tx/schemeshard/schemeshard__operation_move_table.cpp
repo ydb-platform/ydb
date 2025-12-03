@@ -182,8 +182,10 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
     if (srcPath->IsTable()) {
         context.SS->Tables.at(srcPath->PathId)->DetachShardsStats();
+        context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
+    } else if (srcPath->IsColumnTable()) {
+        context.SS->PersistColumnTableRemove(db, srcPath->PathId, context.Ctx);
     }
-    context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
     context.SS->PersistUserAttributes(db, srcPath->PathId, srcPath->UserAttrs, nullptr);
 
     IncParentDirAlterVersionWithRepublish(operationId, srcPath, context);
@@ -279,11 +281,13 @@ public:
             context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
             context.SS->PersistTable(db, dstPath.Base()->PathId);
             context.SS->PersistTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
+            context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo, TVector<TTableShardInfo>(tableInfo->GetPartitions()));
         } else if (srcPath->IsColumnTable()) {
             auto srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
             auto tableInfo = context.SS->ColumnTables.BuildNew(dstPath.Base()->PathId, srcTable.GetPtr());
             tableInfo->AlterVersion += 1;
             context.SS->PersistColumnTable(db, dstPath.Base()->PathId, *tableInfo, false);
+            context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         } else {
             Y_ABORT();
         }

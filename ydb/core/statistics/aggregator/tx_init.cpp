@@ -238,11 +238,11 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 TString operationId = rowset.GetValue<Schema::ForceTraversalTables::OperationId>();
                 ui64 ownerId = rowset.GetValue<Schema::ForceTraversalTables::OwnerId>();
                 ui64 localPathId = rowset.GetValue<Schema::ForceTraversalTables::LocalPathId>();
-                TString columnTags = rowset.GetValue<Schema::ForceTraversalTables::ColumnTags>();
+                TString columnTagsStr = rowset.GetValue<Schema::ForceTraversalTables::ColumnTags>();
                 TForceTraversalTable::EStatus status = (TForceTraversalTable::EStatus)rowset.GetValue<Schema::ForceTraversalTables::Status>();
 
                 if (status == TForceTraversalTable::EStatus::AnalyzeStarted) {
-                    // Resent TEvAnalyzeTable to shards
+                    // Resent TEvAnalyzeShard to shards
                     status = TForceTraversalTable::EStatus::None;
                 } else if (status == TForceTraversalTable::EStatus::TraversalStarted) {
                     // Reset traversal
@@ -250,18 +250,19 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
 
                 auto pathId = TPathId(ownerId, localPathId);
+                auto columnTags = Scan<ui32>(SplitString(columnTagsStr, ","));
 
                 TForceTraversalTable operationTable {
                     .PathId = pathId,
-                    .ColumnTags = columnTags,
+                    .ColumnTags = std::move(columnTags),
                     .Status = status,
                 };
                 auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);
-                if (!forceTraversalOperation) {
+                if (forceTraversalOperation) {
+                    forceTraversalOperation->Tables.emplace_back(operationTable);
+                } else {
                     SA_LOG_E("[" << Self->TabletID() << "] ForceTraversalTables contains unknown operationId: " << operationId);
-                    continue;
                 }
-                forceTraversalOperation->Tables.emplace_back(operationTable);
 
                 if (!rowset.Next()) {
                     return false;
@@ -282,6 +283,8 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         Self->EnableStatistics = AppData(ctx)->FeatureFlags.GetEnableStatistics();
         Self->EnableColumnStatistics = AppData(ctx)->FeatureFlags.GetEnableColumnStatistics();
+        Self->EnableBackgroundColumnStatsCollection = AppData(ctx)
+            ->StatisticsConfig.GetEnableBackgroundColumnStatsCollection();
         Self->SubscribeForConfigChanges(ctx);
 
         Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
@@ -301,7 +304,6 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         if (Self->TraversalPathId && Self->TraversalStartKey) {
             SA_LOG_D("[" << Self->TabletID() << "] TTxInit::Complete. Start navigate. PathId " << Self->TraversalPathId);
-            Self->NavigateType = ENavigateType::Traversal;
             Self->NavigateDatabase = Self->TraversalDatabase;
             Self->NavigatePathId = Self->TraversalPathId;
             Self->Navigate();

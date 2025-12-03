@@ -264,7 +264,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Poison"
             << " cache serviced " << StatBioReqs << " reqs"
             << " hit {" << Counters.CacheHitPages->Val() << " " << Counters.CacheHitBytes->Val() << "b}"
-            << " miss {" << Counters.CacheMissPages->Val() << " " << Counters.CacheMissBytes->Val() << "b}");
+            << " miss {" << Counters.CacheMissPages->Val() << " " << Counters.CacheMissBytes->Val() << "b}"
+            << " in-memory miss {" << Counters.CacheMissInMemoryPages->Val() << " " << Counters.CacheMissInMemoryBytes->Val() << "b}");
 
         if (auto owner = std::exchange(Owner, { }))
             Send(owner, new TEvents::TEvGone);
@@ -400,6 +401,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             case PageStatePending:
                 Counters.CacheMissPages->Inc();
                 Counters.CacheMissBytes->Add(page->Size);
+                if (page->CacheMode == NTable::NPage::ECacheMode::TryKeepInMemory) {
+                    Counters.CacheMissInMemoryPages->Inc();
+                    Counters.CacheMissInMemoryBytes->Add(page->Size);
+                }
                 readyPages.emplace_back(pageId, TSharedPageRef());
                 pendingPages.emplace_back(pageId, reqIdx);
                 break;
@@ -1059,7 +1064,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto *fetch = new NBlockIO::TEvFetch(request.Priority, request.PageCollection, std::move(pages), bytes);
         if (cookie == EBlockIOFetchTypeCookie::AsyncQueue || cookie == EBlockIOFetchTypeCookie::ScanQueue) {
             // Note: queued requests can fetch multiple times, so copy trace id
-            fetch->TraceId = request.TraceId.GetTraceId();
+            fetch->TraceId = NWilson::TTraceId(request.TraceId);
         } else {
             fetch->TraceId = std::move(request.TraceId);            
         }

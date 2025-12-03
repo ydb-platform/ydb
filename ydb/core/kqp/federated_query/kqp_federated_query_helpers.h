@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>

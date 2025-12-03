@@ -4,7 +4,6 @@
 #include "async_expiring_cache.h"
 #endif
 
-// COMPAT(cherepashka)
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
@@ -40,9 +39,9 @@ TAsyncExpiringCache<TKey, TValue>::TShard::TShard(const TShard& other)
 template <class TKey, class TValue>
 TAsyncExpiringCache<TKey, TValue>::TAsyncExpiringCache(
     TAsyncExpiringCacheConfigPtr config,
+    const IInvokerPtr& invoker,
     NLogging::TLogger logger,
-    NProfiling::TProfiler profiler,
-    const IInvokerPtr& invoker)
+    NProfiling::TProfiler profiler)
     : Logger_(std::move(logger))
     , ExpirationExecutor_(New<NConcurrency::TPeriodicExecutor>(
         invoker,
@@ -51,6 +50,7 @@ TAsyncExpiringCache<TKey, TValue>::TAsyncExpiringCache(
         invoker,
         BIND(&TAsyncExpiringCache::RefreshAllItems, MakeWeak(this))))
     , ShardCount_(config->ShardCount)
+    , Invoker_(invoker)
     , MapShards_(config->ShardCount)
     , Config_(config)
     , HitCounter_(profiler.Counter("/hit"))
@@ -467,7 +467,7 @@ void TAsyncExpiringCache<TKey, TValue>::ScheduleEntryUpdate(
     if (config->ExpirationPeriod && *config->ExpirationPeriod) {
         NConcurrency::TDelayedExecutor::MakeDelayed(
             *config->ExpirationPeriod,
-            NRpc::TDispatcher::Get()->GetHeavyInvoker())
+            Invoker_)
             .Subscribe(BIND_NO_PROPAGATE([key, weakEntry = MakeWeak(entry), this, weakThis_ = MakeWeak(this)] (const TError& /*error*/) {
                 auto this_ = weakThis_.Lock();
                 if (!this_) {
@@ -483,28 +483,21 @@ void TAsyncExpiringCache<TKey, TValue>::ScheduleEntryUpdate(
 template <class TKey, class TValue>
 void TAsyncExpiringCache<TKey, TValue>::Clear()
 {
-    auto config = GetConfig();
-    if (!config->BatchUpdate) {
-        for (int shardIndex = 0; shardIndex < ShardCount_; ++shardIndex) {
-            auto [guard, map] = LockAndGetWritableShard(shardIndex);
-            for (const auto& [key, entry] : map) {
-                if (entry->Promise.IsSet()) {
-                    NConcurrency::TDelayedExecutor::CancelAndClear(entry->ProbationCookie);
-                }
-            }
-        }
-    }
-
     for (int shardIndex = 0; shardIndex < ShardCount_; ++shardIndex) {
         auto [guard, map] = LockAndGetWritableShard(shardIndex);
-        for (const auto& [key, value] : map) {
+        for (const auto& [key, entry] : map) {
+            if (entry->Promise.IsSet()) {
+                NConcurrency::TDelayedExecutor::CancelAndClear(entry->ProbationCookie);
+            }
             OnRemoved(key);
         }
+
+        auto mapSize = map.size();
         map.clear();
+        EntryCount_.fetch_sub(mapSize);
     }
 
-    SizeCounter_.Update(0);
-    EntryCount_.store(0);
+    SizeCounter_.Update(EntryCount_.load());
 }
 
 template <class TKey, class TValue>

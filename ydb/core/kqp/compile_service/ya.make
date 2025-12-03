@@ -23,3 +23,7 @@ END()
 RECURSE(
     helpers
 )
+
+RECURSE_FOR_TESTS(
+    ut
+)

@@ -33,7 +33,7 @@ public:
         {
             auto guard = TReadGuard(Lock_);
             if (MtpQueue_) {
-                return ::NThreading::Async(std::move(func), *MtpQueue_);
+                return ::NThreading::Async(std::forward<TCallable>(func), *MtpQueue_);
             }
         }
 

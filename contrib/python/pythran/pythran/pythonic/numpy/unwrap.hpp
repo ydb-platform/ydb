@@ -25,9 +25,7 @@ namespace numpy
       ++ibegin;
       for (; ibegin != iend; ++ibegin, ++obegin) {
         if (functor::abs{}(*obegin - *ibegin) > discont)
-          *(obegin + 1) =
-              *ibegin +
-              2 * pi * functor::round{}((*obegin - *ibegin) / (2 * pi));
+          *(obegin + 1) = *ibegin + 2 * pi * functor::round{}((*obegin - *ibegin) / (2 * pi));
         else
           *(obegin + 1) = *ibegin;
       }
@@ -43,14 +41,11 @@ namespace numpy
   } // namespace
 
   template <class E>
-  types::ndarray<double, typename E::shape_t> unwrap(E const &expr,
-                                                     double discont)
+  types::ndarray<double, typename E::shape_t> unwrap(E const &expr, double discont)
   {
     discont = functor::maximum{}(discont, pi);
-    types::ndarray<double, typename E::shape_t> out(sutils::getshape(expr),
-                                                    builtins::None);
-    _unwrap(expr.begin(), expr.end(), out.begin(), discont,
-            utils::int_<E::value>());
+    types::ndarray<double, typename E::shape_t> out(sutils::getshape(expr), builtins::None);
+    _unwrap(expr.begin(), expr.end(), out.begin(), discont, utils::int_<E::value>());
     return out;
   }
 } // namespace numpy

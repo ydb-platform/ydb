@@ -9,6 +9,7 @@ PEERDIR(
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/udf_resolve
+    yql/essentials/providers/common/gateways_utils
     yql/essentials/core/file_storage
     yql/essentials/core/file_storage/proto
     yql/essentials/core/file_storage/defs
@@ -48,6 +49,7 @@ PEERDIR(
     yql/essentials/sql
     yql/essentials/public/langver
     yql/essentials/core/langver
+    yql/essentials/core/layers
 
     library/cpp/resource
     library/cpp/getopt

@@ -122,6 +122,7 @@ public:
         void InitClientCert();
 
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
+        bool UseAllNodes = false;
         bool EnableSsl = false;
         bool SkipDiscovery = false;
         bool IsNetworkIntensive = false;
@@ -164,8 +165,6 @@ public:
         bool AllowEmptyAddress = false;
         bool OnlyExplicitProfile = false;
         bool AssumeYes = false;
-        // Whether a command is local (need no connection to YDB) or not
-        bool LocalCommand = false;
         std::optional<std::string> StorageUrl = std::nullopt;
 
         TCredentialsGetter CredentialsGetter;
@@ -275,22 +274,26 @@ public:
                 .SetDatabase(Database)
                 .SetCredentialsProviderFactory(GetSingletonCredentialsProviderFactory())
                 .SetUsePerChannelTcpConnection(UsePerChannelTcpConnection);
-        
+
+            if (UseAllNodes) {
+                driverConfig.SetBalancingPolicy(TBalancingPolicy::UseAllNodes());
+            }
+
             if (EnableSsl) {
                 driverConfig.UseSecureConnection(CaCerts);
             }
-        
+
             if (IsNetworkIntensive) {
                 size_t networkThreadNum = GetNetworkThreadNum();
                 driverConfig.SetNetworkThreadsNum(networkThreadNum);
             }
-        
+
             if (SkipDiscovery) {
                 driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
             }
-        
+
             driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
-        
+
             return driverConfig;
         }
 
@@ -420,7 +423,6 @@ public:
 
     void Hide();
     void MarkDangerous();
-    void MarkLocal();
     void UseOnlyExplicitProfile();
 
 protected:
@@ -450,7 +452,6 @@ public:
     void AddCommand(std::unique_ptr<TClientCommand> command);
     void AddHiddenCommand(std::unique_ptr<TClientCommand> command);
     void AddDangerousCommand(std::unique_ptr<TClientCommand> command);
-    void AddLocalCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
     void RenderCommandDescription(
         TStringStream& stream,

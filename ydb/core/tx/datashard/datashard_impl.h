@@ -242,6 +242,7 @@ class TDataShard
     class TTxHandleSafeRecomputeKMeansScan;
     class TTxHandleSafeStatisticsScan;
     class TTxHandleSafeBuildFulltextIndexScan;
+    class TTxHandleSafeBuildFulltextDictScan;
 
     class TTxMediatorStateRestored;
 
@@ -1350,6 +1351,8 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -3242,6 +3245,7 @@ protected:
             HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvPrefixKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvBuildFulltextIndexRequest, Handle);
+            HFunc(TEvDataShard::TEvBuildFulltextDictRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
@@ -3310,6 +3314,7 @@ protected:
             HFuncTraced(TEvDataShard::TEvReadCancel, Handle);
             hFuncTraced(TEvDataShard::TEvReadScanStarted, Handle);
             hFuncTraced(TEvDataShard::TEvReadScanFinished, Handle);
+            HFunc(TEvDataShard::TEvGetTableStats, Handle);
             HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);

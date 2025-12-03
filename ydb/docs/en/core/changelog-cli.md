@@ -1,5 +1,22 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.27.0 {#2-27-0}
+
+Released on October 30, 2025. To update to version **2.27.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* Added the `--exclude` option to the `{{ ydb-cli }} import s3` [command](./reference/ydb-cli/export-import/import-s3.md), allowing schema objects to be excluded from the import if their names match a pattern.
+* Added the `{{ ydb-cli }} admin cluster state fetch` command to collect information about cluster nodes' state and metrics.
+* Added [transfer](./concepts/transfer.md) objects support to the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md) and `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md).
+* Added a new `--retention-period` option to the `{{ ydb-cli }} topic` subcommands. Usage of the legacy `--retention-period-hours` option is discouraged.
+* The `{{ ydb-cli }} topic consumer add` [command](./reference/ydb-cli/topic-consumer-add.md) now has a new `--availability-period` option, which overrides the consumer's retention guarantee.
+* The `{{ ydb-cli }} workload vector` [commands](./reference/ydb-cli/commands/workload/index.md) now support `build-index` and `drop-index` subcommands.
+
+### Bug fixes
+
+* Fixed a bug where the `{{ ydb-cli }} debug ping` command crashed on any error.
+
 ## Version 2.26.0 {#2-26-0}
 
 Released on September 25, 2025. To update to version **2.26.0**, select the [Downloads](downloads/ydb-cli.md) section.

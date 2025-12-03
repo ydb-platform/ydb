@@ -2,6 +2,7 @@
 
 #include "attributes.h"
 #include "ypath_client.h"
+#include "private.h"
 
 #include <yt/yt/core/misc/error.h>
 
@@ -15,6 +16,10 @@ using namespace NYson;
 
 using NYT::FromProto;
 using NYT::ToProto;
+
+////////////////////////////////////////////////////////////////////////////////
+
+constinit const auto Logger = YTreeLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -138,6 +143,7 @@ public:
 
     bool Remove(TKeyView /*key*/) override
     {
+        YT_LOG_ALERT("Attempt to remove an item from an empty ephemeral attribute dictionary");
         return false;
     }
 

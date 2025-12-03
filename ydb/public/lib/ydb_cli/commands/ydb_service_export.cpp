@@ -1,9 +1,11 @@
 #include "ydb_service_export.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/lib/ydb_cli/common/exclude_item.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
@@ -58,27 +60,15 @@ namespace {
     }
 
     template <typename TSettings>
-    void ExpandItems(NScheme::TSchemeClient& client, TSettings& settings, const TVector<TRegExMatch>& exclusions, const TFilterOp& filter = FilterTables) {
-        auto isExclusion = [&exclusions](const char* str) -> bool {
-            for (const auto& pattern : exclusions) {
-                if (pattern.Match(str)) {
-                    return true;
-                }
-            }
-
-            return false;
-        };
-
+    void ExpandItems(NScheme::TSchemeClient& client, TSettings& settings, const TVector<TRegExMatch>& exclusionPatterns, const TFilterOp& filter = FilterTables) {
         auto items(std::move(settings.Item_));
         for (const auto& item : items) {
             for (const auto& [src, dst] : ExpandItem(client, item.Src, item.Dst, filter)) {
-                if (isExclusion(src.c_str())) {
-                    continue;
-                }
-
                 settings.AppendItem({src, dst});
             }
         }
+
+        ExcludeItems(settings, exclusionPatterns);
     }
 
 } // anonymous namespace
@@ -96,7 +86,7 @@ TCommandExport::TCommandExport(bool useExportToYt)
 TCommandExportToYt::TCommandExportToYt()
     : TYdbOperationCommand("yt", {}, "Create export to YT")
 {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
         {"Destination", {{"destination", "dst", "d"}, "Path to a table or a directory in YT", true}},
@@ -225,7 +215,7 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
-    auto colors = NColorizer::AutoColors(Cout);
+    auto colors = NConsoleClient::AutoColors(Cout);
     config.Opts->AddLongOption("scheme", TStringBuilder()
             << "S3 endpoint scheme - "
             << colors.BoldColor() << "http" << colors.OldColor()

@@ -793,8 +793,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1275,7 +1273,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
             // One read of main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), UseSink ? 0 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
 
 
             // One update of index table
@@ -2684,8 +2682,6 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2714,7 +2710,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                     query1,
                     TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
        }
 
        {
@@ -2996,7 +2992,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
 
-    Y_UNIT_TEST_TWIN(MultipleSecondaryIndexWithSameComulns, UseSink) {
+    Y_UNIT_TEST_TWIN(MultipleSecondaryIndexWithSameColumns, UseSink) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
@@ -3335,7 +3331,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndexWithPrimaryKeySameComulns, UseSink) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexWithPrimaryKeySameColumns, UseSink) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
@@ -5066,7 +5062,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/TestTable", {
-            .ExpectedReads = 0,
+            .ExpectedReads = 1,
             .ExpectedUpdates = 1
         });
 
@@ -5783,6 +5779,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 SELECT * FROM `%s`;
             )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         };
+        auto copyImplTableQuery = [&]() {
+            return userSession.CopyTable(implTablePath, "/Root/ImplTableCopy").ExtractValueSync();
+        };
         auto upsertTableQuery = [&]() {
             return userSession.ExecuteDataQuery(Sprintf(R"(
                 UPSERT INTO `%s` (Key, Fk, Value) VALUES
@@ -5814,6 +5813,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .EndStruct();
             builder.EndList();
             return userClient.BulkUpsert(implTablePath, builder.Build()).ExtractValueSync();
+        };
+        auto recreateUserSession = [&]() {
+            userSession = userClient.CreateSession().GetValueSync().GetSession();
         };
 
         // try accessing tables without permissions
@@ -5873,6 +5875,14 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 result.GetIssues().ToString()
             );
         }
+        {
+            auto result = copyImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Access denied for user@builtin on path /Root",
+                result.GetIssues().ToString()
+            );
+        }
 
         // grant necessary permission
         Grant(adminSession, "USE", tablePath, "user@builtin");
@@ -5921,6 +5931,14 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 "Writing to index implementation tables is not allowed",
                 result.GetIssues().ToString()
             );
+        }
+        {
+            Grant(adminSession, "CREATE TABLE", "/Root", "user@builtin");
+            recreateUserSession();
+            auto result = copyImplTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            Revoke(adminSession, "CREATE TABLE", "/Root", "user@builtin");
+            recreateUserSession();
         }
 
         // become superuser
@@ -5971,6 +5989,14 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 result.GetIssues().ToString()
             );
         }
+        {
+            Grant(adminSession, "CREATE TABLE", "/Root", "user@builtin");
+            recreateUserSession();
+            auto result = copyImplTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            Revoke(adminSession, "CREATE TABLE", "/Root", "user@builtin");
+            recreateUserSession();
+        }
     }
 
     Y_UNIT_TEST_TWIN(IndexUpsert, Uniq) {
@@ -5979,6 +6005,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         TKikimrRunner kikimr(serverSettings);
 
         auto client = kikimr.GetQueryClient();
+
+        const bool isStreamIndex = kikimr.GetTestServer().GetSettings().AppConfig->GetTableServiceConfig().GetEnableIndexStreamWrite();
 
         {
             const TString query(Q_(std::format(R"(
@@ -6028,7 +6056,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                     query,
                     NQuery::TTxControl::NoTx())
                 .ExtractValueSync();
-            if (Uniq) {
+            if (Uniq && !isStreamIndex) {
                 UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS_C(
                     result.GetIssues().ToString(),

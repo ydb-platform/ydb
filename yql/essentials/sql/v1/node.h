@@ -1,12 +1,14 @@
 #pragma once
 
-#include <google/protobuf/message.h>
+#include "result.h"
+
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/resetable_setting.h>
 #include <yql/essentials/parser/proto_ast/common.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
+
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
 #include <util/generic/map.h>
@@ -14,6 +16,8 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
+
+#include <google/protobuf/message.h>
 
 #include <library/cpp/enumbitset/enumbitset.h>
 
@@ -289,6 +293,12 @@ protected:
     bool DisableSort_ = false;
 };
 typedef INode::TPtr TNodePtr;
+
+using TNodeResult = TSQLResult<TNonNull<TNodePtr>>;
+
+TNodeResult Wrap(TNodePtr node);
+
+TNodePtr Unwrap(TNodeResult result);
 
 class IProxyNode: public INode {
 public:
@@ -718,10 +728,15 @@ struct TIdentifier {
     }
 };
 
+struct TCompression {
+    TMap<TString, TNodePtr> Entries;
+};
+
 struct TColumnOptions {
     TNodePtr DefaultExpr;
-    bool Nullable = true;
     TVector<TIdentifier> Families;
+    TMaybe<TCompression> Compression;
+    bool Nullable = true;
 };
 
 struct TColumnSchema {
@@ -729,20 +744,19 @@ struct TColumnSchema {
         Nothing,
         DropNotNullConstraint,
         SetNotNullConstraint,
-        SetFamily
+        SetFamily,
+        SetCompression,
     };
 
     TPosition Pos;
     TString Name;
     TNodePtr Type;
-    bool Nullable;
     TVector<TIdentifier> Families;
-    bool Serial;
     TNodePtr DefaultExpr;
-    const ETypeOfChange TypeOfChange;
-
-    TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-                  TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr, ETypeOfChange typeOfChange = ETypeOfChange::Nothing);
+    TMaybe<TCompression> Compression;
+    const ETypeOfChange TypeOfChange = ETypeOfChange::Nothing;
+    bool Nullable = false;
+    bool Serial = false;
 };
 
 struct TColumns: public TSimpleRefCount<TColumns> {
@@ -1358,7 +1372,7 @@ struct TSequenceParameters {
 
 class TSecretParameters {
 public:
-    enum class TOperationMode {
+    enum class EOperationMode {
         Create,
         Alter,
     };
@@ -1367,7 +1381,7 @@ public:
     TMaybe<TDeferredAtom> InheritPermissions;
 
 public:
-    bool ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::TOperationMode mode);
+    bool ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode);
 };
 
 struct TTopicConsumerSettings {
@@ -1403,6 +1417,7 @@ struct TTopicSettings {
     NYql::TResetableSetting<TNodePtr, void> AutoPartitioningUpUtilizationPercent;
     NYql::TResetableSetting<TNodePtr, void> AutoPartitioningDownUtilizationPercent;
     NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStrategy;
+    NYql::TResetableSetting<TNodePtr, void> MetricsLevel;
 
     bool IsSet() const {
         return MinPartitions ||
@@ -1416,7 +1431,8 @@ struct TTopicSettings {
                AutoPartitioningStabilizationWindow ||
                AutoPartitioningUpUtilizationPercent ||
                AutoPartitioningDownUtilizationPercent ||
-               AutoPartitioningStrategy;
+               AutoPartitioningStrategy ||
+               MetricsLevel;
     }
 };
 
@@ -1562,6 +1578,7 @@ TAggregationPtr BuildCountAggregation(TPosition pos, const TString& name, const 
 TAggregationPtr BuildUserDefinedFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
 TAggregationPtr BuildPGFactoryAggregation(TPosition pos, const TString& name, EAggregateMode aggMode);
 TAggregationPtr BuildNthFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
+TAggregationPtr BuildReservoirSamplingFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode, bool isValue);
 
 // Implemented in builtin.cpp
 TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,

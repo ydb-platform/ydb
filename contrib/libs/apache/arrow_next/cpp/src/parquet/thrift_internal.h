@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "parquet/windows_compatibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/windows_compatibility.h"
 
 #include <cstdint>
 #include <limits>
@@ -37,18 +37,18 @@
 #include <thrift/protocol/TCompactProtocol.h>
 #include <thrift/transport/TBufferTransports.h>
 
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
-#include "parquet/encryption/internal_file_decryptor.h"
-#include "parquet/encryption/internal_file_encryptor.h"
-#include "parquet/exception.h"
-#include "parquet/platform.h"
-#include "parquet/properties.h"
-#include "parquet/size_statistics.h"
-#include "parquet/statistics.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/internal_file_decryptor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/internal_file_encryptor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/size_statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
-#include "generated/parquet_types.h"  // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/generated/parquet_types.h"  // IWYU pragma: export
 
 namespace parquet20 {
 

@@ -590,7 +590,7 @@ private:
                     << " fromInclusive: " << true);
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
-
+        request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
         request->ResultSet.emplace_back(std::move(KeyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));

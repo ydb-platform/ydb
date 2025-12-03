@@ -216,316 +216,12 @@ TString DebugPath(NYT::TRichYPath path) {
     return NYT::NodeToCanonicalYsonString(NYT::PathToNode(path), NYT::NYson::EYsonFormat::Text) + " (" + std::to_string(numColumns) + " columns)";
 }
 
-void GetIntegerConstraints(const TExprNode::TPtr& column, bool& isSigned, ui64& minValueAbs, ui64& maxValueAbs, bool& isOptional) {
-    const TDataExprType* dataType = nullptr;
-    const bool columnHasDataType = IsDataOrOptionalOfData(column->GetTypeAnn(), isOptional, dataType);
-    YQL_ENSURE(columnHasDataType, "YtQLFilter: unsupported type of column " << column->Dump());
-    YQL_ENSURE(dataType);
-    const EDataSlot dataSlot = dataType->Cast<TDataExprType>()->GetSlot();
-
-    // looks like AllowIntegralConversion (may consider some refactoring)
-    if (dataSlot == EDataSlot::Uint8) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui8>();
-    }
-    else if (dataSlot == EDataSlot::Uint16) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui16>();
-    }
-    else if (dataSlot == EDataSlot::Uint32) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui32>();
-    }
-    else if (dataSlot == EDataSlot::Uint64) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui64>();
-    }
-    else if (dataSlot == EDataSlot::Int8) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i8>() + 1;
-        maxValueAbs = (ui64)Max<i8>();
-    }
-    else if (dataSlot == EDataSlot::Int16) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i16>() + 1;
-        maxValueAbs = (ui64)Max<i16>();
-    }
-    else if (dataSlot == EDataSlot::Int32) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i32>() + 1;
-        maxValueAbs = (ui64)Max<i32>();
-    }
-    else if (dataSlot == EDataSlot::Int64) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i64>() + 1;
-        maxValueAbs = (ui64)Max<i64>();
-    } else {
-        YQL_ENSURE(false, "unexpected integer node type");
-    }
-}
-
-void QuoteColumnForQL(const TStringBuf& columnName, TStringBuilder& result) {
-    result << '`';
-    if (!columnName.Contains('`')) {
-        result << columnName;
-    } else {
-        for (const auto c : columnName) {
-            if (c == '`') {
-                result << "\\`";
-            } else {
-                result << c;
-            }
-        }
-    }
-    result << '`';
-}
-
-void ConvertComparisonForQL(const TStringBuf& opName, TStringBuilder& result) {
-    if (opName == "==") {
-        result << '=';
-    } else {
-        result << opName;
-    }
-}
-
-void GenerateInputQueryIntegerComparison(const TStringBuf& opName, const TExprNode::TPtr& intColumn, const TExprNode::TPtr& intValue, const std::optional<bool>& nullValue, TStringBuilder& result) {
-    if (TMaybeNode<TCoNull>(intValue) || TMaybeNode<TCoNothing>(intValue)) {
-        YQL_ENSURE(nullValue.has_value(), "YtQLFilter: optional type without coalesce is not supported");
-        if (nullValue.value()) {
-            result << "TRUE";
-        } else {
-            result << "FALSE";
-        }
+void PreparePathInputQuerySpec(NYT::TNode& spec, const TVector<TRichYPath>& paths) {
+    if (AllOf(paths, [] (const auto& path) { return !path.InputQuery_; })) {
         return;
     }
-
-    TMaybeNode<TCoIntegralCtor> maybeIntValue;
-    if (auto maybeJustValue = TMaybeNode<TCoJust>(intValue)) {
-        maybeIntValue = TMaybeNode<TCoIntegralCtor>(maybeJustValue.Cast().Input().Ptr());
-    } else {
-        maybeIntValue = TMaybeNode<TCoIntegralCtor>(intValue);
-    }
-    YQL_ENSURE(maybeIntValue);
-
-    bool columnsIsSigned;
-    ui64 minValueAbs;
-    ui64 maxValueAbs;
-    bool columnIsOptional;
-    GetIntegerConstraints(intColumn, columnsIsSigned, minValueAbs, maxValueAbs, columnIsOptional);
-    YQL_ENSURE(!columnIsOptional || columnIsOptional && nullValue.has_value(), "YtQLFilter: optional type without coalesce is not supported");
-
-    bool hasSign;
-    bool isSigned;
-    ui64 valueAbs;
-    ExtractIntegralValue(maybeIntValue.Ref(), false, hasSign, isSigned, valueAbs);
-
-    std::optional<bool> constantFilter;
-    if (!hasSign && valueAbs > maxValueAbs) {
-        // Value is greater than maximum.
-        if (opName == ">" || opName == ">=" || opName == "==") {
-            constantFilter = false;
-        } else {
-            constantFilter = true;
-        }
-    } else if (hasSign && valueAbs > minValueAbs) {
-        // Value is less than minimum.
-        if (opName == "<" || opName == "<=" || opName == "==") {
-            constantFilter = false;
-        } else {
-            constantFilter = true;
-        }
-    }
-
-    const auto columnName = intColumn->ChildPtr(1)->Content();
-    if (!constantFilter.has_value()) {
-        // Value is in the range, comparison is not constant.
-        if (columnIsOptional) {
-            const bool isLess = opName == "<" || opName == "<=";
-            if (isLess && !nullValue.value()) {
-                // QL will handle 'x [operation] NULL' as TRUE here, but we need FALSE.
-                QuoteColumnForQL(columnName, result);
-                result << " != NULL AND ";
-            } else if (!isLess && nullValue.value()) {
-                // QL will handle 'x [operation] NULL' as FALSE here, but we need TRUE.
-                QuoteColumnForQL(columnName, result);
-                result << " = NULL OR ";
-            }
-        }
-        QuoteColumnForQL(columnName, result);
-        result << " ";
-        ConvertComparisonForQL(opName, result);
-        const auto valueStr = maybeIntValue.Cast().Literal().Value();
-        result << " " << valueStr;
-    } else if (constantFilter.value()) {
-        // Value is out of the range, comparison is always TRUE.
-        if (columnIsOptional && !nullValue.value()) {
-            // Handle comparison with NULL as FALSE.
-            QuoteColumnForQL(columnName, result);
-            result << " IS NOT NULL";
-        } else {
-            result << "TRUE";
-        }
-    } else {
-        // Value is out of the range, comparison is always FALSE.
-        if (columnIsOptional && nullValue.value()) {
-            // Handle comparison with NULL as TRUE.
-            QuoteColumnForQL(columnName, result);
-            result << " IS NULL";
-        } else {
-            result << "FALSE";
-        }
-    }
-}
-
-void GenerateInputQueryComparison(const TCoCompare& op, const std::optional<bool>& nullValue, TStringBuilder& result) {
-    YQL_ENSURE(op.Ref().IsCallable({"<", "<=", ">", ">=", "==", "!="}));
-    const auto left = op.Left().Ptr();
-    const auto right = op.Right().Ptr();
-
-    if (left->IsCallable("Member")) {
-        GenerateInputQueryIntegerComparison(op.CallableName(), left, right, nullValue, result);
-    } else {
-        YQL_ENSURE(right->IsCallable("Member"));
-        auto invertedOp = op.CallableName();
-        if (invertedOp == "<") {
-            invertedOp = ">";
-        } else if (invertedOp == "<=") {
-            invertedOp = ">=";
-        } else if (invertedOp == ">") {
-            invertedOp = "<";
-        } else if (invertedOp == ">=") {
-            invertedOp = "<=";
-        }
-        GenerateInputQueryIntegerComparison(invertedOp, right, left, nullValue, result);
-    }
-}
-
-void GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuilder& result) {
-    if (const auto maybeCompare = TMaybeNode<TCoCompare>(node)) {
-        GenerateInputQueryComparison(maybeCompare.Cast(), {}, result);
-    } else if (node->IsCallable("Not")) {
-        const auto child = node->ChildPtr(0);
-        if (child->IsCallable("Exists")) {
-            // Do not generate NOT (x IS NOT NULL).
-            result << "(";
-            GenerateInputQueryWhereExpression(child->ChildPtr(0), result);
-            result << ") IS NULL";
-        } else {
-            result << "NOT (";
-            GenerateInputQueryWhereExpression(child, result);
-            result << ")";
-        }
-    } else if (node->IsCallable("Exists")) {
-        result << "(";
-        GenerateInputQueryWhereExpression(node->ChildPtr(0), result);
-        result << ") IS NOT NULL";
-    } else if (node->IsCallable({"And", "Or"})) {
-        const TStringBuf op = node->IsCallable("And") ? "AND" : "OR";
-
-        result << "(";
-        GenerateInputQueryWhereExpression(node->Child(0), result);
-        result << ")";
-
-        const auto size = node->ChildrenSize();
-        for (TExprNode::TListType::size_type i = 1U; i < size; ++i) {
-            result << " " << op << " (";
-            GenerateInputQueryWhereExpression(node->Child(i), result);
-            result << ")";
-        };
-    } else if (node->IsCallable("Coalesce")) {
-        YQL_ENSURE(node->ChildrenSize() == 2);
-        const auto op = TMaybeNode<TCoCompare>(node->Child(0)).Cast();
-        const auto nullValueStr = TMaybeNode<TCoBool>(node->Child(1)).Cast().Literal().Value();
-        const std::optional<bool> nullValue(IsTrue(nullValueStr));
-        GenerateInputQueryComparison(op, nullValue, result);
-    } else if (const auto maybeBool = TMaybeNode<TCoBool>(node)) {
-        result << maybeBool.Cast().Literal().Value();
-    } else if (node->IsCallable("Member")) {
-        const auto columnName = node->ChildPtr(1)->Content();
-        QuoteColumnForQL(columnName, result);
-    } else {
-        YQL_ENSURE(false, "unexpected node type");
-    }
-}
-
-TString GenerateInputQueryWhereExpression(const TExprNode& settings) {
-    auto qlFilterNode = NYql::GetSetting(settings, EYtSettingType::QLFilter);
-    if (!qlFilterNode) {
-        return "";
-    }
-
-    qlFilterNode = qlFilterNode->ChildPtr(1);
-    YQL_ENSURE(qlFilterNode && qlFilterNode->IsCallable("YtQLFilter"));
-    const TYtQLFilter qlFilter(qlFilterNode);
-    const auto predicate = qlFilter.Predicate().Body();
-
-    TStringBuilder result;
-    GenerateInputQueryWhereExpression(predicate.Ptr(), result);
-    YQL_CLOG(INFO, ProviderYt)  << __FUNCTION__ << ": " << result;
-    return result;
-}
-
-TString GenerateInputQuery(const TRichYPath& path, const TString& whereExpression, bool useSystemColumns) {
-    YQL_ENSURE(whereExpression);
-    TStringBuilder result;
-    if (!path.Columns_ || !path.Columns_->Parts_) {
-        result << "*";
-    } else {
-        bool first = true;
-        for (const auto& column: path.Columns_->Parts_) {
-            if (!first) {
-                result << ", ";
-            }
-            QuoteColumnForQL(column, result);
-            first = false;
-        }
-        if (useSystemColumns) {
-            result << ", `$row_index`, `$range_index`";
-        }
-    }
-    result << " WHERE " << whereExpression;
-    YQL_CLOG(INFO, ProviderYt)  << __FUNCTION__ << ": " << result;
-    return result;
-}
-
-void SetInputQuerySpec(NYT::TNode& spec, const TString& inputQuery, const TYtSettings::TConstPtr& config, bool useSystemColumns) {
-    spec["input_query"] = inputQuery;
     spec["input_query_filter_options"]["enable_chunk_filter"] = true;
-    spec["input_query_filter_options"]["enable_row_filter"] = config->PruneQLFilterLambda.Get().GetOrElse(DEFAULT_PRUNE_QL_FILTER_LAMBDA);
-    if (useSystemColumns) {
-        spec["input_query_options"]["use_system_columns"] = true;
-    }
-}
-
-void PrepareInputQueryForMerge(NYT::TNode& spec, TVector<TRichYPath>& paths, const TString& whereExpression, const TYtSettings::TConstPtr& config) {
-    // YQL-19382
-    if (whereExpression) {
-        YQL_ENSURE(paths.size() == 1, "YtQLFilter: multiple inputs are not supported");
-        auto& path = paths[0];
-        const TString inputQuery = GenerateInputQuery(path, whereExpression, /*useSystemColumns*/ false);
-        path.Columns_.Clear();
-        SetInputQuerySpec(spec, inputQuery, config, /*useSystemColumns*/ false);
-    }
-}
-
-template <typename T>
-void PrepareInputQueryForMap(NYT::TNode& spec, T& specWithPaths, const TString& whereExpression, const TYtSettings::TConstPtr& config, bool useSystemColumns) {
-    // YQL-19382
-    if (whereExpression) {
-        const auto& inputs = specWithPaths.GetInputs();
-        YQL_ENSURE(inputs.size() == 1, "YtQLFilter: multiple inputs are not supported");
-        auto path = inputs[0];
-        const TString inputQuery = GenerateInputQuery(path, whereExpression, useSystemColumns);
-        if (path.Columns_) {
-            path.Columns_.Clear();
-            specWithPaths.SetInput(0, path);
-        }
-        SetInputQuerySpec(spec, inputQuery, config, useSystemColumns);
-    }
+    spec["input_query_filter_options"]["enable_row_filter"] = false;
 }
 
 struct TSrcTable {
@@ -623,9 +319,14 @@ public:
         try {
             TSession::TPtr session = GetSession(options.SessionId());
             auto logCtx = NYql::NLog::CurrentLogContextPath();
-            return session->Queue_->Async([session, logCtx, abort=options.Abort(), detachSnapshotTxs=options.DetachSnapshotTxs()] () {
+            return session->Queue_->Async([
+                session, logCtx,
+                abort=options.Abort(),
+                detachSnapshotTxs=options.DetachSnapshotTxs(),
+                commitDumpTxs=options.CommitDumpTxs()
+            ] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
-                return ExecFinalize(session, abort, detachSnapshotTxs);
+                return ExecFinalize(session, abort, detachSnapshotTxs, commitDumpTxs);
             });
         } catch (...) {
             return MakeFuture(ResultFromCurrentException<TFinalizeResult>());
@@ -1151,10 +852,21 @@ public:
             TSet<TString> srcColumnGroupAlts;
             bool first = true;
             const TStructExprType* itemType = nullptr;
+
+            const auto destinationRowSpec = options.DestinationRowSpec();
+            const auto dstIsDynamic = TYtTableBaseInfo::GetMeta(publish.Publish())->IsDynamic;
+            bool srcAreSortedByDstKeys = true;
             for (auto out: publish.Input()) {
                 auto outTableWithCluster = GetOutTableWithCluster(out);
                 auto outTable = outTableWithCluster.first.Cast<TYtOutTable>();
-                src.emplace_back(outTable.Name().StringValue(), outTableWithCluster.second);
+                src.emplace_back(
+                    outTable.Name().StringValue(),
+                    outTableWithCluster.second);
+
+                if (dstIsDynamic && !destinationRowSpec->CompareSortness(outTable.RowSpec(), /*checkUniqueFlag*/false)) {
+                    srcAreSortedByDstKeys = false;
+                }
+
                 if (first) {
                     itemType = GetSeqItemType(*outTable.Ref().GetTypeAnn()).Cast<TStructExprType>();
                     if (auto columnGroupSetting = NYql::GetSetting(outTable.Settings().Ref(), EYtSettingType::ColumnGroups)) {
@@ -1251,9 +963,9 @@ public:
             const ui32 dstEpoch = TEpochInfo::Parse(publish.Publish().Epoch().Ref()).GetOrElse(0);
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, node.Get(), &ctx);
 
-            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts = std::move(strOpts)] () mutable {
+            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstIsDynamic, srcAreSortedByDstKeys, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts = std::move(strOpts)] () mutable {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
-                return ExecPublish(execCtx, std::move(src), dst, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts);
+                return ExecPublish(execCtx, std::move(src), dst, dstIsDynamic, srcAreSortedByDstKeys, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts);
             })
             .Apply([nodePos] (const TFuture<void>& f) {
                 try {
@@ -1568,7 +1280,7 @@ public:
         }
     }
 
-    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const final {
+    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
         auto nodePos = ctx.GetPosition(node->Pos());
         try {
@@ -1751,6 +1463,36 @@ public:
         Clusters_->AddCluster(cluster, false);
     }
 
+    TFuture<TDumpResult> Dump(TDumpOptions&& options) override {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+
+            TVector<TFuture<void>> futures;
+            for (auto& [cluster, entries] : options.Entries()) {
+                auto execCtx = MakeExecCtx(std::move(entries), session, cluster, nullptr, nullptr);
+                futures.push_back(execCtx->Session_->Queue_->Async([execCtx]() {
+                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+                    return ExecDump(execCtx);
+                }));
+            }
+
+            return WaitExceptionOrAll(futures).Apply([futures](const TFuture<void>& f) {
+                try {
+                    f.GetValue();
+
+                    TDumpResult res;
+                    res.SetSuccess();
+                    return res;
+                } catch (...) {
+                    return ResultFromCurrentException<TDumpResult>();
+                }
+            });
+        } catch (...) {
+            return MakeFuture(ResultFromCurrentException<TDumpResult>());
+        }
+    }
+
 private:
     class TNodeResultBuilder {
     public:
@@ -1886,7 +1628,7 @@ private:
         const TVector<TString> Columns_;
     };
 
-    static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort, bool detachSnapshotTxs) {
+    static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort, bool detachSnapshotTxs, bool commitDumpTxs) {
         try {
             TFinalizeResult res;
             if (detachSnapshotTxs) {
@@ -1897,7 +1639,7 @@ private:
                 YQL_CLOG(INFO, ProviderYt) << "Aborting all transactions for hidden query";
                 session->TxCache_.AbortAll();
             } else {
-                session->TxCache_.Finalize();
+                session->TxCache_.Finalize(commitDumpTxs);
             }
             res.SetSuccess();
             return res;
@@ -2540,6 +2282,8 @@ private:
         const TExecContext<TPublishOptions>::TPtr& execCtx,
         TVector<TSrcTable>&& src,
         const TString& dst,
+        bool dstIsDynamic,
+        bool srcAreSortedByDstKeys,
         const ui32 dstEpoch,
         const bool isAnonymous,
         EYtWriteMode mode,
@@ -2555,6 +2299,10 @@ private:
 
         auto cluster = execCtx->Cluster_;
         auto entry = execCtx->GetEntry();
+
+        const bool enableDynamicTablesWrite = execCtx->Options_.Config()->_EnableDynamicTablesWrite.Get(cluster).GetOrElse(false);
+        YQL_ENSURE(!dstIsDynamic || enableDynamicTablesWrite);
+
         TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), cluster);
         auto dstPath = NYql::TransformPath(tmpFolder, dst, isAnonymous, execCtx->Session_->UserName_);
         if (execCtx->Hidden) {
@@ -2742,14 +2490,14 @@ private:
 
         TFuture<void> res;
         forceMerge = forceMerge || AnyOf(src, [&](const auto& entry) { return entry.Cluster != execCtx->Cluster_; });
-        if (EYtWriteMode::Flush == mode || EYtWriteMode::Append == mode || src.size() > 1 || forceMerge) {
+        if (EYtWriteMode::Flush == mode || EYtWriteMode::Append == mode || src.size() > 1 || forceMerge || dstIsDynamic) {
             TFuture<bool> cacheCheck = MakeFuture<bool>(false);
             if (EYtWriteMode::Flush != mode && isAnonymous) {
                 execCtx->SetCacheItem({dstPath}, {NYT::TNode::CreateMap()}, tmpFolder);
                 cacheCheck = execCtx->LookupQueryCacheAsync();
             }
             res = cacheCheck.Apply([mode, src, execCtx, rowSpec, forceTransform,
-                                    appendToSorted, initial, entry, dstPath, dstEpoch, yqlAttrs, combineChunks,
+                                    appendToSorted, initial, entry, dstPath, dstIsDynamic, srcAreSortedByDstKeys, dstEpoch, yqlAttrs, combineChunks,
                                     dstCompressionCodec, dstErasureCodec, dstReplicationFactor, dstMedia, dstPrimaryMedium,
                                     nativeYtTypeCompatibility, publishTx, cluster,
                                     commitCheckpoint, columnGroupsSpec = std::move(columnGroupsSpec),
@@ -2768,8 +2516,9 @@ private:
                     columns.emplace_back(item.first);
                 }
 
-                TMergeOperationSpec mergeSpec;
+                TVector<TRichYPath> inputs;
                 if (appendToSorted) {
+                    YQL_ENSURE(!dstIsDynamic);
                     TRichYPath input;
                     if (initial) {
                         with_lock (entry->Lock_) {
@@ -2780,7 +2529,7 @@ private:
                     } else {
                         input = TRichYPath(dstPath).Columns(columns);
                     }
-                    mergeSpec.AddInput(input);
+                    inputs.push_back(input);
                 }
                 for (auto& s: src) {
                     auto path = TRichYPath(s.Name).Columns(columns);
@@ -2791,7 +2540,7 @@ private:
                             path.Cluster(execCtx->Clusters_->GetYtName(pathCluster));
                         }
                     }
-                    mergeSpec.AddInput(path);
+                    inputs.push_back(path);
                 }
 
                 NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc();
@@ -2800,10 +2549,17 @@ private:
                     spec["additional_security_tags"] = securityTagsNode;
                 }
 
+                if (dstIsDynamic) {
+                    // Otherwise, the chunks after bulk insert will be too big.
+                    forceTransform = true;
+                    // Should be set on production clusters
+                    spec["allow_output_dynamic_tables"] = true;
+                }
+
                 auto ytDst = TRichYPath(dstPath);
-                if (EYtWriteMode::Append == mode && !appendToSorted) {
+                if ((EYtWriteMode::Append == mode && !appendToSorted) || EYtWriteMode::Upsert == mode) {
                     ytDst.Append(true);
-                } else {
+                } else if (!dstIsDynamic) {
                     NYT::TNode fullSpecYson;
                     rowSpec->FillCodecNode(fullSpecYson);
                     const auto schema = RowSpecToYTSchema(fullSpecYson, nativeYtTypeCompatibility, columnGroupsSpec);
@@ -2838,33 +2594,54 @@ private:
                         yqlAttrs.Clear();
                     }
                 }
-                mergeSpec.Output(ytDst);
-                mergeSpec.ForceTransform(forceTransform);
-                FillOperationSpec(mergeSpec, execCtx);
-
-                if (rowSpec->IsSorted()) {
-                    mergeSpec.Mode(MM_SORTED);
-                    mergeSpec.MergeBy(ToYTSortColumns(rowSpec->GetForeignSort()));
-                } else {
-                    mergeSpec.Mode(MM_ORDERED);
-                }
 
                 EYtOpProps flags = EYtOpProp::PublishedAutoMerge;
                 if (combineChunks) {
                     flags |= EYtOpProp::PublishedChunkCombine;
                 }
 
-                FillSpec(spec, *execCtx, entry, 0., Nothing(), flags);
-                CheckSpecForSecrets(spec, execCtx);
+                TFuture<void> resultFuture;
+                if (dstIsDynamic && !srcAreSortedByDstKeys) {
+                    TSortOperationSpec sortSpec;
+                    sortSpec.Inputs(inputs);
+                    sortSpec.Output(ytDst);
 
-                if (combineChunks) {
-                    mergeSpec.CombineChunks(true);
+                    sortSpec.SortBy(TSortColumns(rowSpec->SortedBy));
+                    sortSpec.SchemaInferenceMode(ESchemaInferenceMode::Auto);
+
+                    FillOperationSpec(sortSpec, execCtx);
+                    FillSpec(spec, *execCtx, entry, 0., flags);
+                    CheckSpecForSecrets(spec, execCtx);
+
+                    resultFuture = execCtx->RunOperation([publishTx, sortSpec = std::move(sortSpec), spec = std::move(spec)]() {
+                        return publishTx->Sort(sortSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).CreateOutputTables(false).Spec(spec));
+                    });
+                } else {
+                    TMergeOperationSpec mergeSpec;
+                    mergeSpec.Inputs(inputs);
+                    mergeSpec.Output(ytDst);
+                    mergeSpec.ForceTransform(forceTransform);
+                    FillOperationSpec(mergeSpec, execCtx);
+
+                    if (rowSpec->IsSorted()) {
+                        mergeSpec.Mode(MM_SORTED);
+                        mergeSpec.MergeBy(ToYTSortColumns(rowSpec->GetForeignSort()));
+                    } else {
+                        mergeSpec.Mode(MM_ORDERED);
+                    }
+
+                    FillSpec(spec, *execCtx, entry, 0., Nothing(), flags);
+                    CheckSpecForSecrets(spec, execCtx);
+
+                    if (combineChunks) {
+                        mergeSpec.CombineChunks(true);
+                    }
+
+                    resultFuture = execCtx->RunOperation([publishTx, mergeSpec = std::move(mergeSpec), spec = std::move(spec)]() {
+                        return publishTx->Merge(mergeSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).CreateOutputTables(false).Spec(spec));
+                    });
                 }
-
-                return execCtx->RunOperation([publishTx, mergeSpec = std::move(mergeSpec), spec = std::move(spec)]() {
-                    return publishTx->Merge(mergeSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).CreateOutputTables(false).Spec(spec));
-                })
-                .Apply([execCtx](const auto& f){
+                return resultFuture.Apply([execCtx](const auto& f){
                     f.GetValue();
                     execCtx->StoreQueryCache();
                 });
@@ -3837,10 +3614,9 @@ private:
         }
         bool combineChunks = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks);
         TMaybe<ui64> limit = GetLimit(merge.Settings().Ref());
-        const TString inputQueryExpr = GenerateInputQueryWhereExpression(merge.Settings().Ref());
 
-        return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, inputQueryExpr, execCtx]() {
-            return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, inputQueryExpr, execCtx] (const auto& f) {
+        return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, execCtx]() {
+            return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 execCtx->SetNodeExecProgress("Preparing");
                 auto entry = execCtx->GetEntry();
@@ -3887,7 +3663,8 @@ private:
                     spec["schema_inference_mode"] = "from_output"; // YTADMINREQ-17692
                 }
 
-                PrepareInputQueryForMerge(spec, mergeOpSpec.Inputs_, inputQueryExpr, execCtx->Options_.Config());
+                PreparePathInputQuerySpec(spec, mergeOpSpec.Inputs_);
+
                 CheckSpecForSecrets(spec, execCtx);
 
                 return execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)](){
@@ -3905,13 +3682,12 @@ private:
         const TVector<TString>& sortLimitBy,
         TString mapLambda,
         const TExpressionResorceUsage& extraUsage,
-        const TString& inputQueryExpr,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([job, ordered, jobCount, limit, sortLimitBy, mapLambda,
-            extraUsage, inputQueryExpr, execCtx, testRun] (const auto& f) mutable
+            extraUsage, execCtx, testRun] (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->SetNodeExecProgress("Preparing");
@@ -4023,7 +3799,8 @@ private:
                 spec["job_count"] = static_cast<i64>(*jobCount);
             }
 
-            PrepareInputQueryForMap(spec, mapOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
+            PreparePathInputQuerySpec(spec, mapOpSpec.GetInputs());
+
             CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
@@ -4058,12 +3835,11 @@ private:
             limit.Clear();
         }
         auto extraUsage = execCtx->ScanExtraResourceUsage(map.Mapper().Body().Ref(), true);
-        const TString inputQueryExpr = GenerateInputQueryWhereExpression(map.Settings().Ref());
 
-        return execCtx->Session_->Queue_->Async([mapJob, ordered, jobCount, limit, sortLimitBy, mapLambda, extraUsage, inputQueryExpr, execCtx]() {
+        return execCtx->Session_->Queue_->Async([mapJob, ordered, jobCount, limit, sortLimitBy, mapLambda, extraUsage, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
-            return ExecMap(mapJob, ordered, jobCount, limit, sortLimitBy, mapLambda, extraUsage, inputQueryExpr, execCtx);
+            return ExecMap(mapJob, ordered, jobCount, limit, sortLimitBy, mapLambda, extraUsage, execCtx);
         });
     }
 
@@ -4296,14 +4072,13 @@ private:
         NYT::TNode intermediateMeta,
         const NYT::TNode& intermediateSchema,
         const NYT::TNode& intermediateStreams,
-        const TString& inputQueryExpr,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs,
                           mapExtraUsage, mapBlockInput, reduceLambda, reduceInputType, reduceExtraUsage,
-                          intermediateMeta, intermediateSchema, intermediateStreams, inputQueryExpr, execCtx, testRun]
+                          intermediateMeta, intermediateSchema, intermediateStreams, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4527,7 +4302,8 @@ private:
                 spec["mapper"]["output_streams"] = intermediateStreams;
             }
 
-            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
+            PreparePathInputQuerySpec(spec, mapReduceOpSpec.GetInputs());
+
             CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
@@ -4551,13 +4327,12 @@ private:
         const TExpressionResorceUsage& reduceExtraUsage,
         const NYT::TNode& intermediateSchema,
         bool useIntermediateStreams,
-        const TString& inputQueryExpr,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType,
-                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, inputQueryExpr, execCtx, testRun]
+                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4678,7 +4453,8 @@ private:
                 spec["reducer"]["enable_input_table_index"] = true;
             }
 
-            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
+            PreparePathInputQuerySpec(spec, mapReduceOpSpec.GetInputs());
+
             CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
@@ -4803,19 +4579,17 @@ private:
             limit.Clear();
         }
 
-        const TString inputQueryExpr = GenerateInputQueryWhereExpression(mapReduce.Settings().Ref());
-
         return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
-            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, inputQueryExpr, execCtx]()
+            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, execCtx]()
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             if (mapLambda) {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
-                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, inputQueryExpr, execCtx);
+                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, execCtx);
             } else {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, intermediateSchema,
-                    useIntermediateStreams, inputQueryExpr, execCtx);
+                    useIntermediateStreams, execCtx);
             }
         });
     }
@@ -4956,6 +4730,14 @@ private:
                     execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
                     TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
                     execCtx->SetNodeExecProgress("Local run");
+
+                    if (transform.HasFilesToDump()) {
+                        YQL_ENSURE(execCtx->Session_->FullCapture_);
+                        execCtx->Session_->FullCapture_->ReportError(
+                            yexception() << "user files in local run"
+                        );
+                    }
+
                     ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff, nativeTypeCompat), execCtx, entry, builder, alloc, tmpFiles->TmpDir.GetPath() + '/');
                     return MakeFuture();
                 }
@@ -5567,6 +5349,14 @@ private:
                 execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
                 TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
                 execCtx->SetNodeExecProgress("Local run");
+
+                if (transform.HasFilesToDump()) {
+                    YQL_ENSURE(execCtx->Session_->FullCapture_);
+                    execCtx->Session_->FullCapture_->ReportError(
+                        yexception() << "user files in local run"
+                    );
+                }
+
                 TExploringNodeVisitor explorer;
                 auto localGraph = builder.BuildLocalGraph(GetGatewayNodeFactory(codecCtx.Get(), nullptr, execCtx->UserFiles_, pathPrefix),
                     execCtx->Options_.UdfValidateMode(), NUdf::EValidatePolicy::Exception,
@@ -5713,6 +5503,48 @@ private:
             });
     }
 
+    static void ExecDump(const TExecContext<TDumpOptions::TEntries>::TPtr& execCtx) {
+        auto entry = execCtx->GetEntry();
+        YQL_ENSURE(entry->DumpTx);
+        for (auto& [srcPath, dstPath] : execCtx->Options_) {
+            NYT::TRichYPath srcRichYPath;
+            NYT::ITransactionPtr srcTx;
+            auto snapshot = entry->Snapshots.FindPtr(std::make_pair(srcPath, 0));
+            if (snapshot) {
+                // use table snapshot if present
+                auto& [tableId, txId, _] = *snapshot;
+                srcRichYPath.Path(tableId).TransactionId(txId);
+                srcTx = entry->GetSnapshotTx(txId);
+            } else {
+                srcRichYPath.Path(srcPath);
+                srcTx = entry->Tx;
+            }
+
+            NYT::TNode attrs = srcTx->Get(srcRichYPath.Path_ + "&/@", NYT::TGetOptions().AttributeFilter(
+                NYT::TAttributeFilter()
+                    .AddAttribute("type")
+                    .AddAttribute("compression_codec")
+                    .AddAttribute("erasure_codec")
+                    .AddAttribute("optimize_for")
+                    .AddAttribute("schema")
+                    .AddAttribute("media")
+                    .AddAttribute("primary_medium")
+            ));
+            auto srcType = FromString<NYT::ENodeType>(attrs.At("type").AsString());
+            attrs.AsMap().erase("type");
+
+            auto userAttrs = GetUserAttributes(srcTx, srcRichYPath.Path_, true);
+            NYT::MergeNodes(attrs, userAttrs);
+
+            entry->DumpTx->Create(dstPath, srcType, TCreateOptions().Recursive(true).Attributes(attrs));
+            entry->DumpTx->Concatenate(
+                { srcRichYPath },
+                NYT::TRichYPath(dstPath),
+                TConcatenateOptions()
+            );
+        }
+    }
+
     template <class TExecParamsPtr>
     static TVector<TRichYPath> PrepareDestinations(
         const TVector<TOutputInfo>& outTables,
@@ -5821,9 +5653,9 @@ private:
         const TSession::TPtr& session,
         const TString& cluster,
         const TExprNode* root,
-        TExprContext* exprCtx) const
+        TExprContext* exprCtx)
     {
-        auto ctx = MakeIntrusive<TExecContext<TOptions>>(MakeIntrusive<TYtNativeServices>(Services_), Clusters_, MkqlCompiler_, std::move(options), session, cluster, UrlMapper_, Services_.Metrics);
+        auto ctx = MakeIntrusive<TExecContext<TOptions>>(TIntrusivePtr<TYtNativeGateway>(this), MakeIntrusive<TYtNativeServices>(Services_), Clusters_, MkqlCompiler_, std::move(options), session, cluster, UrlMapper_, Services_.Metrics);
         if (root) {
             YQL_ENSURE(exprCtx);
             if (TYtTransientOpBase::Match(root)) {

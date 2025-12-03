@@ -1,9 +1,9 @@
 #include "construct_join_graph.h"
-#include <algorithm>
 #include <ydb/library/yql/dq/comp_nodes/type_utils.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -88,9 +88,9 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
 
     const TVector<TType*> resultTypesArr = [&] {
         TVector<TType*> arr;
-        TDqRenames dqRenames = FromGraceFormat(renames);
+        TDqUserRenames dqRenames = FromGraceFormat(renames);
         for (auto rename : dqRenames) {
-            if (rename.Side == JoinSide::kLeft) {
+            if (rename.Side == EJoinSide::kLeft) {
                 auto* resType = descr.LeftSource.ColumnTypes[rename.Index];
                 arr.push_back([&] {
                     if (ForceLeftOptional(joinKind) && !resType->IsOptional()) {
@@ -151,6 +151,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
 
     auto scalarGraphFrom = [&](TRuntimeNode wideStreamJoin) {
         THolder<IComputationGraph> graph = descr.Setup->BuildGraph(wideStreamJoin, args.Entrypoints);
+
         SetEntryPointValues(*graph, descr.LeftSource.ValuesList, descr.RightSource.ValuesList);
         return graph;
     };
@@ -238,7 +239,9 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
             Y_ABORT("unreachable");
         }
     }();
-    return graphFrom(wideStream);
+    auto graph = graphFrom(wideStream);
+    graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+    return graph;
 }
 
 i32 ResultColumnCount(ETestedJoinAlgo algo, TJoinDescription descr) {

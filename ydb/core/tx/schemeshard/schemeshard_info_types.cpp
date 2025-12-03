@@ -279,27 +279,33 @@ void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartiti
 }
 
 void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& diskSpaceUsageDelta) {
+    // just (in)sanity check, diskSpaceUsageDelta should have at least 1 element
+    if (diskSpaceUsageDelta.empty()) {
+        return;
+    }
     // see filling of diskSpaceUsageDelta in UpdateShardStats()
-    for (const auto& [poolKind, delta] : diskSpaceUsageDelta) {
-        if (poolKind.empty()) {
-            // total space
-            DiskSpaceUsage.Tables.DataSize += delta.DataSize;
-            counters->ChangeDiskSpaceTablesDataBytes(delta.DataSize);
+    // total space usage, index 0
+    {
+        const auto& [poolKind, delta] = diskSpaceUsageDelta[0];
 
-            DiskSpaceUsage.Tables.IndexSize += delta.IndexSize;
-            counters->ChangeDiskSpaceTablesIndexBytes(delta.IndexSize);
+        DiskSpaceUsage.Tables.DataSize += delta.DataSize;
+        counters->ChangeDiskSpaceTablesDataBytes(delta.DataSize);
 
-            i64 oldTotalBytes = DiskSpaceUsage.Tables.TotalSize;
-            DiskSpaceUsage.Tables.TotalSize = DiskSpaceUsage.Tables.DataSize + DiskSpaceUsage.Tables.IndexSize;
-            i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize;
-            counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes);
-        } else {
-            // space separated by storage pool kinds
-            auto& r = DiskSpaceUsage.StoragePoolsUsage[poolKind];
-            r.DataSize += delta.DataSize;
-            r.IndexSize += delta.IndexSize;
-            counters->AddDiskSpaceTables(GetUserFacingStorageType(poolKind), delta.DataSize, delta.IndexSize);
-        }
+        DiskSpaceUsage.Tables.IndexSize += delta.IndexSize;
+        counters->ChangeDiskSpaceTablesIndexBytes(delta.IndexSize);
+
+        i64 oldTotalBytes = DiskSpaceUsage.Tables.TotalSize;
+        DiskSpaceUsage.Tables.TotalSize = DiskSpaceUsage.Tables.DataSize + DiskSpaceUsage.Tables.IndexSize;
+        i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize;
+        counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes);
+    }
+    // space usage by storage pool kinds, from index 1 onwards
+    for (size_t i = 1; i < diskSpaceUsageDelta.size(); ++i) {
+        const auto& [poolKind, delta] = diskSpaceUsageDelta[i];
+        auto& r = DiskSpaceUsage.StoragePoolsUsage[poolKind];
+        r.DataSize += delta.DataSize;
+        r.IndexSize += delta.IndexSize;
+        counters->AddDiskSpaceTables(GetUserFacingStorageType(poolKind), delta.DataSize, delta.IndexSize);
     }
 }
 
@@ -762,6 +768,40 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     }
 
     return alterData;
+}
+
+void TTableInfo::GetIndexObjectCount(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc, ui32& indexTableCount, ui32& sequenceCount, ui32& indexTableShards) {
+    indexTableCount = 1;
+    sequenceCount = 0;
+    switch (GetIndexType(indexDesc)) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
+            indexTableCount = (prefixVectorIndex ? 3 : 2);
+            sequenceCount = (prefixVectorIndex ? 1 : 0);
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+            bool withRelevance = indexDesc.GetFulltextIndexDescription().GetSettings()
+                .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+            indexTableCount = (withRelevance ? 4 : 1);
+            break;
+        }
+        default:
+            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDesc.GetType()));
+            break;
+    }
+    if (indexDesc.IndexImplTableDescriptionsSize() == indexTableCount) {
+        indexTableShards = 0;
+        for (const auto& indexTableDesc: indexDesc.GetIndexImplTableDescriptions()) {
+            indexTableShards += TTableInfo::ShardsToCreate(indexTableDesc);
+        }
+    } else {
+        indexTableShards = indexTableCount;
+    }
 }
 
 void TTableInfo::ResetDescriptionCache() {
@@ -1420,26 +1460,6 @@ bool TPartitionConfigMerger::VerifyAlterParams(
         return false;
     }
 
-    if (dstConfig.HasChannelProfileId()) {
-        for (const auto& family : dstConfig.GetColumnFamilies()) {
-            if (family.HasStorageConfig()) {
-                errDescr = TStringBuilder()
-                        << "Migration from profile id by storage config is not allowed, was "
-                        << srcConfig.GetChannelProfileId() << ", asks storage config";
-                return false;
-            }
-        }
-
-        if (srcConfig.GetChannelProfileId() != dstConfig.GetChannelProfileId()) {
-            errDescr = TStringBuilder()
-                    << "Profile modification is not allowed, was "
-                    << srcConfig.GetChannelProfileId()
-                    << ", asks "
-                    <<  dstConfig.GetChannelProfileId();
-            return false;
-        }
-    }
-
     const NKikimrSchemeOp::TStorageConfig* wasStorageConfig = nullptr;
     for (const auto& family : srcConfig.GetColumnFamilies()) {
         if (family.GetId() == 0 && family.HasStorageConfig()) {
@@ -1480,7 +1500,26 @@ bool TPartitionConfigMerger::VerifyAlterParams(
     if (isStorageConfig) {
         if (!wasStorageConfig) {
             errDescr = TStringBuilder()
-                    << "Couldn't add storage configuration if it hasn't been set before";
+                    << "Cannot add storage config if it hasn't been set before";
+            return false;
+        }
+    }
+
+    if (dstConfig.HasChannelProfileId()) {
+        // Note: ChannelProfileId == 0 may have been implicit
+        if (dstConfig.GetChannelProfileId() != srcConfig.GetChannelProfileId()) {
+            errDescr = TStringBuilder()
+                    << "Profile modification is not allowed, was "
+                    << srcConfig.GetChannelProfileId()
+                    << ", asks "
+                    <<  dstConfig.GetChannelProfileId();
+            return false;
+        }
+
+        if (isStorageConfig && !srcConfig.HasChannelProfileId()) {
+            errDescr = TStringBuilder()
+                    << "Setting ChannelProfileId to " << dstConfig.GetChannelProfileId()
+                    << " for tables with storage config is not allowed";
             return false;
         }
     }
@@ -1854,10 +1893,9 @@ void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsag
             diskSpaceUsageDelta->emplace_back(poolKind, delta);
         }
     }
-    for (const auto& [poolKind, delta] : *diskSpaceUsageDelta) {
-        if (poolKind.empty()) {
-            continue;
-        }
+    // from index 1 onwards (as index 0 holds total space delta)
+    for (size_t i = 1; i < diskSpaceUsageDelta->size(); ++i) {
+        const auto& [poolKind, delta] = (*diskSpaceUsageDelta)[i];
         auto& r = Aggregated.StoragePoolsStats[poolKind];
         r.DataSize += delta.DataSize;
         r.IndexSize += delta.IndexSize;
@@ -1916,10 +1954,57 @@ void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsag
     UpdatedStats.insert(datashardIdx);
 }
 
-void TAggregatedStats::UpdateTableStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {
+void TTableInfo::UpdateShardStatsForFollower(
+    ui64 followerId,
+    const TShardIdx& shardIdx,
+    const TPartitionStats& newStats
+) {
+    Stats.UpdateShardStatsForFollower(followerId, shardIdx, newStats);
+}
+
+void TTableAggregatedStats::UpdateShardStatsForFollower(
+    ui64 /* followerId */,
+    const TShardIdx& shardIdx,
+    const TPartitionStats& newStats
+) {
+    // Find the statistics record for the given partition
+    const auto statsIt = PartitionStats.find(shardIdx);
+
+    if (statsIt == PartitionStats.end()) {
+        return;
+    }
+
+    TPartitionStats& oldStats = statsIt->second;
+
+    // Ignore messages coming from older generations of the given partition
+    //
+    // NOTE: Each EvPeriodicTableStats message contains two fields, which help
+    //       identify and filter old/stale messages: the generation and the round.
+    //       The generation is updated every time the partition is relocated
+    //       (comes from the state storage) and the round is incremented for
+    //       every message sent (comes from the DataShard actor memory).
+    //       Comparing the round requires keeping track of the round field
+    //       received from every follower. This is both too hard and too expensive.
+    //       For the purposes of tracking statistics from followers, it is sufficient
+    //       to compare only the generation (and ignore the round) - it is compared
+    //       to the generation that came from the most recent EvPeriodicTableStats
+    //       message from the leader for the given partition.
+    if (newStats.SeqNo.Generation < oldStats.SeqNo.Generation) {
+        return;
+    }
+
+    // Update only the top CPU usage and ignore the rest of the statistics
+    //
+    // NOTE: See the comment for the TPartitionStats.TopCpuUsage field
+    //       for the reasons why this is sufficient
+    oldStats.TopCpuUsage.Update(newStats.TopCpuUsage); // The left is new stats now!
+}
+
+void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {
     auto& tableStats = TableStats[pathId];
     tableStats.PartitionStats[shardIdx]; // insert if none
-    tableStats.UpdateShardStats(diskSpaceUsageDelta, shardIdx, newStats, now);
+    TDiskSpaceUsageDelta unused;
+    tableStats.UpdateShardStats(&unused, shardIdx, newStats, now);
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {
@@ -2029,7 +2114,8 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 
     // Check if we can try merging by load
     TDuration minUptime = TDuration::Seconds(splitSettings.MergeByLoadMinUptimeSec);
-    if (!canMerge && IsMergeByLoadEnabled(mainTableForIndex) && stats->StartTime && stats->StartTime + minUptime < now) {
+    bool canMergeByLoad = IsMergeByLoadEnabled(mainTableForIndex);
+    if (!canMerge && canMergeByLoad && stats->StartTime && stats->StartTime + minUptime < now) {
         reason = "merge by load";
         canMerge = true;
     }
@@ -2042,13 +2128,12 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
         return false;
     }
 
-    // Check that total load doesn't exceed the limits
-    float shardLoad = stats->GetCurrentRawCpuUsage() * 0.000001;
-    if (IsMergeByLoadEnabled(mainTableForIndex)) {
-        // Calculate shard load based on historical data
-        TDuration loadDuration = TDuration::Seconds(splitSettings.MergeByLoadMinLowLoadDurationSec);
-        shardLoad = 0.01 * stats->GetLatestMaxCpuUsagePercent(now - loadDuration);
+    // Calculate shard load based on historical data
+    const TDuration loadDuration = TDuration::Seconds(splitSettings.MergeByLoadMinLowLoadDurationSec);
+    const float shardLoad = 0.01 * stats->GetLatestMaxCpuUsagePercent(now - loadDuration);
 
+    // Check that total load doesn't exceed the limits
+    if (canMergeByLoad) {
         if (shardLoad + totalLoad > cpuUsageThreshold)
             return false;
 
@@ -2147,10 +2232,12 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
 }
 
 bool TTableInfo::CheckSplitByLoad(
-        const TSplitSettings& splitSettings, TShardIdx shardIdx,
-        ui64 dataSize, ui64 rowCount,
-        const TTableInfo* mainTableForIndex, TString& reason) const
-{
+    const TSplitSettings& splitSettings,
+    const TShardIdx& shardIdx,
+    ui64 currentCpuUsage,
+    const TTableInfo* mainTableForIndex,
+    TString& reason
+) const {
     // Don't split/merge backup tables
     if (IsBackup) {
         reason = "IsBackup";
@@ -2210,30 +2297,31 @@ bool TTableInfo::CheckSplitByLoad(
     //       operations (which reduce the expected partition count).
     const ui64 effectiveShardCount = Max(ExpectedPartitionCount, Stats.PartitionStats.size());
 
-    if (rowCount < MIN_ROWS_FOR_SPLIT_BY_LOAD ||
-        dataSize < MIN_SIZE_FOR_SPLIT_BY_LOAD ||
+    if (stats->RowCount < MIN_ROWS_FOR_SPLIT_BY_LOAD ||
+        stats->DataSize < MIN_SIZE_FOR_SPLIT_BY_LOAD ||
         effectiveShardCount >= maxShards ||
-        stats->GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
+        currentCpuUsage < cpuUsageThreshold * 1000000)
     {
         reason = TStringBuilder() << "ConditionsNotMet"
-            << " rowCount: " << rowCount << " minRowCount: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
-            << " shardSize: " << dataSize << " minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
+            << " rowCount: " << stats->RowCount << " minRowCount: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
+            << " shardSize: " << stats->DataSize << " minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
             << " shardCount: " << Stats.PartitionStats.size()
             << " expectedShardCount: " << ExpectedPartitionCount << " maxShardCount: " << maxShards
-            << " cpuUsage: " << stats->GetCurrentRawCpuUsage() << " cpuUsageThreshold: " << cpuUsageThreshold * 1000000;
+            << " cpuUsage: " << currentCpuUsage
+            << " cpuUsageThreshold: " << static_cast<ui64>(cpuUsageThreshold * 1000000);
         return false;
     }
 
     reason = TStringBuilder() << "split by load ("
-        << "rowCount: " << rowCount << ", "
+        << "rowCount: " << stats->RowCount << ", "
         << "minRowCount: " << MIN_ROWS_FOR_SPLIT_BY_LOAD << ", "
-        << "shardSize: " << dataSize << ", "
+        << "shardSize: " << stats->DataSize << ", "
         << "minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD << ", "
         << "shardCount: " << Stats.PartitionStats.size() << ", "
         << "expectedShardCount: " << ExpectedPartitionCount << ", "
         << "maxShardCount: " << maxShards << ", "
-        << "cpuUsage: " << stats->GetCurrentRawCpuUsage() << ", "
-        << "cpuUsageThreshold: " << cpuUsageThreshold * 1000000 << ")";
+        << "cpuUsage: " << currentCpuUsage << ", "
+        << "cpuUsageThreshold: " << static_cast<ui64>(cpuUsageThreshold * 1000000) << ")";
 
     return true;
 }
@@ -2643,6 +2731,9 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
     switch (value) {
         case ESubState::None:
         case ESubState::UniqIndexValidation:
+        case ESubState::FulltextIndexStats:
+        case ESubState::FulltextIndexDictionary:
+        case ESubState::FulltextIndexBorders:
             return true;
     }
     return false;
@@ -3021,22 +3112,22 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         }
 
         for (auto& item : Items) {
-            TMapping::iterator mappingIt;
+            const TMapping::value_type::second_type* found = nullptr;
             if (item.SrcPrefix) {
-                mappingIt = schemaMappingPrefixIndex.find(NBackup::NormalizeItemPrefix(item.SrcPrefix));
-                if (mappingIt == schemaMappingPrefixIndex.end()) {
+                found = schemaMappingPrefixIndex.FindPtr(NBackup::NormalizeItemPrefix(item.SrcPrefix));
+                if (!found) {
                     result.AddError(TStringBuilder() << "cannot find prefix \"" << item.SrcPrefix << "\" in schema mapping");
                 }
             } else if (item.SrcPath) {
-                mappingIt = schemaMappingObjectPathIndex.find(NBackup::NormalizeItemPath(item.SrcPath));
-                if (mappingIt == schemaMappingObjectPathIndex.end()) {
+                found = schemaMappingObjectPathIndex.FindPtr(NBackup::NormalizeItemPath(item.SrcPath));
+                if (!found) {
                     result.AddError(TStringBuilder() << "cannot find source path \"" << item.SrcPath << "\" in schema mapping");
                 }
             }
 
-            if (mappingIt) {
+            if (found) {
                 const bool isDstPathAbsolute = item.DstPathName && item.DstPathName.front() == '/';
-                for (const auto& [index, suffix] : mappingIt->second) {
+                for (const auto& [index, suffix] : *found) {
                     const auto& schemaMappingItem = SchemaMapping->Items[index];
                     TStringBuilder dstPath;
                     if (item.DstPathName) {

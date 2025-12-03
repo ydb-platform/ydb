@@ -233,6 +233,8 @@ namespace NKikimr::NStorage {
         TControlWrapper ThrottlingMaxLogChunkCount;
 
         TControlWrapper MaxInProgressSyncCount;
+        TControlWrapper EnablePhantomFlagStorage;
+        TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
 
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
@@ -707,6 +709,7 @@ namespace NKikimr::NStorage {
         void ForwardToDistributedConfigKeeper(STATEFN_SIG);
 
         std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> CommittedStorageConfig;
         bool SelfManagementEnabled = false;
         TBridgeInfo::TPtr BridgeInfo;
         THashSet<TActorId> StorageConfigSubscribers;
@@ -715,9 +718,8 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
         void HandleUnsubscribe(STATEFN_SIG);
-        void ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
-                const NKikimrBlobStorage::TNodeWardenServiceSet *proposed);
-        void ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConfig *proposed);
+        void ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current);
+        void ApplyStateStorageConfig();
         void ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss);
 
         void Handle(TEventHandle<TEvNodeWardenQueryBaseConfig>::TPtr ev);

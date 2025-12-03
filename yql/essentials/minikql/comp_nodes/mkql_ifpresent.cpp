@@ -81,7 +81,7 @@ private:
     void RegisterDependencies() const final {
         this->DependsOn(Optional);
         this->DependsOn(MissingBranch);
-        Optional->AddDependence(Item);
+        Optional->AddDependent(Item);
         this->Own(Item);
         this->DependsOn(PresentBranch);
     }
@@ -168,7 +168,7 @@ private:
             this->DependsOn(flow, Optional);
             this->Own(flow, Item);
         }
-        Optional->AddDependence(Item);
+        Optional->AddDependent(Item);
     }
 
     IComputationNode* const Optional;
@@ -288,7 +288,7 @@ private:
             this->DependsOn(flow, Optional);
             this->Own(flow, Item);
         }
-        Optional->AddDependence(Item);
+        Optional->AddDependent(Item);
     }
 
     IComputationNode* const Optional;

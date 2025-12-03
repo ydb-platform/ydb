@@ -94,7 +94,7 @@ public:
 
 public:
     void Scan(const TExprNode& node) {
-        VisitExprByFirst(node, [this](const TExprNode& n) {
+        VisitExpr(node, [this](const TExprNode& n) {
             if (n.IsCallable(ConfigureName)) {
                 if (n.ChildrenSize() > 3 && n.Child(1)->Child(0)->Content() == ConfigProviderName) {
                     bool pending = false;
@@ -140,8 +140,8 @@ private:
             }
         }
 
-        static THashSet<TStringBuf> FILE_CALLABLES = {"FilePath", "FileContent", "FolderPath"};
-        if (node.IsCallable(FILE_CALLABLES)) {
+        static THashSet<TStringBuf> FileCallables = {"FilePath", "FileContent", "FolderPath"};
+        if (node.IsCallable(FileCallables)) {
             const auto alias = node.Head().Content();
             if (PendingFileAliases_.contains(alias) || AnyOf(PendingFolderPrefixes_, [alias](const TStringBuf prefix) {
                     auto withSlash = TString(prefix) + "/";
@@ -205,13 +205,15 @@ private:
 };
 
 struct TEvalScope {
-    TEvalScope(TTypeAnnotationContext& types)
+    TEvalScope(TTypeAnnotationContext& types, TExprContext& ctx)
         : Types(types)
+        , Ctx(ctx)
     {
         ++Types.EvaluationInProgress;
         for (auto& dataProvider : Types.DataSources) {
             dataProvider->EnterEvaluation(Types.EvaluationInProgress);
         }
+        Ctx.ResetCycleDetector();
     }
 
     ~TEvalScope() {
@@ -219,8 +221,10 @@ struct TEvalScope {
             dataProvider->LeaveEvaluation(Types.EvaluationInProgress);
         }
         --Types.EvaluationInProgress;
+        Ctx.ResetCycleDetector();
     }
     TTypeAnnotationContext& Types;
+    TExprContext& Ctx;
 };
 
 bool ValidateCalcWorlds(const TExprNode& node, const TTypeAnnotationContext& types, TNodeSet& visited) {
@@ -1021,7 +1025,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         NYT::TNode ysonNode;
         if (types.QContext) {
             key = MakeCacheKey(*clonedArg);
-            if (types.QContext.CanRead()) {
+            if (types.QContext.CanRead() && types.QContext.CaptureMode() != EQPlayerCaptureMode::Full) {
                 auto item = types.QContext.GetReader()->Get({EvaluationComponent, key}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
@@ -1040,7 +1044,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 calcWorldRoot.Drop();
                 fullTransformer->Rewind();
                 auto prevSteps = ctx.Step;
-                TEvalScope scope(types);
+                TEvalScope scope(types, ctx);
                 ctx.Step.Reset();
                 if (prevSteps.IsDone(TExprStep::Recapture)) {
                     ctx.Step.Done(TExprStep::Recapture);
@@ -1058,7 +1062,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                     return nullptr;
                 }
 
-                if (types.QContext.CanRead()) {
+                if (types.QContext.CanRead() && types.QContext.CaptureMode() != EQPlayerCaptureMode::Full) {
                     break;
                 }
 

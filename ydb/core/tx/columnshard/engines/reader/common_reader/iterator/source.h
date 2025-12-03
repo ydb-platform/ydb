@@ -1,7 +1,6 @@
 #pragma once
 #include "context.h"
 #include "fetched_data.h"
-#include "fetching.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/program/execution.h>
@@ -13,6 +12,8 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/script_counters.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/script_cursor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -40,28 +41,9 @@ private:
     std::optional<TFetchingScriptCursor> CursorStep;
 
 public:
-    void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals) {
-        if (!CurrentProgramNodeId) {
-            CurrentNodeStart = TMonotonic::Now();
-            CurrentProgramNodeId = nodeId;
-            AFL_VERIFY(!CurrentStepSignals);
-            CurrentStepSignals = signals;
-        } else {
-            AFL_VERIFY(CurrentProgramNodeId == nodeId);
-            AFL_VERIFY(!!CurrentStepSignals);
-            AFL_VERIFY(!!CurrentNodeStart);
-        }
-    }
+    void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
 
-    void OnFinishProgramStepExecution() {
-        AFL_VERIFY(!!CurrentProgramNodeId);
-        AFL_VERIFY(!!CurrentStepSignals);
-        AFL_VERIFY(!!CurrentNodeStart);
-        CurrentStepSignals->AddTotalDuration(TMonotonic::Now() - *CurrentNodeStart);
-        CurrentProgramNodeId.reset();
-        CurrentStepSignals = nullptr;
-        CurrentNodeStart.reset();
-    }
+    void OnFinishProgramStepExecution();
 
     void OnFailedProgramStepExecution() {
         OnFinishProgramStepExecution();
@@ -72,48 +54,24 @@ public:
 
     void Stop();
 
-    const TFetchingStepSignals& GetCurrentStepSignalsVerified() const {
-        AFL_VERIFY(!!CurrentStepSignals);
-        return *CurrentStepSignals;
-    }
+    const TFetchingStepSignals& GetCurrentStepSignalsVerified() const;
 
-    const TFetchingStepSignals* GetCurrentStepSignalsOptional() const {
-        if (!CurrentStepSignals) {
-            return nullptr;
-        }
-        return &*CurrentStepSignals;
-    }
+    const TFetchingStepSignals* GetCurrentStepSignalsOptional() const;
 
     bool HasProgramIterator() const {
         return !!ProgramIterator;
     }
 
     void SetProgramIterator(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& it,
-        const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& visitor) {
-        AFL_VERIFY(!ProgramIterator);
-        ProgramIterator = it;
-        ExecutionVisitor = visitor;
-    }
+        const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& visitor);
 
-    void SetCursorStep(const TFetchingScriptCursor& step) {
-        AFL_VERIFY(!CursorStep);
-        CursorStep = step;
-    }
+    void SetCursorStep(const TFetchingScriptCursor& step);
 
-    const TFetchingScriptCursor& GetCursorStep() const {
-        AFL_VERIFY(!!CursorStep);
-        return *CursorStep;
-    }
+    const TFetchingScriptCursor& GetCursorStep() const;
 
-    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& GetProgramIteratorVerified() const {
-        AFL_VERIFY(!!ProgramIterator);
-        return ProgramIterator;
-    }
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& GetProgramIteratorVerified() const;
 
-    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& GetExecutionVisitorVerified() const {
-        AFL_VERIFY(!!ExecutionVisitor);
-        return ExecutionVisitor;
-    }
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& GetExecutionVisitorVerified() const;
 };
 
 class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
@@ -147,14 +105,7 @@ private:
         return SourceId;
     }
 
-    virtual ui64 DoGetEntityRecordsCount() const override {
-        if (RecordsCountImpl) {
-            return *RecordsCountImpl;
-        } else {
-            AFL_VERIFY(!!GetRecordsCountVirtual());
-            return GetRecordsCountVirtual();
-        }
-    }
+    virtual ui64 DoGetEntityRecordsCount() const override;
 
     std::optional<bool> IsSourceInMemoryFlag;
     TAtomic SourceFinishedSafeFlag = 0;
@@ -180,42 +131,21 @@ private:
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
     std::unique_ptr<TFetchedResult> StageResult;
-    virtual ui32 GetRecordsCountVirtual() const {
-        AFL_VERIFY(false);
-        return 0;
-    }
+    virtual ui32 GetRecordsCountVirtual() const;
 
 public:
 
-    ui64 GetReservedMemory() const {
-        ui64 result = 0;
-        for (auto&& i : ResourceGuards) {
-            result += i->GetMemory();
-        }
-        return result;
-    }
+    ui64 GetReservedMemory() const;
 
-    const TPortionDataAccessor& GetPortionAccessor() const {
-        AFL_VERIFY(!!Accessor);
-        return *Accessor;
-    }
+    const TPortionDataAccessor& GetPortionAccessor() const;
 
-    std::shared_ptr<TPortionDataAccessor> ExtractPortionAccessor() {
-        AFL_VERIFY(!!Accessor);
-        auto result = std::move(Accessor);
-        Accessor.reset();
-        return result;
-    }
+    std::shared_ptr<TPortionDataAccessor> ExtractPortionAccessor();
 
     bool HasPortionAccessor() const {
         return !!Accessor;
     }
 
-    void SetPortionAccessor(std::shared_ptr<TPortionDataAccessor>&& acc) {
-        AFL_VERIFY(!!acc);
-        AFL_VERIFY(!Accessor);
-        Accessor = std::move(acc);
-    }
+    void SetPortionAccessor(std::shared_ptr<TPortionDataAccessor>&& acc);
 
     template <class T>
     const T* GetAs() const {
@@ -253,46 +183,23 @@ public:
         return RecordsCountImpl;
     }
 
-    virtual void InitRecordsCount(const ui32 recordsCount) {
-        AFL_VERIFY(!RecordsCountImpl);
-        RecordsCountImpl = recordsCount;
-        AFL_VERIFY(StageData);
-        StageData->InitRecordsCount(recordsCount);
-    }
+    virtual void InitRecordsCount(const ui32 recordsCount);
 
-    ui32 GetRecordsCount() const {
-        if (RecordsCountImpl) {
-            return *RecordsCountImpl;
-        } else {
-            AFL_VERIFY(!!GetRecordsCountVirtual());
-            return GetRecordsCountVirtual();
-        }
-    }
+    ui32 GetRecordsCount() const;
 
-    void StartAsyncSection() {
-        AFL_VERIFY(AtomicCas(&SyncSectionFlag, 0, 1));
-    }
+    void StartAsyncSection();
 
-    void CheckAsyncSection() {
-        AFL_VERIFY(AtomicGet(SyncSectionFlag) == 0);
-    }
+    void CheckAsyncSection();
 
-    void StartSyncSection() {
-        AFL_VERIFY(AtomicCas(&SyncSectionFlag, 1, 0));
-    }
+    void StartSyncSection();
 
     bool IsSyncSection() const {
         return AtomicGet(SyncSectionFlag) == 1;
     }
 
-    void AddEvent(const TString& evDescription) {
-        AFL_VERIFY(!!Events);
-        Events->AddEvent(evDescription);
-    }
+    void AddEvent(const TString& evDescription);
 
-    TString GetEventsReport() const {
-        return Events ? Events->DebugString() : Default<TString>();
-    }
+    TString GetEventsReport() const;
 
     TExecutionContext& MutableExecutionContext() {
         return ExecutionContext;
@@ -302,41 +209,17 @@ public:
         return ExecutionContext;
     }
 
-    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const {
-        AFL_VERIFY(false);
-        return Default<std::shared_ptr<ISnapshotSchema>>();
-    }
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const;
 
-    virtual TString GetColumnStorageId(const ui32 /*columnId*/) const {
-        AFL_VERIFY(false);
-        return "";
-    }
+    virtual TString GetColumnStorageId(const ui32 /*columnId*/) const;
 
-    virtual TString GetEntityStorageId(const ui32 /*entityId*/) const {
-        AFL_VERIFY(false);
-        return "";
-    }
+    virtual TString GetEntityStorageId(const ui32 /*entityId*/) const;
 
-    virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const {
-        AFL_VERIFY(false);
-        return TBlobRange();
-    }
+    virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const;
 
     IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
-        const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : Type(type)
-        , SourceId(sourceId)
-        , SourceIdx(sourceIdx)
-        , RecordSnapshotMin(recordSnapshotMin)
-        , RecordSnapshotMax(recordSnapshotMax)
-        , Context(context)
-        , RecordsCountImpl(recordsCount)
-        , ShardingVersionOptional(shardingVersion)
-        , HasDeletions(hasDeletions) {
-        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Events.emplace(NEvLog::TLogsThread()));
-        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("c"));
-    }
+        const std::optional<ui64> shardingVersion, const bool hasDeletions);
 
     virtual ~IDataSource() = default;
 
@@ -344,158 +227,75 @@ public:
         return ResourceGuards;
     }
 
-    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ExtractResourceGuards() {
-        auto result = std::move(ResourceGuards);
-        ResourceGuards.clear();
-        return std::move(result);
-    }
+    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ExtractResourceGuards();
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
 
-    bool IsSourceInMemory() const {
-        AFL_VERIFY(IsSourceInMemoryFlag);
-        return *IsSourceInMemoryFlag;
-    }
+    bool IsSourceInMemory() const;
 
     bool HasSourceInMemoryFlag() const {
         return !!IsSourceInMemoryFlag;
     }
 
-    void SetSourceInMemory(const bool value) {
-        AFL_VERIFY(!IsSourceInMemoryFlag);
-        IsSourceInMemoryFlag = value;
-        if (!value) {
-            AFL_VERIFY(StageData);
-            StageData->SetUseFilter(value);
-        }
-    }
+    void SetSourceInMemory(const bool value);
 
-    void SetMemoryGroupId(const ui64 groupId) {
-        AFL_VERIFY(!MemoryGroupId);
-        MemoryGroupId = groupId;
-    }
+    void SetMemoryGroupId(const ui64 groupId);
 
-    ui64 GetMemoryGroupId() const {
-        AFL_VERIFY(!!MemoryGroupId);
-        return *MemoryGroupId;
-    }
+    ui64 GetMemoryGroupId() const;
 
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const = 0;
 
-    ui64 GetResourceGuardsMemory() const {
-        ui64 result = 0;
-        for (auto&& i : ResourceGuards) {
-            result += i->GetMemory();
-        }
-        return result;
-    }
+    ui64 GetResourceGuardsMemory() const;
     void RegisterAllocationGuard(const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard) {
         ResourceGuards.emplace_back(guard);
     }
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const = 0;
 
-    void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false) {
-        if (columns->IsEmpty()) {
-            return;
-        }
-        DoAssembleColumns(columns, sequential);
-    }
+    void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false);
 
     bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
         return DoStartFetchingColumns(sourcePtr, step, columns);
     }
 
-    void ResetSourceFinishedFlag() {
-        AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 0, 1));
-    }
+    void ResetSourceFinishedFlag();
 
-    void OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) {
-        AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 1, 0));
-        AFL_VERIFY(sourcePtr);
-        DoOnSourceFetchingFinishedSafe(owner, sourcePtr);
-    }
+    void OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr);
 
-    void OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
-        AFL_VERIFY(AtomicCas(&StageResultBuiltFlag, 1, 0));
-        AFL_VERIFY(sourcePtr);
-        AFL_VERIFY(!StageResult);
-        AFL_VERIFY(StageData);
-        DoOnEmptyStageData(sourcePtr);
-        AFL_VERIFY(StageResult);
-        AFL_VERIFY(!StageData);
-    }
+    void OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 
     template <class T>
     void BuildStageResult(const std::shared_ptr<T>& sourcePtr) {
         BuildStageResult(std::static_pointer_cast<IDataSource>(sourcePtr));
     }
 
-    void BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) {
-        TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-        AFL_VERIFY(AtomicCas(&StageResultBuiltFlag, 1, 0));
-        AFL_VERIFY(sourcePtr);
-        AFL_VERIFY(!StageResult);
-        AFL_VERIFY(StageData);
-        DoBuildStageResult(sourcePtr);
-        AFL_VERIFY(StageResult);
-        AFL_VERIFY(!StageData);
-    }
+    void BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr);
 
-    bool AddTxConflict() {
-        if (!Context->GetCommonContext()->HasLock()) {
-            return false;
-        }
-        if (DoAddTxConflict()) {
-            StageData->Abort();
-            return true;
-        }
-        return false;
-    }
+    bool AddTxConflict();
 
-    void InitStageData(std::unique_ptr<TFetchedData>&& data) {
-        AFL_VERIFY(!StageData);
-        StageData = std::move(data);
-    }
+    void InitStageData(std::unique_ptr<TFetchedData>&& data);
 
-    std::unique_ptr<TFetchedData> ExtractStageData() {
-        AFL_VERIFY(StageData)("source_id", SourceId);
-        auto result = std::move(StageData);
-        StageData.reset();
-        return std::move(result);
-    }
+    std::unique_ptr<TFetchedData> ExtractStageData();
 
     void ClearStageData() {
         StageData.reset();
     }
 
-    const TFetchedData& GetStageData() const {
-        AFL_VERIFY(StageData)("source_id", SourceId);
-        return *StageData;
-    }
+    const TFetchedData& GetStageData() const;
 
     bool HasStageData() const {
         return !!StageData;
     }
 
-    TFetchedData& MutableStageData() {
-        AFL_VERIFY(StageData);
-        return *StageData;
-    }
+    TFetchedData& MutableStageData();
 
     bool HasStageResult() const {
         return !!StageResult;
     }
 
-    const TFetchedResult& GetStageResult() const {
-        AFL_VERIFY(!!StageResult);
-        return *StageResult;
-    }
+    const TFetchedResult& GetStageResult() const;
 
-    TFetchedResult& MutableStageResult() {
-        AFL_VERIFY(!!StageResult);
-        return *StageResult;
-    }
+    TFetchedResult& MutableStageResult();
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

@@ -114,10 +114,11 @@ public:
 template <typename T, typename Ops = TDefaultRefCountedPtrOps<T>>
 class TRefCountedPtr {
 public:
-    enum AddRef {
+    enum EAddRef {
         ADD_REF
     };
-    enum StealRef {
+
+    enum EStealRef {
         STEAL_REF
     };
 
@@ -128,7 +129,7 @@ public:
         Ref();
     }
 
-    inline TRefCountedPtr(T* ptr, StealRef)
+    inline TRefCountedPtr(T* ptr, EStealRef)
         : Ptr_(ptr)
     {
         // do not call Ref() on new pointer
@@ -178,7 +179,7 @@ public:
         }
     }
 
-    inline void Reset(T* ptr, StealRef) {
+    inline void Reset(T* ptr, EStealRef) {
         if (Ptr_ != ptr) {
             UnRef();
             Ptr_ = ptr;

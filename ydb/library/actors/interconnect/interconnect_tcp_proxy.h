@@ -53,6 +53,7 @@ namespace NActors {
             enum XDCFlags {
                 NONE = 0,
                 MSG_ZERO_COPY_SEND = 1,
+                RDMA_READ = 1 << 1,
             };
             ui8 XDCFlags;
         };

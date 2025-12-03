@@ -1,6 +1,6 @@
 #include "batching_timestamp_provider.h"
 #include "timestamp_provider.h"
-#include "private.h"
+#include "config.h"
 
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/thread_affinity.h>
@@ -24,8 +24,8 @@ public:
         TDuration batchPeriod,
         TCellTag clockClusterTag)
         : Underlying_(std::move(underlying))
-        , BatchPeriod_(batchPeriod)
         , ClockClusterTag_(clockClusterTag)
+        , BatchPeriod_(batchPeriod)
     { }
 
     TFuture<TTimestamp> GenerateTimestamps(int count)
@@ -52,9 +52,16 @@ public:
 
     }
 
+    void SetBatchPeriod(TDuration batchPeriod)
+    {
+        YT_ASSERT_THREAD_AFFINITY_ANY();
+
+        auto guard = Guard(SpinLock_);
+        BatchPeriod_ = batchPeriod;
+    }
+
 private:
     const ITimestampProviderPtr Underlying_;
-    const TDuration BatchPeriod_;
     const TCellTag ClockClusterTag_;
 
     struct TRequest
@@ -65,6 +72,7 @@ private:
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
 
+    TDuration BatchPeriod_;
     bool GenerateInProgress_ = false;
     bool FlushScheduled_ = false;
     std::vector<TRequest> PendingRequests_;
@@ -81,8 +89,9 @@ private:
         }
 
         auto now = GetInstant();
+        auto batchDeadline = LastRequestTime_ +  BatchPeriod_;
 
-        if (LastRequestTime_ + BatchPeriod_ < now) {
+        if (batchDeadline < now) {
             SendGenerateRequest(guard);
         } else if (!FlushScheduled_) {
             FlushScheduled_ = true;
@@ -95,7 +104,7 @@ private:
                     }
                     SendGenerateRequest(guard);
                 }),
-                BatchPeriod_ - (now - LastRequestTime_));
+                batchDeadline - now);
         }
     }
 
@@ -168,10 +177,10 @@ class TBatchingTimestampProvider
 public:
     TBatchingTimestampProvider(
         ITimestampProviderPtr underlying,
-        TDuration batchPeriod)
+        const TRemoteTimestampProviderConfigPtr& config)
         : Underlying_(std::move(underlying))
-        , BatchPeriod_(batchPeriod)
-        , NativeRequestBatcher_(New<TRequestBatcher>(Underlying_, BatchPeriod_, InvalidCellTag))
+        , NativeRequestBatcher_(New<TRequestBatcher>(Underlying_, config->BatchPeriod, InvalidCellTag))
+        , BatchPeriod_(config->BatchPeriod)
     { }
 
     TFuture<TTimestamp> GenerateTimestamps(int count, TCellTag clockClusterTag) override
@@ -182,21 +191,7 @@ public:
             return NativeRequestBatcher_->GenerateTimestamps(count);
         }
 
-        TRequestBatcherPtr requestBatcher;
-        {
-            auto guard = Guard(SpinLock_);
-            auto byCellBatcherIterator = ByTagRequestBatchers_.find(clockClusterTag);
-            if (byCellBatcherIterator == ByTagRequestBatchers_.end()) {
-                byCellBatcherIterator = EmplaceOrCrash(ByTagRequestBatchers_, clockClusterTag, New<TRequestBatcher>(
-                    Underlying_,
-                    BatchPeriod_,
-                    clockClusterTag));
-            }
-
-            requestBatcher = byCellBatcherIterator->second;
-        }
-
-        return requestBatcher->GenerateTimestamps(count);
+        return GetAlienBatcher(clockClusterTag)->GenerateTimestamps(count);
     }
 
     TTimestamp GetLatestTimestamp(TCellTag clockClusterTag) override
@@ -206,22 +201,69 @@ public:
         return Underlying_->GetLatestTimestamp(clockClusterTag);
     }
 
+    void Reconfigure(const TRemoteTimestampProviderConfigPtr& config) override
+    {
+        YT_ASSERT_THREAD_AFFINITY_ANY();
+
+        SetBatchPeriod(config->BatchPeriod);
+        Underlying_->Reconfigure(config);
+    }
+
 private:
     const ITimestampProviderPtr Underlying_;
-    const TDuration BatchPeriod_;
     const TRequestBatcherPtr NativeRequestBatcher_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-    THashMap<TCellTag, TRequestBatcherPtr> ByTagRequestBatchers_;
+    std::atomic<TDuration> BatchPeriod_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    THashMap<TCellTag, TRequestBatcherPtr> Batchers_;
+
+    TRequestBatcherPtr GetAlienBatcher(TCellTag clockClusterTag)
+    {
+        YT_ASSERT_THREAD_AFFINITY_ANY();
+
+        {
+            auto readerGuard = ReaderGuard(SpinLock_);
+
+            if (auto batcherIt = Batchers_.find(clockClusterTag); batcherIt != Batchers_.end()) {
+                return batcherIt->second;
+            }
+        }
+
+        // Usually entered once during binary lifetime
+        auto writerGuard = WriterGuard(SpinLock_);
+
+        auto [batcherIt, inserted] = Batchers_.try_emplace(clockClusterTag, nullptr);
+        if (inserted) {
+            batcherIt->second = New<TRequestBatcher>(
+                Underlying_,
+                BatchPeriod_.load(),
+                clockClusterTag);
+        }
+
+        return batcherIt->second;
+    }
+
+    void SetBatchPeriod(TDuration batchPeriod)
+    {
+        YT_ASSERT_THREAD_AFFINITY_ANY();
+
+        BatchPeriod_.store(batchPeriod);
+        NativeRequestBatcher_->SetBatchPeriod(batchPeriod);
+
+        auto guard = ReaderGuard(SpinLock_);
+        for (const auto& [_, requestBatcher] : Batchers_) {
+            requestBatcher->SetBatchPeriod(batchPeriod);
+        }
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 ITimestampProviderPtr CreateBatchingTimestampProvider(
     ITimestampProviderPtr underlying,
-    TDuration batchPeriod)
+    const TRemoteTimestampProviderConfigPtr& config)
 {
-    return New<TBatchingTimestampProvider>(std::move(underlying), batchPeriod);
+    return New<TBatchingTimestampProvider>(std::move(underlying), config);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

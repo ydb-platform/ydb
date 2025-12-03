@@ -17,7 +17,7 @@ namespace NYT::NYTProf {
 class TStaticQueue
 {
 public:
-    inline TStaticQueue(size_t logSize);
+    inline explicit TStaticQueue(size_t logSize);
 
     template <class TFn>
     bool TryPush(const TFn& getIp);

@@ -13,6 +13,8 @@ using namespace NScheme;
 using namespace NTable;
 using namespace NTopic;
 
+namespace {
+
 TStatus RemoveDirectory(TSchemeClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
     return RetryFunction([&]() -> TStatus {
         return client.RemoveDirectory(path, settings).ExtractValueSync();
@@ -83,11 +85,17 @@ TStatus RemoveTransfer(NQuery::TQueryClient& client, const TString& path, const 
     return DropSchemeObject("TRANSFER", client, path, settings);
 }
 
+TStatus RemoveStreamingQuery(NQuery::TQueryClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    return DropSchemeObject("STREAMING QUERY", client, path, settings);
+}
+
 NYdb::NIssue::TIssues MakeIssues(const TString& error) {
     NYdb::NIssue::TIssues issues;
     issues.AddIssue(NYdb::NIssue::TIssue(error));
     return issues;
 }
+
+} // anonymous namespace
 
 bool Prompt(const TString& path, ESchemeEntryType type) {
     Cout << "Remove " << to_lower(ToString(type)) << " '" << path << "' (y/n)? ";
@@ -173,6 +181,8 @@ TStatus Remove(
         return Remove(&RemoveReplication, schemeClient, queryClient, type, path, prompt, settings);
     case ESchemeEntryType::Transfer:
         return Remove(&RemoveTransfer, schemeClient, queryClient, type, path, prompt, settings);
+    case ESchemeEntryType::StreamingQuery:
+        return Remove(&RemoveStreamingQuery, schemeClient, queryClient, type, path, prompt, settings);
 
     default:
         return TStatus(EStatus::UNSUPPORTED, MakeIssues(TStringBuilder()

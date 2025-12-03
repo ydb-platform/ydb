@@ -9,17 +9,15 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  types::list<typename assignable<
-      decltype(std::declval<E>()[types::fast_contiguous_slice()])>::type>
+  types::list<
+      typename assignable<decltype(std::declval<E>()[types::fast_contiguous_slice()])>::type>
   array_split(E const &a, long nb_split);
 
   template <class E, class I>
-  typename std::enable_if<
-      types::is_iterable<I>::value,
-      types::list<typename assignable<
-          decltype(std::declval<E>()[types::fast_contiguous_slice()])>::type>>::
-      type
-      array_split(E const &a, I const &split_mask);
+  std::enable_if_t<types::is_iterable<I>::value,
+                   types::list<typename assignable<
+                       decltype(std::declval<E>()[types::fast_contiguous_slice()])>::type>>
+  array_split(E const &a, I const &split_mask);
 
   NUMPY_EXPR_TO_NDARRAY0_DECL(array_split);
   DEFINE_FUNCTOR(pythonic::numpy, array_split);

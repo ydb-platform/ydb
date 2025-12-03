@@ -181,9 +181,14 @@ YT_DEFINE_RECONFIGURABLE_SINGLETON(
 
 TEST(TConfigurableSingletonTest, Run)
 {
-    auto config = ConvertTo<TSingletonsConfigPtr>(NYson::TYsonString(TString(R"""({
+    auto config1 = ConvertTo<TSingletonsConfigPtr>(NYson::TYsonString(TString(R"""({
         required = {
             speed = 123;
+        };
+    })""")));
+    auto config2 = ConvertTo<TSingletonsConfigPtr>(NYson::TYsonString(TString(R"""({
+        required = {
+            speed = 124;
         };
     })""")));
     auto dynamicConfig1 = ConvertTo<TSingletonsDynamicConfigPtr>(NYson::TYsonString(TString(R"""({
@@ -204,25 +209,30 @@ TEST(TConfigurableSingletonTest, Run)
     EXPECT_EQ(ConfiguredWidth, -1);
     EXPECT_EQ(ConfiguredCost, -1);
 
-    TSingletonManager::Configure(config);
+    TSingletonManager::Configure(config1);
 
     EXPECT_EQ(ConfiguredSpeed, 123);
     EXPECT_EQ(ConfiguredDepth, -1);
     EXPECT_EQ(ConfiguredWidth, 456);
     EXPECT_EQ(ConfiguredCost, 777);
 
-    EXPECT_THROW_WITH_SUBSTRING(TSingletonManager::Configure(config), "Singletons have already been configured");
+    TSingletonManager::Configure(config2);
+
+    EXPECT_EQ(ConfiguredSpeed, 124);
+    EXPECT_EQ(ConfiguredDepth, -1);
+    EXPECT_EQ(ConfiguredWidth, 456);
+    EXPECT_EQ(ConfiguredCost, 777);
 
     TSingletonManager::Reconfigure(dynamicConfig1);
 
-    EXPECT_EQ(ConfiguredSpeed, 123);
+    EXPECT_EQ(ConfiguredSpeed, 124);
     EXPECT_EQ(ConfiguredDepth, -1);
     EXPECT_EQ(ConfiguredWidth, 456);
     EXPECT_EQ(ConfiguredCost, 888);
 
     TSingletonManager::Reconfigure(dynamicConfig2);
 
-    EXPECT_EQ(ConfiguredSpeed, 123);
+    EXPECT_EQ(ConfiguredSpeed, 124);
     EXPECT_EQ(ConfiguredDepth, -1);
     EXPECT_EQ(ConfiguredWidth, 456);
     EXPECT_EQ(ConfiguredCost, 999);

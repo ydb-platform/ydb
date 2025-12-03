@@ -22,7 +22,7 @@ TString RoundConvertText(TStringBuf textValue, int precision, int scale)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TDecimal, TestTextBinaryConversion)
+TEST(TDecimalTest, TestTextBinaryConversion)
 {
 #define TEST_TEXT_BINARY_CONVERSION(precision, scale, text, binary) \
     do {                                                                 \
@@ -42,14 +42,14 @@ TEST(TDecimal, TestTextBinaryConversion)
     TEST_TEXT_BINARY_CONVERSION(3, 2, "-inf", "00000002");
     EXPECT_EQ("FFFFFFFE", HexEncode(TDecimal::TextToBinary("+inf", 3, 2)));
 
-    TEST_TEXT_BINARY_CONVERSION(10, 2,"nan", "FFFFFFFF" "FFFFFFFF");
-    TEST_TEXT_BINARY_CONVERSION(10, 2,"inf", "FFFFFFFF" "FFFFFFFE");
-    TEST_TEXT_BINARY_CONVERSION(10, 2,"-inf", "00000000" "00000002");
+    TEST_TEXT_BINARY_CONVERSION(10, 2, "nan", "FFFFFFFF" "FFFFFFFF");
+    TEST_TEXT_BINARY_CONVERSION(10, 2, "inf", "FFFFFFFF" "FFFFFFFE");
+    TEST_TEXT_BINARY_CONVERSION(10, 2, "-inf", "00000000" "00000002");
     EXPECT_EQ("FFFFFFFF" "FFFFFFFE", HexEncode(TDecimal::TextToBinary("+inf", 10, 2)));
 
-    TEST_TEXT_BINARY_CONVERSION(35, 2,"nan", "FFFFFFFF" "FFFFFFFF" "FFFFFFFF" "FFFFFFFF");
-    TEST_TEXT_BINARY_CONVERSION(35, 2,"inf", "FFFFFFFF" "FFFFFFFF" "FFFFFFFF" "FFFFFFFE");
-    TEST_TEXT_BINARY_CONVERSION(35, 2,"-inf", "00000000" "00000000" "00000000" "00000002");
+    TEST_TEXT_BINARY_CONVERSION(35, 2, "nan", "FFFFFFFF" "FFFFFFFF" "FFFFFFFF" "FFFFFFFF");
+    TEST_TEXT_BINARY_CONVERSION(35, 2, "inf", "FFFFFFFF" "FFFFFFFF" "FFFFFFFF" "FFFFFFFE");
+    TEST_TEXT_BINARY_CONVERSION(35, 2, "-inf", "00000000" "00000000" "00000000" "00000002");
     EXPECT_EQ("FFFFFFFF" "FFFFFFFF" "FFFFFFFF" "FFFFFFFE", HexEncode(TDecimal::TextToBinary("+inf", 35, 2)));
 
     EXPECT_THROW_WITH_SUBSTRING(TDecimal::TextToBinary("-nan", 3, 2), "is not valid Decimal");
@@ -246,7 +246,7 @@ TEST(TDecimal, TestTextBinaryConversion)
 
 }
 
-TEST(TDecimal, TestPrecisionScaleLimits)
+TEST(TDecimalTest, TestPrecisionScaleLimits)
 {
     EXPECT_THROW_WITH_SUBSTRING(TDecimal::TextToBinary("0", -1, 0), "Invalid decimal precision");
     EXPECT_THROW_WITH_SUBSTRING(TDecimal::TextToBinary("0", 0, 0), "Invalid decimal precision");
@@ -294,7 +294,7 @@ TEST(TDecimal, TestPrecisionScaleLimits)
     EXPECT_EQ("-578960446186580977117854925043439539266349923328202820197287920039565648199.65", TDecimal::BinaryToText(minBinaryDecimal2, TDecimal::MaxPrecision, 2));
 }
 
-TEST(TDecimal, TestValidation)
+TEST(TDecimalTest, TestValidation)
 {
     EXPECT_NO_THROW(TDecimal::ValidateBinaryValue(HexDecode("8000013A"), 3, 2));
     EXPECT_NO_THROW(TDecimal::ValidateBinaryValue(HexDecode("80000000" "0000013A"), 10, 2));

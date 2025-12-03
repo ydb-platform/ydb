@@ -1,3 +1,5 @@
+#include "common/simple/services.h"
+
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/shutdown/state.h>
@@ -545,7 +547,9 @@ struct TDictCase {
     }
 
      Y_UNIT_TEST(TwoNodeOneShuttingDown) {
-        TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2)
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableShuttingDownNodeState(true);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetNodeCount(2)
                                         .SetUseRealThreads(false));
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         ui32 const nodeId = runtime.GetNodeId(0);

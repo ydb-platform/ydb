@@ -28,7 +28,7 @@ class TUserDirectory;
 
 YT_DEFINE_ERROR_ENUM(
     ((PrerequisiteCheckFailed)                   (1000))
-    ((InvalidObjectLifeStage)                    (1001))
+    ((InactiveObjectLifeStage)                   (1001))
     ((CrossCellAdditionalPath)                   (1002))
     ((CrossCellRevisionPrerequisitePath)         (1003))
     ((ForwardedRequestFailed)                    (1004))
@@ -223,7 +223,7 @@ DEFINE_ENUM(EObjectType,
     ((Uint64Node)                                   (306))
     ((DoubleNode)                                   (302))
     ((MapNode)                                      (303))
-    ((ListNode)                                     (304))
+    ((DeprecatedListNode)                           (304))
     ((BooleanNode)                                  (305))
 
     // Dynamic nodes

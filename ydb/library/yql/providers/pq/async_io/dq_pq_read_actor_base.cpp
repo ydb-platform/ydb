@@ -144,12 +144,12 @@ const NYql::NDq::TDqAsyncStats& TDqPqReadActorBase::GetIngressStats() const {
     return IngressStats;
 }
 
-void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDuration idleDelay) {
+void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDuration idleTimeout) {
     const auto granularity = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs());
     SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: " << granularity
         << " late arrival delay: " << lateArrivalDelay
         << " idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
-        << " idle delay: " << idleDelay
+        << " idle timeout: " << idleTimeout
         );
 
     if (!SourceParams.GetWatermarks().GetEnabled()) {
@@ -160,25 +160,16 @@ void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDurat
         granularity,
         SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
         lateArrivalDelay,
-        idleDelay,
-        TInstant::Now()
+        idleTimeout,
+        LogPrefix
     );
 }
 
-void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
-    if (!WatermarkTracker) {
-        return;
-    }
-
-    const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
-    if (!nextIdleCheckAt) {
-        return;
-    }
-
-    if (!NextIdlenessCheckAt.Defined() || nextIdleCheckAt != *NextIdlenessCheckAt) {
-        NextIdlenessCheckAt = *nextIdleCheckAt;
-        SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
-        ScheduleSourcesCheck(*nextIdleCheckAt);
+void TDqPqReadActorBase::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime) {
+    Y_DEBUG_ABORT_UNLESS(WatermarkTracker);
+    if (const auto nextIdleCheckAt = WatermarkTracker->PrepareIdlenessCheck(systemTime)) {
+        SRC_LOG_T("Next idleness check scheduled at " << *nextIdleCheckAt);
+        SchedulePartitionIdlenessCheck(*nextIdleCheckAt);
     }
 }
 

@@ -12,7 +12,7 @@ namespace NKikimr {
 
         NYdbGrpc::TCallMeta FillCallMeta() const {
             NYdbGrpc::TCallMeta callMeta;
-            callMeta.Timeout = DEFAULT_CACHED_GRPC_REQUEST_TIMEOUT;
+            callMeta.Timeout = NYdb::TDeadline::SafeDurationCast(DEFAULT_CACHED_GRPC_REQUEST_TIMEOUT);
             callMeta.Aux.emplace_back(REQUEST_ID_METADATA_NAME, RequestId);
             return callMeta;
         }
@@ -30,7 +30,7 @@ namespace NKikimr {
 
         NYdbGrpc::TCallMeta FillCallMeta() const {
             NYdbGrpc::TCallMeta callMeta;
-            callMeta.Timeout = DEFAULT_CACHED_GRPC_REQUEST_TIMEOUT;
+            callMeta.Timeout = NYdb::TDeadline::SafeDurationCast(DEFAULT_CACHED_GRPC_REQUEST_TIMEOUT);
             callMeta.Aux.emplace_back("authorization", "Bearer " + Ticket);
             return callMeta;
         }

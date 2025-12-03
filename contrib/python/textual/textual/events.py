@@ -16,10 +16,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Type, TypeVar
-from typing_extensions import Self
 
 import rich.repr
 from rich.style import Style
+from typing_extensions import Self
 
 from textual._types import CallbackType
 from textual.geometry import Offset, Size
@@ -344,44 +344,44 @@ class MouseEvent(InputEvent, bubble=True):
 
     __slots__ = [
         "widget",
-        "x",
-        "y",
-        "delta_x",
-        "delta_y",
+        "_x",
+        "_y",
+        "_delta_x",
+        "_delta_y",
         "button",
         "shift",
         "meta",
         "ctrl",
-        "screen_x",
-        "screen_y",
+        "_screen_x",
+        "_screen_y",
         "_style",
     ]
 
     def __init__(
         self,
         widget: Widget | None,
-        x: int,
-        y: int,
+        x: float,
+        y: float,
         delta_x: int,
         delta_y: int,
         button: int,
         shift: bool,
         meta: bool,
         ctrl: bool,
-        screen_x: int | None = None,
-        screen_y: int | None = None,
+        screen_x: float | None = None,
+        screen_y: float | None = None,
         style: Style | None = None,
     ) -> None:
         super().__init__()
         self.widget: Widget | None = widget
         """The widget under the mouse at the time of a click."""
-        self.x = x
+        self._x = x
         """The relative x coordinate."""
-        self.y = y
+        self._y = y
         """The relative y coordinate."""
-        self.delta_x = delta_x
+        self._delta_x = delta_x
         """Change in x since the last message."""
-        self.delta_y = delta_y
+        self._delta_y = delta_y
         """Change in y since the last message."""
         self.button = button
         """Indexed of the pressed button."""
@@ -391,11 +391,61 @@ class MouseEvent(InputEvent, bubble=True):
         """`True` if the meta key is pressed."""
         self.ctrl = ctrl
         """`True` if the ctrl key is pressed."""
-        self.screen_x = x if screen_x is None else screen_x
+        self._screen_x = x if screen_x is None else screen_x
         """The absolute x coordinate."""
-        self.screen_y = y if screen_y is None else screen_y
+        self._screen_y = y if screen_y is None else screen_y
         """The absolute y coordinate."""
         self._style = style or Style()
+
+    @property
+    def x(self) -> int:
+        """The relative X coordinate of the cell under the mouse."""
+        return int(self._x)
+
+    @property
+    def y(self) -> int:
+        """The relative Y coordinate of the cell under the mouse."""
+        return int(self._y)
+
+    @property
+    def delta_x(self) -> int:
+        """Change in `x` since last message."""
+        return self._delta_x
+
+    @property
+    def delta_y(self) -> int:
+        """Change in `y` since the last message."""
+        return self._delta_y
+
+    @property
+    def screen_x(self) -> int:
+        """X coordinate of the cell relative to top left of screen."""
+        return int(self._screen_x)
+
+    @property
+    def screen_y(self) -> int:
+        """Y coordinate of the cell relative to top left of screen."""
+        return int(self._screen_y)
+
+    @property
+    def pointer_x(self) -> float:
+        """The relative X coordinate of the pointer."""
+        return self._x
+
+    @property
+    def pointer_y(self) -> float:
+        """The relative Y coordinate of the pointer."""
+        return self._y
+
+    @property
+    def pointer_screen_x(self) -> float:
+        """The X coordinate of the pointer relative to the screen."""
+        return self._screen_x
+
+    @property
+    def pointer_screen_y(self) -> float:
+        """The Y coordinate of the pointer relative to the screen."""
+        return self._screen_y
 
     @classmethod
     def from_event(
@@ -403,16 +453,16 @@ class MouseEvent(InputEvent, bubble=True):
     ) -> MouseEventT:
         new_event = cls(
             widget,
-            event.x,
-            event.y,
-            event.delta_x,
-            event.delta_y,
+            event._x,
+            event._y,
+            event._delta_x,
+            event._delta_y,
             event.button,
             event.shift,
             event.meta,
             event.ctrl,
-            event.screen_x,
-            event.screen_y,
+            event._screen_x,
+            event._screen_y,
             event._style,
         )
         return new_event
@@ -421,16 +471,20 @@ class MouseEvent(InputEvent, bubble=True):
         yield self.widget
         yield "x", self.x
         yield "y", self.y
+        yield "pointer_x", self.pointer_x
+        yield "pointer_y", self.pointer_y
         yield "delta_x", self.delta_x, 0
         yield "delta_y", self.delta_y, 0
         if self.screen_x != self.x:
-            yield "screen_x", self.screen_x
+            yield "screen_x", self._screen_x
         if self.screen_y != self.y:
-            yield "screen_y", self.screen_y
+            yield "screen_y", self._screen_y
         yield "button", self.button, 0
         yield "shift", self.shift, False
         yield "meta", self.meta, False
         yield "ctrl", self.ctrl, False
+        if self.style:
+            yield "style", self.style
 
     @property
     def control(self) -> Widget | None:
@@ -493,16 +547,16 @@ class MouseEvent(InputEvent, bubble=True):
     def _apply_offset(self, x: int, y: int) -> MouseEvent:
         return self.__class__(
             self.widget,
-            x=self.x + x,
-            y=self.y + y,
-            delta_x=self.delta_x,
-            delta_y=self.delta_y,
+            x=self._x + x,
+            y=self._y + y,
+            delta_x=self._delta_x,
+            delta_y=self._delta_y,
             button=self.button,
             shift=self.shift,
             meta=self.meta,
             ctrl=self.ctrl,
-            screen_x=self.screen_x,
-            screen_y=self.screen_y,
+            screen_x=self._screen_x,
+            screen_y=self._screen_y,
             style=self.style,
         )
 
@@ -539,7 +593,7 @@ class MouseScrollDown(MouseEvent, bubble=True, verbose=True):
     """Sent when the mouse wheel is scrolled *down*.
 
     - [X] Bubbles
-    - [ ] Verbose
+    - [X] Verbose
     """
 
 
@@ -548,7 +602,7 @@ class MouseScrollUp(MouseEvent, bubble=True, verbose=True):
     """Sent when the mouse wheel is scrolled *up*.
 
     - [X] Bubbles
-    - [ ] Verbose
+    - [X] Verbose
     """
 
 
@@ -722,7 +776,21 @@ class Focus(Event, bubble=False):
 
     - [ ] Bubbles
     - [ ] Verbose
+
+    Args:
+        from_app_focus: True if this focus event has been sent because the app itself has
+            regained focus (via an AppFocus event). False if the focus came from within
+            the Textual app (e.g. via the user pressing tab or a programmatic setting
+            of the focused widget).
     """
+
+    def __init__(self, from_app_focus: bool = False) -> None:
+        self.from_app_focus = from_app_focus
+        super().__init__()
+
+    def __rich_repr__(self) -> rich.repr.Result:
+        yield from super().__rich_repr__()
+        yield "from_app_focus", self.from_app_focus
 
 
 class Blur(Event, bubble=False):

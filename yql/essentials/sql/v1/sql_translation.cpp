@@ -7,6 +7,7 @@
 #include "object_processing.h"
 #include "source.h"
 #include "antlr_token.h"
+#include "secret_settings.h"
 
 #include <yql/essentials/sql/settings/partitioning.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
@@ -953,7 +954,7 @@ TNodePtr TSqlTranslation::NamedExpr(
     if (nameTree) {
         expr.MarkAsNamed();
     }
-    TNodePtr exprNode = expr.Build(exprTree);
+    TNodePtr exprNode = Unwrap(expr.Build(exprTree));
     if (!exprNode) {
         Ctx_.IncrementMonCounter("sql_errors", "NamedExprInvalid");
         return nullptr;
@@ -1385,7 +1386,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                 values.push_back(new TAstAtomNodeImpl(Ctx_.Pos(), "world", TNodeFlags::Default));
 
                 TSqlExpression sqlExpr(Ctx_, Mode_);
-                if (alt.GetBlock2().HasBlock2() && !ExprList(sqlExpr, values, alt.GetBlock2().GetBlock2().GetRule_expr_list1())) {
+                if (alt.GetBlock2().HasBlock2() && !Unwrap(ExprList(sqlExpr, values, alt.GetBlock2().GetBlock2().GetRule_expr_list1()))) {
                     return false;
                 }
 
@@ -1503,21 +1504,82 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
     return Nothing();
 }
 
+bool ColumnCompression(const TRule_compression_setting_entry& node, TTranslation& ctx, TCompression& compression) {
+    const auto id = to_lower(Id(node.GetRule_an_id1(), ctx));
+
+    const auto& value = node.GetRule_compression_setting_value3(); // compression_setting_value
+
+    if (compression.Entries.contains(id)) {
+        ctx.Context().Error() << "'" << id << "' setting can be specified only once";
+        return false;
+    }
+
+    switch (value.Alt_case()) {
+        case TRule_compression_setting_value::AltCase::kAltCompressionSettingValue1: {
+            const auto result = ParseInteger(ctx.Context(), value.GetAlt_compression_setting_value1().GetRule_integer1());
+            if (!result) {
+                return false; // ParseInteger has already set error to context
+            }
+            const auto literal = MakeIntrusive<TLiteralNumberNode<ui64>>(ctx.Context().Pos(), "Uint64", ToString(*result));
+
+            compression.Entries[std::move(id)] = std::move(literal);
+            break;
+        }
+        case TRule_compression_setting_value::AltCase::kAltCompressionSettingValue2: {
+            const auto result = Id(value.GetAlt_compression_setting_value2().GetRule_id1(), ctx);
+            const TNodePtr literal = BuildLiteralRawString(ctx.Context().Pos(), result);
+
+            compression.Entries[std::move(id)] = std::move(literal);
+            break;
+        }
+        case TRule_compression_setting_value::AltCase::ALT_NOT_SET:
+            Y_UNREACHABLE();
+    }
+
+    return true;
+}
+
+TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslation& ctx) {
+    // compression: COMPRESSION LPAREN (compression_setting_entry (COMMA compression_setting_entry)*)? COMMA? RPAREN;
+
+    TCompression compression;
+
+    if (!node.HasBlock3()) { // compression_setting_entry
+        return compression;
+    }
+
+    const auto& block = node.GetBlock3();
+    const auto& entry = block.GetRule_compression_setting_entry1();
+    if (!ColumnCompression(entry, ctx, compression)) {
+        return Nothing();
+    }
+
+    for (const auto& block2 : block.GetBlock2()) {
+        const auto& entry2 = block2.GetRule_compression_setting_entry2();
+        if (!ColumnCompression(entry2, ctx, compression)) {
+            return Nothing();
+        }
+    }
+
+    return compression;
+}
+
 TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx) {
     TNodePtr defaultExpr;
-    bool nullable = true;
     TVector<TIdentifier> families;
+    TMaybe<TCompression> compression;
+    bool nullable = true;
 
     const auto& optionsList = node.GetRule_column_option_list3();
 
     enum class EOption {
         Family,
         NotNull,
-        DefaultValue
+        DefaultValue,
+        Compression,
     };
 
-    std::vector<TRule_column_option> columnOptions;
-    columnOptions.reserve(static_cast<size_t>(EOption::DefaultValue) + 1);
+    TVector<TRule_column_option> columnOptions(Reserve(static_cast<size_t>(EOption::Compression) + 1));
 
     {
         switch (optionsList.Alt_case()) {
@@ -1559,32 +1621,37 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslati
 
         for (const auto& rule : columnOptions) {
             switch (rule.Alt_case()) {
-                case TRule_column_option::kAltColumnOption1: {
+                case TRule_column_option::kAltColumnOption1: { // family_relation
+                    const auto opt = rule.GetAlt_column_option1().GetRule_family_relation1();
                     if (std::find(usedOptions.begin(), usedOptions.end(), EOption::Family) != usedOptions.end()) {
-                        ctx.Context().Error() << "'FAMILY' option can be specified only once";
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken1());
+                        ctx.Context().Error(pos) << "'FAMILY' option can be specified only once";
                         return {};
                     }
 
                     usedOptions.push_back(EOption::Family);
 
-                    const auto& familyRelation = rule.GetAlt_column_option1().GetRule_family_relation1();
-                    families.push_back(IdEx(familyRelation.GetRule_an_id2(), ctx));
+                    families.push_back(IdEx(opt.GetRule_an_id2(), ctx));
                     break;
                 }
-                case TRule_column_option::kAltColumnOption2: {
+                case TRule_column_option::kAltColumnOption2: { // nullability
+                    const auto opt = rule.GetAlt_column_option2().GetRule_nullability1();
                     if (std::find(usedOptions.begin(), usedOptions.end(), EOption::NotNull) != usedOptions.end()) {
-                        ctx.Context().Error() << "'NOT NULL' option can be specified only once";
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken2());
+                        ctx.Context().Error(pos) << "'NOT NULL' option can be specified only once";
                         return {};
                     }
 
                     usedOptions.push_back(EOption::NotNull);
 
-                    nullable = !rule.GetAlt_column_option2().GetRule_nullability1().HasBlock1();
+                    nullable = !opt.HasBlock1();
                     break;
                 }
-                case TRule_column_option::kAltColumnOption3: {
+                case TRule_column_option::kAltColumnOption3: { // default_value
+                    const auto opt = rule.GetAlt_column_option3().GetRule_default_value1();
                     if (std::find(usedOptions.begin(), usedOptions.end(), EOption::DefaultValue) != usedOptions.end()) {
-                        ctx.Context().Error() << "'DEFAULT' option can be specified only once";
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken1());
+                        ctx.Context().Error(pos) << "'DEFAULT' option can be specified only once";
                         return {};
                     }
 
@@ -1600,14 +1667,15 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslati
 
                     ctx.Context().DisableLegacyNotNull = true;
 
-                    defaultExpr = expr.Build(rule.GetAlt_column_option3().GetRule_default_value1().GetRule_expr2());
+                    defaultExpr = Unwrap(expr.Build(opt.GetRule_expr2()));
 
                     if (AnyOf(ctx.Context().Issues.begin(), ctx.Context().Issues.end(), [](const auto& issue) {
                             return issue.GetCode() == TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL;
                         })) {
-                        ctx.Context().Error() << "'DEFAULT' option can not use expr which contains literall 'NOT NULL'."
-                                              << " If you wanted to use two different options 'DEFAULT' and 'NOT NULL',"
-                                              << " it is recommended to use the syntax '(DEFAULT value, NOT NULL, ...)'";
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken1());
+                        ctx.Context().Error(pos) << "'DEFAULT' option can not use expr which contains literall 'NOT NULL'."
+                                                 << " If you wanted to use two different options 'DEFAULT' and 'NOT NULL',"
+                                                 << " it is recommended to use the syntax '(DEFAULT value, NOT NULL, ...)'";
 
                         return {};
                     }
@@ -1618,13 +1686,30 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslati
 
                     break;
                 }
+                case TRule_column_option::kAltColumnOption4: { // compression
+                    const auto opt = rule.GetAlt_column_option4().GetRule_compression1();
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::Compression) != usedOptions.end()) {
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken1());
+                        ctx.Context().Error(pos) << "'COMPRESSION' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::Compression);
+
+                    compression = ColumnCompression(opt, ctx);
+                    break;
+                }
                 case TRule_column_option::ALT_NOT_SET:
                     Y_UNREACHABLE();
             }
         }
     }
 
-    return TColumnOptions{std::move(defaultExpr), nullable, std::move(families)};
+    return TColumnOptions{
+        .DefaultExpr = std::move(defaultExpr),
+        .Families = std::move(families),
+        .Compression = std::move(compression),
+        .Nullable = nullable};
 }
 
 TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schema& node) {
@@ -1633,12 +1718,12 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     TNodePtr type = SerialTypeNode(node.GetRule_type_name_or_bind2());
     const bool serial = (type != nullptr);
 
-    auto columnOptions = ColumnOptions(node, *this);
+    const auto columnOptions = ColumnOptions(node, *this);
     if (!columnOptions) {
         return {};
     }
 
-    auto [defaultExpr, nullable, families] = columnOptions.GetRef();
+    const auto [defaultExpr, families, compression, nullable] = columnOptions.GetRef();
 
     if (!type) {
         type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
@@ -1648,14 +1733,16 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         return {};
     }
 
-    return TColumnSchema(
-        std::move(pos),
-        std::move(name),
-        std::move(type),
-        nullable,
-        std::move(families),
-        serial,
-        std::move(defaultExpr));
+    return TColumnSchema{
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .Type = std::move(type),
+        .Families = std::move(families),
+        .DefaultExpr = std::move(defaultExpr),
+        .Compression = compression,
+        .Nullable = nullable,
+        .Serial = serial,
+    };
 }
 
 TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
@@ -1909,7 +1996,7 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             const TString name(Id(node.GetAlt_create_table_entry6().GetRule_an_id_schema1(), *this));
             const TPosition pos(Context().Pos());
 
-            params.Columns.push_back(TColumnSchema(pos, name, nullptr, true, {}, false, nullptr));
+            params.Columns.push_back({.Pos = std::move(pos), .Name = std::move(name), .Nullable = true});
             break;
         }
         case NSQLv1Generated::TRule_create_table_entry::ALT_NOT_SET:
@@ -2085,7 +2172,7 @@ bool StoreSplitBoundaries(const TRule_table_setting_value& from, TVector<TVector
 }
 
 bool FillTieringInterval(const TRule_expr& from, TNodePtr& tieringInterval, TSqlExpression& expr, TContext& ctx) {
-    auto exprNode = expr.Build(from);
+    auto exprNode = Unwrap(expr.Build(from));
     if (!exprNode) {
         return false;
     }
@@ -2488,7 +2575,7 @@ static bool StoreConsumerSettingsEntry(
     const TStringBuf statement = alter ? "ALTER CONSUMER"sv : "CONSUMER"sv;
     TNodePtr valueExprNode;
     if (value) {
-        valueExprNode = ctx.Build(value->GetRule_expr1());
+        valueExprNode = Unwrap(ctx.Build(value->GetRule_expr1()));
         if (!valueExprNode) {
             ctx.Error() << "invalid value for setting: " << id.Name;
             return false;
@@ -2662,7 +2749,7 @@ static bool StoreTopicSettingsEntry(
     YQL_ENSURE(value || reset);
     TNodePtr valueExprNode;
     if (value) {
-        valueExprNode = ctx.Build(value->GetRule_expr1());
+        valueExprNode = Unwrap(ctx.Build(value->GetRule_expr1()));
         if (!valueExprNode) {
             ctx.Error() << "invalid value for setting: " << id.Name;
             return false;
@@ -2788,6 +2875,16 @@ static bool StoreTopicSettingsEntry(
                 return false;
             }
             settings.AutoPartitioningStrategy.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "metrics_level") {
+        if (reset) {
+            settings.MetricsLevel.Reset();
+        } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                return false;
+            }
+            settings.MetricsLevel.Set(valueExprNode);
         }
     } else {
         ctx.Error() << "unknown topic setting: " << id.Name;
@@ -3403,7 +3500,7 @@ TNodePtr TSqlTranslation::ListLiteral(const TRule_list_literal& node) {
     values.push_back(new TAstAtomNodeImpl(Ctx_.Pos(), "AsListMayWarn", TNodeFlags::Default));
 
     TSqlExpression sqlExpr(Ctx_, Mode_);
-    if (node.HasBlock2() && !ExprList(sqlExpr, values, node.GetBlock2().GetRule_expr_list1())) {
+    if (node.HasBlock2() && !Unwrap(ExprList(sqlExpr, values, node.GetBlock2().GetRule_expr_list1()))) {
         return nullptr;
     }
 
@@ -3418,16 +3515,16 @@ TNodePtr TSqlTranslation::DictLiteral(const TRule_dict_literal& node) {
         values.push_back(new TAstAtomNodeImpl(Ctx_.Pos(), isSet ? "AsSet" : "AsDict", TNodeFlags::Default));
         TSqlExpression sqlExpr(Ctx_, Mode_);
         if (isSet) {
-            if (!Expr(sqlExpr, values, list.GetRule_expr1())) {
+            if (!Unwrap(Expr(sqlExpr, values, list.GetRule_expr1()))) {
                 return nullptr;
             }
         } else {
             TVector<TNodePtr> tupleItems;
-            if (!Expr(sqlExpr, tupleItems, list.GetRule_expr1())) {
+            if (!Unwrap(Expr(sqlExpr, tupleItems, list.GetRule_expr1()))) {
                 return nullptr;
             }
 
-            if (!Expr(sqlExpr, tupleItems, list.GetBlock2().GetRule_expr2())) {
+            if (!Unwrap(Expr(sqlExpr, tupleItems, list.GetBlock2().GetRule_expr2()))) {
                 return nullptr;
             }
 
@@ -3443,16 +3540,16 @@ TNodePtr TSqlTranslation::DictLiteral(const TRule_dict_literal& node) {
             }
 
             if (isSet) {
-                if (!Expr(sqlExpr, values, b.GetRule_expr2())) {
+                if (!Unwrap(Expr(sqlExpr, values, b.GetRule_expr2()))) {
                     return nullptr;
                 }
             } else {
                 TVector<TNodePtr> tupleItems;
-                if (!Expr(sqlExpr, tupleItems, b.GetRule_expr2())) {
+                if (!Unwrap(Expr(sqlExpr, tupleItems, b.GetRule_expr2()))) {
                     return nullptr;
                 }
 
-                if (!Expr(sqlExpr, tupleItems, b.GetBlock3().GetRule_expr2())) {
+                if (!Unwrap(Expr(sqlExpr, tupleItems, b.GetBlock3().GetRule_expr2()))) {
                     return nullptr;
                 }
 
@@ -3471,7 +3568,7 @@ bool TSqlTranslation::StructLiteralItem(TVector<TNodePtr>& labels, const TRule_e
     {
         TColumnRefScope scope(Ctx_, EColumnRefState::AsStringLiteral, /* topLevel */ false);
         TSqlExpression sqlExpr(Ctx_, Mode_);
-        if (!Expr(sqlExpr, labels, label)) {
+        if (!Unwrap(Expr(sqlExpr, labels, label))) {
             return false;
         }
 
@@ -3486,7 +3583,7 @@ bool TSqlTranslation::StructLiteralItem(TVector<TNodePtr>& labels, const TRule_e
     // value expr
     {
         TSqlExpression sqlExpr(Ctx_, Mode_);
-        if (!Expr(sqlExpr, values, value)) {
+        if (!Unwrap(Expr(sqlExpr, values, value))) {
             return false;
         }
     }
@@ -3520,6 +3617,8 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
     //    | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
     //    | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
     //    | WATERMARK AS LPAREN expr RPAREN
+    //    | WATERMARK EQUALS expr
+
     switch (rule.Alt_case()) {
         case TRule_table_hint::kAltTableHint1: {
             const auto& alt = rule.GetAlt_table_hint1();
@@ -3636,7 +3735,19 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
             const auto& alt = rule.GetAlt_table_hint4();
             const auto pos = Ctx_.TokenPosition(alt.GetToken1());
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-            auto expr = TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr4());
+            TNodePtr expr = Unwrap(TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr4()));
+            if (!expr) {
+                return false;
+            }
+            hints["watermark"] = {BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr))};
+            break;
+        }
+
+        case TRule_table_hint::kAltTableHint5: {
+            const auto& alt = rule.GetAlt_table_hint5();
+            const auto pos = Ctx_.TokenPosition(alt.GetToken1());
+            TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
+            TNodePtr expr = Unwrap(TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr3()));
             if (!expr) {
                 return false;
             }
@@ -3798,7 +3909,7 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
     switch (rule.GetBlock3().Alt_case()) {
         case TRule_named_nodes_stmt::TBlock3::kAlt1: {
             TSqlExpression expr(Ctx_, Mode_);
-            auto result = expr.BuildSourceOrNode(rule.GetBlock3().GetAlt1().GetRule_expr1());
+            TNodePtr result = Unwrap(expr.BuildSourceOrNode(rule.GetBlock3().GetAlt1().GetRule_expr1()));
             if (TSourcePtr source = MoveOutIfSource(result)) {
                 result = BuildSourceNode(Ctx_.Pos(), std::move(source));
             }
@@ -3868,7 +3979,7 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
     bool asc = true;
     TSqlExpression expr(Ctx_, Mode_);
     TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-    TNodePtr exprNode = expr.Build(node.GetRule_expr1());
+    TNodePtr exprNode = Unwrap(expr.Build(node.GetRule_expr1()));
     if (!exprNode) {
         return false;
     }
@@ -3938,8 +4049,8 @@ bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom&
     }
 
     if (auto literalName = result.GetLiteral(); literalName && !allowSystemRoles) {
-        static const THashSet<TStringBuf> systemRoles = {"current_role", "current_user", "session_user"};
-        if (systemRoles.contains(to_lower(*literalName))) {
+        static const THashSet<TStringBuf> SystemRoles = {"current_role", "current_user", "session_user"};
+        if (SystemRoles.contains(to_lower(*literalName))) {
             Ctx_.Error() << "System role " << to_upper(*literalName) << " can not be used here";
             return false;
         }
@@ -4507,7 +4618,7 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
             switch (block.Alt_case()) {
                 case TRule_window_frame_bound_TAlt2_TBlock1::kAlt1: {
                     TSqlExpression boundExpr(Ctx_, Mode_);
-                    bound->Bound = boundExpr.Build(block.GetAlt1().GetRule_expr1());
+                    bound->Bound = Unwrap(boundExpr.Build(block.GetAlt1().GetRule_expr1()));
                     if (!bound->Bound) {
                         return false;
                     }
@@ -4756,7 +4867,7 @@ TNodePtr TSqlTranslation::DoStatement(const TRule_do_stmt& stmt, bool makeLambda
             values.push_back(new TAstAtomNodeImpl(Ctx_.Pos(), "world", TNodeFlags::Default));
 
             TSqlExpression sqlExpr(Ctx_, Mode_);
-            if (callAction.HasBlock3() && !ExprList(sqlExpr, values, callAction.GetBlock3().GetRule_expr_list1())) {
+            if (callAction.HasBlock3() && !Unwrap(ExprList(sqlExpr, values, callAction.GetBlock3().GetRule_expr_list1()))) {
                 return nullptr;
             }
 
@@ -4925,7 +5036,7 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
 TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
     TSqlExpression expr(Ctx_, Mode_);
-    auto exprNode = expr.Build(stmt.GetRule_expr3());
+    auto exprNode = Unwrap(expr.Build(stmt.GetRule_expr3()));
     if (!exprNode) {
         return {};
     }
@@ -4956,7 +5067,7 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     }
     TPosition itemArgNamePos = Ctx_.Pos();
 
-    auto exprNode = expr.Build(stmt.GetRule_expr6());
+    auto exprNode = Unwrap(expr.Build(stmt.GetRule_expr6()));
     if (!exprNode) {
         return {};
     }
@@ -5112,7 +5223,7 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
         Ctx_.Error() << "SOURCE_TYPE requires key";
         return false;
     }
-    if (!ValidateAuthMethod(result)) {
+    if (!ValidateExternalDataSourceAuthMethod(result, Ctx_)) {
         return false;
     }
     return true;
@@ -5152,6 +5263,8 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
         case TRule_alter_external_data_source_action::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
+
+    // no ValidateExternalDataSourceAuthMethod is called b/c its impossible to check format with previously saved settings
 }
 
 bool TSqlTranslation::StoreSecretInheritPermissions(
@@ -5252,7 +5365,7 @@ bool TSqlTranslation::ParseSecretSettings(
     const TPosition pos,
     const TRule_with_secret_settings& settingsNode,
     TSecretParameters& secretParams,
-    const TSecretParameters::TOperationMode mode) {
+    const TSecretParameters::EOperationMode mode) {
     // with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* RPAREN;
     auto tryStoreEntry = [&](const auto& entry) -> bool {
         return StoreSecretSettingEntry(
@@ -5286,48 +5399,6 @@ bool TSqlTranslation::ParseSecretId(const TRule_id_or_at& node, TString& objectI
     if (objectId.empty()) {
         Error() << "Empty secret name";
         return false;
-    }
-    return true;
-}
-
-bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result) {
-    const static TSet<TStringBuf> allAuthFields{
-        "service_account_id",
-        "service_account_secret_name",
-        "login",
-        "password_secret_name",
-        "aws_access_key_id_secret_name",
-        "aws_secret_access_key_secret_name",
-        "aws_region",
-        "token_secret_name"};
-    const static TMap<TStringBuf, TSet<TStringBuf>> authMethodFields{
-        {"NONE", {}},
-        {"SERVICE_ACCOUNT", {"service_account_id", "service_account_secret_name"}},
-        {"BASIC", {"login", "password_secret_name"}},
-        {"AWS", {"aws_access_key_id_secret_name", "aws_secret_access_key_secret_name", "aws_region"}},
-        {"MDB_BASIC", {"service_account_id", "service_account_secret_name", "login", "password_secret_name"}},
-        {"TOKEN", {"token_secret_name"}}};
-    auto authMethodIt = result.find("auth_method");
-    if (authMethodIt == result.end() || authMethodIt->second.GetLiteral() == nullptr) {
-        Ctx_.Error() << "AUTH_METHOD requires key";
-        return false;
-    }
-    const auto& authMethod = *authMethodIt->second.GetLiteral();
-    auto it = authMethodFields.find(authMethod);
-    if (it == authMethodFields.end()) {
-        Ctx_.Error() << "Unknown AUTH_METHOD = " << authMethod;
-        return false;
-    }
-    const auto& currentAuthFields = it->second;
-    for (const auto& authField : allAuthFields) {
-        if (currentAuthFields.contains(authField) && !result.contains(TString{authField})) {
-            Ctx_.Error() << to_upper(TString{authField}) << " requires key";
-            return false;
-        }
-        if (!currentAuthFields.contains(authField) && result.contains(TString{authField})) {
-            Ctx_.Error() << to_upper(TString{authField}) << " key is not supported for AUTH_METHOD = " << authMethod;
-            return false;
-        }
     }
     return true;
 }
@@ -5467,7 +5538,7 @@ bool TSqlTranslation::ParseViewQuery(
 namespace {
 
 static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
-    static const TString statementSeparator = ";\n";
+    static const TString StatementSeparator = ";\n";
 
     TVector<TString> statements;
     NYql::TIssues issues;
@@ -5503,14 +5574,14 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
                 return {};
             }
 
-            result << "$__ydb_transfer_lambda = " << Ctx.Query.substr(begin, end - begin + endToken->value().size()) << statementSeparator;
+            result << "$__ydb_transfer_lambda = " << Ctx.Query.substr(begin, end - begin + endToken->value().size()) << StatementSeparator;
 
             return result;
         }
         case NSQLv1Generated::TRule_lambda_or_parameter::kAltLambdaOrParameter2: {
             const auto& valueBlock = lambdaOrParameter.GetAlt_lambda_or_parameter2().GetRule_bind_parameter1().GetBlock2();
             const auto id = Id(valueBlock.GetAlt1().GetRule_an_id_or_type1(), ctx);
-            result << "$__ydb_transfer_lambda = $" << id << statementSeparator;
+            result << "$__ydb_transfer_lambda = $" << id << StatementSeparator;
             return result;
         }
         case NSQLv1Generated::TRule_lambda_or_parameter::ALT_NOT_SET:

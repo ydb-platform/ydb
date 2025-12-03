@@ -4,10 +4,12 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.in
 
 TEST_SRCS(
     test_streaming.py
+    test_udfs.py
 )
 
 PY_SRCS(
-    base.py
+    common.py
+    conftest.py
 )
 
 SIZE(MEDIUM)
@@ -25,6 +27,7 @@ PEERDIR(
 DEPENDS(
     ydb/apps/ydb
     ydb/tests/tools/pq_read
+    yql/essentials/udfs/common/python/python3_small
 )
 
 END()

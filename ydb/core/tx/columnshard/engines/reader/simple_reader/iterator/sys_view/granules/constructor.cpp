@@ -15,7 +15,7 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
             continue;
         }
         constructors.emplace_back(pathIdTranslator, TabletId, i.second);
-        if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
+        if (!pkFilter->IsUsed(constructors.back().GetStart().BuildSortablePosition(), constructors.back().GetFinish().BuildSortablePosition())) {
             constructors.pop_back();
         }
     }

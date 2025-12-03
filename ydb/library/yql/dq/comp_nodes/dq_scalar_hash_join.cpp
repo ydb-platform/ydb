@@ -13,7 +13,7 @@ namespace NKikimr::NMiniKQL {
 namespace {
 class TScalarRowSource : public NNonCopyable::TMoveOnly {
   public:
-    TScalarRowSource(IComputationWideFlowNode* flow, const std::vector<TType*>& types)
+    TScalarRowSource(IComputationWideFlowNode* flow, const TMKQLVector<TType*>& types)
         : Flow_(flow)
         , ConsumeBuff_(types.size())
         , Pointers_(types.size())
@@ -54,17 +54,17 @@ class TScalarRowSource : public NNonCopyable::TMoveOnly {
   private:
     bool Finished_ = false;
     IComputationWideFlowNode* Flow_;
-    std::vector<NYql::NUdf::TUnboxedValue> ConsumeBuff_;
-    std::vector<NYql::NUdf::TUnboxedValue*> Pointers_;
+    TMKQLVector<NYql::NUdf::TUnboxedValue> ConsumeBuff_;
+    TMKQLVector<NYql::NUdf::TUnboxedValue*> Pointers_;
 };
 
 template <EJoinKind Kind> class TScalarHashJoinState : public TComputationValue<TScalarHashJoinState<Kind>> {
   public:
     TScalarHashJoinState(TMemoryUsageInfo* memInfo, IComputationWideFlowNode* leftFlow,
-                         IComputationWideFlowNode* rightFlow, const std::vector<ui32>& leftKeyColumns,
-                         const std::vector<ui32>& rightKeyColumns, const std::vector<TType*>& leftColumnTypes,
-                         const std::vector<TType*>& rightColumnTypes, NUdf::TLoggerPtr logger, TString componentName,
-                         TDqRenames renames)
+                         IComputationWideFlowNode* rightFlow, const TMKQLVector<ui32>& leftKeyColumns,
+                         const TMKQLVector<ui32>& rightKeyColumns, const TMKQLVector<TType*>& leftColumnTypes,
+                         const TMKQLVector<TType*>& rightColumnTypes, NUdf::TLoggerPtr logger, TString componentName,
+                         TDqUserRenames renames)
         : NKikimr::NMiniKQL::TComputationValue<TScalarHashJoinState>(memInfo)
         , Join_(memInfo, TScalarRowSource{leftFlow, leftColumnTypes}, TScalarRowSource{rightFlow, rightColumnTypes},
                 TJoinMetadata{TColumnsMetadata{rightKeyColumns, rightColumnTypes},
@@ -109,11 +109,11 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
   public:
     TScalarHashJoinWrapper(TComputationMutables& mutables, IComputationWideFlowNode* leftFlow,
                            IComputationWideFlowNode* rightFlow,
-                           TVector<TType*>&& resultItemTypes,
-                           TVector<TType*>&& leftColumnTypes,
-                           TVector<ui32>&& leftKeyColumns,
-                           TVector<TType*>&& rightColumnTypes,
-                           TVector<ui32>&& rightKeyColumns, TDqRenames renames)
+                           TMKQLVector<TType*>&& resultItemTypes,
+                           TMKQLVector<TType*>&& leftColumnTypes,
+                           TMKQLVector<ui32>&& leftKeyColumns,
+                           TMKQLVector<TType*>&& rightColumnTypes,
+                           TMKQLVector<ui32>&& rightKeyColumns, TDqUserRenames renames)
         : TBaseComputation(mutables, nullptr, EValueRepresentation::Boxed)
         , LeftFlow_(leftFlow)
         , RightFlow_(rightFlow)
@@ -150,12 +150,12 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
     IComputationWideFlowNode* const LeftFlow_;
     IComputationWideFlowNode* const RightFlow_;
 
-    const TVector<TType*> ResultItemTypes_;
-    const TVector<TType*> LeftColumnTypes_;
-    const TVector<ui32> LeftKeyColumns_;
-    const TVector<TType*> RightColumnTypes_;
-    const TVector<ui32> RightKeyColumns_;
-    const TDqRenames Renames_;
+    const TMKQLVector<TType*> ResultItemTypes_;
+    const TMKQLVector<TType*> LeftColumnTypes_;
+    const TMKQLVector<ui32> LeftKeyColumns_;
+    const TMKQLVector<TType*> RightColumnTypes_;
+    const TMKQLVector<ui32> RightKeyColumns_;
+    const TDqUserRenames Renames_;
 };
 
 } // namespace
@@ -167,7 +167,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting flow");
     const auto joinComponents = GetWideComponents(joinType);
     MKQL_ENSURE(joinComponents.size() > 0, "Expected at least one column");
-    TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
+    TMKQLVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsFlow(), "Expected WideFlow as a left flow");
@@ -175,7 +175,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     MKQL_ENSURE(leftFlowType->GetItemType()->IsMulti(), "Expected Multi as a left flow item type");
     const auto leftFlowComponents = GetWideComponents(leftFlowType);
     MKQL_ENSURE(leftFlowComponents.size() > 0, "Expected at least one column");
-    TVector<TType*> leftFlowItems(leftFlowComponents.cbegin(), leftFlowComponents.cend());
+    TMKQLVector<TType*> leftFlowItems(leftFlowComponents.cbegin(), leftFlowComponents.cend());
 
     const auto rightType = callable.GetInput(1).GetStaticType();
     MKQL_ENSURE(rightType->IsFlow(), "Expected WideFlow as a right flow");
@@ -183,7 +183,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     MKQL_ENSURE(rightFlowType->GetItemType()->IsMulti(), "Expected Multi as a right flow item type");
     const auto rightFlowComponents = GetWideComponents(rightFlowType);
     MKQL_ENSURE(rightFlowComponents.size() > 0, "Expected at least one column");
-    TVector<TType*> rightFlowItems(rightFlowComponents.cbegin(), rightFlowComponents.cend());
+    TMKQLVector<TType*> rightFlowItems(rightFlowComponents.cbegin(), rightFlowComponents.cend());
 
     const auto joinKindNode = callable.GetInput(2);
     const auto rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
@@ -191,7 +191,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const auto leftKeyColumnsLiteral = callable.GetInput(3);
     const auto leftKeyColumnsTuple = AS_VALUE(TTupleLiteral, leftKeyColumnsLiteral);
-    TVector<ui32> leftKeyColumns;
+    TMKQLVector<ui32> leftKeyColumns;
     leftKeyColumns.reserve(leftKeyColumnsTuple->GetValuesCount());
     for (ui32 i = 0; i < leftKeyColumnsTuple->GetValuesCount(); i++) {
         const auto item = AS_VALUE(TDataLiteral, leftKeyColumnsTuple->GetValue(i));
@@ -200,7 +200,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const auto rightKeyColumnsLiteral = callable.GetInput(4);
     const auto rightKeyColumnsTuple = AS_VALUE(TTupleLiteral, rightKeyColumnsLiteral);
-    TVector<ui32> rightKeyColumns;
+    TMKQLVector<ui32> rightKeyColumns;
     rightKeyColumns.reserve(rightKeyColumnsTuple->GetValuesCount());
     for (ui32 i = 0; i < rightKeyColumnsTuple->GetValuesCount(); i++) {
         const auto item = AS_VALUE(TDataLiteral, rightKeyColumnsTuple->GetValue(i));
@@ -216,7 +216,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     MKQL_ENSURE(rightFlow, "Expected WideFlow as a right input");
     MKQL_ENSURE(joinKind == EJoinKind::Inner, "Only inner is supported, see gh#26780 for details.");
 
-    TDqRenames renames =
+    TDqUserRenames renames =
         FromGraceFormat(TGraceJoinRenames::FromRuntimeNodes(callable.GetInput(5), callable.GetInput(6)));
     ValidateRenames(renames, joinKind, std::ssize(leftFlowItems), std::ssize(rightFlowItems));
     return new TScalarHashJoinWrapper<EJoinKind::Inner>(ctx.Mutables, leftFlow, rightFlow, std::move(joinItems),

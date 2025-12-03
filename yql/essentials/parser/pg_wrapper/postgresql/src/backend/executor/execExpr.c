@@ -1171,6 +1171,14 @@ ExecInitExprRec(Expr *node, ExprState *state,
 							 state);
 
 				/*
+				 * If first argument is of varlena type, we'll need to ensure
+				 * that the value passed to the comparison function is a
+				 * read-only pointer.
+				 */
+				scratch.d.func.make_ro =
+					(get_typlen(exprType((Node *) linitial(op->args))) == -1);
+
+				/*
 				 * Change opcode of call instruction to EEOP_NULLIF.
 				 *
 				 * XXX: historically we've not called the function usage
@@ -2294,6 +2302,8 @@ ExecInitExprRec(Expr *node, ExprState *state,
 			{
 				JsonValueExpr *jve = (JsonValueExpr *) node;
 
+				Assert(jve->raw_expr != NULL);
+				ExecInitExprRec(jve->raw_expr, state, resv, resnull);
 				Assert(jve->formatted_expr != NULL);
 				ExecInitExprRec(jve->formatted_expr, state, resv, resnull);
 				break;

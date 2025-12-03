@@ -28,7 +28,8 @@ class S3ImportTestBase(object):
         config = KikimrConfigGenerator(
             extra_feature_flags={
                 "enable_external_data_sources": True,
-                "enable_move_column_table": True
+                "enable_move_column_table": True,
+                "enable_columnshard_bool": True,
             },
             query_service_config={"available_external_data_sources": ["ObjectStorage"]},
             table_service_config={}

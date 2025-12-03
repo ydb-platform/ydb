@@ -16,6 +16,8 @@ SRCS(
     blobstorage.h
     blobstorage.cpp
     blobstorage_grouptype.cpp
+    boot_type.h
+    boot_type.cpp
     channel_profiles.h
     counters.cpp
     counters.h
@@ -88,6 +90,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/snowball
     ydb/library/actors/core
     ydb/library/actors/helpers
     ydb/library/actors/interconnect
@@ -129,6 +132,7 @@ PEERDIR(
 )
 ENDIF()
 
+GENERATE_ENUM_SERIALIZATION(boot_type.h)
 GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
 
 END()

@@ -26,14 +26,12 @@ const TString AuthNode = "authentication";
 TCommandConfig::TCommandConfig()
     : TClientCommandTree("config", {}, "Manage YDB CLI configuration")
 {
-    AddLocalCommand(std::make_unique<TCommandProfile>());
+    AddCommand(std::make_unique<TCommandProfile>());
     AddCommand(std::make_unique<TCommandConnectionInfo>());
 }
 
 void TCommandConfig::Config(TConfig& config) {
     TClientCommandTree::Config(config);
-
-    config.NeedToConnect = false;
 }
 
 TCommandProfile::TCommandProfile()
@@ -263,7 +261,6 @@ TCommandConnectionInfo::TCommandConnectionInfo()
 void TCommandConnectionInfo::Config(TConfig& config) {
     TClientCommand::Config(config);
 
-    config.NeedToConnect = false;
     config.SetFreeArgsNum(0);
 }
 
@@ -339,6 +336,12 @@ void TCommandConnectionInfo::PrintVerboseInfo(TConfig& config) {
             ++cnt;
         }
     }
+}
+
+void TCommandProfile::Config(TConfig& config) {
+    TClientCommandTree::Config(config);
+
+    config.NeedToConnect = false;
 }
 
 TCommandInit::TCommandInit()

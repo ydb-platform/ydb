@@ -66,6 +66,7 @@ bool IsChannelFailureError(const TError& error)
     }
     return
         code == NRpc::EErrorCode::TransportError ||
+        code == NRpc::EErrorCode::SslError ||
         code == NRpc::EErrorCode::Unavailable ||
         code == NRpc::EErrorCode::NoSuchService ||
         code == NRpc::EErrorCode::NoSuchMethod ||

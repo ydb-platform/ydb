@@ -502,15 +502,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
     }
 
-    static THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForAdjustPathNames(NKikimrSchemeOp::TModifyScheme& scheme) {
+    static THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForAdjustPathNames(
+        const TString& database, NKikimrSchemeOp::TModifyScheme& scheme)
+    {
         auto parts = GetFullPath(scheme);
         if (parts.size() < 2) {
             return {};
         }
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        TVector<TString> path;
+        request->DatabaseName = database;
 
+        TVector<TString> path;
         for (auto it = parts.begin(); it != parts.end() - 1; ++it) {
             path.emplace_back(*it);
 
@@ -624,7 +627,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             // Cluster admin trumps database admin, database owner check is needed only for database admin.
             if (!IsClusterAdministrator && CheckDatabaseAdministrator) {
                 auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-                request->DatabaseName = CanonizePath(GetRequestProto().GetDatabaseName());
+                request->DatabaseName = GetRequestProto().GetDatabaseName();
 
                 auto& entry = request->ResultSet.emplace_back();
                 entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
@@ -1696,7 +1699,7 @@ void TFlatSchemeReq::Start(const TActorContext &ctx) {
     }
 
     if (NeedAdjustPathNames(GetModifyScheme())) {
-        auto resolveRequest = ResolveRequestForAdjustPathNames(GetModifyScheme());
+        auto resolveRequest = ResolveRequestForAdjustPathNames(GetRequestProto().GetDatabaseName(), GetModifyScheme());
         if (!resolveRequest) {
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
             TxProxyMon->ResolveKeySetWrongRequest->Inc();

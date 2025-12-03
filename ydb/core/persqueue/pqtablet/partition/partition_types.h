@@ -21,6 +21,7 @@ struct TWriteMsg {
     TEvPQ::TEvWrite::TMsg Msg;
     std::optional<ui64> InitialSeqNo;
     bool Internal = false;
+    bool DeduplicatedByMessageId = false;
 };
 
 struct TOwnershipMsg {

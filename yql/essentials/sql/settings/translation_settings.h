@@ -9,7 +9,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
-namespace google::protobuf {
+namespace google::protobuf { // NOLINT(readability-identifier-naming)
 class Arena;
 } // namespace google::protobuf
 
@@ -118,6 +118,8 @@ struct TTranslationSettings {
     bool AssumeYdbOnClusterWithSlash;
     TString DynamicClusterProvider;
     TString FileAliasPrefix;
+    // lower case mapping Module -> Functions
+    const THashMap<TString, THashSet<TString>>* UdfFilter = nullptr;
 
     TVector<ui32> PgParameterTypeOids;
     bool AutoParametrizeEnabled = false;

@@ -105,6 +105,8 @@ std::pair<TString, TViewDescription> TableKeyImpl(const std::pair<bool, TString>
 
 std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx, bool hasAt);
 
+TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslation& ctx);
+
 TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx);
 
 /// \return optional prefix
@@ -243,7 +245,7 @@ protected:
     bool ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_external_data_source_action& alterActions);
-    bool ParseSecretSettings(const TPosition stmBeginPos, const TRule_with_secret_settings& settings, TSecretParameters& secretParams, const TSecretParameters::TOperationMode mode);
+    bool ParseSecretSettings(const TPosition stmBeginPos, const TRule_with_secret_settings& settings, TSecretParameters& secretParams, const TSecretParameters::EOperationMode mode);
     [[nodiscard]] bool ParseSecretId(const TRule_id_or_at& node, TString& objectId);
     bool ParseViewOptions(std::map<TString, TDeferredAtom>& features, const TRule_with_table_settings& options);
     bool ParseViewQuery(std::map<TString, TDeferredAtom>& features, const TRule_select_stmt& query);
@@ -292,7 +294,6 @@ protected:
     bool ParseStreamingQueryDefinition(const TRule_streaming_query_definition& node, TStreamingQuerySettings& settings);
     bool ParseAlterStreamingQueryAction(const TRule_alter_streaming_query_action& node, TStreamingQuerySettings& settings);
 
-    bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);
     bool ValidateSubqueryOrViewBody(const TBlocks& blocks);
 

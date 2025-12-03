@@ -380,7 +380,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
 
     auto batch = GetPortionAccessor()
                      .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
-                     .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
+                     .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>(), Portion->GetPortionId(), Portion->GetPathId().DebugString())
                      .DetachResult();
 
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
@@ -410,9 +410,11 @@ TPortionDataSource::TPortionDataSource(
     , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata())) {
     AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
     if (context->GetReadMetadata()->IsDescSorted()) {
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Finish.GetValue(), Start.GetValue());
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(
+            Finish.GetValue().BuildSortablePosition(), Start.GetValue().BuildSortablePosition());
     } else {
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Start.GetValue(), Finish.GetValue());
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(
+            Start.GetValue().BuildSortablePosition(), Finish.GetValue().BuildSortablePosition());
     }
     AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())("finish", Finish.DebugString());

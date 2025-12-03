@@ -63,14 +63,6 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
         return true;
     }
 
-    if (lambdaBody.IsCallable("udf") && lambdaBody.ChildrenSize() == 8) {
-        for (const auto& setting: lambdaBody.Child(7)->Children()) {
-            if (setting->HeadPtr()->Content() == "layers") {
-                return false;
-            }
-        }
-    }
-
     if (auto maybeLength = TMaybeNode<TYtLength>(&lambdaBody)) {
         if (auto maybeRead = maybeLength.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();
@@ -394,6 +386,25 @@ TMaybe<TString> DeriveClusterFromSection(const NNodes::TYtSection& section, ERun
         }
     }
     return result;
+}
+
+void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TListType &needCalc, TNodeSet &uniqNodes) {
+    YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
+    const auto lambdaBody = qlFilter.Child(1)->Child(1);
+    VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
+        if (node->IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="})) {
+            return true;
+        }
+        if (node->IsCallable("Member")) {
+            return false;
+        }
+        if (uniqNodes.insert(node.Get()).second) {
+            if (NeedCalc(TExprBase(node.Get()))) {
+                needCalc.push_back(node);
+            }
+        }
+        return false;
+    });
 }
 
 } // unnamed
@@ -723,25 +734,6 @@ bool IsConstExpSortDirections(NNodes::TExprBase sortDirections) {
     return false;
 }
 
-void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TListType &needCalc, TNodeSet &uniqNodes) {
-    YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
-    const auto lambdaBody = qlFilter.Child(1)->Child(1);
-    VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
-        if (node->IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="})) {
-            return true;
-        }
-        if (node->IsCallable("Member")) {
-            return false;
-        }
-        if (uniqNodes.insert(node.Get()).second) {
-            if (NeedCalc(TExprBase(node.Get()))) {
-                needCalc.push_back(node);
-            }
-        }
-        return false;
-    });
-}
-
 TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
     TExprNode::TListType needCalc;
     TNodeSet uniqNodes;
@@ -760,9 +752,6 @@ TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
                             }
                         }
                     }
-                    break;
-                case EYtSettingType::QLFilter:
-                    GetNodesToCalculateFromQLFilter(setting.Value().Cast().Ref(), needCalc, uniqNodes);
                     break;
                 default:
                     break;
@@ -804,6 +793,14 @@ TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
                         }
                     }
                     break;
+                }
+                case EYtSettingType::QLFilter: {
+                    for (const auto& p : section.Paths()) {
+                        TYtPathInfo pathInfo(p);
+                        if (pathInfo.QLFilter) {
+                            GetNodesToCalculateFromQLFilter(*pathInfo.QLFilter, needCalc, uniqNodes);
+                        }
+                    }
                 }
                 default:
                     break;
@@ -1495,6 +1492,7 @@ IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::T
                                         .Columns<TCoVoid>().Build()
                                         .Ranges<TCoVoid>().Build()
                                         .Stat<TCoVoid>().Build()
+                                        .QLFilter<TCoVoid>().Build()
                                     .Build()
                                 .Build()
                                 .Settings()
@@ -1521,6 +1519,7 @@ IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::T
                                         .Columns<TCoVoid>().Build()
                                         .Ranges<TCoVoid>().Build()
                                         .Stat<TCoVoid>().Build()
+                                        .QLFilter<TCoVoid>().Build()
                                     .Build()
                                 .Build()
                                 .Settings()
@@ -1545,6 +1544,7 @@ IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::T
                                         .Columns<TCoVoid>().Build()
                                         .Ranges<TCoVoid>().Build()
                                         .Stat<TCoVoid>().Build()
+                                        .QLFilter<TCoVoid>().Build()
                                     .Build()
                                 .Build()
                                 .Settings()
@@ -1774,6 +1774,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                         .Columns<TCoVoid>().Build()
                         .Ranges<TCoVoid>().Build()
                         .Stat<TCoVoid>().Build()
+                        .QLFilter<TCoVoid>().Build()
                         .Done();
                 }
                 updatedPaths.push_back(path);
@@ -1853,6 +1854,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
             .Columns<TCoVoid>().Build()
             .Ranges<TCoVoid>().Build()
             .Stat<TCoVoid>().Build()
+            .QLFilter<TCoVoid>().Build()
             .Done();
     }
 
@@ -1917,6 +1919,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         .Columns<TCoVoid>().Build()
         .Ranges<TCoVoid>().Build()
         .Stat<TCoVoid>().Build()
+        .QLFilter<TCoVoid>().Build()
         .Done();
 }
 
@@ -2337,6 +2340,7 @@ TYtReadTable ConvertContentInputToRead(TExprBase input, TMaybeNode<TCoNameValueT
                     .Columns(columns)
                     .Ranges<TCoVoid>().Build()
                     .Stat<TCoVoid>().Build()
+                    .QLFilter<TCoVoid>().Build()
                 .Build()
             .Build()
             .Settings(settings.Cast())

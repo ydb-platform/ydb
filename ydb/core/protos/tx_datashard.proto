@@ -274,6 +274,8 @@ message TKqpReadRangesSourceSettings {
 
     optional bool IsTableImmutable = 23 [default = false];
     optional NKikimrKqp.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
+
+    optional string Database = 25;
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given
@@ -307,6 +309,9 @@ message TKqpVectorResolveSettings {
 
     // Input root cluster ID column (for the prefixed index)
     optional uint32 RootClusterColumnIndex = 16;
+
+    // Database name for KqpReadActor
+    optional string Database = 17;
 }
 
 message TKqpTaskInfo {
@@ -850,6 +855,7 @@ message TEvGetTableStatsResult {
     repeated uint64 SysTablesPartOwners = 7;
     optional bool FullStatsReady = 8;
     optional uint64 TableOwnerId = 9;
+    optional uint32 FollowerId = 10;
 }
 
 message TEvPeriodicTableStats {
@@ -1445,6 +1451,7 @@ message TEvConditionalEraseRowsRequest {
     optional uint64 SchemaVersion = 3;
     repeated TIndexDescription Indexes = 4;
     optional TLimits Limits = 5;
+    optional string DatabaseName = 6;
 
     oneof Condition {
         TExpirationCondition Expiration = 2;
@@ -1501,6 +1508,8 @@ message TEvBuildIndexCreateRequest {
     optional NKikimrIndexBuilder.TColumnBuildSettings ColumnBuildSettings = 16;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 17;
+
+    optional string DatabaseName = 18;
 }
 
 message TEvBuildIndexProgressResponse {
@@ -1611,6 +1620,8 @@ message TEvLocalKMeansRequest {
     repeated string DataColumns = 20;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 22;
+
+    optional string DatabaseName = 23;
 }
 
 message TEvLocalKMeansResponse {
@@ -1659,6 +1670,8 @@ message TEvReshuffleKMeansRequest {
     repeated string DataColumns = 15;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 16;
+
+    optional string DatabaseName = 17;
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1725,7 +1738,7 @@ message TEvIncrementalRestoreResponse {
         RETRY = 1;
         ERROR = 2;
     }
-    
+
     optional uint64 TxId = 1;
     optional uint64 TableId = 2;
     optional uint64 OperationId = 3;
@@ -1770,6 +1783,8 @@ message TEvPrefixKMeansRequest {
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 18;
 
     repeated string SourcePrimaryKeyColumns = 19;
+
+    optional string DatabaseName = 20;
 }
 
 message TEvPrefixKMeansResponse {
@@ -1806,6 +1821,10 @@ message TEvBuildFulltextIndexRequest {
     repeated string DataColumns = 10;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 11;
+
+    optional string DatabaseName = 12;
+
+    optional string DocsTableName = 13;
 }
 
 message TEvBuildFulltextIndexResponse {
@@ -1821,6 +1840,56 @@ message TEvBuildFulltextIndexResponse {
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 8;
+
+    optional uint64 DocCount = 9;
+    optional uint64 TotalDocLength = 10;
+}
+
+message TEvBuildFulltextDictRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 SnapshotTxId = 4;
+    optional uint64 SnapshotStep = 5;
+    optional bool ReadShadowData = 6;
+
+    optional uint64 SeqNoGeneration = 7;
+    optional uint64 SeqNoRound = 8;
+
+    optional string OutputName = 9;
+    optional string DatabaseName = 10;
+
+    optional Ydb.Table.FulltextIndexSettings Settings = 11; // also has key columns
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 12;
+
+    // When the posting table split point is in the middle of a key, first and last keys
+    // in the shard require cross-shard aggregation which is performed by the scheme shard
+    optional bool SkipFirstToken = 13;
+    optional bool SkipLastToken = 14;
+}
+
+message TEvBuildFulltextDictResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 RequestSeqNoGeneration = 4;
+    optional uint64 RequestSeqNoRound = 5;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 6;
+    repeated Ydb.Issue.IssueMessage Issues = 7;
+
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 8;
+
+    // First and last key rows if skipped in the scan
+    optional string FirstToken = 9;
+    optional uint64 FirstTokenRows = 10;
+    optional string LastToken = 11;
+    optional uint64 LastTokenRows = 12;
 }
 
 message TEvCdcStreamScanRequest {
@@ -2087,6 +2156,8 @@ message TEvRead {
     optional NKikimrSchemeOp.EOlapProgramType ProgramType = 903;
 
     optional NKikimrDataEvents.ELockMode LockMode = 904;
+
+    optional NKikimrKqp.TReadVectorTopK VectorTopK = 905;
 }
 
 message TReadContinuationToken {

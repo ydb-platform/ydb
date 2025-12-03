@@ -29,18 +29,6 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 0cda88d047ce1cbd63afdf716f1ace43
-BELONGS third_party/utf8_range/ya.make
-    License text:
-        Copyright (c) 2019 Yibo Cai
-        Copyright 2022 Google LLC
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        third_party/utf8_range/LICENSE [3:4]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 6229b3029004c1905fe5e24a63be2311
 BELONGS ya.make
     License text:
@@ -271,17 +259,3 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         src/google/protobuf/descriptor.cc [544:544]
-
-KEEP     COPYRIGHT_SERVICE_LABEL e618dd164932f955bb8121f5f486e841
-BELONGS third_party/utf8_range/ya.make
-    License text:
-        Copyright (c) 2019 Yibo Cai
-        Copyright 2022 Google LLC
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        third_party/utf8_range/LICENSE [3:4]
-        third_party/utf8_range/utf8_validity.cc [1:1]
-        third_party/utf8_range/utf8_validity.h [1:1]

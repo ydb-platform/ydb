@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/services/ydb)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -12,6 +12,7 @@ ENDIF()
 SRCS(
     backup_path_ut.cpp
     encrypted_backup_ut.cpp
+    fs_backup_validation_ut.cpp
     list_objects_in_s3_export_ut.cpp
     ydb_backup_ut.cpp
 )

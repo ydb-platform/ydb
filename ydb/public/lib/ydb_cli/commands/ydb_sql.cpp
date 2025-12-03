@@ -12,6 +12,7 @@
 #include <ydb/public/lib/ydb_cli/common/progress_indication.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <util/generic/queue.h>
 #include <util/string/escape.h>
@@ -45,8 +46,10 @@ void TCommandSql::Config(TConfig& config) {
         .StoreTrue(&ExplainAnalyzeMode);
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
+    config.Opts->AddLongOption("tx-mode", "Transaction mode [serializable-rw, online-ro, stale-ro, snapshot-ro, snapshot-rw, no-tx]")
+        .RequiredArgument("[String]").DefaultValue("no-tx").StoreResult(&TxMode);
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     TStringStream description;
     description << "Print progress of query execution. Requires non-none statistics collection mode. Available options: ";
     description << "\n  " << colors.BoldColor() << "tty" << colors.OldColor()
@@ -177,13 +180,35 @@ int TCommandSql::RunCommand(TConfig& config) {
 
     settings.Syntax(SyntaxType);
 
+    // Configure transaction control based on TxMode
+    auto getTxControl = [this]() -> NQuery::TTxControl {
+        if (TxMode == "no-tx" || TxMode == "notx") {
+            return NQuery::TTxControl::NoTx();
+        }
+        NQuery::TTxSettings txSettings;
+        if (TxMode == "serializable-rw") {
+            txSettings = NQuery::TTxSettings::SerializableRW();
+        } else if (TxMode == "online-ro") {
+            txSettings = NQuery::TTxSettings::OnlineRO();
+        } else if (TxMode == "stale-ro") {
+            txSettings = NQuery::TTxSettings::StaleRO();
+        } else if (TxMode == "snapshot-ro") {
+            txSettings = NQuery::TTxSettings::SnapshotRO();
+        } else if (TxMode == "snapshot-rw") {
+            txSettings = NQuery::TTxSettings::SnapshotRW();
+        } else {
+            throw TMisuseException() << "Unknown transaction mode.";
+        }
+        return NQuery::TTxControl::BeginTx(txSettings).CommitTx();
+    };
+
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
         THolder<TParamsBuilder> paramBuilder;
         while (!IsInterrupted() && GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             auto asyncResult = client.StreamExecuteQuery(
                     Query,
-                    NQuery::TTxControl::NoTx(),
+                    getTxControl(),
                     paramBuilder->Build(),
                     settings
                 );
@@ -202,7 +227,7 @@ int TCommandSql::RunCommand(TConfig& config) {
         // Execute query without parameters
         auto asyncResult = client.StreamExecuteQuery(
             Query,
-            NQuery::TTxControl::NoTx(),
+            getTxControl(),
             settings
         );
 

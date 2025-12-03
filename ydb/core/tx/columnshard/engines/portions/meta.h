@@ -4,6 +4,8 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/engines/portions/column_record.h>
+#include <ydb/core/tx/columnshard/engines/portions/index_chunk.h>
 #include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -43,6 +45,8 @@ protected:
         AFL_VERIFY(result);
         return *result;
     }
+
+    static std::vector<ui32> DoCalcSliceBorderOffsets(const std::vector<TColumnRecord>& records, const std::vector<TIndexChunk>& indexes);
 
 public:
     TPortionMetaBase() = default;
@@ -107,6 +111,7 @@ private:
     YDB_READONLY(ui32, ColumnBlobBytes, 0);
     YDB_READONLY(ui32, IndexRawBytes, 0);
     YDB_READONLY(ui32, IndexBlobBytes, 0);
+    YDB_READONLY(ui32, NumSlices, 1);
 
     friend class TPortionMetaConstructor;
     friend class TPortionInfo;
@@ -117,7 +122,7 @@ private:
         , LastPKRow(pk.GetLast().GetContent())
         , RecordSnapshotMin(min)
         , RecordSnapshotMax(max) {
-        AFL_VERIFY(IndexKeyStart() <= IndexKeyEnd())("start", IndexKeyStart().DebugString())("end", IndexKeyEnd().DebugString());
+        AFL_VERIFY_DEBUG(IndexKeyStart() <= IndexKeyEnd())("start", IndexKeyStart().DebugString())("end", IndexKeyEnd().DebugString());
     }
     TSnapshot RecordSnapshotMin;
     TSnapshot RecordSnapshotMax;

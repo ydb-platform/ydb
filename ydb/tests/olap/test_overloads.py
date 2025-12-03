@@ -5,6 +5,7 @@ import logging
 import yatest.common
 import ydb
 import random
+import requests
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -110,13 +111,13 @@ class TestLogScenario(object):
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
             extra_feature_flags={"enable_olap_reject_probability": True},
-            memory_controller_config={"max_tx_in_fly": 0},
         )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()
         node = cls.cluster.nodes[1]
         cls.ydb_client = YdbClient(endpoint=f"grpc://{node.host}:{node.port}", database=f"/{config.domain_name}")
         cls.ydb_client.wait_connection(timeout=60)
+        cls.mon_url = f"http://{node.host}:{node.mon_port}"
 
     def get_row_count(self) -> int:
         return self.ydb_client.query(f"select count(*) as Rows from `{self.table_name}`")[0].rows[0]["Rows"]
@@ -208,8 +209,16 @@ class TestLogScenario(object):
         logging.info(f"Count rows after insert {self.get_row_count()}")
         assert self.get_row_count() != 0
 
+    def tune_icb(self):
+        response = requests.post(
+            self.mon_url + "/actors/icb",
+            data="TabletControls.MaxTxInFly=0"
+        )
+        response.raise_for_status()
+
     def test_overloads_reject_probability(self):
         self._setup_ydb_rp()
+        self.tune_icb()
 
         table_path = f"{self.ydb_client.database}/table_for_test_overloads_reject_probability"
         self.ydb_client.query(

@@ -130,7 +130,7 @@ public:
     void Precharge(ui32 root,
                            TRawVals keyFrom, TRawVals keyTo,
                            TTagsRef tags, ui32 flags) override {
-        bool res = Db->Precharge(root, keyFrom, keyTo, tags, flags, -1, -1);
+        bool res = Db->Precharge(root, keyFrom, keyTo, tags, flags, -1, -1).Ready;
         if (!res)
             throw TIteratorNotReady();
     }

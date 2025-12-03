@@ -4,34 +4,42 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
 void TGRpcOperationService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+    using namespace Ydb::Operations;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
-    using namespace Ydb;
 
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#ifdef SETUP_OPERATION_METHOD
+#error SETUP_OPERATION_METHOD macro already defined
 #endif
-#define ADD_REQUEST(NAME, CB, TCALL, AUDIT_MODE)                                                                \
-    MakeIntrusive<TGRpcRequest<Operations::NAME##Request, Operations::NAME##Response, TGRpcOperationService>>   \
-        (this, &Service_, CQ_,                                                                                  \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                        \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
-                    new TCALL<Operations::NAME##Request, Operations::NAME##Response>                            \
-                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, AUDIT_MODE})); \
-            }, &Operation::V1::OperationService::AsyncService::Request ## NAME,                                 \
-            #NAME, logger, getCounterBlock("operation", #NAME))->Run();
 
-    ADD_REQUEST(GetOperation, DoGetOperationRequest, TGrpcRequestOperationCall, TAuditMode::NonModifying())
-    ADD_REQUEST(CancelOperation, DoCancelOperationRequest, TGrpcRequestNoOperationCall, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Operations))
-    ADD_REQUEST(ForgetOperation, DoForgetOperationRequest, TGrpcRequestNoOperationCall, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Operations))
-    ADD_REQUEST(ListOperations, DoListOperationsRequest, TGrpcRequestNoOperationCall, TAuditMode::NonModifying())
+#define SETUP_OPERATION_METHOD(methodName, methodCallback, rlMode, requestType, auditMode, operationCallClass) \
+    SETUP_RUNTIME_EVENT_METHOD(                               \
+        methodName,                                           \
+        YDB_API_DEFAULT_REQUEST_TYPE(methodName),             \
+        YDB_API_DEFAULT_RESPONSE_TYPE(methodName),            \
+        methodCallback,                                       \
+        rlMode,                                               \
+        requestType,                                          \
+        YDB_API_DEFAULT_COUNTER_BLOCK(operation, methodName), \
+        auditMode,                                            \
+        COMMON,                                               \
+        operationCallClass,                                   \
+        GRpcRequestProxyId_,                                  \
+        CQ_,                                                  \
+        nullptr,                                              \
+        nullptr)
 
-#undef ADD_REQUEST
+    SETUP_OPERATION_METHOD(GetOperation, DoGetOperationRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    SETUP_OPERATION_METHOD(CancelOperation, DoCancelOperationRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Operations), TGrpcRequestNoOperationCall);
+    SETUP_OPERATION_METHOD(ForgetOperation, DoForgetOperationRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Operations), TGrpcRequestNoOperationCall);
+    SETUP_OPERATION_METHOD(ListOperations, DoListOperationsRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestNoOperationCall);
+
+#undef SETUP_OPERATION_METHOD
 }
 
 } // namespace NGRpcService

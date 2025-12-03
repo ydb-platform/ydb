@@ -2,7 +2,7 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-VERSION(v1.36.6)
+VERSION(v1.36.10)
 
 SRCS(
     build.go
@@ -13,6 +13,7 @@ SRCS(
     desc_list_gen.go
     editions.go
     placeholder.go
+    presence.go
 )
 
 END()

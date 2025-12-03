@@ -10,7 +10,7 @@ namespace NSQLTranslationV1 {
 using namespace NSQLv1Generated;
 
 TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
-    static const TMap<TString, ESQLWriteColumnMode> str2Mode = {
+    static const TMap<TString, ESQLWriteColumnMode> Str2Mode = {
         {"InsertInto", ESQLWriteColumnMode::InsertInto},
         {"InsertOrAbortInto", ESQLWriteColumnMode::InsertOrAbortInto},
         {"InsertOrIgnoreInto", ESQLWriteColumnMode::InsertOrIgnoreInto},
@@ -179,8 +179,8 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
         SqlIntoModeStr_ += "WithTruncate";
         SqlIntoUserModeStr_ += " ... WITH TRUNCATE";
     }
-    const auto iterMode = str2Mode.find(SqlIntoModeStr_);
-    YQL_ENSURE(iterMode != str2Mode.end(), "Invalid sql write mode string: " << SqlIntoModeStr_);
+    const auto iterMode = Str2Mode.find(SqlIntoModeStr_);
+    YQL_ENSURE(iterMode != Str2Mode.end(), "Invalid sql write mode string: " << SqlIntoModeStr_);
     const auto SqlIntoMode = iterMode->second;
 
     TPosition pos(Ctx_.Pos());
@@ -232,10 +232,23 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
     const bool isStat = serviceName == StatProviderName;
 
     if (!isKikimr) {
+        if (mode == ESQLWriteColumnMode::UpsertInto && !isStat && isMapReduce)
+        {
+            // Upsert in MapReduce is available only from 2025.4
+            auto requiredLangVer = MakeLangVersion(2025, 4);
+            if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
+                auto str = FormatLangVersion(requiredLangVer);
+                YQL_ENSURE(str);
+                Ctx_.Error(pos) << "UPSERT is not available before language version " << *str;
+                Ctx_.IncrementMonCounter("sql_errors", TStringBuilder() << "UPSERT is not available before language version " << *str);
+                return false;
+            }
+        }
+
         if (mode == ESQLWriteColumnMode::InsertOrAbortInto ||
             mode == ESQLWriteColumnMode::InsertOrIgnoreInto ||
             mode == ESQLWriteColumnMode::InsertOrRevertInto ||
-            mode == ESQLWriteColumnMode::UpsertInto && !isStat)
+            mode == ESQLWriteColumnMode::UpsertInto && !isStat && !isMapReduce)
         {
             Ctx_.Error(pos) << SqlIntoUserModeStr_ << " is not supported for " << serviceName << " tables";
             Ctx_.IncrementMonCounter("sql_errors", TStringBuilder() << SqlIntoUserModeStr_ << "UnsupportedFor" << serviceName);

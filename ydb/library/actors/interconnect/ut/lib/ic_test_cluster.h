@@ -2,11 +2,11 @@
 
 #include "node.h"
 #include "interrupter.h"
+#include "port_manager.h"
 
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/generic/noncopyable.h>
 
@@ -21,7 +21,8 @@ public:
     enum Flags : ui64 {
         EMPTY = 0,
         USE_ZC = 1,
-        USE_TLS = 1 << 1
+        USE_TLS = 1 << 1,
+        RDMA_POLLING_CQ = 1 << 2,
     };
 
     using TCheckerFactory = std::function<IActor*(ui32)>;
@@ -34,7 +35,7 @@ private:
     THashMap<ui32, THolder<TNode>> Nodes;
     TList<TTrafficInterrupter> interrupters;
     NActors::TChannelsConfig ChannelsConfig;
-    TPortManager PortManager;
+    NInterconnectTest::IPortManager::TPtr PortManager;
     TIntrusivePtr<NLog::TSettings> LoggerSettings;
 
 public:
@@ -44,13 +45,14 @@ public:
         : NumNodes(numNodes)
         , Counters(new NMonitoring::TDynamicCounters)
         , ChannelsConfig(channelsConfig)
+        , PortManager(NInterconnectTest::CreatePortmanager())
         , LoggerSettings(loggerSettings)
     {
         THashMap<ui32, ui16> nodeToPortMap;
         THashMap<ui32, THashMap<ui32, ui16>> specificNodePortMap;
 
         for (ui32 i = 1; i <= NumNodes; ++i) {
-            nodeToPortMap.emplace(i, PortManager.GetPort());
+            nodeToPortMap.emplace(i, PortManager->GetPort());
         }
 
         if (tiSettings) {
@@ -60,7 +62,7 @@ public:
             for (auto& item : nodeToPortMap) {
                 nodeId = item.first;
                 listenPort = item.second;
-                forwardPort = PortManager.GetPort();
+                forwardPort = PortManager->GetPort();
 
                 specificNodePortMap[nodeId] = nodeToPortMap;
                 specificNodePortMap[nodeId].at(nodeId) = forwardPort;
@@ -74,7 +76,7 @@ public:
             Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig,
                 /*numDynamicNodes=*/0, /*numThreads=*/1, LoggerSettings, TNode::DefaultInflight(),
                 flags & USE_ZC ? ESocketSendOptimization::IC_MSG_ZEROCOPY : ESocketSendOptimization::DISABLED,
-                flags & USE_TLS, checkerFactory));
+                flags & USE_TLS, checkerFactory, flags & RDMA_POLLING_CQ ? NInterconnect::NRdma::ECqMode::POLLING : NInterconnect::NRdma::ECqMode::EVENT));
         }
     }
 

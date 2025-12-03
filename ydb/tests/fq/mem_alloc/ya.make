@@ -18,7 +18,7 @@ TEST_SRCS(
     test_scheduling.py
 )
 
-IF (SANITIZER_TYPE == "thread")
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()

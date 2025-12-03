@@ -1282,7 +1282,7 @@ public:
         return CompressedBlocks_;
     }
 
-    std::optional<TMD5Hash> GetDigest() const override
+    std::optional<TRowsDigest> GetDigest() const override
     {
         return std::nullopt;
     }

@@ -316,6 +316,8 @@ private:
             PrivateProto.SetImportant(important);
             if (important) 
                 PublicProto.set_important(important);
+            PrivateProto.SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+            PublicProto.mutable_streaming_consumer_type();
         }
 
     private:

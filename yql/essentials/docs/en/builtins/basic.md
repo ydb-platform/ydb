@@ -37,7 +37,25 @@ SELECT NVL(
 
 All three examples above are equivalent.
 
+## NullIf {#nullif}
 
+Returns NULL if both arguments are equal; otherwise, returns the first argument.
+
+#### Signature
+
+```yql
+NullIf(T, U)->T?
+NullIf(T?, U)->T?
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+
+#### Examples
+
+```yql
+SELECT NullIf(1,2); -- 1
+SELECT NullIf(1,1); -- NULL
+```
 
 ## LENGTH {#length}
 
@@ -319,6 +337,11 @@ Builds a `Callable` given a function name and optional `external user types`, `R
 * `Udf(Foo::Bar, "1e9+7" as RunConfig")(1, 'extended' As Precision)` — Call udf `Foo::Bar` with specified `RunConfig` and named parameters.
 * `Udf(Foo::Bar, $parent as Depends)` — Call udf `Foo::Bar` with specified computation dependency on specified node - since version [2025.03](../changelog/2025.03.md).
 
+You can also specify additional settings as named arguments; their type must be `String`:
+
+* Cpu - a factor describing how much CPU the udf consumes. The default value is "1". The higher this value, the more parallelism is required to call such a udf.
+* ExtraMem - the additional memory required by the udf in bytes. The default value is "0".
+
 #### Signatures
 
 ```yql
@@ -344,6 +367,10 @@ $config = @@{
 "meta": "..."
 }@@;
 SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
+```
+
+```yql
+SELECT Udf(Foo::Bar, "4" as Cpu, "100000000" as ExtraMem)(1);
 ```
 
 ## CurrentUtc... {#current-utc}

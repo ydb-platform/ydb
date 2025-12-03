@@ -41,7 +41,7 @@ private:
         } else if (const auto& read = input.Maybe<TYtReadTable>()) {
             lengthRes = 0ULL;
             for (auto path: read.Cast().Input().Item(0).Paths()) {
-                if (const auto& info = TYtTableBaseInfo::Parse(path.Table()); info->Stat && info->Meta && !info->Meta->IsDynamic && path.Ranges().Maybe<TCoVoid>())
+                if (const auto& info = TYtTableBaseInfo::Parse(path.Table()); info->Stat && info->Meta && !info->Meta->IsDynamic && path.Ranges().Maybe<TCoVoid>() && path.QLFilter().Maybe<TCoVoid>())
                     lengthRes = *lengthRes + info->Stat->RecordsCount;
                 else {
                     lengthRes = std::nullopt;

@@ -25,6 +25,21 @@ namespace {
 using namespace NCommon;
 using namespace NNodes;
 
+static const TSet<TString> REPLICATION_AND_TRANSFER_SECRETS_SETTINGS = [] {
+    static const TSet<TString> settings = {
+        "token_secret",
+        "password_secret",
+        "initial_token_secret",
+    };
+
+    TSet<TString> result;
+    for (const auto& setting : settings) {
+        result.insert(setting + "_name");
+        result.insert(setting + "_path");
+    }
+    return result;
+}();
+
 const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tableDesc,
     const TVector<TString>& columns, const TPosition& pos, TExprContext& ctx)
 {
@@ -1871,23 +1886,24 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateReplication(TKiCreateReplication node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
-            "connection_string",
-            "endpoint",
-            "database",
-            "token",
-            "token_secret_name",
-            "user",
-            "password",
-            "password_secret_name",
-            "service_account_id",
-            "initial_token",
-            "initial_token_secret_name",
-            "resource_id",
-            "ca_cert",
-            "consistency_level",
-            "commit_interval",
-        };
+        static const THashSet<TString> supportedSettings = [] {
+            THashSet<TString> settings = {
+               "connection_string",
+                "endpoint",
+                "database",
+                "token",
+                "user",
+                "password",
+                "service_account_id",
+                "initial_token",
+                "resource_id",
+                "ca_cert",
+                "consistency_level",
+                "commit_interval",
+            };
+            settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
+            return settings;
+        }();
 
         if (!CheckReplicationSettings(node.ReplicationSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -1903,23 +1919,24 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterReplication(TKiAlterReplication node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
-            "connection_string",
-            "endpoint",
-            "database",
-            "token",
-            "token_secret_name",
-            "user",
-            "password",
-            "password_secret_name",
-            "service_account_id",
-            "initial_token",
-            "initial_token_secret_name",
-            "resource_id",
-            "ca_cert",
-            "state",
-            "failover_mode",
-        };
+        static const THashSet<TString> supportedSettings = [] {
+            THashSet<TString> settings = {
+                "connection_string",
+                "endpoint",
+                "database",
+                "token",
+                "user",
+                "password",
+                "service_account_id",
+                "initial_token",
+                "resource_id",
+                "ca_cert",
+                "state",
+                "failover_mode",
+            };
+            settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
+            return settings;
+        }();
 
         if (!CheckReplicationSettings(node.ReplicationSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -1940,26 +1957,27 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateTransfer(TKiCreateTransfer node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
-            "connection_string",
-            "endpoint",
-            "database",
-            "token",
-            "token_secret_name",
-            "user",
-            "password",
-            "password_secret_name",
-            "service_account_id",
-            "initial_token",
-            "initial_token_secret_name",
-            "resource_id",
-            "ca_cert",
-            "commit_interval",
-            "flush_interval",
-            "batch_size_bytes",
-            "consumer",
-            "directory",
-        };
+        static const THashSet<TString> supportedSettings = [] {
+            THashSet<TString> settings = {
+                "connection_string",
+                "endpoint",
+                "database",
+                "token",
+                "user",
+                "password",
+                "service_account_id",
+                "initial_token",
+                "resource_id",
+                "ca_cert",
+                "commit_interval",
+                "flush_interval",
+                "batch_size_bytes",
+                "consumer",
+                "directory",
+            };
+            settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
+            return settings;
+        }();
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -1975,26 +1993,27 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterTransfer(TKiAlterTransfer node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
-            "connection_string",
-            "endpoint",
-            "database",
-            "token",
-            "token_secret_name",
-            "user",
-            "password",
-            "password_secret_name",
-            "service_account_id",
-            "initial_token",
-            "initial_token_secret_name",
-            "resource_id",
-            "ca_cert",
-            "state",
-            "failover_mode",
-            "flush_interval",
-            "batch_size_bytes",
-            "directory"
-        };
+        static const THashSet<TString> supportedSettings = [] {
+            THashSet<TString> settings = {
+                "connection_string",
+                "endpoint",
+                "database",
+                "token",
+                "user",
+                "password",
+                "service_account_id",
+                "initial_token",
+                "resource_id",
+                "ca_cert",
+                "state",
+                "failover_mode",
+                "flush_interval",
+                "batch_size_bytes",
+                "directory"
+            };
+            settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
+            return settings;
+        }();
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -2031,7 +2050,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             return TStatus::Error;
         }
 
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR"
         };
 
@@ -2075,7 +2094,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "password",
             "hash",
             "passwordEncrypted",
@@ -2115,7 +2134,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "password",
             "hash",
             "passwordEncrypted",
@@ -2445,9 +2464,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleCreateBackupCollection(TKiCreateBackupCollection node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "incremental_backup_enabled",
             "storage",
+            "omit_indexes",
         };
 
         if (!CheckBackupCollectionSettings(node.BackupCollectionSettings(), supportedSettings, ctx)) {
@@ -2464,7 +2484,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleAlterBackupCollection(TKiAlterBackupCollection node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {};
+        static const THashSet<TString> supportedSettings = {};
 
         if (!CheckBackupCollectionSettings(node.BackupCollectionSettings(), supportedSettings, ctx)) {
             return TStatus::Error;

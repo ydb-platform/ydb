@@ -30,6 +30,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/set.h>
+#include <util/generic/queue.h>
 #include <util/generic/yexception.h>
 #include <util/generic/algorithm.h>
 #include <util/digest/murmur.h>
@@ -2749,6 +2750,18 @@ using TSingletonTypeCache = std::tuple<
     const TStructExprType*,
     const TMultiExprType*>;
 
+class TExprCycleDetector {
+public:
+    TExprCycleDetector(ui64 maxQueueSize);
+    void Reset();
+    void AddNode(const TExprNode& node);
+
+private:
+    THashSet<TString> Set_;
+    TQueue<TString> Queue_;
+    const ui64 MaxQueueSize_;
+};
+
 struct TExprContext: private TNonCopyable {
     class TFreezeGuard {
     public:
@@ -2792,6 +2805,7 @@ struct TExprContext: private TNonCopyable {
     ui64 NodesAllocationLimit = 3000000;
     ui64 StringsAllocationLimit = 100000000;
     ui64 RepeatTransformLimit = 1000000;
+    TMaybe<TExprCycleDetector> CycleDetector;
     ui64 RepeatTransformCounter = 0;
     ui64 TypeAnnNodeRepeatLimit = 1000;
 
@@ -2829,7 +2843,7 @@ struct TExprContext: private TNonCopyable {
     }
 
     TPositionHandle AppendPosition(const TPosition& pos);
-    TPosition GetPosition(TPositionHandle handle) const;
+    const TPosition& GetPosition(TPositionHandle handle) const;
 
     TExprNodeBuilder Builder(TPositionHandle pos) {
         return TExprNodeBuilder(pos, *this);
@@ -3012,6 +3026,18 @@ struct TExprContext: private TNonCopyable {
     }
 
     std::string_view GetIndexAsString(ui32 index);
+
+    void CheckCycle(const TExprNode& node) {
+        if (CycleDetector) {
+            CycleDetector->AddNode(node);
+        }
+    }
+
+    void ResetCycleDetector() {
+        if (CycleDetector) {
+            CycleDetector->Reset();
+        }
+    }
 
 private:
     using TPositionHandleEqualPred = std::function<bool(TPositionHandle, TPositionHandle)>;

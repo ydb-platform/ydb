@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
 
 #include <algorithm>
 #include <cstring>
@@ -24,10 +24,10 @@
 #include <type_traits>
 #include <utility>
 
-#include "arrow/util/logging.h"
-#include "parquet/exception.h"
-#include "parquet/schema_internal.h"
-#include "parquet/thrift_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/thrift_internal.h"
 
 using parquet20::format::SchemaElement;
 

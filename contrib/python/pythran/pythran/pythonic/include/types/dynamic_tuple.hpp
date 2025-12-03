@@ -33,14 +33,11 @@ namespace types
     using size_type = std::size_t;
     using difference_type = std::ptrdiff_t;
     using reverse_iterator = typename container_type::reverse_iterator;
-    using const_reverse_iterator =
-        typename container_type::const_reverse_iterator;
+    using const_reverse_iterator = typename container_type::const_reverse_iterator;
 
     // minimal ndarray interface
-    using dtype =
-        typename utils::nested_container_value_type<dynamic_tuple>::type;
-    static const size_t value =
-        utils::nested_container_depth<dynamic_tuple>::value;
+    using dtype = typename utils::nested_container_value_type<dynamic_tuple>::type;
+    static const size_t value = utils::nested_container_depth<dynamic_tuple>::value;
     static const bool is_vectorizable = true;
     static const bool is_strided = false;
 
@@ -157,8 +154,7 @@ namespace types
       else {
         dynamic_tuple res;
         res.data->reserve(ns.size());
-        for (auto i = ns.lower, step = ns.step, n = ns.upper; i != n;
-             i += step) {
+        for (auto i = ns.lower, step = ns.step, n = ns.upper; i != n; i += step) {
           res.data->emplace_back(fast(i));
         }
         return res;
@@ -173,8 +169,7 @@ namespace types
 
     using shape_t = typename shape_builder<dynamic_tuple, value>::type;
     template <size_t I>
-    auto shape() const -> decltype(details::extract_shape(*this,
-                                                          utils::int_<I>{}))
+    auto shape() const -> decltype(details::extract_shape(*this, utils::int_<I>{}))
     {
       return details::extract_shape(*this, utils::int_<I>{});
     }
@@ -217,15 +212,13 @@ namespace std
   }
 
   template <size_t I, class T>
-  typename pythonic::types::dynamic_tuple<T>::reference
-  get(pythonic::types::dynamic_tuple<T> &t)
+  typename pythonic::types::dynamic_tuple<T>::reference get(pythonic::types::dynamic_tuple<T> &t)
   {
     return t[I];
   }
 
   template <size_t I, class T>
-  typename pythonic::types::dynamic_tuple<T>::reference
-  get(pythonic::types::dynamic_tuple<T> &&t)
+  typename pythonic::types::dynamic_tuple<T>::reference get(pythonic::types::dynamic_tuple<T> &&t)
   {
     return t[I];
   }

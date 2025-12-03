@@ -88,6 +88,7 @@ static void analyzeCTE(ParseState *pstate, CommonTableExpr *cte);
 /* Dependency processing functions */
 static void makeDependencyGraph(CteState *cstate);
 static bool makeDependencyGraphWalker(Node *node, CteState *cstate);
+static void WalkInnerWith(Node *stmt, WithClause *withClause, CteState *cstate);
 static void TopologicalSort(ParseState *pstate, CteItem *items, int numitems);
 
 /* Recursion validity checker functions */
@@ -731,58 +732,69 @@ makeDependencyGraphWalker(Node *node, CteState *cstate)
 	if (IsA(node, SelectStmt))
 	{
 		SelectStmt *stmt = (SelectStmt *) node;
-		ListCell   *lc;
 
 		if (stmt->withClause)
 		{
-			if (stmt->withClause->recursive)
-			{
-				/*
-				 * In the RECURSIVE case, all query names of the WITH are
-				 * visible to all WITH items as well as the main query. So
-				 * push them all on, process, pop them all off.
-				 */
-				cstate->innerwiths = lcons(stmt->withClause->ctes,
-										   cstate->innerwiths);
-				foreach(lc, stmt->withClause->ctes)
-				{
-					CommonTableExpr *cte = (CommonTableExpr *) lfirst(lc);
-
-					(void) makeDependencyGraphWalker(cte->ctequery, cstate);
-				}
-				(void) raw_expression_tree_walker(node,
-												  makeDependencyGraphWalker,
-												  (void *) cstate);
-				cstate->innerwiths = list_delete_first(cstate->innerwiths);
-			}
-			else
-			{
-				/*
-				 * In the non-RECURSIVE case, query names are visible to the
-				 * WITH items after them and to the main query.
-				 */
-				cstate->innerwiths = lcons(NIL, cstate->innerwiths);
-				foreach(lc, stmt->withClause->ctes)
-				{
-					CommonTableExpr *cte = (CommonTableExpr *) lfirst(lc);
-					ListCell   *cell1;
-
-					(void) makeDependencyGraphWalker(cte->ctequery, cstate);
-					/* note that recursion could mutate innerwiths list */
-					cell1 = list_head(cstate->innerwiths);
-					lfirst(cell1) = lappend((List *) lfirst(cell1), cte);
-				}
-				(void) raw_expression_tree_walker(node,
-												  makeDependencyGraphWalker,
-												  (void *) cstate);
-				cstate->innerwiths = list_delete_first(cstate->innerwiths);
-			}
+			/* Examine the WITH clause and the SelectStmt */
+			WalkInnerWith(node, stmt->withClause, cstate);
 			/* We're done examining the SelectStmt */
 			return false;
 		}
 		/* if no WITH clause, just fall through for normal processing */
 	}
-	if (IsA(node, WithClause))
+	else if (IsA(node, InsertStmt))
+	{
+		InsertStmt *stmt = (InsertStmt *) node;
+
+		if (stmt->withClause)
+		{
+			/* Examine the WITH clause and the InsertStmt */
+			WalkInnerWith(node, stmt->withClause, cstate);
+			/* We're done examining the InsertStmt */
+			return false;
+		}
+		/* if no WITH clause, just fall through for normal processing */
+	}
+	else if (IsA(node, DeleteStmt))
+	{
+		DeleteStmt *stmt = (DeleteStmt *) node;
+
+		if (stmt->withClause)
+		{
+			/* Examine the WITH clause and the DeleteStmt */
+			WalkInnerWith(node, stmt->withClause, cstate);
+			/* We're done examining the DeleteStmt */
+			return false;
+		}
+		/* if no WITH clause, just fall through for normal processing */
+	}
+	else if (IsA(node, UpdateStmt))
+	{
+		UpdateStmt *stmt = (UpdateStmt *) node;
+
+		if (stmt->withClause)
+		{
+			/* Examine the WITH clause and the UpdateStmt */
+			WalkInnerWith(node, stmt->withClause, cstate);
+			/* We're done examining the UpdateStmt */
+			return false;
+		}
+		/* if no WITH clause, just fall through for normal processing */
+	}
+	else if (IsA(node, MergeStmt))
+	{
+		MergeStmt  *stmt = (MergeStmt *) node;
+
+		if (stmt->withClause)
+		{
+			/* Examine the WITH clause and the MergeStmt */
+			WalkInnerWith(node, stmt->withClause, cstate);
+			/* We're done examining the MergeStmt */
+			return false;
+		}
+		/* if no WITH clause, just fall through for normal processing */
+	}
+	else if (IsA(node, WithClause))
 	{
 		/*
 		 * Prevent raw_expression_tree_walker from recursing directly into a
@@ -794,6 +806,60 @@ makeDependencyGraphWalker(Node *node, CteState *cstate)
 	return raw_expression_tree_walker(node,
 									  makeDependencyGraphWalker,
 									  (void *) cstate);
+}
+
+/*
+ * makeDependencyGraphWalker's recursion into a statement having a WITH clause.
+ *
+ * This subroutine is concerned with updating the innerwiths list correctly
+ * based on the visibility rules for CTE names.
+ */
+static void
+WalkInnerWith(Node *stmt, WithClause *withClause, CteState *cstate)
+{
+	ListCell   *lc;
+
+	if (withClause->recursive)
+	{
+		/*
+		 * In the RECURSIVE case, all query names of the WITH are visible to
+		 * all WITH items as well as the main query.  So push them all on,
+		 * process, pop them all off.
+		 */
+		cstate->innerwiths = lcons(withClause->ctes, cstate->innerwiths);
+		foreach(lc, withClause->ctes)
+		{
+			CommonTableExpr *cte = (CommonTableExpr *) lfirst(lc);
+
+			(void) makeDependencyGraphWalker(cte->ctequery, cstate);
+		}
+		(void) raw_expression_tree_walker(stmt,
+										  makeDependencyGraphWalker,
+										  (void *) cstate);
+		cstate->innerwiths = list_delete_first(cstate->innerwiths);
+	}
+	else
+	{
+		/*
+		 * In the non-RECURSIVE case, query names are visible to the WITH
+		 * items after them and to the main query.
+		 */
+		cstate->innerwiths = lcons(NIL, cstate->innerwiths);
+		foreach(lc, withClause->ctes)
+		{
+			CommonTableExpr *cte = (CommonTableExpr *) lfirst(lc);
+			ListCell   *cell1;
+
+			(void) makeDependencyGraphWalker(cte->ctequery, cstate);
+			/* note that recursion could mutate innerwiths list */
+			cell1 = list_head(cstate->innerwiths);
+			lfirst(cell1) = lappend((List *) lfirst(cell1), cte);
+		}
+		(void) raw_expression_tree_walker(stmt,
+										  makeDependencyGraphWalker,
+										  (void *) cstate);
+		cstate->innerwiths = list_delete_first(cstate->innerwiths);
+	}
 }
 
 /*
@@ -883,25 +949,14 @@ checkWellFormedRecursion(CteState *cstate)
 							cte->ctename),
 					 parser_errposition(cstate->pstate, cte->location)));
 
-		/* The left-hand operand mustn't contain self-reference at all */
-		cstate->curitem = i;
-		cstate->innerwiths = NIL;
-		cstate->selfrefcount = 0;
-		cstate->context = RECURSION_NONRECURSIVETERM;
-		checkWellFormedRecursionWalker((Node *) stmt->larg, cstate);
-		Assert(cstate->innerwiths == NIL);
-
-		/* Right-hand operand should contain one reference in a valid place */
-		cstate->curitem = i;
-		cstate->innerwiths = NIL;
-		cstate->selfrefcount = 0;
-		cstate->context = RECURSION_OK;
-		checkWellFormedRecursionWalker((Node *) stmt->rarg, cstate);
-		Assert(cstate->innerwiths == NIL);
-		if (cstate->selfrefcount != 1)	/* shouldn't happen */
-			elog(ERROR, "missing recursive reference");
-
-		/* WITH mustn't contain self-reference, either */
+		/*
+		 * Really, we should insist that there not be a top-level WITH, since
+		 * syntactically that would enclose the UNION.  However, we've not
+		 * done so in the past and it's probably too late to change.  Settle
+		 * for insisting that WITH not contain a self-reference.  Test this
+		 * before examining the UNION arms, to avoid issuing confusing errors
+		 * in such cases.
+		 */
 		if (stmt->withClause)
 		{
 			cstate->curitem = i;
@@ -918,7 +973,9 @@ checkWellFormedRecursion(CteState *cstate)
 		 * don't make sense because it's impossible to figure out what they
 		 * mean when we have only part of the recursive query's results. (If
 		 * we did allow them, we'd have to check for recursive references
-		 * inside these subtrees.)
+		 * inside these subtrees.  As for WITH, we have to do this before
+		 * examining the UNION arms, to avoid issuing confusing errors if
+		 * there is a recursive reference here.)
 		 */
 		if (stmt->sortClause)
 			ereport(ERROR,
@@ -944,6 +1001,28 @@ checkWellFormedRecursion(CteState *cstate)
 					 errmsg("FOR UPDATE/SHARE in a recursive query is not implemented"),
 					 parser_errposition(cstate->pstate,
 										exprLocation((Node *) stmt->lockingClause))));
+
+		/*
+		 * Now we can get on with checking the UNION operands themselves.
+		 *
+		 * The left-hand operand mustn't contain a self-reference at all.
+		 */
+		cstate->curitem = i;
+		cstate->innerwiths = NIL;
+		cstate->selfrefcount = 0;
+		cstate->context = RECURSION_NONRECURSIVETERM;
+		checkWellFormedRecursionWalker((Node *) stmt->larg, cstate);
+		Assert(cstate->innerwiths == NIL);
+
+		/* Right-hand operand should contain one reference in a valid place */
+		cstate->curitem = i;
+		cstate->innerwiths = NIL;
+		cstate->selfrefcount = 0;
+		cstate->context = RECURSION_OK;
+		checkWellFormedRecursionWalker((Node *) stmt->rarg, cstate);
+		Assert(cstate->innerwiths == NIL);
+		if (cstate->selfrefcount != 1)	/* shouldn't happen */
+			elog(ERROR, "missing recursive reference");
 	}
 }
 

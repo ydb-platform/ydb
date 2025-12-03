@@ -42,7 +42,7 @@ PEERDIR(
 )
 
 ADDINCL(
-    contrib/libs/protobuf/third_party/utf8_range
+    contrib/libs/protobuf/src
 )
 
 NO_COMPILER_WARNINGS()

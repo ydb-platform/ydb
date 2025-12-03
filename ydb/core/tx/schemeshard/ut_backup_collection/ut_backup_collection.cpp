@@ -85,10 +85,10 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         auto transaction = modifyTx->Record.AddTransaction();
         transaction->SetWorkingDir(workingDir);
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection);
-        
+
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(request, transaction->MutableBackupBackupCollection());
         UNIT_ASSERT(parseOk);
-        
+
         AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release(), 0);
     }
 
@@ -99,14 +99,14 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     void AsyncBackupIncrementalBackupCollection(TTestBasicRuntime& runtime, ui64 txId, const TString& workingDir, const TString& request) {
         TActorId sender = runtime.AllocateEdgeActor();
-        
+
         auto request2 = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = request2->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection);
         transaction->SetWorkingDir(workingDir);
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(request, transaction->MutableBackupIncrementalBackupCollection());
         UNIT_ASSERT(parseOk);
-        
+
         AsyncSend(runtime, TTestTxConfig::SchemeShard, request2.Release(), 0, sender);
     }
 
@@ -589,8 +589,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             AsyncBackupBackupCollection(runtime, ++txId, "/MyRoot",
                 R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
 
-            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
-                "Name: \"" DEFAULT_NAME_1 "\"", 
+            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+                "Name: \"" DEFAULT_NAME_1 "\"",
                 {NKikimrScheme::StatusPreconditionFailed});
             env.TestWaitNotification(runtime, txId);
 
@@ -616,8 +616,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             SetupLogging(runtime);
             PrepareDirs(runtime, env, txId);
 
-            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
-                "Name: \"NonExistentCollection\"", 
+            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+                "Name: \"NonExistentCollection\"",
                 {NKikimrScheme::StatusPathDoesNotExist});
             env.TestWaitNotification(runtime, txId);
 
@@ -801,7 +801,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
             env.TestWaitNotification(runtime, txId);
 
-            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
                 "Name: \"NonExistentCollection\"",
                 {NKikimrScheme::StatusPathDoesNotExist});
             env.TestWaitNotification(runtime, txId);
@@ -860,7 +860,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 if (i > 0) {
                     runtime.AdvanceCurrentTime(TDuration::Seconds(1));
                 }
-                
+
                 TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
                     R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
                 env.TestWaitNotification(runtime, txId);
@@ -886,18 +886,18 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             SetupLogging(runtime);
             PrepareDirs(runtime, env, txId);
 
-            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
-                "Name: \"\"", 
+            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+                "Name: \"\"",
                 {NKikimrScheme::StatusInvalidParameter});
             env.TestWaitNotification(runtime, txId);
 
-            TestDropBackupCollection(runtime, ++txId, "/NonExistent/path", 
-                "Name: \"test\"", 
+            TestDropBackupCollection(runtime, ++txId, "/NonExistent/path",
+                "Name: \"test\"",
                 {NKikimrScheme::StatusPathDoesNotExist});
             env.TestWaitNotification(runtime, txId);
 
-            TestDropBackupCollection(runtime, ++txId, "/MyRoot", 
-                "Name: \"test\"", 
+            TestDropBackupCollection(runtime, ++txId, "/MyRoot",
+                "Name: \"test\"",
                 {NKikimrScheme::StatusSchemeError});
             env.TestWaitNotification(runtime, txId);
         }
@@ -910,15 +910,15 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             SetupLogging(runtime);
             PrepareDirs(runtime, env, txId);
 
-            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", 
+            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
                 DefaultCollectionSettingsWithName("Collection1"));
             env.TestWaitNotification(runtime, txId);
 
-            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", 
+            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
                 DefaultCollectionSettingsWithName("Collection2"));
             env.TestWaitNotification(runtime, txId);
 
-            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", 
+            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
                 DefaultCollectionSettingsWithName("Collection3"));
             env.TestWaitNotification(runtime, txId);
 
@@ -939,7 +939,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             env.TestWaitNotification(runtime, txId);
         }
 
-    
+
     Y_UNIT_TEST(DropCollectionVerifyLocalDatabaseCleanup) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -959,7 +959,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             }
             Cluster: {}
         )";
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", 
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
             localDbCollectionSettings);
         env.TestWaitNotification(runtime, txId);
 
@@ -973,17 +973,17 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/LocalDbTestCollection")");
-        env.TestWaitNotification(runtime, txId);        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        env.TestWaitNotification(runtime, txId);        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             "Name: \"LocalDbTestCollection\"");
         env.TestWaitNotification(runtime, txId);
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/LocalDbTestCollection"), 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/LocalDbTestCollection"),
                           {NLs::PathNotExist});
 
         ui64 schemeshardTabletId = TTestTxConfig::SchemeShard;
-        
+
         bool backupCollectionTableClean = true;
         try {
             auto result = LocalMiniKQL(runtime, schemeshardTabletId, R"(
@@ -996,7 +996,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                     ))
                 )
             )");
-            
+
             auto& value = result.GetValue();
             if (value.GetStruct(0).GetOptional().HasOptional()) {
                 backupCollectionTableClean = false;
@@ -1006,7 +1006,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             backupCollectionTableClean = false;
             Cerr << "ERROR: Failed to query BackupCollection table" << Endl;
         }
-        
+
         UNIT_ASSERT_C(backupCollectionTableClean, "BackupCollection table not properly cleaned up");
 
         bool incrementalRestoreOperationsClean = true;
@@ -1021,7 +1021,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                     ))
                 )
             )");
-            
+
             auto& value = result.GetValue();
             if (value.GetStruct(0).GetOptional().HasOptional()) {
                 incrementalRestoreOperationsClean = false;
@@ -1031,7 +1031,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             incrementalRestoreOperationsClean = false;
             Cerr << "ERROR: Failed to query IncrementalRestoreOperations table" << Endl;
         }
-        
+
         UNIT_ASSERT_C(incrementalRestoreOperationsClean, "IncrementalRestoreOperations table not properly cleaned up");
 
         bool incrementalRestoreStateClean = true;
@@ -1046,7 +1046,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                     ))
                 )
             )");
-            
+
             auto& value = result.GetValue();
             if (value.GetStruct(0).GetOptional().HasOptional()) {
                 incrementalRestoreStateClean = false;
@@ -1056,7 +1056,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             incrementalRestoreStateClean = false;
             Cerr << "ERROR: Failed to query IncrementalRestoreState table" << Endl;
         }
-        
+
         UNIT_ASSERT_C(incrementalRestoreStateClean, "IncrementalRestoreState table not properly cleaned up");
 
         bool incrementalRestoreShardProgressClean = true;
@@ -1071,7 +1071,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                     ))
                 )
             )");
-            
+
             auto& value = result.GetValue();
             if (value.GetStruct(0).GetOptional().HasOptional()) {
                 incrementalRestoreShardProgressClean = false;
@@ -1081,7 +1081,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             incrementalRestoreShardProgressClean = false;
             Cerr << "ERROR: Failed to query IncrementalRestoreShardProgress table" << Endl;
         }
-        
+
         UNIT_ASSERT_C(incrementalRestoreShardProgressClean, "IncrementalRestoreShardProgress table not properly cleaned up");
 
         Cerr << "SUCCESS: All LocalDB tables properly cleaned up after DROP BACKUP COLLECTION" << Endl;
@@ -1097,7 +1097,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             }
             Cluster: {}
         )";
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", 
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
             recreateCollectionSettings);
         env.TestWaitNotification(runtime, txId);
     }
@@ -1139,22 +1139,22 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         ui64 backupTxId = txId;
 
         // This shows that active operation protection IS implemented
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
-            "Name: \"ActiveOpTestCollection\"", 
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+            "Name: \"ActiveOpTestCollection\"",
             {NKikimrScheme::StatusPreconditionFailed}); // CORRECT: System properly rejects this
         env.TestWaitNotification(runtime, txId);
 
         env.TestWaitNotification(runtime, backupTxId);
 
         // VERIFICATION: Collection should still exist since drop was properly rejected
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/ActiveOpTestCollection"), 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/ActiveOpTestCollection"),
             {NLs::PathExist});
 
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             "Name: \"ActiveOpTestCollection\"");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/ActiveOpTestCollection"), 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/ActiveOpTestCollection"),
             {NLs::PathNotExist});
 
     }
@@ -1179,7 +1179,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             IncrementalBackupConfig: {}
         )";
 
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", 
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
             collectionSettingsWithIncremental);
         env.TestWaitNotification(runtime, txId);
 
@@ -1202,11 +1202,11 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
                           {NLs::PathExist, NLs::IsTable});
-        
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
                           {NLs::PathExist, NLs::IsBackupCollection});
 
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             "Name: \"" DEFAULT_NAME_1 "\"");
         env.TestWaitNotification(runtime, txId);
 
@@ -1263,7 +1263,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         auto describeResult = DescribePath(runtime, "/MyRoot/Table1", true, true);
         TVector<TString> cdcStreamNames;
-        
+
         // Check table description for CDC streams (this is where they are actually stored)
         if (describeResult.GetPathDescription().HasTable()) {
             const auto& tableDesc = describeResult.GetPathDescription().GetTable();
@@ -1278,18 +1278,18 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 }
             }
         }
-        
+
         UNIT_ASSERT_C(!cdcStreamNames.empty(), "Expected to find CDC streams with '_continuousBackupImpl' suffix after incremental backup");
-        
+
         for (const auto& streamName : cdcStreamNames) {
-            UNIT_ASSERT_C(streamName.size() >= 15 + TString("_continuousBackupImpl").size(), 
+            UNIT_ASSERT_C(streamName.size() >= 15 + TString("_continuousBackupImpl").size(),
                 "CDC stream name should have timestamp prefix: " + streamName);
-            
+
             TString prefix = streamName.substr(0, streamName.size() - TString("_continuousBackupImpl").size());
             UNIT_ASSERT_C(prefix.EndsWith("Z"), "CDC stream timestamp should end with 'Z': " + prefix);
         }
 
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             "Name: \"" DEFAULT_NAME_1 "\"");
         env.TestWaitNotification(runtime, txId);
 
@@ -1298,7 +1298,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         auto describeAfter = DescribePath(runtime, "/MyRoot/Table1", true, true);
         TVector<TString> remainingCdcStreams;
-        
+
         // Check table description for remaining CDC streams
         if (describeAfter.GetPathDescription().HasTable()) {
             const auto& tableDesc = describeAfter.GetPathDescription().GetTable();
@@ -1313,12 +1313,12 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 }
             }
         }
-        
-        UNIT_ASSERT_C(remainingCdcStreams.empty(), 
+
+        UNIT_ASSERT_C(remainingCdcStreams.empty(),
             "Incremental backup CDC streams with '_continuousBackupImpl' suffix should be cleaned up after dropping backup collection");
         // During incremental backup, CDC streams are created under the source table
         // They should be properly cleaned up when the backup collection is dropped
-        
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                           {NLs::PathExist, NLs::IsTable});
 
@@ -1328,13 +1328,13 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
                           {NLs::PathNotExist});
-        
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                           {NLs::PathExist, NLs::IsTable});
 
         auto describeAfterReboot = DescribePath(runtime, "/MyRoot/Table1", true, true);
         TVector<TString> cdcStreamsAfterReboot;
-        
+
         if (describeAfterReboot.GetPathDescription().HasTable()) {
             const auto& tableDesc = describeAfterReboot.GetPathDescription().GetTable();
             if (tableDesc.CdcStreamsSize() > 0) {
@@ -1348,8 +1348,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 }
             }
         }
-        
-        UNIT_ASSERT_C(cdcStreamsAfterReboot.empty(), 
+
+        UNIT_ASSERT_C(cdcStreamsAfterReboot.empty(),
             "Incremental backup CDC streams with '_continuousBackupImpl' suffix should remain cleaned up after restart");
 
         // The implementation properly handles CDC stream cleanup during backup collection drop
@@ -1382,7 +1382,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             env.TestWaitNotification(runtime, txId);
         }
 
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             "Name: \"" DEFAULT_NAME_1 "\"");
         env.TestWaitNotification(runtime, txId);
 
@@ -1420,12 +1420,12 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         env.TestWaitNotification(runtime, txId);
 
         // Start first drop operation asynchronously
-        AsyncDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        AsyncDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             "Name: \"" DEFAULT_NAME_1 "\"");
 
         // Immediately try second drop operation (should fail)
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
-            "Name: \"" DEFAULT_NAME_1 "\"", 
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+            "Name: \"" DEFAULT_NAME_1 "\"",
             {NKikimrScheme::StatusMultipleModifications}); // Expect concurrent operation error
 
         env.TestWaitNotification(runtime, txId - 1);
@@ -1660,5 +1660,891 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         TestForgetIncrementalBackup(runtime, txId++, "/MyRoot", backupId);
 
         TestGetIncrementalBackup(runtime, backupId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(BackupServiceDirectoryValidation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        SetupLogging(runtime);
+
+        // Enable system names protection feature
+        runtime.GetAppData().FeatureFlags.SetEnableSystemNamesProtection(true);
+
+        ui64 txId = 100;
+
+        PrepareDirs(runtime, env, txId);
+
+        // Create a backup collection
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "TestCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Try to create __ydb_backup_meta outside backup collection (should fail - reserved name)
+        TestMkDir(runtime, ++txId, "/MyRoot", "__ydb_backup_meta", {NKikimrScheme::StatusSchemeError});
+
+        // Verify we can't create directories with reserved backup service prefix outside backup context
+        TestMkDir(runtime, ++txId, "/MyRoot", "__ydb_backup_test", {NKikimrScheme::StatusSchemeError});
+
+        // But we CAN create __ydb_backup_meta inside a backup collection (should succeed)
+        TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/TestCollection", "__ydb_backup_meta");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify it was created
+        TestLs(runtime, "/MyRoot/.backups/collections/TestCollection/__ydb_backup_meta", false, NLs::PathExist);
+    }
+
+    Y_UNIT_TEST(SingleTableWithGlobalSyncIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create incremental backup collection
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create table with one global sync covering index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Execute full backup
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify CDC stream exists on main table
+        auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithIndex", true, true);
+        UNIT_ASSERT(mainTableDesc.GetPathDescription().HasTable());
+        
+        const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+        bool foundMainTableCdc = false;
+        TString mainTableCdcName;
+        
+        for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+            const auto& cdcStream = tableDesc.GetCdcStreams(i);
+            if (cdcStream.GetName().EndsWith("_continuousBackupImpl")) {
+                foundMainTableCdc = true;
+                mainTableCdcName = cdcStream.GetName();
+                Cerr << "Found main table CDC stream: " << mainTableCdcName << Endl;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundMainTableCdc, "Main table should have CDC stream with '_continuousBackupImpl' suffix");
+
+        // Verify CDC stream exists on index implementation table
+        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithIndex/ValueIndex", true, true);
+        UNIT_ASSERT(indexDesc.GetPathDescription().HasTableIndex());
+        
+        // Get index implementation table (first child of index)
+        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+        TString indexImplTableName = indexDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        auto indexImplTableDesc = DescribePrivatePath(runtime, 
+            "/MyRoot/TableWithIndex/ValueIndex/" + indexImplTableName, true, true);
+        UNIT_ASSERT(indexImplTableDesc.GetPathDescription().HasTable());
+        
+        const auto& indexTableDesc = indexImplTableDesc.GetPathDescription().GetTable();
+        bool foundIndexCdc = false;
+        TString indexCdcName;
+        
+        for (size_t i = 0; i < indexTableDesc.CdcStreamsSize(); ++i) {
+            const auto& cdcStream = indexTableDesc.GetCdcStreams(i);
+            if (cdcStream.GetName().EndsWith("_continuousBackupImpl")) {
+                foundIndexCdc = true;
+                indexCdcName = cdcStream.GetName();
+                Cerr << "Found index CDC stream: " << indexCdcName << Endl;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundIndexCdc, "Index implementation table should have CDC stream with '_continuousBackupImpl' suffix");
+
+        // Verify CDC stream names match pattern and use same timestamp
+        UNIT_ASSERT_VALUES_EQUAL(mainTableCdcName, indexCdcName);
+        UNIT_ASSERT_C(mainTableCdcName.Contains("Z") && mainTableCdcName.EndsWith("_continuousBackupImpl"), 
+            "CDC stream name should have X.509 timestamp format (YYYYMMDDHHMMSSZ_continuousBackupImpl)");
+    }
+
+    Y_UNIT_TEST(SingleTableWithMultipleGlobalSyncIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create incremental backup collection
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithMultipleIndexes"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create table with multiple global sync indexes
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithMultipleIndexes"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value1" Type: "Utf8" }
+                Columns { Name: "value2" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "Value1Index"
+                KeyColumnNames: ["value1"]
+                Type: EIndexTypeGlobal
+            }
+            IndexDescription {
+                Name: "Value2Index"
+                KeyColumnNames: ["value2"]
+                DataColumnNames: ["value1"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Execute full backup
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify CDC stream on main table
+        auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithMultipleIndexes", true, true);
+        const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+        
+        TString mainCdcName;
+        for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+            const auto& cdcStream = tableDesc.GetCdcStreams(i);
+            if (cdcStream.GetName().EndsWith("_continuousBackupImpl")) {
+                mainCdcName = cdcStream.GetName();
+                break;
+            }
+        }
+        UNIT_ASSERT_C(!mainCdcName.empty(), "Main table should have CDC stream");
+
+        // Verify CDC streams on both indexes
+        TVector<TString> indexNames = {"Value1Index", "Value2Index"};
+        TVector<TString> indexCdcNames;
+        
+        for (const auto& indexName : indexNames) {
+            auto indexDesc = DescribePrivatePath(runtime, 
+                "/MyRoot/TableWithMultipleIndexes/" + indexName, true, true);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+            TString indexImplTableName = indexDesc.GetPathDescription().GetChildren(0).GetName();
+            
+            auto indexImplTableDesc = DescribePrivatePath(runtime, 
+                "/MyRoot/TableWithMultipleIndexes/" + indexName + "/" + indexImplTableName, true, true);
+            const auto& indexTableDesc = indexImplTableDesc.GetPathDescription().GetTable();
+            
+            bool foundCdc = false;
+            for (size_t i = 0; i < indexTableDesc.CdcStreamsSize(); ++i) {
+                const auto& cdcStream = indexTableDesc.GetCdcStreams(i);
+                if (cdcStream.GetName().EndsWith("_continuousBackupImpl")) {
+                    indexCdcNames.push_back(cdcStream.GetName());
+                    foundCdc = true;
+                    Cerr << "Found CDC stream on " << indexName << ": " << cdcStream.GetName() << Endl;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundCdc, "Index " + indexName + " should have CDC stream");
+        }
+
+        // Verify all streams use the same timestamp
+        UNIT_ASSERT_VALUES_EQUAL(indexCdcNames.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(mainCdcName, indexCdcNames[0]);
+        UNIT_ASSERT_VALUES_EQUAL(mainCdcName, indexCdcNames[1]);
+    }
+
+    Y_UNIT_TEST(TableWithMixedIndexTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create incremental backup collection
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithMixedIndexes"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create table with global sync + async indexes
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithMixedIndexes"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value1" Type: "Utf8" }
+                Columns { Name: "value2" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "SyncIndex"
+                KeyColumnNames: ["value1"]
+                Type: EIndexTypeGlobal
+            }
+            IndexDescription {
+                Name: "AsyncIndex"
+                KeyColumnNames: ["value2"]
+                Type: EIndexTypeGlobalAsync
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Execute full backup
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify CDC stream on main table
+        auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithMixedIndexes", true, true);
+        const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+        
+        bool foundMainCdc = false;
+        for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+            if (tableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundMainCdc = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundMainCdc, "Main table should have CDC stream");
+
+        // Verify CDC stream on global sync index ONLY
+        auto syncIndexDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithMixedIndexes/SyncIndex", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(syncIndexDesc.GetPathDescription().ChildrenSize(), 1);
+        TString syncImplTableName = syncIndexDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        auto syncImplTableDesc = DescribePrivatePath(runtime, 
+            "/MyRoot/TableWithMixedIndexes/SyncIndex/" + syncImplTableName, true, true);
+        const auto& syncTableDesc = syncImplTableDesc.GetPathDescription().GetTable();
+        
+        bool foundSyncCdc = false;
+        for (size_t i = 0; i < syncTableDesc.CdcStreamsSize(); ++i) {
+            if (syncTableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundSyncCdc = true;
+                Cerr << "Found CDC stream on SyncIndex (expected)" << Endl;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundSyncCdc, "Global sync index should have CDC stream");
+
+        // Verify NO CDC stream on async index
+        auto asyncIndexDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithMixedIndexes/AsyncIndex", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(asyncIndexDesc.GetPathDescription().ChildrenSize(), 1);
+        TString asyncImplTableName = asyncIndexDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        auto asyncImplTableDesc = DescribePrivatePath(runtime, 
+            "/MyRoot/TableWithMixedIndexes/AsyncIndex/" + asyncImplTableName, true, true);
+        const auto& asyncTableDesc = asyncImplTableDesc.GetPathDescription().GetTable();
+        
+        bool foundAsyncCdc = false;
+        for (size_t i = 0; i < asyncTableDesc.CdcStreamsSize(); ++i) {
+            if (asyncTableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundAsyncCdc = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(!foundAsyncCdc, "Async index should NOT have CDC stream");
+    }
+
+    Y_UNIT_TEST(MultipleTablesWithIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create incremental backup collection with 2 tables
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table2"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create Table1 with index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "Index1"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Create Table2 with index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table2"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "Index2"
+                KeyColumnNames: ["data"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Execute full backup
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify CDC streams on both main tables
+        TVector<TString> tables = {"Table1", "Table2"};
+        TVector<TString> indexes = {"Index1", "Index2"};
+        
+        for (size_t tableIdx = 0; tableIdx < tables.size(); ++tableIdx) {
+            const auto& tableName = tables[tableIdx];
+            const auto& indexName = indexes[tableIdx];
+            
+            // Check main table CDC
+            auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/" + tableName, true, true);
+            const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+            
+            bool foundMainCdc = false;
+            for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+                if (tableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                    foundMainCdc = true;
+                    Cerr << "Found CDC stream on " << tableName << Endl;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundMainCdc, tableName + " should have CDC stream");
+            
+            // Check index CDC
+            auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/" + tableName + "/" + indexName, true, true);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+            TString indexImplTableName = indexDesc.GetPathDescription().GetChildren(0).GetName();
+            
+            auto indexImplTableDesc = DescribePrivatePath(runtime, 
+                "/MyRoot/" + tableName + "/" + indexName + "/" + indexImplTableName, true, true);
+            const auto& indexTableDesc = indexImplTableDesc.GetPathDescription().GetTable();
+            
+            bool foundIndexCdc = false;
+            for (size_t i = 0; i < indexTableDesc.CdcStreamsSize(); ++i) {
+                if (indexTableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                    foundIndexCdc = true;
+                    Cerr << "Found CDC stream on " << indexName << Endl;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundIndexCdc, indexName + " should have CDC stream");
+        }
+    }
+
+    Y_UNIT_TEST(IncrementalBackupWithIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create incremental backup collection
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableForIncremental"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create table with global sync index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableForIncremental"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Execute full backup (creates CDC streams)
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify CDC streams were created for both main table and index
+        auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/TableForIncremental", true, true);
+        const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+        
+        bool foundMainCdc = false;
+        for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+            if (tableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundMainCdc = true;
+                Cerr << "Found CDC stream on main table" << Endl;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundMainCdc, "Main table should have CDC stream after full backup");
+
+        // Verify CDC stream on index
+        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableForIncremental/ValueIndex", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+        TString indexImplTableName = indexDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        auto indexImplTableDesc = DescribePrivatePath(runtime, 
+            "/MyRoot/TableForIncremental/ValueIndex/" + indexImplTableName, true, true);
+        const auto& indexTableDesc = indexImplTableDesc.GetPathDescription().GetTable();
+        
+        bool foundIndexCdc = false;
+        for (size_t i = 0; i < indexTableDesc.CdcStreamsSize(); ++i) {
+            if (indexTableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundIndexCdc = true;
+                Cerr << "Found CDC stream on index implementation table" << Endl;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundIndexCdc, "Index implementation table should have CDC stream after full backup");
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+        // Execute incremental backup (rotates CDC, creates backup tables)
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify backup collection structure
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+            NLs::ChildrenCount(2), // full + incremental
+        });
+
+        // Find the incremental backup directory (should end with "_incremental")
+        auto collectionDesc = DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1, true, true);
+        TString incrBackupDir;
+        for (size_t i = 0; i < collectionDesc.GetPathDescription().ChildrenSize(); ++i) {
+            const auto& child = collectionDesc.GetPathDescription().GetChildren(i);
+            Cerr << "Child: " << child.GetName() << " PathState: " << child.GetPathState() << Endl;
+            if (child.GetName().EndsWith("_incremental")) {
+                incrBackupDir = child.GetName();
+                break;
+            }
+        }
+        UNIT_ASSERT_C(!incrBackupDir.empty(), "Should find incremental backup directory");
+
+        // Verify backup table for main table exists
+        TestDescribeResult(DescribePath(runtime, 
+            "/MyRoot/.backups/collections/" DEFAULT_NAME_1 "/" + incrBackupDir + "/TableForIncremental"), {
+            NLs::PathExist,
+            NLs::IsTable,
+        });
+
+        // Verify index backup table exists in __ydb_backup_meta/indexes/TableForIncremental/ValueIndex
+        TString indexBackupPath = "/MyRoot/.backups/collections/" DEFAULT_NAME_1 "/" + incrBackupDir + 
+            "/__ydb_backup_meta/indexes/TableForIncremental/ValueIndex";
+        TestDescribeResult(DescribePath(runtime, indexBackupPath), {
+            NLs::PathExist,
+            NLs::IsTable,
+        });
+
+        Cerr << "SUCCESS: Full backup created CDC streams for both main table and index" << Endl;
+        Cerr << "         Incremental backup created backup tables for both main table and index" << Endl;
+        Cerr << "         Index backup table verified at: " << indexBackupPath << Endl;
+    }
+
+    Y_UNIT_TEST(OmitIndexesFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create incremental backup collection WITH OmitIndexes flag set
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig {
+                OmitIndexes: true
+            }
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create table with global sync index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Execute full backup
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify CDC stream exists on main table
+        auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithIndex", true, true);
+        const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+        
+        bool foundMainCdc = false;
+        for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+            if (tableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundMainCdc = true;
+                Cerr << "Found CDC stream on main table (expected)" << Endl;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundMainCdc, "Main table should have CDC stream even with OmitIndexes=true");
+
+        // Verify NO CDC stream on index (because OmitIndexes is true)
+        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithIndex/ValueIndex", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+        TString indexImplTableName = indexDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        auto indexImplTableDesc = DescribePrivatePath(runtime, 
+            "/MyRoot/TableWithIndex/ValueIndex/" + indexImplTableName, true, true);
+        const auto& indexTableDesc = indexImplTableDesc.GetPathDescription().GetTable();
+        
+        bool foundIndexCdc = false;
+        for (size_t i = 0; i < indexTableDesc.CdcStreamsSize(); ++i) {
+            if (indexTableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundIndexCdc = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(!foundIndexCdc, "Index should NOT have CDC stream when OmitIndexes=true");
+
+        Cerr << "SUCCESS: OmitIndexes flag works correctly - main table has CDC, index does not" << Endl;
+    }
+
+    Y_UNIT_TEST(BackupWithIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        SetupLogging(runtime);
+        ui64 txId = 100;
+
+        // Create table with index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify source table has the index
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableWithIndex"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1)
+        });
+
+        PrepareDirs(runtime, env, txId);
+
+        // Create backup collection with OmitIndexes = false (explicitly request indexes)
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "CollectionWithIndex"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+            OmitIndexes: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Backup the table (indexes should be included)
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CollectionWithIndex")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify backup collection has children (the backup directory)
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/CollectionWithIndex"), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+            NLs::ChildrenCount(1)
+        });
+
+        // Get the backup directory and verify its structure contains index
+        auto backupDesc = DescribePath(runtime, "/MyRoot/.backups/collections/CollectionWithIndex");
+        UNIT_ASSERT(backupDesc.GetPathDescription().ChildrenSize() == 1);
+        TString backupDirName = backupDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        // Verify backup directory has the table (indexes are stored under the table)
+        TString backupPath = "/MyRoot/.backups/collections/CollectionWithIndex/" + backupDirName;
+        auto backupContentDesc = DescribePath(runtime, backupPath);
+        
+        // The backup should contain 1 child (the table; indexes are children of the table)
+        UNIT_ASSERT_C(backupContentDesc.GetPathDescription().ChildrenSize() == 1,
+            "Backup should contain 1 table, got " << backupContentDesc.GetPathDescription().ChildrenSize());
+        
+        // Verify the table HAS indexes in the backup (check via TableIndexesSize)
+        UNIT_ASSERT_VALUES_EQUAL(backupContentDesc.GetPathDescription().GetChildren(0).GetName(), "TableWithIndex");
+        
+        auto tableDesc = DescribePath(runtime, backupPath + "/TableWithIndex");
+        UNIT_ASSERT(tableDesc.GetPathDescription().HasTable());
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetPathDescription().GetTable().TableIndexesSize(), 1);
+        
+        // Verify ChildrenExist flag is set (index exists as child, even if not in Children list)
+        UNIT_ASSERT(tableDesc.GetPathDescription().GetSelf().GetChildrenExist());
+    }
+
+    Y_UNIT_TEST(BackupWithIndexesOmit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        SetupLogging(runtime);
+        ui64 txId = 100;
+
+        // Create table with index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify source table has the index
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableWithIndex"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1)
+        });
+
+        PrepareDirs(runtime, env, txId);
+
+        // Create backup collection with OmitIndexes = true (at collection level)
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "CollectionWithoutIndex"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+            OmitIndexes: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Backup the table (indexes should be omitted)
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CollectionWithoutIndex")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify backup collection has children (the backup directory)
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/CollectionWithoutIndex"), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+            NLs::ChildrenCount(1)
+        });
+
+        // Get the backup directory and verify its structure does NOT contain index
+        auto backupDesc = DescribePath(runtime, "/MyRoot/.backups/collections/CollectionWithoutIndex");
+        UNIT_ASSERT(backupDesc.GetPathDescription().ChildrenSize() == 1);
+        TString backupDirName = backupDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        // Verify backup directory has only the table (no index children when omitted)
+        TString backupPath = "/MyRoot/.backups/collections/CollectionWithoutIndex/" + backupDirName;
+        auto backupContentDesc = DescribePath(runtime, backupPath);
+        
+        // The backup should contain 1 child (the table), without index children
+        UNIT_ASSERT_C(backupContentDesc.GetPathDescription().ChildrenSize() == 1,
+            "Backup should contain only table without index, got " << backupContentDesc.GetPathDescription().ChildrenSize());
+        
+        // Verify the table exists but has NO indexes (omitted via OmitIndexes: true)
+        UNIT_ASSERT_VALUES_EQUAL(backupContentDesc.GetPathDescription().GetChildren(0).GetName(), "TableWithIndex");
+        
+        auto tableDesc = DescribePath(runtime, backupPath + "/TableWithIndex");
+        UNIT_ASSERT(tableDesc.GetPathDescription().HasTable());
+        
+        // When indexes are omitted, TableIndexesSize should be 0
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetPathDescription().GetTable().TableIndexesSize(), 0);
+        
+        // Verify ChildrenExist is false (no index children)
+        UNIT_ASSERT(!tableDesc.GetPathDescription().GetSelf().GetChildrenExist());
+    }
+
+    Y_UNIT_TEST(BackupWithIndexesDefault) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        SetupLogging(runtime);
+        ui64 txId = 100;
+
+        // Create table with index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify source table has the index
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableWithIndex"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1)
+        });
+
+        PrepareDirs(runtime, env, txId);
+
+        // Create backup collection without specifying OmitIndexes (default behavior)
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "CollectionDefaultBehavior"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Backup the table (default behavior: OmitIndexes not specified, should default to false)
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CollectionDefaultBehavior")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify backup collection has children (the backup directory)
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/CollectionDefaultBehavior"), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+            NLs::ChildrenCount(1)
+        });
+
+        // Get the backup directory and verify its structure
+        auto backupDesc = DescribePath(runtime, "/MyRoot/.backups/collections/CollectionDefaultBehavior");
+        UNIT_ASSERT(backupDesc.GetPathDescription().ChildrenSize() == 1);
+        TString backupDirName = backupDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        // Verify backup directory structure
+        TString backupPath = "/MyRoot/.backups/collections/CollectionDefaultBehavior/" + backupDirName;
+        auto backupContentDesc = DescribePath(runtime, backupPath);
+        
+        // The backup should contain 1 child (the table; indexes are children of the table)
+        UNIT_ASSERT_C(backupContentDesc.GetPathDescription().ChildrenSize() == 1,
+            "Backup should contain 1 table, got " << backupContentDesc.GetPathDescription().ChildrenSize());
+        
+        // Verify the table HAS indexes in the backup by default (check via TableIndexesSize)
+        UNIT_ASSERT_VALUES_EQUAL(backupContentDesc.GetPathDescription().GetChildren(0).GetName(), "TableWithIndex");
+        
+        auto tableDesc = DescribePath(runtime, backupPath + "/TableWithIndex");
+        UNIT_ASSERT(tableDesc.GetPathDescription().HasTable());
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetPathDescription().GetTable().TableIndexesSize(), 1);
+        
+        // Verify ChildrenExist flag is set by default (index exists as child)
+        UNIT_ASSERT(tableDesc.GetPathDescription().GetSelf().GetChildrenExist());
     }
 } // TBackupCollectionTests

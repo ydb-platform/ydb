@@ -176,9 +176,12 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     if (settings.EnableStorageProxy) {
         NFq::TCheckpointCoordinatorSettings::DefaultCheckpointingPeriod = settings.CheckpointPeriod;
 
-        auto& checkpoints = *appConfig.MutableQueryServiceConfig()->MutableStreamingQueries()->MutableExternalStorage()->MutableDatabaseConnection();
-        checkpoints.SetEndpoint(GetEnv("YDB_ENDPOINT"));
-        checkpoints.SetDatabase(GetEnv("YDB_DATABASE"));
+        auto* streamingQueries = appConfig.MutableQueryServiceConfig()->MutableStreamingQueries();
+        if (!settings.UseLocalCheckpointsInStreamingQueries) {
+            auto& checkpoints = *streamingQueries->MutableExternalStorage()->MutableDatabaseConnection();
+            checkpoints.SetEndpoint(GetEnv("YDB_ENDPOINT"));
+            checkpoints.SetDatabase(GetEnv("YDB_DATABASE"));
+        }
     }
     if (!appConfig.GetQueryServiceConfig().HasAllExternalDataSourcesAreAvailable()) {
         appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
@@ -1544,6 +1547,16 @@ void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const 
         permissions, path, user
     );
     auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+};
+
+void Revoke(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user) {
+    auto revokeQuery = Sprintf(R"(
+            REVOKE %s ON `%s` FROM `%s`;
+        )",
+        permissions, path, user
+    );
+    auto result = adminSession.ExecuteSchemeQuery(revokeQuery).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 };
 

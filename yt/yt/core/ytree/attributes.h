@@ -42,6 +42,9 @@ struct IAttributeDictionary
     //! Returns the value of the attribute (throws an exception if the attribute is not found).
     TValue GetYson(TKeyView key) const;
 
+    //! Same as #FindYson but removes the value if it exists.
+    TValue FindYsonAndRemove(TKeyView key);
+
     //! Same as #GetYson but removes the value.
     TValue GetYsonAndRemove(TKeyView key);
 

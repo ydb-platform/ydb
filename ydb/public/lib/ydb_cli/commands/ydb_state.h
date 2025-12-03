@@ -25,6 +25,7 @@ public:
 private:
     ui32 DurationSeconds = 0;
     ui32 PeriodSeconds = 0;
+    TString FileName;
 };
 
 }

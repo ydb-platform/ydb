@@ -1,4 +1,7 @@
 #pragma once
+
+#include "backup_test_base.h"
+
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
@@ -46,18 +49,6 @@ protected:
         return *Driver;
     }
 
-#define YDB_SDK_CLIENT(type, funcName)                               \
-    protected:                                                       \
-    TMaybe<type> Y_CAT(funcName, Instance);                          \
-    public:                                                          \
-    type& funcName() {                                               \
-        if (!Y_CAT(funcName, Instance)) {                            \
-            Y_CAT(funcName, Instance).ConstructInPlace(YdbDriver()); \
-        }                                                            \
-        return *Y_CAT(funcName, Instance);                           \
-    }                                                                \
-    /**/
-
     YDB_SDK_CLIENT(NYdb::NTable::TTableClient, YdbTableClient);
     YDB_SDK_CLIENT(NYdb::NExport::TExportClient, YdbExportClient);
     YDB_SDK_CLIENT(NYdb::NImport::TImportClient, YdbImportClient);
@@ -67,8 +58,6 @@ protected:
     YDB_SDK_CLIENT(NYdb::NTopic::TTopicClient, YdbTopicClient);
     YDB_SDK_CLIENT(NYdb::NCoordination::TClient, YdbCoordinationClient);
     YDB_SDK_CLIENT(NYdb::NRateLimiter::TRateLimiterClient, YdbRateLimiterClient);
-
-#undef YDB_SDK_CLIENT
 
     NKikimr::NWrappers::NTestHelpers::TS3Mock& S3Mock() {
         if (!S3Mock_) {

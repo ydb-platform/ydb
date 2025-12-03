@@ -2,6 +2,7 @@
 
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
@@ -13,6 +14,8 @@
 #include <util/stream/file.h>
 #include <util/string/strip.h>
 #include <util/system/env.h>
+
+#include <ydb/core/fq/libs/ydb/table_client.h>
 
 namespace NKikimrConfig {
 
@@ -42,7 +45,7 @@ private:
     YDB_ACCESSOR(bool, UseLocalMetadataService, false);
     YDB_ACCESSOR_DEF(TString, IamEndpoint);
     YDB_ACCESSOR(ui64, MaxActiveQuerySessions, 50); // 50 - default in TSessionPoolSettings
-    YDB_ACCESSOR_DEF(TDuration, ClientTimeout);
+    YDB_ACCESSOR(TDuration, ClientTimeout, TDuration::Max());
     YDB_ACCESSOR_DEF(TDuration, OperationTimeout);
     YDB_ACCESSOR_DEF(TDuration, CancelAfter);
 };
@@ -64,6 +67,25 @@ struct TYdbConnection : public TThrRefBase {
 
 using TYdbConnectionPtr = TIntrusivePtr<TYdbConnection>;
 
+struct IYdbConnection : public TThrRefBase {
+    using TPtr = TIntrusivePtr<IYdbConnection>;
+
+    virtual IYdbTableClient::TPtr GetTableClient() const = 0;
+    virtual TString GetTablePathPrefix() const = 0;
+    virtual TString GetDb() const = 0;
+    virtual TString GetTablePathPrefixWithoutDb() const = 0;
+};
+
+IYdbConnection::TPtr CreateLocalYdbConnection(
+    const TString& db,
+    const TString& tablePathPrefix);
+
+IYdbConnection::TPtr CreateSdkYdbConnection(
+    const TExternalStorageSettings& config,
+    const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+    const NYdb::TDriver& driver);
+
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TGenerationContext : public TThrRefBase {
@@ -77,7 +99,7 @@ struct TGenerationContext : public TThrRefBase {
     EOperationType OperationType = Register;
 
     // within this session we execute transaction
-    NYdb::NTable::TSession Session;
+    ISession::TPtr Session;
 
     // - In Register and RegisterCheck operation - whether
     // to commit or not after upserting new generation (usually true)
@@ -105,14 +127,12 @@ struct TGenerationContext : public TThrRefBase {
     // it with Transaction (must have CommitTx = false)
     const ui64 Generation;
 
-    std::optional<NYdb::NTable::TTransaction> Transaction;
-
     // result of Select
     ui64 GenerationRead = 0;
 
     NYdb::NTable::TExecDataQuerySettings ExecDataQuerySettings;
 
-    TGenerationContext(NYdb::NTable::TSession session,
+    TGenerationContext(ISession::TPtr session,
                        bool commitTx,
                        const TString& tablePathPrefix,
                        const TString& table,
@@ -121,7 +141,7 @@ struct TGenerationContext : public TThrRefBase {
                        const TString& primaryKey,
                        ui64 generation,
                        const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {})
-        : Session(session)
+        : Session(std::move(session))
         , CommitTx(commitTx)
         , TablePathPrefix(tablePathPrefix)
         , Table(table)
@@ -154,6 +174,12 @@ NThreading::TFuture<NYdb::TStatus> CreateTable(
     const TYdbConnectionPtr& ydbConnection,
     const TString& name,
     NYdb::NTable::TTableDescription&& description);
+
+NThreading::TFuture<NYdb::TStatus> CreateTable(
+    const IYdbConnection::TPtr& ydbConnection,
+    const TString& name,
+    NYdb::NTable::TTableDescription&& description,
+    const NACLib::TDiffACL& acl);
 
 bool IsTableCreated(const NYdb::TStatus& status);
 bool IsTableDeleted(const NYdb::TStatus& status);

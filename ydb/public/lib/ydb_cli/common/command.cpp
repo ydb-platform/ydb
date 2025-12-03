@@ -3,6 +3,7 @@
 #include "normalize_path.h"
 
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -41,7 +42,7 @@ TClientCommand::TClientCommand(
         .IfPresentDisableCompletion()
         .Handler(&PrintSvnVersionAndThrowHelpPrinted)
         .Hidden();
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     Opts.AddLongOption('h', "help", TStringBuilder() << "Print usage, " << colors.Green() << "-hh" << colors.OldColor() << " for detailed help")
         .HasArg(NLastGetopt::EHasArg::NO_ARGUMENT)
         .IfPresentDisableCompletion()
@@ -227,14 +228,11 @@ void TClientCommand::Config(TConfig& config) {
     config.Opts = &Opts;
     config.OnlyExplicitProfile = OnlyExplicitProfile;
     TStringStream stream;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());
-    if (Local) {
-        config.LocalCommand = true;
-    }
 }
 
 void TClientCommand::Parse(TConfig& config) {
@@ -417,10 +415,6 @@ void TClientCommand::MarkDangerous() {
     Dangerous = true;
 }
 
-void TClientCommand::MarkLocal() {
-    Local = true;
-}
-
 void TClientCommand::UseOnlyExplicitProfile() {
     OnlyExplicitProfile = true;
 }
@@ -451,18 +445,13 @@ void TClientCommandTree::AddDangerousCommand(std::unique_ptr<TClientCommand> com
     AddCommand(std::move(command));
 }
 
-void TClientCommandTree::AddLocalCommand(std::unique_ptr<TClientCommand> command) {
-    command->MarkLocal();
-    AddCommand(std::move(command));
-}
-
 void TClientCommandTree::Config(TConfig& config) {
     TClientCommand::Config(config);
     SetFreeArgs(config);
     TString commands;
     SetFreeArgTitle(0, "<subcommand>", commands);
     TStringStream stream;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;

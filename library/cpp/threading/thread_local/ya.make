@@ -7,6 +7,9 @@ PEERDIR(
 
 GENERATE_ENUM_SERIALIZATION(thread_local.h)
 
-SRCS(thread_local.cpp)
+SRCS(
+    thread_local.cpp
+    generic.cpp
+)
 
 END()

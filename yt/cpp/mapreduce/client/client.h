@@ -120,6 +120,10 @@ public:
         const TRichYPath& path,
         const TFileWriterOptions& options) override;
 
+    IFileFragmentWriterPtr CreateFileFragmentWriter(
+        const TDistributedWriteFileCookie& cookie,
+        const TFileFragmentWriterOptions& options = {}) override;
+
     TTableWriterPtr<::google::protobuf::Message> CreateTableWriter(
         const TRichYPath& path,
         const ::google::protobuf::Descriptor& descriptor,
@@ -299,6 +303,19 @@ private:
     ::TIntrusivePtr<IProtoWriterImpl> CreateProtoWriter(
         const TRichYPath& path,
         const TTableWriterOptions& options,
+        const Message* prototype) override;
+
+    ::TIntrusivePtr<ITableFragmentWriter<TNode>> CreateNodeFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options) override;
+
+    ::TIntrusivePtr<ITableFragmentWriter<TYaMRRow>> CreateYaMRFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options) override;
+
+    ::TIntrusivePtr<ITableFragmentWriter<Message>> CreateProtoFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options,
         const Message* prototype) override;
 };
 
@@ -508,6 +525,34 @@ public:
     void ResumeOperation(
         const TOperationId& operationId,
         const TResumeOperationOptions& options) override;
+
+    TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteTableOptions& options = {}) override;
+
+    void PingDistributedWriteTableSession(
+        const TDistributedWriteTableSession& session,
+        const TPingDistributedWriteTableOptions& options = {}) override;
+
+    void FinishDistributedWriteTableSession(
+        const TDistributedWriteTableSession& session,
+        const TVector<TWriteTableFragmentResult>& results,
+        const TFinishDistributedWriteTableOptions& options = {}) override;
+
+    TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteFileOptions& options = {}) override;
+
+    void PingDistributedWriteFileSession(
+        const TDistributedWriteFileSession& session,
+        const TPingDistributedWriteFileOptions& options = {}) override;
+
+    void FinishDistributedWriteFileSession(
+        const TDistributedWriteFileSession& session,
+        const TVector<TWriteFileFragmentResult>& results,
+        const TFinishDistributedWriteFileOptions& options = {}) override;
 
     void Shutdown() override;
 

@@ -985,8 +985,8 @@ bool IsLegacyStructBlock(const TType* type, ui32& blockLengthIndex, TVector<cons
         return false;
     }
     const TStructType* structType = static_cast<const TStructType*>(type);
-    static const TStringBuf blockLenColumnName = "_yql_block_length";
-    auto index = structType->FindMemberIndex(blockLenColumnName);
+    static const TStringBuf BlockLenColumnName = "_yql_block_length";
+    auto index = structType->FindMemberIndex(BlockLenColumnName);
     if (!index) {
         return false;
     }
@@ -1412,6 +1412,7 @@ template <bool Fast>
 void TValuePackerTransport<Fast>::UnpackBatchBlocks(TChunkedBuffer&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
     while (!buf.Empty()) {
         TChunkedInputBuffer chunked(std::move(buf));
+        buf = {};
 
         // unpack block length
         const ui64 len = UnpackData<false, ui64>(chunked);

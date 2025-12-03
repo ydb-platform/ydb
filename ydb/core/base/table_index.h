@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -43,10 +44,11 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
 
 bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType);
 
-NKikimrSchemeOp::EIndexType GetIndexType(NKikimrSchemeOp::TIndexCreationConfig indexCreation);
+NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationConfig& indexCreation);
 TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType);
 
 std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys);
+std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout);
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
 
@@ -85,11 +87,28 @@ TClusterId SetPostingParentFlag(TClusterId parent);
 }
 
 namespace NFulltext {
-    // TODO: support utf-8 in fulltext index
-    inline constexpr auto TokenType = Ydb::Type::STRING;
-    inline constexpr const char* TokenTypeName = "String";
+    // Type for token frequency within a document - uint32 is OK
+    using TTokenCount = ui32;
+    inline constexpr auto TokenCountType = Ydb::Type::UINT32;
+    inline constexpr const char* TokenCountTypeName = "Uint32";
+
+    // Type for the global number of documents / number of documents with token
+    using TDocCount = ui64;
+    inline constexpr auto DocCountType = Ydb::Type::UINT64;
+    inline constexpr const char* DocCountTypeName = "Uint64";
 
     inline constexpr const char* TokenColumn = "__ydb_token";
+    inline constexpr const char* FreqColumn = "__ydb_freq";
+    inline constexpr const char* IdColumn = "__ydb_id";
+
+    inline constexpr const char* DocsTable = "indexImplDocsTable";
+    inline constexpr const char* DocLengthColumn = "__ydb_length";
+
+    inline constexpr const char* DictTable = "indexImplDictTable";
+
+    inline constexpr const char* StatsTable = "indexImplStatsTable";
+    inline constexpr const char* DocCountColumn = "__ydb_doc_count";
+    inline constexpr const char* SumDocLengthColumn = "__ydb_sum_doc_length";
 }
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);

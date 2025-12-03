@@ -11,6 +11,8 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
+THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg"};
+
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
 {
@@ -58,7 +60,11 @@ TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
     TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> newItemTypes;
     for (auto t : structItemTypes) {
-        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>("_alias_" + read->Alias + "." + t->GetName(), t->GetItemType()));
+        TString columnName = TString(t->GetName());
+        auto it = std::find(read->Columns.begin(), read->Columns.end(), columnName);
+        auto columnIndex = std::distance(read->Columns.begin(), it);
+        auto fullName = read->OutputIUs[columnIndex].GetFullName();
+        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, t->GetItemType()));
     }
 
     auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
@@ -76,11 +82,43 @@ TStatus ComputeTypes(std::shared_ptr<TOpEmptySource> emptySource, TRBOContext & 
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext & ctx) {
+const TStructExprType* AddScalarTypes(const TStructExprType* itemType, TVector<TInfoUnit> scalarContextIUs, TRBOContext & ctx, TPlanProps& props) {
+    TVector<const TItemExprType*> structItemTypes;
+    for (auto t : itemType->GetItems()) {
+        structItemTypes.push_back(t);
+    }
+
+    for (auto iu : scalarContextIUs) {
+        auto subplan = props.ScalarSubplans.PlanMap.at(iu);
+        auto subplanType = subplan->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        auto scalarExprType = subplanType->GetItems()[0];
+
+        auto newType = ctx.ExprCtx.MakeType<TItemExprType>(iu.GetFullName(), scalarExprType->GetItemType());
+        structItemTypes.push_back(newType);
+    }
+
+    return ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes);
+}
+
+TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext & ctx, TPlanProps& props) {
     const TTypeAnnotationNode* inputType = filter->GetInput()->Type;
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, inputType: " << *inputType;
 
-    auto itemType = inputType->Cast<TListExprType>()->GetItemType();
+    auto itemType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, itemType: " << *(TTypeAnnotationNode*)itemType;
+
+    auto filterIUs = filter->GetFilterIUs(props);
+    TVector<TInfoUnit> scalarContextIUs;
+    for (auto iu : filterIUs ) {
+        if (iu.ScalarContext) {
+            scalarContextIUs.push_back(iu);
+        }
+    }
+    if (!scalarContextIUs.empty()) {
+        itemType = AddScalarTypes(itemType, scalarContextIUs, ctx, props);
+    }
+    YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, itemType after scalars: " << *(TTypeAnnotationNode*)itemType;
+
 
     auto& lambda = filter->FilterLambda;
 
@@ -148,6 +186,10 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
             auto typeIt = std::find_if(typeItems.begin(), typeItems.end(), [&from](const TItemExprType* t){
                 return from.GetFullName() == t->GetName();
             });
+            if (typeIt==typeItems.end()) {
+                YQL_CLOG(TRACE, CoreDq) << "Did not find column: " 
+                << from.GetFullName() << " in " << *inputType << " while processing map " << map->ToString(ctx.ExprCtx);
+            }
             Y_ENSURE(typeIt!=typeItems.end());
 
             auto renameType = ctx.ExprCtx.MakeType<TItemExprType>(mapEl.first.GetFullName(), (*typeIt)->GetItemType());
@@ -195,27 +237,44 @@ TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
 TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    THashMap<TStringBuf, std::pair<TStringBuf, TStringBuf>> aggTraitsMap;
+    THashMap<TString, TString> aggTraitsMap;
     for (const auto& aggTraits : aggregate->AggregationTraitsList) {
         const auto originalColName = aggTraits.OriginalColName.GetFullName();
-        const auto resultColName = aggTraits.ResultColName.GetFullName();
-        const auto funcName = aggTraits.AggFunction;
-        aggTraitsMap[originalColName] = {resultColName, funcName};
+        aggTraitsMap[originalColName] = aggTraits.AggFunction;
+    }
+
+    THashSet<TString> keyColumns;
+    for (const auto& key : aggregate->KeyColumns) {
+        keyColumns.insert(key.GetFullName());
     }
 
     TVector<const TItemExprType*> newItemTypes;
     for (const auto* itemType : structType->GetItems()) {
-        if (auto it = aggTraitsMap.find(itemType->GetName()); it != aggTraitsMap.end()) {
-            Y_ENSURE(it->second.second == "sum", "Only sum aggregation function is supported");
-            // For count need to update type
-            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->second.first, itemType->GetItemType()));
-        } else {
+        // The type of the column could be changed after aggregation.
+        const auto itemName = itemType->GetName();
+        if (auto it = aggTraitsMap.find(itemName); it != aggTraitsMap.end()) {
+            const auto& colName = it->first;
+            const auto& aggFunction = it->second;
+            Y_ENSURE(SupportedAggregationFunctions.count(aggFunction), "Unsupported aggregation function " + aggFunction);
+            TPositionHandle dummyPos;
+
+            const TTypeAnnotationNode* aggFieldType = itemType->GetItemType();
+            if (aggFunction == "count") {
+                aggFieldType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64);
+            } else if (aggFunction == "sum") {
+                Y_ENSURE(GetSumResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx.ExprCtx),
+                         "Unsupported type for sum aggregation function");
+            } else if (aggFunction == "avg") {
+                Y_ENSURE(GetAvgResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx.ExprCtx),
+                         "Unsupported type for avg aggregation function");
+            }
+            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(colName, aggFieldType));
+        } else if (keyColumns.contains(itemName)) {
             newItemTypes.push_back(itemType);
         }
     }
 
-    auto resultType = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes));
-    aggregate->Type = resultType;
+    aggregate->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes));
     return TStatus::Ok;
 }
 
@@ -248,7 +307,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpLimit> limit, TRBOContext & ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx) {
+TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProps& props) {
     if (MatchOperator<TOpEmptySource>(op)) {
         return ComputeTypes(CastOperator<TOpEmptySource>(op), ctx);
     }
@@ -256,7 +315,7 @@ TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx) {
         return ComputeTypes(CastOperator<TOpRead>(op), ctx);
     }
     else if(MatchOperator<TOpFilter>(op)) {
-        return ComputeTypes(CastOperator<TOpFilter>(op), ctx);
+        return ComputeTypes(CastOperator<TOpFilter>(op), ctx, props);
     }
     else if(MatchOperator<TOpMap>(op)) {
         return ComputeTypes(CastOperator<TOpMap>(op), ctx);
@@ -285,7 +344,7 @@ namespace NKqp {
 
 TStatus TOpRoot::ComputeTypes(TRBOContext & ctx) {
     for (auto it = begin(); it != end(); it++) {
-        auto status = ::ComputeTypes((*it).Current, ctx);
+        auto status = ::ComputeTypes((*it).Current, ctx, PlanProps);
         if (status != TStatus::Ok) {
             return status;
         }

@@ -7,7 +7,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.h>
-#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 
 namespace NKikimr {
 

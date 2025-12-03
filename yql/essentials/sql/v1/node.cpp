@@ -38,19 +38,6 @@ TTopicRef::TTopicRef(const TString& refName, const TDeferredAtom& cluster, TNode
 {
 }
 
-TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-                             TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr, ETypeOfChange typeOfChange)
-    : Pos(pos)
-    , Name(name)
-    , Type(type)
-    , Nullable(nullable)
-    , Families(families)
-    , Serial(serial)
-    , DefaultExpr(defaultExpr)
-    , TypeOfChange(typeOfChange)
-{
-}
-
 INode::INode(TPosition pos)
     : Pos_(pos)
 {
@@ -434,6 +421,22 @@ void INode::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) cons
 void INode::DoAdd(TNodePtr node) {
     Y_UNUSED(node);
     Y_DEBUG_ABORT_UNLESS(false, "Node is not expandable");
+}
+
+TNodeResult Wrap(TNodePtr node) {
+    if (!node) {
+        return std::unexpected(ESQLError::Basic);
+    }
+
+    return TNonNull(std::move(node));
+}
+
+TNodePtr Unwrap(TNodeResult result) {
+    EnsureUnwrappable(result);
+
+    return result
+               ? TNodePtr(std::move(*result))
+               : nullptr;
 }
 
 bool IProxyNode::IsNull() const {
@@ -1595,7 +1598,11 @@ bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
                            : BuildQuotedAtom(Pos_, *GetColumnName());
 
         if (IsYqlRef_) {
-            Node_ = Y("YqlColumnRef", ref);
+            if (!Source_.empty()) {
+                Node_ = Y("YqlColumnRef", Q(Source_), ref);
+            } else {
+                Node_ = Y("YqlColumnRef", ref);
+            }
         } else {
             Node_ = Y(callable, "row", ref);
         }
@@ -1654,6 +1661,7 @@ TNodePtr TColumnNode::DoClone() const {
     copy->Reliable_ = Reliable_;
     copy->UseSource_ = UseSource_;
     copy->UseSourceAsColumn_ = UseSourceAsColumn_;
+    copy->IsYqlRef_ = IsYqlRef_;
     return copy;
 }
 
@@ -2661,7 +2669,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_DEBUG_ABORT_UNLESS(Node_);
+        Y_DEBUG_ABORT_UNLESS(Node_, "Oh, no Node! Maybe you forgot to call Init");
         return Node_->Translate(ctx);
     }
 
@@ -3234,7 +3242,9 @@ const TUdfNode* TUdfNode::GetUdfNode() const {
 }
 
 TAstNode* TUdfNode::Translate(TContext& ctx) const {
-    ctx.Error(Pos_) << "Abstract Udf Node can't be used as a part of expression.";
+    ctx.Error(Pos_)
+        << "Abstract Udf Node can't be used as a part of expression. "
+        << "It should be applied immediately to its arguments";
     return nullptr;
 }
 
@@ -3262,10 +3272,10 @@ TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNod
         return nullptr;
     }
 
-    static const THashSet<TStringBuf> nullSafeOps = {
+    static const THashSet<TStringBuf> NullSafeOps = {
         "IsDistinctFrom", "IsNotDistinctFrom",
         "EqualsIgnoreCase", "StartsWithIgnoreCase", "EndsWithIgnoreCase", "StringContainsIgnoreCase"};
-    if (!nullSafeOps.contains(opName)) {
+    if (!NullSafeOps.contains(opName)) {
         const bool bothArgNull = a->IsNull() && b->IsNull();
         const bool oneArgNull = a->IsNull() || b->IsNull();
 
@@ -3653,12 +3663,12 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
     return new TNamedExprNode(parent);
 }
 
-bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::TOperationMode mode) {
+bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode) {
     if (!Value) {
         ctx.Error(stmBeginPos) << "parameter VALUE must be set";
         return false;
     }
-    if (mode == TOperationMode::Alter) {
+    if (mode == EOperationMode::Alter) {
         if (InheritPermissions) {
             ctx.Error(stmBeginPos) << "parameter INHERIT_PERMISSIONS is not supported for alter operation";
             return false;

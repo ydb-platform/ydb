@@ -12,11 +12,12 @@
 
 #include <yt/yt/core/yson/string.h>
 
-#include <library/cpp/yt/compact_containers/compact_vector.h>
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
 #include <library/cpp/yt/compact_containers/compact_set.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
+#include <library/cpp/yt/containers/non_empty.h>
 
 #include <library/cpp/yt/assert/assert.h>
 
@@ -1409,6 +1410,32 @@ struct TEnumIndexedArraySerializer
     }
 };
 
+struct TOptionalNonEmptySerializer
+{
+    template <class T, class C>
+    static void Save(C& context, const std::optional<TNonEmpty<T>>& value)
+    {
+        if (value) {
+            TVectorSerializer<TDefaultSerializer, TUnsortedTag>::Save(context, value->Get());
+        } else {
+            static const T Empty;
+            TVectorSerializer<TDefaultSerializer, TUnsortedTag>::Save(context, Empty);
+        }
+    }
+
+    template <class T, class C>
+    static void Load(C& context, std::optional<TNonEmpty<T>>& value)
+    {
+        T result;
+        TVectorSerializer<TDefaultSerializer, TUnsortedTag>::Load(context, result);
+        if (result.empty()) {
+            value.reset();
+        } else {
+            value.emplace(std::move(result));
+        }
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 // Possibly unordered collections
 
@@ -1632,24 +1659,24 @@ struct TTupleSerializer;
 template <class T>
 struct TTupleSerializer<T, 0U>
 {
-    template<class C>
+    template <class C>
     static void Save(C&, const T&) {}
 
-    template<class C>
+    template <class C>
     static void Load(C&, T&) {}
 };
 
 template <class T, size_t Size>
 struct TTupleSerializer
 {
-    template<class C>
+    template <class C>
     static void Save(C& context, const T& tuple)
     {
         TTupleSerializer<T, Size - 1U>::Save(context, tuple);
         NYT::Save(context, std::get<Size - 1U>(tuple));
     }
 
-    template<class C>
+    template <class C>
     static void Load(C& context, T& tuple)
     {
         TTupleSerializer<T, Size - 1U>::Load(context, tuple);
@@ -1846,6 +1873,12 @@ template <class T, size_t N, class C>
 struct TSerializerTraits<TCompactVector<T, N>, C, void>
 {
     using TSerializer = TVectorSerializer<>;
+};
+
+template <class T, class C>
+struct TSerializerTraits<std::optional<TNonEmpty<T>>, C>
+{
+    using TSerializer = TOptionalNonEmptySerializer;
 };
 
 template <class T, std::size_t size, class C>

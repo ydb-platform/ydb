@@ -4,8 +4,14 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/yql_parser/yql_parser.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/async.h>
+
+#if defined(_unix_)
+#include <sys/select.h>
+#include <unistd.h>
+#endif
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -24,7 +30,7 @@ namespace {
 
 void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config, const TString& clarification) {
     TStringStream descr;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     descr << "Query parameter[s].";
     if (clarification) {
         descr << ' ' << clarification;
@@ -108,7 +114,7 @@ void TCommandWithParameters::AddLegacyStdinFormats(TClientCommand::TConfig& conf
 
 void TCommandWithParameters::AddBatchParametersOptions(TClientCommand::TConfig& config, const TString& requestString) {
     TStringStream descr;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     descr << "Batching mode for input parameters processing. Available options:\n  "
         << colors.BoldColor() << "iterative" << colors.OldColor()
         << "\n    Executes " << requestString << " for each parameter set (exactly one execution "
@@ -193,12 +199,12 @@ void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
 }
 
 namespace {
-    bool StdinHasData(bool verbose) {
-#if defined(_win32_)
-        // Too complex case for Windows
+    bool IsStdinEmpty(bool verbose) {
+#if !defined(_unix_)
+        // Too complex case for non-Unix systems (Windows, etc.)
         return false;
 #else
-        // fd_set to store a set of descriptor set.
+        // Check if stdin is available through select with no timeout
         fd_set read_fds;
         FD_ZERO(&read_fds);
         FD_SET(STDIN_FILENO, &read_fds);
@@ -207,34 +213,38 @@ namespace {
         timeout.tv_sec = 0;
         timeout.tv_usec = 0; // No timeout, instant check
 
-        // Check if stdin is available for reading
         int selectResult = select(STDIN_FILENO + 1, &read_fds, NULL, NULL, &timeout);
+
         if (selectResult == 0) {
+            // Stream not available - this is a pipe (slow or empty)
+            // Don't wait for data, just indicate it's not a detached job
             if (verbose) {
-                Cerr << "stdin is not available" << Endl;
+                Cerr << "stdin is a pipe, not empty" << Endl;
             }
             return false;
         }
 
-        // Trying to read 1 symbol from stdin
-        char buffer[1];
-        ssize_t result = read(fileno(stdin), buffer, sizeof(buffer));
-        if (result == -1) {
-            if (verbose) {
-                Cerr << "Error reading from stdin. Error: " << strerror(errno) << Endl;
+        if (selectResult > 0) {
+            // Stream is available - read 1 symbol from stdin to check if it has data
+            char buffer[1];
+            ssize_t result = read(fileno(stdin), buffer, sizeof(buffer));
+            if (result > 0) {
+                // Data available
+                if (verbose) {
+                    Cerr << "stdin has data, returning first symbol '" << buffer[0] << "' back..." << Endl;
+                }
+                ungetc(buffer[0], stdin);
+                return false;
+            } else if (result == 0) {
+                // EOF - this is detached job
+                if (verbose) {
+                    Cerr << "stdin is empty (EOF)" << Endl;
+                }
+                return true;
             }
-        } else if (result == 0) {
-            if (verbose) {
-                Cerr << "No data from stdin" << Endl;
-            }
-        } else {
-            if (verbose) {
-                Cerr << "stdin has data, returning first symbol '" << buffer[0] << "' back..." << Endl;
-            }
-            ungetc(buffer[0], stdin);
-            return true;
         }
-        return false;
+
+        return true;
 #endif
     }
 }
@@ -280,7 +290,7 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
         Parameters[paramName] = parameterOption.substr(equalPos + 1);
         ParameterSources[paramName] = "\'--param\' option";
     }
-    
+
     if (!ParameterFiles.empty() && !InputFiles.empty()) {
         throw TMisuseException() << "Can't use both \"--input-file\" and \"--param-file\" options";
     }
@@ -303,7 +313,7 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     bool verbose = config.IsVerbose();
 
     if (InputFiles.empty()) {
-        if (!IsStdinInteractive() && !ReadingSomethingFromStdin && StdinHasData(verbose)) {
+        if (!IsStdinInteractive() && !ReadingSomethingFromStdin && !IsStdinEmpty(verbose)) {
             // By default reading params from stdin
             SetParamsInputFromStdin(verbose);
         }

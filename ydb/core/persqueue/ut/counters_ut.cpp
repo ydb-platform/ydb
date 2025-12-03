@@ -718,7 +718,7 @@ Y_UNIT_TEST(PartitionKeyCompaction) {
         tc.Prepare(dispatchName, setup, activeZone, true, true, true);
 
         tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicCompactificationByKey(true);
-        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(1);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(10_MB);
         tc.Runtime->SetScheduledLimit(10000);
 
         tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
@@ -815,11 +815,13 @@ Y_UNIT_TEST(PartitionKeyCompaction) {
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
             group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
+            group->GetNamedCounter("name", "topic.partition.read.throttled_microseconds_max", false)->Set(2000);
             group = group->GetSubgroup("consumer", "__ydb_compaction_consumer");
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(200);
             group->GetNamedCounter("name", "topic.partition.end_to_end_lag_milliseconds_max", false)->Set(30000);
             group->GetNamedCounter("name", "topic.partition.read.throttled_microseconds_max", false)->Set(2000);
             group->GetNamedCounter("name", "topic.partition.read.idle_milliseconds_max", false)->Set(300);
+            group->GetNamedCounter("name", "topic.partition.read.lag_milliseconds_max", false)->Set(300);
 
             TStringStream countersStr;
             dbGroup->OutputHtml(countersStr);
@@ -842,6 +844,110 @@ Y_UNIT_TEST(PartitionKeyCompaction) {
         // }
     });
 }
+
+
+Y_UNIT_TEST(PartitionBlobCompactionCounters) {
+    SetEnv("FAST_UT", "1");
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() { return tc.InitialEventsFilter.Prepare(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        activeZone = false;
+        bool dbRegistered = false;
+
+        tc.EnableDetailedPQLog = true;
+        tc.Prepare(dispatchName, setup, activeZone, true, true, true);
+
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(10_MB);
+        tc.Runtime->SetScheduledLimit(10000);
+
+        tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NSysView::TEvSysView::EvRegisterDbCounters) {
+                auto database = event.Get()->Get<NSysView::TEvSysView::TEvRegisterDbCounters>()->Database;
+                UNIT_ASSERT_VALUES_EQUAL(database, "/Root/PQ");
+                dbRegistered = true;
+            } else if (event->GetTypeRewrite() == TEvPQ::EEv::EvRunCompaction) {
+                Cerr << "===Dropped TEvRunCompaction with blobs count: " << event->Get<TEvPQ::TEvRunCompaction>()->BlobsCount << Endl;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::DefaultObserverFunc(event);
+        });
+        PQTabletPrepare({.deleteTime = 3600, .writeSpeed = 2_MB, .enableCompactificationByKey = false}, {}, tc);
+
+        TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
+        ui64 ssId = 325;
+        BootFakeSchemeShard(*tc.Runtime, ssId, state);
+
+        auto balancerParams = TBalancerParams::FromContext("topic", {{0, {tc.TabletId, 1}}}, ssId, tc);
+        balancerParams.EnableKeyCompaction = false;
+        PQBalancerPrepare(balancerParams);
+
+        IActor* actor = CreateTabletCountersAggregator(false);
+        auto aggregatorId = tc.Runtime->Register(actor);
+        tc.Runtime->EnableScheduleForActor(aggregatorId);
+        TString s{5_MB, 'c'};
+        ui64 currentOffset = 0;
+        auto writeData = [&](ui32 count) {
+            TVector<std::pair<ui64, TString>> data;
+            for (auto i = 0u; i < count; ++i) {
+                data.push_back({i + 1, s});
+            }
+            CmdWrite(0, "sourceid0", std::move(data), tc, false, {}, false, "", -1, currentOffset, false, false, true);
+            currentOffset += count;
+        };
+        writeData(3);
+        writeData(3);
+
+        {
+            NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};
+            result->SetPath("/Root");
+            TVector<TString> attrs = {"folder_id", "cloud_id", "database_id"};
+            for (auto& attr : attrs) {
+                auto ua = result->MutablePathDescription()->AddUserAttributes();
+                ua->SetKey(attr);
+                ua->SetValue(attr);
+            }
+            NSchemeCache::TDescribeResult::TCPtr cres = result;
+            auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+            TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
+            tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
+
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvWatchNotifyUpdated);
+            options.FinalEvents.emplace_back(TEvPQ::EEv::EvRunCompaction);
+            auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+            UNIT_ASSERT(processedCountersEvent);
+        }
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
+            auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+            UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+        }
+
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        {
+            auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
+            auto group = dbGroup->GetSubgroup("host", "")
+                             ->GetSubgroup("database", "/Root")
+                             ->GetSubgroup("cloud_id", "cloud_id")
+                             ->GetSubgroup("folder_id", "folder_id")
+                             ->GetSubgroup("database_id", "database_id")
+                             ->GetSubgroup("topic", "topic");
+
+
+            TStringStream countersStr;
+            dbGroup->OutputHtml(countersStr);
+            Cerr << "COUNTERS: " << countersStr.Str() << "\n";
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                group->FindNamedCounter("name", "topic.partition.blobs.uncompacted_count_max")->Val(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(
+                group->FindNamedCounter("name", "topic.partition.blobs.uncompacted_bytes_max")->Val(), 31461348);
+            UNIT_ASSERT_GE(group->FindNamedCounter("name", "topic.partition.blobs.compaction_lag_milliseconds_max")->Val(), 1000);
+        }
+    });
+}
+
 
 Y_UNIT_TEST(NewConsumersCountersAppear) {
     TTestContext tc;

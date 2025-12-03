@@ -12,7 +12,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 
-TEST(Profiler, SaveOptions)
+TEST(TProfilerTest, SaveOptions)
 {
     auto profiler = TProfiler(
         "my_prefix", "my_namespace", TTagSet{{{"my_tag", "my_tag_value"}}}, nullptr,

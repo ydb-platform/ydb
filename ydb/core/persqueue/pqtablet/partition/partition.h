@@ -127,6 +127,11 @@ struct TTransaction {
 
     TInstant WriteInfoResponseTimestamp;
     TInstant CalcPredicateTimestamp;
+
+    TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+    TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfig;
+    TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfig;
+    TMaybe<NKikimrPQ::TPartitions> PartitionsData;
 };
 class TPartitionCompaction;
 
@@ -1261,6 +1266,8 @@ private:
     TMessageIdDeduplicator MessageIdDeduplicator;
     void AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
     std::optional<ui64> DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset);
+
+    void TryAddCmdWriteForTransaction(const TTransaction& tx);
 };
 
 inline ui64 TPartition::GetStartOffset() const {

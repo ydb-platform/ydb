@@ -269,11 +269,11 @@ struct TDeserializerWithOffset {
     }
 };
 
-void SerializeMetrics(const TStorage::TMetrics& metrics, NKikimrPQ::TMLPMetrics& storedMetrics) {
+void SerializeMetrics(const TMetrics& metrics, NKikimrPQ::TMLPMetrics& storedMetrics) {
     storedMetrics.SetTotalScheduledToDLQMessageCount(metrics.TotalScheduledToDLQMessageCount);
 }
 
-void DeserializeMetrics(TStorage::TMetrics& metrics, const NKikimrPQ::TMLPMetrics& storedMetrics) {
+void DeserializeMetrics(TMetrics& metrics, const NKikimrPQ::TMLPMetrics& storedMetrics) {
     metrics.TotalScheduledToDLQMessageCount = storedMetrics.GetTotalScheduledToDLQMessageCount();
 }
 

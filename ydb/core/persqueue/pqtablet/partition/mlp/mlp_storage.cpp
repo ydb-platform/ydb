@@ -773,7 +773,7 @@ TStorage::TBatch TStorage::GetBatch() {
     return std::exchange(Batch, {this});
 }
 
-const TStorage::TMetrics& TStorage::GetMetrics() const {
+const TMetrics& TStorage::GetMetrics() const {
     return Metrics;
 }
 

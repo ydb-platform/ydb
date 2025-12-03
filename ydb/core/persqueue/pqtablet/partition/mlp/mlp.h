@@ -12,6 +12,19 @@ class TDuration;
 
 namespace NKikimr::NPQ::NMLP {
 
+struct TMetrics {
+    size_t InflyMessageCount = 0;
+    size_t UnprocessedMessageCount = 0;
+    size_t LockedMessageCount = 0;
+    size_t LockedMessageGroupCount = 0;
+    size_t DelayedMessageCount = 0;
+    size_t CommittedMessageCount = 0;
+    size_t DeadlineExpiredMessageCount = 0;
+    size_t DLQMessageCount = 0;
+
+    size_t TotalScheduledToDLQMessageCount = 0;
+};
+
 // MLP не работает если включена компактифкация по ключу!!! (иначе не понятно как прореживать скомпакченные значения)
 NActors::IActor* CreateConsumerActor(
     const TString& database,

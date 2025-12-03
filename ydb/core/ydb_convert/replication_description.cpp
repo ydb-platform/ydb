@@ -140,6 +140,27 @@ void ConvertState(const NKikimrReplication::TReplicationState& from, T& to) {
     }
 }
 
+bool CheckReplicationConfig(const NKikimrReplication::TReplicationConfig config,
+    Ydb::StatusIds_StatusCode& status,
+    TString& error) {
+    switch (config.GetTargetCase()) {
+        case NKikimrReplication::TReplicationConfig::TargetCase::kSpecific:
+            return true;
+        case NKikimrReplication::TReplicationConfig::TargetCase::kEverything:
+            error = "not implemented";
+            break;
+        case NKikimrReplication::TReplicationConfig::TargetCase::kTransferSpecific:
+            error = "replication config was expected, transer config provided";
+            break;
+        default:
+            error = "unexpected config type";
+            break;
+    }
+
+    status = Ydb::StatusIds::INTERNAL_ERROR;
+    return false;
+}
+
 } // anonymous namespace
 
 void FillReplicationDescription(
@@ -178,6 +199,31 @@ void FillTransferDescription(
     ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
     ConvertState(inDesc.GetState(), out);
     ConvertTransferSpecific(inDesc.GetTransferSpecific(), out);
+}
+
+bool FillReplicationDescription(
+    Ydb::Replication::DescribeReplicationResult& out,
+    const NKikimrSchemeOp::TReplicationDescription inDesc,
+    const NKikimrSchemeOp::TDirEntry& inDirEntry,
+    Ydb::StatusIds_StatusCode& status,
+    TString& error)
+{
+    const auto& config = inDesc.GetConfig();
+    if (!CheckReplicationConfig(config, status, error)) {
+        return false;
+    }
+
+    ConvertDirectoryEntry(inDirEntry, out.mutable_self(), true);
+
+    ConvertConnectionParams(config.GetSrcConnectionParams(), *out.mutable_connection_params());
+    ConvertConsistencySettings(config.GetConsistencySettings(), out);
+    ConvertState(inDesc.GetState(), out);
+
+    for (const auto& target : config.GetSpecific().GetTargets()) {
+        ConvertItem(target, *out.add_items());
+    }
+
+    return true;
 }
 
 } // namespace NKikimr

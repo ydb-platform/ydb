@@ -31,7 +31,7 @@ ui32 TQueuePair::GetQpNum() const noexcept { return 0; }
 
 int TQueuePair::ToRtsState(const THandshakeData&) noexcept { return 0; }
 
-bool TQueuePair::IsRtsState(TQueuePair::TQpS) { return false; }
+bool TQueuePair::IsRtsState(TQueuePair::TQpS) noexcept { return false; }
 
 TQueuePair::TQpState TQueuePair::GetState(bool /*forseUpdate*/) const noexcept {
     return TQpErr { .Err = 22 };

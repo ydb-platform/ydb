@@ -43,13 +43,17 @@ namespace NKikimr {
             , MaxDiskChunks(CalcMaxDiskChunks(syncLogMaxDiskAmount, SyncLogPtr->GetChunkSize()))
             , SyncLogMaxEntryPointSize(syncLogMaxEntryPointSize)
             , NeedsInitialCommit(repaired->NeedsInitialCommit)
-            , PhantomFlagStorageState(SlCtx->VCtx->Top->GType)
+            , PhantomFlagStorageState(SlCtx)
             , EnablePhantomFlagStorage(SlCtx->EnablePhantomFlagStorage)
             , PhantomFlagStorageLimit(SlCtx->PhantomFlagStorageLimit)
         {
+            Y_VERIFY_S(SlCtx->VCtx->Top->GetTotalVDisksNum() <= MaxPossibleDisksInGroup,
+                    "Bad erasure# " << TBlobStorageGroupType::ErasureSpeciesName(SlCtx->VCtx->Top->GType.GetErasure()));
             SyncedLsns.resize(SlCtx->VCtx->Top->GetTotalVDisksNum());
             ui32 selfOrderNum = SlCtx->VCtx->Top->GetOrderNumber(SlCtx->VCtx->ShortSelfVDisk);
             SyncedLsns[selfOrderNum] = Max<ui64>();
+            SyncedMask.reset();
+            SyncedMask.set(selfOrderNum, true);
         }
 
         // Calculate first lsn in recovery log we must keep
@@ -458,15 +462,15 @@ namespace NKikimr {
             ui64 firstStoredLsn = SyncLogPtr->GetFirstLsn();
             if (PhantomFlagStorageState.IsActive()) {
                 if (std::all_of(SyncedLsns.begin(), SyncedLsns.end(), [&](ui64 lsn) {
-                    return lsn >= firstStoredLsn;
+                    return lsn == Max<ui64>() || lsn + 1 >= firstStoredLsn;
                 })) {
                     PhantomFlagStorageState.Deactivate();
                 }
             }
         }
 
-        void TSyncLogKeeperState::AddFlagsToPhantomFlagStorage(TPhantomFlags&& flags) {
-            PhantomFlagStorageState.AddFlags(std::move(flags), PhantomFlagStorageLimit);
+        void TSyncLogKeeperState::FinishPhantomFlagStorageBuilder(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds) {
+            PhantomFlagStorageState.FinishBuilding(std::move(flags), std::move(thresholds), PhantomFlagStorageLimit);
         }
 
         TPhantomFlagStorageSnapshot TSyncLogKeeperState::GetPhantomFlagStorageSnapshot() const {
@@ -478,16 +482,24 @@ namespace NKikimr {
         }
 
         void TSyncLogKeeperState::DropUnsyncedChunks(const TVector<ui32>& chunks) {
+            ui64 firstStoredLsn = SyncLogPtr->GetFirstLsn();
+            for (ui32 orderNumber = 0; orderNumber < SlCtx->VCtx->Top->GType.BlobSubgroupSize(); ++orderNumber) {
+                SyncedMask.set(orderNumber, SyncedLsns[orderNumber] >= firstStoredLsn);
+            }
+
             if (EnablePhantomFlagStorage) {
+                PhantomFlagStorageState.UpdateSyncedMask(SyncedMask);
                 if (!chunks.empty() && !PhantomFlagStorageState.IsActive() && SelfId != TActorId{}) {
-                    PhantomFlagStorageState.Activate();
+                    PhantomFlagStorageState.StartBuilding();
                     TActivationContext::Register(CreatePhantomFlagStorageBuilderActor(SlCtx, SelfId, Snapshot));
                 }
-            } else if (PhantomFlagStorageState.IsActive()) {
-                PhantomFlagStorageState.Deactivate();
             }
 
             ChunksToDeleteDelayed.Insert(chunks);
+        }
+
+        void TSyncLogKeeperState::UpdateMetrics() {
+            PhantomFlagStorageState.UpdateMetrics();
         }
 
     } // NSyncLog

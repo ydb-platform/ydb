@@ -448,7 +448,7 @@ public:
             std::move(keyColumnsMetadata),
             std::move(columnsMetadata),
             priority);
-        
+
         // At current time only insert operation can fail.
         NeedToFlushBeforeCommit |= (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
 
@@ -715,7 +715,7 @@ public:
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
 
-        const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE
+        const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE
                     || ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
 
         if (ev->Get()->Record.HasOverloadSubscribed() && handleOverload) {
@@ -809,8 +809,8 @@ public:
                 getIssues());
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED: {
-            CA_LOG_E("Got DISK_SPACE_EXHAUSTED for table `"
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DATABASE_DISK_SPACE_QUOTA_EXCEEDED: {
+            CA_LOG_E("Got DATABASE_DISK_SPACE_QUOTA_EXCEEDED for table `"
                     << TablePath << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
@@ -819,14 +819,14 @@ public:
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             RuntimeError(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
-                NYql::TIssuesIds::KIKIMR_DISK_SPACE_EXHAUSTED,
+                NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED,
                 TStringBuilder() << "Disk space exhausted. Table `"
                     << TablePath << "`.",
                 getIssues());
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE: {
-            CA_LOG_W("Got OUT_OF_SPACE for table `"
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE: {
+            CA_LOG_W("Got DISK_GROUP_OUT_OF_SPACE for table `"
                 << TablePath << "`."
                 << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                 << " Sink=" << this->SelfId() << "."
@@ -1672,7 +1672,7 @@ private:
             });
         }
         BufferedBatches.clear();
-        
+
         if (!PathLookupInfo.empty()) {
             // Need to lookup unique indexes.
             // In this case unique indexes keys are subsets of main table key or operation is INSERT.
@@ -1680,7 +1680,7 @@ private:
 
             for (auto& [pathId, lookupInfo] : PathLookupInfo) {
                 AFL_ENSURE(pathId != PathId);
-                
+
                 TUniqueSecondaryKeyCollector collector(
                     KeyColumnTypes,
                     lookupInfo.Lookup->GetKeyColumnTypes(),
@@ -2721,7 +2721,7 @@ public:
                         {});
                     return false;
                 }
-                AFL_ENSURE(actor->GetTableId() == tableId);  
+                AFL_ENSURE(actor->GetTableId() == tableId);
                 return true;
             };
 
@@ -3926,7 +3926,7 @@ public:
             ProcessWritePreparedShard(ev);
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             if (ev->Get()->Record.HasOverloadSubscribed()) {
                 CA_LOG_D("Shard " << ev->Get()->Record.GetOrigin() << " is overloaded. Waiting.");
@@ -4071,21 +4071,21 @@ public:
                 getIssues());
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED: {
-            CA_LOG_E("Got DISK_SPACE_EXHAUSTED for tables."
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DATABASE_DISK_SPACE_QUOTA_EXCEEDED: {
+            CA_LOG_E("Got DATABASE_DISK_SPACE_QUOTA_EXCEEDED for tables."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             ReplyError(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
-                NYql::TIssuesIds::KIKIMR_DISK_SPACE_EXHAUSTED,
+                NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED,
                 TStringBuilder() << "Disk space exhausted. " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE: {
-            CA_LOG_W("Got OUT_OF_SPACE for tables."
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE: {
+            CA_LOG_W("Got DISK_GROUP_OUT_OF_SPACE for tables."
                 << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                 << " Sink=" << this->SelfId() << "."
                 << " Ignored this error."

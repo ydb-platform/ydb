@@ -129,7 +129,7 @@ class YdbCluster:
 
                 headers = {}
                 # Добавляем таймаут для каждого запроса
-                request_timeout = min(10, deadline - time())
+                request_timeout = min(30, deadline - time())
                 if request_timeout <= 0:
                     break
 

@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/tabbed_table.h>
 #include <library/cpp/colorizer/colors.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -94,7 +95,7 @@ void TDefaultSchemePrinter::PrintDirectory(
     }
     if (children.size()) {
         if (Settings.FromNewLine) {
-            NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+            NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
             for (const auto& child : children) {
                 PrintSchemeEntry(Cout, child, colors);
                 Cout << Endl;
@@ -109,7 +110,7 @@ void TDefaultSchemePrinter::PrintDirectory(
 
 void TDefaultSchemePrinter::PrintEntry(const TString& relativePath, const NScheme::TSchemeEntry& entry) {
     if (!relativePath) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         PrintSchemeEntry(Cout, entry, colors);
         Cout << Endl;
     }

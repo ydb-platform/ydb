@@ -16,4 +16,4 @@
 #undef HAVE_LINUX_TCP_H
 
 /* cpu-machine-OS */
-#define CURL_OS "x86_64-pc-freebsd"
+#define OS "x86_64-pc-freebsd"

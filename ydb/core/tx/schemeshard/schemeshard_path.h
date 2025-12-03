@@ -175,6 +175,7 @@ public:
     TPath& RiseUntilOlapStore();
     TPath FindOlapStore() const;
     bool IsCommonSensePath() const;
+    bool ShouldSkipCommonPathCheckForIndexImplTable() const;
     bool AtLocalSchemeShardPath() const;
     bool IsInsideTableIndexPath(bool failOnUnresolved = true) const;
     bool IsInsideCdcStreamPath() const;

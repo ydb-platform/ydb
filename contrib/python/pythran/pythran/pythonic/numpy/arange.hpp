@@ -12,8 +12,7 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class T, class U, class S, class dtype>
-  types::numpy_expr<pythonic::operator_::functor::pos,
-                    details::arange_index<typename dtype::type>>
+  types::numpy_expr<pythonic::operator_::functor::pos, details::arange_index<typename dtype::type>>
   arange(T begin, U end, S step, dtype d)
   {
     using R = typename dtype::type;

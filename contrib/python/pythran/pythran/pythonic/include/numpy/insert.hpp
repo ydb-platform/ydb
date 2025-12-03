@@ -14,30 +14,26 @@ namespace numpy
 {
 
   template <class T, class pS, class I, class F>
-  typename std::enable_if<types::is_iterable<I>::value &&
-                              types::is_iterable<F>::value,
-                          types::ndarray<T, types::pshape<long>>>::type
+  std::enable_if_t<types::is_iterable<I>::value && types::is_iterable<F>::value,
+                   types::ndarray<T, types::pshape<long>>>
   insert(types::ndarray<T, pS> in, I const &indices, F const &data,
          types::none_type axis = builtins::None);
 
   template <class T, class pS, class I, class F>
-  typename std::enable_if<types::is_iterable<I>::value &&
-                              !types::is_iterable<F>::value,
-                          types::ndarray<T, types::pshape<long>>>::type
+  std::enable_if_t<types::is_iterable<I>::value && !types::is_iterable<F>::value,
+                   types::ndarray<T, types::pshape<long>>>
   insert(types::ndarray<T, pS> in, I const &indices, F const &data,
          types::none_type axis = builtins::None);
 
   template <class T, class pS, class I, class F>
-  typename std::enable_if<!types::is_iterable<I>::value &&
-                              types::is_iterable<F>::value,
-                          types::ndarray<T, types::pshape<long>>>::type
+  std::enable_if_t<!types::is_iterable<I>::value && types::is_iterable<F>::value,
+                   types::ndarray<T, types::pshape<long>>>
   insert(types::ndarray<T, pS> in, I const &indices, F const &data,
          types::none_type axis = builtins::None);
 
   template <class T, class pS, class I, class F>
-  typename std::enable_if<!types::is_iterable<I>::value &&
-                              !types::is_iterable<F>::value,
-                          types::ndarray<T, types::pshape<long>>>::type
+  std::enable_if_t<!types::is_iterable<I>::value && !types::is_iterable<F>::value,
+                   types::ndarray<T, types::pshape<long>>>
   insert(types::ndarray<T, pS> in, I const &indices, F const &data,
          types::none_type axis = builtins::None);
 

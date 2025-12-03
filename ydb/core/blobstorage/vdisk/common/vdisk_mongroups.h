@@ -1008,9 +1008,23 @@ public:                                                                         
             {
                 COUNTER_INIT(BuilderReadsFromDisk, true);
                 COUNTER_INIT(BuilderReadsFromDiskBytes, true);
+
+                COUNTER_INIT(IsPhantomFlagStorageActive, false);
+                COUNTER_INIT(IsPhantomFlagStorageBuilding, false);
+                COUNTER_INIT(StoredFlagsCount, false);
+                COUNTER_INIT(StoredFlagsMemoryConsumption, false);
+                COUNTER_INIT(ThresholdsMemoryConsumption, false);
+                COUNTER_INIT(SyncedMask, false);
             }
             COUNTER_DEF(BuilderReadsFromDisk);
             COUNTER_DEF(BuilderReadsFromDiskBytes);
+
+            COUNTER_DEF(IsPhantomFlagStorageActive);
+            COUNTER_DEF(IsPhantomFlagStorageBuilding);
+            COUNTER_DEF(StoredFlagsCount);
+            COUNTER_DEF(StoredFlagsMemoryConsumption);
+            COUNTER_DEF(ThresholdsMemoryConsumption);
+            COUNTER_DEF(SyncedMask);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

@@ -613,7 +613,7 @@ TFuture<ITransactionPtr> TTransaction::StartTransaction(
     NTransactionClient::ETransactionType type,
     const TTransactionStartOptions& options)
 {
-    return Underlying_->StartTransaction(type, options).ApplyUnique(BIND(
+    return Underlying_->StartTransaction(type, options).AsUnique().Apply(BIND(
         [this, this_ = MakeStrong(this)] (TErrorOr<ITransactionPtr>&& result) -> TErrorOr<ITransactionPtr> {
             if (!result.IsOK()) {
                 Client_->HandleError(result, ClientIndex_);
@@ -706,7 +706,7 @@ template <class T>
 TFuture<T> TClient::DoCall(int retryAttemptCount, const TCallback<TFuture<T>(const IClientPtr&, int)>& callee)
 {
     auto [client, clientIndex] = GetActiveClient();
-    return callee(client, clientIndex).ApplyUnique(BIND(
+    return callee(client, clientIndex).AsUnique().Apply(BIND(
         [
             this,
             this_ = MakeStrong(this),
@@ -729,7 +729,7 @@ TFuture<ITransactionPtr> TClient::StartTransaction(
     const NApi::TTransactionStartOptions& options)
 {
     auto callee = BIND([this_ = MakeStrong(this), type, options] (const IClientPtr& client, int clientIndex) {
-        return client->StartTransaction(type, options).ApplyUnique(BIND(
+        return client->StartTransaction(type, options).AsUnique().Apply(BIND(
             [this_, clientIndex] (ITransactionPtr&& transaction) -> ITransactionPtr {
                 return New<TTransaction>(std::move(this_), clientIndex, std::move(transaction));
             }));

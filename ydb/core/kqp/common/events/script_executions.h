@@ -357,7 +357,7 @@ struct TEvGetScriptPhysicalGraphResponse : public TEventLocal<TEvGetScriptPhysic
         , Issues(std::move(issues))
     {}
 
-    TEvGetScriptPhysicalGraphResponse(Ydb::StatusIds::StatusCode status, NKikimrKqp::TQueryPhysicalGraph&& physicalGraph, i64 generation, NYql::TIssues issues)
+    TEvGetScriptPhysicalGraphResponse(Ydb::StatusIds::StatusCode status, std::optional<NKikimrKqp::TQueryPhysicalGraph>&& physicalGraph, i64 generation, NYql::TIssues issues)
         : Status(status)
         , PhysicalGraph(std::move(physicalGraph))
         , Generation(generation)
@@ -365,7 +365,7 @@ struct TEvGetScriptPhysicalGraphResponse : public TEventLocal<TEvGetScriptPhysic
     {}
 
     Ydb::StatusIds::StatusCode Status;
-    NKikimrKqp::TQueryPhysicalGraph PhysicalGraph;
+    std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     i64 Generation = 0;
     NYql::TIssues Issues;
 };

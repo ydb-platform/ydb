@@ -26,11 +26,11 @@
 
 #include <curl/curl.h>
 #include "llist.h"
-#include "curlx/dynbuf.h"
+#include "dynbuf.h"
 
 struct fileinfo {
   struct curl_fileinfo info;
-  struct Curl_llist_node list;
+  struct Curl_llist_element list;
   struct dynbuf buf;
 };
 

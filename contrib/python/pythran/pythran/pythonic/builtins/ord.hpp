@@ -15,9 +15,8 @@ namespace builtins
   long ord(types::str const &v)
   {
     if (v.size() != 1)
-      throw types::TypeError(
-          "ord() expected a character, but string of length " +
-          std::to_string(v.size()) + " found");
+      throw types::TypeError("ord() expected a character, but string of length " +
+                             std::to_string(v.size()) + " found");
     return (long)v.chars()[0];
   }
 } // namespace builtins

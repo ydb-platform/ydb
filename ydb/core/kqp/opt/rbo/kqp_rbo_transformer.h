@@ -32,11 +32,11 @@ class TKqpRewriteSelectTransformer : public TSyncTransformerBase {
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
-                                                          TTypeAnnotationContext &typeCtx);
+                                                             TTypeAnnotationContext &typeCtx);
 
 class TKqpNewRBOTransformer : public TSyncTransformerBase {
   public:
-    TKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
+    TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
                           TTypeAnnotationContext &typeCtx,
                           TAutoPtr<IGraphTransformer> rboTypeAnnTransformer, 
                           TAutoPtr<IGraphTransformer> typeAnnTransformer, 
@@ -57,11 +57,11 @@ class TKqpNewRBOTransformer : public TSyncTransformerBase {
 
   private:
     TTypeAnnotationContext &TypeCtx;
-    const TKqpOptimizeContext &KqpCtx;
+    TKqpOptimizeContext &KqpCtx;
     TRuleBasedOptimizer RBO;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
                                                       TTypeAnnotationContext &typeCtx,
                                                       TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
                                                       TAutoPtr<IGraphTransformer> typeAnnTransformer,
@@ -82,7 +82,7 @@ class TKqpRBOCleanupTransformer : public TSyncTransformerBase {
 
 TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext &typeCtx);
 
-TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, bool pgSyntax=false);
+TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, const TKqpOptimizeContext& kqpCtx, bool pgSyntax=false);
 
 } // namespace NKqp
 } // namespace NKikimr

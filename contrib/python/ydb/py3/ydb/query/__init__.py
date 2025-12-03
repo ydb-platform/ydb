@@ -10,6 +10,12 @@ __all__ = [
     "QuerySession",
     "QueryStatsMode",
     "QueryTxContext",
+    "QuerySchemaInclusionMode",
+    "QueryResultSetFormat",
+    "ArrowCompressionCodecType",
+    "ArrowCompressionCodec",
+    "ArrowFormatSettings",
+    "ArrowFormatMeta",
 ]
 
 import logging
@@ -18,6 +24,8 @@ from .base import (
     QueryClientSettings,
     QueryExplainResultFormat,
     QueryStatsMode,
+    QuerySchemaInclusionMode,
+    QueryResultSetFormat,
 )
 
 from .session import QuerySession
@@ -30,6 +38,10 @@ from .._grpc.grpcwrapper.ydb_query_public_types import (
     QuerySerializableReadWrite,
     QuerySnapshotReadOnly,
     QueryStaleReadOnly,
+    ArrowCompressionCodecType,
+    ArrowCompressionCodec,
+    ArrowFormatSettings,
+    ArrowFormatMeta,
 )
 
 from .pool import QuerySessionPool

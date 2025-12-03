@@ -295,6 +295,9 @@ public:
     template <class TStruct>
     void InitializeStruct(TStruct* target, const NYT::TSourceLocation& sourceLocation = {});
 
+    template <CYsonStructDerived TStruct>
+    const IYsonStructMeta* GetMeta();
+
     void OnBaseCtorCalled();
 
     void OnFinalCtorCalled();

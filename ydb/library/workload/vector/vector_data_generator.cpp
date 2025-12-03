@@ -4,6 +4,7 @@
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
+#include <ydb/library/workload/abstract/colors.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_nested.h>
@@ -256,7 +257,7 @@ TWorkloadVectorFilesDataInitializer::TWorkloadVectorFilesDataInitializer(const T
 { }
 
 void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = GetColors(Cout);
 
     TStringBuilder inputDescription;
     inputDescription

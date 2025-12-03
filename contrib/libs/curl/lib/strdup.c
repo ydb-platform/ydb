@@ -71,7 +71,7 @@ wchar_t *Curl_wcsdup(const wchar_t *src)
 {
   size_t length = wcslen(src);
 
-  if(length > (SIZE_MAX / sizeof(wchar_t)) - 1)
+  if(length > (SIZE_T_MAX / sizeof(wchar_t)) - 1)
     return (wchar_t *)NULL; /* integer overflow */
 
   return (wchar_t *)Curl_memdup(src, (length + 1) * sizeof(wchar_t));
@@ -101,23 +101,24 @@ void *Curl_memdup(const void *src, size_t length)
 
 /***************************************************************************
  *
- * Curl_memdup0(source, length)
+ * Curl_strndup(source, length)
  *
  * Copies the 'source' string to a newly allocated buffer (that is returned).
- * Copies 'length' bytes then adds a null-terminator.
+ * Copies not more than 'length' bytes (up to a null terminator) then adds a
+ * null terminator.
  *
  * Returns the new pointer or NULL on failure.
  *
  ***************************************************************************/
-void *Curl_memdup0(const char *src, size_t length)
+void *Curl_strndup(const char *src, size_t length)
 {
-  char *buf = malloc(length + 1);
+  char *buf = memchr(src, '\0', length);
+  if(buf)
+    length = buf - src;
+  buf = malloc(length + 1);
   if(!buf)
     return NULL;
-  if(length) {
-    DEBUGASSERT(src); /* must never be NULL */
-    memcpy(buf, src, length);
-  }
+  memcpy(buf, src, length);
   buf[length] = 0;
   return buf;
 }

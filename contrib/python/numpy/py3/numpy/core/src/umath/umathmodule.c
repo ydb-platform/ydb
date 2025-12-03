@@ -29,8 +29,8 @@
 #include "string_ufuncs.h"
 
 /* Automatically generated code to define all ufuncs: */
-#include "funcs.inc"
-#include "__umath_generated.c"
+#include "contrib/python/numpy/py3/numpy/core/src/umath/funcs.inc"
+#include "contrib/python/numpy/py3/numpy/core/include/numpy/__umath_generated.c"
 
 
 static PyUFuncGenericFunction pyfunc_functions[] = {PyUFunc_On_Om};

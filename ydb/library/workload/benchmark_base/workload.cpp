@@ -1,6 +1,7 @@
 #include "workload.h"
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <ydb/public/api/protos/ydb_formats.pb.h>
+#include <ydb/library/workload/abstract/colors.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/colorizer/colors.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/node/parse.h>
@@ -203,7 +204,8 @@ TBulkDataGeneratorList TWorkloadDataInitializerBase::GetBulkInitialData() {
 }
 
 void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int /*workloadType*/) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = GetColors(Cout);
+
     switch (commandType) {
     default:
         break;

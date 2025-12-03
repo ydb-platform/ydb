@@ -6,6 +6,7 @@
 #include "ydb_cluster.h"
 
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -125,7 +126,7 @@ void TCommandAdmin::Config(TConfig& config) {
     TString commands;
     SetFreeArgTitle(0, "<subcommand>", commands);
     TStringStream stream;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     stream << Endl << Endl
            << colors.BoldColor()
            << "Commands in this subtree may damage your cluster if used wrong" << Endl

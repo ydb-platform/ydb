@@ -1195,6 +1195,36 @@ public:
     void Handle(TEvDataShard::TEvIncrementalRestoreResponse::TPtr& ev, const TActorContext& ctx);
     void CreateIncrementalRestoreOperation(const TPathId& backupCollectionPathId, ui64 operationId, const TString& backupName, const TActorContext& ctx);
 
+    void DiscoverAndCreateIndexRestoreOperations(
+        const TPathId& backupCollectionPathId,
+        ui64 operationId,
+        const TString& backupName,
+        const TPath& bcPath,
+        const TBackupCollectionInfo::TPtr& backupCollectionInfo,
+        const TActorContext& ctx);
+
+    void DiscoverIndexesRecursive(
+        ui64 operationId,
+        const TString& backupName,
+        const TPath& bcPath,
+        const TBackupCollectionInfo::TPtr& backupCollectionInfo,
+        const TPath& currentPath,
+        const TString& accumulatedRelativePath,
+        const TActorContext& ctx);
+
+    void CreateSingleIndexRestoreOperation(
+        ui64 operationId,
+        const TString& backupName,
+        const TPath& bcPath,
+        const TString& relativeTablePath,
+        const TString& indexName,
+        const TString& targetTablePath,
+        const TActorContext& ctx);
+
+    TString FindTargetTablePath(
+        const TBackupCollectionInfo::TPtr& backupCollectionInfo,
+        const TString& relativeTablePath);
+
     void Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
@@ -1528,6 +1558,7 @@ public:
     void PersistBuildIndexShardStatusInitiate(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus);
     void PersistBuildIndexShardStatus(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus);
     void PersistBuildIndexShardRange(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus);
+    void PersistBuildIndexShardStatusFulltext(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus);
     void PersistBuildIndexShardStatusReset(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, TIndexBuildInfo::TShardStatus& shardStatus);
     void PersistBuildIndexShardStatusReset(NIceDb::TNiceDb& db, TIndexBuildInfo& info);
 
@@ -1573,6 +1604,7 @@ public:
         struct TTxReplyUploadSample;
         struct TTxReplyValidateUniqueIndex;
         struct TTxReplyFulltextIndex;
+        struct TTxReplyFulltextDict;
 
         struct TTxPipeReset;
         struct TTxBilling;
@@ -1596,6 +1628,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& response);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildFulltextDictResponse::TPtr& response);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
     NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
 
@@ -1614,6 +1647,7 @@ public:
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvBuildFulltextDictResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);
 

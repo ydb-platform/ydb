@@ -31,7 +31,7 @@ void SetSigHandler() noexcept {
     struct sigaction sigActionData;
     sigemptyset(&sigActionData.sa_mask);
     sigActionData.sa_handler = &SigHandler;
-    sigActionData.sa_flags = SA_INTERRUPT;
+    sigActionData.sa_flags = 0;
     sigaction(SIGUSR1, &sigActionData, nullptr);
 }
 
@@ -290,6 +290,9 @@ void TQueuePair::Output(IOutputStream& os) const noexcept {
     } else {
         os << attr.qp_state;
     }
+    if (Ctx) {
+        os << ", ctx: " << *Ctx;
+    }
 }
 
 TQueuePair::TQpState TQueuePair::GetState(bool forseUpdate) const noexcept {
@@ -324,7 +327,7 @@ size_t TQueuePair::GetDeviceIndex() const noexcept {
     return Ctx->GetDeviceIndex();
 }
 
-bool TQueuePair::IsRtsState(TQpS state) {
+bool TQueuePair::IsRtsState(TQpS state) noexcept {
      enum ibv_qp_state qpState = static_cast<enum ibv_qp_state>(state.State);
      return qpState == IBV_QPS_RTS;
 }

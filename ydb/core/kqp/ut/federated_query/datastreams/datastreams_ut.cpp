@@ -604,7 +604,10 @@ public:
         UNIT_ASSERT_C(graph, "Empty graph response");
         UNIT_ASSERT_VALUES_EQUAL_C(graph->Get()->Status, Ydb::StatusIds::SUCCESS, graph->Get()->Issues.ToOneLineString());
 
-        return graph->Get()->PhysicalGraph;
+        const auto& graphProto = graph->Get()->PhysicalGraph;
+        UNIT_ASSERT(graphProto);
+
+        return *graphProto;
     }
 
     void CheckScriptExecutionsCount(ui64 expectedExecutionsCount, ui64 expectedLeasesCount) {
@@ -2710,6 +2713,88 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         switchAccess(/* allowed */ false);
         testNoAccess();
+    }
+
+    Y_UNIT_TEST_F(OffsetsRecoveryAfterManualAndInternalRetry, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "offsetsRecoveryAfterManualAndInternalRetry,InputTopic";
+        constexpr char outputTopicName[] = "offsetsRecoveryAfterManualAndInternalRetry,OutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char consumerName[] = "unknownConsumer";
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA pq.Consumer = "{consumer_name}";
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName,
+            "consumer_name"_a = consumerName
+        ));
+
+        WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Issues FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            TString issues;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                issues = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+            });
+
+            error = TStringBuilder() << "Query issues: " << issues;
+            return issues.Contains("no read rule provided for consumer 'unknownConsumer' in topic");
+        });
+
+        ExecExternalQuery(fmt::format(R"(
+            ALTER TOPIC `{input_topic}` ADD CONSUMER `{consumer_name}`;)",
+            "input_topic"_a = inputTopicName,
+            "consumer_name"_a = consumerName
+        ));
+
+        WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            TString status;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                status = *resultSet.ColumnParser("Status").GetOptionalUtf8();
+            });
+
+            error = TStringBuilder() << "Query status: " << status;
+            return status == "RUNNING";
+        });
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
+        ReadTopicMessage(outputTopicName, R"({"key": "key1", "value": "value1"})");
+        Sleep(TDuration::Seconds(1));
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+
+        const auto disposition = TInstant::Now();
+        WriteTopicMessage(inputTopicName, R"({"key": "key2", "value": "value2"})");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+
+        ReadTopicMessage(outputTopicName, R"({"key": "key2", "value": "value2"})", disposition);
     }
 
     Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnInternalRetry, TStreamingTestFixture) {

@@ -586,7 +586,7 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
         return false;
     }
 
-    for (auto &child : input->Children) {
+    for (const auto &child : input->Children) {
         if (!child->Props.StageId.has_value()) {
             YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName << " child with unassigned stage";
             return false;
@@ -594,10 +594,11 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
     }
 
     if (input->Kind == EOperator::EmptySource || input->Kind == EOperator::Source) {
+        auto opRead = CastOperator<TOpRead>(input);
         TString readName;
         if (input->Kind == EOperator::Source) {
             auto opRead = CastOperator<TOpRead>(input);
-            auto newStageId = props.StageGraph.AddSourceStage(opRead->Columns, opRead->GetOutputIUs(), opRead->NeedsMap());
+            auto newStageId = props.StageGraph.AddSourceStage(opRead->Columns, opRead->GetOutputIUs(), opRead->SourceType, opRead->NeedsMap());
             input->Props.StageId = newStageId;
             readName = opRead->Alias;
         } else {
@@ -644,18 +645,24 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
         // If the child operator is a source, it requires its own stage
         // So we have build a new stage for current operator
         if (childOp->Kind == EOperator::Source) {
+            auto opRead = CastOperator<TOpRead>(childOp);
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
-            props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TSourceConnection>());
-        } 
+            std::shared_ptr<TConnection> connection;
+            if (opRead->SourceType == ETableSourceType::Row) {
+                connection.reset(new TSourceConnection());
+            } else {
+                connection.reset(new TUnionAllConnection(false));
+            }
+            props.StageGraph.Connect(prevStageId, newStageId, connection);
+        }
         // If the child operator is not single use, we also need to create a new stage
         // for current operator with a map connection
         else if (!childOp->IsSingleConsumer()) {
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
             props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TMapConnection>(false));
-        }
-        else {
+        } else {
             input->Props.StageId = prevStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";

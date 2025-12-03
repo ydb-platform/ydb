@@ -30,6 +30,10 @@ public:
     }
 };
 
+constexpr static ui32 MaxExpectedDisksInGroup = 9;
+constexpr static ui32 MaxPossibleDisksInGroup = 32;
+using TSyncedMask = std::bitset<MaxPossibleDisksInGroup>;
+
 ////////////////////////////////////////////////////////////////////////////
 // TSyncLogCtx
 ////////////////////////////////////////////////////////////////////////////
@@ -40,6 +44,7 @@ public:
     const TPDiskCtxPtr PDiskCtx;
     const TActorId LoggerID;
     const TActorId LogCutterID;
+    const TActorId SkeletonId;
 
     const ui64 SyncLogMaxDiskAmount;
     const ui64 SyncLogMaxEntryPointSize;
@@ -61,6 +66,7 @@ public:
             TPDiskCtxPtr pdiskCtx,
             const TActorId &loggerId,
             const TActorId &logCutterId,
+            const TActorId& skeletonId,
             ui64 syncLogMaxDiskAmount,
             ui64 syncLogMaxEntryPointSize,
             ui64 syncLogMaxMemAmount,
@@ -74,6 +80,7 @@ public:
         , PDiskCtx(std::move(pdiskCtx))
         , LoggerID(loggerId)
         , LogCutterID(logCutterId)
+        , SkeletonId(skeletonId)
         , SyncLogMaxDiskAmount(syncLogMaxDiskAmount)
         , SyncLogMaxEntryPointSize(syncLogMaxEntryPointSize)
         , SyncLogMaxMemAmount(syncLogMaxMemAmount)

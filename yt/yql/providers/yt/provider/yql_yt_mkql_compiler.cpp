@@ -269,6 +269,7 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
             case EYtSettingType::Unordered:
             case EYtSettingType::NonUnique:
             case EYtSettingType::SysColumns:
+            case EYtSettingType::QLFilter:
                 break;
             default:
                 YQL_LOG_CTX_THROW yexception() << "Unsupported table content setting " << TString{child->Child(0)->Content()}.Quote();

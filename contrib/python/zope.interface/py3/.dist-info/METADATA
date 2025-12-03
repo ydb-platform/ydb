@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: zope.interface
-Version: 8.1
+Version: 8.1.1
 Summary: Interfaces for Python
 Home-page: https://github.com/zopefoundation/zope.interface
 Author: Zope Foundation and Contributors
@@ -85,6 +85,13 @@ For detailed documentation, please see https://zopeinterface.readthedocs.io/en/l
 =========
  Changes
 =========
+
+8.1.1 (2025-11-15)
+==================
+
+- Fix the GitHub workflow for publishing wheels, which failed for Linux/arm64.
+  (`#348 <https://github.com/zopefoundation/zope.interface/issues/348>`_)
+
 
 8.1 (2025-11-10)
 ================

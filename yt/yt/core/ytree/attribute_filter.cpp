@@ -126,13 +126,13 @@ std::unique_ptr<IHeterogenousFilterConsumer> CreateFilteringConsumerImpl(
                 // But just in case, let async writer do the job on concatenating these segments.
                 asyncYson = AsyncWriter_.Finish();
             } else {
-                asyncYson = asyncSegments.front().ApplyUnique(BIND([] (std::pair<TYsonString, bool>&& pair) {
+                asyncYson = asyncSegments.front().AsUnique().Apply(BIND([] (std::pair<TYsonString, bool>&& pair) {
                     return std::move(pair.first);
                 }));
             }
 
             // Second, perform actual filtration.
-            auto asyncFilteredYson = asyncYson.ApplyUnique(BIND([paths = std::move(Paths_), sync = Sync_] (TYsonString&& yson) {
+            auto asyncFilteredYson = asyncYson.AsUnique().Apply(BIND([paths = std::move(Paths_), sync = Sync_] (TYsonString&& yson) {
                 // Note the special case when there are no matches. Ideally we would like to not emit
                 // our attribute at all, but the possibility to do so depends on whether we are in sync or async case.
                 //

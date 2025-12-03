@@ -14,7 +14,7 @@ TEST_SRCS(
     test_ydb_tools.py
 )
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 

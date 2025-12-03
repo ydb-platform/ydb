@@ -69,6 +69,10 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
     TString tablePath = config.GetTablePath();
     TString indexName = config.GetIndexName();
 
+    if (indexName.empty() && !context.SS->EnableAddColumsWithDefaults) {
+        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding columns with defaults is disabled")};
+    }
+
     TPath table = TPath::Resolve(tablePath, context.SS);
     TVector<ISubOperation::TPtr> result;
     {
@@ -177,6 +181,20 @@ ISubOperation::TPtr DropBuildColumn(TOperationId id, const TTxTransaction& tx, T
     TString tablePath = config.GetSettings().GetTable();
 
     TPath table = TPath::Resolve(tablePath, context.SS);
+    {
+        auto checks = table.Check();
+        checks
+            .NotEmpty()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return CreateReject(id, checks.GetStatus(), checks.GetError());
+        }
+    }
 
     auto mainTableAlter = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
     *mainTableAlter.MutableLockGuard() = tx.GetLockGuard();

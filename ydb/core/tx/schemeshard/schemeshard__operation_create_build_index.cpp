@@ -21,6 +21,21 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
     const auto& op = tx.GetInitiateColumnBuild();
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
+    {
+        auto checks = table.Check();
+        checks
+            .NotEmpty()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        }
+    }
+
     TVector<ISubOperation::TPtr> result;
 
     // altering version of the table.

@@ -1,4 +1,4 @@
-#include "common_level.h"
+#include "one_layer.h"
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
@@ -50,7 +50,7 @@ std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
     return problems;
 }
 
-TCompactionTaskData TOneLayerPortions::DoGetOptimizationTask() const {
+std::vector<TCompactionTaskData> TOneLayerPortions::DoGetOptimizationTasks() const {
     AFL_VERIFY(GetNextLevel());
     ui64 compactedData = 0;
     TCompactionTaskData result(GetNextLevel()->GetLevelId());
@@ -76,7 +76,7 @@ TCompactionTaskData TOneLayerPortions::DoGetOptimizationTask() const {
             --itBkwd;
         }
     }
-    return result;
+    return { result };
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

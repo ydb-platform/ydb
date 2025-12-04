@@ -1,6 +1,7 @@
 #include "json_value_path.h"
 
 #include <arrow/array/array_binary.h>
+#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/minikql/jsonpath/jsonpath.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -153,7 +154,7 @@ void TJsonPathAccessor::VisitValues(const TValuesVisitor& visitor) const {
                         visitor(rootCursor.GetElement(0).GetString());
                         break;
                     case NBinaryJson::EEntryType::Number:
-                        visitor(::ToString(rootCursor.GetElement(0).GetNumber()));
+                        visitor(TBinaryJsonValueView::JsonNumberToString(rootCursor.GetElement(0).GetNumber()));
                         break;
                     case NBinaryJson::EEntryType::BoolTrue:
                         visitor("true");

@@ -498,6 +498,5 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             expected[str] = 1;
             UNIT_ASSERT_VALUES_EQUAL(expected, restorer.GetResult());
         }
-
     }
 };

@@ -23,6 +23,7 @@ private:
             return false;
         }
         SubColumnName = proto.GetSubColumn().GetSubColumnName();
+        Cerr << "SubColumnName = " << SubColumnName << "; on line " << __LINE__ << Endl;
         if (!SubColumnName) {
             return false;
         }
@@ -36,6 +37,8 @@ private:
             return TConclusionStatus::Fail("extractor description parameter 'sub_column_name' has to been string");
         }
         SubColumnName = jsonInfo["sub_column_name"].GetString();
+
+        Cerr << "SubColumnName = " << SubColumnName << "; on line " << __LINE__ << Endl;
         if (!SubColumnName) {
             return TConclusionStatus::Fail("extractor description parameter 'sub_column_name' hasn't been empty");
         }
@@ -46,6 +49,7 @@ private:
         const TRecordVisitor& recordVisitor) const override;
 
     virtual bool DoCheckForIndex(const NRequest::TOriginalDataAddress& request, ui64* /*hashBase*/) const override {
+        Cerr << "Check " << request.GetSubColumnName() << " == " << SubColumnName << Endl;
         return request.GetSubColumnName() == SubColumnName;
     }
 

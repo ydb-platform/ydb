@@ -54,6 +54,7 @@ private:
     void Handle(TEvKafka::TEvWakeup::TPtr request, const TActorContext& ctx);
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr request, const TActorContext& ctx);
     void Handle(TEvPartitionWriter::TEvInitResult::TPtr request, const TActorContext& ctx);
+    void Handle(TEvPartitionWriter::TEvDisconnected::TPtr request, const TActorContext& ctx);
     void EnqueueRequest(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
@@ -69,6 +70,7 @@ private:
             HFunc(TEvKafka::TEvProduceRequest, EnqueueRequest);
             HFunc(TEvPartitionWriter::TEvInitResult, Handle);
             HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
+            HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
 
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
@@ -87,6 +89,7 @@ private:
             HFunc(TEvKafka::TEvProduceRequest, Handle);
             HFunc(TEvPartitionWriter::TEvInitResult, Handle);
             HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
+            HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
 
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
@@ -108,6 +111,7 @@ private:
             HFunc(TEvKafka::TEvProduceRequest, EnqueueRequest);
             HFunc(TEvPartitionWriter::TEvInitResult, Handle);
             HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
+            HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
 
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
@@ -129,6 +133,7 @@ private:
     void CleanTopics(const TActorContext& ctx);
     void CleanWriters(const TActorContext& ctx);
     std::pair<ETopicStatus, TActorId> PartitionWriter(const TTopicPartition& topicPartition, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId, const TActorContext& ctx);
+    std::pair<TString, ui32> WriterDied(const TActorId& writerId);
 
     TString LogPrefix();
     void LogEvent(IEventHandle& ev);

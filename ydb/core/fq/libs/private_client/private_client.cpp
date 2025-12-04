@@ -7,7 +7,9 @@ namespace NFq {
 
 using namespace NYdb;
 
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
 constexpr TDeadline::Duration PERIODIC_REBALANCE_INTERVAL = std::chrono::seconds(300);
+#endif
 
 class TPrivateClient::TImpl : public TClientImplCommon<TPrivateClient::TImpl> {
 public:

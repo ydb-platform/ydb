@@ -4,6 +4,7 @@
 #include "export_iface.h"
 #include "export_scan.h"
 #include "export_s3.h"
+#include "export_fs.h"
 
 #include <ydb/core/protos/datashard_config.pb.h>
 
@@ -72,6 +73,20 @@ protected:
                 std::shared_ptr<IExport>(exportFactory->CreateExportToS3(backup, columns)).swap(exp);
             } else {
                 Abort(op, ctx, "Exports to S3 are disabled");
+                return false;
+            }
+        } else if (backup.HasFSSettings()) {
+            NBackupRestoreTraits::ECompressionCodec codec;
+            if (!TryCodecFromTask(backup, codec)) {
+                Abort(op, ctx, TStringBuilder() << "Unsupported compression codec"
+                    << ": " << backup.GetCompression().GetCodec());
+                return false;
+            }
+
+            if (auto* exportFactory = appData->DataShardExportFactory) {
+                std::shared_ptr<IExport>(exportFactory->CreateExportToFs(backup, columns)).swap(exp);
+            } else {
+                Abort(op, ctx, "Exports to FS are disabled");
                 return false;
             }
         } else {

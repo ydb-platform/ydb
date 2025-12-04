@@ -8,5 +8,6 @@ class TDataShardExportFactory : public NKikimr::NDataShard::IExportFactory {
 public:
     IExport* CreateExportToYt(const IExport::TTask& task, const IExport::TTableColumns& columns) const override;
     IExport* CreateExportToS3(const IExport::TTask& task, const IExport::TTableColumns& columns) const override;
+    IExport* CreateExportToFs(const IExport::TTask& task, const IExport::TTableColumns& columns) const override;
     void Shutdown() override;
 };

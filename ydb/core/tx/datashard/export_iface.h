@@ -27,6 +27,7 @@ public:
 
     virtual IExport* CreateExportToYt(const IExport::TTask& task, const IExport::TTableColumns& columns) const = 0;
     virtual IExport* CreateExportToS3(const IExport::TTask& task, const IExport::TTableColumns& columns) const = 0;
+    virtual IExport* CreateExportToFs(const IExport::TTask& task, const IExport::TTableColumns& columns) const = 0;
     virtual void Shutdown() = 0;
 };
 

@@ -153,6 +153,7 @@ SRCS(
     execution_unit_ctors.h
     execution_unit_kind.h
     export_common.cpp
+    export_fs_uploader.cpp
     export_iface.cpp
     export_iface.h
     export_scan.cpp

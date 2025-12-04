@@ -10,6 +10,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/tx/datashard/export_iface.h>
 #include <ydb/core/tx/datashard/export_s3.h>
+#include <ydb/core/tx/datashard/export_fs.h>
 #include <ydb/core/tx/schemeshard/schemeshard_operation_factory.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/config.pb.h>
@@ -46,6 +47,12 @@ namespace NKikimr {
             Y_UNUSED(columns);
             return nullptr;
         #endif
+        }
+
+        IExport* CreateExportToFs(
+                const IExport::TTask& task, const IExport::TTableColumns& columns) const override
+        {
+            return new NDataShard::TFsExport(task, columns);
         }
 
         void Shutdown() override {

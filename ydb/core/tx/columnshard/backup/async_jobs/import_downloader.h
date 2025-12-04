@@ -1,9 +1,16 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/core/tx/datashard/import_common.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/conclusion/result.h>
-#include <ydb/core/tx/datashard/import_s3.h>
+
+namespace NKikimr::NDataShard {
+class TTableInfo;
+}
+
+namespace NKikimr::NScheme {
+class TTypeInfo;
+}
 
 namespace NKikimr::NColumnShard::NBackup {
     

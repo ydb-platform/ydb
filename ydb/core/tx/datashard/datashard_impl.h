@@ -337,7 +337,6 @@ class TDataShard
             EvPersistScanState,
             EvPersistScanStateAck,
             EvConditionalEraseRowsRegistered,
-            EvAsyncJobComplete, // unused
             EvSubDomainPathIdFound, // unused
             EvRequestChangeRecords,
             EvRemoveChangeRecords,

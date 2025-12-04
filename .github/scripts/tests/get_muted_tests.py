@@ -197,7 +197,7 @@ def mute_applier(args):
     all_tests_file = os.path.join(output_path, '1_all_tests.txt')
     all_muted_tests_file = os.path.join(output_path, '1_all_muted_tests.txt')
 
-    # Используем переданный путь или путь по умолчанию
+    # Use the provided path or default path
     current_muted_ya_path = getattr(args, 'muted_ya_file', None) or muted_ya_path
     print(f'📋 Loading mute rules from: {current_muted_ya_path}')
     mute_check = YaMuteCheck()

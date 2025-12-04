@@ -69,7 +69,7 @@ class KeyValueClient(object):
 
                 time.sleep(self.__retry_sleep_seconds)
 
-    def kv_write(self, path, partition_id, key, value, channel = None):
+    def kv_write(self, path, partition_id, key, value, channel=None):
         request = keyvalue_api.ExecuteTransactionRequest()
         request.path = path
         request.partition_id = partition_id
@@ -124,7 +124,7 @@ class KeyValueClient(object):
                     new_channel = request.storage_config.channel.add()
                     new_channel.media = media
         return self.invoke(request, 'CreateVolume')
-    
+
     def drop_tablets(self, path):
         request = keyvalue_api.DropVolumeRequest()
         request.path = path

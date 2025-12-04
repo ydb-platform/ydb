@@ -1,6 +1,5 @@
 # Развёртывание {{ ydb-short-name }} кластера с помощью Ansible
 
-<!-- markdownlint-disable blanks-around-fences -->
 {% note warning %}
 
 Данная инструкция предназначена только для развёртывания кластеров с [конфигурацией V1](../../configuration-management/configuration-v1/index.md). Развёртывание кластеров с [конфигурацией V2](../../configuration-management/configuration-v2/index.md) с помощью Ansible в настоящий момент находится в разработке.
@@ -66,13 +65,15 @@
 
 {% cut "Установка Ansible в виртуальное окружение Python" %}
 
-* Обновите список пакетов apt — `sudo apt-get update`;
-* Установите пакет `venv` для Python3 — `sudo apt-get install python3-venv`;
-* Создайте директорию, где будет создано виртуальное окружение и куда будут загружены плейбуки. Например, `mkdir venv-ansible`;
-* Создайте виртуальное окружение Python — `python3 -m venv venv-ansible`;
+На примере Ubuntu 22.04 LTS:
+
+* Обновите список доступных deb пакетов — `sudo apt-get update`;
+* Установите пакет `python3-venv` для управления Python виртуальными окружениями — `sudo apt-get install venv`;
+* Создайте директорию, где будет создано виртуальное окружение. Например, `mkdir venv-ansible`;
+* Создайте виртуальное окружение Python — `python3 -m venv venv-ansible`, где `venv-ansible` - путь к директории созданной на предыдущем шаге;
 * Активируйте виртуальное окружение — `source venv-ansible/bin/activate`. Все дальнейшие действия с Ansible выполняются внутри виртуального окружения. Выйти из него можно командой `deactivate`;
-* Установите рекомендуемую версию Ansible с помощью команды `pip3 install ansible-core` (убедитесь, что устанавливаемая версия не выше 2.18 и не меньше 2.15.2);
-* Проверьте версию Ansible core — `ansible --version`.
+* Установите рекомендуемую версию Ansible с помощью команды `pip3 install "ansible-core>=2.15.2,<2.19` (убедитесь, что устанавливаемая версия не выше 2.18 и не меньше 2.15.2);
+* Проверьте установленную версию Ansible — `ansible --version`.
 
 {% endcut %}
 
@@ -282,7 +283,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 Создайте файл `ansible_vault_password_file` с содержимым:
 
-```
+```bash
 password
 ```
 

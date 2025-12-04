@@ -787,7 +787,18 @@ public:
             }
         }
 
-        // 2. Collect non-DISCARD results from query.Results() - need channels to return to user
+        if (const auto overridePlanner = Config->OverridePlanner.Get()) {
+            if (const auto& issues = ApplyOverridePlannerSettings(*overridePlanner, queryProto)) {
+                NYql::TIssue rootIssue("Invalid override planner settings");
+                rootIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+                for (auto issue : issues) {
+                    rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)));
+                }
+                ctx.AddError(rootIssue);
+                return false;
+            }
+        }
+
         for (ui32 i = 0; i < query.Results().Size(); ++i) {
             const auto& result = query.Results().Item(i);
             if (result.Maybe<TKqpTxResultBinding>()) {
@@ -800,7 +811,6 @@ public:
                 if (!isDiscard) {
                     createChannel.insert({txIndex, resultIndex});
                 }
-                // DISCARD results: NOT added, so CanSkipChannel will be true
             }
         }
 
@@ -872,18 +882,6 @@ public:
                 auto& columnMeta = resultMetaColumns->at(bindingColumnId);
                 columnMeta.Setname(it != columnOrder.end() ? order.at(it->second).LogicalName : column.GetName());
                 ConvertMiniKQLTypeToYdbType(column.GetType(), *columnMeta.mutable_type());
-            }
-        }
-
-        if (const auto overridePlanner = Config->OverridePlanner.Get()) {
-            if (const auto& issues = ApplyOverridePlannerSettings(*overridePlanner, queryProto)) {
-                NYql::TIssue rootIssue("Invalid override planner settings");
-                rootIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
-                for (auto issue : issues) {
-                    rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)));
-                }
-                ctx.AddError(rootIssue);
-                return false;
             }
         }
 
@@ -1169,7 +1167,6 @@ private:
                 auto txIndex = FromString<ui32>(resultBinding.TxIndex());
                 auto resultIndex = FromString<ui32>(resultBinding.ResultIndex());
 
-                // ResultIndex is physical index, TxResults array is also indexed by physical index
                 auto& txResultProto = *bindingProto.MutableTxResultBinding();
                 txResultProto.SetTxIndex(txIndex);
                 txResultProto.SetResultIndex(resultIndex);
@@ -1228,8 +1225,6 @@ private:
                     columnHintsProto.Add(TString(columnHint.Value()));
                 }
             }
-            // CanSkipChannel = true if result is NOT in createChannel
-            // (i.e., not used by ParamBindings and not returned to user)
             bool canSkip = (createChannel.find(std::make_pair(txIdx, resIdx)) == createChannel.end());
             resultProto.SetCanSkipChannel(canSkip);
         }

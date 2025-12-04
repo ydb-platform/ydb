@@ -2480,7 +2480,6 @@ public:
         if (QueryState->PreparedQuery) {
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             size_t trailingResultsCount = 0;
-            
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 if (QueryState->IsStreamResult()) {
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {

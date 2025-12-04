@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/core/persqueue/public/config.h>
+#include <ydb/core/tablet/tablet_counters.h>
 
 #include <util/system/types.h>
 
@@ -27,6 +28,9 @@ struct TMetrics {
     size_t TotalScheduledToDLQMessageCount = 0;
     size_t TotalPurgedMessageCount = 0; // TODO MLP
     size_t TotalDeletedByRetentionMessageCount = 0;
+
+    // stores how many times messages were locked
+    TTabletPercentileCounter MessageLocks;
 };
 
 // MLP не работает если включена компактифкация по ключу!!! (иначе не понятно как прореживать скомпакченные значения)

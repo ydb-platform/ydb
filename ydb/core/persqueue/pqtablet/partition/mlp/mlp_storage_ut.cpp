@@ -183,8 +183,8 @@ struct TUtils {
         UNIT_ASSERT_VALUES_EQUAL(join(other.Storage.GetDLQMessages()), join(Storage.GetDLQMessages()));
         UNIT_ASSERT_VALUES_EQUAL(join(other.Storage.GetLockedMessageGroupsId()), join(Storage.GetLockedMessageGroupsId()));
 
-        auto ometrics = other.Storage.GetMetrics();
-        auto metrics = Storage.GetMetrics();
+        auto& ometrics = other.Storage.GetMetrics();
+        auto& metrics = Storage.GetMetrics();
 
         UNIT_ASSERT_VALUES_EQUAL(ometrics.InflightMessageCount, metrics.InflightMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.UnprocessedMessageCount, metrics.UnprocessedMessageCount);

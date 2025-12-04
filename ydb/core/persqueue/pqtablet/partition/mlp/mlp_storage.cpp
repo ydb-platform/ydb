@@ -1,6 +1,7 @@
 #include "mlp_storage.h"
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/string/join.h>
@@ -24,6 +25,7 @@ TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages
     , Batch(this)
 {
     BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
+    Metrics.MessageLocks.Initialize(MLP_LOCKS_INTERVALS, 10, true);
 }
 
 void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
@@ -288,10 +290,18 @@ size_t TStorage::Compact() {
 void TStorage::RemoveMessage(ui64 offset, const TMessage& message) {
     AFL_ENSURE(Metrics.InflightMessageCount > 0);
     --Metrics.InflightMessageCount;
+
+    auto updateMessageLocksMetric = [&](const auto& message) {
+        if (message.ProcessingCount > 0) {
+            Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
+        }
+    };
+
     switch(message.GetStatus()) {
         case EMessageStatus::Unprocessed:
             AFL_ENSURE(Metrics.UnprocessedMessageCount > 0);
             --Metrics.UnprocessedMessageCount;
+            updateMessageLocksMetric(message);
             break;
         case EMessageStatus::Locked:
             AFL_ENSURE(Metrics.LockedMessageCount > 0);
@@ -300,6 +310,7 @@ void TStorage::RemoveMessage(ui64 offset, const TMessage& message) {
                 AFL_ENSURE(Metrics.LockedMessageGroupCount > 0);
                 --Metrics.LockedMessageGroupCount;
             }
+            updateMessageLocksMetric(message);
             break;
         case EMessageStatus::Delayed:
             AFL_ENSURE(Metrics.DelayedMessageCount > 0);
@@ -565,7 +576,11 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     message.SetStatus(EMessageStatus::Locked);
     message.DeadlineDelta = NormalizeDeadline(deadline);
     if (message.ProcessingCount < MAX_PROCESSING_COUNT) {
+        if (message.ProcessingCount > 0) {
+            Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
+        }
         ++message.ProcessingCount;
+        Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
     }
 
     Batch.AddChange(offset);
@@ -589,6 +604,12 @@ bool TStorage::DoCommit(ui64 offset) {
         return false;
     }
 
+    auto updateMessageLocksMetric = [&]() {
+        if (message->ProcessingCount > 0) {
+            Metrics.MessageLocks.DecrementFor(message->ProcessingCount);
+        }
+    };
+
     switch(message->GetStatus()) {
         case EMessageStatus::Unprocessed:
             if (!slowZone) {
@@ -599,6 +620,7 @@ bool TStorage::DoCommit(ui64 offset) {
             AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
             --Metrics.UnprocessedMessageCount;
             ++Metrics.TotalCommittedMessageCount;
+            updateMessageLocksMetric();
             break;
         case EMessageStatus::Locked:
             if (!slowZone) {
@@ -608,13 +630,15 @@ bool TStorage::DoCommit(ui64 offset) {
 
             AFL_ENSURE(Metrics.LockedMessageCount > 0)("o", offset);
             --Metrics.LockedMessageCount;
-            ++Metrics.TotalCommittedMessageCount;
             if (KeepMessageOrder && message->HasMessageGroupId) {
                 if (LockedMessageGroupsId.erase(message->MessageGroupIdHash)) {
                     AFL_ENSURE(Metrics.LockedMessageGroupCount > 0)("o", offset);
                     --Metrics.LockedMessageGroupCount;
                 }
             }
+
+            ++Metrics.TotalCommittedMessageCount;
+            updateMessageLocksMetric();
 
             break;
         case EMessageStatus::Delayed:
@@ -701,6 +725,7 @@ void TStorage::DoUnlock(ui64 offset, TMessage& message) {
                     AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
                     --Metrics.UnprocessedMessageCount;
                     ++Metrics.DLQMessageCount;
+                    Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
                     return;
                 }
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:

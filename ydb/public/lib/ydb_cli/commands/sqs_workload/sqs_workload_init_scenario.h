@@ -7,11 +7,14 @@ namespace NYdb::NConsoleClient {
 
 class TSqsWorkloadInitScenario : public TSqsWorkloadScenario {
 public:
-    int Run(const TClientCommand::TConfig&);
+    int Run(TClientCommand::TConfig&);
 
+    TString TopicPath;
     TString QueueName;
+    bool KeepMessagesOrder;
     bool Fifo;
     bool DeduplicationOn;
+    ui32 DefaultProcessingTimeout; // seconds
     TMaybe<TString> DlqQueueName;
     ui32 MaxReceiveCount;
 

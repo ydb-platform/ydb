@@ -17,8 +17,7 @@ int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
 
     TSqsWorkloadReaderParams params{
         .TotalSec = TotalSec,
-        .QueueName = QueueName,
-        .EndPoint = EndPoint,
+        .QueueUrl = QueueUrl,
         .Account = Account,
         .Log = Log,
         .ErrorFlag = ErrorFlag,

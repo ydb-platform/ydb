@@ -88,7 +88,7 @@ void TSqsWorkloadReader::OnMessageReceived(
 
     if (!deleteMessageBatchRequestEntries.empty()) {
         Aws::SQS::Model::DeleteMessageBatchRequest deleteMessageBatchRequest;
-        deleteMessageBatchRequest.SetQueueUrl(fmt::format("http://{}/{}", params.EndPoint, params.QueueName).c_str());
+        deleteMessageBatchRequest.SetQueueUrl(params.QueueUrl.c_str());
         deleteMessageBatchRequest.SetEntries(deleteMessageBatchRequestEntries);
         deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSWorkloadActionHeader, kSQSWorkloadActionDelete);
         deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSMessageCountHeader, std::to_string(deleteMessageBatchRequestEntries.size()));
@@ -141,11 +141,10 @@ bool TSqsWorkloadReader::ValidateFifo(const TSqsWorkloadReaderParams& params, co
 
 void TSqsWorkloadReader::RunLoop(const TSqsWorkloadReaderParams& params, TInstant endTime) {
     auto visibilityTimeout = params.VisibilityTimeout.Seconds();
-    auto queueUrl = fmt::format("http://{}/{}", params.EndPoint, params.QueueName);
 
     while (Now() < endTime && !params.ErrorFlag->load()) {
         Aws::SQS::Model::ReceiveMessageRequest receiveMessageRequest;
-        receiveMessageRequest.SetQueueUrl(queueUrl.c_str());
+        receiveMessageRequest.SetQueueUrl(params.QueueUrl.c_str());
         receiveMessageRequest.SetWaitTimeSeconds(kWaitTimeSeconds);
         receiveMessageRequest.SetVisibilityTimeout(visibilityTimeout);
         receiveMessageRequest.SetMaxNumberOfMessages(params.BatchSize);

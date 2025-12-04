@@ -19,9 +19,6 @@ void TCommandWorkloadSqsClean::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "token", "AWS token.").
         Required().
         StoreResult(&Scenario.Token);
-    config.Opts->AddLongOption('e', "endpoint", "AWS queue endpoint.").
-        DefaultValue("sqs.yandex.net:8771").
-        StoreResult(&Scenario.EndPoint);
 }
 
 void TCommandWorkloadSqsClean::Parse(TConfig& config) { TClientCommand::Parse(config); }

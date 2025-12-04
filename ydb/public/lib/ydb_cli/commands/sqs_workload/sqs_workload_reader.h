@@ -10,8 +10,7 @@ namespace NYdb::NConsoleClient {
 
 struct TSqsWorkloadReaderParams {
     TDuration TotalSec;
-    TString QueueName;
-    TString EndPoint;
+    TString QueueUrl;
     TString Account;
     std::shared_ptr<TLog> Log;
     std::shared_ptr<std::atomic_bool> ErrorFlag;

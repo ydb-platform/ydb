@@ -65,7 +65,7 @@ void TSqsWorkloadWriter::RunLoop(const TSqsWorkloadWriterParams& params, TInstan
         auto now = Now().MilliSeconds();
 
         Aws::SQS::Model::SendMessageBatchRequest sendMessageBatchRequest;
-        sendMessageBatchRequest.SetQueueUrl(fmt::format("http://{}/{}", params.EndPoint, params.QueueName).c_str());
+        sendMessageBatchRequest.SetQueueUrl(params.QueueUrl.c_str());
         sendMessageBatchRequest.SetEntries(CreateSendMessageBatchRequestEntries(now, params.BatchSize, params.MessageSize, params.GroupsAmount, messageGroupID));
         sendMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSWorkloadActionHeader, kSQSWorkloadActionSend);
         sendMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSMessageCountHeader, std::to_string(params.BatchSize));

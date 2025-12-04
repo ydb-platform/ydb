@@ -10,12 +10,21 @@ void TCommandWorkloadSqsInit::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
+    config.Opts->AddLongOption("topic-path", "YDB topic path.").
+        Required().
+        StoreResult(&Scenario.TopicPath);
     config.Opts->AddLongOption('n', "queue-name", "SQS queue name.").
         Required().
         StoreResult(&Scenario.QueueName);
     config.Opts->AddLongOption("fifo", "SQS FIFO queue.").
         DefaultValue(false).
         StoreTrue(&Scenario.Fifo);
+    config.Opts->AddLongOption("keep-messages-order", "Keep messages order.").
+        DefaultValue(false).
+        StoreTrue(&Scenario.KeepMessagesOrder);
+    config.Opts->AddLongOption("default-processing-timeout", "Default processing timeout.").
+        DefaultValue(TDuration::Seconds(10)).
+        StoreResult(&Scenario.DefaultProcessingTimeout);
     config.Opts->AddLongOption("deduplication-on", "SQS deduplication on.").
         DefaultValue(false).
         StoreTrue(&Scenario.DeduplicationOn);
@@ -28,9 +37,6 @@ void TCommandWorkloadSqsInit::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "token", "AWS token.").
         Required().
         StoreResult(&Scenario.Token);
-    config.Opts->AddLongOption('e', "endpoint", "Queue endpoint.").
-        DefaultValue("sqs.yandex.net:8771").
-        StoreResult(&Scenario.EndPoint);
     config.Opts->AddLongOption("max-receive-count", "SQS max receive count.").
         DefaultValue(5).
         StoreResult(&Scenario.MaxReceiveCount);

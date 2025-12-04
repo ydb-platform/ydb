@@ -7,7 +7,7 @@ namespace NYdb::NConsoleClient {
 
 class TSqsWorkloadCleanScenario : public TSqsWorkloadScenario {
 public:
-    int Run(const TClientCommand::TConfig&);
+    int Run(TClientCommand::TConfig&);
 
     TString QueueName;
 };

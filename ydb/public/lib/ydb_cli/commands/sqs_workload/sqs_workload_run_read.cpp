@@ -13,6 +13,9 @@ void TCommandWorkloadSqsRunRead::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
 
     // Common params
+    config.Opts->AddLongOption("queue-url", "AWS queue URL.")
+        .Required()
+        .StoreResult(&Scenario.QueueUrl);
     config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
         .DefaultValue(60)
         .StoreResult(&Scenario.TotalSec);
@@ -32,12 +35,12 @@ void TCommandWorkloadSqsRunRead::Config(TConfig& config) {
     config.Opts->AddLongOption('c', "concurrent", "Number of concurrent readers.")
         .DefaultValue(1)
         .StoreResult(&Scenario.Concurrency);
-    config.Opts->AddLongOption('a', "account", "AWS account ID.").Required().StoreResult(&Scenario.Account);
-    config.Opts->AddLongOption('n', "queue-name", "AWS queue name.").Required().StoreResult(&Scenario.QueueName);
-    config.Opts->AddLongOption('t', "token", "AWS token.").Required().StoreResult(&Scenario.Token);
-    config.Opts->AddLongOption('e', "endpoint", "AWS queue endpoint.")
-        .DefaultValue("sqs.yandex.net:8771")
-        .StoreResult(&Scenario.EndPoint);
+    config.Opts->AddLongOption('a', "account", "AWS account ID.").
+        Required().
+        StoreResult(&Scenario.Account);
+    config.Opts->AddLongOption('t', "token", "AWS token.").
+        Required().
+        StoreResult(&Scenario.Token);
     config.Opts->AddLongOption("error-messages-rate", "Error messages rate.")
         .Optional()
         .ManualDefaultValueDescription(
@@ -53,7 +56,9 @@ void TCommandWorkloadSqsRunRead::Config(TConfig& config) {
     config.Opts->AddLongOption("handle-message-time", "Handle message time in milliseconds.")
         .DefaultValue(0)  // 0 means no delay
         .StoreResult(&Scenario.HandleMessageDelayMs);
-    config.Opts->AddLongOption("batch-size", "Batch size.").DefaultValue(1).StoreResult(&Scenario.BatchSize);
+    config.Opts->AddLongOption("batch-size", "Batch size.").
+        DefaultValue(1).
+        StoreResult(&Scenario.BatchSize);
     config.Opts->AddLongOption("validate-fifo", "Validate FIFO queue.").
         DefaultValue(false).
         StoreTrue(&Scenario.ValidateFifo);

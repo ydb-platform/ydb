@@ -2,6 +2,7 @@
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentials.h>
 #include <aws/core/utils/threading/Executor.h>
+#include <library/cpp/uri/http_url.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include <library/cpp/logger/log.h>
 
@@ -27,7 +28,8 @@ TSqsWorkloadScenario::~TSqsWorkloadScenario() { Aws::ShutdownAPI(AwsOptions); }
 
 void TSqsWorkloadScenario::InitSqsClient() {
     Aws::Client::ClientConfiguration sqsClientConfiguration;
-    sqsClientConfiguration.endpointOverride = Aws::String(EndPoint.c_str(), EndPoint.size());
+    auto endpoint = GetQueueEndpointFromUrl(QueueUrl);
+    sqsClientConfiguration.endpointOverride = Aws::String(endpoint.c_str(), endpoint.size());
     sqsClientConfiguration.scheme = Aws::Http::Scheme::HTTP;
     sqsClientConfiguration.maxConnections = Concurrency;
     sqsClientConfiguration.executor =
@@ -41,6 +43,35 @@ void TSqsWorkloadScenario::InitSqsClient() {
     credentials.SetSessionToken(tokenStr.c_str());
 
     SqsClient = Aws::MakeShared<Aws::SQS::SQSClient>("sqs-client", credentials, sqsClientConfiguration);
+}
+
+TString TSqsWorkloadScenario::GetQueueEndpointFromUrl(const TString& queueUrl) const {
+    auto endpoint = queueUrl;
+    if (queueUrl.StartsWith("http://")) {
+        endpoint = queueUrl.substr(7);
+        endpoint = endpoint.substr(0, endpoint.find('/'));
+        return endpoint;
+    }
+
+    if (queueUrl.StartsWith("https://")) {
+        endpoint = queueUrl.substr(8);
+        endpoint = endpoint.substr(0, endpoint.find('/'));
+        return endpoint;
+    }
+
+    if (queueUrl.StartsWith("grpc://")) {
+        endpoint = queueUrl.substr(7);
+        endpoint = endpoint.substr(0, endpoint.find('/'));
+        return endpoint;
+    }
+
+    if (queueUrl.StartsWith("grpcs://")) {
+        endpoint = queueUrl.substr(8);
+        endpoint = endpoint.substr(0, endpoint.find('/'));
+        return endpoint;
+    }
+
+    return queueUrl;
 }
 
 void TSqsWorkloadScenario::DestroySqsClient() { SqsClient.reset(); }

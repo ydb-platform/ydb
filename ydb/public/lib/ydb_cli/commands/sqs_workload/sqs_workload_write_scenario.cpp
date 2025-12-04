@@ -11,8 +11,7 @@ int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig&) {
 
     TSqsWorkloadWriterParams params{
         .TotalSec = TotalSec,
-        .QueueName = QueueName,
-        .EndPoint = EndPoint,
+        .QueueUrl = QueueUrl,
         .Account = Account,
         .Log = Log,
         .Mutex = Mutex,

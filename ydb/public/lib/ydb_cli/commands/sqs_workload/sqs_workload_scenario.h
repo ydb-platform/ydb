@@ -25,8 +25,7 @@ struct TSqsWorkloadScenario {
     std::shared_ptr<std::atomic_bool> ErrorFlag;
     std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;
     TString Token;
-    TString QueueName;
-    TString EndPoint;
+    TString QueueUrl;
     TString Account;
     ui32 BatchSize;
     ui32 MessageSize;
@@ -38,6 +37,8 @@ struct TSqsWorkloadScenario {
     void DestroySqsClient();
 private:
     Aws::SDKOptions AwsOptions;
+
+    TString GetQueueEndpointFromUrl(const TString& queueUrl) const;
 
 protected:
     bool AnyErrors() const;

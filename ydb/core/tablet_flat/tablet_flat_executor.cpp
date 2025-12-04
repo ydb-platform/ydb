@@ -1,4 +1,5 @@
 #include "tablet_flat_executor.h"
+#include "flat_backup.h"
 #include "flat_executor.h"
 #include "util_fmt_abort.h"
 
@@ -110,6 +111,10 @@ namespace NFlatExecutorSetup {
             default:
                 return false;
         }
+    }
+
+    TIntrusiveConstPtr<NTable::TBackupExclusion> ITablet::BackupExclusion() const {
+        return nullptr; // everything is included in backup
     }
 }
 

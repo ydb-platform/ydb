@@ -41,9 +41,9 @@ void TCommandClusterStateFetch::Config(TConfig& config) {
     config.Opts->AddLongOption('o', "output", "Path to the output .tar.bz2 file")
     .DefaultValue("out.tar.bz2")
         .OptionalArgument("PATH").StoreResult(&FileName);
-    config.Opts->AddLongOption("sanitize", "Sanitize output by removing sensitive data such as table names, authentication, \n"
-        "and other personally identifiable information")
-        .StoreTrue(&Sanitize);
+    config.Opts->AddLongOption("no-sanitize", "Disable sanitization and preserve sensitive data in the output, including table names,\n"
+        "authentication information, and other personally identifiable information")
+        .StoreTrue(&NoSanitize);
     config.AllowEmptyDatabase = true;
 }
 
@@ -109,7 +109,7 @@ int TCommandClusterStateFetch::Run(TConfig& config) {
     NMonitoring::TClusterStateSettings settings;
     settings.DurationSeconds(DurationSeconds);
     settings.PeriodSeconds(PeriodSeconds);
-    settings.Sanitize(Sanitize);
+    settings.Sanitize(!NoSanitize);
     NMonitoring::TClusterStateResult result = client.ClusterState(settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     const auto& proto = NYdb::TProtoAccessor::GetProto(result);

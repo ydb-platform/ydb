@@ -304,25 +304,8 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
     }
 }
 
-void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx, ui64 totalTxCount) {
-    // Determine if transaction has any results returned to user (with QueryResultIndex)
-    bool hasAnyQueryResultIndex = false;
+void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx) {
     for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
-        if (tx->GetResults(i).HasQueryResultIndex()) {
-            hasAnyQueryResultIndex = true;
-            break;
-        }
-    }
-
-    bool isFinalTx = (totalTxCount > 0) && (txIdx == totalTxCount - 1);
-    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, 
-        "[DISCARD_INDEX] BuildKqpTaskGraphResultChannels: txIdx=" << txIdx << "/" << totalTxCount 
-        << ", isFinalTx=" << (isFinalTx ? "YES" : "NO")
-        << ", hasAnyQueryResultIndex=" << (hasAnyQueryResultIndex ? "YES" : "NO")
-        << ", tx->ResultsSize()=" << tx->ResultsSize());
-    
-    for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "tx->ResultsSize() = " << tx->ResultsSize());
         const auto& result = tx->GetResults(i);
         const auto& connection = result.GetConnection();
         const auto& inputStageInfo = GetStageInfo(TStageId(txIdx, connection.GetStageIndex()));
@@ -338,11 +321,7 @@ void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TCon
         auto& originTask = GetTask(originTaskId);
         auto& taskOutput = originTask.Outputs[outputIdx];
 
-        bool shouldSkipChannel = !result.HasQueryResultIndex() && isFinalTx;
-        if (shouldSkipChannel) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER,
-                "[DISCARD_INDEX] BuildResultChannels: SKIP physical_index=" << i
-                << " (DISCARD result), setting output type to Effects");
+        if (result.GetCanSkipChannel()) {
             taskOutput.Type = TTaskOutputType::Effects;
             continue;
         }
@@ -352,10 +331,6 @@ void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TCon
         channel.SrcOutputIndex = outputIdx;
         channel.DstTask = 0;
         channel.DstInputIndex = i;
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, 
-            "[DISCARD_INDEX] BuildResultChannels: CREATE channel for physical_index=" << i 
-            << ", DstInputIndex=" << i 
-            << ", QueryResultIndex=" << result.GetQueryResultIndex());
         channel.InMemory = true;
 
         taskOutput.Type = TTaskOutputType::Map;
@@ -3148,9 +3123,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
         GetMeta().UseFastChannels = tx.Body->EnableFastChannels();
 
         // Not task-related
-        // Use TotalTxCount from Meta if available, otherwise fall back to Transactions.size()
-        ui64 totalTxCount = GetMeta().TotalTxCount > 0 ? GetMeta().TotalTxCount : Transactions.size();
-        BuildKqpTaskGraphResultChannels(tx.Body, txIdx, totalTxCount);
+        BuildKqpTaskGraphResultChannels(tx.Body, txIdx);
     }
 
     return sourceScanPartitionsCount;

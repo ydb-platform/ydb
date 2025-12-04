@@ -3490,18 +3490,22 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetQueryClient();
 
-        auto failingEnsureQuery = R"(
-            DISCARD SELECT Ensure(Data, Data > 1000000, "Data value too large") AS value
-            FROM `/Root/EightShard`
-        )";
+        auto failingEnsureQuery = std::vector{R"(
+            DISCARD SELECT Ensure(Data, Data > 1000000, "some error message") AS value
+            FROM `/Root/EightShard`)" // , 
+            // R"(DISCARD SELECT Ensure(r2, r2 IS NOT NULL, "l3") AS final
+            //     FROM (SELECT Ensure(r1, r1 IS NOT NULL, "l2") AS r2
+            //     FROM (SELECT Ensure((1 > 2), true, "l1") AS r1) AS t1) AS t2;)"
+            };
 
-        auto result = db.ExecuteQuery(failingEnsureQuery,
-            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        for (const auto& query : failingEnsureQuery) {
+            auto result = db.ExecuteQuery(query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
-        UNIT_ASSERT_C(!result.IsSuccess(),
-            "Query with DISCARD and failing Ensure should fail, proving Ensure is executed. Got status: " << result.GetStatus());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Data value too large");
-
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                "Query with DISCARD and failing Ensure should fail, proving Ensure is executed. Got status: " << result.GetStatus());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "some error message");
+        }
         auto passingEnsureQuery = R"(
             DISCARD SELECT Ensure(Data, Data < 1000000, "Data value out of range") AS value
             FROM `/Root/EightShard`

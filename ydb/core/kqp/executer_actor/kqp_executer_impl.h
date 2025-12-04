@@ -168,7 +168,6 @@ public:
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
         TasksGraph.GetMeta().StatsMode = Request.StatsMode;
-        TasksGraph.GetMeta().TotalTxCount = Request.TotalTxCount;
         if (BatchOperationSettings) {
             TasksGraph.GetMeta().MaxBatchSize = BatchOperationSettings->MaxBatchSize;
         }
@@ -474,12 +473,6 @@ protected:
         LOG_T("Got result, channelId: " << channel.Id
             << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender
             << ", finished: " << channelData.GetFinished());
-
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, 
-            "[DISCARD_INDEX] HandleChannelData: channelId=" << channel.Id 
-            << ", DstInputIndex=" << channel.DstInputIndex 
-            << ", batch.RowCount()=" << batch.RowCount()
-            << ", TxResults.size()=" << ResponseEv->TxResults.size());
 
         ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
         LOG_T("Send ack to channelId: " << channel.Id << ", seqNo: " << record.GetSeqNo() << ", to: " << ev->Sender);

@@ -753,8 +753,6 @@ public:
                     auto result = kiResult.Cast<TKiResult>();
                     bool discard = result.Discard().Value() == "true";
                     resultDiscardFlags.push_back(discard);
-                    Cerr << "[DISCARD_COMPILER] resultDiscardFlags[" << (resultDiscardFlags.size()-1) 
-                        << "] = " << (discard ? "DISCARD" : "NORMAL") << Endl;
                 }
             }
 
@@ -770,41 +768,48 @@ public:
             }
         }
 
-        Cerr << "[DISCARD_COMPILER] === After collecting resultDiscardFlags ===" << Endl;
-        Cerr << "[DISCARD_COMPILER] Total resultDiscardFlags: " << resultDiscardFlags.size() << Endl;
-        Cerr << "[DISCARD_COMPILER] query.Transactions().Size(): " << query.Transactions().Size() << Endl;
+        // Results that MUST have channels (cannot skip):
+        // 1. Results used by ParamBindings in subsequent transactions
+        // 2. Results returned to user (non-DISCARD)
+        // All other results can have CanSkipChannel = true
+        THashSet<std::pair<ui32, ui32>> createChannel;
 
-        for (const auto& tx : query.Transactions()) {
-            CompileTransaction(tx, *queryProto.AddTransactions(), ctx);
-        }
-
-        Cerr << "[DISCARD_COMPILER] === After CompileTransaction ===" << Endl;
-        Cerr << "[DISCARD_COMPILER] queryProto.TransactionsSize(): " << queryProto.TransactionsSize() << Endl;
-        for (ui32 txIdx = 0; txIdx < queryProto.TransactionsSize(); ++txIdx) {
-            auto& tx = queryProto.GetTransactions(txIdx);
-            Cerr << "[DISCARD_COMPILER] tx[" << txIdx << "].ResultsSize() = " << tx.ResultsSize() << Endl;
-            for (ui32 resIdx = 0; resIdx < tx.ResultsSize(); ++resIdx) {
-                auto& res = tx.GetResults(resIdx);
-                Cerr << "[DISCARD_COMPILER]   tx[" << txIdx << "].result[" << resIdx 
-                    << "].HasQueryResultIndex() = " << (res.HasQueryResultIndex() ? "YES" : "NO");
-                if (res.HasQueryResultIndex()) {
-                    Cerr << ", QueryResultIndex = " << res.GetQueryResultIndex();
+        // 1. Collect results used by ParamBindings - need channels for data transfer
+        for (ui32 txIdx = 0; txIdx < query.Transactions().Size(); ++txIdx) {
+            const auto& tx = query.Transactions().Item(txIdx);
+            for (const auto& paramBinding : tx.ParamBindings()) {
+                if (auto maybeResultBinding = paramBinding.Binding().Maybe<TKqpTxResultBinding>()) {
+                    auto resultBinding = maybeResultBinding.Cast();
+                    auto refTxIndex = FromString<ui32>(resultBinding.TxIndex());
+                    auto refResultIndex = FromString<ui32>(resultBinding.ResultIndex());
+                    createChannel.insert({refTxIndex, refResultIndex});
                 }
-                Cerr << Endl;
             }
         }
 
-        // Set QueryResultIndex for non-DISCARD results BEFORE validating ParamBindings
-        ui32 resultIdx = 0; // to skip discard results
+        // 2. Collect non-DISCARD results from query.Results() - need channels to return to user
+        for (ui32 i = 0; i < query.Results().Size(); ++i) {
+            const auto& result = query.Results().Item(i);
+            if (result.Maybe<TKqpTxResultBinding>()) {
+                auto binding = result.Cast<TKqpTxResultBinding>();
+                auto txIndex = FromString<ui32>(binding.TxIndex().Value());
+                auto resultIndex = FromString<ui32>(binding.ResultIndex());
+                
+                bool isDiscard = (querySettings.Type == EPhysicalQueryType::GenericQuery) && 
+                                 (i < resultDiscardFlags.size() && resultDiscardFlags[i]);
+                if (!isDiscard) {
+                    createChannel.insert({txIndex, resultIndex});
+                }
+                // DISCARD results: NOT added, so CanSkipChannel will be true
+            }
+        }
 
-        // For backward compatibility: ignore discard flag for Data and Scan queries
-        bool ignoreDiscard = (querySettings.Type == EPhysicalQueryType::Data ||
-                              querySettings.Type == EPhysicalQueryType::Scan);
+        for (ui32 txIdx = 0; txIdx < query.Transactions().Size(); ++txIdx) {
+            const auto& tx = query.Transactions().Item(txIdx);
+            CompileTransaction(tx, *queryProto.AddTransactions(), ctx, txIdx, createChannel);
+        }
 
-        Cerr << "[DISCARD_COMPILER] === Processing query.Results() ===" << Endl;
-        Cerr << "[DISCARD_COMPILER] query.Results().Size() = " << query.Results().Size() 
-            << ", resultDiscardFlags.size() = " << resultDiscardFlags.size() 
-            << ", ignoreDiscard=" << (ignoreDiscard ? "YES" : "NO") << Endl;
+        ui32 resultIdx = 0;
         
         for (ui32 i = 0; i < query.Results().Size(); ++i) {
             const auto& result = query.Results().Item(i);
@@ -814,40 +819,23 @@ public:
             auto txIndex = FromString<ui32>(binding.TxIndex().Value());
             auto txResultIndex = FromString<ui32>(binding.ResultIndex());
 
-            Cerr << "[DISCARD_COMPILER] --- query.Results()[" << i << "] ---" << Endl;
-            Cerr << "[DISCARD_COMPILER]   Binding: txIndex=" << txIndex 
-                << ", txResultIndex=" << txResultIndex << Endl;
-
             YQL_ENSURE(txIndex < queryProto.TransactionsSize());
             YQL_ENSURE(txResultIndex < queryProto.GetTransactions(txIndex).ResultsSize());
             auto& txResult = *queryProto.MutableTransactions(txIndex)->MutableResults(txResultIndex);
 
             YQL_ENSURE(txResult.GetIsStream());
 
-            bool isDiscard = !ignoreDiscard && (i < resultDiscardFlags.size() && resultDiscardFlags[i]);
             
-            Cerr << "[DISCARD_COMPILER]   resultDiscardFlags[" << i << "] = " 
-                << (i < resultDiscardFlags.size() ? (resultDiscardFlags[i] ? "DISCARD" : "NORMAL") : "OUT_OF_BOUNDS") << Endl;
-            Cerr << "[DISCARD_COMPILER]   Calculated isDiscard = " << (isDiscard ? "YES" : "NO") << Endl;
-            Cerr << "[DISCARD_COMPILER]   tx[" << txIndex << "].result[" << txResultIndex 
-                << "] BEFORE: HasQueryResultIndex=" << (txResult.HasQueryResultIndex() ? "YES" : "NO") << Endl;
-            
-            // Only create ResultBinding for non-DISCARD results
-            if (isDiscard) {
-                Cerr << "[DISCARD_COMPILER]   SKIP: This is a DISCARD result, not setting QueryResultIndex" << Endl;
+            if (querySettings.Type == EPhysicalQueryType::GenericQuery && 
+                i < resultDiscardFlags.size() && resultDiscardFlags[i]) {
                 continue;
             }
             
-            Cerr << "[DISCARD_COMPILER]   Setting QueryResultIndex=" << resultIdx << " on tx[" 
-                << txIndex << "].result[" << txResultIndex << "]" << Endl;
             txResult.SetQueryResultIndex(resultIdx);
             auto& queryBindingProto = *queryProto.AddResultBindings();
             auto& txBindingProto = *queryBindingProto.MutableTxResultBinding();
             txBindingProto.SetTxIndex(txIndex);
             txBindingProto.SetResultIndex(txResultIndex);
-            
-            Cerr << "[DISCARD_COMPILER]   Created ResultBinding: TxIndex=" << txIndex 
-                << ", ResultIndex=" << txResultIndex << Endl;
             
             resultIdx++;
 
@@ -886,11 +874,6 @@ public:
                 ConvertMiniKQLTypeToYdbType(column.GetType(), *columnMeta.mutable_type());
             }
         }
-
-        // Note: We don't validate ParamBindings here because they can reference intermediate
-        // results from other transactions that are not in query.Results() and don't have
-        // QueryResultIndex. The DISCARD concept only applies to results returned to the user
-        // (i.e., those in query.Results()), not to intermediate results used between transactions.
 
         if (const auto overridePlanner = Config->OverridePlanner.Get()) {
             if (const auto& issues = ApplyOverridePlannerSettings(*overridePlanner, queryProto)) {
@@ -1146,7 +1129,8 @@ private:
         stageProto.SetAllowWithSpilling(Config->EnableSpilling);
     }
 
-    void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx) {
+    void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx,
+                            ui32 txIdx, const THashSet<std::pair<ui32, ui32>>& createChannel) {
         auto txSettings = TKqpPhyTxSettings::Parse(tx);
         YQL_ENSURE(txSettings.Type);
         txProto.SetType(GetPhyTxType(*txSettings.Type));
@@ -1199,7 +1183,8 @@ private:
         }
 
         TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
-        for (const auto& resultNode : tx.Results()) {
+        for (ui32 resIdx = 0; resIdx < tx.Results().Size(); ++resIdx) {
+            const auto& resultNode = tx.Results().Item(resIdx);
             YQL_ENSURE(resultNode.Maybe<TDqConnection>(), "" << NCommon::ExprToPrettyString(ctx, tx.Ref()));
             auto connection = resultNode.Cast<TDqConnection>();
 
@@ -1243,6 +1228,10 @@ private:
                     columnHintsProto.Add(TString(columnHint.Value()));
                 }
             }
+            // CanSkipChannel = true if result is NOT in createChannel
+            // (i.e., not used by ParamBindings and not returned to user)
+            bool canSkip = (createChannel.find(std::make_pair(txIdx, resIdx)) == createChannel.end());
+            resultProto.SetCanSkipChannel(canSkip);
         }
 
         for (auto& [tablePath, tableColumns] : tablesMap) {

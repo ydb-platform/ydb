@@ -216,7 +216,6 @@ public:
 
         with_lock (*alloc) { // allocator is used only by outputChannel->PopAll()
             for (auto& taskOutput : task.Outputs) {
-                // Skip Effects outputs - they have no channels (DISCARD results)
                 if (taskOutput.Type == TTaskOutputType::Effects) {
                     continue;
                 }

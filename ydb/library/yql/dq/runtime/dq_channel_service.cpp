@@ -1630,7 +1630,7 @@ std::shared_ptr<TNodeState> TDqChannelService::GetOrCreateNodeState(ui32 nodeId)
         return it->second;
     } else {
         auto nodeState = std::make_shared<TNodeState>(ActorSystem, nodeId, Counters, Limits.NodeSessionIcInflightBytes);
-        nodeState->NodeActorId = ActorSystem->Register(new TNodeSessionActor(nodeState));
+        nodeState->NodeActorId = ActorSystem->Register(new TNodeSessionActor(nodeState), NActors::TMailboxType::HTSwap, PoolId);
         nodeState->Self = nodeState;
         NodeStates.emplace(nodeId, nodeState);
         LOG_N("NODE SESSION CREATED, to NodeId=" << nodeId << ", NodeActorId=" << nodeState->NodeActorId << ", MaxInflight=" << Limits.NodeSessionIcInflightBytes << " bytes");
@@ -2036,9 +2036,9 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
 }
 
 NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId,
-    NMonitoring::TDynamicCounterPtr counters,
-    const TDqChannelLimits& limits, std::shared_ptr<IDqChannelService>& service) {
-    auto channelService = std::make_shared<TDqChannelService>(actorSystem, nodeId, counters, limits);
+        NMonitoring::TDynamicCounterPtr counters, const TDqChannelLimits& limits,
+        ui32 poolId, std::shared_ptr<IDqChannelService>& service) {
+    auto channelService = std::make_shared<TDqChannelService>(actorSystem, nodeId, counters, limits, poolId);
     channelService->Self = channelService;
     service = channelService;
     return new TChannelServiceActor(channelService);

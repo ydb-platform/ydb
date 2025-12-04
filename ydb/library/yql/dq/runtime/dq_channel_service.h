@@ -142,7 +142,7 @@ struct TDqChannelLimits {
 };
 
 NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId,
-    NMonitoring::TDynamicCounterPtr counters,
-    const TDqChannelLimits& limits, std::shared_ptr<IDqChannelService>& service);
+    NMonitoring::TDynamicCounterPtr counters, const TDqChannelLimits& limits,
+    ui32 poolId, std::shared_ptr<IDqChannelService>& service);
 
 } // namespace NYql::NDq

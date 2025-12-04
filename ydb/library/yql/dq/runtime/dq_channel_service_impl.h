@@ -663,11 +663,12 @@ public:
 
 class TDqChannelService : public IDqChannelService {
 public:
-    TDqChannelService(NActors::TActorSystem* actorSystem, ui32 nodeId, NMonitoring::TDynamicCounterPtr counters, const TDqChannelLimits& limits)
+    TDqChannelService(NActors::TActorSystem* actorSystem, ui32 nodeId, NMonitoring::TDynamicCounterPtr counters, const TDqChannelLimits& limits, ui32 poolId)
         : ActorSystem(actorSystem)
         , NodeId(nodeId)
         , Counters(counters)
-        , Limits(limits) {
+        , Limits(limits)
+        , PoolId(poolId) {
         LocalBufferRegistry = std::make_shared<TLocalBufferRegistry>(actorSystem, counters, Limits.LocalChannelInflightBytes, Limits.LocalChannelInflightBytes * 8 / 10);
     }
 
@@ -696,6 +697,7 @@ public:
     ui32 NodeId;
     NMonitoring::TDynamicCounterPtr Counters;
     const TDqChannelLimits Limits;
+    ui32 PoolId;
     std::weak_ptr<TDqChannelService> Self;
     std::shared_ptr<TLocalBufferRegistry> LocalBufferRegistry;
     mutable std::unordered_map<ui32, std::shared_ptr<TNodeState>> NodeStates;

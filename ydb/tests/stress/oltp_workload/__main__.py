@@ -14,7 +14,7 @@ if __name__ == "__main__":
     parser.add_argument("--path", default="oltp_workload", help="A path prefix for tables")
     parser.add_argument("--duration", default=10 ** 9, type=lambda x: int(x), help="A duration of workload in seconds.")
     args = parser.parse_args()
-    client = YdbClient(args.endpoint, args.database, True)
+    client = YdbClient(args.endpoint, args.database, True, sessions=3000)
     client.wait_connection()
     with WorkloadRunner(client, args.path, args.duration) as runner:
         runner.run()

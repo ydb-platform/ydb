@@ -20,20 +20,24 @@ class WorkloadConfig:
     SECONDARY_KEY_MAX_COLUMNS = 2
     COVER_MAX_COLUMNS = 2
     ALLOWED_SECONDARY_INDEXES_COUNT = [1, 2, 3, 8, 16]
+    UNIQUE_INDEXES_ALLOWED = True
+    UNIQUE_INDEX_PROBALITY = 0.1
     
     # Column types
     ALLOWED_COLUMN_TYPES = ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64", "Utf8", "String", "Bool"]
     
     # Data generation constants
     MAX_PRIMARY_KEY_VALUE = 100  # update the same rows
+    MAX_VALUE = 100000
     MAX_OPERATIONS = 4
     MAX_ROWS_PER_OPERATION = 4
+    INSERTS_ALLOWED = True
     
     # Workload execution constants
-    TABLES_INFLIGHT = 16
-    JOBS_PER_TABLE = 4
+    TABLES_INFLIGHT = 32
+    JOBS_PER_TABLE = 1
     OPERATIONS_PER_JOB = 64
-    CHECK_OPERATIONS_PERIOD = 10000
+    CHECK_OPERATIONS_PERIOD = 10
     
     # Retry configuration
     MAX_RETRIES = 3
@@ -72,6 +76,7 @@ class WorkloadStats:
     def __init__(self):
         self.operations = 0
         self.precondition_failed = 0
+        self.tables = 0
         self._lock = threading.Lock()
     
     def increment_operations(self) -> None:
@@ -83,11 +88,16 @@ class WorkloadStats:
         """Increment the precondition failed counter in a thread-safe manner"""
         with self._lock:
             self.precondition_failed += 1
-    
+
+    def increment_tables(self) -> None:
+        """Increment the tables counter in a thread-safe manner"""
+        with self._lock:
+            self.tables += 1
+
     def get_stats(self) -> str:
         """Get current statistics as a formatted string"""
         with self._lock:
-            return f"Operations: {self.operations}, PreconditionFailed: {self.precondition_failed}"
+            return f"Tables: {self.tables}, Operations: {self.operations}, PreconditionFailed: {self.precondition_failed}"
 
 
 class WorkloadSecondaryIndex(WorkloadBase):
@@ -125,7 +135,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
             cover = self._generate_cover_columns(primary_key_size, columns)
             
             indexes.append(IndexInfo(
-                unique=random.choice([True, False]),
+                unique=(random.randint(0, 1000000) < WorkloadConfig.UNIQUE_INDEX_PROBALITY * 1000000) if WorkloadConfig.UNIQUE_INDEXES_ALLOWED else False,
                 columns=columns,
                 cover=cover
             ))
@@ -236,7 +246,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
                     self.verify_table(table, table_info)
             except ydb.issues.PreconditionFailed as e:
                 self.stats.increment_precondition_failed()
-                logger.warning(f"Job {job_key} for {table} operation failed with PreconditionFailed: {e}")
+                logger.info(f"Job {job_key} for {table} operation failed with PreconditionFailed: {e}")
             except Exception as e:
                 logger.error(f"Job {job_key} for {table} encountered unexpected error: {e}")
                 raise
@@ -261,6 +271,8 @@ class WorkloadSecondaryIndex(WorkloadBase):
         for thread in threads:
             thread.join()
 
+        self.stats.increment_tables()
+
         self.verify_table(table_name, table_info)
         self.drop_table(table_name)
 
@@ -272,17 +284,17 @@ class WorkloadSecondaryIndex(WorkloadBase):
         for _ in range(rows_count):
             row = []
             for i in range(WorkloadConfig.COLUMNS if not pk_only else pk_size):
-                row.append(self._generate_value_by_type(table_info.column_types[i]))
+                row.append(self._generate_value_by_type(table_info.column_types[i], i < pk_size))
             batch_rows.append(row)
         
         return batch_rows
     
-    def _generate_value_by_type(self, column_type: str) -> Union[int, bool, str]:
+    def _generate_value_by_type(self, column_type: str, is_pk: bool) -> Union[int, bool, str]:
         """Generate a value based on column type"""
         if column_type in ["Uint8", "Uint32", "Uint64"]:
-            return random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE)
+            return random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE if is_pk else WorkloadConfig.MAX_VALUE)
         elif column_type in ["Int8", "Int32", "Int64"]:
-            return random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE)
+            return random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE if is_pk else WorkloadConfig.MAX_VALUE)
         elif column_type == "Bool":
             return random.choice([True, False])
         elif column_type in ["Utf8", "String"]:
@@ -298,7 +310,11 @@ class WorkloadSecondaryIndex(WorkloadBase):
         queries = []
         
         for operation_id in range(operations_count):
-            operation_type = random.choice(list(OperationType))
+            operation_type = random.choice(
+                list(
+                    filter(
+                        lambda x: True if WorkloadConfig.INSERTS_ALLOWED else x != OperationType.INSERT,
+                        OperationType)))
             
             if operation_type == OperationType.INSERT:
                 queries.append(self._insert_operation(operation_id, table, table_info))
@@ -326,7 +342,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
         for attempt in range(WorkloadConfig.MAX_RETRIES):
             try:
                 return self.client.query(query, is_ddl)
-            except (ydb.issues.Aborted, ydb.issues.Unavailable) as e:
+            except (ydb.issues.Aborted, ydb.issues.Unavailable, ydb.issues.Undetermined) as e:
                 last_exception = e
                 if attempt < WorkloadConfig.MAX_RETRIES - 1:
                     logger.warning(f"Query failed (attempt {attempt + 1}/{WorkloadConfig.MAX_RETRIES}): {e}")
@@ -335,7 +351,6 @@ class WorkloadSecondaryIndex(WorkloadBase):
                     logger.error(f"Query failed after {WorkloadConfig.MAX_RETRIES} attempts: {e}")
             except Exception as e:
                 # Don't retry on non-transient errors
-                logger.error(f"Query failed with non-retryable error: {e}")
                 raise
         
         # If we get here, all retries failed
@@ -476,15 +491,19 @@ class WorkloadSecondaryIndex(WorkloadBase):
     
     def _format_value_by_type(self, value: Any, column_type: str) -> str:
         """Format a value based on its column type for SQL queries"""
+
+        formated_value = None
         if column_type in ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64"]:
-            return str(value)
+            formated_value = str(value)
         elif column_type == "Bool":
-            return "true" if value else "false"
+            formated_value = "true" if value else "false"
         elif column_type in ["Utf8", "String"]:
-            return f"'{value}'"
+            formated_value = f"'{value}'"
         else:
-            # Default to string representation
-            return str(value)
+            raise Exception(f"Unknown type {column_type}")
+
+        return f'CAST({formated_value} AS {column_type})'
+
     
     def verify_table(self, table_name: str, table_info: TableInfo) -> None:
         """Verify data consistency between main table and its index tables"""

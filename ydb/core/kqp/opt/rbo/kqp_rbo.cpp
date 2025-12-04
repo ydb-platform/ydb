@@ -32,7 +32,7 @@ void ComputeRequiredProps(TOpRoot &root, ui32 props, TRBOContext &ctx) {
             Y_ENSURE(false, "RBO type annotation failed");
         }
     }
-    if (props & ERuleProperties::RequireMetadata) {
+    if (props & (ERuleProperties::RequireMetadata | ERuleProperties::RequireStatistics)) {
         root.ComputePlanMetadata(ctx);
     }
     if (props & ERuleProperties::RequireStatistics) {
@@ -104,7 +104,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) 
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-    auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetataAndStatistics;
+    auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics;
     ComputeRequiredProps(root, convertProps, context);
     YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintBasicStatistics);
 

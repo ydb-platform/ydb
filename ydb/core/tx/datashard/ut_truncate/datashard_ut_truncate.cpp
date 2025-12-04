@@ -9,9 +9,9 @@ using namespace NKikimr::NDataShard::NKqpHelpers;
 
 class TServerHelper {
 private:
-    Tests::TServer::TPtr server;
-    TTestActorRuntime* runtime;
-    TActorId edgeSender;
+    Tests::TServer::TPtr Server;
+    TTestActorRuntime* Runtime;
+    TActorId EdgeSender;
 
 public:
     TServerHelper() {
@@ -19,15 +19,15 @@ public:
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
-        server = new TServer(serverSettings);
-        runtime = server->GetRuntime();
-        edgeSender = runtime->AllocateEdgeActor();
+        Server = new TServer(serverSettings);
+        Runtime = Server->GetRuntime();
+        EdgeSender = runtime->AllocateEdgeActor();
 
-        InitRoot(server, edgeSender);
+        InitRoot(Server, EdgeSender);
     }
 
     std::tuple<Tests::TServer::TPtr, TTestActorRuntime*, TActorId> GetObjects() const {
-        return std::make_tuple(server, runtime, edgeSender);
+        return std::make_tuple(Server, Runtime, EdgeSender);
     }
 };
 

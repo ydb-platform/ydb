@@ -80,5 +80,6 @@ THolder<TExecutionUnit> CreateCheckReadUnit(TDataShard &dataShard, TPipeline &pi
 THolder<TExecutionUnit> CreateReadUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateIncrementalRestoreSrcUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateTruncateUnit(TDataShard &dataShard, TPipeline &pipeline);
+
 } // namespace NDataShard
 } // namespace NKikimr

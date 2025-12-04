@@ -34,7 +34,6 @@ class IRule {
 
     TString RuleName;
     ui32 Props{0x00};
-    ui32 Props;
     bool LogRule = false;
 };
 

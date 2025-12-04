@@ -7,28 +7,26 @@
 Строит новую колонку с указанными именем, типом и опциями для указанной таблицы.
 
 ```yql
-ALTER TABLE table_name ADD COLUMN column_name column_data_type column_option_list;
+ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>];
 ```
 
-### Параметры запроса
+## Параметры запроса
 
-#### table_name
+### table_name
 
-Имя таблицы, для которой требуется добавить новую колонку.
+Путь таблицы, для которой требуется добавить новую колонку.
 
-#### column_name
+### column_name
 
 Имя колонки, которая будет добавлена в указанную таблицу. При выборе имени для колонки учитывайте общие [правила именования колонок](../../../../concepts/datamodel/table.md#column-naming-rules).
 
-#### column_data_type
+### column_data_type
 
 Тип данных колонки. Полный список типов данных, которые поддерживает {{ ydb-short-name }} доступен в разделе [{#T}](../../types/index.md).
 
-#### column_option_list
-
 {% include [column_option_list.md](../_includes/column_option_list.md) %}
 
-### Пример
+## Пример
 
 Приведенный ниже код добавит к таблице `episodes` колонку `views` с типом данных `Uint64`.
 
@@ -55,7 +53,7 @@ ALTER TABLE table_name DROP COLUMN column_name;
 
 #### table_name
 
-Имя таблицы, в которой требуется удалить колонку.
+Путь к таблице, в которой требуется удалить колонку.
 
 #### column_name
 

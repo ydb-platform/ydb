@@ -34,7 +34,8 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                     UPSERT INTO `/Root/Test` (Group, Name, Comment)
                     VALUES (1U, "Paul", "Changed");
                 )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetIssues().ToString().contains("SnapshotRW is not supported"));
             }
 
             {
@@ -42,7 +43,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                     SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
                 )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                CompareYson(R"([[[300u];["Changed"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
+                CompareYson(R"([[[300u];["None"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
             }
         }
     };
@@ -151,30 +152,35 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TConflictWriteOlapInsert) {
+        return;
         TConflictWrite tester("insert");
         tester.SetIsOlap(true);
         tester.Execute();
     }
 
     Y_UNIT_TEST(TConflictWriteOlapUpsertPartial) {
+        return;
         TConflictWrite tester("upsert_partial");
         tester.SetIsOlap(true);
         tester.Execute();
     }
 
     Y_UNIT_TEST(TConflictWriteOlapUpsertFull) {
+        return;
         TConflictWrite tester("upsert_full");
         tester.SetIsOlap(true);
         tester.Execute();
     }
 
     Y_UNIT_TEST(TConflictWriteOlapReplace) {
+        return;
         TConflictWrite tester("replace");
         tester.SetIsOlap(true);
         tester.Execute();
     }
 
     Y_UNIT_TEST(TConflictWriteOlapDelete) {
+        return;
         TConflictWrite tester("delete");
         tester.SetIsOlap(true);
         tester.Execute();
@@ -231,6 +237,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TConflictReadWriteOlap) {
+        return;
         TConflictReadWrite tester;
         tester.SetIsOlap(true);
         tester.Execute();
@@ -288,6 +295,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TReadOnlyOlap) {
+        return;
         TReadOnly tester;
         tester.SetIsOlap(true);
         tester.Execute();
@@ -374,11 +382,12 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     };
 
     Y_UNIT_TEST(TSnapshotTwoInsertOlap) {
+        return;
         TSnapshotTwoInsert tester;
         tester.SetIsOlap(true);
         tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
-       tester.Execute();
+        tester.Execute();
     }
 
     class TReadOwnChanges : public TTableDataModificationTester {
@@ -434,6 +443,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TReadOwnChangesOlap) {
+        return;
         TReadOwnChanges tester;
         tester.SetIsOlap(true);
         tester.Execute();

@@ -173,14 +173,14 @@ std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelParams& para
             if (local) {
                 return std::make_unique<TBlockSerializer>(buffer, params.RowType, params.TransportVersion, params.PackerVersion, params.BufferPageAllocSize);
             } else {
-                auto splitter = NArrow::CreateBlockSplitter(params.RowType, 36_KB);
+                auto splitter = NArrow::CreateBlockSplitter(params.RowType, 36_MB);
                 return std::make_unique<TChunkedSerializer>(buffer, params.RowType, params.TransportVersion, params.PackerVersion, params.BufferPageAllocSize, *params.HolderFactory, splitter);
             }
         } else {
-            return std::make_unique<TWideSerializer>(buffer, params.RowType, params.TransportVersion, params.PackerVersion, params.BufferPageAllocSize, 48_KB);
+            return std::make_unique<TWideSerializer>(buffer, params.RowType, params.TransportVersion, params.PackerVersion, params.BufferPageAllocSize, 48_MB);
         }
     } else {
-        return std::make_unique<TNarrowSerializer>(buffer, params.RowType, params.TransportVersion, params.PackerVersion, params.BufferPageAllocSize, 48_KB);
+        return std::make_unique<TNarrowSerializer>(buffer, params.RowType, params.TransportVersion, params.PackerVersion, params.BufferPageAllocSize, 48_MB);
     }
 
 }

@@ -236,4 +236,3 @@ message TFeatureFlags {
     optional bool EnableReplication = 217 [default = true];
     optional bool UseYdsTopicStorageMetering = 220 [default = false];
 }
-

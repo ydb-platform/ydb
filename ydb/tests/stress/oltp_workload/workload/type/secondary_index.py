@@ -617,7 +617,8 @@ class WorkloadSecondaryIndex(WorkloadBase):
         
         for row in index_rows:
             key = tuple(row[f'c{col}'] for col in index_desc.columns)
-            if key in index_keys:
+            # NULL != NULL for secondary index
+            if None not in key and key in index_keys:
                 raise Exception(f"Duplicate key {key} found in index {index_id} for table {table_name}")
             index_keys.add(key)
     

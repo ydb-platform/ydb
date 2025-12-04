@@ -430,6 +430,58 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr request,
     KAFKA_LOG_D("Produce actor: Init " << request->Get()->ToString());
 }
 
+void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr request, const TActorContext& ctx) {
+    auto sender = request->Sender;
+
+    auto [topicPath, partitionId] = WriterDied(sender);
+    if (topicPath.empty()) {
+        KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvDisconnected with unexpected writer " << sender);
+        return;
+    }
+
+    KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvDisconnected for " << topicPath << ":" << partitionId);
+
+    for (auto& [cookie, info] : Cookies) {
+        if (info.TopicPath == topicPath && info.PartitionId == partitionId) {
+            info.Request->Results[info.Position].ErrorCode = EKafkaErrors::NOT_LEADER_OR_FOLLOWER;
+            info.Request->Results[info.Position].ErrorMessage = TStringBuilder() << "Partition writer " << sender << " disconnected";
+            info.Request->WaitAcceptingCookies.erase(cookie);
+            info.Request->WaitResultCookies.erase(cookie);
+
+            if (info.Request->WaitAcceptingCookies.empty() && info.Request->WaitResultCookies.empty()) {
+                SendResults(ctx);
+            }
+
+            Cookies.erase(cookie);
+            break;
+        }
+    }
+}
+
+std::pair<TString, ui32>  TKafkaProduceActor::WriterDied(const TActorId& writerId) {
+    for (auto& [topicPartition, writer] : TransactionalWriters) {
+        if (writer.ActorId == writerId) {
+            auto id = topicPartition;
+            CleanWriter(topicPartition, writerId);
+            TransactionalWriters.erase(topicPartition);
+            return {id.TopicPath, id.PartitionId};
+        }
+    }
+
+    for (auto& [topicPath, partitionWriters] : NonTransactionalWriters) {
+        for (auto& [partitionId, writer] : partitionWriters) {
+            if (writer.ActorId == writerId) {
+                auto id = partitionId;
+                CleanWriter({topicPath, static_cast<ui32>(partitionId)}, writerId);
+                partitionWriters.erase(partitionId);
+                return {topicPath, static_cast<ui32>(id)};
+            }
+        }
+    }
+
+    return {"", 0};
+}
+
 void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr request, const TActorContext& ctx) {
     auto r = request->Get();
     auto cookie = r->Record.GetPartitionResponse().GetCookie();

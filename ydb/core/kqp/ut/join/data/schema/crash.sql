@@ -1,0 +1,58 @@
+PRAGMA TablePathPrefix='/Root';
+
+CREATE TABLE distribution_order_stats_history (
+    multi_order_id	Utf8,	
+	order_id	Int64 NOT NULL,
+	item_id	Int64 NOT NULL,	
+	id	Int64	NOT NULL,	
+	stats_creation_time_utc	Datetime	NOT NULL,		
+	distribution_order_status	Int16	NOT NULL,		
+	clid	Int64	NOT NULL,
+	order_creation_time_utc	Datetime	NOT NULL,		
+	order_status	Int32	NOT NULL,
+	order_status_event_id	Int64	NOT NULL,	
+	order_status_change_time_utc	Datetime NOT NULL,		
+	approval_time_utc	Datetime,
+	items_count	Int32	NOT NULL,
+	items_return_count	Int32	NOT NULL,		
+	item_price	Int64	NOT NULL,
+	item_billed_cost	Int64	NOT NULL,			
+	is_first_order	Bool	NOT NULL,
+    tariff_name	Utf8	NOT NULL,		
+	tariff_rate	Decimal(22,9)	NOT NULL,	
+	tariff_grid	Utf8,
+	partner_payment_no_vat	Decimal(22,9)	NOT NULL,	
+	partner_payment_with_vat	Decimal(22,9)	NOT NULL,			
+	partner_payment_no_vat_max	Decimal(22,9) NOT NULL,		
+	order_billed_cost	Int64,
+	order_payment_no_vat	Decimal(22,9),	
+	additional_info	Utf8,	
+	promocode	Utf8,
+	promocode_data	Utf8,	
+	paid_promo_nominal	Int64,	
+	paid_promo_amount	Decimal(22,9),	
+	categories_threshold_limit	Int64,
+	categories_threshold_key	Utf8,	
+	category_id	Int64	NOT NULL,	
+	feed_id	Int64 NOT NULL,
+    offer_id	Utf8 NOT NULL,			
+	msku	Int64,
+	vid	Utf8,			
+	distr_type	Int64	NOT NULL,			
+	delivery_region_id	Int64,			
+	refid	Utf8,
+    PRIMARY KEY (order_id, item_id, id));
+
+CREATE TABLE order_fraud_info (
+    order_id	Int64	NOT NULL,		
+	is_fraud	Bool		NOT NULL,			
+	traffic_type	Utf8,		
+	updated_at_utc	Datetime	NOT NULL,		
+	user_fraud_markers	Yson,
+    PRIMARY KEY (order_id));
+
+CREATE TABLE dwh_order_properties (
+    order_id	Int64	NOT NULL,		
+	is_first_order	Bool	NOT NULL,		
+	updated_at_utc	Datetime	NOT NULL,
+    PRIMARY KEY (order_id));

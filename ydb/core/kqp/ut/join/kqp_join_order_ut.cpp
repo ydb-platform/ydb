@@ -76,6 +76,8 @@ static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStor
 
     CreateTables(session, "schema/sortings.sql", useColumnStore);
 
+    CreateTables(session, "schema/crash.sql", useColumnStore);
+
     {
         CreateTables(session, "schema/different_join_predicate_key_types.sql", false /* olap params are already set in schema */);
         const TString upsert =
@@ -645,6 +647,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 auto eRows = op.GetMapSafe().at("E-Rows").GetStringSafe();
                 UNIT_ASSERT_EQUAL(std::stod(eRows), card);
             }
+        }
+    }
+
+    Y_UNIT_TEST(Crash) {
+        for (size_t i=0; i<15; i++) {
+            ExecuteJoinOrderTestGenericQueryWithStats("queries/crash.sql", "stats/basic.json", false, false);
         }
     }
 

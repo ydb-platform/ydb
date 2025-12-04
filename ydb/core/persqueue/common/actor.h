@@ -40,7 +40,7 @@ public:
     {
     }
 
-    bool OnUnhandledException(const std::exception& exc) override  {
+    bool OnUnhandledException(const std::exception& exc) override {
         LOG_C("unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
                 << TBackTrace::FromCurrentException().PrintToString());
 

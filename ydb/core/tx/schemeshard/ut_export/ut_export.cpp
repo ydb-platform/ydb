@@ -727,9 +727,10 @@ namespace {
             if (enablePermissions) {
                 UNIT_ASSERT(HasS3File("/Replication/permissions.pb"));
                 const auto permissions = GetS3FileContent("/Replication/permissions.pb");
+                const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
                 UNIT_ASSERT_EQUAL_C(
-                    permissions, "", 
-                    TStringBuilder() << "chtoto" << "\n\nVS\n\n" << content);
+                    permissions, permissions_expected, 
+                    TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
             }
         }
 
@@ -3402,5 +3403,33 @@ WITH (
   COMMIT_INTERVAL = Interval('PT17S')
 );)";
         TestReplication(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ReplicationExportWithPermissions) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: ""
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                }
+            }
+        )";
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=',
+  CONSISTENCY_LEVEL = 'Row'
+);)";
+        TestReplication(scheme, expected, true);
     }
 }

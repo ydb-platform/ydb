@@ -4715,7 +4715,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         // prevent build columns from progress if adding columns with defaults is not enabled
                         if (!Self->EnableAddColumsWithDefaults) {
                             buildInfo->IsBroken = true;
-                            buildInfo->AddIssue(TStringBuilder() << "Adding columns with defaults is not enabled");
+                            buildInfo->AddIssue(TStringBuilder() << "Adding columns with defaults is disabled");
                         }
 
                         if (!Self->PathsById.contains(buildInfo->TablePathId)) {

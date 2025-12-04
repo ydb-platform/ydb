@@ -98,11 +98,14 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(
 TVector<ui64> GetTableShards(TTestActorRuntime& runtime, TActorId sender, const TString &path);
 TVector<ui64> GetColumnTableShards(TTestActorRuntime& runtime, TActorId sender,const TString &path);
 
+// Create a datashard table with 4 uniform shards.
 void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
+// Create a datashard table with 4 uniform shards and insert 1 row into each shard.
+void PrepareUniformTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
+
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
 
 std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag = 1);
-void ValidateCountMinColumnshard(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expectedProbe);
 
 void ValidateCountMinDatashard(TTestActorRuntime& runtime, TPathId pathId);
 void ValidateCountMinAbsence(TTestActorRuntime& runtime, TPathId pathId);

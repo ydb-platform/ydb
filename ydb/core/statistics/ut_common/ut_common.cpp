@@ -253,6 +253,10 @@ void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TStrin
         )
         WITH ( UNIFORM_PARTITIONS = 4 );
     )", databaseName.c_str(), tableName.c_str()));
+}
+
+void PrepareUniformTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
+    CreateUniformTable(env, databaseName, tableName);
 
     TStringBuilder replace;
     replace << Sprintf("REPLACE INTO `Root/%s/%s` (Key, Value) VALUES ",
@@ -436,14 +440,6 @@ std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, con
     UNIT_ASSERT(stat.CountMin);
 
     return stat.CountMin;
-}
-
-void ValidateCountMinColumnshard(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expectedProbe) {
-    auto countMin = ExtractCountMin(runtime, pathId);
-
-    ui32 value = 1;
-    auto actualProbe = countMin->Probe((const char *)&value, sizeof(value));
-    UNIT_ASSERT_VALUES_EQUAL(actualProbe, expectedProbe);
 }
 
 void ValidateCountMinDatashard(TTestActorRuntime& runtime, TPathId pathId) {

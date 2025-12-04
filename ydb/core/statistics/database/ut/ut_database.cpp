@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database", 1, true);
-        CreateUniformTable(env, "Database", "Table");
+        PrepareUniformTable(env, "Database", "Table");
 
         NYdb::EStatus status;
         auto test = [&] () {

@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
-        CreateUniformTable(env, "Database", "Table");
+        PrepareUniformTable(env, "Database", "Table");
 
         ui64 saTabletId;
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
@@ -34,8 +34,8 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
-        CreateUniformTable(env, "Database", "Table1");
-        CreateUniformTable(env, "Database", "Table2");
+        PrepareUniformTable(env, "Database", "Table1");
+        PrepareUniformTable(env, "Database", "Table2");
 
         ui64 saTabletId1;
         auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1", nullptr, &saTabletId1);
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
-        CreateUniformTable(env, "Database", "Table");
+        PrepareUniformTable(env, "Database", "Table");
 
         ui64 saTabletId = 0;
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);

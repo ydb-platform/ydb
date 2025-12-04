@@ -789,8 +789,11 @@ public:
                             .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
                             .TransportVersion = outputChannelDesc.GetTransportVersion(),
                             .PackerVersion = FromProto(task.GetValuePackerVersion()),
+                            .MaxChunkBytes = settings.MaxChunkBytes,
+                            .ChunkSizeLimit = settings.ChunkSizeLimit,
+                            .ArrayBufferMinFillPercentage = settings.ArrayBufferMinFillPercentage,
+                            .BufferPageAllocSize = settings.BufferPageAllocSize,
                             .ChannelStorage = settings.ChannelStorage,
-                            .BufferPageAllocSize = settings.BufferPageAllocSize
                         };
                         outputChannel = Context.ChannelService->GetOutputChannel(params);
                     } else {

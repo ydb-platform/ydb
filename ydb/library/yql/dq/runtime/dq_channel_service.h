@@ -29,8 +29,11 @@ struct TDqChannelParams {
     TCollectStatsLevel Level = TCollectStatsLevel::None;
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion = NKikimr::NMiniKQL::EValuePackerVersion::V0;
-    IDqChannelStorage::TPtr ChannelStorage;
+    ui64 MaxChunkBytes = 2_MB;
+    ui64 ChunkSizeLimit = 48_MB;
+    TMaybe<ui8> ArrayBufferMinFillPercentage;
     TMaybe<size_t> BufferPageAllocSize;
+    IDqChannelStorage::TPtr ChannelStorage;
 };
 
 struct TChannelInfo {

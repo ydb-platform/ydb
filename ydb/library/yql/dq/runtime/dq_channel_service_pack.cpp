@@ -22,7 +22,7 @@ public:
 
 class TBuferredSerializer : public TPackedSerializer {
 public:
-    TBuferredSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize, ui64 maxChunkBytes)
+    TBuferredSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
         : TPackedSerializer(buffer, rowType, transportVersion, packerVersion, bufferPageAllocSize)
         , MaxChunkBytes(maxChunkBytes) {
 
@@ -34,8 +34,8 @@ public:
 
 class TNarrowSerializer : public TBuferredSerializer {
 public:
-    TNarrowSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize, ui64 maxChunkBytes)
-        : TBuferredSerializer(buffer, rowType, transportVersion, packerVersion, bufferPageAllocSize, maxChunkBytes) {
+    TNarrowSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
+        : TBuferredSerializer(buffer, rowType, transportVersion, packerVersion, maxChunkBytes, bufferPageAllocSize) {
     }
 
     void Flush(bool finished) override {
@@ -63,8 +63,8 @@ public:
 
 class TWideSerializer : public TBuferredSerializer {
 public:
-    TWideSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize, ui64 maxChunkBytes)
-        : TBuferredSerializer(buffer, rowType, transportVersion, packerVersion, bufferPageAllocSize, maxChunkBytes) {
+    TWideSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
+        : TBuferredSerializer(buffer, rowType, transportVersion, packerVersion, maxChunkBytes, bufferPageAllocSize) {
     }
 
     void Flush(bool finished) override {
@@ -166,21 +166,29 @@ public:
 
 std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelParams& params, std::shared_ptr<IChannelBuffer> buffer, bool local) {
 
+    auto maxChunkBytes = std::min(params.MaxChunkBytes, params.ChunkSizeLimit / 2);
+
     if (params.RowType->IsMulti()) {
         ui32 blockLengthIndex;
         TVector<const NKikimr::NMiniKQL::TBlockType*> items;
         if (IsLegacyStructBlock(params.RowType, blockLengthIndex, items) || IsMultiBlock(params.RowType, blockLengthIndex, items)) {
-            if (local) {
+            auto chunkSizeLimit = 24_MB;
+
+            // if (params.ArrayBufferMinFillPercentage && *params.ArrayBufferMinFillPercentage > 0) {
+            //     chunkSizeLimit = params.ChunkSizeLimit * *params.ArrayBufferMinFillPercentage / 100;
+            // }
+
+            if (local || chunkSizeLimit == 0) {
                 return std::make_unique<TBlockSerializer>(buffer, params.RowType, params.TransportVersion, params.PackerVersion, params.BufferPageAllocSize);
             } else {
-                auto splitter = NArrow::CreateBlockSplitter(params.RowType, 36_MB);
+                auto splitter = NArrow::CreateBlockSplitter(params.RowType, chunkSizeLimit);
                 return std::make_unique<TChunkedSerializer>(buffer, params.RowType, params.TransportVersion, params.PackerVersion, params.BufferPageAllocSize, *params.HolderFactory, splitter);
             }
         } else {
-            return std::make_unique<TWideSerializer>(buffer, params.RowType, params.TransportVersion, params.PackerVersion, params.BufferPageAllocSize, 48_MB);
+            return std::make_unique<TWideSerializer>(buffer, params.RowType, params.TransportVersion, params.PackerVersion, maxChunkBytes, params.BufferPageAllocSize);
         }
     } else {
-        return std::make_unique<TNarrowSerializer>(buffer, params.RowType, params.TransportVersion, params.PackerVersion, params.BufferPageAllocSize, 48_MB);
+        return std::make_unique<TNarrowSerializer>(buffer, params.RowType, params.TransportVersion, params.PackerVersion, maxChunkBytes, params.BufferPageAllocSize);
     }
 
 }

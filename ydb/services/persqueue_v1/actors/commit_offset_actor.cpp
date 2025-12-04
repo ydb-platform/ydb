@@ -72,7 +72,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     auto request = dynamic_cast<const Ydb::Topic::CommitOffsetRequest*>(GetProtoRequest());
     AFL_ENSURE(request);
     ClientId = NPersQueue::ConvertNewConsumerName(request->consumer(), ctx);
-    PartitionId = request->Getpartition_id();
+    PartitionId = request->partition_id();
 
     if (TopicsHandler == nullptr) {
         TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
@@ -121,7 +121,7 @@ bool TCommitOffsetActor::OnUnhandledException(const std::exception& exc) {
     NPQ::DoLogUnhandledException(NKikimrServices::PQ_READ_PROXY, "[CommitOffsetActor]", exc);
 
     Ydb::Topic::CommitOffsetResult result;
-    Request().SendResult(result, Ydb::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR);
+    Request().SendResult(result, Ydb::StatusIds::INTERNAL_ERROR);
 
     this->Die(ActorContext());
 

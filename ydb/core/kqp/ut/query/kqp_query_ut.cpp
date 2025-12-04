@@ -3492,10 +3492,10 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
 
         auto failingEnsureQuery = std::vector{R"(
             DISCARD SELECT Ensure(Data, Data > 1000000, "some error message") AS value
-            FROM `/Root/EightShard`)" // , 
-            // R"(DISCARD SELECT Ensure(r2, r2 IS NOT NULL, "l3") AS final
-            //     FROM (SELECT Ensure(r1, r1 IS NOT NULL, "l2") AS r2
-            //     FROM (SELECT Ensure((1 > 2), true, "l1") AS r1) AS t1) AS t2;)"
+            FROM `/Root/EightShard`)", 
+            R"(DISCARD SELECT Ensure(r2, r2 > 100, "some error message") AS final
+                FROM (SELECT Ensure(r1, r1 IS NOT NULL, "ok") AS r2
+                FROM (SELECT Ensure(1, true, "ok") AS r1) AS t1) AS t2;)"
             };
 
         for (const auto& query : failingEnsureQuery) {

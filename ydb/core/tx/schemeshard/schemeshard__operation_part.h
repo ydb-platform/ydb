@@ -756,5 +756,9 @@ ISubOperation::TPtr CreateAlterStreamingQuery(TOperationId id, TTxState::ETxStat
 ISubOperation::TPtr CreateDropStreamingQuery(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropStreamingQuery(TOperationId id, TTxState::ETxState state);
 
+ISubOperation::TPtr CreateTruncateTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateTruncateTable(TOperationId id, TTxState::ETxState state);
+
+
 }
 }

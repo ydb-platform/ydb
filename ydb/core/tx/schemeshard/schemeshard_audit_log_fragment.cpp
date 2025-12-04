@@ -308,6 +308,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP STREAMING QUERY";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
         return "ALTER STREAMING QUERY";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
+        return "TRUNCATE TABLE";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -704,6 +706,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
         result.emplace_back(tx.GetCreateStreamingQuery().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
+        result.emplace_back(tx.GetTruncateTable().GetTableName());
         break;
     }
 

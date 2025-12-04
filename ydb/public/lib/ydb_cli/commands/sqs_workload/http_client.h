@@ -12,7 +12,6 @@ namespace NYdb::NConsoleClient {
 class TMeasuringHttpClient : public Aws::Http::HttpClient {
 public:
     explicit TMeasuringHttpClient(const Aws::Client::ClientConfiguration& cfg);
-    ~TMeasuringHttpClient();
 
     std::shared_ptr<Aws::Http::HttpResponse> MakeRequest(
         const std::shared_ptr<Aws::Http::HttpRequest>& request,

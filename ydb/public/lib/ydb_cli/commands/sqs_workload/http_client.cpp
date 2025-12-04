@@ -8,13 +8,7 @@ namespace NYdb::NConsoleClient {
 
 TMeasuringHttpClient::TMeasuringHttpClient(const Aws::Client::ClientConfiguration& cfg)
     : Inner(Aws::MakeShared<Aws::Http::CurlHttpClient>("InnerCurl", cfg))
-{
-}
-
-TMeasuringHttpClient::~TMeasuringHttpClient()
-{
-    Inner.reset();
-}
+{}
 
 std::shared_ptr<Aws::Http::HttpResponse> TMeasuringHttpClient::MakeRequest(
     const std::shared_ptr<Aws::Http::HttpRequest>& request,

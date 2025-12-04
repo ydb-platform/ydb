@@ -34,7 +34,7 @@ class IRule {
     virtual ~IRule() = default;
 
     TString RuleName;
-    ui32 Props;
+    ui32 Props{0x00};
 };
 
 /**

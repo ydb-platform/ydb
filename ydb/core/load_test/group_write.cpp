@@ -1013,15 +1013,17 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 const ui32 size = id.BlobSize();
 
                 if (ok) {
-                    auto gcCallback = [](IEventBase *event, const TActorContext&) {
-                        auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);
-                        Y_ABORT_UNLESS(res);
-                    };
+                    if (WriteKeepFlags) {
+                        auto gcCallback = [](IEventBase *event, const TActorContext&) {
+                            auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);
+                            Y_ABORT_UNLESS(res);
+                        };
 
-                    auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, Generation,
-                            GarbageCollectStep, Channel, true, Generation, GarbageCollectStep,
-                            new TVector<TLogoBlobID>({id}), nullptr, TInstant::Max(), false);
-                    SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(gcCallback)));
+                        auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, Generation,
+                                GarbageCollectStep, Channel, true, Generation, GarbageCollectStep,
+                                new TVector<TLogoBlobID>({id}), nullptr, TInstant::Max(), false);
+                        SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(gcCallback)));|
+                    }
 
                     // this blob has been confirmed -- update set
                     if (!ConfirmedBlobIds || id > ConfirmedBlobIds.back()) {

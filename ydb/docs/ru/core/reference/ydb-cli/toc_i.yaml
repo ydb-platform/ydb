@@ -96,12 +96,6 @@ items:
     - name: Выполнение запросов с параметрами
       href: parameterized-queries-cli.md
       hidden: true
-#  - name: Утилиты
-#    items:
-    # - name: Снятие бэкапа
-    #   href: commands/tools/dump.md
-    # - name: Восстановление бэкапа
-    #   href: commands/tools/restore.md
   - name: Управление фоновыми операциями
     items:
     - name: Получение списка фоновых операций

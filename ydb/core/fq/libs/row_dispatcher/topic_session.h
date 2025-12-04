@@ -25,6 +25,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
-    ui64 maxBufferSize);
+    ui64 maxBufferSize,
+    bool enableStreamingQueriesCounters);
 
 } // namespace NFq

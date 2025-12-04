@@ -383,6 +383,10 @@ void TPCCRunner::RunSync() {
         Tui = std::make_unique<TRunnerTui>(Log, *LogBackend, DataToDisplay);
     }
 
+#ifndef NDEBUG
+    LOG_W("You're running a CLI binary built without NDEBUG defined, results will be much worse than expected");
+#endif
+
     if (forcedWarmup) {
         LOG_I("Forced minimal warmup time: " << TDuration::Seconds(warmupSeconds));
     }
@@ -584,8 +588,9 @@ void TPCCRunner::UpdateDisplayTextMode() {
 
 void TPCCRunner::CollectDataToDisplay(Clock::time_point now) {
     auto newDisplayData = std::make_shared<TRunDisplayData>(PerThreadTerminalStats.size(), now);
+    newDisplayData->WarehouseCount = Config.WarehouseCount;
 
-    // order makes sence here
+    // order makes sense here
     CollectStatistics(newDisplayData->Statistics);
     CalculateStatusData(now, *newDisplayData);
 

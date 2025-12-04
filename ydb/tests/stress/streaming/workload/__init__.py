@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 import ydb
 import time
-import unittest
-import uuid
 import random
-from collections import defaultdict
+
 
 class Workload():
     def __init__(self, endpoint, database, duration, partitions_count, prefix):
@@ -28,7 +26,7 @@ class Workload():
                 CREATE TOPIC `{self.output_topic}` (CONSUMER {self.consumer_name}) WITH (retention_period = Interval('PT12H'));
             """
         )
-    
+
     def drop_topics(self):
         self.pool.execute_with_retries(
             f"""
@@ -91,7 +89,7 @@ class Workload():
         writers = []
         for i in range(self.partitions_count):
             writers.append(self.driver.topic_client.writer(self.input_topic, partition_id=i))
-        
+
         while time.time() < finished_at:
             for writer in writers:
                 messages = []
@@ -100,18 +98,18 @@ class Workload():
                     messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
                 writer.write(messages)
         for writer in writers:
-            writer.close()  
+            writer.close()
 
     def read_from_output_topic(self):
         count = 0
         with self.driver.topic_client.reader(self.output_topic, self.consumer_name) as reader:
             while True:
                 try:
-                    mess = reader.receive_message(timeout=self.receive_message_timeout_sec)
+                    reader.receive_message(timeout=self.receive_message_timeout_sec)
                     count += 1
                 except TimeoutError:
                     break
-        expected = self.duration # Group by HOP 1s
+        expected = self.duration  # Group by HOP 1s
         if count < expected * 0.7:
             raise Exception(f"Insufficient data in output topic: expected ~{expected} messages, got {count}")
 
@@ -122,7 +120,7 @@ class Workload():
         self.check_status()
         self.write_to_input_topic()
         self.read_from_output_topic()
-        self.drop_topics();
+        self.drop_topics()
 
     def __enter__(self):
         return self

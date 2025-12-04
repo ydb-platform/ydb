@@ -34,6 +34,7 @@ message TPartitionMeta {
     optional TPartitionCounterData CounterData = 4;
     optional uint64 EndWriteTimestamp = 5;
     optional uint64 FirstUncompactedOffset = 6; //deprecated
+    optional uint64 NextMessageIdDeduplicatorWAL = 7 [default = 1];
 }
 
 message TPartitionTxMeta {
@@ -1415,11 +1416,10 @@ message TMLPStorageWAL {
 }
 
 message TMessageDeduplicationIdWAL {
-    optional uint64 ExpirationTimestampMilliseconds = 1;
-
     message TMessage {
         optional string DeduplicationId = 1;
-        optional uint64 Offset = 2;
+        optional uint64 OffsetDelta = 2;
+        optional uint64 ExpirationTimestampMillisecondsDelta = 3;
     }
-    repeated TMessage Message = 2;
+    repeated TMessage Message = 1;
 };

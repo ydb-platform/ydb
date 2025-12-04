@@ -285,6 +285,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   <?php
 
   use YdbPlatform\Ydb\Ydb;
+  use YdbPlatform\Ydb\Auth\AccessTokenAuthentication;
 
   $config = [
       // Database path
@@ -622,6 +623,8 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   <?php
 
   use YdbPlatform\Ydb\Ydb;
+  use YdbPlatform\Ydb\Session;
+  use YdbPlatform\Ydb\Auth\AccessTokenAuthentication;
 
   $config = [
       // Database path
@@ -644,7 +647,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   $ydb = new Ydb($config);
   $ydb->table()->retryTransaction(function(Session $session){
     $session->query('SELECT 1;');
-  })
+  });
   ```
 
   {% endcut %}

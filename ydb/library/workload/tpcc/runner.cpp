@@ -383,6 +383,10 @@ void TPCCRunner::RunSync() {
         Tui = std::make_unique<TRunnerTui>(Log, *LogBackend, DataToDisplay);
     }
 
+#ifndef NDEBUG
+    LOG_W("You're running a CLI binary built without NDEBUG defined, results will be much worse than expected");
+#endif
+
     if (forcedWarmup) {
         LOG_I("Forced minimal warmup time: " << TDuration::Seconds(warmupSeconds));
     }

@@ -15,6 +15,6 @@ ANALYZE <path_to_table> [ (<column_name> [, ...]) ]
 
 {% if oss == true and backend_name == "YDB" %}
 
-Текущий набор статистик указан в разделе [{#T}](../../../concepts/optimizer.md#statistics).
+Текущий набор статистик указан в разделе [{#T}](../../../concepts/query_execution/optimizer.md#statistics).
 
 {% endif %}

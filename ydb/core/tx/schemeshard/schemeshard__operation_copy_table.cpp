@@ -148,7 +148,8 @@ public:
                          if (id == txState->CdcPathId) newStreamName = name;
                     }
 
-                    context.SS->DescribeCdcStream(txState->CdcPathId, newStreamName, newStreamInfo, *notice.MutableNewStreamDescription());
+                    // context.SS->DescribeCdcStream(txState->CdcPathId, newStreamName, newStreamInfo, *notice.MutableNewStreamDescription());
+                    context.SS->DescribeCdcStream(txState->CdcPathId, newStreamName, newStreamInfo->AlterData, *notice.MutableNewStreamDescription());
                     notice.SetTableSchemaVersion(context.SS->Tables.at(txState->SourcePathId)->AlterVersion + 1);
                 } else {
                     NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());

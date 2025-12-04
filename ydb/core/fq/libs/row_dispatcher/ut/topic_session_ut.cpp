@@ -90,7 +90,8 @@ public:
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             !MockTopicSession ? CreatePqNativeGateway(pqServices) : MockPqGateway,
-            16000000
+            16000000,
+            true
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
     }

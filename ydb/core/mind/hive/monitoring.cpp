@@ -1448,9 +1448,9 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (ChangeRequest) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"ok\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"status":"ok"})"));
         } else {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"error\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"status":"error"})"));
         }
     }
 
@@ -2647,7 +2647,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            Response = "{\"error\":\"Must use POST request\"}";
+            Response = R"({"error":"Must use POST request"})";
             return true;
         }
         NIceDb::TNiceDb db(txc.DB);
@@ -2690,7 +2690,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            Response = "{\"error\":\"Must use POST request\"}";
+            Response = R"({"error":"Must use POST request"})";
             return true;
         }
         NIceDb::TNiceDb db(txc.DB);
@@ -2733,7 +2733,7 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            Response = "{\"error\":\"Must use POST request\"}";
+            Response = R"({"error":"Must use POST request"})";
             return true;
         }
         TNodeInfo* node = Self->FindNode(NodeId);
@@ -2840,10 +2840,10 @@ public:
                 Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, WaitActorId));
             } else {
                 Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, {}));
-                ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"SCHEDULED\"}"));
+                ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"status":"SCHEDULED"})"));
             }
         } else {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"ERROR\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"status":"ERROR"})"));
         }
     }
 };
@@ -2869,7 +2869,7 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            Response = "{\"error\": \"Must use POST request\"}";
+            Response = R"({"error":"Must use POST request"})";
             return true;
         }
         Self->StartHiveBalancer({
@@ -2906,7 +2906,7 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            Response = "{\"error\": \"Must use POST request\"}";
+            Response = R"({"error":"Must use POST request"})";
             return true;
         }
         Self->StartHiveStorageBalancer(Settings);
@@ -3454,7 +3454,7 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Must use POST request\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -3547,7 +3547,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Must use POST request\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -3600,7 +3600,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Must use POST request\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << R"({"error":"Must use POST request"})"));
             return true;
         }
         TDomainInfo* domain = Self->FindDomain(DomainId);
@@ -3700,7 +3700,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Must use POST request\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -3722,7 +3722,7 @@ public:
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
         } else {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Tablet not found\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << R"({"error":"Must use POST request"})"));
         }
         return true;
     }
@@ -4226,7 +4226,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Must use POST request\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -4809,7 +4809,7 @@ public:
 bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
     if (httpInfo->GetMethod() != HTTP_METHOD_POST) {
-        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"only POST method is allowed\"}"));
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
         return false;
     }
     if (!GetEnableDestroyOperations()) {

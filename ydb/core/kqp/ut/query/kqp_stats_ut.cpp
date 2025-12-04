@@ -666,7 +666,6 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
     TKikimrRunner kikimr(TKikimrSettings(app).SetNodeCount(2));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
-    //kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_TRACE);
 
     auto firstNodeId = kikimr.GetTestServer().GetRuntime()->GetFirstNodeId();
 

@@ -237,4 +237,11 @@ message TFeatureFlags {
     optional bool EnableOlapRejectProbability = 213 [default = false];
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = false];
     optional bool EnableReplication = 217 [default = true];
+<<<<<<< HEAD
 }
+=======
+    optional bool EnableShuttingDownNodeState = 218 [default = false];
+    optional bool EnableStreamingQueriesCounters = 219 [default = false];
+    optional bool UseYdsTopicStorageMetering = 220 [default = false];
+    }
+>>>>>>> 40899112e9a (optionally change name of the storage metering schema (#30080))

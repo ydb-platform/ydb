@@ -35,12 +35,20 @@ void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* 
 
     if (blobRec->Ingress.IsDoNotKeep(GType) &&
             (Building || Thresholds.IsBehindThresholdOnUnsynced(blobRec->LogoBlobID(), SyncedMask))) {
+        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_STORAGE, BSPFS09,
+                VDISKP(SlCtx->VCtx, "Try to add DoNotKeepFlag flag to PhantomFlagStorage"),
+                (BlobId, blobRec->LogoBlobID().ToString()),
+                (Building, Building),
+                (SyncedMask, SyncedMask.to_ullong()),
+                (Thresholds, Thresholds.ToString()));
         AddFlag(*blobRec);
     }
 }
 
 void TPhantomFlagStorageState::ProcessBlobRecordFromNeighbour(ui32 orderNumber, const TLogoBlobRec* blobRec) {
-    Thresholds.AddBlob(orderNumber, blobRec->LogoBlobID());
+    if (blobRec->Ingress.IsKeep(GType)) {
+        Thresholds.AddBlob(orderNumber, blobRec->LogoBlobID());
+    }
 }
 
 void TPhantomFlagStorageState::ProcessBarrierRecordFromNeighbour(ui32 orderNumber, const TBarrierRec* barrierRec) {
@@ -160,7 +168,7 @@ bool TPhantomFlagStorageState::AddFlag(const TLogoBlobRec& blobRec) {
         StoredFlags.emplace_back(blobRec);
         return true;
     } else {
-        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_STORAGE, BSPFS02,
+        STLOG(PRI_INFO, BS_PHANTOM_FLAG_STORAGE, BSPFS02,
                 VDISKP(SlCtx->VCtx, "Cannot add flag to PhantomFlagStorage, memory limit reached"),
                 (Capacity, StoredFlags.capacity()),
                 (Size, StoredFlags.size()),

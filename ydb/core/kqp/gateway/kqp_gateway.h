@@ -172,7 +172,6 @@ public:
         NTopic::TTopicOperations TopicOperations;
 
         ui64 OutputChunkMaxSize = 0;
-        ui64 TotalTxCount = 0;
 
         bool IsTrailingResultsAllowed() const {
             return AllowTrailingResults && (

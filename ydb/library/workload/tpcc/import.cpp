@@ -925,6 +925,10 @@ public:
             Tui = std::make_unique<TImportTui>(Log, Config, *LogBackend, dataToDisplay);
         }
 
+#ifndef NDEBUG
+        LOG_W("You're running a CLI binary built without NDEBUG defined, import will take much longer than expected");
+#endif
+
         // TODO: calculate optimal number of drivers (but per thread looks good)
         size_t driverCount = threadCount;
 

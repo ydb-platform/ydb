@@ -39,6 +39,7 @@ struct TEvPrivate {
         EvRefreshScaleRecommendation,
         EvUpdateFollowers,
         EvUpdateBalanceCounters,
+        EvProcessMetrics,
         EvEnd
     };
 
@@ -145,6 +146,8 @@ struct TEvPrivate {
     };
 
     struct TEvUpdateBalanceCounters : TEventLocal<TEvUpdateBalanceCounters, EvUpdateBalanceCounters> {};
+
+    struct TEvProcessMetrics : TEventLocal<TEvProcessMetrics, EvProcessMetrics> {};
 };
 
 } // NHive

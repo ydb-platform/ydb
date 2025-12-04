@@ -996,18 +996,13 @@ private:
 
             if (columnTuple.Size() > 3) {
                 auto columnItem = columnTuple.Item(3);
-
-                //Cerr << "HandleCreateTable columnItem3 " << ExprToPrettyString(ctx, columnItem.Ref()) << Endl;
-
                 if (columnItem.Maybe<TExprList>()) {
-                    //Cerr << "HandleCreateTable columnItem3 TExprList " << columnName << Endl;
                     const auto exprs = columnItem.Cast<TExprList>();
                     if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
                         columnMeta.Compression = TColumnCompression();
                         const auto settings = exprs.Item(1).Cast<TExprList>();
                         for (const auto setting : settings) {
                             const auto sKV = setting.Cast<TExprList>();
-                            //Cerr << "HandleCreateTable columnCompression setting size " << sKV.Size() << Endl;
                             const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
                             const auto& settingVal = sKV.Item(1).Ref();
                             if (key == "algorithm" && settingVal.IsCallable("String")) {

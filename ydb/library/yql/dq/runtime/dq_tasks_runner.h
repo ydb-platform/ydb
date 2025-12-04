@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dq_tasks_counters.h"
+#include "dq_channel_service.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
@@ -152,6 +153,7 @@ struct TDqTaskRunnerContext {
     NKikimr::NMiniKQL::TCallableVisitFuncProvider FuncProvider;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
     std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> PatternCache;
+    std::shared_ptr<IDqChannelService> ChannelService;
 };
 
 class IDqTaskRunnerExecutionContext {
@@ -166,6 +168,7 @@ public:
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
+    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, TWakeUpCallback wakeUpCallback, TErrorCallback errorCallback) const = 0;
 
     virtual TWakeUpCallback GetWakeupCallback() const = 0;
     virtual TErrorCallback GetErrorCallback() const = 0;
@@ -191,6 +194,10 @@ public:
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NActors::TActorSystem* /*actorSystem*/) const override {
         return {};
     };
+
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, TWakeUpCallback /* wakeUpCallback */, TErrorCallback /* errorCallback */) const override {
+        return {};
+    }
 
     TWakeUpCallback GetWakeupCallback() const override {
         return {};
@@ -428,6 +435,10 @@ public:
         return Task_->GetValuePackerVersion();
     }
 
+    bool GetFastChannels() const {
+        return Task_->GetFastChannels();
+    }
+
 private:
 
     // external callback to retrieve parameter value.
@@ -484,6 +495,10 @@ public:
 
     virtual void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) = 0;
     virtual TString GetOutputDebugString() = 0;
+    ui32 ChannelId = 0;
+    TInstant LastFetch;
+    ERunStatus LastStatus = ERunStatus::PendingInput;
+
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(

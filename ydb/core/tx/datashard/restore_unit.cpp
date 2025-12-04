@@ -49,8 +49,6 @@ protected:
         #endif
 
         case NKikimrSchemeOp::TRestoreTask::kFSSettings:
-            // TODO: Implement FS downloader similar to S3
-            // For now, return success as filesystem import is not yet implemented
             op->SetAsyncJobResult(new TImportJobProduct(true, TString(), 0, 0));
             break;
 

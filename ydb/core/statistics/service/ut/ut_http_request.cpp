@@ -62,7 +62,7 @@ void ProbeTest(bool isServerless) {
     runtime.Register(new THttpRequest(THttpRequest::ERequestType::PROBE_COUNT_MIN_SKETCH, {
             { THttpRequest::EParamType::PATH, tableInfo.Path },
             { THttpRequest::EParamType::COLUMN_NAME, columnName },
-            { THttpRequest::EParamType::CELL_VALUE, "1" }
+            { THttpRequest::EParamType::CELL_VALUE, "\"1\"" }
         },
         THttpRequest::EResponseContentType::HTML,
         sender));

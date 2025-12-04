@@ -277,7 +277,7 @@ void CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString
     ExecuteYqlScript(env, Sprintf(R"(
         CREATE TABLE `%s` (
             Key Uint64 NOT NULL,
-            Value Uint64,
+            Value String,
             PRIMARY KEY (Key)
         )
         PARTITION BY HASH(Key)
@@ -332,13 +332,13 @@ void PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TStrin
         reqKeyType->mutable_type()->set_type_id(Ydb::Type::UINT64);
         auto* reqValueType = reqRowType->add_members();
         reqValueType->set_name("Value");
-        reqValueType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+        reqValueType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
 
         auto* reqRows = rows->mutable_value();
         for (size_t j = 0; j < rowsInBlock && i < ColumnTableRowsNumber; ++i, ++j) {
             auto* row = reqRows->add_items();
             row->add_items()->set_uint64_value(i);
-            row->add_items()->set_uint64_value(i);
+            row->add_items()->set_bytes_value(ToString(i));
         }
         i -= overlap;
         auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(

@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
 
         std::vector<TColumnStatisticsProbes> expected = {
             {
-                .Tag = 1,
+                .Tag = 1, // Key column
                 .Probes{ {1, 4}, {2, 4} }
             }
         };
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         auto sender = runtime.AllocateEdgeActor();
         std::vector<TColumnStatisticsProbes> expected = {
             {
-                .Tag = 1,
+                .Tag = 1, // Key column
                 .Probes{ {1, 4}, {2, 4} }
             }
         };

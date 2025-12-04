@@ -54,11 +54,11 @@
 
 На примере Ubuntu 22.04 LTS:
 
-* Обновите список пакетов apt командой `sudo apt-get update`;
-* Обновите пакеты командой `sudo apt-get upgrade`;
-* Установите пакет `software-properties-common` для управления источниками программного обеспечения вашего дистрибутива — `sudo apt install software-properties-common`;
-* Добавьте новый PPA в apt — `sudo add-apt-repository --yes --update ppa:ansible/ansible`;
-* Установите Ansible — `sudo apt-get install ansible-core` (убедитесь, что устанавливаемая версия не выше 2.18 и не меньше 2.15.2; установка пакета просто `ansible` приведёт к устаревшей и неподходящей версии);
+* Обновите список пакетов apt командой `sudo apt-get update`.
+* Обновите пакеты командой `sudo apt-get upgrade`.
+* Установите пакет `software-properties-common` для управления источниками программного обеспечения вашего дистрибутива — `sudo apt install software-properties-common`.
+* Добавьте новый PPA в apt — `sudo add-apt-repository --yes --update ppa:ansible/ansible`.
+* Установите Ansible — `sudo apt-get install ansible-core` (убедитесь, что устанавливаемая версия не выше 2.18 и не меньше 2.15.2; установка пакета просто `ansible` приведёт к устаревшей и неподходящей версии).
 * Проверьте версию Ansible core — `ansible --version`.
 
 {% endcut %}
@@ -67,12 +67,12 @@
 
 На примере Ubuntu 22.04 LTS:
 
-* Обновите список доступных deb пакетов — `sudo apt-get update`;
-* Установите пакет `python3-venv` для управления Python виртуальными окружениями — `sudo apt-get install venv`;
-* Создайте директорию, где будет создано виртуальное окружение. Например, `mkdir venv-ansible`;
-* Создайте виртуальное окружение Python — `python3 -m venv venv-ansible`, где `venv-ansible` - путь к директории созданной на предыдущем шаге;
-* Активируйте виртуальное окружение — `source venv-ansible/bin/activate`. Все дальнейшие действия с Ansible выполняются внутри виртуального окружения. Выйти из него можно командой `deactivate`;
-* Установите рекомендуемую версию Ansible с помощью команды `pip3 install "ansible-core>=2.15.2,<2.19` (убедитесь, что устанавливаемая версия не выше 2.18 и не меньше 2.15.2);
+* Обновите список доступных deb пакетов — `sudo apt-get update`.
+* Установите пакет `python3-venv` для управления Python виртуальными окружениями — `sudo apt-get install venv`.
+* Создайте директорию, где будет создано виртуальное окружение. Например, `mkdir venv-ansible`.
+* Создайте виртуальное окружение Python — `python3 -m venv venv-ansible`, где `venv-ansible` - путь к директории созданной на предыдущем шаге.
+* Активируйте виртуальное окружение — `source venv-ansible/bin/activate`. Все дальнейшие действия с Ansible выполняются внутри виртуального окружения. Выйти из него можно командой `deactivate`.
+* Установите рекомендуемую версию Ansible с помощью команды `pip3 install "ansible-core>=2.15.2,<2.19` (убедитесь, что устанавливаемая версия не выше 2.18 и не меньше 2.15.2).
 * Проверьте установленную версию Ansible — `ansible --version`.
 
 {% endcut %}

@@ -8,7 +8,7 @@
 
 namespace NKikimr::NPQ {
 
-static std::atomic<ui64> TMeteringSink::MeteringCounter_{0};
+std::atomic<ui64> TMeteringSink::MeteringCounter_{0};
 
 
 struct TMeteringSink::FlushParameters {

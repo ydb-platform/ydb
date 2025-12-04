@@ -1,14 +1,18 @@
 #include "sqs_workload_read_scenario.h"
+#include "sqs_workload_stats_collector.h"
 #include <aws/core/utils/threading/Executor.h>
 #include <aws/sqs/model/SetQueueAttributesRequest.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include "sqs_workload_reader.h"
+#include "http_client.h"
 
 #include <fmt/format.h>
 
 namespace NYdb::NConsoleClient {
 
 int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
+    auto statsCollector = std::make_shared<TSqsWorkloadStatsCollector>(0, Concurrency, Quiet, PrintTimestamp, WindowSec.Seconds(), TotalSec.Seconds(), WarmupSec.Seconds(), Percentile, ErrorFlag);
+    InitMeasuringHttpClient(statsCollector);
     InitSqsClient();
 
     TSqsWorkloadReaderParams params{
@@ -31,10 +35,14 @@ int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
         .ValidateFifo = ValidateFifo,
         .HashMapMutex = std::make_shared<std::mutex>(),
         .LastReceivedMessageInGroup = std::make_shared<THashMap<TString, TInstant>>(),
+        .StatsCollector = statsCollector,
     };
 
-    TSqsWorkloadReader::RunLoop(params, Now() + params.TotalSec);
+    auto f = std::async([&params]() {
+        params.StatsCollector->PrintWindowStatsLoop();
+    });
 
+    TSqsWorkloadReader::RunLoop(params, Now() + params.TotalSec);
     {
         std::unique_lock<std::mutex> lock(*Mutex);
         while (*StartedCount > 0) {
@@ -42,7 +50,10 @@ int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
         }
     }
 
+    f.wait();
+
     DestroySqsClient();
+    DestroyMeasuringHttpClient();
 
     if (AnyErrors()) {
         return EXIT_FAILURE;

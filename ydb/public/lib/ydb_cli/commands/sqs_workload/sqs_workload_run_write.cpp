@@ -20,6 +20,9 @@ void TCommandWorkloadSqsRunWrite::Config(TConfig& config) {
     config.Opts->AddLongOption('w', "window", "Output window duration in seconds.")
         .DefaultValue(1)
         .StoreResult(&Scenario.WindowSec);
+    config.Opts->AddLongOption("warmup", "Warm-up time in seconds.")
+        .DefaultValue(5)
+        .StoreResult(&Scenario.WarmupSec);
     config.Opts->AddLongOption('q', "quiet", "Quiet mode. Doesn't print statistics each second.")
         .StoreTrue(&Scenario.Quiet);
     config.Opts->AddLongOption("print-timestamp", "Print timestamp each second with statistics.")

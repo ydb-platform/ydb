@@ -8,6 +8,7 @@ SRCS(
     sqs_workload_run_read.cpp
     sqs_workload_run_write.cpp
     sqs_workload_scenario.cpp
+    sqs_workload_stats.cpp
     sqs_workload_stats_collector.cpp
     sqs_workload_write_scenario.cpp
     sqs_workload_writer.cpp
@@ -15,6 +16,7 @@ SRCS(
     sqs_workload_init_scenario.cpp
     sqs_workload_clean.cpp
     sqs_workload_clean_scenario.cpp
+    http_client.cpp
 )
 
 PEERDIR(

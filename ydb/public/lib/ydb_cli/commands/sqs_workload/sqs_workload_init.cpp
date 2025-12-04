@@ -28,7 +28,7 @@ void TCommandWorkloadSqsInit::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "token", "AWS token.").
         Required().
         StoreResult(&Scenario.Token);
-    config.Opts->AddLongOption('e', "endpoint", "AWS queue endpoint.").
+    config.Opts->AddLongOption('e', "endpoint", "Queue endpoint.").
         DefaultValue("sqs.yandex.net:8771").
         StoreResult(&Scenario.EndPoint);
     config.Opts->AddLongOption("max-receive-count", "SQS max receive count.").

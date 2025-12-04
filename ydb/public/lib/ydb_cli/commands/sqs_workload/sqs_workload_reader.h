@@ -4,6 +4,7 @@
 #include <library/cpp/logger/log.h>
 #include <aws/core/utils/threading/Executor.h>
 #include <aws/sqs/SQSClient.h>
+#include "sqs_workload_stats_collector.h"
 
 namespace NYdb::NConsoleClient {
 
@@ -27,6 +28,7 @@ struct TSqsWorkloadReaderParams {
     bool ValidateFifo;
     std::shared_ptr<std::mutex> HashMapMutex;
     std::shared_ptr<THashMap<TString, TInstant>> LastReceivedMessageInGroup;
+    std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;
 };
 
 class TSqsWorkloadReader {

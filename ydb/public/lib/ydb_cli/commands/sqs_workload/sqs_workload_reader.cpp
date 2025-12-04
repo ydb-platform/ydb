@@ -1,4 +1,6 @@
 #include "sqs_workload_reader.h"
+#include "sqs_workload_stats.h"
+#include "consts.h"
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_defines.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include <library/cpp/logger/log.h>
@@ -37,33 +39,32 @@ void TSqsWorkloadReader::OnMessageReceived(
     }
 
     const auto& messages = outcome.GetResult().GetMessages();
+    if (!messages.empty()) {
+        try {
+            const auto& message = messages[0];
+            const auto& body = message.GetBody();
+            std::string startTime;
+            for (size_t i = 0; i < body.size(); ++i) {
+                if (body[i] == kSQSMessageStartTimeSeparator) {
+                    break;
+                }
+
+                startTime.push_back(body[i]);
+            }
+
+            auto endToEndLatency = Now().MilliSeconds() - std::stoll(startTime);
+            TSqsWorkloadStats::GotMessageEvent gotMessageEvent{body.size() * messages.size(), endToEndLatency};
+            params.StatsCollector->AddGotMessageEvent(gotMessageEvent);
+        } catch (const std::exception& e) {
+            params.Log->Write(ELogPriority::TLOG_ERR, TStringBuilder() << "Error parsing message body: " << e.what());
+        }
+    }
 
     Aws::Vector<Aws::SQS::Model::DeleteMessageBatchRequestEntry> deleteMessageBatchRequestEntries;
     for (const auto& message : messages) {
         auto startHandlingTime = TInstant::Now();
-        TInstant sendTimestamp = TInstant::Now();
-
-        try {
-            const auto& body = message.GetBody();
-            std::string sendTime;
-            for (size_t i = 0; i < body.size(); ++i) {
-                if (body[i] == 'a') {
-                    break;
-                }
-
-                sendTime.push_back(body[i]);
-            }
-
-            [[maybe_unused]] auto endToEnd = (TInstant::Now().MilliSeconds() - std::stoll(sendTime));
-            // params.Log->Write(ELogPriority::TLOG_INFO, TStringBuilder() << "End-to-end latency: " << endToEnd << "
-            // ms");
-
-            sendTimestamp = TInstant::MilliSeconds(std::stoll(sendTime));
-        } catch (const std::exception& e) {
-            params.Log->Write(ELogPriority::TLOG_ERR, TStringBuilder() << "Error parsing message body: " << e.what());
-        }
-
-        if (params.ValidateFifo && !ValidateFifo(params, message, sendTimestamp)) {
+        TInstant timestamp = TInstant::Now();
+        if (params.ValidateFifo && !ValidateFifo(params, message, timestamp)) {
             params.Log->Write(ELogPriority::TLOG_ERR, TStringBuilder() << "FIFO validation failed for message: " << message.GetMessageId());
             params.ErrorFlag->store(true);
             return;
@@ -86,11 +87,13 @@ void TSqsWorkloadReader::OnMessageReceived(
     }
 
     if (!deleteMessageBatchRequestEntries.empty()) {
-        auto deleteMessageBatchOutcome = client->DeleteMessageBatch(
-            Aws::SQS::Model::DeleteMessageBatchRequest()
-                .WithQueueUrl(fmt::format("http://{}/{}", params.EndPoint, params.QueueName).c_str())
-                .WithEntries(deleteMessageBatchRequestEntries)
-        );
+        Aws::SQS::Model::DeleteMessageBatchRequest deleteMessageBatchRequest;
+        deleteMessageBatchRequest.SetQueueUrl(fmt::format("http://{}/{}", params.EndPoint, params.QueueName).c_str());
+        deleteMessageBatchRequest.SetEntries(deleteMessageBatchRequestEntries);
+        deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSWorkloadActionHeader, kSQSWorkloadActionDelete);
+        deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSMessageCountHeader, std::to_string(deleteMessageBatchRequestEntries.size()));
+        
+        auto deleteMessageBatchOutcome = client->DeleteMessageBatch(deleteMessageBatchRequest);
 
         if (!deleteMessageBatchOutcome.IsSuccess()) {
             params.Log->Write(
@@ -114,7 +117,7 @@ bool TSqsWorkloadReader::ShouldFail(const TSqsWorkloadReaderParams& params, cons
     return (params.ErrorMessagesDestiny == kErrorMessagesDestinyFatal) || (std::rand() % 2 == 0);
 }
 
-bool TSqsWorkloadReader::ValidateFifo(const TSqsWorkloadReaderParams& params, const Aws::SQS::Model::Message& message, TInstant sendTimestamp) {
+bool TSqsWorkloadReader::ValidateFifo(const TSqsWorkloadReaderParams& params, const Aws::SQS::Model::Message& message, TInstant timestamp) {
     std::unique_lock<std::mutex> locker(*params.HashMapMutex);
     const auto& attributes = message.GetAttributes();
     const auto& messageGroupId = attributes.find(Aws::SQS::Model::MessageSystemAttributeName::MessageGroupId);
@@ -124,15 +127,15 @@ bool TSqsWorkloadReader::ValidateFifo(const TSqsWorkloadReaderParams& params, co
 
     auto lastReceivedMessageInGroup = params.LastReceivedMessageInGroup->find(messageGroupId->second);
     if (lastReceivedMessageInGroup == params.LastReceivedMessageInGroup->end()) {
-        (*params.LastReceivedMessageInGroup)[messageGroupId->second] = sendTimestamp;
+        (*params.LastReceivedMessageInGroup)[messageGroupId->second] = timestamp;
         return true;
     }
 
-    if (lastReceivedMessageInGroup->second > sendTimestamp) {
+    if (lastReceivedMessageInGroup->second > timestamp) {
         return false;
     }
 
-    (*params.LastReceivedMessageInGroup)[messageGroupId->second] = sendTimestamp;
+    (*params.LastReceivedMessageInGroup)[messageGroupId->second] = timestamp;
     return true;
 }
 
@@ -146,6 +149,8 @@ void TSqsWorkloadReader::RunLoop(const TSqsWorkloadReaderParams& params, TInstan
         receiveMessageRequest.SetWaitTimeSeconds(kWaitTimeSeconds);
         receiveMessageRequest.SetVisibilityTimeout(visibilityTimeout);
         receiveMessageRequest.SetMaxNumberOfMessages(params.BatchSize);
+        receiveMessageRequest.SetAdditionalCustomHeaderValue(kSQSWorkloadActionHeader, kSQSWorkloadActionReceive);
+        receiveMessageRequest.SetAdditionalCustomHeaderValue(kSQSMessageCountHeader, std::to_string(params.BatchSize));
 
         {
             std::unique_lock<std::mutex> locker(*params.Mutex);

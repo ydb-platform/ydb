@@ -1,6 +1,8 @@
 #include "sqs_workload_writer.h"
+#include "consts.h"
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
+#include <aws/core/utils/UUID.h>
 #include <aws/sqs/SQSClient.h>
 #include <aws/sqs/model/SendMessageBatchRequest.h>
 #include <aws/sqs/model/SendMessageRequest.h>
@@ -13,11 +15,10 @@ namespace NYdb::NConsoleClient {
 namespace {
 
 Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry>
-CreateSendMessageBatchRequestEntries(ui32 batchSize, ui32 messageSize, ui32 messageGroups, ui32& messageGroupID) {
+CreateSendMessageBatchRequestEntries(ui64 now, ui32 batchSize, ui32 messageSize, ui32 messageGroups, ui32& messageGroupID) {
     Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry> entries;
-    auto now = Now().MilliSeconds();
     for (ui32 i = 0; i < batchSize; ++i) {
-        auto messageBody = fmt::format("{}", now);
+        auto messageBody = fmt::format("{}{}", now, kSQSMessageStartTimeSeparator);
         while (messageBody.size() < messageSize) {
             messageBody.push_back('a');
         }
@@ -29,7 +30,6 @@ CreateSendMessageBatchRequestEntries(ui32 batchSize, ui32 messageSize, ui32 mess
         }
 
         entries.push_back(std::move(entry));
-
         if (messageGroups > 0) {
             messageGroupID = (messageGroupID + 1) % messageGroups;
         }
@@ -62,9 +62,14 @@ void TSqsWorkloadWriter::RunLoop(const TSqsWorkloadWriterParams& params, TInstan
     ui32 messageGroupID = 0;
     
     while (Now() < endTime && !params.ErrorFlag->load()) {
+        auto now = Now().MilliSeconds();
+
         Aws::SQS::Model::SendMessageBatchRequest sendMessageBatchRequest;
         sendMessageBatchRequest.SetQueueUrl(fmt::format("http://{}/{}", params.EndPoint, params.QueueName).c_str());
-        sendMessageBatchRequest.SetEntries(CreateSendMessageBatchRequestEntries(params.BatchSize, params.MessageSize, params.GroupsAmount, messageGroupID));
+        sendMessageBatchRequest.SetEntries(CreateSendMessageBatchRequestEntries(now, params.BatchSize, params.MessageSize, params.GroupsAmount, messageGroupID));
+        sendMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSWorkloadActionHeader, kSQSWorkloadActionSend);
+        sendMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSMessageCountHeader, std::to_string(params.BatchSize));
+        sendMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSMessageTotalSizeHeader, std::to_string(params.BatchSize * params.MessageSize));
 
         {
             std::unique_lock<std::mutex> locker(*params.Mutex);
@@ -78,7 +83,9 @@ void TSqsWorkloadWriter::RunLoop(const TSqsWorkloadWriterParams& params, TInstan
                 const Aws::SQS::Model::SendMessageBatchRequest& sendMessageBatchRequest,
                 const Aws::SQS::Model::SendMessageBatchOutcome& outcome,
                 const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context
-            ) { OnMessageSent(params, sqsClient, sendMessageBatchRequest, outcome, context); }
+            ) {
+                OnMessageSent(params, sqsClient, sendMessageBatchRequest, outcome, context);
+            }
         );
 
         std::this_thread::sleep_for(std::chrono::milliseconds(params.SleepTimeMs));

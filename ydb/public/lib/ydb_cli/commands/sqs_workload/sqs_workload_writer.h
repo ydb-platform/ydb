@@ -1,5 +1,7 @@
 #pragma once
 
+#include "sqs_workload_stats_collector.h"
+
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include <library/cpp/logger/log.h>
 #include <aws/core/utils/threading/Executor.h>
@@ -18,6 +20,7 @@ struct TSqsWorkloadWriterParams {
     std::shared_ptr<size_t> StartedCount;
     std::shared_ptr<std::atomic_bool> ErrorFlag;
     std::shared_ptr<Aws::SQS::SQSClient> SqsClient;
+    std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;
     ui32 BatchSize;
     ui32 GroupsAmount;
     ui32 MessageSize;

@@ -1,34 +1,75 @@
 #pragma once
 
-#include "sqs_workload_scenario.h"
+#include "sqs_workload_stats.h"
+
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <util/thread/lfqueue.h>
 
 namespace NYdb::NConsoleClient {
 
-struct TSqsWorkloadMessageReceivedEvent {
-    double EndToEndLatency;
-    TInstant Timestamp;
-};
-
-class TSqsWorkloadStats {
+class TSqsWorkloadStatsCollector {
 public:
-    template<typename T>
-    void AddEvent(T&& event);
-};
+    TSqsWorkloadStatsCollector(
+        size_t writerCount, size_t readerCount,
+        bool quiet, bool printTimestamp,
+        ui32 windowDurationSec, ui32 totalDurationSec, ui32 warmupSec,
+        double percentile,
+        std::shared_ptr<std::atomic_bool> errorFlag);
 
+    void PrintWindowStatsLoop();
 
-class TSqsWorkloadStatsCollector : public TSqsWorkloadScenario {
-public:
-    void Run(const TClientCommand::TConfig& config);
+    void PrintHeader(bool total = false) const;
+    void PrintTotalStats() const;
 
-    TSqsWorkloadStatsCollector(TDuration windowSec, TDuration totalSec);
+    void AddSendRequestDoneEvent(const TSqsWorkloadStats::SendRequestDoneEvent& event);
+    void AddReceiveRequestDoneEvent(const TSqsWorkloadStats::ReceiveRequestDoneEvent& event);
+    void AddDeleteRequestDoneEvent(const TSqsWorkloadStats::DeleteRequestDoneEvent& event);
+    void AddGotMessageEvent(TSqsWorkloadStats::GotMessageEvent& event);
+
+    ui64 GetTotalReadMessages() const;
+    ui64 GetTotalWriteMessages() const;
 
 private:
-    TDuration WindowSec = TDuration::Seconds(1);
-    TDuration TotalSec = TDuration::Seconds(60);
+    template<typename T>
+    using TEventQueues = std::vector<THolder<TAutoLockFreeQueue<T>>>;
 
-    void PrintHeader();
-    void PrintWindowStats();
+    void CollectEvents();
+
+    template<typename T>
+    void CollectEvents();
+
+    template<typename T>
+    void AddEvent(THolder<TAutoLockFreeQueue<T>>& queue, const T& event);
+
+    void PrintWindowStats(ui32 windowIt);
+    void PrintStats(TMaybe<ui32> windowIt) const;
+
+    size_t WriterCount;
+    size_t ReaderCount;
+
+    THolder<TAutoLockFreeQueue<TSqsWorkloadStats::SendRequestDoneEvent>> SendRequestDoneEventQueue;
+    THolder<TAutoLockFreeQueue<TSqsWorkloadStats::ReceiveRequestDoneEvent>> ReceiveRequestDoneEventQueue;
+    THolder<TAutoLockFreeQueue<TSqsWorkloadStats::DeleteRequestDoneEvent>> DeleteRequestDoneEventQueue;
+    THolder<TAutoLockFreeQueue<TSqsWorkloadStats::GotMessageEvent>> GotMessageEventQueue;
+
+    bool Quiet;
+    bool PrintTimestamp;
+
+    double WindowSec;
+    double TotalSec;
+    double WarmupSec;
+
+    double Percentile;
+
+    std::shared_ptr<std::atomic_bool> ErrorFlag;
+
+    THolder<TSqsWorkloadStats> WindowStats;
+    TSqsWorkloadStats TotalStats;
+
+    std::mutex HashMapMutex;
+    THolder<THashMap<TString, std::pair<TSqsWorkloadStats::SendRequestStartEvent, size_t>>> UnreadRequests;
+
+    TInstant WarmupTime;
 };
 
 } // namespace NYdb::NConsoleClient

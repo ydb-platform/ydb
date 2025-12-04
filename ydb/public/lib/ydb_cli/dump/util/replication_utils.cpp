@@ -60,7 +60,7 @@ TString ExtractTransformationLambdaName(const TString& lambdaCreateQuery) {
     
     size_t startPos = lambdaCreateQuery.find(lambdaNameStartPattern);
     if (startPos == TString::npos) {
-        LOG_E(Sprintf("Unexpected transfer lambda name: '%s' was not found", lambdaNameStartPattern.c_str()));
+        // LOG_E(Sprintf("Unexpected transfer lambda name: '%s' was not found", lambdaNameStartPattern.c_str()));
         return "";
     }
 
@@ -68,12 +68,12 @@ TString ExtractTransformationLambdaName(const TString& lambdaCreateQuery) {
 
     size_t endPos = lambdaCreateQuery.rfind(lambdaNameEndPattern);
     if (endPos == TString::npos) {
-        LOG_E("Unexpected transfer lambda name: end semicolon was not found");
+        // LOG_E("Unexpected transfer lambda name: end semicolon was not found");
         return "";
     }
 
     if (startPos >= endPos) {
-        LOG_E("Unexpected transfer lambda name");
+        // LOG_E("Unexpected transfer lambda name");
         return "";
     }
     

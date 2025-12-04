@@ -186,6 +186,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore66: // create secret
         case TRule_sql_stmt_core::kAltSqlStmtCore67: // alter secret
         case TRule_sql_stmt_core::kAltSqlStmtCore68: // drop secret
+        case TRule_sql_stmt_core::kAltSqlStmtCore69: // truncate table
             return false;
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Y_UNREACHABLE();

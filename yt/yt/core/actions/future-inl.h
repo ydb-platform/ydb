@@ -1246,27 +1246,6 @@ TFuture<R> TFutureBase<T>::Apply(TCallback<TFuture<R>(const TErrorOr<T>&)> callb
 }
 
 template <class T>
-template <class R>
-TFuture<R> TFutureBase<T>::ApplyUnique(TCallback<R(TErrorOr<T>&&)> callback) const
-{
-    return NYT::NDetail::ApplyUniqueHelper<R>(Impl_, std::move(callback));
-}
-
-template <class T>
-template <class R>
-TFuture<R> TFutureBase<T>::ApplyUnique(TCallback<TErrorOr<R>(TErrorOr<T>&&)> callback) const
-{
-    return NYT::NDetail::ApplyUniqueHelper<R>(Impl_, std::move(callback));
-}
-
-template <class T>
-template <class R>
-TFuture<R> TFutureBase<T>::ApplyUnique(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const
-{
-    return NYT::NDetail::ApplyUniqueHelper<R>(Impl_, std::move(callback));
-}
-
-template <class T>
 template <class U>
 TFuture<U> TFutureBase<T>::As() const
 {
@@ -1363,20 +1342,6 @@ template <class R>
 TFuture<R> TFuture<T>::Apply(TCallback<TUniqueFuture<R>(T)> callback) const
 {
     return this->Apply(TCallback<TUniqueFuture<R>(const T&)>(callback));
-}
-
-template <class T>
-template <class R>
-TFuture<R> TFuture<T>::ApplyUnique(TCallback<R(T&&)> callback) const
-{
-    return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, callback);
-}
-
-template <class T>
-template <class R>
-TFuture<R> TFuture<T>::ApplyUnique(TCallback<TFuture<R>(T&&)> callback) const
-{
-    return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, callback);
 }
 
 template <class T>

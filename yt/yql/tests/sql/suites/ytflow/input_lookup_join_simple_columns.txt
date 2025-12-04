@@ -1,0 +1,7 @@
+{"custom_key"="foo";"value"=1};
+{"custom_key"="bar";"value"=2};
+{"custom_key"=#;"value"=3};
+{"custom_key"="foobar";"value"=4};
+{"custom_key"="foo";"value"=5};
+{"custom_key"="bar";"value"=6};
+{"custom_key"="foo";"value"=7};

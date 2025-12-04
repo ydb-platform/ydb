@@ -768,13 +768,8 @@ public:
             }
         }
 
-        // Results that MUST have channels (cannot skip):
-        // 1. Results used by ParamBindings in subsequent transactions
-        // 2. Results returned to user (non-DISCARD)
-        // All other results can have CanSkipChannel = true
         THashSet<std::pair<ui32, ui32>> createChannel;
 
-        // 1. Collect results used by ParamBindings - need channels for data transfer
         for (ui32 txIdx = 0; txIdx < query.Transactions().Size(); ++txIdx) {
             const auto& tx = query.Transactions().Item(txIdx);
             for (const auto& paramBinding : tx.ParamBindings()) {

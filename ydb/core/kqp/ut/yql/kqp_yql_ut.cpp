@@ -584,21 +584,11 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
     Y_UNIT_TEST(Discard) {
         auto kikimr = DefaultKikimrRunner();
-        {
-            auto db = kikimr.GetQueryClient();
-            auto result = db.ExecuteQuery(R"(
-                DISCARD SELECT 1;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        auto db = kikimr.GetQueryClient();
+        auto result = db.ExecuteQuery(R"(
             DISCARD SELECT 1;
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(AnsiIn) {

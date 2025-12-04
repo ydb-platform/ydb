@@ -118,7 +118,8 @@ WITH (
     CREATE TABLE <table_name> (
       a Uint64,
       b Uint64,
-      e "List<List<Int32>>"
+      c Float,
+      d "List<List<Int32>>"
       PRIMARY KEY (a, b)
     );
     ```
@@ -129,6 +130,7 @@ WITH (
     CREATE TABLE <table_name> (
       a Uint64,
       b Uint64,
+      c Float,
       PRIMARY KEY (a, b)
     );
     ```
@@ -196,8 +198,7 @@ WITH (
   CREATE TABLE <table_name> (
     a Uint64,
     b Uint64,
-    c Float NOT NULL DEFAULT 3.0f,
-    d String (DEFAULT "Text", NOT NULL),
+    c Float,
     PRIMARY KEY (a, b)
   )
   WITH (

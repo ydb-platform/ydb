@@ -50,9 +50,13 @@ std::shared_ptr<arrow::RecordBatch> TestRecordBatch() {
 
 NDataShard::IExport::TTableColumns MakeYdbColumns() {
     NDataShard::IExport::TTableColumns columns;
-    columns[0] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "key", true);
-    columns[1] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "value", false);
+    columns[0] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "key", true);
+    columns[1] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "value", false);
     return columns;
+}
+
+TVector<std::pair<TString, NScheme::TTypeInfo>> MakeYdbSchema() {
+    return {{"key", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)}, {"value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)}};
 }
 
 NKikimrSchemeOp::TBackupTask MakeBackupTask(const TString& bucketName) {
@@ -66,11 +70,11 @@ NKikimrSchemeOp::TBackupTask MakeBackupTask(const TString& bucketName) {
     tableDescription.SetColumnShardCount(4);
     auto& col1 = *tableDescription.MutableSchema()->MutableColumns()->Add();
     col1.SetName("key");
-    col1.SetType("String");
+    col1.SetType("Utf8");
 
     auto& col2 = *tableDescription.MutableSchema()->MutableColumns()->Add();
     col2.SetName("value");
-    col2.SetType("String");
+    col2.SetType("Utf8");
     table.MutableSelf();
     return backupTask;
 }
@@ -83,14 +87,14 @@ NKikimrSchemeOp::TRestoreTask MakeRestoreTask(const TString& bucketName) {
     auto& description = *restoreTask.MutableTableDescription();
     auto& col1 = *description.AddColumns();
     col1.SetName("key");
-    col1.SetType("String");
+    col1.SetType("Utf8");
     col1.SetId(1);
-    col1.SetTypeId(NScheme::NTypeIds::String);
+    col1.SetTypeId(NScheme::NTypeIds::Utf8);
     auto& col2 = *description.AddColumns();
     col2.SetName("value");
-    col2.SetType("String");
+    col2.SetType("Utf8");
     col2.SetId(2);
-    col2.SetTypeId(NScheme::NTypeIds::String);
+    col2.SetTypeId(NScheme::NTypeIds::Utf8);
     description.AddKeyColumnNames("key");
     description.AddKeyColumnIds(1);
     return restoreTask;
@@ -118,8 +122,8 @@ Y_UNIT_TEST_SUITE(IScan) {
 
         TAutoPtr<IEventHandle> handle;
         runtime->DispatchEvents({}, TDuration::Seconds(1));
-        runtime->Send(new IEventHandle(exporter, edge, new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(TestRecordBatch(), false)));
-        runtime->Send(new IEventHandle(exporter, edge, new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(TestRecordBatch(), true)));
+        runtime->Send(new IEventHandle(exporter, edge, std::make_unique<NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>(TestRecordBatch(), false)));
+        runtime->Send(new IEventHandle(exporter, edge, std::make_unique<NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>(TestRecordBatch(), true)));
         auto event1 = runtime->GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult>(handle);
         UNIT_ASSERT(!event1->IsFinish);
         auto event2 = runtime->GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult>(handle);
@@ -130,7 +134,7 @@ Y_UNIT_TEST_SUITE(IScan) {
         UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount("test2", s3Client), 0);
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", result), "data_00.csv,metadata.json,permissions.pb,scheme.pb");
         auto scheme = NTestUtils::GetObject("test2", "scheme.pb", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(scheme, "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\ncolumns {\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
+        UNIT_ASSERT_VALUES_EQUAL(scheme, "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: UTF8\n      }\n    }\n  }\n}\ncolumns {\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: UTF8\n      }\n    }\n  }\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
         auto metadata = NTestUtils::GetObject("test2", "metadata.json", s3Client);
         UNIT_ASSERT_VALUES_EQUAL(metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[]}");
         auto data = NTestUtils::GetObject("test2", "data_00.csv", s3Client);
@@ -140,9 +144,18 @@ Y_UNIT_TEST_SUITE(IScan) {
         auto restoreTask = MakeRestoreTask("test2");
         auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
 
-        auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloaderImport(edge, 0, restoreTask, NKikimr::NDataShard::TTableInfo{0, userTable});
-        runtime->Register(importActor.release());
+        auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(edge, 0, restoreTask, NKikimr::NDataShard::TTableInfo{0, userTable}, MakeYdbSchema());
+        auto importActorId = runtime->Register(importActor.release());
         runtime->DispatchEvents({}, TDuration::Seconds(1));
+        
+        auto event3 = runtime->GrabEdgeEvent<TEvPrivate::TEvBackupImportRecordBatch>(handle);
+        UNIT_ASSERT(!event3->IsLast);
+        UNIT_ASSERT_VALUES_EQUAL(event3->Data->ToString(), "key:   [\n    \"foo\",\n    \"bar\",\n    \"baz\",\n    \"foo\",\n    \"bar\",\n    \"baz\"\n  ]\nvalue:   [\n    \"one\",\n    \"two\",\n    \"three\",\n    \"one\",\n    \"two\",\n    \"three\"\n  ]\n");
+        runtime->Send(new IEventHandle(importActorId, edge, std::make_unique<TEvPrivate::TEvBackupImportRecordBatchResult>()));
+
+        auto event4 = runtime->GrabEdgeEvent<TEvPrivate::TEvBackupImportRecordBatch>(handle);
+        UNIT_ASSERT(event4->IsLast);
+        UNIT_ASSERT(!event4->Data);
     }
 }
 

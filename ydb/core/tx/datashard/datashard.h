@@ -4,6 +4,7 @@
 #include "datashard_s3_upload.h"
 
 #include <ydb/core/tx/tx.h>
+#include <ydb/core/tablet_flat/util_basics.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/base/domain.h>
@@ -368,6 +369,8 @@ namespace TEvDataShard {
 
         EvBuildFulltextIndexRequest,
         EvBuildFulltextIndexResponse,
+        
+        EvAsyncJobComplete,
 
         EvEnd
     };
@@ -1455,6 +1458,15 @@ namespace TEvDataShard {
                 << " Info: " << Info
             << " }";
         }
+    };
+
+    struct TEvAsyncJobComplete : public TEventLocal<TEvAsyncJobComplete, TEvDataShard::EvAsyncJobComplete> {
+        explicit TEvAsyncJobComplete(TAutoPtr<IDestructable> prod)
+            : Prod(prod)
+        {
+        }
+
+        TAutoPtr<IDestructable> Prod;
     };
 
     struct TEvObjectStorageListingRequest

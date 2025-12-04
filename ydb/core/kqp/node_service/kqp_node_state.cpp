@@ -14,6 +14,24 @@ void TNodeState::AddRequest(TNodeRequest&& request) {
     }
 }
 
+bool TNodeState::AddTasksToRequest(ui64 txId, TActorId executerId, const TVector<ui64>& taskIds) {
+    auto& bucket = GetBucketByTxId(txId);
+    TWriteGuard guard(bucket.Mutex);
+
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
+        if (requestIt->second.ExecuterId == executerId) {
+            if (requestIt->second.ExecutionCancelled) {
+                return false;
+            }
+            for (ui64 taskId : taskIds) {
+                requestIt->second.Tasks.emplace(taskId, std::nullopt);
+            }
+            return true;
+        }
+    }
+    return false;
+}
 bool TNodeState::HasRequest(ui64 txId) const {
     const auto& bucket = GetBucketByTxId(txId);
     TReadGuard guard(bucket.Mutex);
@@ -51,8 +69,11 @@ bool TNodeState::OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId, 
                 taskIt->second = computeActorId;
                 return true;
             }
+            // If request has more tasks, then this one may already be finished and not exist.
+            return false;
         }
     }
+    // If request(s) had a single task, then the task may already be finished - and request(s) may not exist.
     return false;
 }
 
@@ -107,20 +128,14 @@ std::vector<TNodeRequest::TTaskInfo> TNodeState::GetTasksByTxId(ui64 txId) const
     return tasks;
 }
 
-THashSet<ui64> TNodeState::GetTaskIdsByTxId(ui64 txId) const {
-    THashSet<ui64> taskIds;
-
-    const auto& bucket = GetBucketByTxId(txId);
-    TReadGuard guard(bucket.Mutex);
+void TNodeState::MarkRequestAsCancelled(ui64 txId) {
+    auto& bucket = GetBucketByTxId(txId);
+    TWriteGuard guard(bucket.Mutex);
 
     const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
     for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
-        for(const auto& [taskId, actorId] : requestIt->second.Tasks) {
-            taskIds.insert(taskId);
-        }
+        requestIt->second.ExecutionCancelled = true;
     }
-
-    return taskIds;
 }
 
 void TNodeState::DumpInfo(TStringStream& str) const {
@@ -209,6 +224,34 @@ void TNodeState::DumpInfo(TStringStream& str) const {
             }
         }
     }
+}
+
+bool TNodeState::ValidateComputeActorId(const TString& computeActorId, TActorId& id) const {
+    for (const auto& bucket : Buckets) {
+        TReadGuard guard(bucket.Mutex);
+        for (const auto& [_, request] : bucket.Requests) {
+            for (auto& [_, actorId] : request.Tasks) {
+                if (actorId && ToString(*actorId) == computeActorId) {
+                    id = *actorId;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool TNodeState::ValidateKqpExecuterId(const TString& kqpExecuterId, ui32 nodeId, TActorId& id) const {
+    for (const auto& bucket : Buckets) {
+        TReadGuard guard(bucket.Mutex);
+        for (const auto& [_, request] : bucket.Requests) {
+            if (ToString(request.ExecuterId) == kqpExecuterId && request.ExecuterId.NodeId() == nodeId) {
+                id = request.ExecuterId;
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 bool TNodeState::ValidateComputeActorId(const TString& computeActorId, TActorId& id) const {

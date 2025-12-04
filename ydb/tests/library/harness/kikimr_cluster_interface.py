@@ -26,6 +26,7 @@ class KiKiMRClusterInterface(object):
         self.__client = None
         self.__kv_client = None
         self.__scheme_client = None
+        self.__config_client = None
         self.__clients = None
         self.__monitors = None
         self.__ready_timeout_seconds = 60
@@ -109,6 +110,19 @@ class KiKiMRClusterInterface(object):
                 retry_count=10,
             )
         return self.__scheme_client
+
+    @property
+    def config_client(self):
+        if self.__config_client is None:
+            self.__config_client = self._create_config_client()
+        return self.__config_client
+
+    @abc.abstractmethod
+    def _create_config_client(self):
+        """
+        Factory method for ConfigClient, must be implemented by subclasses.
+        """
+        pass
 
     def _send_get_tenant_status_request(self, database_name, token=None):
         req = GetTenantStatusRequest(database_name)

@@ -441,7 +441,10 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr reques
 
     KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvDisconnected for " << topicPath << ":" << partitionId);
 
-    for (auto& [cookie, info] : Cookies) {
+    for (auto it = Cookies.begin(); it != Cookies.end();) {
+        auto cookie = it->first;
+        auto& info = it->second;
+
         if (info.TopicPath == topicPath && info.PartitionId == partitionId) {
             info.Request->Results[info.Position].ErrorCode = EKafkaErrors::NOT_LEADER_OR_FOLLOWER;
             info.Request->Results[info.Position].ErrorMessage = TStringBuilder() << "Partition writer " << sender << " disconnected";
@@ -452,28 +455,29 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr reques
                 SendResults(ctx);
             }
 
-            Cookies.erase(cookie);
-            break;
+            it = Cookies.erase(it);
+        } else {
+            ++it;
         }
     }
 }
 
 std::pair<TString, ui32>  TKafkaProduceActor::WriterDied(const TActorId& writerId) {
-    for (auto& [topicPartition, writer] : TransactionalWriters) {
-        if (writer.ActorId == writerId) {
-            auto id = topicPartition;
-            CleanWriter(topicPartition, writerId);
-            TransactionalWriters.erase(topicPartition);
+    for (auto it = TransactionalWriters.begin(); it != TransactionalWriters.end(); ++it) {
+        if (it->second.ActorId == writerId) {
+            auto id = it->first;
+            CleanWriter(id, writerId);
+            TransactionalWriters.erase(it);
             return {id.TopicPath, id.PartitionId};
         }
     }
 
     for (auto& [topicPath, partitionWriters] : NonTransactionalWriters) {
-        for (auto& [partitionId, writer] : partitionWriters) {
-            if (writer.ActorId == writerId) {
-                auto id = partitionId;
-                CleanWriter({topicPath, static_cast<ui32>(partitionId)}, writerId);
-                partitionWriters.erase(partitionId);
+        for (auto it = partitionWriters.begin(); it != partitionWriters.end(); ++it) {
+            if (it->second.ActorId == writerId) {
+                auto id = it->first;
+                CleanWriter({topicPath, static_cast<ui32>(id)}, writerId);
+                partitionWriters.erase(it);
                 return {topicPath, static_cast<ui32>(id)};
             }
         }

@@ -17,7 +17,7 @@
 
 namespace NKikimr::NPQ {
 
-void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TString& prefix, const std::exception& exc);
+void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStringBuf prefix, const std::exception& exc);
 
 namespace NPrivate {
     class ILogPrefixBase {

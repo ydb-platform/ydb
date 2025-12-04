@@ -34,9 +34,9 @@ class WorkloadRunner:
     def run(self):
         stop = threading.Event()
         workloads = [
-            #WorkloadInsertDeleteAllTypes(self.client, self.name, stop),
-            #WorkloadVectorIndex(self.client, self.name, stop),
-            #WorkloadSelectPartition(self.client, self.name, stop),
+            WorkloadInsertDeleteAllTypes(self.client, self.name, stop),
+            WorkloadVectorIndex(self.client, self.name, stop),
+            WorkloadSelectPartition(self.client, self.name, stop),
             WorkloadSecondaryIndex(self.client, self.name, stop)
         ]
 

@@ -10,7 +10,7 @@
 namespace NYdb::NConsoleClient {
 
 int TSqsWorkloadInitScenario::Run(TClientCommand::TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(
+    TDriver driver(
         TYdbCommand::CreateDriver(
             config,
             std::unique_ptr<TLogBackend>(CreateLogBackend("cerr",
@@ -19,21 +19,58 @@ int TSqsWorkloadInitScenario::Run(TClientCommand::TConfig& config) {
         )
     );
 
-    NTopic::TTopicClient client(*driver);
+    NTopic::TTopicClient client(driver);
 
-    NTopic::TAlterTopicSettings settings;
-    settings.BeginAddConsumer().
-        ConsumerType(NTopic::EConsumerType::Shared).
-        KeepMessagesOrder(KeepMessagesOrder).
-        DefaultProcessingTimeout(TDuration::Seconds(DefaultProcessingTimeout)).
-        DeadLetterPolicy(NTopic::TDeadLetterPolicySettings().Action(NTopic::EDeadLetterAction::Move).
-        DeadLetterQueue(DlqQueueName.Defined() ? std::make_optional(*DlqQueueName) : std::nullopt)).
-        EndAddConsumer();
+    if (DlqQueueName.Defined()) {
+        auto status = client.AlterTopic(
+            TopicPath,
+            NTopic::TAlterTopicSettings().
+                BeginAddConsumer(QueueName).
+                    ConsumerType(NTopic::EConsumerType::Shared).
+                    KeepMessagesOrder(KeepMessagesOrder).
+                    DefaultProcessingTimeout(DefaultProcessingTimeout.Defined() ? std::make_optional(*DefaultProcessingTimeout) : std::nullopt).
+                    BeginDeadLetterPolicy().
+                        Enable().
+                        BeginCondition().
+                            MaxProcessingAttempts(MaxReceiveCount).
+                        EndCondition().
+                        MoveAction(*DlqQueueName).
+                    EndDeadLetterPolicy().
+                EndAddConsumer()).
+            GetValueSync();
+        NStatusHelpers::ThrowOnError(status);
+    } else if (MaxReceiveCount > 0) {
+        auto status = client.AlterTopic(
+            TopicPath,
+            NTopic::TAlterTopicSettings().
+                BeginAddConsumer(QueueName).
+                    ConsumerType(NTopic::EConsumerType::Shared).
+                    KeepMessagesOrder(KeepMessagesOrder).
+                    DefaultProcessingTimeout(DefaultProcessingTimeout.Defined() ? std::make_optional(*DefaultProcessingTimeout) : std::nullopt).
+                    BeginDeadLetterPolicy().
+                        Enable().
+                        BeginCondition().
+                            MaxProcessingAttempts(MaxReceiveCount).
+                        EndCondition().
+                        DeleteAction().
+                    EndDeadLetterPolicy().
+                EndAddConsumer()).
+            GetValueSync();
+        NStatusHelpers::ThrowOnError(status);
+    } else {
+        auto status = client.AlterTopic(
+            TopicPath,
+            NTopic::TAlterTopicSettings().
+                BeginAddConsumer(QueueName).
+                    ConsumerType(NTopic::EConsumerType::Shared).
+                    DefaultProcessingTimeout(DefaultProcessingTimeout.Defined() ? std::make_optional(*DefaultProcessingTimeout) : std::nullopt).
+                    KeepMessagesOrder(KeepMessagesOrder).
+                EndAddConsumer()).
+            GetValueSync();
+        NStatusHelpers::ThrowOnError(status);
+    }
 
-    auto status = client.AlterTopic(TopicPath, settings).GetValueSync();
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
-
-    return EXIT_SUCCESS;
+    return 0;
 }
 
 }  // namespace NYdb::NConsoleClient

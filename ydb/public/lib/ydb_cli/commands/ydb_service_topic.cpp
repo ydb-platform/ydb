@@ -179,14 +179,6 @@ namespace NYdb::NConsoleClient {
             }
             return TDuration::Seconds(hours * 3600); // using floating-point ctor with saturation
         }
-
-        TDuration ParseDuration(TStringBuf str) {
-            StripInPlace(str);
-            if (!str.empty() && !IsAsciiAlpha(str.back())) {
-                throw TMisuseException() << "Duration must ends with a unit name (ex. 'h' for hours, 's' for seconds)";
-            }
-            return TDuration::Parse(str);
-        }
     }
 
     void TCommandWithSupportedCodecs::AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NYdb::NTopic::ECodec>& supportedCodecs) {

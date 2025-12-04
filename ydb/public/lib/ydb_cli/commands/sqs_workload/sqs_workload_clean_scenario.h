@@ -10,6 +10,7 @@ public:
     int Run(TClientCommand::TConfig&);
 
     TString QueueName;
+    TString TopicPath;
 };
 
 } // namespace NYdb::NConsoleClient

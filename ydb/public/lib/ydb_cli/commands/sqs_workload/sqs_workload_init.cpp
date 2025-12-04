@@ -1,5 +1,7 @@
 #include "sqs_workload_init.h"
 
+#include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
+
 namespace NYdb::NConsoleClient {
 
 TCommandWorkloadSqsInit::TCommandWorkloadSqsInit() : TWorkloadCommand("init", {}, "Init SQS workload") {
@@ -16,29 +18,20 @@ void TCommandWorkloadSqsInit::Config(TConfig& config) {
     config.Opts->AddLongOption('n', "queue-name", "SQS queue name.").
         Required().
         StoreResult(&Scenario.QueueName);
-    config.Opts->AddLongOption("fifo", "SQS FIFO queue.").
-        DefaultValue(false).
-        StoreTrue(&Scenario.Fifo);
     config.Opts->AddLongOption("keep-messages-order", "Keep messages order.").
         DefaultValue(false).
         StoreTrue(&Scenario.KeepMessagesOrder);
     config.Opts->AddLongOption("default-processing-timeout", "Default processing timeout.").
-        DefaultValue(TDuration::Seconds(10)).
-        StoreResult(&Scenario.DefaultProcessingTimeout);
+        Optional().
+        StoreMappedResult(&Scenario.DefaultProcessingTimeout, ParseDuration);
     config.Opts->AddLongOption("deduplication-on", "SQS deduplication on.").
         DefaultValue(false).
         StoreTrue(&Scenario.DeduplicationOn);
     config.Opts->AddLongOption("dlq-queue-name", "SQS DLQ queue name.").
         Optional().
         StoreResult(&Scenario.DlqQueueName);
-    config.Opts->AddLongOption('a', "account", "AWS account ID.").
-        Required().
-        StoreResult(&Scenario.Account);
-    config.Opts->AddLongOption('t', "token", "AWS token.").
-        Required().
-        StoreResult(&Scenario.Token);
     config.Opts->AddLongOption("max-receive-count", "SQS max receive count.").
-        DefaultValue(5).
+        DefaultValue(0).
         StoreResult(&Scenario.MaxReceiveCount);
 }
 

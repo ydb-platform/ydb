@@ -18,6 +18,17 @@ int TSqsWorkloadCleanScenario::Run(TClientCommand::TConfig& config) {
     NTopic::TTopicClient client(*driver);
     NTopic::TAlterTopicSettings settings;
 
+    auto status = client.AlterTopic(
+        TopicPath,
+        NTopic::TAlterTopicSettings().
+            BeginAlterConsumer(QueueName).
+            EndAlterConsumer()).
+        GetValueSync();
+
+    NStatusHelpers::ThrowOnError(status);
+
+    // HOW TO DELETE CONSUMER?
+
     return EXIT_SUCCESS;
 }
 

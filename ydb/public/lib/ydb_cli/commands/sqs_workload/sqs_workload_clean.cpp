@@ -13,12 +13,9 @@ void TCommandWorkloadSqsClean::Config(TConfig& config) {
     config.Opts->AddLongOption('n', "queue-name", "SQS queue name.").
         Required().
         StoreResult(&Scenario.QueueName);
-    config.Opts->AddLongOption('a', "account", "AWS account ID.").
+    config.Opts->AddLongOption("topic-path", "YDB topic path.").
         Required().
-        StoreResult(&Scenario.Account);
-    config.Opts->AddLongOption('t', "token", "AWS token.").
-        Required().
-        StoreResult(&Scenario.Token);
+        StoreResult(&Scenario.TopicPath);
 }
 
 void TCommandWorkloadSqsClean::Parse(TConfig& config) { TClientCommand::Parse(config); }

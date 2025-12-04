@@ -12,9 +12,8 @@ public:
     TString TopicPath;
     TString QueueName;
     bool KeepMessagesOrder;
-    bool Fifo;
-    bool DeduplicationOn;
-    ui32 DefaultProcessingTimeout; // seconds
+    bool DeduplicationOn; // ?
+    TMaybe<TDuration> DefaultProcessingTimeout;
     TMaybe<TString> DlqQueueName;
     ui32 MaxReceiveCount;
 

@@ -8,6 +8,10 @@
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/config.pb.h>
 
+namespace NKikimr::NTable {
+    class TBackupExclusion;
+}
+
 namespace NKikimr::NTabletFlatExecutor::NBackup {
 
 enum EEv {
@@ -81,10 +85,13 @@ struct TEvChangelogFailed : public TEventLocal<TEvChangelogFailed, EvChangelogFa
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                              const THashMap<ui32, NTable::TScheme::TTableInfo>& tables,
                              TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
-                             TAutoPtr<NTable::TSchemeChanges> schema);
-NTable::IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, NTable::TColumn>& columns);
+                             TAutoPtr<NTable::TSchemeChanges> schema, TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
+
+NTable::IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, NTable::TColumn>& columns,
+                                  TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
 
 IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                               TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
-                              const NTable::TScheme& schema);
+                              const NTable::TScheme& schema, TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
+
 } // NKikimr::NTabletFlatExecutor::NBackup

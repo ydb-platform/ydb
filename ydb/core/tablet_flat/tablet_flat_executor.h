@@ -20,6 +20,7 @@ class TTabletCountersBase;
 namespace NTable {
     class TDatabase;
     class TScheme;
+    class TBackupExclusion;
 }
 
 namespace NTabletFlatExecutor {
@@ -524,6 +525,7 @@ namespace NFlatExecutorSetup {
         virtual void OnFollowerDataUpdated();
 
         virtual bool NeedBackup() const;
+        virtual TIntrusiveConstPtr<NTable::TBackupExclusion> BackupExclusion() const;
 
         // create transaction?
     protected:

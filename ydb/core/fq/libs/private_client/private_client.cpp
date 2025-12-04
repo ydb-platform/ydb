@@ -24,6 +24,7 @@ public:
         , CreateRateLimiterResourceTime(Counters->GetHistogram("CreateRateLimiterResourceMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
         , DeleteRateLimiterResourceTime(Counters->GetHistogram("DeleteRateLimiterResourceMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
     {
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         auto weakConnections = std::weak_ptr<TGRpcConnectionsImpl>(Connections_);
         std::weak_ptr<TPrivateClient::TImpl> self = weak_from_this();
         auto channelPoolUpdateWrapper = [weakConnections, self]
@@ -46,6 +47,7 @@ public:
             return true;
         };
         Connections_->AddPeriodicTask(channelPoolUpdateWrapper, PERIODIC_REBALANCE_INTERVAL);
+#endif
     }
 
     template<class TProtoResult, class TResultWrapper>
@@ -215,9 +217,11 @@ public:
     }
 
 private:
-    void UpdateKnownEndpoints(const std::string& endpoint) {
+    void UpdateKnownEndpoints([[maybe_unused]] const std::string& endpoint) {
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         std::lock_guard lock(KnownEndpointsLock);
         KnownEndpoints.emplace(endpoint);
+#endif
     }
 
 private:

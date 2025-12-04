@@ -14,6 +14,7 @@ namespace NYT::NTableClient {
 struct TMaybeDeletedColumnSchema
     : public TColumnSchema
 {
+    DEFINE_BYREF_RW_PROPERTY(std::optional<std::string>, Constraint);
     DEFINE_BYREF_RO_PROPERTY(std::optional<bool>, Deleted);
 
     TDeletedColumn GetDeletedColumnSchema() const;
@@ -37,7 +38,7 @@ struct TSerializableColumnSchema
 public:
     void DeserializeFromCursor(NYson::TYsonPullParserCursor* cursor);
 
-    void SetColumnSchema(const TColumnSchema& columnSchema);
+    void SetColumnSchema(const TColumnSchema& columnSchema, std::optional<std::string> constraint);
     void SetDeletedColumnSchema(const TDeletedColumn& deletedColumnSchema);
 
 private:

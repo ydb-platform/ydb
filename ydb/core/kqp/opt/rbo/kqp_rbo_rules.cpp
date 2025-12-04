@@ -648,9 +648,9 @@ std::shared_ptr<IOperator> TBuildInitialCBOTreeRule::SimpleTestAndApply(const st
  * Expanding CBO tree is more tricky:
  *  - We can have a join that joins a CBOtree with something else, and there could be a filter in between that we
  *    would like to push out
- *  - We can have a CBOtree who's child is a join, and there could be a filter in between that we would like to push out
  *  - We need to extend this to support filter and aggregates that will be later supported by DP CBO
  * FIXME: Add maybes to make matching look simpler
+ * FIXME: Support other joins for filter push-out, refactor into a lambda to apply to both sides
  */
 std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);

@@ -9,7 +9,7 @@ namespace NYql {
 
 using namespace NNodes;
 
-class TPqYtflowIntegration : public IYtflowIntegration {
+class TPqYtflowIntegration : public TEmptyYtflowIntegration {
 public:
     TPqYtflowIntegration(const TPqState::TPtr& state)
         : State_(state.Get())

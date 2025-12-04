@@ -6,7 +6,7 @@ namespace NYql {
 
 using namespace NNodes;
 
-class TPqYtflowOptimization : public IYtflowOptimization {
+class TPqYtflowOptimization : public TEmptyYtflowOptimization {
 public:
     TPqYtflowOptimization(const TPqState::TPtr& state)
         : State_(state.Get())

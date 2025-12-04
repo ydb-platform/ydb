@@ -182,4 +182,11 @@ set -ex
     COMMIT;
 " 
 
+retVal=$?
+if [ $retVal -ne 0 ]; then
+  echo $retVal
+  exit $retVal
+fi
+
 echo $(date +"%T.%6N") "SUCCESS"
+echo "ydb is started" > /tmp/start

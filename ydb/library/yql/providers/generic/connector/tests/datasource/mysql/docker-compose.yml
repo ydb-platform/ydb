@@ -1,24 +1,26 @@
 services:
+
   fq-connector-go:
+    build: ./connector.d
     container_name: fq-tests-mysql-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.7.2-rc.4@sha256:3dd675ebdba9ff4a1933443d801ba121d11a9eec20a6da8f0fa5dddc4ba97c0f
     ports:
       - 2130
-    volumes:
-      - ../../fq-connector-go/:/opt/ydb/cfg/
+    depends_on:
+      mysql:
+        condition: service_healthy
+
   mysql:
+    build: ./mysql.d
     container_name: fq-tests-mysql-mysql
     environment:
       MYSQL_DATABASE: db
       MYSQL_ROOT_PASSWORD: password
-    image: mirror.gcr.io/library/mysql@sha256:1579fe3a97a436cc10824fc771a07fcedc92213e7ab7604eb5d2976ca419abc8
     ports:
       - 3306
     tmpfs:
       - /run
       - /tmp
       - /var
-    volumes:
-      - ./init:/docker-entrypoint-initdb.d
-      - ./custom.cnf:/etc/mysql/conf.d/custom.cnf
-version: "3.4"
+
+version: "2.4"
+

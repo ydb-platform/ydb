@@ -18,12 +18,12 @@ from ydb.tests.library.stability.utils.results_models import (
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 
 from ydb.tests.library.stability.utils.remote_execution import execute_command
-from ydb.tests.library.stability.utils.utils import external_param_is_true
 
 
 class StressRunExecutor:
-    def __init__(self):
-        self._ignore_stderr_content = external_param_is_true('ignore_stderr_content')
+    def __init__(self, ignore_stderr_content, event_process_mode):
+        self._ignore_stderr_content = ignore_stderr_content
+        self.event_process_mode = event_process_mode
 
     def __substitute_variables_in_template(
         self,
@@ -354,7 +354,10 @@ class StressRunExecutor:
                 # Build and execute command
                 with allure.step("Execute workload command"):
                     # Disable buffering to ensure output capture
-                    cmd = f"export YDB_STRESS_UTIL_EVENT_PROCESS_MODE=send;stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
+                    event_prefix = ''
+                    if self.event_process_mode is not None:
+                        event_prefix = f'export YDB_STRESS_UTIL_EVENT_PROCESS_MODE={self.event_process_mode};'
+                    cmd = f"{event_prefix}stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
 
                     run_timeout = (
                         run_config["duration"] + 600

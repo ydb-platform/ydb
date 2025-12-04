@@ -75,7 +75,7 @@ def send_error_event(event: ErrorEvent):
     try:
         response = requests.post(target_url, json=payload, headers=headers, timeout=5)
         response.raise_for_status()
-        print(f"Request successful. {response.status_code}")
+        # print(f"Request successful. {response.status_code}")
     except requests.exceptions.ConnectionError:
         print(f"Error: Could not connect to {target_url}. Is the server running?", file=sys.stderr)
     except requests.exceptions.Timeout:
@@ -129,29 +129,29 @@ class report_init_exception(assert_exception):
     def __init__(self, func):
         super().__init__(func, 'init')
 
-    def __call__(self):
-        return super().__call__
+    def __call__(self, *args, **kwargs):
+        return super().__call__(*args, **kwargs)
 
 
 class report_work_exception(assert_exception):
     def __init__(self, func):
         super().__init__(func, 'work')
 
-    def __call__(self):
-        return super().__call__
+    def __call__(self, *args, **kwargs):
+        return super().__call__(*args, **kwargs)
 
 
 class report_teardown_exception(assert_exception):
     def __init__(self, func):
         super().__init__(func, 'teardown')
 
-    def __call__(self):
-        return super().__call__
+    def __call__(self, *args, **kwargs):
+        return super().__call__(*args, **kwargs)
 
 
 class report_verify_exception(assert_exception):
     def __init__(self, func):
         super().__init__(func, 'verify')
 
-    def __call__(self):
-        return super().__call__
+    def __call__(self, *args, **kwargs):
+        return super().__call__(*args, **kwargs)

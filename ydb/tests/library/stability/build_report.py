@@ -13,16 +13,17 @@ from ydb.tests.olap.lib.allure_utils import (
     _set_monitoring,
     _set_node_errors
 )
-from ydb.tests.library.stability.utils.utils import external_param_is_true, get_ci_version, get_self_version
+from ydb.tests.library.stability.utils.utils import external_param_is_true, get_ci_version, get_external_param, get_self_version
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 def create_parallel_allure_report(result: StressUtilTestResults, node_errors, verify_errors):
     """Creates an Allure report for workload test results"""
     additional_table_strings = {}
+    end_time = result.end_time if result.recoverability_result is None else result.recoverability_result.end_time
     parallel_allure_test_description(
         start_time=result.start_time,
-        end_time=result.end_time,
+        end_time=end_time,
         addition_table_strings=additional_table_strings,
         node_errors=node_errors,
         verify_errors=verify_errors,
@@ -73,6 +74,7 @@ def parallel_allure_test_description(
     test_info['test_tools_version'] = get_self_version()
     test_info.update(addition_table_strings)
 
+    __set_nemesis_dashboard(test_info, start_time, end_time)
     _set_monitoring(test_info, start_time, end_time)
     _set_coredumps(test_info, start_time, end_time)
     _set_logs_command(test_info, start_time, end_time)
@@ -120,6 +122,19 @@ def parallel_allure_test_description(
         logging.info("Added iterations table to description HTML")
     else:
         logging.warning("iterations_table is empty, not adding to HTML")
+
+    recoverability_results = execution_result.recoverability_result
+    if recoverability_results:
+        recovered_iterations_table = __create_parallel_test_table(recoverability_results)
+        logging.info(f"iterations_table created, length: {len(recovered_iterations_table) if recovered_iterations_table else 0}")
+        if recovered_iterations_table:
+            html += f'''
+            <h3>Recovered Workload Iterations</h3>
+            {recovered_iterations_table}
+            '''
+            logging.info("Added recovered iterations table to description HTML")
+        else:
+            logging.warning("recovered_iterations_table is empty, not adding to HTML")
 
     allure.dynamic.description_html(html)
     allure.attach(html, "description.html", allure.attachment_type.HTML)
@@ -189,3 +204,21 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str
         table_html += '</tr>'
 
     return table_html
+
+
+def __set_nemesis_dashboard(test_info: dict[str, str], start_time: float, end_time: float) -> None:
+    monitoring_start = int((start_time-120) * 1000)
+    monitoring_end = int((end_time+120) * 1000)
+    # monitoring does not show intervals less 1 minute.
+    monitoring_addition = 60000 - (monitoring_end - monitoring_start)
+    if monitoring_addition > 0:
+        monitoring_start -= monitoring_addition
+        monitoring_end += monitoring_addition
+
+    nemesis_monitoring = get_external_param('nemesis_dashboard', None)
+    if not nemesis_monitoring:
+        return
+    test_info['nemesis_dashboard'] = f"<a target='_blank' href='https://{nemesis_monitoring.format(
+        start_time=monitoring_start,
+        end_time=monitoring_end
+    )}'>Nemesis Dashboard</a>"

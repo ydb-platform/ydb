@@ -23,6 +23,7 @@ PY3TEST()
     IF(NOT NOT_INCLUDE_CLI)
         DEPENDS (
             ydb/apps/ydb
+            ydb/tests/stress/backup
             ydb/tests/stress/simple_queue
             ydb/tests/stress/topic
             ydb/tests/stress/log

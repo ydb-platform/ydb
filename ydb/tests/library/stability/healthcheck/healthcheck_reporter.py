@@ -23,8 +23,10 @@ class HealthCheckReporter():
 
     def stop_healthchecks(self):
         self.stop = True
-        if self.healthcheck_thread:
-            self.healthcheck_thread.join(10)
+        if self.healthcheck_thread and self.healthcheck_thread.is_alive():
+            self.healthcheck_thread.join(30)
+            if self.healthcheck_thread.is_alive():
+                logging.warning("Healthcheck thread did not stop gracefully, it may be hanging in a blocking operation")
 
     def __execute_healthcheck_thr(self):
         while self.stop is False:
@@ -32,17 +34,20 @@ class HealthCheckReporter():
                 self.__publish_healthcheck_results(self.__execute_healthcheck())
             except Exception as e:
                 logging.error(f"Error in healthcheck thread: {e}")
-            time.sleep(5)
+            time.sleep(15)
 
     def __execute_healthcheck(self):
         results = {}
         for host in self.hosts:
             try:
                 cmd = [f'{self.ydb_path}', '--endpoint', f'grpc://{host}:2135', 'monitoring', 'healthcheck', '--format', 'json']
-                result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+                result = subprocess.run(cmd, check=True, text=True, capture_output=True, timeout=60)
                 results[host] = json.loads(result.stdout)
             except Exception:
                 logging.error(f"Failed to execute healthcheck for {host}: {traceback.format_exc()}")
+                results[host] = {
+                    'self_check_result': 'HC_REQUEST_ERROR'
+                }
         return results
 
     def __publish_healthcheck_results(self, results):
@@ -60,4 +65,7 @@ class HealthCheckReporter():
                 "metrics": [host_metric]
             }
             headers = {'Content-Type': 'application/json'}
-            requests.post(target_url, json=payload, headers=headers, timeout=5)
+            try:
+                requests.post(target_url, json=payload, headers=headers, timeout=(5, 5))
+            except Exception as e:
+                logging.error(f"Failed to publish healthcheck results for {host}: {e}")

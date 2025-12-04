@@ -32,6 +32,7 @@ class ParallelWorkloadTestBase:
             "yaml-config",
             ""))  # Path to yaml configuration
     event_process_mode: str = get_external_param('event_process_mode', None)  # one of: save, send, both
+    ignore_stderr_content: str = external_param_is_true('ignore_stderr_content')
 
     @pytest.fixture(autouse=True, scope="session")
     def binary_deployer(self) -> StressUtilDeployer:
@@ -52,17 +53,7 @@ class ParallelWorkloadTestBase:
 
     @pytest.fixture(autouse=True, scope="session")
     def stress_executor(self) -> StressRunExecutor:
-        return StressRunExecutor()
-
-    @pytest.fixture(autouse=True, scope="session")
-    def context_setup(self, binary_deployer) -> None:
-        """
-        Common initialization for workload tests.
-        Do NOT perform _Verification here - we'll do it before each test.
-        """
-        with allure.step("Workload test setup: initialize"):
-            self._setup_start_time = time_module.time()
-            self._ignore_stderr_content = external_param_is_true('ignore_stderr_content')
+        return StressRunExecutor(self.ignore_stderr_content, self.event_process_mode)
 
     def execute_parallel_workloads_test(
         self,
@@ -138,6 +129,17 @@ class ParallelWorkloadTestBase:
         logging.debug(f"Execution finished with {execution_result}")
         logging.debug(f"Additional stats {additional_stats}")
 
+        if stress_deployer.nemesis_started:
+            # TODO stop nemesis and wait for green validation
+            # TODO start new stress tests for 10 minutes
+            # if any of them fail - mark recoverability testing as failed
+            recoverability_result = self.stop_nemesis_check_recoverability(
+                stress_executor,
+                stress_deployer,
+                workload_params,
+                preparation_result)
+            execution_result['overall_result'].recoverability_result = recoverability_result['overall_result']
+
         # PHASE 3: RESULTS (collect diagnostics and finalize)
         self._finalize_workload_results(
             stress_deployer,
@@ -172,11 +174,12 @@ class ParallelWorkloadTestBase:
         """
 
         with allure.step("Phase 3: Finalize results and diagnostics"):
-            overall_result = execution_result["overall_result"]
+            overall_result: StressUtilTestResults = execution_result["overall_result"]
             successful_runs = execution_result["successful_runs"]
             total_runs = execution_result["total_runs"]
 
-            errors_collector.check_nemesis_status(stress_deployer.nemesis_started, run_config.nemesis_enabled, run_config.stress_util_names)
+            if overall_result.recoverability_result is None:
+                errors_collector.check_nemesis_status(stress_deployer.nemesis_started, run_config.nemesis_enabled, run_config.stress_util_names)
 
             # Final processing with diagnostics (prepares data for upload)
             overall_result.workload_start_time = execution_result["workload_start_time"]
@@ -268,10 +271,6 @@ class ParallelWorkloadTestBase:
             # 4. Generate allure report
             create_parallel_allure_report(result, node_errors, verify_errors)
 
-            # Save node_errors for use after upload
-            # result._node_errors = node_errors
-
-            # Data is ready, now we can upload results
             return node_errors, verify_errors
 
     def _handle_final_status(
@@ -363,3 +362,21 @@ class ParallelWorkloadTestBase:
             detailed_error_message = "\n".join(error_details)
             exc = pytest.fail.Exception(detailed_error_message)
             raise exc
+
+    def stop_nemesis_check_recoverability(self,
+                                          stress_executor: StressRunExecutor,
+                                          stress_deployer: StressUtilDeployer,
+                                          workload_params: dict[str, dict],
+                                          preparation_result: dict[str, StressUtilDeployResult]) -> None:
+        with allure.step("Stop nemesis and check recoverability"):
+            stress_deployer._manage_nemesis(False, workload_params.keys())
+            # TODO replace with health polling
+            time_module.sleep(1)
+            recoverability_execution_result = stress_executor.execute_stress_runs(
+                stress_deployer,
+                workload_params,
+                600,
+                preparation_result,
+                False
+            )
+        return recoverability_execution_result

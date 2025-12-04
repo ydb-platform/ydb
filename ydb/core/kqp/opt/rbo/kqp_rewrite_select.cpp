@@ -431,6 +431,14 @@ TExprNode::TPtr GetTableSourceType(const NYql::TKikimrTableDescription& desc, TE
     // clang-format on
 }
 
+TExprNode::TPtr GetMember(TExprNode::TPtr node) {
+    TExprNode::TPtr member = node;
+    if (member->IsCallable("ToPg")) {
+        member = member->ChildPtr(0);
+    }
+    return member->IsCallable("Member") ? member : nullptr;
+}
+
 } // namespace
 
 namespace NKikimr {
@@ -693,9 +701,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         for (ui32 i = 0; i < result->Child(1)->ChildrenSize(); ++i) {
             const auto resultItem = result->Child(1)->ChildPtr(i);
             auto lambda = TCoLambda(ctx.DeepCopyLambda(*(resultItem->Child(2))));
-            auto resultColName = TString(resultItem->Child(0)->Content());
-            const auto* aggFuncResultType = finalType->FindItemType(resultColName);
-            Y_ENSURE(aggFuncResultType, "Cannot find type for aggregation result.");
+            const auto resultColName = TString(resultItem->Child(0)->Content());
             THashMap<TExprNode::TPtr, TString> aggregationsForReplacement;
             // There are could be a tree of aggregatation and expressions.
             //     expr0
@@ -727,9 +733,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                             // Here we want to get just a column name for aggregation.
                             // For example: f(a) -> map(a -> a) -> f(a).
                             // This is needed to simplify logic for translation from PgSelect to KqpOp.
-                            Y_ENSURE(aggInput->IsCallable("ToPg") && aggInput->ChildPtr(0)->IsCallable("Member"), "PgAgg not a member");
-                            auto member = TCoMember(aggInput->ChildPtr(0));
-                            exprBody = member.Ptr();
+                            exprBody = GetMember(aggInput);
+                            Y_ENSURE(exprBody, "Aggregation input is not a member");
+                            auto member = TCoMember(exprBody);
                             // f(a), g(a) => map(a -> a, a -> b) -> f(a), g(b)
                             TString colName = member.Name().StringValue();
                             if (aggregationUniqueColNames.contains(colName)) {
@@ -808,6 +814,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
 
                     // Do not need convertion to pg, because input of projection map is aggregation.
                     if (!distinctAll) {
+                        const auto* aggFuncResultType = finalType->FindItemType(resultColName);
+                        Y_ENSURE(aggFuncResultType, "Cannot find type for aggregation result.");
+
                         auto toPg = ctx.NewCallable(node->Pos(), "ToPg", {member});
                         auto pgType = ctx.NewCallable(
                             node->Pos(), "PgType",

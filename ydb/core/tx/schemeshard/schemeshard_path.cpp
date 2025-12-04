@@ -970,6 +970,7 @@ const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) con
         || (Path.Base()->IsColumnTable() && AppData()->FeatureFlags.GetEnableColumnTablesBackup())
         || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
         || Path.Base()->IsPQGroup()
+        || Path.Base()->IsReplication()
     )  {
         return *this;
     }

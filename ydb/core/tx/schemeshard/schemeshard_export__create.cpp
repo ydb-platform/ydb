@@ -419,7 +419,8 @@ private:
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView
-            || item.SourcePathType == NKikimrSchemeOp::EPathTypePersQueueGroup)
+            || item.SourcePathType == NKikimrSchemeOp::EPathTypePersQueueGroup
+            || item.SourcePathType == NKikimrSchemeOp::EPathTypeReplication )
         {
             Ydb::Export::ExportToS3Settings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));

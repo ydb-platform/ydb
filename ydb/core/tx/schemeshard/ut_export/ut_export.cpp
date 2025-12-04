@@ -694,6 +694,45 @@ namespace {
             }
         }
 
+        void TestReplication(const TString& scheme, const TString& expected, bool enablePermissions = false) {
+            EnvOptions().EnablePermissionsExport(enablePermissions);
+            Env();
+            ui64 txId = 100;
+
+            TestCreateReplication(Runtime(), ++txId, "/MyRoot", scheme);
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TString request = Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_path: "/MyRoot/Replication"
+                        destination_prefix: "Replication"
+                    }
+                }
+            )", S3Port());
+
+            TestExport(Runtime(), ++txId, "/MyRoot", request);
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            UNIT_ASSERT(HasS3File("/Replication/create_async_replication.sql"));
+            const auto content = GetS3FileContent("/Replication/create_async_replication.sql");
+            UNIT_ASSERT_EQUAL_C(
+                content, expected, 
+                TStringBuilder() << "\nExpected:\n\n" << expected << "\n\nActual:\n\n" << content);
+            
+            if (enablePermissions) {
+                UNIT_ASSERT(HasS3File("/Replication/permissions.pb"));
+                const auto permissions = GetS3FileContent("/Replication/permissions.pb");
+                UNIT_ASSERT_EQUAL_C(
+                    permissions, "", 
+                    TStringBuilder() << "chtoto" << "\n\nVS\n\n" << content);
+            }
+        }
+
     protected:
         TS3Mock::TSettings& S3Settings() {
             if (!S3ServerSettings) {
@@ -3222,5 +3261,146 @@ attributes {
               }
             }
         )");
+    }
+    
+    Y_UNIT_TEST(ReplicationExportWithStaticCredentials) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: ""
+                    StaticCredentials {
+                        User: "user"
+                        Password: "pwd"
+                    }
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                }
+            }
+        )";
+        // As passwords are not backuped 
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=',
+  USER = 'user',
+  PASSWORD_SECRET_NAME = '',
+  CONSISTENCY_LEVEL = 'Row'
+);)";
+        TestReplication(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ReplicationExportWithOAuthCredentials) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: ""
+                    OAuthToken {
+                        Token: "super-secret-token"
+                        TokenSecretName: "token-secret-name"
+                    }
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                }
+            }
+        )";
+        // As OAuth tokens are not backuped
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=',
+  TOKEN_SECRET_NAME = 'token-secret-name',
+  CONSISTENCY_LEVEL = 'Row'
+);)";
+        TestReplication(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ReplicationExportMultipleItems) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: ""
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                    Targets {
+                        SrcPath: "/MyRoot/Table2"
+                        DstPath: "/MyRoot/Table2Replica"
+                    }
+                    Targets {
+                        SrcPath: "/MyRoot/Table3"
+                        DstPath: "/MyRoot/Table3Replica"
+                    }
+                }
+            }
+        )";
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`,
+  `/MyRoot/Table2` AS `/MyRoot/Table2Replica`,
+  `/MyRoot/Table3` AS `/MyRoot/Table3Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=',
+  CONSISTENCY_LEVEL = 'Row'
+);)";
+        TestReplication(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ReplicationExportGlobalConsistency) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: ""
+                }
+                ConsistencySettings {
+                    Global {
+                        CommitIntervalMilliSeconds: 17000
+                    }
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                }
+            }
+        )";
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=',
+  CONSISTENCY_LEVEL = 'Global',
+  COMMIT_INTERVAL = Interval('PT17S')
+);)";
+        TestReplication(scheme, expected);
     }
 }

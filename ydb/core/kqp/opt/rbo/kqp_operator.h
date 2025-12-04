@@ -15,7 +15,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Aggregate, Limit, UnionAll, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Aggregate, Limit, UnionAll, CBOTree, Root };
 
 /* Represents aggregation phases. */
 enum EAggregationPhase : ui32 {Intermediate, Final};
@@ -551,6 +551,24 @@ class TOpLimit : public IUnaryOperator {
     virtual TString ToString(TExprContext& ctx) override;
 
     TExprNode::TPtr LimitCond;
+};
+
+/***
+ * This operator packages a subtree of operators in order to pass them to dynamic programming optimizer
+ */
+class TOpCBOTree : public IOperator {
+  public:
+    TOpCBOTree(std::shared_ptr<IOperator> treeRoot, TPositionHandle pos);
+    
+    virtual TVector<TInfoUnit> GetOutputIUs() override { return TreeRoot->GetOutputIUs(); }
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
+    virtual TString ToString(TExprContext& ctx) override;
+
+    virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
+    virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
+
+    std::shared_ptr<IOperator> TreeRoot;
+    TVector<std::shared_ptr<IOperator>> TreeNodes;
 };
 
 class TOpRoot : public IUnaryOperator {

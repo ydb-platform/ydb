@@ -440,6 +440,8 @@ void TOpJoin::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
 
     if (Props.JoinAlgo.has_value()) {
         Props.Cost = CBOStats.Cost;
+    } else {
+        Props.Cost = std::nullopt;
     }
 }
 
@@ -467,7 +469,26 @@ void TOpUnionAll::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
 
     if (GetLeftInput()->Props.Cost.has_value() && GetRightInput()->Props.Cost.has_value()) {
         Props.Cost = *GetLeftInput()->Props.Cost + *GetRightInput()->Props.Cost;
+    } else {
+        Props.Cost = std::nullopt;
     }
+}
+
+void TOpCBOTree::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
+    for (auto op: TreeNodes) {
+        op->ComputeMetadata(ctx, planProps);
+    }
+
+    Props.Metadata = TreeRoot->Props.Metadata;
+}
+
+void TOpCBOTree::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
+    for (auto op: TreeNodes) {
+        op->ComputeStatistics(ctx, planProps);
+    }
+
+    Props.Statistics = TreeRoot->Props.Statistics;
+    Props.Cost = TreeRoot->Props.Cost;
 }
 
 void TOpRoot::ComputePlanMetadata(TRBOContext & ctx) {

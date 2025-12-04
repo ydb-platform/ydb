@@ -17,7 +17,9 @@ bool ISimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContex
     }
 }
 
-TRuleBasedStage::TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules) : Rules(rules) {
+TRuleBasedStage::TRuleBasedStage(TString stageName, TVector<std::shared_ptr<IRule>> rules) : 
+    StageName(stageName),
+    Rules(rules) {
     for (auto & r : Rules) {
         Props |= r->Props;
     }
@@ -95,8 +97,8 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) 
     auto context = TRBOContext(KqpCtx, ctx, TypeCtx, RBOTypeAnnTransformer, FuncRegistry);
 
     for (size_t idx = 0; idx < Stages.size(); idx++) {
-        YQL_CLOG(TRACE, CoreDq) << "Running stage: " << idx;
         auto stage = Stages[idx];
+        YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
         ComputeRequiredProps(root, stage->Props, context);
         stage->RunStage(root, context);
         YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);

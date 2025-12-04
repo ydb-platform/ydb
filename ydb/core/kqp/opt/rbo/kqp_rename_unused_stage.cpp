@@ -107,6 +107,7 @@ struct TIntTUnitPairHash {
  */
 
 TRenameStage::TRenameStage() {
+    StageName = "Remove redundant maps";
     Props = ERuleProperties::RequireParents;
 }
 

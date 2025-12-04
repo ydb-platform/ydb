@@ -899,6 +899,33 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
     return strBuilder;
 }
 
+/***
+ * OpCBOTree operator methods
+ */
+TOpCBOTree::TOpCBOTree(std::shared_ptr<IOperator> treeRoot, TPositionHandle pos) :
+    IOperator(EOperator::CBOTree, pos),
+    TreeRoot(treeRoot),
+    TreeNodes({treeRoot}) {
+        Children = treeRoot->Children;
+    }
+
+void TOpCBOTree::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+    for (auto op : TreeNodes) {
+        op->RenameIUs(renameMap, ctx, stopList);
+    }
+}
+
+TString TOpCBOTree::ToString(TExprContext& ctx) {
+    TStringBuilder res;
+    res << "CBO Tree: [";
+    for (auto op : TreeNodes) {
+        res << op->ToString(ctx);
+    }
+    return res;
+}
+
+
+
 /**
  * OpRoot operator methods
  */

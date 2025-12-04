@@ -1,15 +1,16 @@
 services:
+
   fq-connector-go:
+    build: ./connector.d
     container_name: fq-tests-mssql-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.6.2@sha256:a79b73f31d6ad37ca32d9212fe588e13bef30b56b3d29bbf49e450270c5e11f7
     ports:
       - 2130
-    volumes:
-      - ../../fq-connector-go/:/opt/ydb/cfg/
+    depends_on:
+      ms_sql_server:
+        condition: service_healthy
+
   ms_sql_server:
-    build:
-      context: ./init
-      dockerfile: Dockerfile
+    build: ./ms_sql_server.d
     container_name: fq-tests-mssql-ms_sql_server
     environment:
       ACCEPT_EULA: "Y"
@@ -18,4 +19,5 @@ services:
       SA_PASSWORD: Qwerty12345!
     ports:
       - 1433:1433
-version: "3.4"
+
+version: "2.4"

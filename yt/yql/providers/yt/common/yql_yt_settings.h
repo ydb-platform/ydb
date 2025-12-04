@@ -354,6 +354,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseNativeDynamicTableRead;
     NCommon::TConfSetting<bool, Static> DontForceTransformForInputTables;
     NCommon::TConfSetting<bool, Static> _RequestOnlyRequiredAttrs;
+    NCommon::TConfSetting<bool, Static> _CacheSchemaBySchemaId;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

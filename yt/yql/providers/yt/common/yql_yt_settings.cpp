@@ -337,6 +337,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
             MaxInputTables = value;
         })
         .Deprecated("Pragma ExtendTableLimit is deprecated. Use MaxInputTables instead");
+    REGISTER_SETTING(*this, _CacheSchemaBySchemaId);
     REGISTER_SETTING(*this, CommonJoinCoreLimit);
     REGISTER_SETTING(*this, CombineCoreLimit).Lower(1_MB); // Min 1Mb
     REGISTER_SETTING(*this, SwitchLimit).Lower(1_MB); // Min 1Mb

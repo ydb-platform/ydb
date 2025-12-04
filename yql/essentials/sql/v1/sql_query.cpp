@@ -1118,7 +1118,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "EXTERNAL_DATA_SOURCE", false, std::move(kv), std::move(toReset), context));
+            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
+            AdjustSecretPaths(kv, EDS_SECRETS_SETTINGS, prefixPath);
+
+            auto operation = BuildAlterObjectOperation(
+                Ctx_.Pos(), BuildTablePath(prefixPath, objectId), "EXTERNAL_DATA_SOURCE",
+                /* missingOk = */ false, std::move(kv), std::move(toReset), context);
+            AddStatementToBlocks(blocks, std::move(operation));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore32: {
@@ -2304,6 +2310,27 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
                     context,
                     Ctx_.Scoped));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore69: {
+            // truncate_table_stmt: TRUNCATE TABLE simple_table_ref;
+            Ctx_.BodyPart();
+            auto& rule = core.GetAlt_sql_stmt_core69().GetRule_truncate_table_stmt1();
+
+            TTableRef tr;
+            if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref3(), tr)) {
+                return false;
+            }
+
+            const bool isKikimr = tr.Service == KikimrProviderName || tr.Service == YdbProviderName;
+            if (!isKikimr && tr.Service != UnknownProviderName) {
+                Ctx_.Error(GetPos(rule.GetToken1())) << "TRUNCATE TABLE is unsupported for " << tr.Service << " tables";
+                return false;
+            }
+
+            TTruncateTableParameters params{};
+
+            AddStatementToBlocks(blocks, BuildTruncateTable(Ctx_.Pos(), tr, params, Ctx_.Scoped));
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:

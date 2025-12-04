@@ -2104,7 +2104,10 @@ struct TTypeV3MemberWrapper
 [[maybe_unused]]
 void Serialize(const TTypeV3MemberWrapper& wrapper, NYson::IYsonConsumer* consumer)
 {
-    Serialize(wrapper.Member, consumer);
+    NYTree::BuildYsonFluently(consumer).BeginMap()
+        .Item("type").Value(TTypeV3LogicalTypeWrapper{wrapper.Member.Type})
+        .Item("name").Value(wrapper.Member.Name)
+    .EndMap();
 }
 
 [[maybe_unused]]

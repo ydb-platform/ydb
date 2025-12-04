@@ -8,11 +8,6 @@ using namespace NYPath;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static TYPath GetPrintableStructType(const std::type_info& type)
-{
-    return "[" + TypeName(type) + "]:";
-}
-
 std::optional<EUnrecognizedStrategy> GetRecursiveUnrecognizedStrategy(EUnrecognizedStrategy strategy)
 {
     return strategy == EUnrecognizedStrategy::KeepRecursive || strategy == EUnrecognizedStrategy::ThrowRecursive
@@ -81,7 +76,8 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const std::string& keyOrAl
             return parameter;
         }
     }
-    THROW_ERROR_EXCEPTION("Key or alias %Qv not found in yson struct", keyOrAlias);
+    THROW_ERROR_EXCEPTION("Key or alias %Qv not found in yson struct", keyOrAlias)
+        << TErrorAttribute("struct", TypeName(GetStructType()));
 }
 
 void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const std::string& key, const NYTree::INodePtr& node) const
@@ -101,7 +97,8 @@ void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const std::string& 
                 "Postprocess failed while loading parameter %Qv from value %Qv",
                 key,
                 ConvertToYsonString(node, NYson::EYsonFormat::Text))
-                    << ex;
+                    << ex
+                    << TErrorAttribute("struct", TypeName(GetStructType()));
         }
     };
     auto loadOptions = TLoadParameterOptions{
@@ -115,7 +112,7 @@ void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const std::func
 {
     for (const auto& [name, parameter] : SortedParameters_) {
         parameter->PostprocessParameter(target, [&] {
-            return (pathGetter ? pathGetter() : GetPrintableStructType(GetStructType())) + "/" + ToYPathLiteral(name);
+            return (pathGetter ? pathGetter() : TYPath("")) + "/" + ToYPathLiteral(name);
         });
     }
 
@@ -124,10 +121,10 @@ void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const std::func
             postprocessor(target);
         }
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Postprocess failed at %v:%v",
-            TypeName(GetStructType()),
+        THROW_ERROR_EXCEPTION("Postprocess failed at %v",
             !pathGetter ? "root" : pathGetter())
-                << ex;
+                << ex
+                << TErrorAttribute("struct", TypeName(GetStructType()));
     }
 }
 
@@ -154,8 +151,9 @@ void TYsonStructMeta::LoadStruct(
             auto otherChild = mapNode->FindChild(alias);
             if (child && otherChild && !AreNodesEqual(child, otherChild)) {
                 THROW_ERROR_EXCEPTION("Different values for aliased parameters %Qv and %Qv", key, alias)
-                        << TErrorAttribute("main_value", child)
-                            << TErrorAttribute("aliased_value", otherChild);
+                    << TErrorAttribute("struct", TypeName(GetStructType()))
+                    << TErrorAttribute("main_value", child)
+                    << TErrorAttribute("aliased_value", otherChild);
             }
             if (!child && otherChild) {
                 child = otherChild;
@@ -164,7 +162,7 @@ void TYsonStructMeta::LoadStruct(
         }
         auto loadOptions = TLoadParameterOptions{
             .PathGetter = [&] {
-                return (pathGetter ? pathGetter() : GetPrintableStructType(GetStructType())) + "/" + ToYPathLiteral(key);
+                return (pathGetter ? pathGetter() : TYPath("")) + "/" + ToYPathLiteral(key);
             },
             .RecursiveUnrecognizedRecursively = GetRecursiveUnrecognizedStrategy(unrecognizedStrategy),
         };
@@ -214,8 +212,8 @@ void TYsonStructMeta::LoadStruct(
 
     auto createLoadOptions = [&] (TStringBuf key) {
         return TLoadParameterOptions{
-            .PathGetter = [&pathGetter, key, this] {
-                return (pathGetter ? pathGetter() : GetPrintableStructType(GetStructType())) + "/" + ToYPathLiteral(key);
+            .PathGetter = [&pathGetter, key] {
+                return (pathGetter ? pathGetter() : TYPath("")) + "/" + ToYPathLiteral(key);
             },
             .RecursiveUnrecognizedRecursively = GetRecursiveUnrecognizedStrategy(unrecognizedStrategy),
         };
@@ -245,6 +243,7 @@ void TYsonStructMeta::LoadStruct(
             auto secondNode = ConvertTo<INodePtr>(NYson::TYsonStringBuf(data));
             if (!AreNodesEqual(firstNode, secondNode)) {
                 THROW_ERROR_EXCEPTION("Different values for aliased parameters %Qv and %Qv", canonicalKey, key)
+                    << TErrorAttribute("struct", TypeName(GetStructType()))
                     << TErrorAttribute("main_value", firstNode)
                     << TErrorAttribute("aliased_value", secondNode);
             }

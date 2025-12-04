@@ -13,6 +13,7 @@ public:
     TString ErrorMessagesDestiny;
     ui64 VisibilityTimeoutMs;
     ui64 HandleMessageDelayMs;
+    bool ValidateFifo;
 };
 
 } // namespace NYdb::NConsoleClient

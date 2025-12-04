@@ -28,6 +28,9 @@ int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
         .ErrorMessagesDestiny = ErrorMessagesDestiny,
         .HandleMessageDelay = TDuration::MilliSeconds(HandleMessageDelayMs),
         .VisibilityTimeout = TDuration::MilliSeconds(VisibilityTimeoutMs),
+        .ValidateFifo = ValidateFifo,
+        .HashMapMutex = std::make_shared<std::mutex>(),
+        .LastReceivedMessageInGroup = std::make_shared<THashMap<TString, TInstant>>(),
     };
 
     TSqsWorkloadReader::RunLoop(params, Now() + params.TotalSec);

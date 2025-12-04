@@ -51,6 +51,9 @@ void TCommandWorkloadSqsRunRead::Config(TConfig& config) {
         .DefaultValue(0)  // 0 means no delay
         .StoreResult(&Scenario.HandleMessageDelayMs);
     config.Opts->AddLongOption("batch-size", "Batch size.").DefaultValue(1).StoreResult(&Scenario.BatchSize);
+    config.Opts->AddLongOption("validate-fifo", "Validate FIFO queue.").
+        DefaultValue(false).
+        StoreTrue(&Scenario.ValidateFifo);
 }
 
 void TCommandWorkloadSqsRunRead::Parse(TConfig& config) { TClientCommand::Parse(config); }

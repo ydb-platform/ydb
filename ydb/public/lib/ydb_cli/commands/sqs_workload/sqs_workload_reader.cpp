@@ -41,23 +41,32 @@ void TSqsWorkloadReader::OnMessageReceived(
     Aws::Vector<Aws::SQS::Model::DeleteMessageBatchRequestEntry> deleteMessageBatchRequestEntries;
     for (const auto& message : messages) {
         auto startHandlingTime = TInstant::Now();
+        TInstant sendTimestamp = TInstant::Now();
 
         try {
             const auto& body = message.GetBody();
-            std::string send_time;
+            std::string sendTime;
             for (size_t i = 0; i < body.size(); ++i) {
                 if (body[i] == 'a') {
                     break;
                 }
 
-                send_time.push_back(body[i]);
+                sendTime.push_back(body[i]);
             }
 
-            [[maybe_unused]] auto endToEnd = (TInstant::Now().MilliSeconds() - std::stoll(send_time));
+            [[maybe_unused]] auto endToEnd = (TInstant::Now().MilliSeconds() - std::stoll(sendTime));
             // params.Log->Write(ELogPriority::TLOG_INFO, TStringBuilder() << "End-to-end latency: " << endToEnd << "
             // ms");
+
+            sendTimestamp = TInstant::MilliSeconds(std::stoll(sendTime));
         } catch (const std::exception& e) {
             params.Log->Write(ELogPriority::TLOG_ERR, TStringBuilder() << "Error parsing message body: " << e.what());
+        }
+
+        if (params.ValidateFifo && !ValidateFifo(params, message, sendTimestamp)) {
+            params.Log->Write(ELogPriority::TLOG_ERR, TStringBuilder() << "FIFO validation failed for message: " << message.GetMessageId());
+            params.ErrorFlag->store(true);
+            return;
         }
 
         if (ShouldFail(params, message)) {
@@ -103,6 +112,28 @@ bool TSqsWorkloadReader::ShouldFail(const TSqsWorkloadReaderParams& params, cons
     }
 
     return (params.ErrorMessagesDestiny == kErrorMessagesDestinyFatal) || (std::rand() % 2 == 0);
+}
+
+bool TSqsWorkloadReader::ValidateFifo(const TSqsWorkloadReaderParams& params, const Aws::SQS::Model::Message& message, TInstant sendTimestamp) {
+    std::unique_lock<std::mutex> locker(*params.HashMapMutex);
+    const auto& attributes = message.GetAttributes();
+    const auto& messageGroupId = attributes.find(Aws::SQS::Model::MessageSystemAttributeName::MessageGroupId);
+    if (messageGroupId == attributes.end()) {
+        return false;
+    }  
+
+    auto lastReceivedMessageInGroup = params.LastReceivedMessageInGroup->find(messageGroupId->second);
+    if (lastReceivedMessageInGroup == params.LastReceivedMessageInGroup->end()) {
+        (*params.LastReceivedMessageInGroup)[messageGroupId->second] = sendTimestamp;
+        return true;
+    }
+
+    if (lastReceivedMessageInGroup->second > sendTimestamp) {
+        return false;
+    }
+
+    (*params.LastReceivedMessageInGroup)[messageGroupId->second] = sendTimestamp;
+    return true;
 }
 
 void TSqsWorkloadReader::RunLoop(const TSqsWorkloadReaderParams& params, TInstant endTime) {

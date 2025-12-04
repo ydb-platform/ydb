@@ -24,6 +24,9 @@ struct TSqsWorkloadReaderParams {
     TString ErrorMessagesDestiny;
     TDuration HandleMessageDelay;
     TDuration VisibilityTimeout;
+    bool ValidateFifo;
+    std::shared_ptr<std::mutex> HashMapMutex;
+    std::shared_ptr<THashMap<TString, TInstant>> LastReceivedMessageInGroup;
 };
 
 class TSqsWorkloadReader {
@@ -39,6 +42,7 @@ private:
     );
 
     static bool ShouldFail(const TSqsWorkloadReaderParams& params, const Aws::SQS::Model::Message& message);
+    static bool ValidateFifo(const TSqsWorkloadReaderParams& params, const Aws::SQS::Model::Message& message, TInstant sendTimestamp);
 };
 
 } // namespace NYdb::NConsoleClient

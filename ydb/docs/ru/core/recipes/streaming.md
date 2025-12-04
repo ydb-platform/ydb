@@ -84,9 +84,7 @@ $number_errors = (
         CAST(HOP_START() AS String) AS ts
     FROM
         $filtered
-    GROUP BY
-        HoppingWindow(CAST(time AS Timestamp), 'PT600S', 'PT600S'),
-        host
+    GROUP BY HOP(CAST(time AS Timestamp), 'PT600S', 'PT600S', 'PT0S'), host
 );
 
 $json = (

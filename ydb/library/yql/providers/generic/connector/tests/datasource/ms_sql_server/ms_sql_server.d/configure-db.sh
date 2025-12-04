@@ -24,3 +24,12 @@ fi
 
 # Run the setup script to create the DB and the schema in the DB
 /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P $SA_PASSWORD -d master -i setup.sql
+
+retVal=$?
+if [ $retVal -ne 0 ]; then
+  echo $retVal
+  exit $retVal
+fi
+
+echo $(date +"%T.%6N") "SUCCESS"
+echo "mssql is started" > /tmp/start

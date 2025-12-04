@@ -300,3 +300,12 @@ INSERT INTO "C##ADMIN"."column_selection_col3" ("COL1", "col2") VALUES
 	(10, 20);
 	exit;
 EOF
+
+retVal=$?
+if [ $retVal -ne 0 ]; then
+  echo $retVal
+  exit $retVal
+fi
+
+echo $(date +"%T.%6N") "SUCCESS"
+echo "oracle is started" > /tmp/start

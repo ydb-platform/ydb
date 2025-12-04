@@ -5,6 +5,7 @@
 
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
 
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
@@ -117,10 +118,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
 }
 
 bool TCommitOffsetActor::OnUnhandledException(const std::exception& exc) {
-    AFL_ERROR(NKikimrServices::PQ_READ_PROXY)
-        ("unhandled exception", TypeName(exc))
-        ("error",  exc.what())
-        ("backtrace", TBackTrace::FromCurrentException().PrintToString());
+    NPQ::DoLogUnhandledException(NKikimrServices::PQ_READ_PROXY, "[CommitOffsetActor]", exc);
 
     Ydb::Topic::CommitOffsetResult result;
     Request().SendResult(result, Ydb::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR);

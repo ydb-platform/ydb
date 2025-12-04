@@ -65,8 +65,8 @@ public:
             , Sensitive(sensitive)
             {}
 
-            TString ToSelect() const {
-                if (Sensitive) {
+            TString ToSelect(bool sanitize) const {
+                if (sanitize && Sensitive) {
                     return TStringBuilder() << "Unicode::ReplaceLast(Unicode::SplitToList(`" << Name << "`, ' ')[0], '', '...') AS `" << Name << '`';
                 }
                 return TStringBuilder() << '`' << Name << '`';
@@ -77,7 +77,7 @@ public:
         TString TableName;
         bool Sensitive = false;
 
-        TString ToSelect() {
+        TString ToSelect(bool sanitize) {
             TStringBuilder sb;
             sb << "SELECT ";
             ui32 cnt = 0;
@@ -85,7 +85,7 @@ public:
                 if (cnt++) {
                     sb << ',';
                 }
-                sb << c.ToSelect();
+                sb << c.ToSelect(sanitize);
             }
             sb << " FROM `" << TableName << '`';
             return sb;
@@ -137,6 +137,7 @@ public:
     TInstant Started;
     TDuration Duration;
     TDuration Period;
+    bool Sanitize;
 
     void SendRequest(ui32 i) {
         ui32 nodeId = Nodes[i].NodeId;
@@ -212,7 +213,7 @@ public:
         ActorIdToProto(SelfId(), request->Record.MutableRequestActorId());
         request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-        request->Record.MutableRequest()->SetQuery(Queries[QueryIdx].ToSelect());
+        request->Record.MutableRequest()->SetQuery(Queries[QueryIdx].ToSelect(Sanitize));
         request->Record.MutableRequest()->SetKeepSession(true);
         request->Record.MutableRequest()->MutableTxControl()->Mutablebegin_tx()->Mutablestale_read_only();
         ++Requested;
@@ -229,11 +230,11 @@ public:
         auto record = ev->Get()->Record;
         auto* q = State.AddQueries();
         q->SetTableName(Queries[QueryIdx].TableName);
-        q->SetQuery(Queries[QueryIdx].ToSelect());
+        q->SetQuery(Queries[QueryIdx].ToSelect(Sanitize));
         q->MutableResponse()->CopyFrom(record.GetResponse());
         ++Received;
         ++QueryIdx;
-        while (QueryIdx < Queries.size() && Queries[QueryIdx].Sensitive) {
+        while (QueryIdx < Queries.size() && Queries[QueryIdx].Sensitive && Sanitize) {
             QueryIdx++;
         }
         CloseSession();
@@ -327,7 +328,7 @@ public:
         const TActorId nameserviceId = GetNameserviceActorId();
         Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         TBase::Become(&TThis::StateRequestedBrowse);
-
+        Sanitize = GetProtoRequest()->sanitize();
         Duration = TDuration::Seconds(GetProtoRequest()->duration_seconds() ? GetProtoRequest()->duration_seconds() : defaultDurationSec);
         Started = TInstant::Now();
         Schedule(Duration, new TEvents::TEvWakeup());

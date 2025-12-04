@@ -111,6 +111,10 @@ public:
         if (settings.PeriodSeconds_) {
             request.set_period_seconds(settings.PeriodSeconds_.value());
         }
+
+        if (settings.Sanitize_) {
+            request.set_sanitize(settings.Sanitize_.value());
+        }
         auto promise = NThreading::NewPromise<TClusterStateResult>();
 
         auto extractor = [promise]

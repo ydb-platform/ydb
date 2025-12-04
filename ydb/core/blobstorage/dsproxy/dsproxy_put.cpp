@@ -465,8 +465,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                     (History, PutImpl.PrintHistory()));
         }
 
-        if (ResponsesSent == PutImpl.Blobs.size()) {
-            STLOG(PutImpl.WasNotOkResponses() && PopAllowToken(HandleClass) ? PRI_NOTICE : PRI_DEBUG,
+        if (ResponsesSent == PutImpl.Blobs.size() && IS_LOG_PRIORITY_ENABLED(PutImpl.ResultPriority, LogCtx.LogComponent) && PopAllowToken(HandleClass)) {
+            STLOG(PutImpl.ResultPriority,
                     BS_PROXY_PUT, BPP72, "Query history",
                     (GroupId, Info->GroupID),
                     (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
@@ -747,7 +747,13 @@ public:
         TPutImpl::TPutResultVec putResults;
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
             if (!PutImpl.Blobs[blobIdx].Replied && DeadlineMask[blobIdx]) {
-                PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, "Deadline timer hit", putResults);
+                TStringStream str;
+                str << "Deadline timer hit";
+                str << " GroupId# " << Info->GroupID;
+                str << " BlobId# " << PutImpl.Blobs[blobIdx].BlobId.ToString();
+                str << " Deadline# " << PutImpl.Blobs[blobIdx].Deadline.ToString();
+                str << " RequestStartTime# " << RequestStartTime;
+                PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, str.Str(), putResults);
             }
         }
         if (!ReplyAndDieWithLastResponse(putResults)) {

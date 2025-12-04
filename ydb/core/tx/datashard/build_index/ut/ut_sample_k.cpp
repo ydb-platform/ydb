@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         NKikimr::DoBadRequest<TEvDataShard::TEvSampleKResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring);
     }
 
-    static TString DoSampleK(Tests::TServer::TPtr server, TActorId sender, const TString& tableFrom, const TRowVersion& snapshot, ui64 seed, ui64 k) {
+    static TString DoSampleK(Tests::TServer::TPtr server, TActorId sender, const TString& tableFrom, const TRowVersion& snapshot, ui64 seed, ui64 k, bool skipForeign = false) {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
         auto datashards = GetTableShards(server, sender, tableFrom);
@@ -88,6 +88,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
 
                 rec.AddColumns("value");
                 rec.AddColumns("key");
+                if (skipForeign) {
+                    rec.AddColumns(NTableIndex::NKMeans::IsForeignColumn);
+                }
 
                 if (snapshot.TxId) {
                     rec.SetSnapshotTxId(snapshot.TxId);
@@ -251,6 +254,41 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
                                      "value = 50, key = 5\n"
                                      "value = 40, key = 4\n");
         }
+    }
+
+    Y_UNIT_TEST(SkipForeign) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+        options.AllowSystemColumnNames(true);
+        options.Columns({
+            {"key", "Uint32", true, true},
+            {"value", "Uint32", false, false},
+            {NTableIndex::NKMeans::IsForeignColumn, "Bool", false, true},
+        });
+        CreateShardedTable(server, sender, "/Root", "table-1", options);
+
+        // Upsert some initial values
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value, __ydb_foreign) VALUES "
+            "(1, 10, true), (2, 20, true), (3, 30, true), (4, 40, true), (5, 50, false);");
+
+        auto snapshot = CreateVolatileSnapshot(server, {kTable});
+
+        ui64 seed = 0, k = 2;
+        TString data = DoSampleK(server, sender, kTable, snapshot, seed, k, true);
+        UNIT_ASSERT_VALUES_EQUAL(data, "value = 50, key = 5\n");
     }
 }
 

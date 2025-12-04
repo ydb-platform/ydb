@@ -94,7 +94,7 @@ void TPartitionTestWrapper::LoadMeta(const NKikimrPQ::TPartitionCounterData& cou
     UNIT_ASSERT(ok);
 
     txRead->SetValue(strMeta);
-    MetaStep->LoadMeta(kvResponse, Nothing());
+    MetaStep->LoadMeta(kvResponse);
 
     UNIT_ASSERT_VALUES_EQUAL(counters.GetMessagesWrittenTotal(), MetaStep->Partition()->MsgsWrittenTotal.Value());
     UNIT_ASSERT_VALUES_EQUAL(counters.GetMessagesWrittenGrpc(), MetaStep->Partition()->MsgsWrittenGrpc.Value());

@@ -42,10 +42,7 @@ RUN apt-get update  \
     && apt-get install --no-install-recommends -y libidn12 libaio1 jq \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /root/ydb/bin/ \
-    && mkdir -p /ydb_data \
-    && mkdir -p ydb_certs \
-    && echo '{"check_version":false}' > root/ydb/bin/config.json
+RUN mkdir -p /ydb_data && mkdir -p /ydb_certs
 
 COPY main/.github/docker/files/ /
 COPY --from=builder \

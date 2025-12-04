@@ -770,6 +770,40 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     return alterData;
 }
 
+void TTableInfo::GetIndexObjectCount(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc, ui32& indexTableCount, ui32& sequenceCount, ui32& indexTableShards) {
+    indexTableCount = 1;
+    sequenceCount = 0;
+    switch (GetIndexType(indexDesc)) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
+            indexTableCount = (prefixVectorIndex ? 3 : 2);
+            sequenceCount = (prefixVectorIndex ? 1 : 0);
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+            bool withRelevance = indexDesc.GetFulltextIndexDescription().GetSettings()
+                .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+            indexTableCount = (withRelevance ? 4 : 1);
+            break;
+        }
+        default:
+            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDesc.GetType()));
+            break;
+    }
+    if (indexDesc.IndexImplTableDescriptionsSize() == indexTableCount) {
+        indexTableShards = 0;
+        for (const auto& indexTableDesc: indexDesc.GetIndexImplTableDescriptions()) {
+            indexTableShards += TTableInfo::ShardsToCreate(indexTableDesc);
+        }
+    } else {
+        indexTableShards = indexTableCount;
+    }
+}
+
 void TTableInfo::ResetDescriptionCache() {
     TableDescription.ClearId_Deprecated();
     TableDescription.ClearPathId();
@@ -2273,7 +2307,8 @@ bool TTableInfo::CheckSplitByLoad(
             << " shardSize: " << stats->DataSize << " minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
             << " shardCount: " << Stats.PartitionStats.size()
             << " expectedShardCount: " << ExpectedPartitionCount << " maxShardCount: " << maxShards
-            << " cpuUsage: " << currentCpuUsage << " cpuUsageThreshold: " << cpuUsageThreshold * 1000000;
+            << " cpuUsage: " << currentCpuUsage
+            << " cpuUsageThreshold: " << static_cast<ui64>(cpuUsageThreshold * 1000000);
         return false;
     }
 
@@ -2286,7 +2321,7 @@ bool TTableInfo::CheckSplitByLoad(
         << "expectedShardCount: " << ExpectedPartitionCount << ", "
         << "maxShardCount: " << maxShards << ", "
         << "cpuUsage: " << currentCpuUsage << ", "
-        << "cpuUsageThreshold: " << cpuUsageThreshold * 1000000 << ")";
+        << "cpuUsageThreshold: " << static_cast<ui64>(cpuUsageThreshold * 1000000) << ")";
 
     return true;
 }
@@ -2696,6 +2731,9 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
     switch (value) {
         case ESubState::None:
         case ESubState::UniqIndexValidation:
+        case ESubState::FulltextIndexStats:
+        case ESubState::FulltextIndexDictionary:
+        case ESubState::FulltextIndexBorders:
             return true;
     }
     return false;

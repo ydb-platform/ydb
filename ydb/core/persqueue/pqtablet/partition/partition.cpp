@@ -365,6 +365,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
     , SamplingControl(samplingControl)
+    , MessageIdDeduplicator(Partition, CreateDefaultTimeProvider(), TDuration::Minutes(5))
 {
     TabletCounters.Populate(*Counters);
     TabletCounters.ResetCounters();
@@ -513,6 +514,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     //meta.SetEndOffset(Max(BlobEncoder.NewHead.GetNextOffset(), GetEndOffset()));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
+    meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
 
     if (IsSupportive()) {
         auto* counterData = meta.MutableCounterData();
@@ -2571,15 +2573,14 @@ void TPartition::RunPersist() {
         EndHandleRequests(PersistRequest.Get(), ctx);
     }
 
-    if (TryAddDeleteHeadKeysToPersistRequest()) {
-        haveChanges = true;
-    }
-
     if (Compacter) {
         Compacter->TryCompactionIfPossible();
     }
 
-    if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
+    haveChanges |= TryAddDeleteHeadKeysToPersistRequest();
+    haveChanges |= TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig;
+
+    if (haveChanges) {
         WriteCycleStartTime = now;
         WriteStartTime = now;
         TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
@@ -2587,14 +2588,18 @@ void TPartition::RunPersist() {
         WritesTotal.Inc();
         HaveWriteMsg = true;
 
-        AddMetaKey(PersistRequest.Get());
         AddCmdWriteTxMeta(PersistRequest->Record);
         AddCmdWriteUserInfos(PersistRequest->Record);
         AddCmdWriteConfig(PersistRequest->Record);
     }
 
-    if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
+    auto requestEmpty = PersistRequest->Record.CmdDeleteRangeSize() == 0
+        && PersistRequest->Record.CmdWriteSize() == 0
+        && PersistRequest->Record.CmdRenameSize() == 0;
+
+    if (haveChanges || !requestEmpty) {
         AddMessageDeduplicatorKeys(PersistRequest.Get());
+        AddMetaKey(PersistRequest.Get());
 
         // Apply counters
         for (const auto& writeInfo : WriteInfosApplied) {

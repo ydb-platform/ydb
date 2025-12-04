@@ -965,6 +965,11 @@ private:
         VisitAllFields(TRule_alter_database_stmt::GetDescriptor(), msg);
     }
 
+    void VisitTruncateTable(const TRule_truncate_table_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_truncate_table_stmt::GetDescriptor(), msg);
+    }
+
     void VisitCreateTable(const TRule_create_table_stmt& msg) {
         NewLine();
         Visit(msg.GetToken1());
@@ -3170,6 +3175,7 @@ TStaticData::TStaticData()
           {TRule_restore_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRestore)},
           {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
           {TRule_alter_database_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterDatabase)},
+          {TRule_truncate_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTruncateTable)},
           {TRule_show_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShowCreateTable)},
           {TRule_streaming_query_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitStreamingQuerySettings)},
           {TRule_create_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateStreamingQuery)},

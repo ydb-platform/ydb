@@ -307,17 +307,6 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>(const TErrorOr<T>&)> callback) const;
 
-    //! Same as #Apply but assumes that this chaining will be the only subscriber.
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<R(TErrorOr<T>&&)> callback) const;
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TErrorOr<R>(TErrorOr<T>&&)> callback) const;
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const;
-
     //! Converts (successful) result to |U|; propagates errors as is.
     template <class U>
     TFuture<U> As() const;
@@ -366,20 +355,11 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>(T)> callback) const;
 
-    //! Same as #Apply but assumes that this chaining will be the only subscriber.
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<R(T&&)> callback) const;
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TFuture<R>(T&&)> callback) const;
-
     //! Converts to TUniqueFuture interface.
     TUniqueFuture<T> AsUnique() const&;
     TUniqueFuture<T> AsUnique() &&;
 
     using TFutureBase<T>::Apply;
-    using TFutureBase<T>::ApplyUnique;
 
 private:
     explicit TFuture(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);

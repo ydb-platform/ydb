@@ -51,6 +51,8 @@ TAsyncExpiringCache<TKey, TValue>::TAsyncExpiringCache(
         BIND(&TAsyncExpiringCache::RefreshAllItems, MakeWeak(this))))
     , ShardCount_(config->ShardCount)
     , Invoker_(invoker)
+    // NB(apachee): +1 to avoid 0. Cf. #TRandomizedHash.
+    , ShardKeyHash_(RandomNumber<size_t>(std::numeric_limits<size_t>::max()) + 1)
     , MapShards_(config->ShardCount)
     , Config_(config)
     , HitCounter_(profiler.Counter("/hit"))
@@ -66,10 +68,18 @@ void TAsyncExpiringCache<TKey, TValue>::EnsureStarted()
 {
     auto config = GetConfig();
     if (config->BatchUpdate) {
-        if (!Started_.load(std::memory_order::relaxed) && config->RefreshTime && *config->RefreshTime) {
+        // Attempt to avoid cacheline ping-pong.
+        if (Started_.load(std::memory_order::relaxed)) {
+            return;
+        }
+        auto startedWithAnotherThread = Started_.exchange(true, std::memory_order::relaxed);
+        if (startedWithAnotherThread) {
+            return;
+        }
+        if (config->RefreshTime && *config->RefreshTime) {
             RefreshExecutor_->Start();
         }
-        if (!Started_.exchange(true) && config->ExpirationPeriod && *config->ExpirationPeriod) {
+        if (config->ExpirationPeriod && *config->ExpirationPeriod) {
             ExpirationExecutor_->Start();
         }
     }
@@ -830,7 +840,7 @@ std::vector<std::vector<typename TAsyncExpiringCache<TKey, TValue>::TItem>> TAsy
 template <class TKey, class TValue>
 int TAsyncExpiringCache<TKey, TValue>::GetShardIndex(const TKey& key) const
 {
-    return THash<TKey>()(key) % ShardCount_;
+    return ShardKeyHash_(key) % ShardCount_;
 }
 
 template <class TKey, class TValue>

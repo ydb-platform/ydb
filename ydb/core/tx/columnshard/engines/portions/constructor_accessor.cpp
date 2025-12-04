@@ -42,6 +42,7 @@ std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::Build(const b
     PortionInfo->MetaConstructor.ColumnBlobBytes = GetColumnBlobBytes();
     PortionInfo->MetaConstructor.IndexRawBytes = GetIndexRawBytes();
     PortionInfo->MetaConstructor.IndexBlobBytes = GetIndexBlobBytes();
+    PortionInfo->MetaConstructor.NumSlices = CalcSliceBorderOffsets().size() + 1;
 
     PortionInfo->MetaConstructor.RecordsCount = CalcRecordsCount();
 

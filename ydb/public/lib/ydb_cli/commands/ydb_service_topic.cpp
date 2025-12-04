@@ -6,6 +6,7 @@
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -139,7 +140,7 @@ namespace NYdb::NConsoleClient {
     TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs) {
         TStringStream description;
         description << descriptionPrefix << ". Available codecs: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         for (const auto& codec : codecs) {
             auto findResult = CodecsDescriptions.find(codec);
             Y_ABORT_UNLESS(findResult != CodecsDescriptions.end(),
@@ -199,7 +200,7 @@ namespace NYdb::NConsoleClient {
     void TCommandWithMetricsLevel::AddMetricsLevels(TClientCommand::TConfig& config) {
         TStringStream description;
         description << "Available metrics levels: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         for (const auto& level: ExistingMetricsLevels) {
             auto findResult = MetricsLevelsDescriptions.find(level);
             Y_ABORT_UNLESS(findResult != MetricsLevelsDescriptions.end(),
@@ -234,7 +235,7 @@ namespace NYdb::NConsoleClient {
     void TCommandWithMeteringMode::AddAllowedMeteringModes(TClientCommand::TConfig& config) {
         TStringStream description;
         description << "Topic metering for serverless databases pricing. Available metering modes: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         for (const auto& mode: ExistingMeteringModes) {
             auto findResult = MeteringModesDescriptions.find(mode.second);
             Y_ABORT_UNLESS(findResult != MeteringModesDescriptions.end(),
@@ -275,7 +276,7 @@ namespace NYdb::NConsoleClient {
     void TCommandWithAutoPartitioning::AddAutoPartitioning(TClientCommand::TConfig& config, bool isAlter) {
         TStringStream description;
         description << "A strategy to automatically change the number of partitions depending on the load. Available strategies: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         for (const auto& strategy: AutoPartitioningStrategies) {
             auto findResult = AutoscaleStrategiesDescriptions.find(strategy.second);
             Y_ABORT_UNLESS(findResult != AutoscaleStrategiesDescriptions.end(),
@@ -810,7 +811,7 @@ namespace NYdb::NConsoleClient {
     void TCommandWithTransformBody::AddTransform(TClientCommand::TConfig& config) {
         TStringStream description;
         description << "Conversion between a message data in the topic and the client filesystem/terminal. Available options: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         for (const auto& iter : TransformBodyDescriptions) {
             description << "\n  " << colors.BoldColor() << iter.first << colors.OldColor() << "\n    " << iter.second;
         }
@@ -849,7 +850,7 @@ namespace NYdb::NConsoleClient {
     void TCommandTopicRead::AddAllowedMetadataFields(TConfig& config) {
         TStringStream description;
         description << "Comma-separated list of message fields to print in Pretty format. If not specified, all fields are printed. Available fields: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         for (const auto& iter : TopicMetadataFieldsDescriptions) {
             description << "\n  " << colors.BoldColor() << iter.first << colors.OldColor() << "\n    " << iter.second;
         }

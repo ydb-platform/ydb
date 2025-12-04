@@ -219,7 +219,9 @@ SRCS(
     wait_for_stream_clearance_unit.cpp
 
     build_index/fulltext.cpp
+    build_index/fulltext_dict.cpp
     build_index/kmeans_helper.cpp
+    build_index/filter_kmeans.cpp
     build_index/local_kmeans.cpp
     build_index/prefix_kmeans.cpp
     build_index/recompute_kmeans.cpp

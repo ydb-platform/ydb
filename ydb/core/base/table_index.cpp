@@ -67,6 +67,14 @@ constexpr std::string_view GlobalFulltextImplTables[] = {
 };
 static_assert(std::is_sorted(std::begin(GlobalFulltextImplTables), std::end(GlobalFulltextImplTables)));
 
+constexpr std::string_view GlobalFulltextWithRelevanceImplTables[] = {
+    NFulltext::DictTable,
+    NFulltext::DocsTable,
+    NFulltext::StatsTable,
+    ImplTable,
+};
+static_assert(std::is_sorted(std::begin(GlobalFulltextWithRelevanceImplTables), std::end(GlobalFulltextWithRelevanceImplTables)));
+
 bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -113,7 +121,7 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
     return result;
 }
 
-NKikimrSchemeOp::EIndexType GetIndexType(NKikimrSchemeOp::TIndexCreationConfig indexCreation) {
+NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationConfig& indexCreation) {
     // TODO: always provide EIndexTypeGlobal value instead of null
     // TODO: do not cast unknown index types to EIndexTypeGlobal (proto2 specific)
     return indexCreation.HasType()
@@ -236,11 +244,16 @@ std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType inde
             } else {
                 return PrefixedGlobalKMeansTreeImplTables;
             }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
-            return GlobalFulltextImplTables;
         default:
             Y_ENSURE(false, InvalidIndexType(indexType));
     }
+}
+
+std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout) {
+    if (layout == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        return GlobalFulltextWithRelevanceImplTables;
+    }
+    return GlobalFulltextImplTables;
 }
 
 bool IsImplTable(std::string_view tableName) {
@@ -317,6 +330,14 @@ TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexRespo
     // keys are not human readable and contain user data
     copy.ClearFirstIndexKey();
     copy.ClearLastIndexKey();
+    return copy.ShortDebugString();
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvFilterKMeansResponse& record) {
+    auto copy = record;
+    // keys are not human readable and contain user data
+    copy.ClearFirstKeyRows();
+    copy.ClearLastKeyRows();
     return copy.ShortDebugString();
 }
 

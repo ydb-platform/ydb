@@ -28,8 +28,10 @@ class TYsonStruct;
 class TYsonStructLite;
 
 struct TYsonStructTraverseContext {
-    const IYsonStructParameter* Parameter;
     NYPath::TYPath Path;
+    const std::type_info* StructType;
+    std::string Key;
+    const IYsonStructParameter* Parameter;
 };
 using TYsonStructParameterVisitor = std::function<void(const TYsonStructTraverseContext&)>;
 

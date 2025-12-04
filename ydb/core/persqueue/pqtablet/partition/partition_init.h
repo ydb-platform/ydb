@@ -17,6 +17,7 @@ namespace NKikimr::NPQ {
 
 class TInitializerStep;
 class TPartition;
+class TPartitionId;
 
 struct TInitializionContext {
     std::optional<ui64> StartOffset;
@@ -79,7 +80,6 @@ public:
 
 protected:
     void Done(const TActorContext& ctx);
-    void PoisonPill(const TActorContext& ctx);
 
     TString LogPrefix() const;
 
@@ -132,7 +132,7 @@ public:
     void Execute(const TActorContext& ctx) override;
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
 private:
-    void LoadMeta(const NKikimrClient::TResponse& kvResponse, const TMaybe<TActorContext>& mbCtx);
+    void LoadMeta(const NKikimrClient::TResponse& kvResponse);
 };
 
 class TInitInfoRangeStep: public TBaseKVStep {

@@ -296,7 +296,7 @@ ids {
   severity: S_ERROR
 }
 ids {
-  code: KIKIMR_DISK_SPACE_EXHAUSTED
+  code: KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED
   severity: S_ERROR
 }
 ids {

@@ -471,15 +471,15 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             FillBlobsMetaData(ctx);
             FormHeadAndProceed();
 
-            // AFL_ENSURE(!GetContext().StartOffset || *GetContext().StartOffset >= Partition()->GetStartOffset())
-            //     ("d", "StartOffset from meta and blobs are different")
-            //     ("l", *GetContext().StartOffset)
-            //     ("r", Partition()->GetStartOffset());
+            AFL_ENSURE(!GetContext().StartOffset || *GetContext().StartOffset >= Partition()->GetStartOffset())
+                ("d", "StartOffset from meta and blobs are different")
+                ("l", *GetContext().StartOffset)
+                ("r", Partition()->GetStartOffset());
 
-            // AFL_ENSURE(!GetContext().EndOffset || *GetContext().EndOffset == Partition()->GetEndOffset())
-            //     ("d", "EndOffset from meta and blobs are different")
-            //     ("l", *GetContext().EndOffset)
-            //     ("r", Partition()->GetEndOffset());
+            AFL_ENSURE(!GetContext().EndOffset || *GetContext().EndOffset == Partition()->GetEndOffset())
+                ("d", "EndOffset from meta and blobs are different")
+                ("l", *GetContext().EndOffset)
+                ("r", Partition()->GetEndOffset());
 
             [[fallthrough]];
 

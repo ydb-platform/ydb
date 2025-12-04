@@ -120,6 +120,8 @@ struct TRunDisplayData {
         : Statistics(threadCount, ts)
     {}
 
+    size_t WarehouseCount = 0;
+
     TAllStatistics Statistics;
     TRunStatusData StatusData;
 };

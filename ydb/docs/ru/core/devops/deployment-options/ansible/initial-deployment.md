@@ -214,7 +214,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 * `ydb_archive`: локальный путь файловой системы к архиву дистрибутива {{ ydb-short-name }}, [загруженному](../../../downloads/index.md#ydb-server) или иным образом подготовленному заранее.
 * `ydbd_binary` и `ydb_cli_binary`: локальные пути файловой системы к исполняемым файлам сервера и клиента {{ ydb-short-name }}, [загруженным](../../../downloads/index.md#ydb-server) или иным образом подготовленным заранее.
 
-Для использования [федеративных запросов](../../../concepts/federated_query/index.md) может потребоваться установка [коннектора](../../../concepts/federated_query/architecture.md#connectors). Плейбук может развернуть [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) на хостах с динамическими узлами. Используйте следующие настройки:
+Для использования [федеративных запросов](../../../concepts/query_execution/federated_query/index.md) может потребоваться установка [коннектора](../../../concepts/query_execution/federated_query/architecture.md#connectors). Плейбук может развернуть [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) на хостах с динамическими узлами. Используйте следующие настройки:
 
 * `ydb_install_fq_connector` — установите в `true` для установки коннектора.
 * Выберите один из доступных вариантов развёртывания исполняемых файлов fq-connector-go:

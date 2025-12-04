@@ -6,49 +6,11 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 ## ImplicitTx {#implicittx}
 
-ImplicitTx mode allows executing a single query without explicit transaction control. The query is executed in its own implicit transaction that automatically commits if successful.
+[ImplicitTx](../../concepts/transactions#implicit) mode allows executing a single query without explicit transaction control. The query is executed in its own implicit transaction that automatically commits if successful.
 
 {% list tabs group=lang %}
 
 - Go
-
-  {% cut "ydb-go-sdk" %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.NoTx()),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // work with row
-    _ = row
-  }
-  ```
-
-  {% endcut %}
 
   {% cut "database/sql" %}
 
@@ -96,26 +58,41 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
-- Java
+  ```go
+  package main
 
-  {% cut "ydb-java-sdk" %}
+  import (
+    "context"
+    "fmt"
+    "os"
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
+  )
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1"))
-      );
-      // work with reader
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      query.WithTxControl(query.NoTx()),
+    )
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+    // work with row
+    _ = row
   }
   ```
 
-  {% endcut %}
+- Java
 
   {% cut "JDBC" %}
 
@@ -140,25 +117,22 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
-- Python
+  ```java
+  import tech.ydb.query.QueryClient;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
 
-  {% cut "ydb-python-sdk" %}
-
-  ```python
-  import ydb
-
-  def execute_query(pool: ydb.QuerySessionPool):
-      # ImplicitTx - query without explicit transaction
-      def callee(session: ydb.QuerySession):
-          with session.execute(
-              "SELECT 1",
-          ) as result_sets:
-              pass  # work with result_sets
-
-      pool.retry_operation_sync(callee)
+  // ...
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1"))
+      );
+      // work with reader
+  }
   ```
 
-  {% endcut %}
+- Python
 
   {% cut "dbapi" %}
 
@@ -175,9 +149,21 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
-- C++
+  ```python
+  import ydb
 
-  {% cut "ydb-cpp-sdk" %}
+  def execute_query(pool: ydb.QuerySessionPool):
+      # ImplicitTx - query without explicit transaction
+      def callee(session: ydb.QuerySession):
+          with session.execute(
+              "SELECT 1",
+          ) as result_sets:
+              pass  # work with result_sets
+
+      pool.retry_operation_sync(callee)
+  ```
+
+- C++
 
   ```cpp
   auto result = session.ExecuteQuery(
@@ -186,23 +172,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   ).GetValueSync();
   ```
 
-  {% endcut %}
-
 - C# (.NET)
-
-  {% cut "ydb-dotnet-sdk" %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  // ImplicitTx - single query without explicit transaction
-  var response = await queryClient.Exec(
-      "SELECT 1",
-      txMode: TxMode.None
-  );
-  ```
-
-  {% endcut %}
 
   {% cut "ADO.NET" %}
 
@@ -248,9 +218,17 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
-- Js/Ts
+  ```csharp
+  using Ydb.Sdk.Services.Query;
 
-  {% cut "@ydbjs/query" %}
+  // ImplicitTx - single query without explicit transaction
+  var response = await queryClient.Exec(
+      "SELECT 1",
+      txMode: TxMode.None
+  );
+  ```
+
+- Js/Ts
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -261,11 +239,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   const result = await sql`SELECT 1`;
   ```
 
-  {% endcut %}
-
 - Rust
-
-  {% cut "ydb-rust-sdk" %}
 
   ```rust
   use ydb::Query;
@@ -275,11 +249,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   let result = client.query(query, None).await?;
   ```
 
-  {% endcut %}
-
 - PHP
-
-  {% cut "ydb-php-sdk" %}
 
   ```php
   <?php
@@ -310,8 +280,6 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   $result = $ydb->table()->query('SELECT 1;');
   ```
 
-  {% endcut %}
-
 {% endlist %}
 
 ## Serializable {#serializable}
@@ -319,45 +287,6 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 {% list tabs group=lang %}
 
 - Go
-
-  {% cut "ydb-go-sdk" %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      /* without explicit tx control option used serializable read-write tx control by default */
-      query.WithTxControl(query.SerializableReadWriteTxControl(query.CommitTx())),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // work with row
-    _ = row
-  }
-  ```
-
-  {% endcut %}
 
   {% cut "database/sql" %}
 
@@ -417,28 +346,42 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
-- Java
+  ```go
+  package main
 
-  {% cut "ydb-java-sdk" %}
+  import (
+    "context"
+    "fmt"
+    "os"
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
+  )
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
-      );
-      // work with reader
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      /* without explicit tx control option used serializable read-write tx control by default */
+      query.WithTxControl(query.SerializableReadWriteTxControl(query.CommitTx())),
+    )
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+    // work with row
+    _ = row
   }
-
   ```
 
-  {% endcut %}
+- Java
 
   {% cut "JDBC" %}
 
@@ -466,9 +409,38 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
+  ```java
+  import tech.ydb.query.QueryClient;
+  import tech.ydb.query.TxMode;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+
+  // ...
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
+      );
+      // work with reader
+  }
+
+  ```
+
 - Python
 
-  {% cut "ydb-python-sdk" %}
+  {% cut "dbapi" %}
+
+  ```python
+  import ydb_dbapi
+
+  with ydb_dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      # Serializable mode is used by default
+      with connection.cursor() as cursor:
+          cursor.execute("SELECT 1")
+          row = cursor.fetchone()
+  ```
+
+  {% endcut %}
 
   ```python
   import ydb
@@ -485,25 +457,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
       pool.retry_operation_sync(callee)
   ```
 
-  {% endcut %}
-
-  {% cut "dbapi" %}
-
-  ```python
-  import ydb_dbapi
-
-  with ydb_dbapi.connect(host="localhost", port="2136", database="/local") as connection:
-      # Serializable mode is used by default
-      with connection.cursor() as cursor:
-          cursor.execute("SELECT 1")
-          row = cursor.fetchone()
-  ```
-
-  {% endcut %}
-
 - C++
-
-  {% cut "ydb-cpp-sdk" %}
 
   ```cpp
   auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
@@ -513,23 +467,9 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   ).GetValueSync();
   ```
 
-  {% endcut %}
-
 - C# (.NET)
 
-  {% cut "ydb-dotnet-sdk" %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  // Serializable Read-Write mode is used by default
-  var response = await queryClient.Exec("SELECT 1");
-  ```
-
-  {% endcut %}
-
   {% cut "ADO.NET" %}
-
   ```csharp
   using Ydb.Sdk.Ado;
   using Ydb.Sdk.Services.Query;
@@ -541,7 +481,6 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   await command.ExecuteNonQueryAsync();
   await transaction.CommitAsync();
   ```
-
   {% endcut %}
 
   {% cut "Entity Framework" %}
@@ -578,9 +517,14 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
-- Js/Ts
+  ```csharp
+  using Ydb.Sdk.Services.Query;
 
-  {% cut "@ydbjs/query" %}
+  // Serializable Read-Write mode is used by default
+  var response = await queryClient.Exec("SELECT 1");
+  ```
+
+- Js/Ts
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -598,11 +542,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   });
   ```
 
-  {% endcut %}
-
 - Rust
-
-  {% cut "ydb-rust-sdk" %}
 
   ```rust
   use ydb::{Query, TransactionOptions};
@@ -613,11 +553,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   let result = client.query(query, tx_options).await?;
   ```
 
-  {% endcut %}
-
 - PHP
-
-  {% cut "ydb-php-sdk" %}
 
   ```php
   <?php
@@ -650,8 +586,6 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   });
   ```
 
-  {% endcut %}
-
 {% endlist %}
 
 ## Online Read-Only {#online-read-only}
@@ -659,8 +593,6 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 {% list tabs group=lang %}
 
 - Go
-
-  {% cut "ydb-go-sdk" %}
 
   ```go
   package main
@@ -698,11 +630,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   }
   ```
 
-  {% endcut %}
-
 - Java
-
-  {% cut "ydb-java-sdk" %}
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -720,11 +648,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   }
   ```
 
-  {% endcut %}
-
 - Python
-
-  {% cut "ydb-python-sdk" %}
 
   ```python
   import ydb
@@ -740,11 +664,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
       pool.retry_operation_sync(callee)
   ```
 
-  {% endcut %}
-
 - C++
-
-  {% cut "ydb-cpp-sdk" %}
 
   ```cpp
   auto settings = NYdb::NQuery::TTxSettings::OnlineRO();
@@ -754,22 +674,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   ).GetValueSync();
   ```
 
-  {% endcut %}
-
 - C# (.NET)
-
-  {% cut "ydb-dotnet-sdk" %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows(
-      "SELECT 1",
-      txMode: TxMode.OnlineRo
-  );
-  ```
-
-  {% endcut %}
 
   {% cut "ADO.NET" %}
 
@@ -786,9 +691,16 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
-- Js/Ts
+  ```csharp
+  using Ydb.Sdk.Services.Query;
 
-  {% cut "@ydbjs/query" %}
+  var response = await queryClient.ReadAllRows(
+      "SELECT 1",
+      txMode: TxMode.OnlineRo
+  );
+  ```
+
+- Js/Ts
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -800,11 +712,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   });
   ```
 
-  {% endcut %}
-
 - Rust
-
-  {% cut "ydb-rust-sdk" %}
 
   ```rust
   use ydb::{Query, TransactionOptions};
@@ -815,23 +723,10 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   let result = client.query(query, tx_options).await?;
   ```
 
-  {% endcut %}
-
 - PHP
 
-  {% cut "ydb-php-sdk" %}
-
-  ```php
-  <?php
-
-  use YdbPlatform\Ydb\Ydb;
-  use YdbPlatform\Ydb\Session;
-
-  // Online Read-Only mode is not directly supported.
-  // Use Serializable or Snapshot Read-Only for read operations.
-  ```
-
-  {% endcut %}
+  Online Read-Only mode is not directly supported.
+  Use Serializable or Snapshot Read-Only for read operations.
 
 {% endlist %}
 
@@ -840,8 +735,6 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 {% list tabs group=lang %}
 
 - Go
-
-  {% cut "ydb-go-sdk" %}
 
   ```go
   package main
@@ -877,11 +770,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   }
   ```
 
-  {% endcut %}
-
 - Java
-
-  {% cut "ydb-java-sdk" %}
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -899,11 +788,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   }
   ```
 
-  {% endcut %}
-
 - Python
-
-  {% cut "ydb-python-sdk" %}
 
   ```python
   import ydb
@@ -919,11 +804,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
       pool.retry_operation_sync(callee)
   ```
 
-  {% endcut %}
-
 - C++
-
-  {% cut "ydb-cpp-sdk" %}
 
   ```cpp
   auto settings = NYdb::NQuery::TTxSettings::StaleRO();
@@ -933,22 +814,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   ).GetValueSync();
   ```
 
-  {% endcut %}
-
 - C# (.NET)
-
-  {% cut "ydb-dotnet-sdk" %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows(
-      "SELECT 1",
-      txMode: TxMode.StaleRo
-  );
-  ```
-
-  {% endcut %}
 
   {% cut "ADO.NET" %}
 
@@ -965,9 +831,16 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
-- Js/Ts
+  ```csharp
+  using Ydb.Sdk.Services.Query;
 
-  {% cut "@ydbjs/query" %}
+  var response = await queryClient.ReadAllRows(
+      "SELECT 1",
+      txMode: TxMode.StaleRo
+  );
+  ```
+
+- Js/Ts
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -979,11 +852,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   });
   ```
 
-  {% endcut %}
-
 - Rust
-
-  {% cut "ydb-rust-sdk" %}
 
   ```rust
   use ydb::{Query, TransactionOptions};
@@ -994,23 +863,10 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   let result = client.query(query, tx_options).await?;
   ```
 
-  {% endcut %}
-
 - PHP
 
-  {% cut "ydb-php-sdk" %}
-
-  ```php
-  <?php
-
-  use YdbPlatform\Ydb\Ydb;
-  use YdbPlatform\Ydb\Session;
-
-  // Stale Read-Only mode is not directly supported.
-  // Use Serializable or Snapshot Read-Only for read operations.
-  ```
-
-  {% endcut %}
+  Stale Read-Only mode is not directly supported.
+  Use Serializable or Snapshot Read-Only for read operations.
 
 {% endlist %}
 
@@ -1019,44 +875,6 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 {% list tabs group=lang %}
 
 - Go
-
-  {% cut "ydb-go-sdk" %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.SnapshotReadOnlyTxControl()),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // work with row
-    _ = row
-  }
-  ```
-
-  {% endcut %}
 
   {% cut "database/sql" %}
 
@@ -1111,27 +929,41 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
-- Java
+  ```go
+  package main
 
-  {% cut "ydb-java-sdk" %}
+  import (
+    "context"
+    "fmt"
+    "os"
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
+  )
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
-      );
-      // work with reader
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      query.WithTxControl(query.SnapshotReadOnlyTxControl()),
+    )
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+    // work with row
+    _ = row
   }
   ```
 
-  {% endcut %}
+- Java
 
   {% cut "JDBC" %}
 
@@ -1159,9 +991,23 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
-- Python
+  ```java
+  import tech.ydb.query.QueryClient;
+  import tech.ydb.query.TxMode;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
 
-  {% cut "ydb-python-sdk" %}
+  // ...
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
+      );
+      // work with reader
+  }
+  ```
+
+- Python
 
   ```python
   import ydb
@@ -1177,11 +1023,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
       pool.retry_operation_sync(callee)
   ```
 
-  {% endcut %}
-
 - C++
-
-  {% cut "ydb-cpp-sdk" %}
 
   ```cpp
   auto settings = NYdb::NQuery::TTxSettings::SnapshotRO();
@@ -1191,22 +1033,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   ).GetValueSync();
   ```
 
-  {% endcut %}
-
 - C# (.NET)
-
-  {% cut "ydb-dotnet-sdk" %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows(
-      "SELECT 1",
-      txMode: TxMode.SnapshotRo
-  );
-  ```
-
-  {% endcut %}
 
   {% cut "ADO.NET" %}
 
@@ -1235,9 +1062,16 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
-- Js/Ts
+  ```csharp
+  using Ydb.Sdk.Services.Query;
 
-  {% cut "@ydbjs/query" %}
+  var response = await queryClient.ReadAllRows(
+      "SELECT 1",
+      txMode: TxMode.SnapshotRo
+  );
+  ```
+
+- Js/Ts
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -1249,11 +1083,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   });
   ```
 
-  {% endcut %}
-
 - Rust
-
-  {% cut "ydb-rust-sdk" %}
 
   ```rust
   use ydb::{Query, TransactionOptions};
@@ -1264,23 +1094,9 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   let result = client.query(query, tx_options).await?;
   ```
 
-  {% endcut %}
-
 - PHP
 
-  {% cut "ydb-php-sdk" %}
-
-  ```php
-  <?php
-
-  use YdbPlatform\Ydb\Ydb;
-  use YdbPlatform\Ydb\Session;
-
-  // Snapshot Read-Only mode is not directly supported in PHP SDK.
-  // Use retryTransaction with read-only queries for consistent reads.
-  ```
-
-  {% endcut %}
+  Snapshot Read-Only mode is not directly supported in PHP SDK.
 
 {% endlist %}
 
@@ -1289,44 +1105,6 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 {% list tabs group=lang %}
 
 - Go
-
-  {% cut "ydb-go-sdk" %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.SnapshotReadWriteTxControl(query.CommitTx())),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // work with row
-    _ = row
-  }
-  ```
-
-  {% endcut %}
 
   {% cut "database/sql" %}
 
@@ -1382,9 +1160,41 @@ ImplicitTx mode allows executing a single query without explicit transaction con
 
   {% endcut %}
 
-- Java
+  ```go
+  package main
 
-  {% cut "ydb-java-sdk" %}
+  import (
+    "context"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      query.WithTxControl(query.SnapshotReadWriteTxControl(query.CommitTx())),
+    )
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+    // work with row
+    _ = row
+  }
+  ```
+
+- Java
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -1402,11 +1212,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   }
   ```
 
-  {% endcut %}
-
 - Python
-
-  {% cut "ydb-python-sdk" %}
 
   ```python
   import ydb
@@ -1422,11 +1228,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
       pool.retry_operation_sync(callee)
   ```
 
-  {% endcut %}
-
 - C++
-
-  {% cut "ydb-cpp-sdk" %}
 
   ```cpp
   auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
@@ -1436,11 +1238,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   ).GetValueSync();
   ```
 
-  {% endcut %}
-
 - C# (.NET)
-
-  {% cut "ADO.NET" %}
 
   ```csharp
   using Ydb.Sdk.Ado;
@@ -1453,23 +1251,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   await transaction.CommitAsync();
   ```
 
-  {% endcut %}
-
-  {% cut "linq2db" %}
-
-  ```csharp
-  using LinqToDB;
-  using LinqToDB.Data;
-
-  // linq2db does not expose Snapshot Read-Write mode directly.
-  // Use ydb-dotnet-sdk or ADO.NET for this isolation level.
-  ```
-
-  {% endcut %}
-
 - Js/Ts
-
-  {% cut "@ydbjs/query" %}
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -1481,11 +1263,7 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   });
   ```
 
-  {% endcut %}
-
 - Rust
-
-  {% cut "ydb-rust-sdk" %}
 
   ```rust
   use ydb::{Query, TransactionOptions};
@@ -1496,22 +1274,8 @@ ImplicitTx mode allows executing a single query without explicit transaction con
   let result = client.query(query, tx_options).await?;
   ```
 
-  {% endcut %}
-
 - PHP
 
-  {% cut "ydb-php-sdk" %}
-
-  ```php
-  <?php
-
-  use YdbPlatform\Ydb\Ydb;
-  use YdbPlatform\Ydb\Session;
-
-  // Snapshot Read-Write mode is not directly supported in PHP SDK.
-  // Use retryTransaction for transactional operations.
-  ```
-
-  {% endcut %}
+  Snapshot Read-Write mode is not directly supported in PHP SDK.
 
 {% endlist %}

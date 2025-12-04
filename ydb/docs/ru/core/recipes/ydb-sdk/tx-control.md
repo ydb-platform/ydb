@@ -4,6 +4,284 @@
 
 Ниже приведены примеры кода, которые используют встроенные в {{ ydb-short-name }} SDK средства создания объекта *режим выполнения транзакции*.
 
+## ImplicitTx {#implicittx}
+
+[ImplicitTx](../../concepts/transactions#implicit) режим позволяет выполнить один запрос без явного управления транзакцией. Запрос выполняется в своей собственной неявной транзакции, которая автоматически фиксируется в случае успеха.
+
+{% list tabs group=lang %}
+
+- Go
+
+  {% cut "database/sql" %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "database/sql"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    nativeDriver, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer nativeDriver.Close(ctx)
+
+    connector, err := ydb.Connector(nativeDriver)
+    if err != nil {
+      panic(err)
+    }
+    defer connector.Close()
+
+    db := sql.OpenDB(connector)
+    defer db.Close()
+
+    // ImplicitTx - запрос без явной транзакции (авто-коммит)
+    row := db.QueryRowContext(ctx, "SELECT 1")
+    var result int
+    if err := row.Scan(&result); err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+  }
+  ```
+
+  {% endcut %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      query.WithTxControl(query.NoTx()),
+    )
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+    // работа с row
+    _ = row
+  }
+  ```
+
+- Java
+
+  {% cut "JDBC" %}
+
+  ```java
+  import java.sql.Connection;
+  import java.sql.DriverManager;
+  import java.sql.ResultSet;
+  import java.sql.Statement;
+
+  // ...
+
+  try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
+      // Режим авто-коммита (по умолчанию)
+      connection.setAutoCommit(true);
+
+      try (Statement statement = connection.createStatement()) {
+          ResultSet rs = statement.executeQuery("SELECT 1");
+          // работа с rs
+      }
+  }
+  ```
+
+  {% endcut %}
+
+  ```java
+  import tech.ydb.query.QueryClient;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+
+  // ...
+  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      QueryReader reader = retryCtx.supplyResult(
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1"))
+      );
+      // работа с reader
+  }
+  ```
+
+- Python
+
+  {% cut "dbapi" %}
+
+  ```python
+  import ydb_dbapi
+
+  with ydb_dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      # Режим авто-коммита
+      connection.set_autocommit(True)
+      with connection.cursor() as cursor:
+          cursor.execute("SELECT 1")
+          row = cursor.fetchone()
+  ```
+
+  {% endcut %}
+
+  ```python
+  import ydb
+
+  def execute_query(pool: ydb.QuerySessionPool):
+      # ImplicitTx - запрос без явной транзакции
+      def callee(session: ydb.QuerySession):
+          with session.execute(
+              "SELECT 1",
+          ) as result_sets:
+              pass  # работа с result_sets
+
+      pool.retry_operation_sync(callee)
+  ```
+
+- C++
+
+  ```cpp
+  auto result = session.ExecuteQuery(
+      "SELECT 1",
+      NYdb::NQuery::TTxControl::NoTx()
+  ).GetValueSync();
+  ```
+
+- C# (.NET)
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+
+  await using var connection = await dataSource.OpenConnectionAsync();
+  // Выполнение без явной транзакции (авто-коммит)
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
+  await command.ExecuteNonQueryAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  ```csharp
+  using Microsoft.EntityFrameworkCore;
+
+  // Режим авто-коммита Entity Framework (без явной транзакции)
+  await using var context = await dbContextFactory.CreateDbContextAsync();
+  var result = await context.SomeEntities.FirstOrDefaultAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  ```csharp
+  using LinqToDB;
+  using LinqToDB.Data;
+
+  // Режим авто-коммита linq2db (без явной транзакции)
+  using var db = new DataConnection(
+      new DataOptions().UseConnectionString(
+          "YDB",
+          "Host=localhost;Port=2136;Database=/local;UseTls=false"
+      )
+  );
+
+  var result = db.GetTable<Employee>().FirstOrDefault(e => e.Id == 1);
+  ```
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Services.Query;
+
+  // ImplicitTx - один запрос без явной транзакции
+  var response = await queryClient.Exec(
+      "SELECT 1",
+      txMode: TxMode.None
+  );
+  ```
+
+- Js/Ts
+
+  ```typescript
+  import { sql } from '@ydbjs/query';
+
+  // ...
+
+  // ImplicitTx - один запрос без явной транзакции
+  const result = await sql`SELECT 1`;
+  ```
+
+- Rust
+
+  ```rust
+  use ydb::Query;
+
+  // ImplicitTx - запрос без явной транзакции
+  let query = Query::new("SELECT 1");
+  let result = client.query(query, None).await?;
+  ```
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+  use YdbPlatform\Ydb\Auth\AccessTokenAuthentication;
+
+  $config = [
+      // Database path
+      'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
+
+      // Database endpoint
+      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
+
+      // Auto discovery (dedicated server only)
+      'discovery'   => false,
+
+      // IAM config
+      'iam_config'  => [
+          // 'root_cert_file' => './CA.pem',  Root CA file (uncomment for dedicated server only)
+      ],
+
+      'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
+  ];
+
+  $ydb = new Ydb($config);
+  // ImplicitTx - один запрос без явной транзакции
+  $result = $ydb->table()->query('SELECT 1;');
+  ```
+
+{% endlist %}
+
 ## Serializable {#serializable}
 
 {% list tabs group=lang %}
@@ -410,6 +688,60 @@
   ).GetValueSync();
   ```
 
+- C# (.NET)
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  await using var connection = await dataSource.OpenConnectionAsync();
+  await using var transaction = await connection.BeginTransactionAsync(TxMode.OnlineRo);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await using var reader = await command.ExecuteReaderAsync();
+  await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows(
+      "SELECT 1",
+      txMode: TxMode.OnlineRo
+  );
+  ```
+
+- Js/Ts
+
+  ```typescript
+  import { sql } from '@ydbjs/query';
+
+  // ...
+
+  await sql.begin({ isolation: 'onlineReadOnly', idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
+  });
+  ```
+
+- Rust
+
+  ```rust
+  use ydb::{Query, TransactionOptions};
+
+  let query = Query::new("SELECT 1");
+  let tx_options = TransactionOptions::new()
+      .with_online_read_only();
+  let result = client.query(query, tx_options).await?;
+  ```
+
+- PHP
+
+  Online Read-Only режим не поддерживается напрямую.
+  Используйте Serializable или Snapshot Read-Only для операций чтения.
+
 {% endlist %}
 
 ## Stale Read-Only {#stale-read-only}
@@ -495,6 +827,60 @@
       NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
   ).GetValueSync();
   ```
+
+- C# (.NET)
+
+  {% cut "ADO.NET" %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  await using var connection = await dataSource.OpenConnectionAsync();
+  await using var transaction = await connection.BeginTransactionAsync(TxMode.StaleRo);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await using var reader = await command.ExecuteReaderAsync();
+  await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows(
+      "SELECT 1",
+      txMode: TxMode.StaleRo
+  );
+  ```
+
+- Js/Ts
+
+  ```typescript
+  import { sql } from '@ydbjs/query';
+
+  // ...
+
+  await sql.begin({ isolation: 'staleReadOnly', idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
+  });
+  ```
+
+- Rust
+
+  ```rust
+  use ydb::{Query, TransactionOptions};
+
+  let query = Query::new("SELECT 1");
+  let tx_options = TransactionOptions::new()
+      .with_stale_read_only();
+  let result = client.query(query, tx_options).await?;
+  ```
+
+- PHP
+
+  Stale Read-Only режим не поддерживается напрямую.
+  Используйте Serializable или Snapshot Read-Only для операций чтения.
 
 {% endlist %}
 

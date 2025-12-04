@@ -30,6 +30,7 @@ struct TDqChannelParams {
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion = NKikimr::NMiniKQL::EValuePackerVersion::V0;
     IDqChannelStorage::TPtr ChannelStorage;
+    TMaybe<size_t> BufferPageAllocSize;
 };
 
 struct TChannelInfo {

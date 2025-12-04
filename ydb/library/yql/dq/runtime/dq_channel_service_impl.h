@@ -78,12 +78,13 @@ namespace NYql::NDq {
 
 class TOutputSerializer {
 public:
-    TOutputSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion)
+    TOutputSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize)
         : Buffer(buffer)
         , RowType(rowType)
         , TransportVersion(transportVersion)
-        , PackerVersion(packerVersion) {
-    }
+        , PackerVersion(packerVersion)
+        , BufferPageAllocSize(bufferPageAllocSize)
+    {}
 
     virtual ~TOutputSerializer() {};
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
@@ -94,6 +95,7 @@ public:
     NKikimr::NMiniKQL::TType* RowType;
     NDqProto::EDataTransportVersion TransportVersion;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion;
+    TMaybe<size_t> BufferPageAllocSize;
 };
 
 class TInputDeserializer {
@@ -116,7 +118,7 @@ public:
 
 std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelParams& params, std::shared_ptr<IChannelBuffer> buffer, bool local);
 std::unique_ptr<TOutputSerializer> ConvertToLocalSerializer(std::unique_ptr<TOutputSerializer>&& serializer);
-std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
+std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
 class TChannelStub : public IChannelBuffer {
 public:
@@ -847,7 +849,7 @@ public:
 
     TFastDqInputChannel(std::weak_ptr<TDqChannelService> service, const TDqChannelParams& params, std::shared_ptr<IChannelBuffer> buffer)
         : Service(service), Buffer(buffer), Desc(params.Desc) {
-        Deserializer = CreateDeserializer(params.RowType, params.TransportVersion, params.PackerVersion, *params.HolderFactory);
+        Deserializer = CreateDeserializer(params.RowType, params.TransportVersion, params.PackerVersion, params.BufferPageAllocSize, *params.HolderFactory);
     }
 
     ~TFastDqInputChannel() {

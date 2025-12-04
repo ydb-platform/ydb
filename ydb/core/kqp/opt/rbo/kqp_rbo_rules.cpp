@@ -145,6 +145,49 @@ bool IsNullRejectingPredicate(const TFilterInfo &filter, TExprContext &ctx) {
     }
     return false;
 }
+
+std::shared_ptr<TOpCBOTree> JoinCBOTrees(std::shared_ptr<TOpCBOTree> & left, std::shared_ptr<TOpCBOTree> & right, std::shared_ptr<TOpJoin> &join) {
+    auto newJoin = std::make_shared<TOpJoin>(left->TreeRoot, right->TreeRoot, join->Pos, join->JoinKind, join->JoinKeys);
+    auto newTree = std::make_shared<TOpCBOTree>(newJoin, newJoin->Pos);
+    newTree->TreeNodes = left->TreeNodes;
+    newTree->TreeNodes.insert(newTree->TreeNodes.end(), right->TreeNodes.begin(), right->TreeNodes.end());
+    newTree->Children = left->Children;
+    newTree->Children.insert(newTree->Children.end(), right->Children.begin(), right->Children.end());
+    return newTree;
+}
+
+void ExtractConjuncts(TExprNode::TPtr node, TVector<TExprNode::TPtr> & conjuncts) {
+    if (TCoAnd::Match(node.Get())) {
+        for (auto c : node->ChildrenList()) {
+            conjuncts.push_back(c);
+        }
+    }
+    else {
+        conjuncts.push_back(node);
+    }
+}
+
+std::shared_ptr<TOpFilter> FuseFilters(const std::shared_ptr<TOpFilter>& top, const std::shared_ptr<TOpFilter>& bottom, TExprContext &ctx) {
+    auto topLambda = TCoLambda(top->FilterLambda);
+    auto bottomLambda = TCoLambda(bottom->FilterLambda);
+    auto arg = Build<TCoArgument>(ctx, top->Pos).Name("lambda_arg").Done();
+
+    TVector<TExprNode::TPtr> newConjuncts;
+    ExtractConjuncts(ReplaceArg(topLambda.Body().Ptr(), arg.Ptr(), ctx), newConjuncts);
+    ExtractConjuncts(ReplaceArg(bottomLambda.Body().Ptr(), arg.Ptr(), ctx), newConjuncts);
+
+    // clang-format off
+    auto newLambda = Build<TCoLambda>(ctx, top->Pos)
+        .Args(arg)
+        .Body<TCoAnd>()
+            .Add(newConjuncts)
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+
+    return make_shared<TOpFilter>(bottom->GetInput(), top->Pos, newLambda);
+}
+
 } // namespace
 
 namespace NKikimr {
@@ -577,19 +620,24 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
 
 /**
  * Initially we build CBO only for joins that don't have other joins or CBO trees as arguments
+ * There could be an intermediate filter in between, we also check that
  */
 std::shared_ptr<IOperator> TBuildInitialCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
+    auto containsJoins = [](const std::shared_ptr<IOperator>& op) {
+        std::shared_ptr<IOperator> maybeJoin = op;
+        if (op->Kind == EOperator::Filter) {
+            maybeJoin = CastOperator<TOpFilter>(op)->GetInput();
+        }
+        return (maybeJoin->Kind == EOperator::Join || maybeJoin->Kind == EOperator::CBOTree);
+    };
+
     if (input->Kind == EOperator::Join) {
         auto join = CastOperator<TOpJoin>(input);
-        if (join->GetLeftInput()->Kind != EOperator::Join && join->GetRightInput()->Kind != EOperator::Join) {
-            if (joint->GetLeftInput()->Kind != EOperator::CBOTree && join->GetRightInput()->Kind != EOperator::CBOTree) {
-                if (join->GetLeftInput()->IsSingleConsumer() && join->GetRightInput()->IsSingleConsumer()) {
-                    return std::make_shared<TOpCBOTree>(input, input->Pos);
-                }
-            }
+        if (!containsJoins(join->GetLeftInput()) && !containsJoins(join->GetRightInput())) {
+            return std::make_shared<TOpCBOTree>(input, input->Pos);
         }
     }
 
@@ -610,8 +658,6 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::sha
 
     // In case there is a join of a CBO tree (maybe with a filter stuck in-between)
     // we push this join into the CBO tree and push the filter out above
-    // If the other argument is another CBO tree (also with an optional filter), we fuse that tree
-    // FIXME: Currently filters are pushed out of inner joins only, can be too restictive
 
     if (input->Kind == EOperator::Join) {
         auto join = CastOperator<TOpJoin>(input);
@@ -639,7 +685,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::sha
         else if (rightInput->Kind == EOperator::Filter && 
                 CastOperator<TOpFilter>(rightInput)->GetInput()->Kind == EOperator::CBOTree &&
                 join->JoinKind == "Inner") {
-            maybeFilter = rightInput;
+            maybeFilter = CastOperator<TOpFilter>(rightInput);
             cboTree = CastOperator<TOpCBOTree>(maybeFilter->GetInput());
             leftSideCBOTree = false;
         }
@@ -648,7 +694,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::sha
         }
 
         std::shared_ptr<TOpFilter> maybeAnotherFilter;
-        auto otherSide = leftSideCBOTree ? join->RightInput() : join->LeftInput();
+        auto otherSide = leftSideCBOTree ? join->GetRightInput() : join->GetLeftInput();
         std::shared_ptr<TOpCBOTree> otherSideCBOTree;
 
         if (otherSide->Kind == EOperator::Filter &&
@@ -666,7 +712,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::sha
         }
 
         if (maybeFilter && maybeAnotherFilter) {
-            maybeFilter = FuseFilters(maybeAnotherFilter, maybeFilter);
+            maybeFilter = FuseFilters(maybeFilter, maybeAnotherFilter, ctx.ExprCtx);
         } else if (maybeAnotherFilter) {
             maybeFilter = maybeAnotherFilter;
         }
@@ -679,12 +725,6 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::sha
         }
     }
 
-    // If one of the inputs to CBO tree is a join or a CBO tree, plug it into the top CBO tree
-    // FIXME: there could be a filter on top of the join or CBO tree, but currently we don't handle this case
-    else if (input->Kind == EOperator::CBOTree) {
-        //FIXME: Finish this rule
-        return input;
-    }
     return input;
 }
 

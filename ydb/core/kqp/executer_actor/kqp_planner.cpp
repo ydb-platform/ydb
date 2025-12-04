@@ -161,14 +161,14 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
     }
 
     if (isShutdown) {
+        requestData.RetryNumber = ExecuterRetriesConfig.GetMaxRetryNumber();
         if (requestData.NodeId == target.NodeId()) {
-            LOG_D("Is already on the same node, skipping retry");
-            requestData.RetryNumber = ExecuterRetriesConfig.GetMaxRetryNumber();
+            LOG_D("Request was originally on local node which is shutting down" << requestId);
         } else {
-            LOG_D("Try to retry after NODE_SHUTTING_DOWN, target nodeId: " << target.NodeId() << ", requestId: " << requestId);
+            LOG_D("Try to retry after NODE_SHUTTING_DOWN, run tasks locally, requestId: " << requestId);
+            requestData.NodeId = target.NodeId();
             TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(target, ExecuterId, ev.release(),
                 CalcSendMessageFlagsForNode(target.NodeId()), requestId, nullptr, ExecuterSpan.GetTraceId()));
-            requestData.RetryNumber++;
             return true;
         }
     }

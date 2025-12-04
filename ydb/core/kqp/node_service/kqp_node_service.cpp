@@ -214,37 +214,17 @@ private:
             request.Deadline = now + timeout + /* gap */ TDuration::Seconds(5);
         }
 
-        if (State_->HasRequest(txId)) {
-            auto existingTaskIds = State_->GetTaskIdsByTxId(txId);
-
-            bool hasOverlap = false;
-            TVector<ui64> overlappingTasks;
-            for (const auto& dqTask : msg.GetTasks()) {
-                if (existingTaskIds.contains(dqTask.GetId())) {
-                    hasOverlap = true;
-                    overlappingTasks.push_back(dqTask.GetId());
-                }
-            }
-            
-            if (hasOverlap) {
-                LOG_E("TxId: " << txId << ", requester: " << requester 
-                      << ", REJECTING retry: overlapping tasks found: [" << JoinSeq(", ", overlappingTasks) << "]");
-                co_return ReplyError(txId, executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, ev->Cookie);
-            } else {
-                LOG_D("TxId: " << txId << ", requester: " << requester 
-                      << ", ALLOWING retry: no overlapping tasks, will add as separate request");
-            }
-        }
-
         TVector<ui64> requestTaskIds;
         for (const auto& dqTask : msg.GetTasks()) {
-            request.Tasks.emplace(dqTask.GetId(), std::nullopt);
             requestTaskIds.push_back(dqTask.GetId());
         }
-        
-        LOG_D("TxId: " << txId << ", requester: " << requester 
-              << ", try to add request to State with tasks: [" << JoinSeq(", ", requestTaskIds) << "]");
-        State_->AddRequest(std::move(request));
+
+        if (!State_->HasRequest(txId) || !State_->AddTasksToRequest(txId, executerId, requestTaskIds)) {
+            for (ui64 taskId : requestTaskIds) {
+                request.Tasks.emplace(taskId, std::nullopt);
+            }
+            State_->AddRequest(std::move(request));
+        }
 
         NRm::EKqpMemoryPool memoryPool;
         if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN) {
@@ -390,6 +370,8 @@ private:
     }
 
     void TerminateTx(ui64 txId, const TString& reason, NYql::NDqProto::StatusIds_StatusCode status = NYql::NDqProto::StatusIds::UNSPECIFIED) {
+        State_->MarkRequestAsCancelled(txId);
+
         if (auto tasksToAbort = State_->GetTasksByTxId(txId); !tasksToAbort.empty()) {
             TStringBuilder finalReason;
             finalReason << "node service cancelled the task, because it " << reason

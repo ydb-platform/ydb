@@ -72,7 +72,11 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                     if (iter.Parent) {
                         iter.Parent->Children[iter.ChildIndex] = op;
                     } else {
-                        root.Children[0] = op;
+                        root.SetInput(op);
+                    }
+
+                    if (rule->LogRule) {
+                        YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx);
                     }
 
                     ComputeRequiredProps(root, Props, ctx);

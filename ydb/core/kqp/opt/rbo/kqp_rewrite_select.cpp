@@ -469,7 +469,6 @@ TExprNode::TPtr FlattenNestedConjunctions(TExprNode::TPtr node, TExprContext &ct
         if (conjuncts.size() <= 2) {
             return node;
         }
-
         auto newLambdaBody = Build<TCoAnd>(ctx, node->Pos()).Add(conjuncts).Done().Ptr();
         if (addToPg){
             newLambdaBody = ctx.NewCallable(node->Pos(), "ToPg", {newLambdaBody});

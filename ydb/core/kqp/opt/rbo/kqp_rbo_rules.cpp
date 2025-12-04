@@ -148,12 +148,29 @@ bool IsNullRejectingPredicate(const TFilterInfo &filter, TExprContext &ctx) {
 
 std::shared_ptr<TOpCBOTree> JoinCBOTrees(std::shared_ptr<TOpCBOTree> & left, std::shared_ptr<TOpCBOTree> & right, std::shared_ptr<TOpJoin> &join) {
     auto newJoin = std::make_shared<TOpJoin>(left->TreeRoot, right->TreeRoot, join->Pos, join->JoinKind, join->JoinKeys);
-    auto newTree = std::make_shared<TOpCBOTree>(newJoin, newJoin->Pos);
-    newTree->TreeNodes = left->TreeNodes;
-    newTree->TreeNodes.insert(newTree->TreeNodes.end(), right->TreeNodes.begin(), right->TreeNodes.end());
-    newTree->Children = left->Children;
-    newTree->Children.insert(newTree->Children.end(), right->Children.begin(), right->Children.end());
-    return newTree;
+
+    auto treeNodes = left->TreeNodes;
+    treeNodes.insert(treeNodes.end(), right->TreeNodes.begin(), right->TreeNodes.end());
+    treeNodes.push_back(newJoin);
+
+    return std::make_shared<TOpCBOTree>(newJoin, treeNodes, newJoin->Pos);
+}
+
+std::shared_ptr<TOpCBOTree> AddJoinToCBOTree(std::shared_ptr<TOpCBOTree> & cboTree, std::shared_ptr<TOpJoin> &join) {
+    TVector<std::shared_ptr<IOperator>> treeNodes;
+
+    if (join->GetLeftInput() == cboTree) {
+        join->SetLeftInput(cboTree->TreeRoot);
+        treeNodes.insert(treeNodes.end(), cboTree->TreeNodes.begin(), cboTree->TreeNodes.end());
+        treeNodes.push_back(join);
+    } 
+    else {
+        join->SetRightInput(cboTree->TreeRoot);
+        treeNodes.push_back(join);
+        treeNodes.insert(treeNodes.end(), cboTree->TreeNodes.begin(), cboTree->TreeNodes.end());
+    }
+
+    return std::make_shared<TOpCBOTree>(join, treeNodes, join->Pos);
 }
 
 void ExtractConjuncts(TExprNode::TPtr node, TVector<TExprNode::TPtr> & conjuncts) {
@@ -344,7 +361,7 @@ bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> &input
         filter->FilterLambda = newFilterLambda;
 
         auto newMap = std::make_shared<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
-        filter->Children[0] = newMap;
+        filter->SetInput(newMap);
         return true;
     }
 
@@ -396,7 +413,7 @@ bool TInlineScalarSubplanRule::TestAndApply(std::shared_ptr<IOperator> &input, T
 
     TVector<std::pair<TInfoUnit,TInfoUnit>> joinKeys;
     auto cross = std::make_shared<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
-    unaryOp->Children[0] = cross;
+    unaryOp->SetInput(cross);
 
     props.ScalarSubplans.Remove(scalarIU);
 
@@ -474,12 +491,12 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_pt
 
     if (leftMapElements.size()) {
         auto leftInput = join->GetLeftInput();
-        join->Children[0] = std::make_shared<TOpMap>(leftInput, input->Pos, leftMapElements, false);
+        join->SetLeftInput(std::make_shared<TOpMap>(leftInput, input->Pos, leftMapElements, false));
     }
 
     if (rightMapElements.size()) {
         auto rightInput = join->GetRightInput();
-        join->Children[1] = std::make_shared<TOpMap>(rightInput, input->Pos, rightMapElements, false);
+        join->SetRightInput(std::make_shared<TOpMap>(rightInput, input->Pos, rightMapElements, false));
     }
 
     // If there was an enforcer on the input map, move it to the output
@@ -601,8 +618,8 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
         join->JoinKind = "Inner";
     }
 
-    join->Children[0] = leftInput;
-    join->Children[1] = rightInput;
+    join->SetLeftInput(leftInput);
+    join->SetRightInput(rightInput);
 
     if (topLevelPreds.size()) {
         auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Pos, topLevelPreds, ctx.ExprCtx, props.PgSyntax);
@@ -669,28 +686,32 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::sha
 
         bool leftSideCBOTree = true;
 
-        if (leftInput->Kind == EOperator::CBOTree) {
-            cboTree = CastOperator<TOpCBOTree>(leftInput);
-        } 
-        else if (leftInput->Kind == EOperator::Filter && 
-                CastOperator<TOpFilter>(leftInput)->GetInput()->Kind == EOperator::CBOTree &&
-                join->JoinKind == "Inner") {
-            maybeFilter = CastOperator<TOpFilter>(leftInput);
-            cboTree = CastOperator<TOpCBOTree>(maybeFilter->GetInput());
-        } 
-        else if (rightInput->Kind == EOperator::CBOTree) {
-            cboTree = CastOperator<TOpCBOTree>(rightInput);
-            leftSideCBOTree = false;
-        } 
-        else if (rightInput->Kind == EOperator::Filter && 
-                CastOperator<TOpFilter>(rightInput)->GetInput()->Kind == EOperator::CBOTree &&
-                join->JoinKind == "Inner") {
-            maybeFilter = CastOperator<TOpFilter>(rightInput);
-            cboTree = CastOperator<TOpCBOTree>(maybeFilter->GetInput());
-            leftSideCBOTree = false;
-        }
-        else {
-            return input;
+        auto findCBOTree = [&join](const std::shared_ptr<IOperator>& op, 
+                std::shared_ptr<TOpCBOTree>& cboTree, 
+                std::shared_ptr<TOpFilter>& maybeFilter) {
+
+            if (op->Kind == EOperator::CBOTree) {
+                cboTree = CastOperator<TOpCBOTree>(op);
+                return true;
+            }
+            if (op->Kind == EOperator::Filter && 
+                    CastOperator<TOpFilter>(op)->GetInput()->Kind == EOperator::CBOTree &&
+                    join->JoinKind == "Inner") {
+
+                maybeFilter = CastOperator<TOpFilter>(op);
+                cboTree = CastOperator<TOpCBOTree>(maybeFilter->GetInput());
+                return true;
+            }
+
+            return false;
+        };
+
+        if (!findCBOTree(leftInput, cboTree, maybeFilter)) {
+            if (!findCBOTree(rightInput, cboTree, maybeFilter)) {
+                return input;
+            } else {
+                leftSideCBOTree = true;
+            }
         }
 
         std::shared_ptr<TOpFilter> maybeAnotherFilter;
@@ -698,17 +719,21 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::sha
         std::shared_ptr<TOpCBOTree> otherSideCBOTree;
 
         if (otherSide->Kind == EOperator::Filter &&
-                CastOperator<TOpFilter>(otherSide)->GetInput()->Kind == EOperator::CBOTree) {
+                CastOperator<TOpFilter>(otherSide)->GetInput()->Kind == EOperator::CBOTree &&
+                join->JoinKind == "Inner") {
+
             maybeAnotherFilter = CastOperator<TOpFilter>(otherSide);
             otherSideCBOTree = CastOperator<TOpCBOTree>(maybeAnotherFilter->GetInput());
-        } else {
-            otherSideCBOTree = std::make_shared<TOpCBOTree>(otherSide, otherSide->Pos);
         }
 
-        if (leftSideCBOTree) {
-            cboTree = JoinCBOTrees(cboTree, otherSideCBOTree, join);
+        if (otherSideCBOTree) {
+            if (leftSideCBOTree) {
+                cboTree = JoinCBOTrees(cboTree, otherSideCBOTree, join);
+            } else {
+                cboTree = JoinCBOTrees(otherSideCBOTree, cboTree, join);
+            }
         } else {
-            cboTree = JoinCBOTrees(otherSideCBOTree, cboTree, join);
+            cboTree = AddJoinToCBOTree(cboTree, join);
         }
 
         if (maybeFilter && maybeAnotherFilter) {
@@ -718,7 +743,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::sha
         }
 
         if (maybeFilter) {
-            maybeFilter->Children[0] = cboTree;
+            maybeFilter->SetInput(cboTree);
             return maybeFilter;
         } else {
             return cboTree;
@@ -809,7 +834,7 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
     } else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {
-        auto childOp = input->Children[0];
+        auto childOp = CastOperator<IUnaryOperator>(input)->GetInput();
         auto prevStageId = *(childOp->Props.StageId);
 
         // If the child operator is a source, it requires its own stage

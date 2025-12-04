@@ -387,6 +387,7 @@ class IUnaryOperator : public IOperator {
     IUnaryOperator(EOperator kind, TPositionHandle pos) : IOperator(kind, pos) {}
     IUnaryOperator(EOperator kind, TPositionHandle pos, std::shared_ptr<IOperator> input) : IOperator(kind, pos) { Children.push_back(input); }
     std::shared_ptr<IOperator> &GetInput() { return Children[0]; }
+    void SetInput(std::shared_ptr<IOperator> newInput) { Children[0] = newInput; }
 
     virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
     virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
@@ -402,6 +403,9 @@ class IBinaryOperator : public IOperator {
 
     std::shared_ptr<IOperator> &GetLeftInput() { return Children[0]; }
     std::shared_ptr<IOperator> &GetRightInput() { return Children[1]; }
+
+    void SetLeftInput(std::shared_ptr<IOperator> newInput) { Children[0] = newInput; }
+    void SetRightInput(std::shared_ptr<IOperator> newInput) { Children[1] = newInput; }
 };
 
 class TOpEmptySource : public IOperator {
@@ -559,6 +563,7 @@ class TOpLimit : public IUnaryOperator {
 class TOpCBOTree : public IOperator {
   public:
     TOpCBOTree(std::shared_ptr<IOperator> treeRoot, TPositionHandle pos);
+    TOpCBOTree(std::shared_ptr<IOperator> treeRoot, TVector<std::shared_ptr<IOperator>> treeNodes, TPositionHandle pos);
     
     virtual TVector<TInfoUnit> GetOutputIUs() override { return TreeRoot->GetOutputIUs(); }
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
@@ -614,7 +619,7 @@ class TOpRoot : public IUnaryOperator {
             for (auto scalarSubplan : Root->PlanProps.ScalarSubplans.Get()) {
                 BuildDfsList(scalarSubplan, {}, size_t(0), visited);
             }
-            auto child = ptr->Children[0];
+            auto child = ptr->GetInput();
             BuildDfsList(child, {}, size_t(0), visited);
             CurrElement = 0;
         }

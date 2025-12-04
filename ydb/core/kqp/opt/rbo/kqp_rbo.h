@@ -26,7 +26,7 @@ enum ERuleProperties: ui32 {
 class IRule {
   public:
     IRule(TString name) : RuleName(name) {}
-    IRule(TString name, ui32 props) : RuleName(name), Props(props) {}
+    IRule(TString name, ui32 props, bool logRule = false) : RuleName(name), Props(props), LogRule(logRule) {}
 
     virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
@@ -34,6 +34,8 @@ class IRule {
 
     TString RuleName;
     ui32 Props{0x00};
+    ui32 Props;
+    bool LogRule = false;
 };
 
 /**
@@ -43,7 +45,7 @@ class IRule {
 class ISimplifiedRule : public IRule {
   public:
     ISimplifiedRule(TString name) : IRule(name) {}
-    ISimplifiedRule(TString name, ui32 props) : IRule(name, props) {}
+    ISimplifiedRule(TString name, ui32 props, bool logRule = false) : IRule(name, props, logRule) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 

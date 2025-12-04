@@ -70,7 +70,7 @@ class TPushFilterRule : public ISimplifiedRule {
  */
 class TBuildInitialCBOTreeRule : public ISimplifiedRule {
   public:
-    TBuildInitialCBOTreeRule() : ISimplifiedRule("Building initial CBO tree", ERuleProperties::RequireParents) {}
+    TBuildInitialCBOTreeRule() : ISimplifiedRule("Building initial CBO tree", ERuleProperties::RequireParents, true) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -80,7 +80,7 @@ class TBuildInitialCBOTreeRule : public ISimplifiedRule {
  */
 class TExpandCBOTreeRule : public ISimplifiedRule {
   public:
-    TExpandCBOTreeRule() : ISimplifiedRule("Expand CBO tree", ERuleProperties::RequireParents) {}
+    TExpandCBOTreeRule() : ISimplifiedRule("Expand CBO tree", ERuleProperties::RequireParents, true) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };

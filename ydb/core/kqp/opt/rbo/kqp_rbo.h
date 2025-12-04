@@ -13,9 +13,8 @@ enum ERuleProperties: ui32 {
     RequireParents = 0x01,
     RequireTypes = 0x02,
     RequireMetadata = 0x04,
-    RequireStatistics = 0x08,
-    RequireMetataAndStatistics = 0xC
-};
+    RequireStatistics = 0x08
+  };
 
 /**
  * Interface for transformation rule:

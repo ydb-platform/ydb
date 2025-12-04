@@ -268,7 +268,7 @@ void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TStrin
     ExecuteYqlScript(env, replace);
 }
 
-void CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
+TTableInfo CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
     int shardCount)
 {
     auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
@@ -287,12 +287,63 @@ void CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString
         );
     )", fullTableName.c_str(), shardCount));
     runtime.SimulateSleep(TDuration::Seconds(1));
+
+    TTableInfo tableInfo;
+    tableInfo.Path = Sprintf("/Root/%s/%s", databaseName.c_str(), tableName.c_str());
+    tableInfo.ShardIds = GetColumnTableShards(runtime, runtime.AllocateEdgeActor(), tableInfo.Path);
+    tableInfo.PathId = ResolvePathId(runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
+    return tableInfo;
 }
 
-void PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
+void InsertDataIntoTable(TTestEnv& env, const TString& databaseName, const TString& tableName, size_t rowCount) {
+    auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
+    auto& runtime = *env.GetServer().GetRuntime();
+
+    using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<
+        Ydb::Table::BulkUpsertRequest,
+        Ydb::Table::BulkUpsertResponse>;
+
+    Ydb::Table::BulkUpsertRequest request;
+    request.set_table(fullTableName);
+    auto* rows = request.mutable_rows();
+    auto* reqRowType = rows->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type();
+    auto* reqKeyType = reqRowType->add_members();
+    reqKeyType->set_name("Key");
+    reqKeyType->mutable_type()->set_type_id(Ydb::Type::UINT64);
+    auto* reqValueType = reqRowType->add_members();
+    reqValueType->set_name("Value");
+    reqValueType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+
+    auto* reqRows = rows->mutable_value();
+
+    for (size_t i = 0; i < rowCount; ++i) {
+        auto* row = reqRows->add_items();
+        row->add_items()->set_uint64_value(i);
+        row->add_items()->set_bytes_value(ToString(i));
+    }
+
+    auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
+        std::move(request), "", "", runtime.GetActorSystem(0));
+    auto response = runtime.WaitFuture(std::move(future));
+
+    UNIT_ASSERT(response.operation().ready());
+    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+    env.GetController()->WaitActualization(TDuration::Seconds(1));
+}
+
+
+TTableInfo PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
     int shardCount)
 {
-    CreateColumnTable(env, databaseName, tableName, shardCount);
+    auto info = CreateColumnTable(env, databaseName, tableName, shardCount);
+    InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber);
+    return info;
+}
+
+TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseName, const TString& tableName,
+    int shardCount)
+{
+    auto info = CreateColumnTable(env, databaseName, tableName, shardCount);
 
     auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
     auto& runtime = *env.GetServer().GetRuntime();
@@ -350,48 +401,8 @@ void PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TStrin
     }
 
     env.GetController()->WaitActualization(TDuration::Seconds(1));
-}
 
-std::vector<TTableInfo> GatherColumnTablesInfo(TTestEnv& env, const TString& fullDbName, ui8 tableCount) {
-    auto& runtime = *env.GetServer().GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    std::vector<TTableInfo> ret;
-    for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
-        TTableInfo tableInfo;
-        tableInfo.Path = Sprintf("%s/Table%u", fullDbName.c_str(), tableId);
-        tableInfo.ShardIds = GetColumnTableShards(runtime, sender, tableInfo.Path);
-        tableInfo.PathId = ResolvePathId(runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
-        ret.emplace_back(tableInfo);
-    }
-    return ret;
-}
-
-TDatabaseInfo PrepareDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
-    auto fullDbName = CreateDatabase(env, "Database");
-
-    for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
-        PrepareColumnTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
-    }
-
-    return {
-        .FullDatabaseName = fullDbName,
-        .Tables = GatherColumnTablesInfo(env, fullDbName, tableCount)
-    };
-}
-
-TDatabaseInfo PrepareServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
-    auto fullServerlessDbName = CreateDatabase(env, "Shared", 1, true);
-    auto fullDbName = CreateServerlessDatabase(env, "Database", "/Root/Shared");
-
-    for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
-        PrepareColumnTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
-    }
-
-    return {
-        .FullDatabaseName = fullServerlessDbName,
-        .Tables = GatherColumnTablesInfo(env, fullDbName, tableCount)
-    };
+    return info;
 }
 
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {

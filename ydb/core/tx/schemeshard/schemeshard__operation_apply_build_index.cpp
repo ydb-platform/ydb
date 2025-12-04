@@ -69,10 +69,6 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
     TString tablePath = config.GetTablePath();
     TString indexName = config.GetIndexName();
 
-    if (indexName.empty() && !context.SS->EnableAddColumsWithDefaults) {
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding columns with defaults is disabled")};
-    }
-
     TPath table = TPath::Resolve(tablePath, context.SS);
     TVector<ISubOperation::TPtr> result;
     {

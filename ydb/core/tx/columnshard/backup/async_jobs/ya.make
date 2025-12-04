@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     ydb/core/formats/arrow
     ydb/library/actors/core
+    ydb/core/tx/datashard
 )
 
 YQL_LAST_ABI_VERSION()

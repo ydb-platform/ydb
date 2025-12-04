@@ -14,7 +14,7 @@ TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(con
     #ifndef KIKIMR_DISABLE_S3_OPS
         return std::unique_ptr<NActors::IActor>(CreateS3Downloader(subscriberActorId, txId, restoreTask, tableInfo));
     #else
-        return TConclusionStatus::Fail("Exports to S3 are disabled");
+        return TConclusionStatus::Fail("Import from S3 are disabled");
     #endif
     default:
         return TConclusionStatus::Fail(TStringBuilder() << "Unknown settings: " << static_cast<ui32>(settingsKind));
@@ -32,7 +32,11 @@ public:
     }
     
     void Bootstrap() {
-        Register(CreateAsyncJobImportDownloader(SelfId(), TxId, RestoreTask, TableInfo).DetachResult().release());
+        auto result = CreateAsyncJobImportDownloader(SelfId(), TxId, RestoreTask, TableInfo);
+        if (!result) {
+            return Fail(result.GetError().GetErrorMessage());
+        }
+        Register(result.DetachResult().release());
         Become(&TThis::StateMain);
     }
     

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/tx/datashard/import_common.h>
 #include <ydb/library/conclusion/result.h>

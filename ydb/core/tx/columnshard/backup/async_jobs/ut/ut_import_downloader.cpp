@@ -104,9 +104,9 @@ NKikimrSchemeOp::TRestoreTask MakeRestoreTask(const TString& bucketName) {
 
 using namespace NColumnShard;
 
-Y_UNIT_TEST_SUITE(IScan) {
+Y_UNIT_TEST_SUITE(AsyncJobs) {
 
-    Y_UNIT_TEST(MultiExport) {
+    Y_UNIT_TEST(Import) {
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
         NTestUtils::CreateBucket("test2", s3Client);
 
@@ -122,8 +122,8 @@ Y_UNIT_TEST_SUITE(IScan) {
 
         TAutoPtr<IEventHandle> handle;
         runtime->DispatchEvents({}, TDuration::Seconds(1));
-        runtime->Send(new IEventHandle(exporter, edge, std::make_unique<NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>(TestRecordBatch(), false)));
-        runtime->Send(new IEventHandle(exporter, edge, std::make_unique<NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>(TestRecordBatch(), true)));
+        runtime->Send(new IEventHandle(exporter, edge, new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(TestRecordBatch(), false)));
+        runtime->Send(new IEventHandle(exporter, edge, new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(TestRecordBatch(), true)));
         auto event1 = runtime->GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult>(handle);
         UNIT_ASSERT(!event1->IsFinish);
         auto event2 = runtime->GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult>(handle);
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(IScan) {
         auto event3 = runtime->GrabEdgeEvent<TEvPrivate::TEvBackupImportRecordBatch>(handle);
         UNIT_ASSERT(!event3->IsLast);
         UNIT_ASSERT_VALUES_EQUAL(event3->Data->ToString(), "key:   [\n    \"foo\",\n    \"bar\",\n    \"baz\",\n    \"foo\",\n    \"bar\",\n    \"baz\"\n  ]\nvalue:   [\n    \"one\",\n    \"two\",\n    \"three\",\n    \"one\",\n    \"two\",\n    \"three\"\n  ]\n");
-        runtime->Send(new IEventHandle(importActorId, edge, std::make_unique<TEvPrivate::TEvBackupImportRecordBatchResult>()));
+        runtime->Send(new IEventHandle(importActorId, edge, new TEvPrivate::TEvBackupImportRecordBatchResult()));
 
         auto event4 = runtime->GrabEdgeEvent<TEvPrivate::TEvBackupImportRecordBatch>(handle);
         UNIT_ASSERT(event4->IsLast);

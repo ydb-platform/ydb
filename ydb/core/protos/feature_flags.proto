@@ -243,4 +243,5 @@ message TFeatureFlags {
     optional bool EnableReplication = 217 [default = true];
     optional bool EnableShuttingDownNodeState = 218 [default = false];
     optional bool EnableStreamingQueriesCounters = 219 [default = false];
+    optional bool UseYdsTopicStorageMetering = 220 [default = false];
     }

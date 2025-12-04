@@ -73,11 +73,8 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     }
 
     void MaybeReady() {
-        std::cerr << "FSEXPORT_DEBUG: TExportScan::MaybeReady IsReady()=" << IsReady() << std::endl;
         if (IsReady()) {
-            std::cerr << "FSEXPORT_DEBUG: TExportScan::MaybeReady sending TEvReady to Uploader=" << Uploader.ToString() << std::endl;
             Send(Uploader, new TEvExportScan::TEvReady());
-            std::cerr << "FSEXPORT_DEBUG: TExportScan::MaybeReady TEvReady sent" << std::endl;
         }
     }
 
@@ -140,7 +137,6 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     }
 
     void Handle(TEvExportScan::TEvFinish::TPtr& ev) {
-        std::cerr << "FSEXPORT_DEBUG: TExportScan::Handle TEvFinish START" << std::endl;
         Y_ENSURE(IsReady());
 
         EXPORT_LOG_D("Handle TEvExportScan::TEvFinish"
@@ -149,10 +145,7 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
 
         Success = ev->Get()->Success;
         Error = ev->Get()->Error;
-        std::cerr << "FSEXPORT_DEBUG: TExportScan::Handle TEvFinish Success=" << Success 
-                  << " Error=" << Error << " calling Driver->Touch(EScan::Final)" << std::endl;
         Driver->Touch(EScan::Final);
-        std::cerr << "FSEXPORT_DEBUG: TExportScan::Handle TEvFinish END" << std::endl;
     }
 
 public:
@@ -168,7 +161,6 @@ public:
         , Driver(nullptr)
         , Success(false)
     {
-        std::cerr << "FSEXPORT_DEBUG: TExportScan constructor buffer=" << (void*)Buffer.Get() << std::endl;
     }
 
     void Describe(IOutputStream& o) const override {

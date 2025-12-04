@@ -33,15 +33,11 @@ protected:
     }
 
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run START" << std::endl;
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         Y_ENSURE(tx->GetSchemeTx().HasBackup());
         const auto& backup = tx->GetSchemeTx().GetBackup();
-        std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run HasYTSettings=" << backup.HasYTSettings() 
-                  << " HasS3Settings=" << backup.HasS3Settings() 
-                  << " HasFSSettings=" << backup.HasFSSettings() << std::endl;
 
         const ui64 tableId = backup.GetTableId();
         Y_ENSURE(DataShard.GetUserTables().contains(tableId));
@@ -80,24 +76,16 @@ protected:
                 return false;
             }
         } else if (backup.HasFSSettings()) {
-            std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run FSSettings detected" << std::endl;
-            std::cerr << "FSEXPORT_DEBUG: FSSettings BasePath="
-                      << " Path=" << std::endl;
             NBackupRestoreTraits::ECompressionCodec codec;
             if (!TryCodecFromTask(backup, codec)) {
-                std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run unsupported compression codec" << std::endl;
                 Abort(op, ctx, TStringBuilder() << "Unsupported compression codec"
                     << ": " << backup.GetCompression().GetCodec());
                 return false;
             }
-            std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run codec OK" << std::endl;
 
             if (auto* exportFactory = appData->DataShardExportFactory) {
-                std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run creating FS export" << std::endl;
                 std::shared_ptr<IExport>(exportFactory->CreateExportToFs(backup, columns)).swap(exp);
-                std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run FS export created, exp=" << (void*)exp.get() << std::endl;
             } else {
-                std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run exportFactory is NULL" << std::endl;
                 Abort(op, ctx, "Exports to FS are disabled");
                 return false;
             }
@@ -106,20 +94,12 @@ protected:
             return false;
         }
 
-        std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run creating uploader lambda" << std::endl;
         auto createUploader = [self = DataShard.SelfId(), txId = op->GetTxId(), exp]() {
-            std::cerr << "FSEXPORT_DEBUG: createUploader lambda called" << std::endl;
-            auto* uploader = exp->CreateUploader(self, txId);
-            std::cerr << "FSEXPORT_DEBUG: createUploader lambda returned uploader=" << (void*)uploader << std::endl;
-            return uploader;
+            return exp->CreateUploader(self, txId);
         };
 
-        std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run calling CreateBuffer" << std::endl;
         THolder<IBuffer> buffer{exp->CreateBuffer()};
-        std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run CreateBuffer returned buffer=" << (void*)buffer.Get() << std::endl;
-        std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run calling CreateExportScan" << std::endl;
         THolder<NTable::IScan> scan{CreateExportScan(std::move(buffer), createUploader)};
-        std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run CreateExportScan returned scan=" << (void*)scan.Get() << std::endl;
 
         const auto& taskName = appData->DataShardConfig.GetBackupTaskName();
         const auto taskPrio = appData->DataShardConfig.GetBackupTaskPriority();
@@ -134,14 +114,12 @@ protected:
             readAheadHi = readAheadHiOverride;
         }
 
-        std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run calling QueueScan localTableId=" << localTableId << std::endl;
         tx->SetScanTask(DataShard.QueueScan(localTableId, scan.Release(), op->GetTxId(),
             TScanOptions()
                 .SetResourceBroker(taskName, taskPrio)
                 .SetReadAhead(readAheadLo, readAheadHi)
                 .SetReadPrio(TScanOptions::EReadPrio::Low)
         ));
-        std::cerr << "FSEXPORT_DEBUG: TBackupUnit::Run QueueScan done, returning true" << std::endl;
 
         return true;
     }

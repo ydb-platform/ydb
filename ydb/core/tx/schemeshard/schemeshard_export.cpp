@@ -224,6 +224,8 @@ void TSchemeShard::PersistExportItemState(NIceDb::TNiceDb& db, const TExportInfo
 }
 
 void TSchemeShard::Handle(TEvExport::TEvCreateExportRequest::TPtr& ev, const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+        "Handle TEvExport::TEvCreateExportRequest, txId# " << ev->Get()->Record.GetTxId());
     Execute(CreateTxCreateExport(ev), ctx);
 }
 

@@ -77,35 +77,26 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
     };
 
     void WriteToFile(const TString& path, const TString& data) {
-        std::cerr << "FSEXPORT_DEBUG: WriteToFile START path=" << path << " size=" << data.size() << std::endl;
         EXPORT_LOG_D("WriteToFile"
             << ": self# " << SelfId()
             << ", path# " << path
             << ", size# " << data.size());
         
         try {
-            std::cerr << "FSEXPORT_DEBUG: WriteToFile creating TFsPath" << std::endl;
             TFsPath filePath(path);
             TFsPath dirPath = filePath.Parent();
-            std::cerr << "FSEXPORT_DEBUG: WriteToFile calling MkDirs for " << dirPath.GetPath() << std::endl;
             dirPath.MkDirs();
-            std::cerr << "FSEXPORT_DEBUG: WriteToFile MkDirs done" << std::endl;
             
             // Write file
-            std::cerr << "FSEXPORT_DEBUG: WriteToFile opening file" << std::endl;
             TFileOutput file(path);
-            std::cerr << "FSEXPORT_DEBUG: WriteToFile writing data" << std::endl;
             file.Write(data);
-            std::cerr << "FSEXPORT_DEBUG: WriteToFile finishing file" << std::endl;
             file.Finish();
-            std::cerr << "FSEXPORT_DEBUG: WriteToFile SUCCESS" << std::endl;
             
             EXPORT_LOG_I("Successfully wrote file"
                 << ": self# " << SelfId()
                 << ", path# " << path
                 << ", size# " << data.size());
         } catch (const std::exception& ex) {
-            std::cerr << "FSEXPORT_DEBUG: WriteToFile EXCEPTION: " << ex.what() << std::endl;
             Error = TStringBuilder() << "Failed to write file '" << path << "': " << ex.what();
             EXPORT_LOG_E("WriteToFile error"
                 << ": self# " << SelfId()
@@ -137,7 +128,6 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
     }
     
     void UploadMetadata() {
-        std::cerr << "FSEXPORT_DEBUG: UploadMetadata START" << std::endl;
         Y_ENSURE(!MetadataUploaded);
         Y_ENSURE(ShardNum == 0);
         
@@ -146,30 +136,24 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
         
         try {
             if (EnableChecksums) {
-                std::cerr << "FSEXPORT_DEBUG: UploadMetadata computing checksum" << std::endl;
                 MetadataChecksum = ComputeChecksum(Metadata);
-                std::cerr << "FSEXPORT_DEBUG: UploadMetadata checksum=" << MetadataChecksum << std::endl;
             }
             
-            std::cerr << "FSEXPORT_DEBUG: UploadMetadata calling WriteToFile" << std::endl;
             WriteToFile(Settings.GetMetadataPath(), Metadata);
-            std::cerr << "FSEXPORT_DEBUG: UploadMetadata WriteToFile done" << std::endl;
             
             if (EnableChecksums) {
-                std::cerr << "FSEXPORT_DEBUG: UploadMetadata writing checksum" << std::endl;
                 WriteChecksum(MetadataChecksum, Settings.GetChecksumPath(Settings.GetMetadataPath()), Settings.GetMetadataPath());
             }
             
             MetadataUploaded = true;
-            std::cerr << "FSEXPORT_DEBUG: UploadMetadata SUCCESS" << std::endl;
+            EXPORT_LOG_I("Metadata uploaded successfully"
+                << ": self# " << SelfId());
         } catch (...) {
-            std::cerr << "FSEXPORT_DEBUG: UploadMetadata EXCEPTION" << std::endl;
             return Finish(false, Error.GetOrElse("Unknown error during metadata upload"));
         }
     }
     
     void UploadPermissions() {
-        std::cerr << "FSEXPORT_DEBUG: UploadPermissions START" << std::endl;
         Y_ENSURE(EnablePermissions && !PermissionsUploaded);
         Y_ENSURE(ShardNum == 0);
         
@@ -177,23 +161,20 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
             << ": self# " << SelfId());
         
         if (!Permissions) {
-            std::cerr << "FSEXPORT_DEBUG: UploadPermissions Permissions is empty" << std::endl;
             return Finish(false, "Cannot infer permissions");
         }
         
-        std::cerr << "FSEXPORT_DEBUG: UploadPermissions has Permissions, calling WriteMessage" << std::endl;
         try {
             WriteMessage(Permissions.GetRef(), Settings.GetPermissionsPath(), PermissionsChecksum);
             PermissionsUploaded = true;
-            std::cerr << "FSEXPORT_DEBUG: UploadPermissions SUCCESS" << std::endl;
+            EXPORT_LOG_I("Permissions uploaded successfully"
+                << ": self# " << SelfId());
         } catch (...) {
-            std::cerr << "FSEXPORT_DEBUG: UploadPermissions EXCEPTION" << std::endl;
             return Finish(false, Error.GetOrElse("Unknown error during permissions upload"));
         }
     }
     
     void UploadScheme() {
-        std::cerr << "FSEXPORT_DEBUG: UploadScheme START" << std::endl;
         Y_ENSURE(!SchemeUploaded);
         Y_ENSURE(ShardNum == 0);
         
@@ -201,17 +182,15 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
             << ": self# " << SelfId());
         
         if (!Scheme) {
-            std::cerr << "FSEXPORT_DEBUG: UploadScheme Scheme is empty" << std::endl;
             return Finish(false, "Cannot infer scheme");
         }
         
-        std::cerr << "FSEXPORT_DEBUG: UploadScheme has Scheme, calling WriteMessage" << std::endl;
         try {
             WriteMessage(Scheme.GetRef(), Settings.GetSchemePath(), SchemeChecksum);
             SchemeUploaded = true;
-            std::cerr << "FSEXPORT_DEBUG: UploadScheme SUCCESS" << std::endl;
+            EXPORT_LOG_I("Scheme uploaded successfully"
+                << ": self# " << SelfId());
         } catch (...) {
-            std::cerr << "FSEXPORT_DEBUG: UploadScheme EXCEPTION" << std::endl;
             return Finish(false, Error.GetOrElse("Unknown error during scheme upload"));
         }
     }
@@ -259,7 +238,6 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
     }
     
     void Finish(bool success = true, const TString& error = TString()) {
-        std::cerr << "FSEXPORT_DEBUG: Finish called success=" << success << " error=" << error << std::endl;
         EXPORT_LOG_I("Finish"
             << ": self# " << SelfId()
             << ", success# " << success
@@ -267,26 +245,17 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
         
         if (!success) {
             Error = error;
-            std::cerr << "FSEXPORT_DEBUG: Finish setting Error=" << error << std::endl;
         }
         
-        std::cerr << "FSEXPORT_DEBUG: Finish calling PassAway" << std::endl;
         PassAway();
     }
     
     void PassAway() override {
-        std::cerr << "FSEXPORT_DEBUG: PassAway called Scanner=" << (void*)&Scanner << std::endl;
         if (Scanner) {
-            std::cerr << "FSEXPORT_DEBUG: PassAway sending TEvFinish to Scanner" << std::endl;
             Send(Scanner, new TEvExportScan::TEvFinish(Error.Empty(), Error.GetOrElse(TString())));
-            std::cerr << "FSEXPORT_DEBUG: PassAway TEvFinish sent" << std::endl;
-        } else {
-            std::cerr << "FSEXPORT_DEBUG: PassAway Scanner is NULL" << std::endl;
         }
         
-        std::cerr << "FSEXPORT_DEBUG: PassAway calling IActor::PassAway" << std::endl;
         IActor::PassAway();
-        std::cerr << "FSEXPORT_DEBUG: PassAway done" << std::endl;
     }
 
 public:
@@ -321,93 +290,75 @@ public:
         , EnablePermissions(task.GetEnablePermissions())
     {
         Y_UNUSED(TxId);
-        std::cerr << "FSEXPORT_DEBUG: TFsUploader constructor shardNum=" << ShardNum 
-                  << " hasScheme=" << Scheme.Defined()
-                  << " hasPermissions=" << Permissions.Defined()
-                  << " changefeeds.size=" << Changefeeds.size()
-                  << " EnableChecksums=" << EnableChecksums
-                  << " EnablePermissions=" << EnablePermissions << std::endl;
     }
     
     void Bootstrap() {
-        std::cerr << "FSEXPORT_DEBUG: TFsUploader::Bootstrap START shardNum=" << ShardNum << std::endl;
         EXPORT_LOG_D("Bootstrap"
             << ": self# " << SelfId()
             << ", shardNum# " << ShardNum);
         
         Become(&TThis::StateBase);
-        std::cerr << "FSEXPORT_DEBUG: TFsUploader::Bootstrap END (waiting for TEvReady)" << std::endl;
     }
     
     void DoWork() {
-        std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork START shardNum=" << ShardNum << std::endl;
+        EXPORT_LOG_D("DoWork started"
+            << ": self# " << SelfId()
+            << ", shardNum# " << ShardNum);
         
         if (ShardNum != 0) {
-            std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork shardNum!=0, finishing" << std::endl;
             return Finish();
         }
         
         try {
-            std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork MetadataUploaded=" << MetadataUploaded << std::endl;
             if (!MetadataUploaded) {
-                std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork calling UploadMetadata" << std::endl;
                 UploadMetadata();
-                std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork UploadMetadata done" << std::endl;
             }
             
-            std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork EnablePermissions=" << EnablePermissions 
-                      << " PermissionsUploaded=" << PermissionsUploaded << std::endl;
             if (EnablePermissions && !PermissionsUploaded) {
-                std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork calling UploadPermissions" << std::endl;
                 UploadPermissions();
-                std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork UploadPermissions done" << std::endl;
             }
             
-            std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork SchemeUploaded=" << SchemeUploaded << std::endl;
             if (!SchemeUploaded) {
-                std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork calling UploadScheme" << std::endl;
                 UploadScheme();
-                std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork UploadScheme done" << std::endl;
             }
             
-            std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork ChangefeedsUploaded=" << ChangefeedsUploaded << std::endl;
             if (!ChangefeedsUploaded) {
-                std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork calling UploadChangefeed" << std::endl;
                 UploadChangefeed();
-                std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork UploadChangefeed done" << std::endl;
             } else {
-                std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork no changefeeds, calling Finish" << std::endl;
                 Finish();
             }
         } catch (...) {
-            std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork EXCEPTION caught" << std::endl;
             Finish(false, Error ? *Error : "Unknown error during work");
         }
-        std::cerr << "FSEXPORT_DEBUG: TFsUploader::DoWork END" << std::endl;
     }
     
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExportScan::TEvReady, Handle);
+            hFunc(TEvExportScan::TEvBuffer<TString>, HandleBuffer);
             sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }
     
     void Handle(TEvExportScan::TEvReady::TPtr& ev) {
-        std::cerr << "FSEXPORT_DEBUG: Handle TEvExportScan::TEvReady START sender=" << ev->Sender.ToString() << std::endl;
         EXPORT_LOG_D("Handle TEvExportScan::TEvReady"
             << ": self# " << SelfId()
             << ", sender# " << ev->Sender);
         
         Scanner = ev->Sender;
-        std::cerr << "FSEXPORT_DEBUG: Handle TEvExportScan::TEvReady Scanner set, calling DoWork" << std::endl;
         
         if (Error) {
-            std::cerr << "FSEXPORT_DEBUG: Handle TEvExportScan::TEvReady Error is set, calling PassAway" << std::endl;
             return PassAway();
         }
         
         DoWork();
+    }
+    
+    void HandleBuffer(TEvExportScan::TEvBuffer<TString>::TPtr&) {
+        // Schema-only export doesn't process data buffers
+        // Just ignore them and continue waiting for scan completion
+        EXPORT_LOG_D("Handle TEvExportScan::TEvBuffer (ignored for schema-only export)"
+            << ": self# " << SelfId());
     }
 
 private:
@@ -443,47 +394,52 @@ private:
 
 class TSchemaOnlyBuffer : public NExportScan::IBuffer {
 public:
-    TSchemaOnlyBuffer() {
-        std::cerr << "FSEXPORT_DEBUG: TSchemaOnlyBuffer constructor" << std::endl;
-    }
+    TSchemaOnlyBuffer() = default;
     
     void ColumnsOrder(const TVector<ui32>&) override {
-        std::cerr << "FSEXPORT_DEBUG: TSchemaOnlyBuffer::ColumnsOrder called" << std::endl;
     }
 
     bool Collect(const NTable::IScan::TRow&) override {
-        std::cerr << "FSEXPORT_DEBUG: TSchemaOnlyBuffer::Collect called - returning false" << std::endl;
-        return false;
+        // For schema-only export, we don't actually collect data
+        // Count rows to stop scanning after first row
+        ++RowCount;
+        // Return true to indicate success (false would be interpreted as an error)
+        return true;
     }
 
-    IEventBase* PrepareEvent(bool, TStats&) override {
-        std::cerr << "FSEXPORT_DEBUG: TSchemaOnlyBuffer::PrepareEvent called - returning nullptr" << std::endl;
-        return nullptr;
+    IEventBase* PrepareEvent(bool last, TStats& stats) override {
+        // Schema-only export doesn't need actual data
+        // Send empty event to satisfy scanner protocol
+        stats.Rows = 0;
+        stats.BytesRead = 0;
+        stats.BytesSent = 0;
+        
+        // Send empty buffer - uploader will ignore it
+        return new TEvExportScan::TEvBuffer<TString>(TString(), last);
     }
 
     void Clear() override {
-        std::cerr << "FSEXPORT_DEBUG: TSchemaOnlyBuffer::Clear called" << std::endl;
+        RowCount = 0;
     }
 
     bool IsFilled() const override {
-        std::cerr << "FSEXPORT_DEBUG: TSchemaOnlyBuffer::IsFilled called - returning false" << std::endl;
-        return false;
+        // For schema-only export, we want to stop scanning immediately
+        // Return true after any row to minimize scanning overhead
+        return RowCount > 0;
     }
 
     TString GetError() const override {
-        std::cerr << "FSEXPORT_DEBUG: TSchemaOnlyBuffer::GetError called" << std::endl;
         return {};
     }
+
+private:
+    ui64 RowCount = 0;
 };
 
 IActor* TFsExport::CreateUploader(const TActorId& dataShard, ui64 txId) const {
-    std::cerr << "FSEXPORT_DEBUG: TFsExport::CreateUploader START shardNum=" << Task.GetShardNum() << std::endl;
-    std::cerr << "FSEXPORT_DEBUG: TFsExport::CreateUploader dataShard=" << dataShard.ToString() << " txId=" << txId << std::endl;
-    
     auto scheme = (Task.GetShardNum() == 0)
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
-    std::cerr << "FSEXPORT_DEBUG: TFsExport::CreateUploader GenYdbScheme done, scheme.Defined()=" << scheme.Defined() << std::endl;
 
     TMetadata metadata;
     metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
@@ -491,9 +447,7 @@ IActor* TFsExport::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     
     TVector<TChangefeedExportDescriptions> changefeeds;
     const bool enableChangefeedsExport = AppData() && AppData()->FeatureFlags.GetEnableChangefeedsExport();
-    std::cerr << "FSEXPORT_DEBUG: TFsExport::CreateUploader enableChangefeedsExport=" << enableChangefeedsExport << std::endl;
     if (enableChangefeedsExport) {
-        std::cerr << "FSEXPORT_DEBUG: TFsExport::CreateUploader processing changefeeds" << std::endl;
         const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
         const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
         Y_ASSERT(persQueues.size() == cdcStreams.size());
@@ -527,11 +481,9 @@ IActor* TFsExport::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         }
     }
     
-    std::cerr << "FSEXPORT_DEBUG: TFsExport::CreateUploader before GenYdbPermissions" << std::endl;
     auto permissions = (Task.GetEnablePermissions() && Task.GetShardNum() == 0)
         ? GenYdbPermissions(Task.GetTable())
         : Nothing();
-    std::cerr << "FSEXPORT_DEBUG: TFsExport::CreateUploader GenYdbPermissions done, permissions.Defined()=" << permissions.Defined() << std::endl;
     
     TFullBackupMetadata::TPtr backup = new TFullBackupMetadata{
         .SnapshotVts = TVirtualTimestamp(
@@ -539,22 +491,15 @@ IActor* TFsExport::CreateUploader(const TActorId& dataShard, ui64 txId) const {
             Task.GetSnapshotTxId())
     };
     metadata.AddFullBackup(backup);
-    std::cerr << "FSEXPORT_DEBUG: TFsExport::CreateUploader metadata ready, changefeeds.size=" << changefeeds.size() << std::endl;
     
-    std::cerr << "FSEXPORT_DEBUG: TFsExport::CreateUploader creating TFsUploader" << std::endl;
-    auto* uploader = new TFsUploader(
+    return new TFsUploader(
         dataShard, txId, Task, std::move(scheme), std::move(changefeeds), std::move(permissions), metadata.Serialize());
-    std::cerr << "FSEXPORT_DEBUG: TFsExport::CreateUploader TFsUploader created=" << (void*)uploader << std::endl;
-    return uploader;
 }
 
 IExport::IBuffer* TFsExport::CreateBuffer() const {
-    std::cerr << "FSEXPORT_DEBUG: TFsExport::CreateBuffer START" << std::endl;
     // For schema-only export, return a dummy buffer
     // Data export will be implemented later
-    auto* buffer = new TSchemaOnlyBuffer();
-    std::cerr << "FSEXPORT_DEBUG: TFsExport::CreateBuffer returning buffer=" << (void*)buffer << std::endl;
-    return buffer;
+    return new TSchemaOnlyBuffer();
 }
 
 } // NDataShard

@@ -1368,7 +1368,7 @@ public:
 
                     return createTable.Ptr();
 
-                } else if (mode == "alter") {                    
+                } else if (mode == "alter") {
                     for (auto setting : settings.Other) {
                         if (setting.Name().Value() == "intent") {
                             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Old AST format for AlterTable"));

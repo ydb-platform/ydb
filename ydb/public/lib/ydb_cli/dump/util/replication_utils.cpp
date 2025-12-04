@@ -57,7 +57,7 @@ void AddConnectionOptions(const NReplication::TConnectionParams& connectionParam
 TString ExtractTransformationLambdaName(const TString& lambdaCreateQuery) {
     const TString lambdaNameStartPattern = TStringBuilder() << TRANSFER_LAMBDA_DEFAULT_NAME << " = ";
     const TString lambdaNameEndPattern = ";";
-    
+
     size_t startPos = lambdaCreateQuery.find(lambdaNameStartPattern);
     if (startPos == TString::npos) {
         // LOG_E(Sprintf("Unexpected transfer lambda name: '%s' was not found", lambdaNameStartPattern.c_str()));
@@ -76,7 +76,7 @@ TString ExtractTransformationLambdaName(const TString& lambdaCreateQuery) {
         // LOG_E("Unexpected transfer lambda name");
         return "";
     }
-    
+
     return lambdaCreateQuery.substr(startPos, endPos - startPos);
 }
 
@@ -108,7 +108,7 @@ TString BuildCreateReplicationQuery(
     }
 
     TVector<TString> opts(::Reserve(5 /* max options */));
-        
+
     const auto& params = desc.GetConnectionParams();
     AddConnectionOptions(params, opts);
 
@@ -131,7 +131,7 @@ TString BuildCreateTransferQuery(
         const NReplication::TTransferDescription& desc)
 {            
     TVector<TString> options(::Reserve(7));
-    
+
     const auto& connectionParams = desc.GetConnectionParams();
     AddConnectionOptions(connectionParams, options);
 

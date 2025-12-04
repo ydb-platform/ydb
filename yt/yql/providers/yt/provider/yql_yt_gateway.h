@@ -693,6 +693,7 @@ public:
         }
 
         OPTION_FIELD(TEntriesPerCluster, Entries);
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
     };
 
     struct TDumpResult : public NCommon::TOperationResult {

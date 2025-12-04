@@ -10,6 +10,7 @@
 #include <yt/yql/providers/yt/gateway/lib/yt_attrs.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
+#include <yt/yql/providers/yt/lib/hash/yql_hash_builder.h>
 #include <yt/yql/providers/yt/lib/log/yt_logger.h>
 
 #include <yt/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
@@ -65,6 +66,7 @@
 #include <util/stream/str.h>
 #include <util/stream/input.h>
 #include <util/stream/file.h>
+#include <util/string/hex.h>
 #include <util/string/type.h>
 #include <util/system/execpath.h>
 #include <util/system/guard.h>
@@ -1471,9 +1473,9 @@ public:
             TVector<TFuture<void>> futures;
             for (auto& [cluster, entries] : options.Entries()) {
                 auto execCtx = MakeExecCtx(std::move(entries), session, cluster, nullptr, nullptr);
-                futures.push_back(execCtx->Session_->Queue_->Async([execCtx]() {
+                futures.push_back(execCtx->Session_->Queue_->Async([execCtx, config = options.Config()]() {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
-                    return ExecDump(execCtx);
+                    return ExecDump(execCtx, config);
                 }));
             }
 
@@ -5544,10 +5546,19 @@ private:
             });
     }
 
-    static void ExecDump(const TExecContext<TDumpOptions::TEntries>::TPtr& execCtx) {
+    static void ExecDump(const TExecContext<TDumpOptions::TEntries>::TPtr& execCtx, const TYtSettings::TConstPtr& config) {
+        TString tmpFolder = GetTablesTmpFolder(*config, execCtx->Cluster_);
+
         auto entry = execCtx->GetEntry();
         YQL_ENSURE(entry->DumpTx);
+
+        auto queryDumpAccount = config->_QueryDumpAccount.Get(execCtx->Cluster_);
+        YQL_ENSURE(queryDumpAccount.Defined());
+
         for (auto& [srcPath, dstPath] : execCtx->Options_) {
+            auto dstPathHash = HexEncode((THashBuilder() << dstPath).Finish());
+            auto tmpPath = NYql::TransformPath(tmpFolder, "tmp/" + dstPathHash, true, execCtx->Session_->UserName_);
+
             NYT::TRichYPath srcRichYPath;
             NYT::ITransactionPtr srcTx;
             auto snapshot = entry->Snapshots.FindPtr(std::make_pair(srcPath, 0));
@@ -5577,12 +5588,14 @@ private:
             auto userAttrs = GetUserAttributes(srcTx, srcRichYPath.Path_, true);
             NYT::MergeNodes(attrs, userAttrs);
 
-            entry->DumpTx->Create(dstPath, srcType, TCreateOptions().Recursive(true).Attributes(attrs));
+            attrs["account"] = *queryDumpAccount;
+            entry->DumpTx->Create(tmpPath, srcType, TCreateOptions().Recursive(true).Attributes(attrs));
             entry->DumpTx->Concatenate(
                 { srcRichYPath },
-                NYT::TRichYPath(dstPath),
+                NYT::TRichYPath(tmpPath),
                 TConcatenateOptions()
             );
+            entry->DumpTx->Move(tmpPath, dstPath, TMoveOptions().Recursive(true));
         }
     }
 

@@ -584,6 +584,7 @@ void TPCCRunner::UpdateDisplayTextMode() {
 
 void TPCCRunner::CollectDataToDisplay(Clock::time_point now) {
     auto newDisplayData = std::make_shared<TRunDisplayData>(PerThreadTerminalStats.size(), now);
+    newDisplayData->WarehouseCount = Config.WarehouseCount;
 
     // order makes sence here
     CollectStatistics(newDisplayData->Statistics);

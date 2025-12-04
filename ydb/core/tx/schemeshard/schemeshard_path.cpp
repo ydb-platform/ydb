@@ -3,6 +3,7 @@
 #include "schemeshard_system_names.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/sys_view/common/path.h>
 
@@ -1722,13 +1723,6 @@ bool TPath::IsInsideTableIndexPath(bool failOnUnresolved) const {
         return false;
     }
 
-    ++item;
-    for (; item != Elements.rend(); ++item) {
-        if (!(*item)->IsDirectory() && !(*item)->IsSubDomainRoot()) {
-            return false;
-        }
-    }
-
     return true;
 }
 
@@ -1870,7 +1864,22 @@ bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, TString& explai
     }
 
     if (AppData()->FeatureFlags.GetEnableSystemNamesProtection()) {
-        if (!CheckReservedName(leaf, AppData(), userToken, explain)) {
+        TPathCreationContext context;
+        context.IsSystemUser = NSchemeShard::IsSystemUser(userToken);
+        context.IsAdministrator = NKikimr::IsAdministrator(AppData(), userToken);
+
+        if (IsBackupServiceReservedName(leaf)) {
+            TPath parentPath = Parent();
+            while (parentPath.IsResolved() && !parentPath.Base()->IsRoot()) {
+                if (parentPath.Base()->IsBackupCollection()) {
+                    context.IsInsideBackupCollection = true;
+                    break;
+                }
+                parentPath = parentPath.Parent();
+            }
+        }
+
+        if (!CheckReservedName(leaf, context, explain)) {
             return false;
         }
     } else if (leaf == NSysView::SysPathName) {

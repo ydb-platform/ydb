@@ -164,6 +164,12 @@ namespace {
         return alterDatabaseSettings;
     }
 
+    TTruncateTableSettings ParseTruncateTableSettings(TKiTruncateTable truncateTable) {
+        TTruncateTableSettings truncateTableSettings;
+        Y_UNUSED(truncateTable);
+        return truncateTableSettings;
+    }
+
     TCreateUserSettings ParseCreateUserSettings(TKiCreateUser createUser) {
         TCreateUserSettings createUserSettings;
         createUserSettings.UserName = TString(createUser.UserName());
@@ -1546,6 +1552,25 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing ALTER DATABASE");
+        }
+
+        if (auto maybeTruncateTable = TMaybeNode<TKiTruncateTable>(input)) {
+            auto requireStatus = RequireChild(*input, TKiExecDataQuery::idx_World);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeTruncateTable.Cast().DataSink().Cluster());
+            TTruncateTableSettings truncateTableSettings = ParseTruncateTableSettings(maybeTruncateTable.Cast());
+
+            auto future = Gateway->TruncateTable(cluster, truncateTableSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing TRUNCATE TABLE");
         }
 
         if (auto maybeCreate = TMaybeNode<TKiCreateTable>(input)) {

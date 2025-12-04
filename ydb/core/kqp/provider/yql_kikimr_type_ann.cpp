@@ -915,7 +915,7 @@ private:
         return TStatus::Ok;
     }
 
-virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
+    virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
         TString cluster = TString(create.DataSink().Cluster());
         TString table = TString(create.Table());
         TString tableType = TString(create.TableType());
@@ -2034,6 +2034,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext&) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

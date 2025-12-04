@@ -23,14 +23,17 @@ struct TInputItem {
 
 struct TOutputItem {
     ui32 Key = 0;
-    ui32 Val = 0;
+    TString Val;
     ui64 Time = 0;
 
-    constexpr auto operator<=>(const TOutputItem&) const = default;
+    bool operator<(const TOutputItem& o) const {
+        return Key < o.Key || (Key == o.Key && (Time < o.Time || (Time == o.Time && Val < o.Val)));
+    }
+    bool operator==(const TOutputItem& o) const = default;
 };
 
 [[maybe_unused]] IOutputStream& operator<<(IOutputStream& output, const TOutputItem& item) {
-    return output << "TItem{Key = " << item.Key << ", Val = " << item.Val << ", Time = " << item.Time << "}";
+    return output << "TItem{Key = " << item.Key << ", Val = '" << item.Val << "', Time = " << item.Time << "}";
 }
 
 using TOutputGroup = std::vector<TOutputItem>;
@@ -41,7 +44,7 @@ using TStatsMap = TMap<TString, i64>;
 
 TStatsMap DefaultStatsMap = {
     {"MultiHop_NewHopsCount", 0},
-    {"MultiHop_EarlyThrownEventsCount", 0},
+    {"MultiHop_FarFutureEventsCount", 0},
     {"MultiHop_LateThrownEventsCount", 0},
     {"MultiHop_EmptyTimeCount", 0},
     {"MultiHop_KeysCount", 1},
@@ -110,23 +113,27 @@ std::tuple<TType*, TEncoder, TDecoder> BuildInputType(TSetup<false>& setup) {
                                           pgmBuilder.NewDataType(NUdf::TDataType<NUdf::TTimestamp>::Id));
     structType = pgmBuilder.NewStructType(structType, "sum",
                                           pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
+    structType = pgmBuilder.NewStructType(structType, "str",
+                                          pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id));
     auto keyIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("key");
     auto timeIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("time");
+    auto strIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("str");
     auto sumIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("sum");
+    auto numFields = AS_TYPE(TStructType, structType)->GetMembersCount();
 
-    auto encode = [keyIndex, timeIndex, sumIndex](const TInputItem& input, const THolderFactory& holderFactory) -> NUdf::TUnboxedValue {
+    auto encode = [keyIndex, timeIndex, sumIndex, numFields](const TInputItem& input, const THolderFactory& holderFactory) -> NUdf::TUnboxedValue {
         NUdf::TUnboxedValue* itemsPtr;
-        auto structValues = holderFactory.CreateDirectArrayHolder(3, itemsPtr);
+        auto structValues = holderFactory.CreateDirectArrayHolder(numFields, itemsPtr);
         itemsPtr[keyIndex] = NUdf::TUnboxedValuePod(input.Key);
         itemsPtr[timeIndex] = NUdf::TUnboxedValuePod(input.Time);
         itemsPtr[sumIndex] = NUdf::TUnboxedValuePod(input.Val);
         return structValues;
     };
 
-    auto decode = [keyIndex, timeIndex, sumIndex](const NUdf::TUnboxedValue& result) -> TOutputItem {
+    auto decode = [keyIndex, timeIndex, strIndex](const NUdf::TUnboxedValue& result) -> TOutputItem {
         return {
             result.GetElement(keyIndex).Get<ui32>(),
-            result.GetElement(sumIndex).Get<ui32>(),
+            TString(result.GetElements()[strIndex].AsStringRef()),
             result.GetElement(timeIndex).Get<ui64>(),
         };
     };
@@ -159,37 +166,47 @@ THolder<IComputationGraph> BuildGraph(
         },
         [&](TRuntimeNode item) { // init
             std::vector<std::pair<std::string_view, TRuntimeNode>> members;
-            members.emplace_back("sum", pgmBuilder.Member(item, "sum"));
+            members.emplace_back("str", pgmBuilder.ToString(pgmBuilder.Member(item, "sum")));
             return pgmBuilder.NewStruct(members);
         },
         [&](TRuntimeNode item, TRuntimeNode state) { // update
-            auto add = pgmBuilder.AggrAdd(
-                pgmBuilder.Member(item, "sum"),
-                pgmBuilder.Member(state, "sum"));
+            auto add = pgmBuilder.AggrConcat(
+                pgmBuilder.AggrConcat(
+                    pgmBuilder.AggrConcat(
+                        pgmBuilder.Member(state, "str"),
+                        pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(" ")),
+                    pgmBuilder.ToString(
+                        pgmBuilder.Member(item, "sum"))),
+                pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(" Add"));
             std::vector<std::pair<std::string_view, TRuntimeNode>> members;
-            members.emplace_back("sum", add);
+            members.emplace_back("str", add);
             return pgmBuilder.NewStruct(members);
         },
         [&](TRuntimeNode state) { // save
-            return pgmBuilder.Member(state, "sum");
+            return pgmBuilder.Member(state, "str");
         },
         [&](TRuntimeNode savedState) { // load
             std::vector<std::pair<std::string_view, TRuntimeNode>> members;
-            members.emplace_back("sum", savedState);
+            members.emplace_back("str", savedState);
             return pgmBuilder.NewStruct(members);
         },
         [&](TRuntimeNode state1, TRuntimeNode state2) { // merge
-            auto add = pgmBuilder.AggrAdd(
-                pgmBuilder.Member(state1, "sum"),
-                pgmBuilder.Member(state2, "sum"));
+            auto add = pgmBuilder.AggrConcat(
+                pgmBuilder.AggrConcat(
+                    pgmBuilder.AggrConcat(
+                        pgmBuilder.Member(state1, "str"),
+                        pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(" ")),
+                    pgmBuilder.Member(state2, "str")),
+                pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(" Merge"));
             std::vector<std::pair<std::string_view, TRuntimeNode>> members;
-            members.emplace_back("sum", add);
+            members.emplace_back("str", add);
             return pgmBuilder.NewStruct(members);
         },
         [&](TRuntimeNode key, TRuntimeNode state, TRuntimeNode time) { // finish
             std::vector<std::pair<std::string_view, TRuntimeNode>> members;
             members.emplace_back("key", key);
-            members.emplace_back("sum", pgmBuilder.Member(state, "sum"));
+            members.emplace_back("str", pgmBuilder.Member(state, "str"));
+            members.emplace_back("sum", time);
             members.emplace_back("time", time);
             return pgmBuilder.NewStruct(members);
         },
@@ -226,8 +243,8 @@ void TestImpl(
     auto checkCallback = [&expected, &index, &actual]() -> void {
         UNIT_ASSERT_LT_C(index, expected.size(), index << " < " << expected.size());
         auto expectedItems = expected[index];
-        std::ranges::sort(expectedItems);
-        std::ranges::sort(actual);
+        std::sort(expectedItems.begin(), expectedItems.end());
+        std::sort(actual.begin(), actual.end());
         UNIT_ASSERT_VALUES_EQUAL_C(expectedItems, actual, index);
         ++index;
         actual.clear();
@@ -320,38 +337,37 @@ Y_UNIT_TEST(TestThrowWatermarkFromPast) {
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({
-            {1, 2, 110},
-        }),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, 2, 120},
-            {1, 2, 130},
-            {1, 3, 140},
-            {1, 3, 150},
-            {1, 3, 160},
+            {1, "2", 110},
+            {1, "2", 120},
+            {1, "2", 130},
+            {1, "3", 140},
+            {1, "3", 150},
+            {1, "3", 160},
+            {1, "4", 210},
+            {1, "4", 220},
+            {1, "4", 230},
+            {1, "5", 310},
+            {1, "5", 320},
+            {1, "5", 330},
+            {1, "6", 410},
+            {1, "6", 420},
+            {1, "6", 430},
         }),
-        TOutputGroup({}),
-        TOutputGroup({
-            {1, 4, 210},
-            {1, 4, 220},
-            {1, 4, 230},
-        }),
-        TOutputGroup({
-            {1, 5, 310},
-            {1, 5, 320},
-            {1, 5, 330},
-        }),
-        TOutputGroup({
-            {1, 6, 410},
-            {1, 6, 420},
-            {1, 6, 430},
-        })};
+    };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
         {2, TInstant::MicroSeconds(20)},
         {3, TInstant::MicroSeconds(40)}};
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 15;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 5;
+    expectedStatsMap["MultiHop_KeysCount"] = 0;
 
     TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
 }
@@ -367,15 +383,14 @@ Y_UNIT_TEST(TestThrowWatermarkFromFuture) {
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
+        TOutputGroup({}),
         TOutputGroup({
-            {1, 2, 110},
-        }),
-        TOutputGroup({
-            {1, 2, 120},
-            {1, 2, 130},
-            {1, 3, 140},
-            {1, 3, 150},
-            {1, 3, 160},
+            {1, "2", 110},
+            {1, "2", 120},
+            {1, "2", 130},
+            {1, "3", 140},
+            {1, "3", 150},
+            {1, "3", 160},
         }),
         TOutputGroup({}),
         TOutputGroup({}),
@@ -388,6 +403,8 @@ Y_UNIT_TEST(TestThrowWatermarkFromFuture) {
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 6;
     expectedStatsMap["MultiHop_LateThrownEventsCount"] = 3;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 2;
+    expectedStatsMap["MultiHop_KeysCount"] = 0;
 
     TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
 }
@@ -404,37 +421,36 @@ Y_UNIT_TEST(TestWatermarkFlow1) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({
-            {1, 2, 110},
-        }),
-        TOutputGroup({
-            {1, 2, 120},
-            {1, 2, 130},
-            {1, 3, 140},
-            {1, 3, 150},
-            {1, 3, 160},
-        }),
+        TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, 4, 210},
-            {1, 4, 220},
-            {1, 4, 230},
+            {1, "2", 110},
+            {1, "2", 120},
+            {1, "2", 130},
+            {1, "3", 140},
+            {1, "3", 150},
+            {1, "3", 160},
         }),
+        TOutputGroup({}),
+        TOutputGroup({}),
         TOutputGroup({
-            {1, 5, 310},
-            {1, 5, 320},
-            {1, 5, 330},
+            {1, "4", 210},
+            {1, "4", 220},
+            {1, "4", 230},
+            {1, "5", 310},
+            {1, "5", 320},
+            {1, "5", 330},
+            {1, "6", 410},
+            {1, "6", 420},
+            {1, "6", 430},
         }),
-        TOutputGroup({
-            {1, 6, 410},
-            {1, 6, 420},
-            {1, 6, 430},
-        })};
+    };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
         {0, TInstant::MicroSeconds(100)},
         {3, TInstant::MicroSeconds(200)}};
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 15;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 4;
 
     TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
 }
@@ -456,17 +472,20 @@ Y_UNIT_TEST(TestWatermarkFlow2) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, 4, 90},
-            {1, 4, 100},
-            {1, 20, 110},
-            {1, 16, 120},
-            {1, 16, 130},
-        })};
+            {1, "4", 90},
+            {1, "4", 100},
+            {1, "2 3 Add 5 Add 6 Add 4 Merge", 110},
+            {1, "2 3 Add 5 Add 6 Add", 120},
+            {1, "2 3 Add 5 Add 6 Add", 130},
+        }),
+    };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
         {0, TInstant::MicroSeconds(76)},
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 5;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 4;
+    expectedStatsMap["MultiHop_KeysCount"] = 1;
 
     TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
 }
@@ -488,17 +507,19 @@ Y_UNIT_TEST(TestWatermarkFlow3) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, 4, 90},
-            {1, 9, 100},
-            {1, 20, 110},
-            {1, 16, 120},
-            {1, 11, 130},
-        })};
+            {1, "4", 90},
+            {1, "2 3 Add 4 Merge", 100},
+            {1, "5 6 Add 2 3 Add 4 Merge Merge", 110},
+            {1, "5 6 Add 2 3 Add Merge", 120},
+            {1, "5 6 Add", 130},
+        }),
+    };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
         {0, TInstant::MicroSeconds(76)},
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 5;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 2;
 
     TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
 }
@@ -544,27 +565,26 @@ Y_UNIT_TEST(TestWatermarkFlowOverflow) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
+        TOutputGroup({}),
         TOutputGroup({
-            {1, 90, 100},
-        }),
-        TOutputGroup({
-            {1, 69, 110},
+            {1, "11 12 Add 13 Add 9 10 Add 2 3 Add 4 Add 5 Add 6 Add 7 Add 8 Add Merge Merge", 100},
+            {1, "14 11 12 Add 13 Add 9 10 Add Merge Merge", 110},
         }),
         TOutputGroup({}),
         TOutputGroup({
-            {1, 65, 120},
+            {1, "15 14 11 12 Add 13 Add Merge Merge", 120},
         }),
         TOutputGroup({
-            {1, 62, 130},
-            {1, 62, 140},
-            {1, 62, 150},
-            {1, 62, 160},
-            {1, 62, 170},
-            {1, 62, 180},
-            {1, 62, 190},
-            {1, 62, 200},
-            {1, 48, 210},
-            {1, 33, 220},
+            {1, "16 17 Add 15 14 Merge Merge", 130},
+            {1, "16 17 Add 15 14 Merge Merge", 140},
+            {1, "16 17 Add 15 14 Merge Merge", 150},
+            {1, "16 17 Add 15 14 Merge Merge", 160},
+            {1, "16 17 Add 15 14 Merge Merge", 170},
+            {1, "16 17 Add 15 14 Merge Merge", 180},
+            {1, "16 17 Add 15 14 Merge Merge", 190},
+            {1, "16 17 Add 15 14 Merge Merge", 200},
+            {1, "16 17 Add 15 Merge", 210},
+            {1, "16 17 Add", 220},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -576,6 +596,7 @@ Y_UNIT_TEST(TestWatermarkFlowOverflow) {
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 13;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 1;
 
     TestWatermarksImpl(input, expected, watermarks, expectedStatsMap, 10, 100, 20);
 }
@@ -593,9 +614,9 @@ Y_UNIT_TEST(TestDataWatermarks) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({{1, 2, 110}, {1, 5, 120}, {2, 2, 110}, {2, 2, 120}}),
-        TOutputGroup({{2, 2, 130}, {1, 5, 130}, {1, 3, 140}}),
-        TOutputGroup({{2, 5, 150}, {2, 5, 160}, {2, 6, 170}, {2, 1, 180}, {2, 1, 190}}),
+        TOutputGroup({{1, "2", 110}, {1, "3 2 Merge", 120}, {2, "2", 110}, {2, "2", 120}}),
+        TOutputGroup({{2, "2", 130}, {1, "3 2 Merge", 130}, {1, "3", 140}}),
+        TOutputGroup({{2, "5", 150}, {2, "5", 160}, {2, "1 5 Merge", 170}, {2, "1", 180}, {2, "1", 190}}),
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 12;
@@ -611,8 +632,8 @@ Y_UNIT_TEST(TestDataWatermarksNoGarbage) {
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({{1, 2, 110}, {1, 2, 120}, {1, 2, 130}}),
-        TOutputGroup({{2, 1, 160}, {2, 1, 170}, {2, 1, 180}}),
+        TOutputGroup({{1, "2", 110}, {1, "2", 120}, {1, "2", 130}}),
+        TOutputGroup({{2, "1", 160}, {2, "1", 170}, {2, "1", 180}}),
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 6;
@@ -633,13 +654,24 @@ Y_UNIT_TEST(TestValidness1) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({{2, 2, 110}, {2, 2, 120}}),
-        TOutputGroup({{2, 2, 130}}),
-        TOutputGroup({{1, 2, 110}, {1, 5, 120}, {1, 5, 130}, {1, 3, 140}, {2, 5, 150},
-                      {2, 5, 160},
-                      {2, 6, 170},
-                      {2, 1, 190},
-                      {2, 1, 180}}),
+        TOutputGroup({
+            {2, "2", 110},
+            {2, "2", 120},
+        }),
+        TOutputGroup({
+            {2, "2", 130},
+        }),
+        TOutputGroup({
+            {1, "2", 110},
+            {1, "3 2 Merge", 120},
+            {1, "3 2 Merge", 130},
+            {1, "3", 140},
+            {2, "5", 150},
+            {2, "5", 160},
+            {2, "1 5 Merge", 170},
+            {2, "1", 190},
+            {2, "1", 180},
+        }),
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 12;
@@ -687,21 +719,43 @@ Y_UNIT_TEST(TestValidness2) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({{1, 5, 110}, {1, 9, 120}, {2, 5, 110}, {2, 9, 120}}),
+        TOutputGroup({
+            {1, "2 3 Add", 110},
+            {1, "4 2 3 Add Merge", 120},
+            {2, "2 3 Add", 110},
+            {2, "4 2 3 Add Merge", 120},
+        }),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({{2, 27, 130}, {1, 27, 130}}),
+        TOutputGroup({
+            {2, "6 5 Add 7 Add 4 2 3 Add Merge Merge", 130},
+            {1, "6 5 Add 7 Add 4 2 3 Add Merge Merge", 130},
+        }),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({{2, 22, 140}, {2, 21, 150}, {2, 11, 160}, {1, 22, 140}, {1, 21, 150}, {1, 11, 160}}),
+        TOutputGroup({
+            {2, "6 5 Add 7 Add 4 Merge", 140},
+            {2, "2 1 Add 6 5 Add 7 Add Merge", 150},
+            {2, "6 2 Add 2 1 Add Merge", 160},
+            {1, "6 5 Add 7 Add 4 Merge", 140},
+            {1, "2 1 Add 6 5 Add 7 Add Merge", 150},
+            {1, "6 2 Add 2 1 Add Merge", 160},
+        }),
         TOutputGroup({}),
-        TOutputGroup({{1, 11, 170}, {1, 8, 180}, {1, 8, 190}, {1, 8, 200}, {1, 8, 210}, {2, 11, 170},
-                      {2, 8, 180},
-                      {2, 8, 190},
-                      {2, 8, 200},
-                      {2, 8, 210}}),
+        TOutputGroup({
+            {1, "6 2 Add 2 1 Add Merge", 170},
+            {1, "6 2 Add", 180},
+            {1, "8", 190},
+            {1, "8", 200},
+            {1, "8", 210},
+            {2, "6 2 Add 2 1 Add Merge", 170},
+            {2, "6 2 Add", 180},
+            {2, "8", 190},
+            {2, "8", 200},
+            {2, "8", 210},
+        }),
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 22;
@@ -728,11 +782,26 @@ Y_UNIT_TEST(TestValidness3) {
         TOutputGroup({}),
         TOutputGroup({}), TOutputGroup({}), TOutputGroup({}), TOutputGroup({}),
         TOutputGroup({}), TOutputGroup({}), TOutputGroup({}),
-        TOutputGroup({{1, 14, 110}, {2, 3, 110}}),
+        TOutputGroup({
+            {1, "1 4 Add 9 Add", 110},
+            {2, "3", 110},
+        }),
         TOutputGroup({}),
-        TOutputGroup({{2, 7, 115}, {2, 2, 120}, {1, 21, 115}, {1, 10, 120}, {1, 7, 125}, {1, 4, 130}}),
+        TOutputGroup({
+            {2, "2 3 2 Add Merge", 115},
+            {2, "2", 120},
+            {1, "7 1 4 Add 9 Add Merge", 115},
+            {1, "3 7 Merge", 120},
+            {1, "4 3 Merge", 125},
+            {1, "4", 130},
+        }),
         TOutputGroup({}),
-        TOutputGroup({{1, 10, 145}, {1, 10, 150}, {2, 5, 145}, {2, 5, 150}})};
+        TOutputGroup({
+            {1, "10", 145},
+            {1, "10", 150},
+            {2, "5", 145},
+            {2, "5", 150},
+        })};
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 12;
     expectedStatsMap["MultiHop_KeysCount"] = 2;
@@ -750,9 +819,19 @@ Y_UNIT_TEST(TestDelay) {
         {1, 79, 11}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
-        TOutputGroup({}), TOutputGroup({}), TOutputGroup({}),
-        TOutputGroup({}), TOutputGroup({}),
-        TOutputGroup({{1, 12, 110}, {1, 8, 120}, {1, 15, 130}, {1, 12, 140}, {1, 7, 150}})};
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "3 9 Merge", 110},
+            {1, "5 3 Merge", 120},
+            {1, "7 5 3 Merge Merge", 130},
+            {1, "7 5 Merge", 140},
+            {1, "7", 150},
+        }),
+    };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 5;
     expectedStatsMap["MultiHop_LateThrownEventsCount"] = 1;
@@ -769,7 +848,8 @@ Y_UNIT_TEST(TestWindowsBeforeFirstElement) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({{1, 2, 110}, {1, 5, 120}, {1, 5, 130}, {1, 3, 140}})};
+        TOutputGroup({{1, "2", 110}, {1, "3 2 Merge", 120}, {1, "3 2 Merge", 130}, {1, "3", 140}}),
+    };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 4;
 
@@ -783,7 +863,7 @@ Y_UNIT_TEST(TestSubzeroValues) {
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({{1, 2, 30}}),
+        TOutputGroup({{1, "2", 30}}),
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 1;

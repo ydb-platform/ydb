@@ -584,7 +584,8 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                 size_t recordsCount = partitionData.Records.has_value() ? partitionData.Records->Records.size() : 0;
                 partitionResponse.Index = partitionData.Index;
                 if (EKafkaErrors::NONE_ERROR != result.ErrorCode) {
-                    KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode=" << static_cast<int>(result.ErrorCode) << ", ErrorMessage=" << result.ErrorMessage << ", #01");
+                    KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode=" << static_cast<int>(result.ErrorCode)
+                        << ", ErrorMessage=" << result.ErrorMessage << ", #01");
                     partitionResponse.ErrorCode = result.ErrorCode;
                     metricsErrorCode = result.ErrorCode;
                     partitionResponse.ErrorMessage = result.ErrorMessage;

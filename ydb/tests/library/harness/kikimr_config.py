@@ -32,8 +32,6 @@ elif PDISK_SIZE_STR.endswith("MB"):
     PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024
 elif PDISK_SIZE_STR.endswith("GB"):
     PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024 * 1024
-elif PDISK_SIZE_STR.endswith("TB"):
-    PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024 * 1024 * 1024
 else:
     PDISK_SIZE = int(PDISK_SIZE_STR)
 

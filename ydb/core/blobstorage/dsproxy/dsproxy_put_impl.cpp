@@ -70,6 +70,7 @@ void TPutImpl::PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx
         ev->ErrorReason = std::move(errorReason);
         const NLog::EPriority priority = GetPriorityForReply(Info->PutErrorMuteChecker, status);
         A_LOG_LOG_SX(logCtx, true, priority, "BPP12", "Result# " << ev->Print(false) << " GroupId# " << Info->GroupID);
+        ResultPriority = std::min(ResultPriority, PriorityForStatusResult(status));
         outPutResults.emplace_back(blobIdx, std::move(ev));
     }
 }

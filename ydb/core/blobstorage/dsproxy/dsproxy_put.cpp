@@ -454,12 +454,12 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
                     (History, PutImpl.PrintHistory()));
         }
 
-        if (ResponsesSent == PutImpl.Blobs.size()) {
-            STLOG(PutImpl.WasNotOkResponses() && AllowToReport(HandleClass) ? PRI_NOTICE : PRI_DEBUG, \
-                    BS_PROXY_PUT, BPP72, "Query history",                                             \
-                    (GroupId, Info->GroupID),                                                         \
-                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),             \
-                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),                             \
+        if (ResponsesSent == PutImpl.Blobs.size() && IS_LOG_PRIORITY_ENABLED(PutImpl.ResultPriority, LogCtx.LogComponent) && AllowToReport(HandleClass)) {
+            STLOG(PutImpl.ResultPriority,
+                    BS_PROXY_PUT, BPP72, "Query history",
+                    (GroupId, Info->GroupID),
+                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
+                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
                     (History, PutImpl.PrintHistory()));
         }
 

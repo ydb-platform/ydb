@@ -141,7 +141,7 @@ void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
 TFsPath CreateBackupPath(TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation) {
     TString tabletTypeName = TTabletTypes::EType_Name(tabletType);
     NProtobufJson::ToSnakeCaseDense(&tabletTypeName);
-    TString timestamp = TlsActivationContext->AsActorContext().Now().FormatLocalTime("%Y%m%d%H%M%SZ");
+    TString timestamp = TlsActivationContext->AsActorContext().Now().FormatGmTime("%Y%m%d%H%M%SZ");
 
     auto path = TFsPath(tabletTypeName)
         .Child(ToString(tabletId))
@@ -743,6 +743,12 @@ public:
         }
     }
 
+    bool NeedNewBackup() const {
+        return SnapshotWrittenBytes.has_value()
+            && WrittenBytes >= SnapshotWrittenBytes
+            && WrittenBytes >= NewBackupChangelogMinBytes();
+    }
+
     void Flush() {
         if (!Buffer.Empty()) {
             try {
@@ -758,7 +764,7 @@ public:
                 return;
             }
 
-            if (WrittenBytes >= SnapshotWrittenBytes && WrittenBytes >= NewBackupChangelogMinBytes()) {
+            if (NeedNewBackup()) {
                 Send(Owner, new TEvStartNewBackup);
             }
         }

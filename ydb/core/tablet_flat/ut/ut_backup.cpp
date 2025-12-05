@@ -1406,8 +1406,6 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         Cerr << "...writing little bit more data to changelog" << Endl;
         env.WriteValue(1000, 10);
-
-        env.WaitChangelogFlush();
     }
 }
 

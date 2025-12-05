@@ -408,7 +408,7 @@ public:
             auto curHopIndex = keyState.HopIndex;
             auto curHopIndexModBuckets = curHopIndex % bucketsForKey.size();
 
-            if (curHopIndex > closeBeforeIndex) {
+            if (curHopIndex >= closeBeforeIndex) {
                 return keyState.NextHopIndex <= keyState.HopIndex && keyState.FutureEvents.empty();
             }
 

@@ -201,7 +201,7 @@ private:
 
     [[nodiscard]] bool TrySendWatermark() {
         Y_DEBUG_ABORT_UNLESS(WatermarksEnabled());
-        if (!Watermark || !NotifyWatermarkTracker(InputKey, *Watermark)) {
+        if (!Watermark || !NotifyWatermarkTracker(InputKey, *Watermark) || !WatermarksTracker->HasPendingWatermark()) {
             return false;
         }
         Y_DEBUG_ABORT_UNLESS(WatermarksTracker->HasPendingWatermark());

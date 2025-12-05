@@ -3052,14 +3052,17 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
 TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaMapping(TSchemeShard* ss) {
     TFillItemsFromSchemaMappingResult result;
 
+    Y_ABORT_UNLESS(Kind == EKind::S3);
+    auto settings = GetS3Settings();
+
     TString dstRoot;
-    if (Settings.destination_path().empty()) {
+    if (settings.destination_path().empty()) {
         dstRoot = CanonizePath(ss->RootPathElements);
     } else {
-        dstRoot = CanonizePath(Settings.destination_path());
+        dstRoot = CanonizePath(settings.destination_path());
     }
 
-    TString sourcePrefix = NBackup::NormalizeExportPrefix(Settings.source_prefix());
+    TString sourcePrefix = NBackup::NormalizeExportPrefix(settings.source_prefix());
     if (sourcePrefix) {
         sourcePrefix.push_back('/');
     }

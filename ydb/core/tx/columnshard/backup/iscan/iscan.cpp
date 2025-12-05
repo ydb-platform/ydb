@@ -67,6 +67,8 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
             break;
         case NKikimrSchemeOp::TBackupTask::SETTINGS_NOT_SET:
             return TConclusionStatus::Fail("Internal error. It is not possible to have empty settings for backup here");
+        default:
+            return TConclusionStatus::Fail("Internal error. Unsupported type of backup task settings");
     }
 
     auto createUploader = [subscriberActorId = subscriberActorId, txId = txId, exp]() {

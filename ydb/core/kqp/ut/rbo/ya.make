@@ -21,6 +21,12 @@ ADDINCL(
     yql/essentials/parser/pg_wrapper/postgresql/src/include
 )
 
+DATA (
+    arcadia/ydb/core/kqp/ut/join
+    arcadia/ydb/library/benchmarks/queries
+    arcadia/ydb/library/benchmarks/gen_queries/consts.yql
+)
+
 IF (OS_WINDOWS)
 CFLAGS(
    "-D__thread=__declspec(thread)"

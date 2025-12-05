@@ -30,8 +30,6 @@ TString TKafkaProduceActor::LogPrefix() {
         sb << "Init ";
     } else if (stateFunc == &TKafkaProduceActor::StateWork) {
         sb << "Work ";
-    } else if (stateFunc == &TKafkaProduceActor::StateAccepting) {
-        sb << "Accepting ";
     } else {
         sb << "Unknown ";
     }
@@ -154,7 +152,7 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
             if (!Context->RequireAuthentication || info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *Context->UserToken)) {
                 topic.Status = OK;
                 topic.ExpirationTime = now + TOPIC_OK_EXPIRATION_INTERVAL;
-                topic.PartitionChooser = info.PQGroupInfo->PartitionChooser;
+                topic.PartitionChooser = CreatePartitionChooser(info.PQGroupInfo->Description);
             } else {
                 KAFKA_LOG_W("Produce actor: Unauthorized PRODUCE to topic '" << topicPath << "'");
                 topic.Status = UNAUTHORIZED;
@@ -237,14 +235,15 @@ void TKafkaProduceActor::ProcessRequests(const TActorContext& ctx) {
         return;
     }
 
-    if (EnqueueInitialization()) {
+    auto canProcess = EnqueueInitialization();
+    while (canProcess--) {
         PendingRequests.push_back(std::make_shared<TPendingRequest>(Requests.front()));
         Requests.pop_front();
 
         ProcessRequest(PendingRequests.back(), ctx);
-    } else {
-        ProcessInitializationRequests(ctx);
     }
+
+    ProcessInitializationRequests(ctx);
 }
 
 size_t TKafkaProduceActor::EnqueueInitialization() {
@@ -399,12 +398,10 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
     if (pendingRequest->WaitResultCookies.empty()) {
         // All request for unknown topic or empty request
         SendResults(ctx);
-    } else {
-        Become(&TKafkaProduceActor::StateAccepting);
     }
 }
 
-void TKafkaProduceActor::HandleAccepting(TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext& ctx) {
+void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext& ctx) {
     auto r = request->Get();
     auto cookie = r->Cookie;
 
@@ -659,20 +656,6 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
         }
 
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(correlationId, response, metricsErrorCode));
-
-        if (!pendingRequest->WaitAcceptingCookies.empty()) {
-            if (!expired) {
-                TStringBuilder sb;
-                sb << "Produce actor: All TEvWriteResponse were received, but not all TEvWriteAccepted. Unreceived cookies:";
-                for(auto cookie : pendingRequest->WaitAcceptingCookies) {
-                    sb << " " << cookie;
-                }
-                KAFKA_LOG_W(sb);
-            }
-            if (&TKafkaProduceActor::StateAccepting == CurrentStateFunc()) {
-                Become(&TKafkaProduceActor::StateWork);
-            }
-        }
 
         for(auto cookie : pendingRequest->WaitAcceptingCookies) {
             Cookies.erase(cookie);

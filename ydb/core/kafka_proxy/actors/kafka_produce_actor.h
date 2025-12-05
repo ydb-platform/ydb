@@ -52,10 +52,14 @@ private:
 
     // Handlers for many StateFunc
     void Handle(TEvKafka::TEvWakeup::TPtr request, const TActorContext& ctx);
+
+    void Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext& ctx);
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr request, const TActorContext& ctx);
     void Handle(TEvPartitionWriter::TEvInitResult::TPtr request, const TActorContext& ctx);
     void Handle(TEvPartitionWriter::TEvDisconnected::TPtr request, const TActorContext& ctx);
+
     void EnqueueRequest(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& ctx);
+
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
@@ -68,7 +72,9 @@ private:
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleInit);
 
             HFunc(TEvKafka::TEvProduceRequest, EnqueueRequest);
+
             HFunc(TEvPartitionWriter::TEvInitResult, Handle);
+            HFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
             HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
             HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
 
@@ -87,7 +93,9 @@ private:
         LogEvent(*ev.Get());
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvKafka::TEvProduceRequest, Handle);
+
             HFunc(TEvPartitionWriter::TEvInitResult, Handle);
+            HFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
             HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
             HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
 
@@ -98,29 +106,6 @@ private:
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
-
-    // StateAccepting - enqueue ProduceRequest parts to PartitionWriters
-    // This guarantees the order of responses according order of request
-    void HandleAccepting(TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext& ctx);
-
-    STATEFN(StateAccepting) {
-        LogEvent(*ev.Get());
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPartitionWriter::TEvWriteAccepted, HandleAccepting);
-
-            HFunc(TEvKafka::TEvProduceRequest, EnqueueRequest);
-            HFunc(TEvPartitionWriter::TEvInitResult, Handle);
-            HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
-            HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
-
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-
-            HFunc(TEvKafka::TEvWakeup, Handle);
-            sFunc(TEvents::TEvPoison, PassAway);
-        }
-    }
-
 
     // Logic
     void ProcessRequests(const TActorContext& ctx);

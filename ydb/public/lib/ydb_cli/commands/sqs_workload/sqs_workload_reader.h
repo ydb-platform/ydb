@@ -28,6 +28,7 @@ struct TSqsWorkloadReaderParams {
     std::shared_ptr<std::mutex> HashMapMutex;
     std::shared_ptr<THashMap<TString, TInstant>> LastReceivedMessageInGroup;
     std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;
+    ui32 SleepTimeMs;
 };
 
 class TSqsWorkloadReader {

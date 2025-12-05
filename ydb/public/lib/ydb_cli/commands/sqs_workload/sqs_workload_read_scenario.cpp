@@ -15,6 +15,8 @@ int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
     InitMeasuringHttpClient(statsCollector);
     InitSqsClient();
 
+    auto finishedFlag = std::make_shared<std::atomic_bool>(false);
+
     TSqsWorkloadReaderParams params{
         .TotalSec = TotalSec,
         .QueueUrl = QueueUrl,
@@ -35,10 +37,11 @@ int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
         .HashMapMutex = std::make_shared<std::mutex>(),
         .LastReceivedMessageInGroup = std::make_shared<THashMap<TString, TInstant>>(),
         .StatsCollector = statsCollector,
+        .SleepTimeMs = SleepTimeMs,
     };
 
-    auto f = std::async([&params]() {
-        params.StatsCollector->PrintWindowStatsLoop();
+    auto f = std::async([&params, finishedFlag]() {
+        params.StatsCollector->PrintWindowStatsLoop(finishedFlag);
     });
 
     TSqsWorkloadReader::RunLoop(params, Now() + params.TotalSec);
@@ -49,6 +52,7 @@ int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
         }
     }
 
+    finishedFlag->store(true);
     f.wait();
 
     DestroySqsClient();

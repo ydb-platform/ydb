@@ -38,7 +38,7 @@ int TSqsWorkloadInitScenario::Run(TClientCommand::TConfig& config) {
                     EndDeadLetterPolicy().
                 EndAddConsumer()).
             GetValueSync();
-        NStatusHelpers::ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
     } else if (MaxReceiveCount > 0) {
         auto status = client.AlterTopic(
             TopicPath,
@@ -56,7 +56,7 @@ int TSqsWorkloadInitScenario::Run(TClientCommand::TConfig& config) {
                     EndDeadLetterPolicy().
                 EndAddConsumer()).
             GetValueSync();
-        NStatusHelpers::ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
     } else {
         auto status = client.AlterTopic(
             TopicPath,
@@ -67,7 +67,7 @@ int TSqsWorkloadInitScenario::Run(TClientCommand::TConfig& config) {
                     KeepMessagesOrder(KeepMessagesOrder).
                 EndAddConsumer()).
             GetValueSync();
-        NStatusHelpers::ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
     }
 
     return 0;

@@ -9,6 +9,8 @@ int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig&) {
     InitMeasuringHttpClient(statsCollector);
     InitSqsClient();
 
+    auto finishedFlag = std::make_shared<std::atomic_bool>(false);
+
     TSqsWorkloadWriterParams params{
         .TotalSec = TotalSec,
         .QueueUrl = QueueUrl,
@@ -26,8 +28,8 @@ int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig&) {
         .SleepTimeMs = SleepTimeMs,
     };
 
-    auto f = std::async([&params]() {
-        params.StatsCollector->PrintWindowStatsLoop();
+    auto f = std::async([&params, finishedFlag]() {
+        params.StatsCollector->PrintWindowStatsLoop(finishedFlag);
     });
 
     TSqsWorkloadWriter::RunLoop(params, Now() + params.TotalSec);
@@ -38,6 +40,7 @@ int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig&) {
         }
     }
 
+    finishedFlag->store(true);
     f.wait();
 
     DestroySqsClient();

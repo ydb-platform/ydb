@@ -16,7 +16,7 @@ public:
         double percentile,
         std::shared_ptr<std::atomic_bool> errorFlag);
 
-    void PrintWindowStatsLoop();
+    void PrintWindowStatsLoop(std::shared_ptr<std::atomic_bool> finishedFlag);
 
     void PrintHeader(bool total = false) const;
     void PrintTotalStats() const;
@@ -25,6 +25,11 @@ public:
     void AddReceiveRequestDoneEvent(const TSqsWorkloadStats::ReceiveRequestDoneEvent& event);
     void AddDeleteRequestDoneEvent(const TSqsWorkloadStats::DeleteRequestDoneEvent& event);
     void AddGotMessageEvent(TSqsWorkloadStats::GotMessageEvent& event);
+    void AddSendRequestErrorEvent(const TSqsWorkloadStats::SendRequestErrorEvent& event);
+    void AddReceiveRequestErrorEvent(const TSqsWorkloadStats::ReceiveRequestErrorEvent& event);
+    void AddDeleteRequestErrorEvent(const TSqsWorkloadStats::DeleteRequestErrorEvent& event);
+    void AddDeletedMessagesEvent(const TSqsWorkloadStats::DeletedMessagesEvent& event);
+    void AddSentMessagesEvent(const TSqsWorkloadStats::SentMessagesEvent& event);
 
     ui64 GetTotalReadMessages() const;
     ui64 GetTotalWriteMessages() const;
@@ -51,6 +56,11 @@ private:
     THolder<TAutoLockFreeQueue<TSqsWorkloadStats::ReceiveRequestDoneEvent>> ReceiveRequestDoneEventQueue;
     THolder<TAutoLockFreeQueue<TSqsWorkloadStats::DeleteRequestDoneEvent>> DeleteRequestDoneEventQueue;
     THolder<TAutoLockFreeQueue<TSqsWorkloadStats::GotMessageEvent>> GotMessageEventQueue;
+    THolder<TAutoLockFreeQueue<TSqsWorkloadStats::SendRequestErrorEvent>> SendRequestErrorEventQueue;
+    THolder<TAutoLockFreeQueue<TSqsWorkloadStats::ReceiveRequestErrorEvent>> ReceiveRequestErrorEventQueue;
+    THolder<TAutoLockFreeQueue<TSqsWorkloadStats::DeleteRequestErrorEvent>> DeleteRequestErrorEventQueue;
+    THolder<TAutoLockFreeQueue<TSqsWorkloadStats::SentMessagesEvent>> SentMessagesEventQueue;
+    THolder<TAutoLockFreeQueue<TSqsWorkloadStats::DeletedMessagesEvent>> DeletedMessagesEventQueue;
 
     bool Quiet;
     bool PrintTimestamp;
@@ -58,16 +68,12 @@ private:
     double WindowSec;
     double TotalSec;
     double WarmupSec;
-
     double Percentile;
 
     std::shared_ptr<std::atomic_bool> ErrorFlag;
 
     THolder<TSqsWorkloadStats> WindowStats;
     TSqsWorkloadStats TotalStats;
-
-    std::mutex HashMapMutex;
-    THolder<THashMap<TString, std::pair<TSqsWorkloadStats::SendRequestStartEvent, size_t>>> UnreadRequests;
 
     TInstant WarmupTime;
 };

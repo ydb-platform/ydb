@@ -23,6 +23,12 @@ namespace {
 constexpr auto kWaitTimeSeconds = 15;
 constexpr auto kErrorMessagesDestinyFatal = "fatal";
 
+void DecrementStartedCountAndNotify(const TSqsWorkloadReaderParams& params) {
+    std::unique_lock<std::mutex> locker(*params.Mutex);
+    --(*params.StartedCount);
+    params.FinishedCond->notify_one();
+}
+
 }  // namespace
 
 void TSqsWorkloadReader::OnMessageReceived(
@@ -35,6 +41,9 @@ void TSqsWorkloadReader::OnMessageReceived(
         params.Log->Write(
             ELogPriority::TLOG_ERR, TStringBuilder() << "Error receiving message: " << outcome.GetError().GetMessage()
         );
+
+        params.StatsCollector->AddReceiveRequestErrorEvent(TSqsWorkloadStats::ReceiveRequestErrorEvent());
+        DecrementStartedCountAndNotify(params);
         return;
     }
 
@@ -53,7 +62,7 @@ void TSqsWorkloadReader::OnMessageReceived(
             }
 
             auto endToEndLatency = Now().MilliSeconds() - std::stoll(startTime);
-            TSqsWorkloadStats::GotMessageEvent gotMessageEvent{body.size() * messages.size(), endToEndLatency};
+            TSqsWorkloadStats::GotMessageEvent gotMessageEvent{body.size() * messages.size(), endToEndLatency, messages.size()};
             params.StatsCollector->AddGotMessageEvent(gotMessageEvent);
         } catch (const std::exception& e) {
             params.Log->Write(ELogPriority::TLOG_ERR, TStringBuilder() << "Error parsing message body: " << e.what());
@@ -67,6 +76,7 @@ void TSqsWorkloadReader::OnMessageReceived(
         if (params.ValidateFifo && !ValidateFifo(params, message, timestamp)) {
             params.Log->Write(ELogPriority::TLOG_ERR, TStringBuilder() << "FIFO validation failed for message: " << message.GetMessageId());
             params.ErrorFlag->store(true);
+            DecrementStartedCountAndNotify(params);
             return;
         }
 
@@ -91,7 +101,6 @@ void TSqsWorkloadReader::OnMessageReceived(
         deleteMessageBatchRequest.SetQueueUrl(params.QueueUrl.c_str());
         deleteMessageBatchRequest.SetEntries(deleteMessageBatchRequestEntries);
         deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSWorkloadActionHeader, kSQSWorkloadActionDelete);
-        deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSMessageCountHeader, std::to_string(deleteMessageBatchRequestEntries.size()));
         
         auto deleteMessageBatchOutcome = client->DeleteMessageBatch(deleteMessageBatchRequest);
 
@@ -100,8 +109,13 @@ void TSqsWorkloadReader::OnMessageReceived(
                 ELogPriority::TLOG_ERR,
                 TStringBuilder() << "Error deleting message: " << deleteMessageBatchOutcome.GetError().GetMessage()
             );
+            params.StatsCollector->AddDeleteRequestErrorEvent(TSqsWorkloadStats::DeleteRequestErrorEvent());
+        } else {
+            params.StatsCollector->AddDeletedMessagesEvent(TSqsWorkloadStats::DeletedMessagesEvent{deleteMessageBatchRequestEntries.size()});
         }
     }
+
+    DecrementStartedCountAndNotify(params);
 }
 
 bool TSqsWorkloadReader::ShouldFail(const TSqsWorkloadReaderParams& params, const Aws::SQS::Model::Message& message) {
@@ -162,6 +176,10 @@ void TSqsWorkloadReader::RunLoop(const TSqsWorkloadReaderParams& params, TInstan
                 OnMessageReceived(params, sqsClient, request, outcome);
             }
         );
+
+        if (params.SleepTimeMs > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(params.SleepTimeMs));
+        }
     }
 }
 

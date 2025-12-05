@@ -45,13 +45,18 @@ void TSqsWorkloadWriter::
         params.Log->Write(
             ELogPriority::TLOG_ERR, TStringBuilder() << "Error sending message: " << outcome.GetError().GetMessage()
         );
+        params.StatsCollector->AddSendRequestErrorEvent(TSqsWorkloadStats::SendRequestErrorEvent());
     }
 
     if (outcome.GetResult().GetFailed().size() > 0) {
         params.Log->Write(
             ELogPriority::TLOG_ERR, TStringBuilder() << "Failed to send message: " << outcome.GetResult().GetFailed().size()
         );
+        params.StatsCollector->AddSendRequestErrorEvent(TSqsWorkloadStats::SendRequestErrorEvent());
     }
+    
+    params.StatsCollector->AddSentMessagesEvent(TSqsWorkloadStats::SentMessagesEvent{outcome.GetResult().GetSuccessful().size(), outcome.GetResult().GetSuccessful().size() * params.MessageSize});
+
 
     std::unique_lock<std::mutex> locker(*params.Mutex);
     --(*params.StartedCount);

@@ -25,7 +25,11 @@ TSqsWorkloadStatsCollector::TSqsWorkloadStatsCollector(
     ReceiveRequestDoneEventQueue = MakeHolder<TAutoLockFreeQueue<TSqsWorkloadStats::ReceiveRequestDoneEvent>>();
     DeleteRequestDoneEventQueue = MakeHolder<TAutoLockFreeQueue<TSqsWorkloadStats::DeleteRequestDoneEvent>>();
     GotMessageEventQueue = MakeHolder<TAutoLockFreeQueue<TSqsWorkloadStats::GotMessageEvent>>();
-    UnreadRequests = MakeHolder<THashMap<TString, std::pair<TSqsWorkloadStats::SendRequestStartEvent, size_t>>>();
+    SendRequestErrorEventQueue = MakeHolder<TAutoLockFreeQueue<TSqsWorkloadStats::SendRequestErrorEvent>>();
+    ReceiveRequestErrorEventQueue = MakeHolder<TAutoLockFreeQueue<TSqsWorkloadStats::ReceiveRequestErrorEvent>>();
+    DeleteRequestErrorEventQueue = MakeHolder<TAutoLockFreeQueue<TSqsWorkloadStats::DeleteRequestErrorEvent>>();
+    SentMessagesEventQueue = MakeHolder<TAutoLockFreeQueue<TSqsWorkloadStats::SentMessagesEvent>>();
+    DeletedMessagesEventQueue = MakeHolder<TAutoLockFreeQueue<TSqsWorkloadStats::DeletedMessagesEvent>>();
 }
 
 void TSqsWorkloadStatsCollector::PrintHeader(bool total) const {
@@ -35,50 +39,58 @@ void TSqsWorkloadStatsCollector::PrintHeader(bool total) const {
     TStringBuilder header;
 
     if (WriterCount > 0 && ReaderCount == 0) {
-        header << fmt::format("{:<6} {:>16} {:>17} {:>13}",
+        header << fmt::format("{:<6} {:>10} {:>10} {:>8} {:>10}",
                               "Window",
-                              "Write speed",
-                              "Write bytes",
-                              "Send time");
+                              "Wr speed",
+                              "Wr bytes",
+                              "Send ms",
+                              "Send err");
         if (PrintTimestamp) {
             header << " " << "Timestamp";
         }
         header << "\n";
 
-        header << fmt::format("{:<6} {:>16} {:>17} {:>13}",
+        header << fmt::format("{:<6} {:>10} {:>10} {:>8} {:>10}",
                               "#",
                               "msg/s",
                               "MB/s",
-                              "percentile,ms");
+                              "p" + std::to_string((int)(Percentile * 100)),
+                              "count");
         header << "\n";
     } else if (WriterCount == 0 && ReaderCount > 0) {
-        header << fmt::format("{:<6} {:>16} {:>17} {:>22} {:>15} {:>15}",
+        header << fmt::format("{:<6} {:>10} {:>10} {:>10} {:>8} {:>8} {:>10} {:>10} {:>10}",
                               "Window",
-                              "Read speed",
-                              "Read bytes",
-                              "End-to-end latency",
-                              "Receive time",
-                              "Delete time");
+                              "Rd speed",
+                              "Rd bytes",
+                              "E2E ms",
+                              "Recv ms",
+                              "Del ms",
+                              "Recv err",
+                              "Del err",
+                              "InFlight");
         if (PrintTimestamp) {
             header << " " << "Timestamp";
         }
         header << "\n";
 
-        header << fmt::format("{:<6} {:>16} {:>17} {:>22} {:>15} {:>15}",
+        header << fmt::format("{:<6} {:>10} {:>10} {:>10} {:>8} {:>8} {:>10} {:>10} {:>10}",
                               "#",
                               "msg/s",
                               "MB/s",
-                              "percentile,ms",
-                              "percentile,ms",
-                              "percentile,ms");
+                              "p" + std::to_string((int)(Percentile * 100)),
+                              "p" + std::to_string((int)(Percentile * 100)),
+                              "p" + std::to_string((int)(Percentile * 100)),
+                              "count",
+                              "count",
+                              "count");
         header << "\n";
     } else {
         header << "Window\t";
         if (WriterCount > 0)
-            header << "Write speed\tWrite bytes\tSend time\t";
+            header << "Wr speed\tWr bytes\tSend ms\tSend err\t";
         if (ReaderCount > 0) {
-            header << "Read speed\tRead bytes\tEnd-to-end latency\t";
-            header << "Receive time\tDelete time\t";
+            header << "Rd speed\tRd bytes\tE2E ms\t";
+            header << "Recv ms\tDel ms\tRecv err\tDel err\tInFlight\t";
         }
         if (PrintTimestamp)
             header << "Timestamp";
@@ -87,10 +99,10 @@ void TSqsWorkloadStatsCollector::PrintHeader(bool total) const {
 
         header << "#\t";
         if (WriterCount > 0)
-            header << "msg/s\tMB/s\tpercentile,ms\t";
+            header << "msg/s\tMB/s\tp" << (int)(Percentile * 100) << "\tcount\t";
         if (ReaderCount > 0) {
-            header << "msg/s\tMB/s\tpercentile,ms\t";
-            header << "percentile,ms\tpercentile,ms\t";
+            header << "msg/s\tMB/s\tp" << (int)(Percentile * 100) << "\t";
+            header << "p" << (int)(Percentile * 100) << "\tp" << (int)(Percentile * 100) << "\tcount\tcount\tcount\t";
         }
         header << "\n";
     }
@@ -98,16 +110,15 @@ void TSqsWorkloadStatsCollector::PrintHeader(bool total) const {
     Cout << header << Flush;
 }
 
-void TSqsWorkloadStatsCollector::PrintWindowStatsLoop() {
+void TSqsWorkloadStatsCollector::PrintWindowStatsLoop(std::shared_ptr<std::atomic_bool> finishedFlag) {
     PrintHeader();
 
     auto startTime = Now();
     WarmupTime = startTime + TDuration::Seconds(WarmupSec);
-    auto stopTime = startTime + TDuration::Seconds(TotalSec + 1);
 
     int windowIt = 1;
     auto windowDuration = TDuration::Seconds(WindowSec);
-    while (Now() < stopTime && !*ErrorFlag) {
+    while (!*ErrorFlag && !finishedFlag->load()) {
         auto windowTime = [startTime, windowDuration](int index) {
             return startTime + index * windowDuration;
         };
@@ -146,11 +157,12 @@ void TSqsWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt) const {
         const auto sendMs = (i64)stats.SendRequestTimeHist.GetValueAtPercentile(Percentile);
         const auto mbStr = fmt::format("{:.3f}", writeMbPerSec);
 
-        Cout << fmt::format("{:<6} {:>16} {:>17} {:>13}",
+        Cout << fmt::format("{:<6} {:>10} {:>10} {:>8} {:>10}",
                             totalIt,
                             writeSpeed,
                             mbStr,
-                            sendMs);
+                            sendMs,
+                            stats.SendRequestErrors);
         if (PrintTimestamp) {
             Cout << " " << Now().ToStringUpToSeconds();
         }
@@ -164,15 +176,19 @@ void TSqsWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt) const {
         const auto e2eMs = (i64)stats.EndToEndLatencyHist.GetValueAtPercentile(Percentile);
         const auto recvMs = (i64)stats.ReceiveRequestTimeHist.GetValueAtPercentile(Percentile);
         const auto delMs = (i64)stats.DeleteRequestTimeHist.GetValueAtPercentile(Percentile);
+        const auto inFlight = (i64)stats.MessagesInFlightHist.GetValueAtPercentile(Percentile);
         const auto mbStr = fmt::format("{:.3f}", readMbPerSec);
 
-        Cout << fmt::format("{:<6} {:>16} {:>17} {:>22} {:>15} {:>15}",
+        Cout << fmt::format("{:<6} {:>10} {:>10} {:>10} {:>8} {:>8} {:>10} {:>10} {:>10}",
                             totalIt,
                             readSpeed,
                             mbStr,
                             e2eMs,
                             recvMs,
-                            delMs);
+                            delMs,
+                            stats.ReceiveRequestErrors,
+                            stats.DeleteRequestErrors,
+                            inFlight);
         if (PrintTimestamp) {
             Cout << " " << Now().ToStringUpToSeconds();
         }
@@ -185,8 +201,13 @@ void TSqsWorkloadStatsCollector::CollectEvents()
 {
     CollectEvents<TSqsWorkloadStats::SendRequestDoneEvent>();
     CollectEvents<TSqsWorkloadStats::ReceiveRequestDoneEvent>();
-    CollectEvents<TSqsWorkloadStats::DeleteRequestDoneEvent>();
     CollectEvents<TSqsWorkloadStats::GotMessageEvent>();
+    CollectEvents<TSqsWorkloadStats::DeleteRequestDoneEvent>();
+    CollectEvents<TSqsWorkloadStats::SendRequestErrorEvent>();
+    CollectEvents<TSqsWorkloadStats::ReceiveRequestErrorEvent>();
+    CollectEvents<TSqsWorkloadStats::DeleteRequestErrorEvent>();
+    CollectEvents<TSqsWorkloadStats::SentMessagesEvent>();
+    CollectEvents<TSqsWorkloadStats::DeletedMessagesEvent>();
 }
 
 template<class T>
@@ -203,17 +224,43 @@ void TSqsWorkloadStatsCollector::CollectEvents()
             WindowStats->AddEvent(*event);
             TotalStats.AddEvent(*event);
         }
-    } else if constexpr (std::is_same_v<T, TSqsWorkloadStats::DeleteRequestDoneEvent>) {
-        while (DeleteRequestDoneEventQueue->Dequeue(&event)) {
-            WindowStats->AddEvent(*event);
-            TotalStats.AddEvent(*event);
-        }
     } else if constexpr (std::is_same_v<T, TSqsWorkloadStats::GotMessageEvent>) {
         while (GotMessageEventQueue->Dequeue(&event)) {
             WindowStats->AddEvent(*event);
             TotalStats.AddEvent(*event);
         }
+    } else if constexpr (std::is_same_v<T, TSqsWorkloadStats::DeleteRequestDoneEvent>) {
+        while (DeleteRequestDoneEventQueue->Dequeue(&event)) {
+            WindowStats->AddEvent(*event);
+            TotalStats.AddEvent(*event);
+        }
+    } else if constexpr (std::is_same_v<T, TSqsWorkloadStats::SendRequestErrorEvent>) {
+        while (SendRequestErrorEventQueue->Dequeue(&event)) {
+            WindowStats->AddEvent(*event);
+            TotalStats.AddEvent(*event);
+        }
+    } else if constexpr (std::is_same_v<T, TSqsWorkloadStats::ReceiveRequestErrorEvent>) {
+        while (ReceiveRequestErrorEventQueue->Dequeue(&event)) {
+            WindowStats->AddEvent(*event);
+            TotalStats.AddEvent(*event);
+        }
+    } else if constexpr (std::is_same_v<T, TSqsWorkloadStats::DeleteRequestErrorEvent>) {
+        while (DeleteRequestErrorEventQueue->Dequeue(&event)) {
+            WindowStats->AddEvent(*event);
+            TotalStats.AddEvent(*event);
+        }
+    } else if constexpr (std::is_same_v<T, TSqsWorkloadStats::SentMessagesEvent>) {
+        while (SentMessagesEventQueue->Dequeue(&event)) {
+            WindowStats->AddEvent(*event);
+            TotalStats.AddEvent(*event);
+        }
+    } else if constexpr (std::is_same_v<T, TSqsWorkloadStats::DeletedMessagesEvent>) {
+        while (DeletedMessagesEventQueue->Dequeue(&event)) {
+            WindowStats->AddEvent(*event);
+            TotalStats.AddEvent(*event);
+        }
     }
+
 }
 
 ui64 TSqsWorkloadStatsCollector::GetTotalReadMessages() const {
@@ -242,6 +289,31 @@ void TSqsWorkloadStatsCollector::AddDeleteRequestDoneEvent(const TSqsWorkloadSta
 void TSqsWorkloadStatsCollector::AddGotMessageEvent(TSqsWorkloadStats::GotMessageEvent& event)
 {
     GotMessageEventQueue->Enqueue(MakeHolder<TSqsWorkloadStats::GotMessageEvent>(event));
+}
+
+void TSqsWorkloadStatsCollector::AddSendRequestErrorEvent(const TSqsWorkloadStats::SendRequestErrorEvent& event)
+{
+    SendRequestErrorEventQueue->Enqueue(MakeHolder<TSqsWorkloadStats::SendRequestErrorEvent>(event));
+}
+
+void TSqsWorkloadStatsCollector::AddReceiveRequestErrorEvent(const TSqsWorkloadStats::ReceiveRequestErrorEvent& event)
+{
+    ReceiveRequestErrorEventQueue->Enqueue(MakeHolder<TSqsWorkloadStats::ReceiveRequestErrorEvent>(event));
+}
+
+void TSqsWorkloadStatsCollector::AddDeleteRequestErrorEvent(const TSqsWorkloadStats::DeleteRequestErrorEvent& event)
+{
+    DeleteRequestErrorEventQueue->Enqueue(MakeHolder<TSqsWorkloadStats::DeleteRequestErrorEvent>(event));
+}
+
+void TSqsWorkloadStatsCollector::AddSentMessagesEvent(const TSqsWorkloadStats::SentMessagesEvent& event)
+{
+    SentMessagesEventQueue->Enqueue(MakeHolder<TSqsWorkloadStats::SentMessagesEvent>(event));
+}
+
+void TSqsWorkloadStatsCollector::AddDeletedMessagesEvent(const TSqsWorkloadStats::DeletedMessagesEvent& event)
+{
+    DeletedMessagesEventQueue->Enqueue(MakeHolder<TSqsWorkloadStats::DeletedMessagesEvent>(event));
 }
 
 template<class T>

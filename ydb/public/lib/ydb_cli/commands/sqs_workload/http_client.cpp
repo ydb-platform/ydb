@@ -21,34 +21,15 @@ std::shared_ptr<Aws::Http::HttpResponse> TMeasuringHttpClient::MakeRequest(
     auto ms = (end - start).MilliSeconds();
 
     auto action = request->GetHeaderValue(kSQSWorkloadActionHeader);
-    auto messageCount = GetMessageCount(request);
     if (action == kSQSWorkloadActionReceive) {
-        StatsCollector->AddReceiveRequestDoneEvent(TSqsWorkloadStats::ReceiveRequestDoneEvent{messageCount, ms});
+        StatsCollector->AddReceiveRequestDoneEvent(TSqsWorkloadStats::ReceiveRequestDoneEvent{ms});
     } else if (action == kSQSWorkloadActionSend) {
-        StatsCollector->AddSendRequestDoneEvent(TSqsWorkloadStats::SendRequestDoneEvent{messageCount, GetMessageTotalSize(request), ms});
+        StatsCollector->AddSendRequestDoneEvent(TSqsWorkloadStats::SendRequestDoneEvent{ms});
     } else if (action == kSQSWorkloadActionDelete) {
-        StatsCollector->AddDeleteRequestDoneEvent(TSqsWorkloadStats::DeleteRequestDoneEvent{messageCount, ms});
+        StatsCollector->AddDeleteRequestDoneEvent(TSqsWorkloadStats::DeleteRequestDoneEvent{ms});
     }
 
     return resp;
-}
-
-ui64 TMeasuringHttpClient::GetMessageCount(const std::shared_ptr<Aws::Http::HttpRequest>& request) const {
-    try {
-        return std::stoull(request->GetHeaderValue(kSQSMessageCountHeader));
-    } catch (const std::exception& e) {
-        Cerr << "Error parsing message count: " << e.what() << Endl;
-        return 0;
-    }
-}
-
-ui64 TMeasuringHttpClient::GetMessageTotalSize(const std::shared_ptr<Aws::Http::HttpRequest>& request) const {
-    try {
-        return std::stoull(request->GetHeaderValue(kSQSMessageTotalSizeHeader));
-    } catch (const std::exception& e) {
-        Cerr << "Error parsing message total size: " << e.what() << Endl;
-        return 0;
-    }
 }
 
 void TMeasuringHttpClient::SetStatsCollector(std::shared_ptr<TSqsWorkloadStatsCollector> statsCollector)

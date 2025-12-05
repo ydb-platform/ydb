@@ -21,9 +21,6 @@ public:
     void SetStatsCollector(std::shared_ptr<TSqsWorkloadStatsCollector> statsCollector);
 
 private:
-    ui64 GetMessageCount(const std::shared_ptr<Aws::Http::HttpRequest>& request) const;
-    ui64 GetMessageTotalSize(const std::shared_ptr<Aws::Http::HttpRequest>& request) const;
-
     std::shared_ptr<Aws::Http::HttpClient> Inner;
     std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector = nullptr;
 };

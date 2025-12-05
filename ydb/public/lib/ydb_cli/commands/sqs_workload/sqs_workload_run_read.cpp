@@ -62,6 +62,9 @@ void TCommandWorkloadSqsRunRead::Config(TConfig& config) {
     config.Opts->AddLongOption("validate-fifo", "Validate FIFO queue.").
         DefaultValue(false).
         StoreTrue(&Scenario.ValidateFifo);
+    config.Opts->AddLongOption("sleep-time", "Sleep time in milliseconds.")
+        .DefaultValue(0)
+        .StoreResult(&Scenario.SleepTimeMs);
 }
 
 void TCommandWorkloadSqsRunRead::Parse(TConfig& config) { TClientCommand::Parse(config); }

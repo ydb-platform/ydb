@@ -744,6 +744,17 @@ bool TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
     return true;
 }
 
+TMaybe<ui64> TKqpPlanner::GetActualNodeIdForTask(ui64 taskId) const {
+    for (const auto& request : Requests) {
+        for (ui64 tid : request.TaskIds) {
+            if (tid == taskId) {
+                return request.NodeId;
+            }
+        }
+    }
+    return Nothing();
+}
+
 void TKqpPlanner::TaskNotStarted(ui64 taskId) {
     // NOTE: should be invoked only while shutting down - when node is disconnected.
 

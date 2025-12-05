@@ -802,8 +802,11 @@ protected:
             }
 
             for (auto& task : TasksGraph.GetTasks()) {
-                if (task.Meta.NodeId == nodeId && Planner->GetPendingComputeTasks().contains(task.Id)) {
-                    return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
+                if (Planner->GetPendingComputeTasks().contains(task.Id)) {
+                    auto actualNodeId = Planner->GetActualNodeIdForTask(task.Id);
+                    if (actualNodeId && *actualNodeId == nodeId) {
+                        return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
+                    }
                 }
             }
         }

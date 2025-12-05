@@ -880,14 +880,14 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             const auto &query = queries[i];
             auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            Cout << "OUTPUT_RESULT " << FormatResultSetYson(result.GetResultSet(0)) << Endl;
-            //UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            //Cout << "OUTPUT_RESULT " << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }
 
     Y_UNIT_TEST(Aggregation) {
-        //TestAggregation(false);
-        TestAggregation(true);
+        TestAggregation(/*columnstore=*/false);
+        TestAggregation(/*columnstore=*/true);
     }
 
     Y_UNIT_TEST(UnionAll) {

@@ -127,6 +127,9 @@ public:
         }
 
         if constexpr (IsFsImport) {
+            if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
+                return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Import from FS is not supported in current configuration");
+            }
             if (!settings.base_path().StartsWith("/")) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
                     "base_path must be an absolute path");

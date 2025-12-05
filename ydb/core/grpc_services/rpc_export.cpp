@@ -514,6 +514,16 @@ public:
         const auto& settings = request.settings();
         InitCommonSourcePath();
 
+        if constexpr (IsFsExport) {
+            if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
+                return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Export to FS is not supported in current configuration");
+            }
+            if (!settings.base_path().StartsWith("/")) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
+                    "base_path must be an absolute path");
+            }
+        }
+
         if constexpr (!TTraits::HasSourcePath) {
             if (settings.items().empty()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
@@ -563,13 +573,6 @@ public:
                 if (!CheckCompression(settings.compression(), status, error)) {
                     return this->Reply(status, TIssuesIds::DEFAULT_ERROR, error);
                 }
-            }
-        }
-        
-        if constexpr (IsFsExport) {
-            if (!settings.base_path().StartsWith("/")) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
-                    "base_path must be an absolute path");
             }
         }
 

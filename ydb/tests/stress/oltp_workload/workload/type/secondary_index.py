@@ -22,6 +22,7 @@ class WorkloadConfig:
     ALLOWED_SECONDARY_INDEXES_COUNT = [1, 2, 3, 8, 16]
     UNIQUE_INDEXES_ALLOWED = True
     UNIQUE_INDEX_PROBALITY = 0.1
+    NULL_PROBABILITY = 0.05
     
     # Column types
     ALLOWED_COLUMN_TYPES = ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64", "Utf8", "String", "Bool"]
@@ -289,11 +290,11 @@ class WorkloadSecondaryIndex(WorkloadBase):
         
         return batch_rows
     
-    def _generate_value_by_type(self, column_type: str, is_pk: bool) -> Union[int, bool, str]:
+    def _generate_value_by_type(self, column_type: str, is_pk: bool) -> Union[int, bool, str, None]:
         """Generate a value based on column type"""
-        if column_type in ["Uint8", "Uint32", "Uint64"]:
-            return random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE if is_pk else WorkloadConfig.MAX_VALUE)
-        elif column_type in ["Int8", "Int32", "Int64"]:
+        if random.random() < WorkloadConfig.NULL_PROBABILITY:
+            return None
+        elif column_type in ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64"]:
             return random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE if is_pk else WorkloadConfig.MAX_VALUE)
         elif column_type == "Bool":
             return random.choice([True, False])
@@ -425,8 +426,11 @@ class WorkloadSecondaryIndex(WorkloadBase):
         where_clause = []
         for i in range(pk_size):
             col_type = table_info.column_types[i]
-            formatted_val = self._format_value_by_type(pk_values[i], col_type)
-            where_clause.append(f"{self._column_names[i]} = {formatted_val}")
+            if pk_values[i] is None:
+                where_clause.append(f"{self._column_names[i]} IS NULL")
+            else:
+                formatted_val = self._format_value_by_type(pk_values[i], col_type)
+                where_clause.append(f"{self._column_names[i]} = {formatted_val}")
         
         return f"""
             UPDATE `{table_path}`
@@ -444,8 +448,11 @@ class WorkloadSecondaryIndex(WorkloadBase):
         where_clause = []
         for i in range(pk_size):
             col_type = table_info.column_types[i]
-            formatted_val = self._format_value_by_type(pk_values[i], col_type)
-            where_clause.append(f"{self._column_names[i]} = {formatted_val}")
+            if pk_values[i] is None:
+                where_clause.append(f"{self._column_names[i]} IS NULL")
+            else:
+                formatted_val = self._format_value_by_type(pk_values[i], col_type)
+                where_clause.append(f"{self._column_names[i]} = {formatted_val}")
         
         return f"""
             DELETE FROM `{table_path}`
@@ -491,6 +498,10 @@ class WorkloadSecondaryIndex(WorkloadBase):
     
     def _format_value_by_type(self, value: Any, column_type: str) -> str:
         """Format a value based on its column type for SQL queries"""
+
+        # Handle NULL values
+        if value is None:
+            return "NULL"
 
         formated_value = None
         if column_type in ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64"]:
@@ -606,7 +617,8 @@ class WorkloadSecondaryIndex(WorkloadBase):
         
         for row in index_rows:
             key = tuple(row[f'c{col}'] for col in index_desc.columns)
-            if key in index_keys:
+            # NULL != NULL for secondary index
+            if None not in key and key in index_keys:
                 raise Exception(f"Duplicate key {key} found in index {index_id} for table {table_name}")
             index_keys.add(key)
     

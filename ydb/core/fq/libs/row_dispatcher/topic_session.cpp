@@ -1,5 +1,8 @@
 #include "topic_session.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
+
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
@@ -23,11 +26,14 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTopicSessionMetrics {
-    void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, const TString& readGroup, ui32 partitionId) {
-        TopicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
-        ReadGroup = TopicGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
-        PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
-
+    void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, const TString& readGroupName, ui32 partitionId, bool enableStreamingQueriesCounters) {
+        ReadGroup = counters;
+        PartitionGroup = counters;
+        if (enableStreamingQueriesCounters) {
+            const auto topicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
+            ReadGroup = topicGroup->GetSubgroup("read_group", SanitizeLabel(readGroupName));
+            PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
+        }
         AllSessionsDataRate = ReadGroup->GetCounter("AllSessionsDataRate", true);
         InFlyAsyncInputData = PartitionGroup->GetCounter("InFlyAsyncInputData");
         InFlySubscribe = PartitionGroup->GetCounter("InFlySubscribe");
@@ -37,10 +43,8 @@ struct TTopicSessionMetrics {
         WaitEventTimeMs = PartitionGroup->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
         QueuedBytes = PartitionGroup->GetCounter("QueuedBytes");
     }
-
-    ::NMonitoring::TDynamicCounterPtr TopicGroup;
-    ::NMonitoring::TDynamicCounterPtr ReadGroup;
     ::NMonitoring::TDynamicCounterPtr PartitionGroup;
+    ::NMonitoring::TDynamicCounterPtr ReadGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
@@ -60,6 +64,7 @@ struct TEvPrivate {
         EvSendStatistic,
         EvReconnectSession,
         EvExecuteTopicEvent,
+        EvGetEventByTimerEvent,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
@@ -72,11 +77,13 @@ struct TEvPrivate {
     struct TEvExecuteTopicEvent : public NYql::TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
         using TTopicEventBase::TTopicEventBase;
     };
+    struct TEvGetEventByTimerEvent : public TEventLocal<TEvGetEventByTimerEvent, EvGetEventByTimerEvent> {};
 };
 
 constexpr ui64 SendStatisticPeriodSec = 2;
 constexpr ui64 MaxHandledEventsCount = 1000;
 constexpr ui64 MaxHandledEventsSize = 1000000;
+constexpr ui64 GetEventByTimerPeriodSec = 30;
 
 class TTopicSession : public TActorBootstrapped<TTopicSession>, NYql::TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
 private:
@@ -98,7 +105,7 @@ private:
     struct TClientsInfo : public IClientDataConsumer {
         using TPtr = TIntrusivePtr<TClientsInfo>;
 
-        TClientsInfo(TTopicSession& self, const TString& logPrefix, const ITopicFormatHandler::TSettings& handlerSettings, const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev, const NMonitoring::TDynamicCounterPtr& counters, const TString& readGroup, TMaybe<ui64> offset)
+        TClientsInfo(TTopicSession& self, const TString& logPrefix, const ITopicFormatHandler::TSettings& handlerSettings, const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev, const NMonitoring::TDynamicCounterPtr& counters, const TString& readGroup, TMaybe<ui64> offset, bool enableStreamingQueriesCounters)
             : Self(self)
             , LogPrefix(logPrefix)
             , HandlerSettings(handlerSettings)
@@ -119,11 +126,15 @@ private:
                 InitialOffset = *offset;
             }
             Y_UNUSED(TDuration::TryParse(ev->Get()->Record.GetSource().GetReconnectPeriod(), ReconnectPeriod));
-            for (const auto& sensor : ev->Get()->Record.GetSource().GetTaskSensorLabel()) {
-                Counters = Counters->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+
+            auto readSubGroup = Counters;
+            if (enableStreamingQueriesCounters) {
+                for (const auto& sensor : ev->Get()->Record.GetSource().GetTaskSensorLabel()) {
+                    Counters = Counters->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+                }
+                readSubGroup = readSubGroup->GetSubgroup("query_id", QueryId);
+                readSubGroup = readSubGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
             }
-            auto queryGroup = Counters->GetSubgroup("query_id", QueryId);
-            auto readSubGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
             FilteredDataRate = readSubGroup->GetCounter("FilteredDataRate", true);
             RestartSessionByOffsetsByQuery = readSubGroup->GetCounter("RestartSessionByOffsetsByQuery", true);
 
@@ -295,6 +306,7 @@ private:
     TTopicSessionMetrics Metrics;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
+    bool EnableStreamingQueriesCounters = false;
 
 public:
     TTopicSession(
@@ -312,7 +324,8 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
-        ui64 maxBufferSize);
+        ui64 maxBufferSize,
+        bool enableStreamingQueriesCounters);
 
     void Bootstrap();
     void PassAway() override;
@@ -325,7 +338,7 @@ private:
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(const TString& consumerName) const;
     void CreateTopicSession();
     void CloseTopicSession();
-    void SubscribeOnNextEvent();
+    void SubscribeOnNextEvent(bool checkIsWaitingEvents = true);
     void SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void SendData(TClientsInfo& info);
     void FatalError(const TStatus& status);
@@ -333,7 +346,7 @@ private:
     void SendDataArrived(TClientsInfo& client);
     void StopReadSession();
     TString GetSessionId() const;
-    void HandleNewEvents();
+    bool HandleNewEvents();
     TInstant GetMinStartingMessageTimestamp() const;
     void StartClientSession(TClientsInfo& info);
 
@@ -341,6 +354,7 @@ private:
     void Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&);
     void Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&);
     void Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&);
+    void Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&);
     void Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
@@ -361,6 +375,7 @@ private:
         hFunc(NFq::TEvPrivate::TEvCreateSession, Handle);
         hFunc(NFq::TEvPrivate::TEvSendStatistic, Handle);
         hFunc(NFq::TEvPrivate::TEvReconnectSession, Handle);
+        hFunc(NFq::TEvPrivate::TEvGetEventByTimerEvent, Handle);
         hFunc(TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
@@ -377,7 +392,8 @@ private:
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
         IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
-        IgnoreFunc(NFq::TEvPrivate::TEvReconnectSession);,
+        IgnoreFunc(NFq::TEvPrivate::TEvReconnectSession);
+        IgnoreFunc(NFq::TEvPrivate::TEvGetEventByTimerEvent);,
         ExceptionFunc(std::exception, HandleException)
     )
 };
@@ -397,7 +413,8 @@ TTopicSession::TTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
-    ui64 maxBufferSize)
+    ui64 maxBufferSize,
+    bool enableStreamingQueriesCounters)
     : ReadGroup(readGroup)
     , TopicPath(topicPath)
     , TopicPathPartition(TStringBuilder() << topicPath << "/" << partitionId)
@@ -415,15 +432,17 @@ TTopicSession::TTopicSession(
     , LogPrefix("TopicSession")
     , Counters(counters)
     , CountersRoot(countersRoot)
+    , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
 {}
 
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
-    Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId);
+    Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId, EnableStreamingQueriesCounters);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
         << ", Timeout " << Config.GetTimeoutBeforeStartSession() << " sec");
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
+    Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
 }
 
 void TTopicSession::PassAway() {
@@ -433,8 +452,8 @@ void TTopicSession::PassAway() {
     TBase::PassAway();
 }
 
-void TTopicSession::SubscribeOnNextEvent() {
-    if (!ReadSession || IsWaitingEvents) {
+void TTopicSession::SubscribeOnNextEvent(bool checkIsWaitingEvents) {
+    if (!ReadSession || (checkIsWaitingEvents && IsWaitingEvents)) {
         LOG_ROW_DISPATCHER_TRACE("Skip SubscribeOnNextEvent, has ReadSession: " << (ReadSession ? "true" : "false") << ", IsWaitingEvents: " << IsWaitingEvents);
         return;
     }
@@ -577,12 +596,13 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
     SubscribeOnNextEvent();
 }
 
-void TTopicSession::HandleNewEvents() {
+bool TTopicSession::HandleNewEvents() {
     ui64 handledEventsSize = 0;
+    bool readSomething = false;
 
     for (ui64 i = 0; i < MaxHandledEventsCount; ++i) {
         if (!ReadSession) {
-            return;
+            return false;
         }
         if (Config.GetMaxSessionUsedMemory() && QueuedBytes > Config.GetMaxSessionUsedMemory()) {
             LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << QueuedBytes << " bytes), stop reading from yds");
@@ -592,12 +612,14 @@ void TTopicSession::HandleNewEvents() {
         if (!event) {
             break;
         }
+        readSomething = true;
 
         std::visit(TTopicEventProcessor{*this, LogPrefix, handledEventsSize}, *event);
         if (handledEventsSize >= MaxHandledEventsSize) {
             break;
         }
     }
+    return readSomething;
 }
 
 void TTopicSession::CloseTopicSession() {
@@ -783,7 +805,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     const TString& format = source.GetFormat();
     ITopicFormatHandler::TSettings handlerSettings = {.ParsingFormat = format ? format : "raw"};
 
-    auto clientInfo = Clients.insert({ev->Sender, MakeIntrusive<TClientsInfo>(*this, LogPrefix, handlerSettings, ev, Counters, ReadGroup, offset)}).first->second;
+    auto clientInfo = Clients.insert({ev->Sender, MakeIntrusive<TClientsInfo>(*this, LogPrefix, handlerSettings, ev, Counters, ReadGroup, offset, EnableStreamingQueriesCounters)}).first->second;
     auto formatIt = FormatHandlers.find(handlerSettings);
     if (formatIt == FormatHandlers.end()) {
         auto config = CreateFormatHandlerConfig(Config, FunctionRegistry, CompileServiceActorId, source.GetSkipJsonErrors());
@@ -971,6 +993,21 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
 }
 
+void TTopicSession::Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvGetEventByTimerEvent");
+    // Workaround for a partition reading bug:
+    // In some cases, the partition may stop delivering new events due to missed notifications or lost subscriptions,
+    // causing the session to stall and not receive further data. To address this, we periodically schedule a timer event
+    // (TEvGetEventByTimerEvent) that explicitly triggers reading of new events from the partition. If new data is found,
+    // and the session is waiting for events, we re-subscribe to ensure continuous data flow. This timer-based approach
+    // helps to recover from situations where the normal event-driven mechanism fails to deliver new data.
+    Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
+    bool readSomething = HandleNewEvents();
+    if (readSomething && IsWaitingEvents) {
+        SubscribeOnNextEvent(false);
+    }
+}
+
 bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto it = Clients.find(ev->Sender);
     if (it != Clients.end()) {
@@ -1029,8 +1066,9 @@ std::unique_ptr<IActor> NewTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
-    ui64 maxBufferSize) {
-    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
+    ui64 maxBufferSize,
+    bool enableStreamingQueriesCounters) {
+    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize, enableStreamingQueriesCounters));
 }
 
 } // namespace NFq

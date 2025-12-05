@@ -31,6 +31,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NYql::IPqGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring = nullptr,
-    NActors::TActorId nodesManagerId = {});
+    NActors::TActorId nodesManagerId = {},
+    bool enableStreamingQueriesCounters = false);
 
 } // namespace NFq

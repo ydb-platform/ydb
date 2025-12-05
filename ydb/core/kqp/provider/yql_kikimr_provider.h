@@ -286,6 +286,7 @@ enum class TYdbOperation : ui64 {
     CreateSecret           = 1ull << 39,
     AlterSecret            = 1ull << 40,
     DropSecret             = 1ull << 41,
+    TruncateTable          = 1ull << 42,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);

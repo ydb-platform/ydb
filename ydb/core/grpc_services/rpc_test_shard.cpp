@@ -62,8 +62,46 @@ public:
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 
+    void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override {
+        Y_UNUSED(ev);
+        const auto req = this->GetProtoRequest();
+
+        std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
+        SetAuthToken(navigateRequest, *this->Request_);
+        SetDatabase(navigateRequest.get(), *this->Request_);
+        NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
+        record->SetPath(req->path());
+
+        ctx.Send(MakeTxProxyID(), navigateRequest.release());
+    }
+
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->GetRecord();
+        const auto status = record.GetStatus();
+
+        if (status != NKikimrScheme::StatusSuccess) {
+            return this->Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
+        }
+
+        const auto& pathDescription = record.GetPathDescription();
+        if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeTestShard) {
+            return this->Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
+        }
+
+        Ydb::TestShard::CreateTestShardResult result;
+        const auto& testShardDesc = pathDescription.GetTestShardDescription();
+        for (auto tabletId : testShardDesc.GetTabletIds()) {
+            result.add_tablet_ids(tabletId);
+        }
+
+        return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+    }
+
     STFUNC(StateFunc) {
-        return TBase::StateWork(ev);
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            default: TBase::StateWork(ev);
+        }
     }
 };
 

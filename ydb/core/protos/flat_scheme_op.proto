@@ -1593,16 +1593,16 @@ message TAlterSolomonVolume {
 message TTestShardDescription {
     optional string Name = 1; // mandatory
     optional uint64 PathId = 2;
-    optional uint64 TabletId = 3; // do not set
+    repeated uint64 TabletIds = 3; // do not set
     optional uint64 Version = 4; // do not set
+    repeated NKikimrStoragePool.TChannelBind BoundChannels = 5;
 }
 
 message TCreateTestShard {
     optional string Name = 1; // mandatory
-    optional uint64 OwnerIdx = 2;
-    optional uint32 Count = 3;
-    optional TKeyValueStorageConfig StorageConfig = 4;
-    optional string Config = 5;
+    optional uint32 Count = 2;
+    optional TKeyValueStorageConfig StorageConfig = 3;
+    optional string Config = 4;
 }
 
 message TBlockStoreAssignOp {

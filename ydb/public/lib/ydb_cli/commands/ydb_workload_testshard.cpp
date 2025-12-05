@@ -22,8 +22,8 @@ TCommandTestShardInit::TCommandTestShardInit()
 
 void TCommandTestShardInit::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("owner-idx", "Unique owner index for idempotent tablet creation")
-        .Required().RequiredArgument("IDX").StoreResult(&OwnerIdx);
+    config.Opts->AddLongOption("path", "Path to TestShard object")
+        .Required().RequiredArgument("PATH").StoreResult(&Path);
     config.Opts->AddLongOption("channels", "Storage pool names for tablet channels (comma-separated, optional - uses database storage pools if not specified)")
         .Optional().RequiredArgument("POOLS").Handler([this](const TString& value) {
             Channels = StringSplitter(value).Split(',').ToList<TString>();
@@ -37,10 +37,6 @@ void TCommandTestShardInit::Config(TConfig& config) {
 
 void TCommandTestShardInit::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
-
-    if (OwnerIdx == 0) {
-        ythrow yexception() << "owner-idx must be non-zero";
-    }
 
     if (ConfigFile.empty()) {
         ythrow yexception() << "config-file must be specified";
@@ -58,8 +54,8 @@ int TCommandTestShardInit::Run(TConfig& config) {
     auto client = NYdb::NTestShard::TTestShardClient(*driver);
 
     auto result = client.CreateTestShard(
-        OwnerIdx, std::vector<std::string>(Channels.begin(), Channels.end()), Count,
-        std::string(ConfigYaml), config.Database).GetValueSync();
+        Path, std::vector<std::string>(Channels.begin(), Channels.end()), Count,
+        std::string(ConfigYaml)).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "TestShard tablet(s) created successfully." << Endl;
@@ -75,35 +71,29 @@ int TCommandTestShardInit::Run(TConfig& config) {
 }
 
 TCommandTestShardClean::TCommandTestShardClean()
-    : TYdbCommand("clean", {}, "Delete TestShard tablets by owner_idx range")
+    : TYdbCommand("clean", {}, "Delete TestShard object")
 {
 }
 
 void TCommandTestShardClean::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("owner-idx", "Owner index identifying tablets to delete")
-        .Required().RequiredArgument("IDX").StoreResult(&OwnerIdx);
-    config.Opts->AddLongOption("count", "Number of consecutive tablets to delete (default: 1)")
-        .DefaultValue(1).RequiredArgument("NUM").StoreResult(&Count);
+    config.Opts->AddLongOption("path", "Path to TestShard object")
+        .Required().RequiredArgument("PATH").StoreResult(&Path);
     config.SetFreeArgsNum(0);
 }
 
 void TCommandTestShardClean::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
-
-    if (OwnerIdx == 0) {
-        ythrow yexception() << "owner-idx must be non-zero";
-    }
 }
 
 int TCommandTestShardClean::Run(TConfig& config) {
     auto driver = std::make_unique<TDriver>(CreateDriver(config));
     auto client = NYdb::NTestShard::TTestShardClient(*driver);
 
-    auto result = client.DeleteTestShard(OwnerIdx, Count, config.Database).GetValueSync();
+    auto result = client.DeleteTestShard(Path).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
-    Cout << "TestShard tablet(s) deleted successfully." << Endl;
+    Cout << "TestShard object deleted successfully." << Endl;
 
     return EXIT_SUCCESS;
 }

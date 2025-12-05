@@ -1159,6 +1159,19 @@ void TPathDescriber::DescribeTestShard(TPathId pathId, TPathElement::TPtr pathEl
     auto& entry = *Result->Record.MutablePathDescription()->MutableTestShardDescription();
     entry.SetName(pathEl->Name);
     entry.SetPathId(pathId.LocalPathId);
+
+    for (const auto& [shardIdx, tabletId] : testShardInfo->TestShards) {
+        entry.AddTabletIds(ui64(tabletId));
+    }
+
+    if (testShardInfo->TestShards.size() > 0) {
+        auto shardIdx = testShardInfo->TestShards.begin()->first;
+        auto shardInfo = Self->ShardInfos.FindPtr(shardIdx);
+        Y_ABORT_UNLESS(shardInfo);
+        for (const auto& channel : shardInfo->BindedChannels) {
+            entry.AddBoundChannels()->CopyFrom(channel);
+        }
+    }
 }
 
 static bool ConsiderAsDropped(const TPath& path) {

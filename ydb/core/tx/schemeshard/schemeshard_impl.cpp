@@ -5877,7 +5877,6 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeTestShard:
-        TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");

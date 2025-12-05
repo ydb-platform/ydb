@@ -49,6 +49,8 @@ protected:
         #endif
 
         case NKikimrSchemeOp::TRestoreTask::kFSSettings:
+            // TODO(st-shchetinin): Implement FS restore in DataShard
+            // https://github.com/ydb-platform/ydb/issues/28596
             op->SetAsyncJobResult(new TImportJobProduct(true, TString(), 0, 0));
             break;
 

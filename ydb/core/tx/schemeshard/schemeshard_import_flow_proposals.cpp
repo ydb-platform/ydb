@@ -201,10 +201,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
             if (const auto region = settings.region()) {
                 restoreSettings.SetRegion(region);
             }
-
-            if (!item.Metadata.HasVersion() || item.Metadata.GetVersion() > 0) {
-                task.SetValidateChecksums(!importInfo.GetSkipChecksumValidation());
-            }
         }
         break;
 
@@ -215,12 +211,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
             auto& restoreSettings = *task.MutableFSSettings();
             restoreSettings.SetBasePath(settings.base_path());
             restoreSettings.SetPath(importInfo.GetItemSrcPrefix(itemIdx));
-
-            if (!item.Metadata.HasVersion() || item.Metadata.GetVersion() > 0) {
-                task.SetValidateChecksums(!importInfo.GetSkipChecksumValidation());
-            }
         }
         break;
+    }
+
+    if (!item.Metadata.HasVersion() || item.Metadata.GetVersion() > 0) {
+        task.SetValidateChecksums(!importInfo.GetSkipChecksumValidation());
     }
 
     return propose;

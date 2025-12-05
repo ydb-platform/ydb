@@ -3248,12 +3248,12 @@ public:
         });
     }
 
-    Ydb::Import::ImportFromS3Settings GetS3Settings() const {
+    const Ydb::Import::ImportFromS3Settings& GetS3Settings() const {
         Y_ABORT_UNLESS(Kind == EKind::S3);
         return std::get<Ydb::Import::ImportFromS3Settings>(Settings);
     }
 
-    Ydb::Import::ImportFromFsSettings GetFsSettings() const {
+    const Ydb::Import::ImportFromFsSettings& GetFsSettings() const {
         Y_ABORT_UNLESS(Kind == EKind::FS);
         return std::get<Ydb::Import::ImportFromFsSettings>(Settings);
     }

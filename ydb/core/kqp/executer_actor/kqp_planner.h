@@ -87,6 +87,7 @@ public:
 
     const THashMap<TActorId, TProgressStat>& GetPendingComputeActors();
     const THashSet<ui64>& GetPendingComputeTasks();
+    TMaybe<ui64> GetActualNodeIdForTask(ui64 taskId) const;
 
     ui32 GetnScanTasks();
     ui32 GetnComputeTasks();

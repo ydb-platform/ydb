@@ -671,6 +671,68 @@ struct TDictCase {
         }
     }
 
+    Y_UNIT_TEST(RetryAfterShutdownThenDisconnect) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableShuttingDownNodeState(true);
+
+        TKikimrRunner kikimr(TKikimrSettings()
+                                    .SetFeatureFlags(featureFlags)
+                                    .SetNodeCount(2)
+                                    .SetUseRealThreads(false));
+        kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 2); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto queryClient = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+
+        ui32 nodeToShutdown = 1;
+        auto shuttingDownNodeId = runtime.GetNodeId(nodeToShutdown);
+
+        bool nodeShuttingDownReceived = false;
+        bool retryStarted = false;
+        TActorId executerActorId;
+
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksResponse::EventType) {
+                auto& msg = ev->Get<TEvKqpNode::TEvStartKqpTasksResponse>()->Record;
+                if (msg.NotStartedTasksSize() > 0) {
+                    for (auto& task : msg.GetNotStartedTasks()) {
+                        if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN) {
+                            nodeShuttingDownReceived = true;
+                            executerActorId = ev->Recipient;
+                        }
+                    }
+                }
+            }
+
+            if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksRequest::EventType) {
+                if (nodeShuttingDownReceived && ev->Recipient.NodeId() != shuttingDownNodeId) {
+                    retryStarted = true;
+                    auto disconnectEv = new TEvInterconnect::TEvNodeDisconnected(shuttingDownNodeId);
+                    runtime.Send(new IEventHandle(executerActorId, TActorId(), disconnectEv), 0, true);
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        runtime.SetObserverFunc(observer);
+
+        auto shutdownState = new TKqpShutdownState();
+        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(shuttingDownNodeId), {},
+                     new TEvKqp::TEvInitiateShutdownRequest(shutdownState)), nodeToShutdown);
+
+        auto result = kikimr.RunCall([&queryClient]() {
+            return queryClient.ExecuteQuery(R"(
+                SELECT COUNT(*) AS cnt, SUM(Data) AS sum_data
+                FROM `/Root/LargeTable`
+                LIMIT 100
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+            "Expected SUCCESS because retry to another node was in progress, but got: " << result.GetIssues().ToString());
+    }
+
 }
 
 } // namespace NKqp

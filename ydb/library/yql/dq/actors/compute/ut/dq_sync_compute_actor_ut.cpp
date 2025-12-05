@@ -653,6 +653,21 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         }
     }
 
+    void DumpMonPage(auto syncCA, auto hook) {
+        {
+            TMockHttpRequest request;
+            auto evHttpInfo = MakeHolder<NActors::NMon::TEvHttpInfo>(request);
+            ActorSystem.Send(syncCA, EdgeActor, evHttpInfo.Release());
+        }
+        {
+            auto ev = ActorSystem.GrabEdgeEvent<NActors::NMon::TEvHttpInfoRes>({EdgeActor});
+            UNIT_ASSERT_EQUAL(ev->Get()->GetContentType(), NActors::NMon::IEvHttpInfoRes::EContentType::Html);
+            TStringStream out;
+            ev->Get()->Output(out);
+            hook(out.Str());
+        }
+    }
+
     static constexpr ui32 NoAckPeriod = 2;
 
     void SendData(
@@ -802,7 +817,13 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                     watermark = receivedWatermark;
                     LOG_D("Got watermark " << *watermark);
                 },
-                []() {
+                [this, &syncCA]() {
+                    DumpMonPage(syncCA, [this](auto&& str) {
+                        UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+                        UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
+                        // TODO add validation
+                        LOG_D(str);
+                    });
                 },
                 dqInputChannel))
         {}
@@ -962,7 +983,13 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                     watermark = receivedWatermark;
                     LOG_D("Got watermark " << *watermark);
                 },
-                []() {
+                [this, &syncCA]() {
+                    DumpMonPage(syncCA, [this](auto&& str) {
+                        UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+                        UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
+                        // TODO add validation
+                        LOG_D(str);
+                    });
                 },
                 dqInputChannel))
         {}

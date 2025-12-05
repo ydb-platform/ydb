@@ -149,13 +149,6 @@ namespace NKqp {
         }
     }
 
-    void TTestHelper::SetCompression(
-        const TColumnTableBase& columnTable, const TString& columnName, const TCompression& compression, const NYdb::EStatus expectedStatus) {
-        auto alterQuery = columnTable.BuildAlterCompressionQuery(columnName, compression);
-        auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
-    }
-
     bool TTestHelper::TCompression::DeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializer) {
         if (!serializer.GetClassName()) {
             return false;
@@ -225,50 +218,6 @@ namespace NKqp {
         return BuildQuery();
     }
 
-    bool TTestHelper::TColumnFamily::DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& family) {
-        if (!family.HasId() || !family.HasName()) {
-            return false;
-        }
-        Id = family.GetId();
-        FamilyName = family.GetName();
-        Compression = TTestHelper::TCompression();
-        if (family.HasColumnCodec()) {
-            Compression.SetCompressionType(family.GetColumnCodec());
-        }
-        if (family.HasColumnCodecLevel()) {
-            Compression.SetCompressionLevel(family.GetColumnCodecLevel());
-        }
-        return true;
-    }
-
-    TString TTestHelper::TColumnFamily::BuildQuery() const {
-        TStringBuilder str;
-        str << "FAMILY " << FamilyName << " (";
-        if (!Data.empty()) {
-            str << "DATA=\"" << Data << "\", ";
-        }
-        str << Compression.BuildQuery() << ")";
-        return str;
-    }
-
-    bool TTestHelper::TColumnFamily::IsEqual(const TColumnFamily& rhs, TString& errorMessage) const {
-        if (Id != rhs.GetId()) {
-            errorMessage = TStringBuilder() << "different family id: in left value `" << Id << "` and in right value `" << rhs.GetId() << "`";
-            return false;
-        }
-        if (FamilyName != rhs.GetFamilyName()) {
-            errorMessage = TStringBuilder() << "different family name: in left value `" << FamilyName << "` and in right value `"
-                                            << rhs.GetFamilyName() << "`";
-            return false;
-        }
-
-        return Compression.IsEqual(rhs.GetCompression(), errorMessage);
-    }
-
-    TString TTestHelper::TColumnFamily::ToString() const {
-        return BuildQuery();
-    }
-
     TString TTestHelper::TColumnSchema::BuildQuery() const {
         TStringBuilder str;
         str << Name << ' ';
@@ -284,9 +233,6 @@ namespace NKqp {
         }
         default:
             str << NScheme::GetTypeName(TypeInfo.GetTypeId());
-        }
-        if (!ColumnFamilyName.empty()) {
-        str << " FAMILY " << ColumnFamilyName;
         }
         if (!NullableFlag) {
             str << " NOT NULL";
@@ -327,14 +273,6 @@ namespace NKqp {
     TString TTestHelper::TColumnTableBase::BuildQuery() const {
         auto str = TStringBuilder() << "CREATE " << GetObjectType() << " `" << Name << "`";
         str << " (" << BuildColumnsStr(Schema) << ", PRIMARY KEY (" << JoinStrings(PrimaryKey, ", ") << ")";
-        if (!ColumnFamilies.empty()) {
-            TVector<TString> families;
-            families.reserve(ColumnFamilies.size());
-            for (const auto& family : ColumnFamilies) {
-                families.push_back(family.BuildQuery());
-            }
-            str << ", " << JoinStrings(families, ", ");
-        }
         str << ")";
         if (!Sharding.empty()) {
             str << " PARTITION BY HASH(" << JoinStrings(Sharding, ", ") << ")";
@@ -348,21 +286,6 @@ namespace NKqp {
         return str;
     }
 
-    TString TTestHelper::TColumnTableBase::BuildAlterCompressionQuery(const TString& columnName, const TCompression& compression) const {
-        auto str = TStringBuilder() << "ALTER OBJECT `" << Name << "` (TYPE " << GetObjectType() << ") SET";
-        str << " (ACTION=ALTER_COLUMN, NAME=" << columnName << ", `SERIALIZER.CLASS_NAME`=`" << compression.GetSerializerClassName() << "`,";
-        if (compression.HasCompressionType()) {
-            auto codec = NArrow::CompressionFromProto(compression.GetCompressionTypeUnsafe());
-            Y_VERIFY(codec.has_value());
-            str << " `COMPRESSION.TYPE`=`" << NArrow::CompressionToString(codec.value()) << "`";
-        }
-        if (compression.GetCompressionLevel().has_value()) {
-            str << "`COMPRESSION.LEVEL`=" << compression.GetCompressionLevel().value();
-        }
-        str << ");";
-        return str;
-    }
-
     std::shared_ptr<arrow::Schema> TTestHelper::TColumnTableBase::GetArrowSchema(const TVector<TColumnSchema>& columns) {
         std::vector<std::shared_ptr<arrow::Field>> result;
         for (auto&& col : columns) {
@@ -370,7 +293,6 @@ namespace NKqp {
         }
         return std::make_shared<arrow::Schema>(result);
     }
-
 
     TString TTestHelper::TColumnTableBase::BuildColumnsStr(const TVector<TColumnSchema>& clumns) const {
         TVector<TString> columnStr;

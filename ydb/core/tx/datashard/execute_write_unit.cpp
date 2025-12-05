@@ -324,13 +324,13 @@ public:
         userDb.SetIsImmediateTx(op->IsImmediate());
         userDb.SetLockTxId(writeTx->GetLockTxId());
         userDb.SetLockNodeId(writeTx->GetLockNodeId());
+        userDb.SetLockMode(writeTx->GetLockMode());
 
         if (op->HasVolatilePrepareFlag() || op->GetRemainReadSets()) {
             userDb.SetVolatileTxId(txId);
         }
 
-        auto mvccSnapshot = writeTx->GetMvccSnapshot();
-        if (mvccSnapshot && !writeTx->GetLockTxId()) {
+        if (auto mvccSnapshot = writeTx->GetMvccSnapshot()) {
             userDb.SetSnapshotVersion(*mvccSnapshot);
         }
 
@@ -406,6 +406,9 @@ public:
                     case EEnsureCurrentLock::Abort:
                         // Lock cannot be created and we must abort
                         return abortLock();
+
+                    case EEnsureCurrentLock::Missing:
+                        Y_ENSURE(false, "unreachable");
                 }
             }
 
@@ -609,6 +612,21 @@ public:
             }
 
             writeOp->ReleaseTxData(txc);
+            return EExecutionStatus::Executed;
+        } catch (const TSerializableIsolationException&) {
+            if (CheckForVolatileReadDependencies(userDb, *writeOp, txc, ctx)) {
+                return EExecutionStatus::Continue;
+            }
+
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with another transaction.");
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Write conflict with concurrent transaction.");
+
+            ResetChanges(userDb, txc);
+
+            if (auto status = ensureAbortOutReadSets()) {
+                return *status;
+            }
+
             return EExecutionStatus::Executed;
         } catch (const TKeySizeConstraintException&) {
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, TStringBuilder() << "Size of key in secondary index is more than " << NLimits::MaxWriteKeySize);

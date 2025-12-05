@@ -154,6 +154,9 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
                     op->SetAbortedFlag();
                     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
                     return EExecutionStatus::Executed;
+
+                case EEnsureCurrentLock::Missing:
+                    Y_ENSURE(false, "unreachable");
             }
         }
     }

@@ -163,7 +163,6 @@ void TSqsWorkloadReader::RunLoop(const TSqsWorkloadReaderParams& params, TInstan
         receiveMessageRequest.SetVisibilityTimeout(visibilityTimeout);
         receiveMessageRequest.SetMaxNumberOfMessages(params.BatchSize);
         receiveMessageRequest.SetAdditionalCustomHeaderValue(kSQSWorkloadActionHeader, kSQSWorkloadActionReceive);
-        receiveMessageRequest.SetAdditionalCustomHeaderValue(kSQSMessageCountHeader, std::to_string(params.BatchSize));
 
         {
             std::unique_lock<std::mutex> locker(*params.Mutex);

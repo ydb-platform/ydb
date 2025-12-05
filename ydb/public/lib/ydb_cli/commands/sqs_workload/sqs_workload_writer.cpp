@@ -73,8 +73,6 @@ void TSqsWorkloadWriter::RunLoop(const TSqsWorkloadWriterParams& params, TInstan
         sendMessageBatchRequest.SetQueueUrl(params.QueueUrl.c_str());
         sendMessageBatchRequest.SetEntries(CreateSendMessageBatchRequestEntries(now, params.BatchSize, params.MessageSize, params.GroupsAmount, messageGroupID));
         sendMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSWorkloadActionHeader, kSQSWorkloadActionSend);
-        sendMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSMessageCountHeader, std::to_string(params.BatchSize));
-        sendMessageBatchRequest.SetAdditionalCustomHeaderValue(kSQSMessageTotalSizeHeader, std::to_string(params.BatchSize * params.MessageSize));
 
         {
             std::unique_lock<std::mutex> locker(*params.Mutex);

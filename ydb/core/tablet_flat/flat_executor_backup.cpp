@@ -119,6 +119,7 @@ void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
         break;
     case NScheme::NTypeIds::Utf8:
         writer.WriteKey(columnName).WriteString(columnData.AsBuf());
+        break;
     case NScheme::NTypeIds::Json:
         writer.WriteKey(columnName);
         WriteJson(columnData.AsBuf(), writer);

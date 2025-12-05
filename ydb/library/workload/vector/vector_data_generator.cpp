@@ -277,7 +277,7 @@ private:
             } else if constexpr (std::is_same<T, int8_t>::value) {
                 serializer.HandleElement(Distribution(RandomGenerator) * (INT8_MAX - INT8_MIN + 1) + INT8_MIN);
             } else if constexpr (std::is_same<T, bool>::value) {
-                serializer.HandleElement(static_cast<int>(Distribution(RandomGenerator) * 2));
+                serializer.HandleElement(Distribution(RandomGenerator) >= 0.5);
             } else {
                 static_assert(false, "Unsupported type");
             }

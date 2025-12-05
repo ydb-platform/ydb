@@ -133,7 +133,7 @@ private:
     void CleanTopics(const TActorContext& ctx);
     void CleanWriters(const TActorContext& ctx);
     std::pair<ETopicStatus, TActorId> PartitionWriter(const TTopicPartition& topicPartition, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId, const TActorContext& ctx);
-    std::pair<TString, ui32> WriterDied(const TActorId& writerId);
+    bool WriterDied(const TActorId& writerId, EKafkaErrors errorCode, TStringBuf errorMessage);
 
     TString LogPrefix();
     void LogEvent(IEventHandle& ev);

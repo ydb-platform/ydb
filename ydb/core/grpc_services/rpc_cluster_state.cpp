@@ -328,7 +328,7 @@ public:
         const TActorId nameserviceId = GetNameserviceActorId();
         Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         TBase::Become(&TThis::StateRequestedBrowse);
-        Sanitize = GetProtoRequest()->sanitize();
+        Sanitize = !GetProtoRequest()->no_sanitize();
         Duration = TDuration::Seconds(GetProtoRequest()->duration_seconds() ? GetProtoRequest()->duration_seconds() : defaultDurationSec);
         Started = TInstant::Now();
         Schedule(Duration, new TEvents::TEvWakeup());

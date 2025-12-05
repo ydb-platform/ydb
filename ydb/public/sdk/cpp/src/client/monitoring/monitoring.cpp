@@ -112,8 +112,8 @@ public:
             request.set_period_seconds(settings.PeriodSeconds_.value());
         }
 
-        if (settings.Sanitize_) {
-            request.set_sanitize(settings.Sanitize_.value());
+        if (settings.NoSanitize_) {
+            request.set_no_sanitize(settings.NoSanitize_.value());
         }
         auto promise = NThreading::NewPromise<TClusterStateResult>();
 

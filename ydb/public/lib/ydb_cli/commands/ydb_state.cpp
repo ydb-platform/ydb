@@ -109,7 +109,7 @@ int TCommandClusterStateFetch::Run(TConfig& config) {
     NMonitoring::TClusterStateSettings settings;
     settings.DurationSeconds(DurationSeconds);
     settings.PeriodSeconds(PeriodSeconds);
-    settings.Sanitize(!NoSanitize);
+    settings.NoSanitize(NoSanitize);
     NMonitoring::TClusterStateResult result = client.ClusterState(settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     const auto& proto = NYdb::TProtoAccessor::GetProto(result);

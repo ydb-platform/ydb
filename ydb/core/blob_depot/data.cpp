@@ -808,6 +808,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     bool TData::IsUseful(const TS3Locator& locator) const {
+        Y_DEBUG_ABORT_UNLESS(IsLoaded());
         return RefCountS3.contains(locator);
     }
 

@@ -93,7 +93,9 @@ public:
             CancelAt = StartTime + *Request.CancelAfter;
         }
 
-        LOG_D("Begin literal execution. Operation timeout: " << Request.Timeout << ", cancelAfter: " << Request.CancelAfter);
+        LOG_D("Begin literal execution",
+            (OperationTimeout, Request.Timeout),
+            (CancelAfter, Request.CancelAfter));
     }
 
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral() {
@@ -109,7 +111,8 @@ public:
                 YqlIssue({}, EYqlIssueCode(e.GetCode()), e.GetMessage()));
         } catch (...) {
             auto msg = CurrentExceptionMessage();
-            LOG_C("TKqpLiteralExecuter, unexpected exception caught: " << msg);
+            LOG_C("TKqpLiteralExecuter, unexpected exception caught",
+                (Message, msg));
             CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, msg));
         }
@@ -122,7 +125,8 @@ public:
             Stats->StartTs = TInstant::Now();
         }
 
-        LOG_D("Begin literal execution, txs: " << Request.Transactions.size());
+        LOG_D("Begin literal execution",
+            (TransactionsCount, Request.Transactions.size()));
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions.at(txIdx);
@@ -130,7 +134,9 @@ public:
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
                 auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
-                LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
+                LOG_D("Stage AST",
+                    (StageId, stageInfo.Id),
+                    (AST, stage.GetProgramAst()));
 
                 YQL_ENSURE(stageInfo.Meta.ShardOperations.empty());
                 YQL_ENSURE(stageInfo.InputsCount == 0);
@@ -270,7 +276,8 @@ public:
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
         LiteralExecuterSpan.EndOk();
         CleanupCtx();
-        LOG_D("Execution is complete, results: " << ResponseEv->ResultsSize());
+        LOG_D("Execution is complete",
+            (ResultsSize, ResponseEv->ResultsSize()));
     }
 
 private:

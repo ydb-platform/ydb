@@ -861,7 +861,8 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, errors# " << ev->Get()->Request.Get()->ErrorCount);
+        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            (ErrorCount, ev->Get()->Request.Get()->ErrorCount));
 
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
@@ -928,7 +929,8 @@ public:
         const auto status = response.GetStatus();
         auto issuesProto = response.GetIssues();
 
-        LOG_D("Handle TEvIndexBuilder::TEvCreateResponse " << response.ShortUtf8DebugString());
+        LOG_D("Handle TEvIndexBuilder::TEvCreateResponse",
+            (Response, response.ShortUtf8DebugString()));
 
         if (status == Ydb::StatusIds::SUCCESS) {
             if (response.HasSchemeStatus() && response.GetSchemeStatus() == NKikimrScheme::EStatus::StatusAlreadyExists) {
@@ -977,7 +979,8 @@ public:
 
     void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
-        LOG_D("Handle TEvIndexBuilder::TEvGetResponse: record# " << record.ShortDebugString());
+        LOG_D("Handle TEvIndexBuilder::TEvGetResponse",
+            (Record, record.ShortDebugString()));
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             // Internal error: we made incorrect request to get status of index build operation
             NYql::TIssues responseIssues;
@@ -1025,8 +1028,9 @@ public:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
-        LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-            << ", message: " << issues.ToOneLineString());
+        LOG_D("Got EvAbortExecution",
+            (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())),
+            (Message, issues.ToOneLineString()));
 
         ReplyErrorAndDie(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
     }
@@ -1046,8 +1050,9 @@ private:
     }
 
     void UnexpectedEvent(const TString& state, ui32 eventType) {
-        LOG_C("TKqpSchemeExecuter, unexpected event: " << eventType
-            << ", at state:" << state << ", selfID: " << SelfId());
+        LOG_C("TKqpSchemeExecuter, unexpected event",
+            (EventType, eventType),
+            (State, state));
 
         InternalError(TStringBuilder() << "Unexpected event at TKqpSchemeExecuter, state: " << state
             << ", event: " << eventType);

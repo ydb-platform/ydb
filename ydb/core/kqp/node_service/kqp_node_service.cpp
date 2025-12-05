@@ -8,6 +8,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/util/stlog.h>
 
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
@@ -34,14 +35,15 @@ namespace NKqp {
 
 using namespace NActors;
 
-namespace {
+#define STLOG_C(MARKER, MESSAGE, ...) STLOG(PRI_CRIT, NKikimrServices::KQP_NODE, MARKER, MESSAGE, __VA_ARGS__)
+#define STLOG_E(MARKER, MESSAGE, ...) STLOG(PRI_ERROR, NKikimrServices::KQP_NODE, MARKER, MESSAGE, __VA_ARGS__)
+#define STLOG_W(MARKER, MESSAGE, ...) STLOG(PRI_WARN, NKikimrServices::KQP_NODE, MARKER, MESSAGE, __VA_ARGS__)
+#define STLOG_N(MARKER, MESSAGE, ...) STLOG(PRI_NOTICE, NKikimrServices::KQP_NODE, MARKER, MESSAGE, __VA_ARGS__)
+#define STLOG_I(MARKER, MESSAGE, ...) STLOG(PRI_INFO, NKikimrServices::KQP_NODE, MARKER, MESSAGE, __VA_ARGS__)
+#define STLOG_D(MARKER, MESSAGE, ...) STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, MARKER, MESSAGE, __VA_ARGS__)
+#define STLOG_T(MARKER, MESSAGE, ...) STLOG(PRI_TRACE, NKikimrServices::KQP_NODE, MARKER, MESSAGE, __VA_ARGS__)
 
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
+namespace {
 
 // Min interval between stats send from scan/compute actor to executor
 constexpr TDuration MinStatInterval = TDuration::MilliSeconds(20);
@@ -91,7 +93,9 @@ public:
     }
 
     void Bootstrap() {
-        LOG_I("Starting KQP Node service");
+        STLOG_I(KQPNS00, "Starting KQP Node service",
+            (ActorId, SelfId()),
+            (NodeId, SelfId().NodeId()));
 
         State_ = std::make_shared<TNodeState>();
 
@@ -136,7 +140,10 @@ private:
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleShuttingDown);
             default: {
-                LOG_D("Unexpected event" << ev->GetTypeName() << " for TKqpNodeService");
+                STLOG_D(KQPNS02, "Unexpected event for TKqpNodeService",
+                    (ActorId, SelfId()),
+                    (NodeId, SelfId().NodeId()),
+                    (EventType, ev->GetTypeName()));
             }
         }
     }
@@ -163,8 +170,14 @@ private:
 
         YQL_ENSURE(msg.GetStartAllOrFail()); // TODO: support partial start
 
-        LOG_D("TxId: " << txId << ", new compute tasks request from " << requester
-            << " with " << msg.GetTasks().size() << " tasks: " << TasksIdsStr(msg.GetTasks()));
+        STLOG_D(KQPNS01, "HandleStartKqpTasksRequest",
+            (ActorId, SelfId()),
+            (NodeId, SelfId().NodeId()),
+            (TxId, txId),
+            (Requester, requester),
+            (TasksCount, msg.GetTasks().size()),
+            (TaskIds, TasksIdsStr(msg.GetTasks())),
+            (TraceId, sendTasksSpan ? sendTasksSpan.GetTraceId().GetHexTraceId() : TString()));
 
         const auto& poolId = msg.GetPoolId().empty() ? NResourcePool::DEFAULT_POOL_ID : msg.GetPoolId();
         const auto& databaseId = msg.GetDatabaseId();
@@ -203,7 +216,12 @@ private:
         }
 
         if (State_->HasRequest(txId)) {
-            LOG_E("TxId: " << txId << ", requester: " << requester << ", request already exists");
+            STLOG_E(KQPNS03, "Request already exists",
+                (ActorId, SelfId()),
+                (NodeId, SelfId().NodeId()),
+                (TxId, txId),
+                (Requester, requester),
+                (TraceId, sendTasksSpan ? sendTasksSpan.GetTraceId().GetHexTraceId() : TString()));
             co_return ReplyError(txId, request.ExecuterId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, ev->Cookie);
         }
 
@@ -298,9 +316,21 @@ private:
             startedTask->SetTaskId(taskId);
             ActorIdToProto(*actorId, startedTask->MutableActorId());
             if (State_->OnTaskStarted(txId, taskId, *actorId, executerId)) {
-                LOG_D("TxId: " << txId << ", executing task: " << taskId << " on compute actor: " << *actorId);
+                STLOG_D(KQPNS14, "Executing task",
+                    (ActorId, SelfId()),
+                    (NodeId, SelfId().NodeId()),
+                    (TxId, txId),
+                    (TaskId, taskId),
+                    (ComputeActorId, *actorId),
+                    (TraceId, sendTasksSpan ? sendTasksSpan.GetTraceId().GetHexTraceId() : TString()));
             } else {
-                LOG_D("TxId: " << txId << ", task finished in an instant: " << taskId << " on compute actor: " << *actorId);
+                STLOG_D(KQPNS15, "Task finished instantly",
+                    (ActorId, SelfId()),
+                    (NodeId, SelfId().NodeId()),
+                    (TxId, txId),
+                    (TaskId, taskId),
+                    (ComputeActorId, *actorId),
+                    (TraceId, sendTasksSpan ? sendTasksSpan.GetTraceId().GetHexTraceId() : TString()));
             }
         }
 
@@ -328,10 +358,13 @@ private:
         auto& message = *ev->Get();
         if (auto tasksToAbort = State_->GetTasksByTxId(message.TxId); !tasksToAbort.empty()) {
             TStringBuilder finalReason;
-            finalReason << "Node service cancelled the task, because of direct request "
+                finalReason << "Node service cancelled the task, because of direct request "
                 << ", NodeId: "<< SelfId().NodeId()
                 << ", TxId: " << message.TxId;
-            LOG_E(finalReason);
+                STLOG_E(KQPNS05, finalReason,
+                    (ActorId, SelfId()),
+                    (NodeId, SelfId().NodeId()));
+
 
             for (const auto& [taskId, computeActorId]: tasksToAbort) {
                 if (message.TaskId != taskId) {
@@ -349,7 +382,11 @@ private:
         ui64 txId = ev->Get()->Record.GetTxId();
         auto& reason = ev->Get()->Record.GetReason();
 
-        LOG_W("TxId: " << txId << ", terminate transaction, reason: " << reason);
+        STLOG_W(KQPNS06, "Terminate transaction",
+            (ActorId, SelfId()),
+            (NodeId, SelfId().NodeId()),
+            (TxId, txId),
+            (Reason, reason));
         TerminateTx(txId, reason);
 
         Counters->NodeServiceProcessCancelTime->Collect(timer.Passed() * SecToUsec);
@@ -357,12 +394,10 @@ private:
 
     void TerminateTx(ui64 txId, const TString& reason, NYql::NDqProto::StatusIds_StatusCode status = NYql::NDqProto::StatusIds::UNSPECIFIED) {
         if (auto tasksToAbort = State_->GetTasksByTxId(txId); !tasksToAbort.empty()) {
-            TStringBuilder finalReason;
-            finalReason << "node service cancelled the task, because it " << reason
-                << ", NodeId: "<< SelfId().NodeId()
-                << ", TxId: " << txId;
-
-            LOG_E(finalReason);
+            STLOG_E(KQPNS16, "Node service cancelled the task, because it " << reason,
+                (ActorId, SelfId()),
+                (NodeId, SelfId().NodeId()),
+                (TxId, txId));
             for (const auto& [taskId, computeActorId]: tasksToAbort) {
                 auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(status, reason);
                 Send(computeActorId, abortEv.release());
@@ -380,10 +415,14 @@ private:
 
     void HandleWork(TEvKqp::TEvInitiateShutdownRequest::TPtr& ev) {
         if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
-            LOG_I("Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request");
+            STLOG_I(KQPNS01, "Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request",
+                (ActorId, SelfId()),
+                (NodeId, SelfId().NodeId()));
             return;
         }
-        LOG_I("Prepare to shutdown: do not acccept any messages from this time");
+        STLOG_I(KQPNS01, "Prepare to shutdown: do not acccept any messages from this time",
+            (ActorId, SelfId()),
+            (NodeId, SelfId().NodeId()));
         ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
         Become(&TKqpNodeService::ShuttingDownState);
     }
@@ -391,7 +430,10 @@ private:
     void HandleShuttingDown(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         if (msg.HasSupportShuttingDown() && msg.GetSupportShuttingDown()) {
-            LOG_D("Can't handle StartRequest TxId" << msg.GetTxId() << " in ShuttingDown State");
+            STLOG_D(KQPNS08, "Can't handle StartRequest in ShuttingDown State",
+                (ActorId, SelfId()),
+                (NodeId, SelfId().NodeId()),
+                (TxId, msg.GetTxId()));
             ReplyError(msg.GetTxId(), ev->Sender, msg, NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN, ev->Cookie);
         } else {
             HandleWork(ev);
@@ -399,7 +441,7 @@ private:
     }
 private:
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_D("Subscribed for config changes");
+        STLOG_D(KQPNS09, "Subscribed for config changes");
     }
 
     void HandleWork(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -421,7 +463,10 @@ private:
             FORCE_VALUE(MinMemFreeSize);
 #undef FORCE_VALUE
 
-            LOG_I("Updated table service config: " << Config.DebugString());
+            STLOG_I(KQPNS10, "Updated table service config",
+                (ActorId, SelfId()),
+                (NodeId, SelfId().NodeId()),
+                (Config, Config.DebugString()));
         }
 
         CaFactory_->ApplyConfig(event.GetConfig().GetTableServiceConfig().GetResourceManager());
@@ -492,15 +537,22 @@ private:
             }
 
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                LOG_C("Failed to deliver subscription request to config dispatcher");
+                STLOG_C(KQPNS11, "Failed to deliver subscription request to config dispatcher",
+                    (ActorId, SelfId()),
+                    (NodeId, SelfId().NodeId()));
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                LOG_E("Failed to deliver config notification response");
+                STLOG_E(KQPNS12, "Failed to deliver config notification response",
+                    (ActorId, SelfId()),
+                    (NodeId, SelfId().NodeId()));
                 break;
 
             default:
-                LOG_E("Undelivered event with unexpected source type: " << ev->Get()->SourceType);
+                STLOG_E(KQPNS13, "Undelivered event with unexpected source type",
+                    (ActorId, SelfId()),
+                    (NodeId, SelfId().NodeId()),
+                    (SourceType, ev->Get()->SourceType));
                 break;
         }
     }

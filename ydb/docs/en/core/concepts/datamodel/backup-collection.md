@@ -4,7 +4,7 @@ A backup collection is a [schema object](index.md) that enables [point-in-time r
 
 {% note info %}
 
-For practical instructions on creating and managing backup collections, see the [Backup and Recovery guide](../../devops/backup-and-recovery.md#backup-collections).
+For practical instructions on creating and managing backup collections, see the [Backup and Recovery guide](../../devops/backup-and-recovery/index.md#backup-collections).
 
 {% endnote %}
 
@@ -16,7 +16,7 @@ Backup collections address common backup challenges for production workloads:
 - **Consistent recovery**: All tables in a collection are backed up from the same global snapshot, ensuring referential integrity across tables during restoration.
 - **Point-in-time recovery**: Restore data to any point when a backup was created within the chain.
 
-For a comparison with other backup methods (export/import, dump/restore), see [Backup concepts](../backup.md).
+For a comparison with other backup methods (export/import, dump/restore), see the [Backup and Recovery guide](../../devops/backup-and-recovery/index.md).
 
 ## Key Concepts
 
@@ -169,8 +169,7 @@ During the restore operation, target tables are placed in an `EPathStateIncoming
 
 ## See Also
 
-- [Backup concepts](../backup.md): Overview of all backup approaches in {{ ydb-short-name }}
-- [Backup and Recovery guide](../../devops/backup-and-recovery.md#backup-collections): Practical operations guide
+- [Backup and Recovery guide](../../devops/backup-and-recovery/index.md#backup-collections): Practical operations guide
 - [Recipes and examples](../../recipes/backup-collections/index.md): Common scenarios and examples
 - YQL reference:
   - [CREATE BACKUP COLLECTION](../../yql/reference/syntax/create-backup-collection.md)

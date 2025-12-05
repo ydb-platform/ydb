@@ -133,7 +133,7 @@ public:
     }
 
 private:
-    ui64 LastCookie = 0;
+    ui64 LastRequestId = 0;
     THashMap<ui64, TRequestContext> RequestsInFlight;
     THashMap<ui64, TResponseContext> ResolveInFlight;
     THashMap<TString, TVersionedSecret> VersionedSecrets;

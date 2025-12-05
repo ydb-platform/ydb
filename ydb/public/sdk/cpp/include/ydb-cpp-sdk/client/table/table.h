@@ -1171,7 +1171,9 @@ using TAsyncScanQueryPartIterator = NThreading::TFuture<TScanQueryPartIterator>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TCreateSessionSettings : public TOperationRequestSettings<TCreateSessionSettings> {};
+struct TCreateSessionSettings : public TOperationRequestSettings<TCreateSessionSettings> {
+    FLUENT_SETTING_OPTIONAL(TDeadline, PropagatedDeadline);
+};
 
 using TBackoffSettings = NYdb::NRetry::TBackoffSettings;
 using TRetryOperationSettings = NYdb::NRetry::TRetryOperationSettings;
@@ -1263,6 +1265,7 @@ class TTableClient {
     friend class TSessionPool;
     friend class NRetry::Sync::TRetryContext<TTableClient, TStatus>;
     friend class NRetry::Async::TRetryContext<TTableClient, TAsyncStatus>;
+    friend class TCreateSessionResult;
 
 public:
     using TOperationFunc = std::function<TAsyncStatus(TSession session)>;
@@ -1931,6 +1934,8 @@ public:
     //! Returns session id
     const std::string& GetId() const;
 
+    const std::optional<TDeadline>& GetPropagatedDeadline() const;
+
     class TImpl;
 private:
     TSession(std::shared_ptr<TTableClient::TImpl> client, const std::string& sessionId, const std::string& endpointId, bool isOwnedBySessionPool);
@@ -2283,6 +2288,7 @@ private:
 
 class TCreateSessionResult: public TStatus {
     friend class TSession::TImpl;
+    friend class TTableClient::TImpl;
 public:
     TCreateSessionResult(TStatus&& status, TSession&& session);
     TSession GetSession() const;

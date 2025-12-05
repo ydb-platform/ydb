@@ -123,19 +123,6 @@ def parallel_allure_test_description(
     else:
         logging.warning("iterations_table is empty, not adding to HTML")
 
-    recoverability_results = execution_result.recoverability_result
-    if recoverability_results:
-        recovered_iterations_table = __create_parallel_test_table(recoverability_results)
-        logging.info(f"iterations_table created, length: {len(recovered_iterations_table) if recovered_iterations_table else 0}")
-        if recovered_iterations_table:
-            html += f'''
-            <h3>Recovered Workload Iterations</h3>
-            {recovered_iterations_table}
-            '''
-            logging.info("Added recovered iterations table to description HTML")
-        else:
-            logging.warning("recovered_iterations_table is empty, not adding to HTML")
-
     allure.dynamic.description_html(html)
     allure.attach(html, "description.html", allure.attachment_type.HTML)
 
@@ -150,6 +137,7 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str
         str: HTML string containing the formatted results table
     """
     table_html = """
+    <div>
     <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
         <tr style='background-color: #f0f0f0;'>
             <th>Stress type</th>
@@ -166,13 +154,11 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str
 
     # For each host, take the first node as representative
     unique_hosts = sorted(all_nodes)
-    # Add combined columns for each host
-    if unique_hosts:
-        for host in unique_hosts:
-            table_html += f'<th>{host.split('.')[0]}</th>'
-    else:
-        # If no nodes, add aggregated columns
-        table_html += '<th>Aggregated</th>'
+    for host in unique_hosts:
+        table_html += f'<th>{host.split('.')[0]}</th>'
+    if execution_result.recoverability_result:
+        table_html += '<th>Recovered</th>'
+
     logging.info(f"unique_hosts: {unique_hosts}")
 
     table_html += """
@@ -201,14 +187,28 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str
                 elif host_successes != host_total:
                     color = "#fff4cc"
                 table_html += f'<td style="background-color: {color};">{host_successes}/{host_total}</td>'
+
+        if execution_result.recoverability_result:
+            result_for_util = execution_result.recoverability_result[stress_name]
+            color = '#ccffcc'
+            text = 'Recovered'
+            if result_for_util.get_successful_runs() == 0:
+                color = "#ffcccc"
+                text = 'All failed'
+            else:
+                color = "#fff4cc"
+                text = 'Some failed'
+            table_html += f'<td style="background-color: {color};">{text}</td>'
+
         table_html += '</tr>'
+    table_html += '</table></div>'
 
     return table_html
 
 
 def __set_nemesis_dashboard(test_info: dict[str, str], start_time: float, end_time: float) -> None:
-    monitoring_start = int((start_time-120) * 1000)
-    monitoring_end = int((end_time+120) * 1000)
+    monitoring_start = int((start_time - 120) * 1000)
+    monitoring_end = int((end_time + 120) * 1000)
     # monitoring does not show intervals less 1 minute.
     monitoring_addition = 60000 - (monitoring_end - monitoring_start)
     if monitoring_addition > 0:

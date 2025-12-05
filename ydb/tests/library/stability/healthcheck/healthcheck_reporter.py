@@ -6,6 +6,7 @@ import time
 import traceback
 import requests
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from ydb.tests.library.stability.utils.utils import unpack_resource
 
 
@@ -38,16 +39,33 @@ class HealthCheckReporter():
 
     def __execute_healthcheck(self):
         results = {}
-        for host in self.hosts:
+
+        def run_healthcheck_for_host(host):
             try:
                 cmd = [f'{self.ydb_path}', '--endpoint', f'grpc://{host}:2135', 'monitoring', 'healthcheck', '--format', 'json']
-                result = subprocess.run(cmd, check=True, text=True, capture_output=True, timeout=60)
-                results[host] = json.loads(result.stdout)
+                result = subprocess.run(cmd, check=True, text=True, capture_output=True, timeout=15)
+                return host, json.loads(result.stdout)
             except Exception:
-                logging.error(f"Failed to execute healthcheck for {host}: {traceback.format_exc()}")
-                results[host] = {
+                logging.error(f"Unexpected error during healthcheck for {host}: {traceback.format_exc()}")
+                return host, {
                     'self_check_result': 'HC_REQUEST_ERROR'
                 }
+
+        max_workers = min(len(self.hosts), 10)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_host = {executor.submit(run_healthcheck_for_host, host): host for host in self.hosts}
+
+            for future in as_completed(future_to_host):
+                try:
+                    host, result = future.result(timeout=20)
+                    results[host] = result
+                except Exception:
+                    host = future_to_host[future]
+                    logging.error(f"Failed to retrieve result for healthcheck on {host}: {traceback.format_exc()}")
+                    results[host] = {
+                        'self_check_result': 'HC_RESULT_ERROR'
+                    }
+
         return results
 
     def __publish_healthcheck_results(self, results):

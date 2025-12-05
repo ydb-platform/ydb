@@ -21,10 +21,11 @@ namespace NKikimr::NBlobDepot {
             Bucket = settings->GetSettings().GetBucket();
             SyncMode = settings->HasSyncMode();
             AsyncMode = settings->HasAsyncMode();
-            RunScannerActor();
+            Enabled = true;
         } else {
             SyncMode = false;
             AsyncMode = false;
+            Enabled = false;
         }
     }
 
@@ -45,6 +46,12 @@ namespace NKikimr::NBlobDepot {
             fFunc(TEvPrivate::EvDeleteResult, HandleDeleter)
             fFunc(TEvPrivate::EvScanFound, HandleScanner)
         )
+    }
+
+    void TS3Manager::OnDataLoaded() {
+        if (Enabled) {
+            RunScannerActor();
+        }
     }
 
     void TBlobDepot::InitS3Manager() {

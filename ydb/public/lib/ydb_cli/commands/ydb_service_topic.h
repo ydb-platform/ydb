@@ -110,6 +110,11 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui32> MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
         TMaybe<ui32> PartitionWriteSpeedKbps_;
+        TMaybe<bool> KeepMessagesOrder_;
+        TMaybe<TDuration> DefaultProcessingTimeout_;
+        TMaybe<ui32> DlqMaxProcessingAttempts_;
+        TMaybe<bool> DlqEnabled_;
+        TMaybe<TString> DlqQueueName_;
 
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };
@@ -144,6 +149,12 @@ namespace NYdb::NConsoleClient {
         bool IsImportant_;
         TMaybe<TDuration> AvailabilityPeriod_;
         TMaybe<TInstant> StartingMessageTimestamp_;
+        TString ConsumerType_;
+        TMaybe<bool> KeepMessagesOrder_;
+        TMaybe<TDuration> DefaultProcessingTimeout_;
+        TMaybe<ui32> DlqMaxProcessingAttempts_;
+        TMaybe<bool> DlqEnabled_;
+        TMaybe<TString> DlqQueueName_;
     };
 
     class TCommandTopicConsumerDrop: public TYdbCommand, public TCommandWithTopicName {

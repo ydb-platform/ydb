@@ -1,0 +1,16 @@
+{
+    "typeCheckingMode": "off",
+    "pythonVersion": "3.12",
+    "reportMissingImports": "warning",
+    "reportUndefinedVariable": "error",
+    "extraPaths": [
+        "/home/kuzin57/git/ydb",
+        "/home/kuzin57/git/ydb/contrib/python/Jinja2/py3",
+        "/home/kuzin57/git/ydb/contrib/python/MarkupSafe/py3",
+        "/home/kuzin57/git/ydb/contrib/tools/python3/Lib",
+        "/home/kuzin57/git/ydb/contrib/tools/python3/Modules/_sqlite",
+        "/home/kuzin57/git/ydb/contrib/tools/python3/lib2/py",
+        "/home/kuzin57/git/ydb/library/python/runtime_py3",
+        "/home/kuzin57/git/ydb/library/python/symbols/module"
+    ]
+}

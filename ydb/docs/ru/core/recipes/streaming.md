@@ -20,7 +20,13 @@
   * если вы запускаете {{ ydb-short-name }} через docker, то передайте флаги в `docker run`:
 
     ```bash
-    docker run -d --rm --name ydb-local -h localhost   --platform linux/amd64   -p 2135:2135 -p 2136:2136 -p 8765:8765 -p 9092:9092   -v $(pwd)/ydb_certs:/ydb_certs    -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765   -e YDB_KAFKA_PROXY_PORT=9092 -e YDB_FEATURE_FLAGS=enable_external_data_sources,enable_streaming_queries ydbplatform/local-ydb:trunk
+    docker run -d --rm --name ydb-local -h localhost \
+      --platform linux/amd64 \
+      -p 2135:2135 -p 2136:2136 -p 8765:8765 -p 9092:9092 \
+      -v $(pwd)/ydb_certs:/ydb_certs \
+      -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
+      -e YDB_FEATURE_FLAGS=enable_external_data_sources,enable_streaming_queries \
+      ydbplatform/local-ydb:trunk
     ```
 
   * если вы запускаете {{ ydb-short-name }} через `local_ydb`, то передайте флаги в `deploy`:

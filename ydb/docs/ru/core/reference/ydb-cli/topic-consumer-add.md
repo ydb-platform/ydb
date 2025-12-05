@@ -32,7 +32,7 @@
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-#### Создайте читателя с именем `my-consumer` для [созданного ранее](topic-create.md) топика `my-topic`, чтение начнется с первого сообщения, полученного после 15 августа 2022 13:00:00 GMT
+### Создайте читателя с именем `my-consumer` для [созданного ранее](topic-create.md) топика `my-topic`, чтение начнется с первого сообщения, полученного после 15 августа 2022 13:00:00 GMT
 
 ```bash
 {{ ydb-cli }} -p quickstart topic consumer add \

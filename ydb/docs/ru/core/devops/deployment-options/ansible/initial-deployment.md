@@ -270,7 +270,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 Создайте файл `ansible_vault_password_file` с содержимым:
 
-```
+```text
 password
 ```
 

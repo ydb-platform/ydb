@@ -28,13 +28,13 @@ void TCommandClusterStateFetch::Config(TConfig& config) {
     TYdbReadOnlyCommand::Config(config);
     config.SetFreeArgsNum(0);
     config.Opts->AddLongOption("duration",
-        "Total time in seconds during which metrics should be collected on the server.\n"
+        "Total time in seconds during which metrics should be collected on the server."
         "Defines how long the server-side node will keep polling other nodes. "
         "If --period is unset or zero, only one snapshot is collected and the server waits up to --duration for all responses.")
     .DefaultValue(60)
         .OptionalArgument("NUM").StoreResult(&DurationSeconds);
     config.Opts->AddLongOption("period",
-        "Interval in seconds between metric collections during the --duration period.\n"
+        "Interval in seconds between metric collections during the --duration period."
         "If set to zero or omitted, only a single collection is done.")
     .DefaultValue(0)
         .OptionalArgument("NUM").StoreResult(&PeriodSeconds);

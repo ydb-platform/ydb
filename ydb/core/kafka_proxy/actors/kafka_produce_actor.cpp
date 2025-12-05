@@ -757,18 +757,19 @@ void TKafkaProduceActor::SendWriteRequest(const TProduceRequestData::TTopicProdu
     auto& result = pendingRequest->Results[position];
     if (OK == writer.first) {
         auto ownCookie = ++Cookie;
-        auto& cookieInfo = Cookies[ownCookie];
-        cookieInfo.TopicPath = topicPath;
-        cookieInfo.PartitionId = partitionId;
-        cookieInfo.Position = position;
-        cookieInfo.RuPerRequest = ruPerRequest;
-        cookieInfo.Request = pendingRequest;
-
-        pendingRequest->WaitAcceptingCookies.insert(ownCookie);
-        pendingRequest->WaitResultCookies.insert(ownCookie);
 
         auto [error, ev] = Convert(transactionalId.GetOrElse(""), partitionData, topicPath, ownCookie, ClientDC, ruPerRequest);
         if (error == EKafkaErrors::NONE_ERROR) {
+            auto& cookieInfo = Cookies[ownCookie];
+            cookieInfo.TopicPath = topicPath;
+            cookieInfo.PartitionId = partitionId;
+            cookieInfo.Position = position;
+            cookieInfo.RuPerRequest = ruPerRequest;
+            cookieInfo.Request = pendingRequest;
+
+            pendingRequest->WaitAcceptingCookies.insert(ownCookie);
+            pendingRequest->WaitResultCookies.insert(ownCookie);
+
             ruPerRequest = false;
             KAFKA_LOG_T("Sending TEvPartitionWriter::TEvWriteRequest to " << writer.second << " with cookie " << ownCookie);
             Send(writer.second, std::move(ev));

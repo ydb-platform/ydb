@@ -41,7 +41,7 @@ void TCommandClusterStateFetch::Config(TConfig& config) {
     config.Opts->AddLongOption('o', "output", "Path to the output .tar.bz2 file")
     .DefaultValue("out.tar.bz2")
         .OptionalArgument("PATH").StoreResult(&FileName);
-    config.Opts->AddLongOption("no-sanitize", "Disable sanitization and preserve sensitive data in the output, including table names,\n"
+    config.Opts->AddLongOption("no-sanitize", "Disable sanitization and preserve sensitive data in the output, including table names, "
         "authentication information, and other personally identifiable information")
         .StoreTrue(&NoSanitize);
     config.AllowEmptyDatabase = true;

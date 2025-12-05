@@ -96,10 +96,10 @@ ydb scheme rmdir -r .backups/collections/production_backups/20250209141519Z_incr
 
 ### Best Practices
 
-For detailed guidance on backup collection best practices, see the [Backup collection recipes](../../recipes/backup-collections/index.md):
+For detailed guidance on backup collection best practices, see the [Backup collection recipes](../../recipes/backup-collections/index):
 
-- [Exporting to external storage](../../recipes/backup-collections/exporting-to-external-storage.md) — disaster recovery with S3 or filesystem
-- [Maintenance and cleanup](../../recipes/backup-collections/maintenance-and-cleanup.md) — managing storage and backup chains
-- [Validation and testing](../../recipes/backup-collections/validation-and-testing.md) — verifying backup integrity
+- [Exporting to external storage](../../recipes/backup-collections/exporting-to-external-storage) — disaster recovery with S3 or filesystem
+- [Maintenance and cleanup](../../recipes/backup-collections/maintenance-and-cleanup) — managing storage and backup chains
+- [Validation and testing](../../recipes/backup-collections/validation-and-testing) — verifying backup integrity
 
 {% endcut %}

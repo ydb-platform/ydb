@@ -170,7 +170,7 @@ During the restore operation, target tables are placed in an `EPathStateIncoming
 ## See Also
 
 - [Backup and Recovery guide](../../devops/backup-and-recovery/index.md#backup-collections): Practical operations guide
-- [Recipes and examples](../../recipes/backup-collections/index.md): Common scenarios and examples
+- [Recipes and examples](../../recipes/backup-collections/index): Common scenarios and examples
 - YQL reference:
   - [CREATE BACKUP COLLECTION](../../yql/reference/syntax/create-backup-collection.md)
   - [BACKUP](../../yql/reference/syntax/backup.md)

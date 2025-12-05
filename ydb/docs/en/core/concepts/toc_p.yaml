@@ -1,26 +1,2 @@
 items:
-- name: Concepts
-  href: concepts/index.md
-  include:
-    mode: link
-    path: concepts/toc_p.yaml
-- name: Cluster configuration management
-  href: configuration-management/index.md
-  include:
-    mode: link
-    path: configuration-management/toc_p.yaml
-- name: Deployment options
-  href: deployment-options/index.md
-  include:
-    mode: link
-    path: deployment-options/toc_p.yaml
-- name: Observability
-  href: observability/index.md
-  include:
-    mode: link
-    path: observability/toc_p.yaml
-- name: Backup and recovery
-  href: backup-and-recovery/index.md
-  include:
-    mode: link
-    path: backup-and-recovery/toc_p.yaml
+- include: { mode: link, path: toc_i.yaml }

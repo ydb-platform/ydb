@@ -10,8 +10,8 @@ Different types of activities (background operations, [TTL](../../concepts/ttl.m
 | Queue name                | CPU | Memory | Description                                         |
 |---------------------------| --- | --- |----------------------------------------------------|
 | `queue_ttl`               | 2 | — | [TTL](../../concepts/ttl.md) data deletion operations.                |
-| `queue_backup`            | 2 | — | [Backup](../../devops/backup-and-recovery.md#s3) operations.                |
-| `queue_restore`           | 2 | — | [Restore from backup](../../devops/backup-and-recovery.md#s3) operations.     |
+| `queue_backup`            | 2 | — | [Backup](../../devops/backup-and-recovery/index.md#s3) operations.                |
+| `queue_restore`           | 2 | — | [Restore from backup](../../devops/backup-and-recovery/index.md#s3) operations.     |
 | `queue_build_index`       | 10 | — | [Online secondary index creation](../../concepts/secondary_indexes.md#index-add) operations.   |
 | `queue_cdc_initial_scan` | 4 | — | [Initial table scan](../../concepts/cdc.md#initial-scan) operations.             |
 

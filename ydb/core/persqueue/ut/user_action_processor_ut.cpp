@@ -767,7 +767,7 @@ void TUserActionProcessorFixture::SendRollbackTx(ui64 step, ui64 txId)
 
 void TUserActionProcessorFixture::WaitCommitTxDone(const TCommitTxDoneMatcher& matcher)
 {
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxCommitDone>();
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxDone>();
     UNIT_ASSERT(event != nullptr);
 
     if (matcher.Step) {

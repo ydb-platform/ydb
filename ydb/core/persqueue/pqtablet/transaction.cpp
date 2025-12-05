@@ -359,7 +359,7 @@ void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
     }
 }
 
-void TDistributedTransaction::OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event)
+void TDistributedTransaction::OnTxDone(const TEvPQ::TEvTxDone& event)
 {
     TX_ENSURE(Step == event.Step);
     TX_ENSURE(TxId == event.TxId);
@@ -411,7 +411,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
                                           EState state)
 {
     auto tx = Serialize(state);
-    PQ_LOG_TX_D("save tx " << tx.ShortDebugString());
+    PQ_LOG_TX_D("Save tx " << tx.ShortDebugString());
 
     TString value;
     TX_ENSURE(tx.SerializeToString(&value));

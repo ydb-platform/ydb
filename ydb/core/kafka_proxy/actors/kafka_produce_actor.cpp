@@ -154,7 +154,7 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
             if (!Context->RequireAuthentication || info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *Context->UserToken)) {
                 topic.Status = OK;
                 topic.ExpirationTime = now + TOPIC_OK_EXPIRATION_INTERVAL;
-                topic.PartitionChooser = CreatePartitionChooser(info.PQGroupInfo->Description);
+                topic.PartitionChooser = info.PQGroupInfo->PartitionChooser;
             } else {
                 KAFKA_LOG_W("Produce actor: Unauthorized PRODUCE to topic '" << topicPath << "'");
                 topic.Status = UNAUTHORIZED;
@@ -433,11 +433,11 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr request,
         auto sender = request->Sender;
 
         if (WriterDied(sender, EKafkaErrors::UNKNOWN_SERVER_ERROR, request->Get()->GetError().Reason)) {
-            KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvDisconnected for " << sender);
+            KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvInitResult for " << sender << " with error: " << request->Get()->GetError().Reason);
             return;
         }
-    
-        KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvDisconnected with unexpected writer " << sender);
+
+        KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvInitResult with unexpected writer " << sender);
     }
 }
 

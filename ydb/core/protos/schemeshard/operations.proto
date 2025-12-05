@@ -208,5 +208,9 @@ enum EOperationType {
     ESchemeOpDropStreamingQuery = 131;
     ESchemeOpAlterStreamingQuery = 132;
 
+    // TestShard
+    ESchemeOpCreateTestShard = 133;
+    ESchemeOpDropTestShard = 134;
+
     // Some entries are grouped by semantics, so are out of order
 }

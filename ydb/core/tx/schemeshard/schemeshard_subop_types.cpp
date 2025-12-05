@@ -84,6 +84,7 @@ bool IsCreate(ETxType t) {
         case TxCreateLongIncrementalBackupOp:
         case TxCreateSecret:
         case TxCreateStreamingQuery:
+        case TxCreateTestShard:
             return true; // IsCreate
         case TxIncrementalRestoreFinalize:
             return false; // IsCreate
@@ -128,6 +129,7 @@ bool IsCreate(ETxType t) {
         case TxDropSysView:
         case TxDropStreamingQuery:
         case TxDropSecret:
+        case TxDropTestShard:
             return false; // IsCreate
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -216,6 +218,7 @@ bool IsDrop(ETxType t) {
         case TxDropSysView:
         case TxDropSecret:
         case TxDropStreamingQuery:
+        case TxDropTestShard:
             return true; // IsDrop
         case TxIncrementalRestoreFinalize:
             return false; // IsDrop
@@ -262,6 +265,7 @@ bool IsDrop(ETxType t) {
         case TxCreateLongIncrementalBackupOp:
         case TxCreateSecret:
         case TxCreateStreamingQuery:
+        case TxCreateTestShard:
             return false; // IsDrop
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -341,6 +345,7 @@ bool CanDeleteParts(ETxType t) {
         case TxDropBlobDepot:
         case TxDropContinuousBackup:
         case TxDropBackupCollection:
+        case TxDropTestShard:
             return true; // CanDeleteParts
         case TxDropTableIndex:
         case TxRmDir:
@@ -394,6 +399,7 @@ bool CanDeleteParts(ETxType t) {
         case TxCreateSecret:
         case TxDropSecret:
         case TxCreateStreamingQuery:
+        case TxCreateTestShard:
             return false; // CanDeleteParts
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -573,6 +579,8 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery: return TxCreateStreamingQuery;
         case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery: return TxAlterStreamingQuery;
         case NKikimrSchemeOp::ESchemeOpDropStreamingQuery: return TxDropStreamingQuery;
+        case NKikimrSchemeOp::ESchemeOpCreateTestShard: return TxCreateTestShard;
+        case NKikimrSchemeOp::ESchemeOpDropTestShard: return TxDropTestShard;
 
         // no matching tx-type
         case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:

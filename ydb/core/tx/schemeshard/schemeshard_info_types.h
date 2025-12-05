@@ -3,7 +3,7 @@
 #include "olap/schema/schema.h"
 #include "olap/schema/update.h"
 #include "schemeshard_identificators.h"
-#include "schemeshard_info_types_helper.h"
+#include "schemeshard_info_types_helpers.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_schema.h"
 #include "schemeshard_tx_infly.h"

@@ -17,11 +17,13 @@ PY3TEST()
 
     PEERDIR (
         ydb/tests/library/stability
+        ydb/tests/stress/common
     )
 
     IF(NOT NOT_INCLUDE_CLI)
         DEPENDS (
             ydb/apps/ydb
+            ydb/tests/stress/backup
             ydb/tests/stress/simple_queue
             ydb/tests/stress/topic
             ydb/tests/stress/log

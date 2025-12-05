@@ -288,7 +288,7 @@ public:
             } else {
                 dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
             }
-        } catch(std::exception& ex) {
+        } catch (std::exception& ex) {
             dataRequestFuture = NThreading::MakeFuture(NSo::TGetDataResponse(TString(ex.what())));
         }
 
@@ -512,7 +512,7 @@ private:
             } else {
                 dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
             }
-        } catch(std::exception& ex) {
+        } catch (std::exception& ex) {
             dataRequestFuture = NThreading::MakeFuture(NSo::TGetDataResponse(TString(ex.what())));
         }
 

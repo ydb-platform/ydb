@@ -3718,8 +3718,6 @@ public:
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
-        indexInfo->TargetName = row.template GetValueOrDefault<Schema::IndexBuild::TargetName>(indexInfo->TargetName);
-
         indexInfo->CancelRequested =
             row.template GetValueOrDefault<Schema::IndexBuild::CancelRequest>(false);
         if (row.template HaveValue<Schema::IndexBuild::UserSID>()) {

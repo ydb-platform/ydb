@@ -4712,16 +4712,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     });
 
                     if (buildInfo->IsBuildColumns()) {
-                        // prevent build columns from progress if adding columns with defaults is not enabled
-                        if (!Self->EnableAddColumsWithDefaults) {
-                            buildInfo->IsBroken = true;
-                            buildInfo->AddIssue(TStringBuilder() << "Adding columns with defaults is disabled");
-                        }
-
                         if (!Self->PathsById.contains(buildInfo->TablePathId)) {
                             buildInfo->IsBroken = true;
                             buildInfo->AddIssue(TStringBuilder() << "Table path id not found: " << buildInfo->TablePathId.ToString());
                         }
+
+                        buildInfo->TargetName = TPath::Init(buildInfo->TablePathId, Self).PathString();
                     }
 
                     // prevent build index from progress

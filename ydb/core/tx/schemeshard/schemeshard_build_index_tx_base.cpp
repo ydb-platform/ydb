@@ -309,7 +309,6 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             Y_ENSURE(false, InvalidIndexType(info.IndexType));
         }
     } else if (info.IsBuildColumns()) {
-        settings.set_source_path(info.TargetName);
         for (const auto& column : info.BuildColumns) {
             auto* columnProto = settings.mutable_column_build_operation()->add_column();
             columnProto->SetColumnName(column.ColumnName);

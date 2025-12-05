@@ -1374,8 +1374,6 @@ struct Schema : NIceDb::Schema {
         struct IndexName : Column<7, NScheme::NTypeIds::Utf8> {};
         struct IndexType : Column<8, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexType; };
 
-        struct TargetName : Column<50, NScheme::NTypeIds::Utf8> {};
-
         struct State : Column<9, NScheme::NTypeIds::Uint32> {};
         struct SubState : Column<49, NScheme::NTypeIds::Uint32> {};
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
@@ -1488,8 +1486,7 @@ struct Schema : NIceDb::Schema {
             DropColumnsTxId,
             DropColumnsTxStatus,
             DropColumnsTxDone,
-            SubState,
-            TargetName
+            SubState
         >;
     };
 

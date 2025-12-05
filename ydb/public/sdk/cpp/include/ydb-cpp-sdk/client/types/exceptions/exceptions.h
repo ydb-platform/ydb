@@ -12,6 +12,11 @@ public:
     TYdbException(const std::string& reason);
 };
 
+class TAuthenticationError : public TYdbException {
+public:
+    TAuthenticationError(const std::string& reason);
+};
+
 class TContractViolation : public TYdbException {
 public:
     TContractViolation(const std::string& reason);

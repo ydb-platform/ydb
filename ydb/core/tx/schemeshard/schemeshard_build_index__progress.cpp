@@ -1503,6 +1503,10 @@ private:
         return true;
     }
 
+    bool CanProgressBuilding(const TIndexBuildInfo& buildInfo) const {
+        return !buildInfo.IsBuildColumns() || Self->EnableAddColumsWithDefaults;
+    }
+
 public:
     explicit TTxProgress(TSelf* self, TIndexBuildId buildId)
         : TTxBase(self, buildId, TXTYPE_PROGRESS_INDEX_BUILD)
@@ -1541,6 +1545,7 @@ public:
             }
             break;
         case TIndexBuildInfo::EState::AlterMainTable:
+            Y_ENSURE(buildInfo.IsBuildColumns());
             if (buildInfo.AlterMainTableTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.AlterMainTableTxStatus == NKikimrScheme::StatusSuccess) {
@@ -1574,15 +1579,20 @@ public:
 
             break;
         case TIndexBuildInfo::EState::Filling: {
-            if (buildInfo.IsCancellationRequested() || FillIndex(txc, buildInfo)) {
-                auto cancelState = buildInfo.IsBuildColumns()
-                    ? TIndexBuildInfo::EState::Cancellation_DroppingColumns
-                    : TIndexBuildInfo::EState::Cancellation_Applying;
+            if (!CanProgressBuilding(buildInfo) || buildInfo.IsCancellationRequested() || FillIndex(txc, buildInfo)) {
+                auto nextState = TIndexBuildInfo::EState::Applying;
+                if (!CanProgressBuilding(buildInfo)) {
+                    Y_ENSURE(buildInfo.IsBuildColumns());
+                    buildInfo.AddIssue(TStringBuilder() << "Adding columns with defaults is disabled");
+                    nextState = TIndexBuildInfo::EState::Rejection_DroppingColumns;
+                } else if (buildInfo.IsCancellationRequested()) {
+                    nextState = buildInfo.IsBuildColumns()
+                        ? TIndexBuildInfo::EState::Cancellation_DroppingColumns
+                        : TIndexBuildInfo::EState::Cancellation_Applying;
+                }
 
                 ClearAfterFill(ctx, buildInfo);
-                ChangeState(BuildId, buildInfo.IsCancellationRequested()
-                                         ? cancelState
-                                         : TIndexBuildInfo::EState::Applying);
+                ChangeState(BuildId, nextState);
                 Progress(BuildId);
 
                 // make final bill
@@ -1715,6 +1725,7 @@ public:
             // stay calm keep status/issues
             break;
         case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
+            Y_ENSURE(buildInfo.IsBuildColumns());
             if (buildInfo.DropColumnsTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.DropColumnsTxStatus == NKikimrScheme::StatusSuccess) {
@@ -1755,6 +1766,7 @@ public:
             // stay calm keep status/issues
             break;
         case TIndexBuildInfo::EState::Rejection_DroppingColumns:
+            Y_ENSURE(buildInfo.IsBuildColumns());
             if (buildInfo.DropColumnsTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.DropColumnsTxStatus == NKikimrScheme::StatusSuccess) {

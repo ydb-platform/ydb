@@ -481,248 +481,6 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
                             NLs::CheckColumns("Table", {"key", "value", columnName}, {columnName}, {"key"}, true)});
     }
 
-    Y_UNIT_TEST(DisableFlag) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
-
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "Table"
-              Columns { Name: "key"     Type: "Uint32" }
-              Columns { Name: "value"   Type: "Utf8"   }
-              KeyColumnNames: ["key"]
-              UniformPartitionsCount: 10
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-
-        const TString columnName = "default_value";
-        Ydb::TypedValue columnDefaultValue;
-        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT32);
-        columnDefaultValue.mutable_value()->set_uint32_value(10);
-
-        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> blocker(runtime, [&](auto&) {
-            return true;
-        });
-
-        const ui64 buildIndexTx = ++txId;
-        AsyncBuildColumn(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", columnName, columnDefaultValue);
-
-        runtime.WaitFor("block", [&]{ return blocker.size(); });
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
-        }
-
-        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
-        }
-
-        blocker.Stop().Unblock();
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
-        }
-    }
-
-    Y_UNIT_TEST(DisableAndEnableFlag_BaseCase) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
-
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "Table"
-              Columns { Name: "key"     Type: "Uint32" }
-              Columns { Name: "value"   Type: "Utf8"   }
-              KeyColumnNames: ["key"]
-              UniformPartitionsCount: 10
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-
-        const TString columnName = "default_value";
-        Ydb::TypedValue columnDefaultValue;
-        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT32);
-        columnDefaultValue.mutable_value()->set_uint32_value(10);
-
-        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> blocker(runtime, [&](auto&) {
-            return true;
-        });
-
-        const ui64 buildIndexTx = ++txId;
-        AsyncBuildColumn(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", columnName, columnDefaultValue);
-
-        runtime.WaitFor("block", [&]{ return blocker.size(); });
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
-        }
-
-        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
-        }
-
-        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(true);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
-        blocker.Stop().Unblock();
-
-        env.TestWaitNotification(runtime, buildIndexTx);
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
-        }
-
-        TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table"),
-                           {NLs::PathExist,
-                            NLs::IndexesCount(0),
-                            NLs::PathVersionEqual(6),
-                            NLs::CheckColumns("Table", {"key", "value", columnName}, {}, {"key"}, true)});
-    }
-
-    Y_UNIT_TEST(DisableAndEnableFlag_Cancel) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
-
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "Table"
-              Columns { Name: "key"     Type: "Uint32" }
-              Columns { Name: "value"   Type: "Utf8"   }
-              KeyColumnNames: ["key"]
-              UniformPartitionsCount: 10
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-
-        const TString columnName = "default_value";
-        Ydb::TypedValue columnDefaultValue;
-        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT32);
-        columnDefaultValue.mutable_value()->set_uint32_value(10);
-
-        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> blocker(runtime, [&](auto&) {
-            return true;
-        });
-
-        const ui64 buildIndexTx = ++txId;
-        AsyncBuildColumn(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", columnName, columnDefaultValue);
-
-        runtime.WaitFor("block", [&]{ return blocker.size(); });
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: NO");
-        }
-
-        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: NO");
-        }
-
-        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: YES");
-        }
-
-        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(true);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
-        env.TestWaitNotification(runtime, buildIndexTx);
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: YES");
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(blocker.size(), 2);
-
-        TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table"),
-                           {NLs::PathExist,
-                            NLs::IndexesCount(0),
-                            NLs::PathVersionEqual(7),
-                            NLs::CheckColumns("Table", {"key", "value", columnName}, {columnName}, {"key"}, true)});
-    }
-
     Y_UNIT_TEST(Locking_Failed) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
@@ -740,15 +498,15 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        const TString columnName = "default_value";
-        Ydb::TypedValue columnDefaultValue;
-        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
-        columnDefaultValue.mutable_value()->set_uint64_value(10);
-
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](const auto& ev) {
             const auto& tx = ev->Get()->Record.GetTransaction(0);
             return tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock;
         });
+
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
 
         ui64 buildIndexTx = ++txId;
         AsyncBuildColumn(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
@@ -770,6 +528,77 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             UNIT_ASSERT(event);
             UNIT_ASSERT_VALUES_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST, event->Record.DebugString());
         }
+    }
+
+    Y_UNIT_TEST(Locking_DisableFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+
+        ui64 txId = 100;
+        ui64 tenantSchemeShard = 0;
+
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"     Type: "Uint32" }
+            Columns { Name: "value"   Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](const auto& ev) {
+            const auto& tx = ev->Get()->Record.GetTransaction(0);
+            return tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock;
+        });
+
+        bool rejectionApplying = false;
+        bool rejectionDroppingColumns = false;
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> rejectionDetector(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
+                rejectionDroppingColumns = true;
+            } else if (rejectionDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                rejectionApplying = true;
+            }
+            return false;
+        });
+
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
+
+        AsyncBuildColumn(runtime, txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
+
+        runtime.WaitFor("block", [&]{ return blocker.size(); });
+
+        // Disable the flag
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        blocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        rejectionDetector.Stop().Unblock();
+
+        // We have to skip Rejection_Applying state because Initiating not started
+        UNIT_ASSERT_C(!rejectionApplying, "There was Rejection_Applying state");
+        // We have to skip DroppingColumns state because AlterMainTable failed
+        UNIT_ASSERT_C(!rejectionDroppingColumns, "There was Rejection_DroppingColumns state");
+
+        {
+            // Lock operation does not know about DEFAULT columns, so reject will be from AlterMainTable
+            auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED, descr.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(descr.DebugString(), "Adding columns with defaults is disabled");
+        }
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(3),
+                            NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}, true)});
     }
 
     Y_UNIT_TEST(AlterMainTable_Failed) {
@@ -822,6 +651,86 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
                             NLs::CheckColumns("Table", {"key", "index", "value"}, {}, {"key"}, true)});
     }
 
+    Y_UNIT_TEST(AlterMainTable_DisableFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+
+        ui64 txId = 100;
+        ui64 tenantSchemeShard = 0;
+
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+              Name: "Table"
+              Columns { Name: "key"     Type: "Uint32" }
+              Columns { Name: "index"   Type: "Uint32" }
+              Columns { Name: "value"   Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(3),
+                            NLs::CheckColumns("Table", {"key", "index", "value"}, {}, {"key"}, true)});
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](const auto& ev) {
+            const auto& tx = ev->Get()->Record.GetTransaction(0);
+            return tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable;
+        });
+
+        bool rejectionApplying = false;
+        bool rejectionDroppingColumns = false;
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> rejectionDetector(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
+                rejectionDroppingColumns = true;
+            } else if (rejectionDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                rejectionApplying = true;
+            }
+            return false;
+        });
+
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
+
+        AsyncBuildColumn(runtime, txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
+
+        runtime.WaitFor("block", [&]{ return blocker.size(); });
+
+        // Disable the flag
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        blocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        rejectionDetector.Stop().Unblock();
+
+        // We have to skip Rejection_Applying state if Initiating not started
+        UNIT_ASSERT_C(!rejectionApplying, "There was Rejection_Applying state");
+        // We have to skip DroppingColumns state because AlterMainTable failed
+        UNIT_ASSERT_C(!rejectionDroppingColumns, "There was Rejection_DroppingColumns state");
+
+        {
+            auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED, descr.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(descr.DebugString(), "Adding columns with defaults is disabled");
+        }
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(3),
+                            NLs::CheckColumns("Table", {"key", "index", "value"}, {}, {"key"}, true)});
+    }
+
     Y_UNIT_TEST(Initiating_Failed) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
@@ -838,12 +747,6 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        const TString columnName = "default_value";
-        Ydb::TypedValue columnDefaultValue;
-        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
-        columnDefaultValue.mutable_value()->set_uint64_value(10);
-
 
         bool rejectionApplying = false;
         bool rejectionDroppingColumns = false;
@@ -862,6 +765,11 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             return false;
         });
 
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
+
         TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
@@ -874,6 +782,76 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
         UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED, descr.DebugString());
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(5),
+                            NLs::CheckColumns("Table", {"key", "value", columnName}, {columnName}, {"key"}, true)});
+    }
+
+    Y_UNIT_TEST(Initiating_DisableFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+
+        ui64 txId = 100;
+        ui64 tenantSchemeShard = 0;
+
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"     Type: "Uint32" }
+            Columns { Name: "value"   Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateColumnBuild;
+        });
+
+        bool rejectionApplying = false;
+        bool rejectionDroppingColumns = false;
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> rejectionDetector(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
+                rejectionDroppingColumns = true;
+            } else if (rejectionDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                rejectionApplying = true;
+            }
+            return false;
+        });
+
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
+
+        AsyncBuildColumn(runtime, txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
+
+        runtime.WaitFor("block", [&]{ return blocker.size(); });
+
+        // Disable the flag
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        blocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        rejectionDetector.Stop().Unblock();
+
+        // We have to skip Rejection_Applying state if Initiating failed
+        UNIT_ASSERT_C(!rejectionApplying, "There was Rejection_Applying state");
+        // We have to execute DroppingColumns (by Rejection_DroppingColumns) because AlterMainTable was successful
+        UNIT_ASSERT_C(rejectionDroppingColumns, "There was no Rejection_DroppingColumns state");
+
+        {
+            auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED, descr.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(descr.DebugString(), "Adding columns with defaults is disabled");
+        }
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
                            {NLs::PathExist,
@@ -899,11 +877,6 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        const TString columnName = "default_value";
-        Ydb::TypedValue columnDefaultValue;
-        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
-        columnDefaultValue.mutable_value()->set_uint64_value(10);
-
         TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> blocker(runtime, [&](auto& ev) {
             auto& record = ev->Get()->Record;
             record.SetTargetName("");
@@ -923,6 +896,11 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             return false;
         });
 
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
+
         TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
@@ -936,6 +914,75 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
         UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED, descr.DebugString());
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(7),
+                            NLs::CheckColumns("Table", {"key", "value", columnName}, {columnName}, {"key"}, true)});
+    }
+
+    Y_UNIT_TEST(Filling_DisableFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+
+        ui64 txId = 100;
+        ui64 tenantSchemeShard = 0;
+
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"     Type: "Uint32" }
+            Columns { Name: "value"   Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> blocker(runtime, [&](auto&) {
+            return true;
+        });
+
+        bool rejectionApplying = false;
+        bool rejectionDroppingColumns = false;
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> rejectionDetector(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
+                rejectionDroppingColumns = true;
+            } else if (rejectionDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                rejectionApplying = true;
+            }
+            return false;
+        });
+
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
+
+        AsyncBuildColumn(runtime, txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
+
+        runtime.WaitFor("block", [&]{ return blocker.size(); });
+
+        // Disable the flag
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        blocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        rejectionDetector.Stop().Unblock();
+
+        // We have to execute Applying (by Rejection_Applying) because Initiating was successful
+        UNIT_ASSERT_C(rejectionApplying, "There was no Rejection_Applying state");
+        // We have to execute DroppingColumns (by Rejection_DroppingColumns) because AlterMainTable was successful
+        UNIT_ASSERT_C(rejectionDroppingColumns, "There was no Rejection_DroppingColumns state");
+
+        {
+            auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED, descr.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(descr.DebugString(), "Adding columns with defaults is disabled");
+        }
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
                            {NLs::PathExist,
@@ -961,11 +1008,6 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        const TString columnName = "default_value";
-        Ydb::TypedValue columnDefaultValue;
-        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
-        columnDefaultValue.mutable_value()->set_uint64_value(10);
-
         bool rejectionApplying = false;
         bool rejectionDroppingColumns = false;
 
@@ -982,6 +1024,11 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             }
             return false;
         });
+
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
 
         TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
@@ -1003,7 +1050,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
                             NLs::CheckColumns("Table", {"key", "value", columnName}, {columnName}, {"key"}, true)});
     }
 
-    Y_UNIT_TEST(Unlocking_Failed) {
+    Y_UNIT_TEST(Applying_DisableFlag) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
 
@@ -1020,10 +1067,74 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild;
+        });
+
+        bool rejectionApplying = false;
+        bool rejectionDroppingColumns = false;
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> rejectionDetector(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
+                rejectionDroppingColumns = true;
+            } else if (rejectionDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                rejectionApplying = true;
+            }
+            return false;
+        });
+
         const TString columnName = "default_value";
         Ydb::TypedValue columnDefaultValue;
         columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
         columnDefaultValue.mutable_value()->set_uint64_value(10);
+
+        AsyncBuildColumn(runtime, txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
+
+        runtime.WaitFor("block", [&]{ return blocker.size(); });
+
+        // Disable the flag
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        blocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        rejectionDetector.Stop().Unblock();
+
+        UNIT_ASSERT_C(!rejectionApplying, "There was Rejection_Applying state");
+        UNIT_ASSERT_C(!rejectionDroppingColumns, "There was Rejection_DroppingColumns state");
+
+        {
+            // Applying operation cannot be rejected because it have to finalize the index building
+            // If it failed, Rejection_Applying will be skipped and the table will not be available
+            auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE, descr.DebugString());
+        };
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(6),
+                            NLs::CheckColumns("Table", {"key", "value", columnName}, {}, {"key"}, true)});
+    }
+
+    Y_UNIT_TEST(Unlocking_Failed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+
+        ui64 txId = 100;
+        ui64 tenantSchemeShard = 0;
+
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"     Type: "Uint32" }
+            Columns { Name: "value"   Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // First drop lock belongs to Unlocking stage, second to Rejection_Unlocking
         bool firstLock = true;
@@ -1045,6 +1156,11 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             return false;
         });
 
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
+
         TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
@@ -1063,5 +1179,293 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
                             NLs::IndexesCount(0),
                             NLs::PathVersionEqual(7),
                             NLs::CheckColumns("Table", {"key", "value", columnName}, {columnName}, {"key"}, true)});
+    }
+
+    Y_UNIT_TEST(Unlocking_DisableFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+
+        ui64 txId = 100;
+        ui64 tenantSchemeShard = 0;
+
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"     Type: "Uint32" }
+            Columns { Name: "value"   Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropLock;
+        });
+
+        bool rejectionApplying = false;
+        bool rejectionDroppingColumns = false;
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> rejectionDetector(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
+                rejectionDroppingColumns = true;
+            } else if (rejectionDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild) {
+                rejectionApplying = true;
+            }
+            return false;
+        });
+
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
+
+        AsyncBuildColumn(runtime, txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
+
+        runtime.WaitFor("block", [&]{ return blocker.size(); });
+
+        // Disable the flag
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        blocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        rejectionDetector.Stop().Unblock();
+
+        UNIT_ASSERT_C(!rejectionApplying, "There was Rejection_Applying state");
+        UNIT_ASSERT_C(!rejectionDroppingColumns, "There was Rejection_DroppingColumns state");
+
+        {
+            // Unlock operation does not know about DEFAULT columns, so no rejection will occur
+            auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE, descr.DebugString());
+        }
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(6),
+                            NLs::CheckColumns("Table", {"key", "value", columnName}, {}, {"key"}, true)});
+    }
+
+    Y_UNIT_TEST(Cancellation_DroppingColumns_DisableFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+
+        ui64 txId = 100;
+        ui64 tenantSchemeShard = 0;
+
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+              Name: "Table"
+              Columns { Name: "key"     Type: "Uint32" }
+              Columns { Name: "index"   Type: "Uint32" }
+              Columns { Name: "value"   Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+              UniformPartitionsCount: 10
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(3),
+                            NLs::CheckColumns("Table", {"key", "index", "value"}, {}, {"key"}, true)});
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        bool cancellationApplying = false;
+        bool cancellationDroppingColumns = false;
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> cancellationDetector(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
+                cancellationDroppingColumns = true;
+            } else if (cancellationDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                cancellationApplying = true;
+            }
+            return false;
+        });
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild;
+        });
+
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
+
+        ui64 buildIndexId = ++txId;
+        AsyncBuildColumn(runtime, buildIndexId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
+
+        auto request = CreateCancelBuildIndexRequest(++txId, "/MyRoot/ServerLessDB", buildIndexId);
+        ForwardToTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor(), request);
+
+        runtime.WaitFor("block", [&]{ return blocker.size(); });
+
+        // Disable the flag
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        blocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexId, tenantSchemeShard);
+        cancellationDetector.Stop().Unblock();
+
+        // We have to execute Applying (by Cancellation_Applying) because Initiating was successful
+        UNIT_ASSERT_C(cancellationApplying, "There was no Cancellation_Applying state");
+        // We have to execute DroppingColumns (by Cancellation_DroppingColumns) because AlterMainTable was successful
+        UNIT_ASSERT_C(cancellationDroppingColumns, "There was no Cancellation_DroppingColumns state");
+
+        {
+            // If operation is cancelled, it does not matter if the flag is disabled or enabled
+            auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId);
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED, descr.DebugString());
+        }
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(7),
+                            NLs::CheckColumns("Table", {"key", "index", "value", columnName}, {columnName}, {"key"}, true)});
+    }
+
+    Y_UNIT_TEST(Cancellation_Applying_DisableFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+
+        ui64 txId = 100;
+        ui64 tenantSchemeShard = 0;
+
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+              Name: "Table"
+              Columns { Name: "key"     Type: "Uint32" }
+              Columns { Name: "index"   Type: "Uint32" }
+              Columns { Name: "value"   Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+              UniformPartitionsCount: 10
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(3),
+                            NLs::CheckColumns("Table", {"key", "index", "value"}, {}, {"key"}, true)});
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        bool cancellationApplying = false;
+        bool cancellationDroppingColumns = false;
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> cancellationDetector(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
+                cancellationDroppingColumns = true;
+            } else if (cancellationDroppingColumns && modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild) {
+                cancellationApplying = true;
+            }
+            return false;
+        });
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCancelIndexBuild;
+        });
+
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
+
+        ui64 buildIndexId = ++txId;
+        AsyncBuildColumn(runtime, buildIndexId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
+
+        auto request = CreateCancelBuildIndexRequest(++txId, "/MyRoot/ServerLessDB", buildIndexId);
+        ForwardToTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor(), request);
+
+        runtime.WaitFor("block", [&]{ return blocker.size(); });
+
+        // Disable the flag
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        blocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexId, tenantSchemeShard);
+        cancellationDetector.Stop().Unblock();
+
+        // We have to execute Applying (by Cancellation_Applying) because Initiating was successful
+        UNIT_ASSERT_C(cancellationApplying, "There was no Cancellation_Applying state");
+        // We have to execute DroppingColumns (by Cancellation_DroppingColumns) because AlterMainTable was successful
+        UNIT_ASSERT_C(cancellationDroppingColumns, "There was no Cancellation_DroppingColumns state");
+
+        {
+            // If operation is cancelled, it does not matter if the flag is disabled or enabled
+            auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId);
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED, descr.DebugString());
+        }
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(7),
+                            NLs::CheckColumns("Table", {"key", "index", "value", columnName}, {columnName}, {"key"}, true)});
+    }
+
+    Y_UNIT_TEST(DisabledAndEnabledFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(false));
+
+        ui64 txId = 100;
+        ui64 tenantSchemeShard = 0;
+
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"     Type: "Uint32" }
+            Columns { Name: "value"   Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        const TString columnName = "default_value";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(10);
+
+        TestBuildColumn(runtime, txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(3),
+                            NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}, true)});
+
+        // Enable the flag
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(true);
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        TestBuildColumn(runtime, txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        {
+            auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE, descr.DebugString());
+        }
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(6),
+                            NLs::CheckColumns("Table", {"key", "value", columnName}, {}, {"key"}, true)});
     }
 }

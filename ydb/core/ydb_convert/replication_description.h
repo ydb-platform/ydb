@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/fwd.h>
+#include <ydb/core/protos/replication.pb.h>
 
 namespace Ydb {
     namespace Replication {
@@ -25,15 +25,15 @@ void FillReplicationDescription(
     Ydb::Replication::DescribeReplicationResult& out,
     const NKikimrReplication::TEvDescribeReplicationResult& inDesc);
 
-void FillTransferDescription(
-    Ydb::Replication::DescribeTransferResult& out,
-    const NKikimrReplication::TEvDescribeReplicationResult& inDesc);
-
 bool FillReplicationDescription(
     Ydb::Replication::DescribeReplicationResult& out,
     const NKikimrSchemeOp::TReplicationDescription inDesc,
     const NKikimrSchemeOp::TDirEntry& inDirEntry,
     Ydb::StatusIds_StatusCode& status,
     TString& error);
+
+void FillTransferDescription(
+    Ydb::Replication::DescribeTransferResult& out,
+    const NKikimrReplication::TEvDescribeReplicationResult& inDesc);
 
 } // namespace NKikimr

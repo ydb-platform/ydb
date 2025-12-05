@@ -162,4 +162,4 @@ bool FillReplicationDescription(
     return true;
 }
 
-}
+} // namespace NKikimr

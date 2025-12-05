@@ -15,4 +15,4 @@ bool BuildScheme(
 
 NKikimrSchemeOp::EPathType GetPathType(const NKikimrScheme::TEvDescribeSchemeResult& describeResult);
 
-}
+} // namespace NKikimr::NSchemeShard

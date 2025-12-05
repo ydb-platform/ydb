@@ -221,12 +221,6 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
     }
 
     bool BuildSchemeToUpload(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
-        static THashMap<NKikimrSchemeOp::EPathType, TString> TypeToFileName = {
-            {NKikimrSchemeOp::EPathType::EPathTypeView, NYdb::NDump::NFiles::CreateView().FileName},
-            {NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup, NYdb::NDump::NFiles::CreateTopic().FileName},
-            {NKikimrSchemeOp::EPathType::EPathTypeReplication, NYdb::NDump::NFiles::CreateAsyncReplication().FileName},
-        };
-
         if (!FillExportProperties(describeResult, error)) {
             return false;
         }

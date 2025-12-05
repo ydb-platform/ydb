@@ -298,6 +298,7 @@ public:
     { }
 
     virtual TDataPortions GenerateDataPortion() override {
+        // Sequential generation is required to ensure reproducibility for fixed seed value.
         with_lock(Lock) {
             std::vector<std::shared_ptr<arrow::Array>> resultColumns;
 

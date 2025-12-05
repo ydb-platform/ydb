@@ -227,7 +227,6 @@ void TKafkaProduceActor::Handle(TEvKafka::TEvProduceRequest::TPtr request, const
 
 void TKafkaProduceActor::ProcessRequests(const TActorContext& ctx) {
     if (&TKafkaProduceActor::StateWork != CurrentStateFunc()) {
-        KAFKA_LOG_ERROR("Produce actor: Unexpected state");
         return;
     }
 
@@ -666,6 +665,8 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
 
         PendingRequests.pop_front();
     }
+
+    ProcessRequests(ctx);
 }
 
 void TKafkaProduceActor::ProcessInitializationRequests(const TActorContext& ctx) {

@@ -819,6 +819,12 @@ bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *act
 bool TCheckSchemeTxUnit::CheckTruncate(TActiveTransaction *activeTx) {
     const auto& tx = activeTx->GetSchemeTx();
     
+    if (!AppData()->FeatureFlags.GetEnableTruncateTable()) {
+        BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR)
+            ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, "TRUNCATE TABLE statement is not supported");
+        return false;
+    }
+
     if (HasDuplicate(activeTx, "Truncate", &TPipeline::HasTruncate)) {
         return false;
     }

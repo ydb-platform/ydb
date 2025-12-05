@@ -149,7 +149,7 @@ TString TPhantomFlagThresholds::ToString() const {
         str << "[" << tabletChannel.first << ":" << static_cast<ui32>(tabletChannel.second) << "] ";
         str << thresholds.ToString(GType) << " ";
     }
-    str << "]";
+    str << "}";
     return str.Str();
 }
 

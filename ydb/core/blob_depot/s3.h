@@ -13,6 +13,7 @@ namespace NKikimr::NBlobDepot {
         TString BasePath;
         TString Bucket;
 
+        bool Enabled = false;
         bool SyncMode = false;
         bool AsyncMode = false;
 
@@ -37,6 +38,8 @@ namespace NKikimr::NBlobDepot {
 
         ui64 GetTotalS3TrashObjects() const { return TotalS3TrashObjects; }
         ui64 GetTotalS3TrashSize() const { return TotalS3TrashSize; }
+
+        void OnDataLoaded();
 
     private: ///////////////////////////////////////////////////////////////////////////////////////////////////////////
         class TTxPrepareWriteS3;

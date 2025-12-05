@@ -9,12 +9,22 @@ using namespace NYql;
 
 struct TInfoUnit;
 
+struct TColumnLineage {
+    TColumnLineage(TString alias, TString tableName, TString columnName) : SourceAlias(alias), 
+        TableName(tableName),
+        ColumnName(columnName) {}
+
+    TString SourceAlias;
+    TString TableName;
+    TString ColumnName;
+};
+
 class TRBOMetadata {
 public:
     EStatisticsType Type = EStatisticsType::BaseTable;
     EStorageType StorageType = EStorageType::NA;
 
-    THashSet<TString> Aliases;
+    THashMap<TString, TColumnLineage> ColumnLineage;
     TVector<TInfoUnit> KeyColumns;
     int ColumnsCount = 0;
     TVector<TInfoUnit> ShuffledByColumns;

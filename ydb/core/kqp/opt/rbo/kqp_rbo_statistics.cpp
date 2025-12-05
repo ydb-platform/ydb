@@ -7,7 +7,7 @@ namespace NKqp {
 TString TRBOMetadata::ToString(ui32 printOptions) {
     TStringBuilder builder;
 
-    if (printOptions & EPrintPlanOptions::PrintBasicMetadata) {
+    if (printOptions & (EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintFullMetadata)) {
         TString metadataType;
 
         switch (Type) {
@@ -50,6 +50,17 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
         }
 
         builder << "]";
+    }
+
+    if (printOptions & EPrintPlanOptions::PrintFullMetadata) {
+        builder << ", Lineage: {";
+        for (auto &[k, v] : ColumnLineage) {
+            builder << k << ": <ColName: " << v.ColumnName 
+                << ", Alias: " << v.SourceAlias 
+                << ", Table: " << v.TableName
+                << ">, ";
+        }
+        builder << "}";
     }
 
     return builder;

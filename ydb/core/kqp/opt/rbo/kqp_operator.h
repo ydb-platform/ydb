@@ -450,6 +450,7 @@ class TOpMap : public IUnaryOperator {
     bool HasRenames() const;
     bool HasLambdas() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenamesWithTransforms(TPlanProps& props) const;
     TVector<std::pair<TInfoUnit, TExprNode::TPtr>> GetLambdas() const;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
 
@@ -559,6 +560,8 @@ class TOpLimit : public IUnaryOperator {
 
 /***
  * This operator packages a subtree of operators in order to pass them to dynamic programming optimizer
+ * Currently it requires that the list of operators TreeNodes is in a post-order traversal of the tree
+ * No validation is currently used
  */
 class TOpCBOTree : public IOperator {
   public:

@@ -112,7 +112,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) 
 
     auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics;
     ComputeRequiredProps(root, convertProps, context);
-    YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintBasicStatistics);
+    YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
 
     return ConvertToPhysical(root, context, TypeAnnTransformer, PeepholeTransformer);
 }

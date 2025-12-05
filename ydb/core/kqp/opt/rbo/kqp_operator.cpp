@@ -529,6 +529,8 @@ bool TOpMap::HasRenames() const {
     return false;
 }
 
+// Returns explicit renames as pairs of <to, from>
+
 TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
     TVector<std::pair<TInfoUnit, TInfoUnit>> result;
     for (auto &[iu, body] : MapElements) {
@@ -538,6 +540,34 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
     }
     return result;
 }
+
+// Add simple transformations that preserve both key and column statistics properties
+// Currently only pg transformations FromPg and ToPg are supported
+// Return pairs of renames <to, from>
+
+TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenamesWithTransforms(TPlanProps& props) const {
+    auto result = GetRenames();
+
+    for (auto &[iu, body] : MapElements) {
+        if (std::holds_alternative<TExprNode::TPtr>(body)) {
+            auto lambda = TCoLambda(std::get<TExprNode::TPtr>(body));
+            auto expr = lambda.Body().Ptr();
+
+            if (expr->IsCallable("ToPg") || expr->IsCallable("FromPg")) {
+                if (expr->ChildPtr(0)->IsCallable("Member")) {
+                    TVector<TInfoUnit> transformIUs;
+                    GetAllMembers(expr, transformIUs, props, true);
+                    if (transformIUs.size()==1) {
+                        result.push_back(std::make_pair(iu, transformIUs[0]));
+                    }
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
 
 void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
     TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> newMapElements;

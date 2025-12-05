@@ -40,17 +40,16 @@ std::string TVectorWorkloadGenerator::GetDDLQueries() const {
                 embedding String,
                 PRIMARY KEY(id))
             WITH (
-                AUTO_PARTITIONING_BY_SIZE = {2},
-                AUTO_PARTITIONING_BY_LOAD = {3},
-                {4}
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {5}
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_BY_LOAD = {2},
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = {3},
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {4}
             )
         )_",
         Params.DbPath.c_str(),
         Params.TableOpts.Name.c_str(),
-        Params.TablePartitioningOpts.AutoPartitioningBySize ? "ENABLED" : "DISABLED",
         Params.TablePartitioningOpts.AutoPartitioningByLoad ? "ENABLED" : "DISABLED",
-        Params.TablePartitioningOpts.AutoPartitioningBySize ? std::format("AUTO_PARTITIONING_PARTITION_SIZE_MB = {0},", Params.TablePartitioningOpts.PartitionSize) : "",
+        Params.TablePartitioningOpts.PartitionSize,
         Params.TablePartitioningOpts.MinPartitions
     );
 }

@@ -13,8 +13,7 @@ struct TTableOpts {
 struct TTablePartitioningOpts {
     size_t MinPartitions = 40;
     size_t PartitionSize = 2000;
-    bool AutoPartitioningBySize = true;
-    bool AutoPartitioningByLoad = false;
+    bool AutoPartitioningByLoad = true;
 };
 
 struct TVectorOpts {

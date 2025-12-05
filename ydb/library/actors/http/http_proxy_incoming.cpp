@@ -378,9 +378,9 @@ protected:
             if (res > 0) {
                 InactivityTimer.Reset();
                 buffer->ChopHead(res);
-                if (CurrentResponse.ProgressNotificationActor) {
+                if (CurrentResponse.ProgressNotificationBytes > 0) {
                     bool needToNotify = false;
-                    ui64 progressBefore = CurrentResponse.ProgressBytes % CurrentResponse.ProgressNotificationBytes;
+                    ui64 progressBefore = CurrentResponse.ProgressBytes / CurrentResponse.ProgressNotificationBytes;
                     CurrentResponse.ProgressBytes += res;
                     if (buffer->Size() == 0) { // end of headers / chunk
                         needToNotify = true;
@@ -388,7 +388,7 @@ protected:
                             CurrentResponse.ProgressChunks++;
                         }
                     } else {
-                        ui64 progressAfter = CurrentResponse.ProgressBytes % CurrentResponse.ProgressNotificationBytes;
+                        ui64 progressAfter = CurrentResponse.ProgressBytes / CurrentResponse.ProgressNotificationBytes;
                         if (progressAfter != progressBefore) {
                             needToNotify = true;
                         }

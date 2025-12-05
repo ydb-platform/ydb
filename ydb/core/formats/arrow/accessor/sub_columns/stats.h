@@ -80,14 +80,10 @@ public:
     }
 
     ui32 GetKeyIndexVerified(const std::string_view keyName) const {
-        for (ui32 i = 0; i < DataNames->length(); ++i) {
-            const auto arrView = DataNames->GetView(i);
-            if (std::string_view(arrView.data(), arrView.size()) == keyName) {
-                return i;
-            }
-        }
-        AFL_VERIFY(false);
-        return 0;
+        auto idx = GetKeyIndexOptional(keyName);
+        AFL_VERIFY(idx.has_value());
+
+        return idx.value();
     }
 
     class TRTStatsValue {

@@ -1061,8 +1061,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
-            CompareYson(R"([[]])", result);
-            // CompareYson(R"([[#]])", result); // ??
+            CompareYson(R"([[#]])", result);
         }
 
         // ok
@@ -1278,8 +1277,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
-            CompareYson(result, R"([])");
-            // CompareYson(result, R"([[#]])"); // ??
+            // CompareYson(result, R"([])");?
+            CompareYson(result, R"([[#]])");
         }
 
         Cerr << "Next test" << Endl;
@@ -1318,6 +1317,30 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
             CompareYson(result, R"([[["1"]]])");
+        }
+
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT JSON_VALUE(json_payload, "$.\"g\"[0]") FROM `/Root/olapTable`;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(result, R"([[["1"]]])");
+        }
+
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT JSON_VALUE(json_payload, "$.'g'[2].\"b\"") FROM `/Root/olapTable`;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(result, R"([[["3"]]])");
         }
     }
 }

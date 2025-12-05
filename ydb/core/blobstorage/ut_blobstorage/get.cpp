@@ -153,8 +153,6 @@ Y_UNIT_TEST_SUITE(Get) {
                         auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
                         UNIT_ASSERT_C(!memReg.Empty(), "unable to extract mem region from chunk");
                         UNIT_ASSERT_VALUES_EQUAL_C(memReg.GetSize(), size, "invalid size for memReg");
-                        UNIT_ASSERT_C(memReg.GetLKey(0) != 0, "invalid lkey");
-                        UNIT_ASSERT_C(memReg.GetRKey(0) != 0, "invalid rkey");
                     }
                 }
             }

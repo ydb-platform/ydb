@@ -27,7 +27,8 @@ ui32 PopFront(TDeque<ui32>& pendingItems) {
 }
 
 bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
-    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable;
+    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable
+        || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
 }
 
 }
@@ -811,6 +812,7 @@ private:
                 for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                     const auto& item = exportInfo->Items.at(itemIdx);
 
+                    // Column Tables must be skipped here
                     if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable || item.State != EState::Dropping) {
                         continue;
                     }
@@ -878,13 +880,13 @@ private:
                 return;
             }
             itemIdx = PopFront(exportInfo->PendingItems);
-            if (const auto type = exportInfo->Items.at(itemIdx).SourcePathType; type == NKikimrSchemeOp::EPathTypeTable) {
+            if (const auto item = exportInfo->Items.at(itemIdx); IsPathTypeTable(item)) {
                 TransferData(*exportInfo, itemIdx, txId);
             } else {
                 LOG_W("TExport::TTxProgress: OnAllocateResult allocated a needless txId for an item transferring"
                     << ": id# " << id
                     << ", itemIdx# " << itemIdx
-                    << ", type# " << type
+                    << ", type# " << item.SourcePathType
                 );
                 return;
             }
@@ -1155,7 +1157,8 @@ private:
             Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
             if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
+                // TODO (hcpp): support auto dropping after full support for read-only copying for columnar tables. https://github.com/ydb-platform/ydb/issues/26498
+                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping() || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
                     EndExport(exportInfo, EState::Done, db);
                 } else {
                     PrepareAutoDropping(Self, *exportInfo, db);
@@ -1196,6 +1199,10 @@ private:
         Self->RunningExportSchemeUploaders.erase(std::exchange(exportInfo->ExportMetadataUploader, {}));
 
         if (!exportInfo->IsInProgress()) {
+            LOG_D("TExport::TTxProgress: IsInProgress"
+                << ": id# " << result.ExportId
+                << ", success# " << result.Success
+                << ", error# " << result.Error);
             return;
         }
 
@@ -1327,7 +1334,7 @@ private:
                 item.State = EState::Transferring;
                 Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
-                if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
+                if (IsPathTypeTable(item)) {
                     tables.emplace_back(itemIdx);
                 } else {
                     UploadScheme(*exportInfo, itemIdx, ctx);
@@ -1356,7 +1363,7 @@ private:
                 }
             }
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
+                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping() || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
                     exportInfo->State = EState::Done;
                     exportInfo->EndTime = TAppData::TimeProvider->Now();
                 } else {

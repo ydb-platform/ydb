@@ -631,6 +631,66 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
         tester.SetIsOlap(true);
         tester.Execute();
     }
+
+    class TUpdateLocksOneShardRowExists : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            auto result = session1.ExecuteQuery(Q1_(R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                UPDATE KV ON (Key, Value) VALUES (1u, "TEST");  -- exists
+            )"), TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+
+            {
+                result = session2.ExecuteQuery(Q1_(R"(
+                    UPSERT INTO KV (Key, Value) VALUES (1u, "OTHER");
+                    UPSERT INTO KV (Key, Value) VALUES (0u, "OTHER");
+                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {
+                result = session2.ExecuteQuery(Q1_(R"(
+                    UPDATE KV ON (Key, Value) VALUES (0u, "TEST"); -- exists
+                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+                // TODO: Must be ABORTED.
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {
+                result = session2.ExecuteQuery(Q1_(R"(
+                    SELECT * FROM KV WHERE Key = 0u;
+                    SELECT * FROM KV WHERE Key = 1u;
+                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                // TODO: Must be "OTHER" for both rows.
+                CompareYson(R"([[0u;["TEST"]]])", FormatResultSetYson(result.GetResultSet(0)));
+                CompareYson(R"([[1u;["OTHER"]]])", FormatResultSetYson(result.GetResultSet(1)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(UpdateLocksOneShardRowExists) {
+        TUpdateLocksOneShardRowExists tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapUpdateLocksOneShardRowExists) {
+        TUpdateLocksOneShardRowExists tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

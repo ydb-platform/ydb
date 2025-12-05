@@ -50,6 +50,17 @@ namespace {
         }
         return new NACLib::TUserToken(userSid, groupSids);
     }
+
+    void AssertSecretValues(const TVector<TString>& secretValues, NThreading::TPromise<NKikimr::NKqp::TEvDescribeSecretsResponse::TDescription> promise) {
+        UNIT_ASSERT_VALUES_EQUAL_C(secretValues.size(), promise.GetFuture().GetValueSync().SecretValues.size(), promise.GetFuture().GetValueSync().Issues.ToOneLineString());
+        for (size_t i = 0; i < secretValues.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(secretValues[i], promise.GetFuture().GetValueSync().SecretValues[i]);
+        }
+    }
+
+    void AssertSecretValue(const TString& secretValue, NThreading::TPromise<NKikimr::NKqp::TEvDescribeSecretsResponse::TDescription> promise) {
+        AssertSecretValues(TVector<TString>{secretValue}, promise);
+    }
 }
 
 Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
@@ -65,7 +76,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
         for (int i = 0; i < 3; ++i) {
             auto promise = ResolveSecret("/Root/secret-name", kikimr);
-            UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+            AssertSecretValue(secretValue, promise);
         }
     }
 
@@ -80,14 +91,14 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(secretName, secretValue, session);
 
         auto promise = ResolveSecret("/Root/secret-name", kikimr);
-        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+        AssertSecretValue(secretValue, promise);
 
         for (int i = 0; i < 3; ++i) {
             TString newSecretValue = secretValue + "-" + ToString(i);
             AlterSchemaSecret(secretName, newSecretValue, session);
 
             auto promise = ResolveSecret("/Root/secret-name", kikimr);
-            UNIT_ASSERT_VALUES_EQUAL(newSecretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+            AssertSecretValue(newSecretValue, promise);
         }
     }
 
@@ -145,7 +156,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(secretName, secretValue, session);
 
         auto promise = ResolveSecret("/Root/secret-name", kikimr);
-        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+        AssertSecretValue(secretValue, promise);
 
         DropSchemaSecret(secretName, session);
         UNIT_ASSERT_VALUES_EQUAL("/Root/secret-name", secretUpdateListener->DeletionPromise.GetFuture().GetValueSync());
@@ -157,7 +168,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(secretName, secretValue, session);
 
         promise = ResolveSecret("/Root/secret-name", kikimr);
-        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+        AssertSecretValue(secretValue, promise);
     }
 
     Y_UNIT_TEST(GetInParallel) {
@@ -179,7 +190,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         }
 
         for (int i = 0; i < SECRETS_CNT; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(secrets[i].second, promises[i].GetFuture().GetValueSync().SecretValues[0]);
+            AssertSecretValue(secrets[i].second, promises[i]);
         }
 
         // altered values
@@ -193,7 +204,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         }
 
         for (int i = 0; i < SECRETS_CNT; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(secrets[i].second, promises[i].GetFuture().GetValueSync().SecretValues[0]);
+            AssertSecretValue(secrets[i].second, promises[i]);
         }
     }
 
@@ -208,9 +219,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(secretName, secretValue, session);
 
         auto promise = ResolveSecret({secretName, secretName}, kikimr);
-        UNIT_ASSERT_VALUES_EQUAL(2, promise.GetFuture().GetValueSync().SecretValues.size());
-        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
-        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[1]);
+        AssertSecretValues({secretValue, secretValue}, promise);
     }
 
     Y_UNIT_TEST(FailWithoutGrants) {
@@ -225,7 +234,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(secretName, secretValue, adminSession);
 
         auto promise = ResolveSecret(secretName, kikimr, GetUserToken("root@builtin"));
-        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+        AssertSecretValue(secretValue, promise);
 
         const auto userToken = GetUserToken("user@builtin");
         { // assert no grants by default
@@ -241,7 +250,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
         { // assert grants are ok
             auto promise = ResolveSecret("/Root/secret-name", kikimr, userToken);
-            UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+            AssertSecretValue(secretValue, promise);
         }
 
         // revoke grants
@@ -268,7 +277,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(secretName, secretValue, adminSession);
 
         auto promise = ResolveSecret(secretName, kikimr, GetUserToken("root@builtin"));
-        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+        AssertSecretValue(secretValue, promise);
 
         const auto userToken = GetUserToken("user@builtin", {"group"});
         { // assert no grants by default
@@ -288,7 +297,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
         { // assert group grants are ok
             auto promise = ResolveSecret("/Root/secret-name", kikimr, userToken);
-            UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+            AssertSecretValue(secretValue, promise);
         }
 
         // revoke grants
@@ -323,21 +332,17 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
         { // nothing from cache
             auto promise = ResolveSecret({secretName1, secretName2}, kikimr);
-            UNIT_ASSERT_VALUES_EQUAL(secretValue1, promise.GetFuture().GetValueSync().SecretValues[0]);
-            UNIT_ASSERT_VALUES_EQUAL(secretValue2, promise.GetFuture().GetValueSync().SecretValues[1]);
+            AssertSecretValues({secretValue1, secretValue2}, promise);
         }
 
         { // something from cache
             auto promise = ResolveSecret({secretName2, secretName3}, kikimr);
-            UNIT_ASSERT_VALUES_EQUAL(secretValue2, promise.GetFuture().GetValueSync().SecretValues[0]);
-            UNIT_ASSERT_VALUES_EQUAL(secretValue3, promise.GetFuture().GetValueSync().SecretValues[1]);
+            AssertSecretValues({secretValue2, secretValue3}, promise);
         }
 
         { // all from cache
             auto promise = ResolveSecret({secretName1, secretName2, secretName3}, kikimr);
-            UNIT_ASSERT_VALUES_EQUAL(secretValue1, promise.GetFuture().GetValueSync().SecretValues[0]);
-            UNIT_ASSERT_VALUES_EQUAL(secretValue2, promise.GetFuture().GetValueSync().SecretValues[1]);
-            UNIT_ASSERT_VALUES_EQUAL(secretValue3, promise.GetFuture().GetValueSync().SecretValues[2]);
+            AssertSecretValues({secretValue1, secretValue2, secretValue3}, promise);
         }
     }
 
@@ -360,17 +365,14 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         }
 
         { // nothing from cache
-            auto promise = ResolveSecret(names, kikimr);
-            for (size_t i = 0; i < names.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(values[i], promise.GetFuture().GetValueSync().SecretValues[i]);
-            }
+            const auto SecretsToResolveCnt = names.size() / 2;
+            auto promise = ResolveSecret({names.begin(), names.begin() + SecretsToResolveCnt}, kikimr);
+            AssertSecretValues({values.begin(), values.begin() + SecretsToResolveCnt}, promise);
         }
 
         { // something from cache
             auto promise = ResolveSecret(names, kikimr);
-            for (size_t i = 0; i < names.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(values[i], promise.GetFuture().GetValueSync().SecretValues[i]);
-            }
+            AssertSecretValues(values, promise);
         }
     }
 
@@ -415,9 +417,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
         { // user has grants for all names[0]
             auto promise = ResolveSecret({names[0], names[1]}, kikimr, userToken);
-            for (size_t i = 0; i < values.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(values[i], promise.GetFuture().GetValueSync().SecretValues[i]);
-            }
+            AssertSecretValues(values, promise);
         }
     }
 

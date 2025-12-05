@@ -15,6 +15,7 @@ constexpr TDuration BucketSize = TDuration::Seconds(1);
 constexpr size_t MaxRPS = 1000;
 constexpr size_t MaxBucketCount = MaxDeduplicationWindow.MilliSeconds() / BucketSize.MilliSeconds();
 constexpr ui64 MaxDeduplicationIDs = MaxDeduplicationWindow.Seconds() * MaxRPS;
+constexpr size_t MaxMessageIdInBucketCount = MaxDeduplicationIDs / MaxBucketCount;
 
 TInstant Trim(TInstant value) {
     return TInstant::MilliSeconds(value.MilliSeconds() / BucketSize.MilliSeconds() * BucketSize.MilliSeconds());
@@ -138,7 +139,7 @@ std::optional<TString> TMessageIdDeduplicator::SerializeTo(NKikimrPQ::TMessageDe
         return std::nullopt;
     }
 
-    const bool sameBucket = (CurrentBucket.StartTime > Queue.back().ExpirationTime - BucketSize) && (Queue.size() - CurrentBucket.StartMessageIndex <= MaxBucketCount);
+    const bool sameBucket = Queue.size() - CurrentBucket.StartMessageIndex <= MaxMessageIdInBucketCount;
     size_t startIndex = sameBucket ? CurrentBucket.StartMessageIndex : CurrentBucket.LastWrittenMessageIndex;
     if (startIndex == Queue.size()) {
         return std::nullopt;

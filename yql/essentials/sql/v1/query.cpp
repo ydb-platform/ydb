@@ -3055,8 +3055,8 @@ TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TStr
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR{
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "append"},
-    {EWriteColumnMode::Upsert, "upsert"},
-    {EWriteColumnMode::Renew, "renew"}};
+    {EWriteColumnMode::Renew, "renew"}, // insert with truncat
+    {EWriteColumnMode::Replace, "replace"}};
 
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapStat{
     {EWriteColumnMode::Upsert, "upsert"}};

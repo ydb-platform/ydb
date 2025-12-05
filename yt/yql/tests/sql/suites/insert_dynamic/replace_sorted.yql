@@ -5,7 +5,7 @@
 use plato;
 pragma yt.UseNativeDynamicTableRead;
 
-upsert into Output
+replace into Output
 select "x" as key
 order by key;
 

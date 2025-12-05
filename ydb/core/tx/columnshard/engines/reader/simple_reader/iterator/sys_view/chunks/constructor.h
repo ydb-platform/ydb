@@ -35,7 +35,6 @@ public:
 class TConstructor: public NCommon::TSourcesConstructorWithAccessors<TPortionDataConstructor> {
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TPortionDataConstructor>;
-    ui32 CurrentSourceIdx = 0;
 
     virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNextImpl(
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override;

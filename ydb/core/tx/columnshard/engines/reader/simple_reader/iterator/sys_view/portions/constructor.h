@@ -23,8 +23,8 @@ public:
     }
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
-        return std::make_shared<TSourceData>(
-            GetSourceId(), GetSourceIdx(), PathId, GetTabletId(), std::move(Portions), ExtractStart(), ExtractFinish(), context);
+        return std::make_shared<TSourceData>(GetSourceId(), GetSourceIdx(), PathId, GetTabletId(), std::move(Portions),
+            ExtractStart().ExtractValue(), ExtractFinish().ExtractValue(), context);
     }
 };
 

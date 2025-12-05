@@ -25,6 +25,7 @@
 #include <yt/yt/client/signature/signature.h>
 
 #include <yt/yt/client/table_client/columnar_statistics.h>
+#include <yt/yt/client/table_client/constrained_schema.h>
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/unversioned_row.h>
 #include <yt/yt/client/table_client/wire_protocol.h>
@@ -523,6 +524,12 @@ TFuture<void> TClient::AlterTable(
     }
     if (options.SchemaId) {
         ToProto(req->mutable_schema_id(), *options.SchemaId);
+    }
+    if (options.ConstrainedSchema) {
+        req->set_constrained_schema(ToProto(ConvertToYsonString(*options.ConstrainedSchema)));
+    }
+    if (options.Constraints) {
+        ToProto(req->mutable_constraints(), *options.Constraints);
     }
     YT_OPTIONAL_SET_PROTO(req, dynamic, options.Dynamic);
     if (options.UpstreamReplicaId) {

@@ -111,10 +111,6 @@ TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const TYtNat
 {
 }
 
-TString TNativeYtLambdaBuilder::BuildLambdaWithIO(const IMkqlCallableCompiler& compiler, TCoLambda lambda, TExprContext& exprCtx) {
-    return TGatewayLambdaBuilder::BuildLambdaWithIO("Yt", compiler, lambda, exprCtx);
-}
-
 } // NNative
 
 } // NYql

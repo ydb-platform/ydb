@@ -1,11 +1,11 @@
 LIBRARY()
 
-IF (YDB_ENABLE_PDISK_SHRED) 
+IF (YDB_ENABLE_PDISK_SHRED)
     CFLAGS(
         -DENABLE_PDISK_SHRED
     )
 ENDIF()
-IF (YDB_DISABLE_PDISK_ENCRYPTION) 
+IF (YDB_DISABLE_PDISK_ENCRYPTION)
     CFLAGS(
         -DDISABLE_PDISK_ENCRYPTION
     )
@@ -51,6 +51,7 @@ SRCS(
     blobstorage_pdisk_delayed_cost_loop.cpp
     blobstorage_pdisk_driveestimator.cpp
     blobstorage_pdisk_drivemodel_db.cpp
+    blobstorage_pdisk_encryption_threads.cpp
     blobstorage_pdisk_impl.cpp
     blobstorage_pdisk_impl_http.cpp
     blobstorage_pdisk_impl_log.cpp

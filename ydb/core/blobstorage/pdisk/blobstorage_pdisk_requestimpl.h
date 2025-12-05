@@ -478,11 +478,12 @@ public:
     }
 };
 
-
-class TCompletionChunkWrite;
 //
 // TChunkWrite
 //
+class TCompletionChunkWrite;
+class TCompletionChunkWritePiece;
+
 class TChunkWrite : public TRequestBase {
 public:
     ui32 ChunkIdx;
@@ -495,17 +496,16 @@ public:
     bool ChunkEncrypted = true;
 
     ui32 TotalSize;
-    ui32 CurrentPart = 0;
-    ui32 CurrentPartOffset = 0;
-    ui32 RemainingSize = 0;
+    std::atomic<ui32> RemainingSize = 0;
 
     ui32 SlackSize;
-    ui32 BytesWritten = 0;
+    std::atomic<ui32> BytesWritten = 0;
 
     TAtomic Pieces = 0;
     TAtomic Aborted = 0;
+    std::atomic<ui32> ReadyForBlockDevice = 0;
 
-    THolder<TCompletionChunkWrite> Completion;
+    TCompletionChunkWrite* Completion = nullptr;
 
     TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span);
 
@@ -545,30 +545,31 @@ public:
         }
     }
 
-    void Abort(TActorSystem* actorSystem) override {
-        if (!AtomicSwap(&Aborted, true)) {
-            actorSystem->Send(Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED, ChunkIdx, Cookie, 0, "TChunkWrite is being aborted"));
-        }
-    }
+    void Abort(TActorSystem* actorSystem) override;
 };
 
 //
 // TChunkWritePiece
 //
+
+class TBufferedWriter;
+
 class TChunkWritePiece : public TRequestBase {
 public:
+    TPDisk *PDisk;
+
     TIntrusivePtr<TChunkWrite> ChunkWrite;
     ui32 PieceShift;
     ui32 PieceSize;
+    ui32 PartIdx;
+    ui32 PartOffset = 0;
+    THolder<TBufferedWriter> ChunkWriter;
+    THolder<TCompletionAction> Completion;
+    bool Processed = false;
+    bool ShouldDetach;
 
-    TChunkWritePiece(TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span)
-        : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass, std::move(span))
-        , ChunkWrite(write)
-        , PieceShift(pieceShift)
-        , PieceSize(pieceSize)
-    {
-        ChunkWrite->RegisterPiece();
-    }
+    TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, bool isLast, NWilson::TSpan span);
+    ~TChunkWritePiece();
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkWritePiece;
@@ -584,6 +585,9 @@ public:
             ChunkWrite->AbortPiece(actorSystem);
         }
     }
+
+    void Process();
+    void MarkReady(const TString& logPrefix);
 };
 
 //

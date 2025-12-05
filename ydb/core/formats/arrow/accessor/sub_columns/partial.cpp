@@ -18,16 +18,26 @@ void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstr
     StoreOthersString = blob;
 }
 
-std::shared_ptr<IChunkedArray> TSubColumnsPartialArray::GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
-    if (auto idx = Header.GetColumnStats().GetKeyIndexOptional(svPath)) {
-        return PartialColumnsData.GetAccessorVerified(*idx);
+TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialArray::GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
+    auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
+    auto headerStats = Header.GetColumnStats();
+    for (ui32 i = 0; i < headerStats.GetDataNamesCount(); ++i) {
+        if (PartialColumnsData.HasColumn(i)) {
+            auto insertResult = jsonPathAccessorTrie->Insert(NSubColumns::ToJsonPath(headerStats.GetColumnName(i)), PartialColumnsData.GetAccessorVerified(i));
+            AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
+        }
     }
+
+    auto accessorResult = jsonPathAccessorTrie->GetAccessor(svPath);
+    if (accessorResult.IsSuccess() && accessorResult.GetResult()->IsValid()) {
+        return accessorResult;
+    }
+
     if (OthersData) {
         return OthersData->GetPathAccessor(svPath, recordsCount);
-    } else {
-        AFL_VERIFY(!Header.GetOtherStats().GetKeyIndexOptional(svPath));
-        return std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::binary(), recordsCount));
     }
+
+    return std::shared_ptr<NSubColumns::TJsonPathAccessor>{};
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

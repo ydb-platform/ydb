@@ -253,7 +253,7 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
     return Build<TKqpOlapApply>(ctx, apply.Pos())
         .Lambda(ctx.NewLambda(apply.Pos(), ctx.NewArguments(argument.Pos(), std::move(lambdaArgs)), ctx.ReplaceNodes(apply.Ptr(), replacements)))
         .Args().Add(std::move(realArgs)).Build()
-        .KernelName(ctx.NewAtom(apply.Pos(), ""))    
+        .KernelName(ctx.NewAtom(apply.Pos(), ""))
         .Done();
 }
 
@@ -314,21 +314,6 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, 
 
 namespace {
 
-//Workarownd for #19125
-NYql::NNodes::TCoUtf8 RemoveJsonPathUnnecessaryQuote(const NYql::NNodes::TCoUtf8& node, TExprContext& ctx) {
-    const std::string_view& path = node.Literal();
-    if (UTF8Detect(path) == ASCII && path.starts_with("$.\"") && path.substr(3).ends_with("\"")) {
-        const auto& nakedPath = path.substr(3, path.length()-4);
-        for (auto c: nakedPath) {
-            if (!isalpha(c) && !isdigit(c) && c != '_') {
-                return node;
-            }
-        }
-        return Build<TCoUtf8>(ctx, node.Pos()).Literal().Build(TString("$.") + nakedPath).Done();
-    }
-    return node;
-}
-
 TExprBase UnwrapOptionalTKqpOlapApplyColumnArg(const TExprBase& node) {
     if (const auto& maybeColumnArg = node.Maybe<TKqpOlapApplyColumnArg>()) {
         return maybeColumnArg.Cast().ColumnName();
@@ -374,7 +359,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
 
             auto builder = Build<TKqpOlapJsonValue>(ctx, pos)
                 .Column(maybeColMember.Cast().Name())
-                .Path(RemoveJsonPathUnnecessaryQuote(maybePathUtf8.Cast(), ctx));
+                .Path(maybePathUtf8.Cast());
             if (maybeReturningType) {
                 builder.ReturningType(maybeReturningType.Cast());
             } else {

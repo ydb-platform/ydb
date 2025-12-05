@@ -97,6 +97,7 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
                 flags = OpenAlways | WrOnly | ForAppend;
             }
             TFile file(path, flags);
+            file.Flock(LOCK_EX);
             file.Write(data.data(), data.size());
             file.Close();
             

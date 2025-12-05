@@ -61,6 +61,7 @@ struct TEvHttpProxy {
         EvHttpOutgoingDataChunk,
         EvSubscribeForCancel,
         EvRequestCancelled,
+        EvHttpOutgoingResponseProgress,
         EvEnd
     };
 
@@ -181,9 +182,14 @@ struct TEvHttpProxy {
             , Response(std::move(response))
         {}
     };
-
+    
     struct TEvHttpOutgoingResponse : NActors::TEventLocal<TEvHttpOutgoingResponse, EvHttpOutgoingResponse> {
         THttpOutgoingResponsePtr Response;
+        ui64 ProgressNotificationBytes = 0;
+        // If set to a non-zero value, enables progress notifications.
+        // Progress notifications will be sent approximately every N bytes (where N is this value).
+        // Notifications are sent to the sender of the TEvHttpOutgoingResponse event with the original cookie.
+        // The field value of 0 (default) disables progress notifications.
 
         TEvHttpOutgoingResponse(THttpOutgoingResponsePtr response)
             : Response(std::move(response))
@@ -200,6 +206,16 @@ struct TEvHttpProxy {
 
         TEvHttpOutgoingDataChunk(const TString& error)
             : Error(error)
+        {}
+    };
+
+    struct TEvHttpOutgoingResponseProgress : NActors::TEventLocal<TEvHttpOutgoingResponseProgress, EvHttpOutgoingResponseProgress> {
+        ui64 Bytes = 0;
+        ui64 DataChunks = 0;
+
+        TEvHttpOutgoingResponseProgress(ui64 bytes, ui64 dataChunks)
+            : Bytes(bytes)
+            , DataChunks(dataChunks)
         {}
     };
 

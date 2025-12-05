@@ -12,6 +12,8 @@
 #include <util/system/env.h>
 
 #include <ctime>
+#include <regex>
+#include <fstream>
 
 
 extern "C" {
@@ -1226,6 +1228,77 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([["0";"0"];["0";"1"];["1";"0"];["1";"1"];["2";"0"];["2";"1"]])");
+    }
+
+    void Replace(std::string& s, const std::string& from, const std::string& to) {
+        size_t pos = 0;
+        while ((pos = s.find(from, pos)) != std::string::npos) {
+            s.replace(pos, from.size(), to);
+            pos += to.size();
+        }
+    }
+
+    TString GetFullPath(const TString& filePath) {
+        TString fullPath = SRC_("../join/data/" + filePath);
+
+        std::ifstream file(fullPath);
+
+        if (!file.is_open()) {
+            throw std::runtime_error("can't open + " + fullPath + " " + std::filesystem::current_path());
+        }
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+
+        return buffer.str();
+    }
+
+    void CreateTablesFromPath(NYdb::NTable::TSession session, const TString& schemaPath, bool useColumnStore) {
+        std::string query = GetFullPath(schemaPath);
+
+        if (useColumnStore) {
+            std::regex pattern(R"(CREATE TABLE [^\(]+ \([^;]*\))", std::regex::multiline);
+            query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
+        }
+
+        auto res = session.ExecuteSchemeQuery(TString(query)).GetValueSync();
+        res.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT(res.IsSuccess());
+    }
+
+    void RunTPCHBenchmark(bool columnStore, std::vector<ui32> queries) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(session, "schema/tpch.sql", columnStore);
+
+        if (!queries.size()) {
+            for (ui32 i = 1; i <= 22; ++i) {
+                queries.push_back(i);
+            }
+        }
+
+        for (const auto qId : queries) {
+            const TString qPath = TStringBuilder{} << ArcadiaSourceRoot() << "/ydb/library/benchmarks/queries/tpch/pg/" << "q" << qId << ".sql";
+
+            TIFStream s(qPath);
+            std::string q = s.ReadAll();
+            Replace(q, "{% include 'header.sql.jinja' %}", "");
+            std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
+            q = "--!syntax_pg\n" + std::regex_replace(q, pattern, "$1");
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(q, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(TPCH) {
+        RunTPCHBenchmark(/*columnstore*/true, {1, 3, 5, 10});
     }
 
     Y_UNIT_TEST(Bench_Select) {

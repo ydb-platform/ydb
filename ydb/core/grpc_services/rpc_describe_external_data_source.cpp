@@ -18,31 +18,39 @@ namespace {
 
 using TProperties = google::protobuf::Map<TProtoStringType, TProtoStringType>;
 
+TString AdjustSecretSettingName(TStringBuf secretName, const TString& secretSettingPrefix) {
+    return secretName.StartsWith('/') ? secretSettingPrefix + "_PATH" : secretSettingPrefix + "_NAME";
+}
+
+void SetSecretSettingName(TStringBuf secretName, const TString& secretSettingPrefix, TProperties& out) {
+    out[AdjustSecretSettingName(secretName, secretSettingPrefix)] = secretName;
+}
+
 void Convert(const TServiceAccountAuth& in, TProperties& out) {
     out["SERVICE_ACCOUNT_ID"] = in.GetId();
-    out["SERVICE_ACCOUNT_SECRET_NAME"] = in.GetSecretName();
+    SetSecretSettingName(in.GetSecretName(), "SERVICE_ACCOUNT_SECRET", out);
 }
 
 void Convert(const TBasic& in, TProperties& out) {
     out["LOGIN"] = in.GetLogin();
-    out["PASSWORD_SECRET_NAME"] = in.GetPasswordSecretName();
+    SetSecretSettingName(in.GetPasswordSecretName(), "PASSWORD_SECRET", out);
 }
 
 void Convert(const TMdbBasic& in, TProperties& out) {
     out["SERVICE_ACCOUNT_ID"] = in.GetServiceAccountId();
-    out["SERVICE_ACCOUNT_SECRET_NAME"] = in.GetServiceAccountSecretName();
+    SetSecretSettingName(in.GetServiceAccountSecretName(), "SERVICE_ACCOUNT_SECRET", out);
     out["LOGIN"] = in.GetLogin();
-    out["PASSWORD_SECRET_NAME"] = in.GetPasswordSecretName();
+    SetSecretSettingName(in.GetPasswordSecretName(), "PASSWORD_SECRET", out);
 }
 
 void Convert(const TAws& in, TProperties& out) {
-    out["AWS_ACCESS_KEY_ID_SECRET_NAME"] = in.GetAwsAccessKeyIdSecretName();
-    out["AWS_SECRET_ACCESS_KEY_SECRET_NAME"] = in.GetAwsSecretAccessKeySecretName();
+    SetSecretSettingName(in.GetAwsAccessKeyIdSecretName(), "AWS_ACCESS_KEY_ID_SECRET", out);
+    SetSecretSettingName(in.GetAwsSecretAccessKeySecretName(), "AWS_SECRET_ACCESS_KEY_SECRET", out);
     out["AWS_REGION"] = in.GetAwsRegion();
 }
 
 void Convert(const TToken& in, TProperties& out) {
-    out["TOKEN_SECRET_NAME"] = in.GetTokenSecretName();
+    SetSecretSettingName(in.GetTokenSecretName(), "TOKEN_SECRET", out);
 }
 
 void Convert(const TAuth& in, TProperties& out) {

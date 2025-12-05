@@ -73,19 +73,42 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     }
 
     void MaybeReady() {
+        EXPORT_LOG_I("MaybeReady"
+            << ": self# " << SelfId()
+            << ", uploader# " << Uploader
+            << ", isRegistered# " << State.Test(ES_REGISTERED)
+            << ", isInitialized# " << State.Test(ES_INITIALIZED)
+            << ", isReady# " << IsReady());
         if (IsReady()) {
+            EXPORT_LOG_I("MaybeReady - sending TEvReady to uploader"
+                << ": self# " << SelfId()
+                << ", uploader# " << Uploader);
             Send(Uploader, new TEvExportScan::TEvReady());
         }
     }
 
     EScan MaybeSendBuffer() {
         const bool noMoreData = State.Test(ES_NO_MORE_DATA);
+        const bool bufferFilled = Buffer->IsFilled();
+        const bool uploaderReady = State.Test(ES_UPLOADER_READY);
+        const bool bufferSent = State.Test(ES_BUFFER_SENT);
 
-        if (!noMoreData && !Buffer->IsFilled()) {
+        EXPORT_LOG_D("MaybeSendBuffer"
+            << ": self# " << SelfId()
+            << ", noMoreData# " << noMoreData
+            << ", bufferFilled# " << bufferFilled
+            << ", uploaderReady# " << uploaderReady
+            << ", bufferSent# " << bufferSent);
+
+        if (!noMoreData && !bufferFilled) {
             return EScan::Feed;
         }
 
-        if (!State.Test(ES_UPLOADER_READY) || State.Test(ES_BUFFER_SENT)) {
+        if (!uploaderReady || bufferSent) {
+            EXPORT_LOG_D("MaybeSendBuffer - sleeping"
+                << ": self# " << SelfId()
+                << ", uploaderReady# " << uploaderReady
+                << ", bufferSent# " << bufferSent);
             Spent->Alter(false);
             return EScan::Sleep;
         }
@@ -96,14 +119,25 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
         if (!ev) {
             Success = false;
             Error = Buffer->GetError();
+            EXPORT_LOG_E("MaybeSendBuffer - failed to prepare event"
+                << ": self# " << SelfId()
+                << ", error# " << Error);
             return EScan::Final;
         }
 
+        EXPORT_LOG_I("MaybeSendBuffer - sending buffer to uploader"
+            << ": self# " << SelfId()
+            << ", uploader# " << Uploader
+            << ", noMoreData# " << noMoreData
+            << ", rows# " << stats.Rows
+            << ", bytesRead# " << stats.BytesRead);
         Send(Uploader, std::move(ev));
         State.Set(ES_BUFFER_SENT);
         Stats->Aggr(stats);
 
         if (noMoreData) {
+            EXPORT_LOG_I("MaybeSendBuffer - no more data, sleeping"
+                << ": self# " << SelfId());
             Spent->Alter(false);
             return EScan::Sleep;
         }
@@ -114,7 +148,7 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvReset::TPtr&) {
         Y_ENSURE(IsReady());
 
-        EXPORT_LOG_D("Handle TEvExportScan::TEvReset"
+        EXPORT_LOG_I("Handle TEvExportScan::TEvReset"
             << ": self# " << SelfId());
 
         Stats.Reset(new TStats);
@@ -126,8 +160,9 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvFeed::TPtr&) {
         Y_ENSURE(IsReady());
 
-        EXPORT_LOG_D("Handle TEvExportScan::TEvFeed"
-            << ": self# " << SelfId());
+        EXPORT_LOG_I("Handle TEvExportScan::TEvFeed"
+            << ": self# " << SelfId()
+            << ", uploader# " << Uploader);
 
         State.Set(ES_UPLOADER_READY).Reset(ES_BUFFER_SENT);
         Spent->Alter(true);
@@ -139,12 +174,17 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvFinish::TPtr& ev) {
         Y_ENSURE(IsReady());
 
-        EXPORT_LOG_D("Handle TEvExportScan::TEvFinish"
+        EXPORT_LOG_I("Handle TEvExportScan::TEvFinish"
             << ": self# " << SelfId()
+            << ", sender# " << ev->Sender
+            << ", success# " << ev->Get()->Success
+            << ", error# " << ev->Get()->Error
             << ", msg# " << ev->Get()->ToString());
 
         Success = ev->Get()->Success;
         Error = ev->Get()->Error;
+        EXPORT_LOG_I("Handle TEvFinish - touching driver with Final"
+            << ": self# " << SelfId());
         Driver->Touch(EScan::Final);
     }
 
@@ -184,17 +224,27 @@ public:
     }
 
     void Registered(TActorSystem* sys, const TActorId&) override {
+        EXPORT_LOG_I("Registered - creating uploader"
+            << ": self# " << SelfId());
         Uploader = sys->Register(CreateUploaderFn(), TMailboxType::HTSwap, AppData()->BatchPoolId);
+        EXPORT_LOG_I("Registered - uploader created"
+            << ": self# " << SelfId()
+            << ", uploader# " << Uploader);
 
         State.Set(ES_REGISTERED);
         MaybeReady();
     }
 
     EScan Seek(TLead& lead, ui64) override {
+        EXPORT_LOG_I("Seek called"
+            << ": self# " << SelfId()
+            << ", uploader# " << Uploader);
         lead.To(Scheme->Tags(), {}, ESeek::Lower);
         Buffer->Clear();
 
         State.Set(ES_INITIALIZED);
+        EXPORT_LOG_I("Seek - set initialized, calling MaybeReady"
+            << ": self# " << SelfId());
         MaybeReady();
 
         Spent->Alter(true);
@@ -213,11 +263,19 @@ public:
     }
 
     EScan Exhausted() override {
+        EXPORT_LOG_I("Exhausted - no more data"
+            << ": self# " << SelfId()
+            << ", uploader# " << Uploader);
         State.Set(ES_NO_MORE_DATA);
         return MaybeSendBuffer();
     }
 
     TAutoPtr<IDestructable> Finish(EStatus status) override {
+        EXPORT_LOG_I("Finish called"
+            << ": self# " << SelfId()
+            << ", status# " << static_cast<int>(status)
+            << ", success# " << Success
+            << ", error# " << Error);
         auto outcome = EExportOutcome::Success;
         if (status != EStatus::Done) {
             outcome = status == EStatus::Exception
@@ -227,6 +285,11 @@ public:
             outcome = EExportOutcome::Error;
         }
 
+        EXPORT_LOG_I("Finish - outcome determined"
+            << ": self# " << SelfId()
+            << ", outcome# " << static_cast<int>(outcome)
+            << ", bytesRead# " << Stats->BytesRead
+            << ", rows# " << Stats->Rows);
         PassAway();
         return new TExportScanProduct(outcome, Error, Stats->BytesRead, Stats->Rows);
     }

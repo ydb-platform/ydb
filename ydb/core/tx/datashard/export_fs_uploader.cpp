@@ -31,7 +31,6 @@ namespace NDataShard {
 using namespace NBackup;
 using namespace NBackupRestoreTraits;
 
-// Settings class for filesystem export
 class TFsSettings {
 public:
     const TString BasePath;      // Base path on filesystem (e.g., /mnt/exports)
@@ -88,7 +87,6 @@ struct TChangefeedExportDescriptions {
 class TFsUploader: public TActorBootstrapped<TFsUploader> {
     using TEvBuffer = TEvExportScan::TEvBuffer<TBuffer>;
 
-    // Write data to a file, creating parent directories if needed
     bool WriteFile(const TString& path, const TString& data, TString& error) {
         try {
             TFsPath fsPath(path);
@@ -114,14 +112,12 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
         }
     }
 
-    // Write protobuf message to file
     bool WriteMessage(const google::protobuf::Message& message, const TString& path, TString& error) {
         TString data;
         google::protobuf::TextFormat::PrintToString(message, &data);
         return WriteFile(path, data, error);
     }
 
-    // Write data with checksum
     bool WriteFileWithChecksum(const TString& path, const TString& data, TString& error) {
         if (!WriteFile(path, data, error)) {
             return false;
@@ -143,7 +139,6 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
         return true;
     }
 
-    // Write protobuf message with checksum
     bool WriteMessageWithChecksum(const google::protobuf::Message& message, const TString& path, TString& error) {
         TString data;
         google::protobuf::TextFormat::PrintToString(message, &data);
@@ -151,15 +146,23 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
     }
 
     void UploadMetadata() {
-        EXPORT_LOG_D("UploadMetadata"
-            << ": self# " << SelfId());
+        EXPORT_LOG_I("UploadMetadata started"
+            << ": self# " << SelfId()
+            << ", path# " << Settings.GetMetadataKey()
+            << ", metadataSize# " << Metadata.size());
 
         TString error;
         if (!WriteFileWithChecksum(Settings.GetMetadataKey(), Metadata, error)) {
+            EXPORT_LOG_E("UploadMetadata failed"
+                << ": self# " << SelfId()
+                << ", error# " << error);
             return Finish(false, error);
         }
 
         MetadataUploaded = true;
+        EXPORT_LOG_I("UploadMetadata completed"
+            << ": self# " << SelfId()
+            << ", enablePermissions# " << EnablePermissions);
         
         if (EnablePermissions) {
             UploadPermissions();
@@ -169,41 +172,59 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
     }
 
     void UploadPermissions() {
-        EXPORT_LOG_D("UploadPermissions"
-            << ": self# " << SelfId());
+        EXPORT_LOG_I("UploadPermissions started"
+            << ": self# " << SelfId()
+            << ", path# " << Settings.GetPermissionsKey()
+            << ", hasPermissions# " << Permissions.Defined());
 
         if (!Permissions) {
+            EXPORT_LOG_E("UploadPermissions failed - no permissions"
+                << ": self# " << SelfId());
             return Finish(false, "Cannot infer permissions");
         }
 
         TString error;
         if (!WriteMessageWithChecksum(Permissions.GetRef(), Settings.GetPermissionsKey(), error)) {
+            EXPORT_LOG_E("UploadPermissions failed"
+                << ": self# " << SelfId()
+                << ", error# " << error);
             return Finish(false, error);
         }
 
         PermissionsUploaded = true;
+        EXPORT_LOG_I("UploadPermissions completed"
+            << ": self# " << SelfId());
         UploadScheme();
     }
 
     void UploadScheme() {
-        EXPORT_LOG_D("UploadScheme"
-            << ": self# " << SelfId());
+        EXPORT_LOG_I("UploadScheme started"
+            << ": self# " << SelfId()
+            << ", path# " << Settings.GetSchemeKey()
+            << ", hasScheme# " << Scheme.Defined());
 
         if (!Scheme) {
+            EXPORT_LOG_E("UploadScheme failed - no scheme"
+                << ": self# " << SelfId());
             return Finish(false, "Cannot infer scheme");
         }
 
         TString error;
         if (!WriteMessageWithChecksum(Scheme.GetRef(), Settings.GetSchemeKey(), error)) {
+            EXPORT_LOG_E("UploadScheme failed"
+                << ": self# " << SelfId()
+                << ", error# " << error);
             return Finish(false, error);
         }
 
         SchemeUploaded = true;
+        EXPORT_LOG_I("UploadScheme completed"
+            << ": self# " << SelfId());
         UploadChangefeeds();
     }
 
     void UploadChangefeeds() {
-        EXPORT_LOG_D("UploadChangefeeds"
+        EXPORT_LOG_I("UploadChangefeeds started"
             << ": self# " << SelfId()
             << ", index# " << IndexExportedChangefeed
             << ", total# " << Changefeeds.size());
@@ -211,15 +232,25 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
         while (IndexExportedChangefeed < Changefeeds.size()) {
             const auto& desc = Changefeeds[IndexExportedChangefeed];
             
+            EXPORT_LOG_I("UploadChangefeeds processing changefeed"
+                << ": self# " << SelfId()
+                << ", index# " << IndexExportedChangefeed
+                << ", name# " << desc.Name
+                << ", prefix# " << desc.Prefix);
+            
             TString error;
             
-            // Write changefeed description
             if (!WriteMessageWithChecksum(desc.ChangefeedDescription, Settings.GetChangefeedKey(desc.Prefix), error)) {
+                EXPORT_LOG_E("UploadChangefeeds failed to write changefeed"
+                    << ": self# " << SelfId()
+                    << ", error# " << error);
                 return Finish(false, error);
             }
             
-            // Write topic description
             if (!WriteMessageWithChecksum(desc.Topic, Settings.GetTopicKey(desc.Prefix), error)) {
+                EXPORT_LOG_E("UploadChangefeeds failed to write topic"
+                    << ": self# " << SelfId()
+                    << ", error# " << error);
                 return Finish(false, error);
             }
             
@@ -227,50 +258,74 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
         }
 
         ChangefeedsUploaded = true;
+        EXPORT_LOG_I("UploadChangefeeds completed"
+            << ": self# " << SelfId()
+            << ", scanner# " << Scanner);
         
-        // Scheme upload is done, now wait for scanner to be ready for data export
-        // For now, we skip data export and finish successfully
         if (Scanner) {
+            EXPORT_LOG_I("Scanner already ready, finishing export"
+                << ": self# " << SelfId());
             // Tell scanner we're done (skip data export for now)
             Finish(true);
         } else {
+            EXPORT_LOG_I("Waiting for scanner to become ready"
+                << ": self# " << SelfId());
             // Wait for scanner to be ready
             Become(&TThis::StateWaitForScanner);
         }
     }
 
     void Handle(TEvExportScan::TEvReady::TPtr& ev) {
-        EXPORT_LOG_D("Handle TEvExportScan::TEvReady"
+        EXPORT_LOG_I("Handle TEvExportScan::TEvReady"
             << ": self# " << SelfId()
-            << ", sender# " << ev->Sender);
+            << ", sender# " << ev->Sender
+            << ", metadataUploaded# " << MetadataUploaded
+            << ", schemeUploaded# " << SchemeUploaded
+            << ", permissionsUploaded# " << PermissionsUploaded
+            << ", changefeedsUploaded# " << ChangefeedsUploaded
+            << ", error# " << Error.GetOrElse("none"));
 
         Scanner = ev->Sender;
 
         if (Error) {
+            EXPORT_LOG_I("Handle TEvReady - has error, passing away"
+                << ": self# " << SelfId()
+                << ", error# " << Error.GetOrElse("none"));
             return PassAway();
         }
 
         const bool permissionsDone = !EnablePermissions || PermissionsUploaded;
+        EXPORT_LOG_I("Handle TEvReady - checking completion"
+            << ": self# " << SelfId()
+            << ", permissionsDone# " << permissionsDone
+            << ", enablePermissions# " << EnablePermissions);
+            
         if (SchemeUploaded && MetadataUploaded && permissionsDone && ChangefeedsUploaded) {
-            // Scheme export is done, finish successfully
-            // Data export will be implemented later
+            EXPORT_LOG_I("Handle TEvReady - all uploads done, finishing"
+                << ": self# " << SelfId());
             Finish(true);
+        } else {
+            EXPORT_LOG_I("Handle TEvReady - waiting for uploads to complete"
+                << ": self# " << SelfId());
         }
     }
 
     void Handle(TEvBuffer::TPtr& ev) {
-        EXPORT_LOG_D("Handle TEvExportScan::TEvBuffer"
+        EXPORT_LOG_I("Handle TEvExportScan::TEvBuffer"
             << ": self# " << SelfId()
             << ", sender# " << ev->Sender
+            << ", isScanner# " << (ev->Sender == Scanner)
+            << ", last# " << ev->Get()->Last
             << ", msg# " << ev->Get()->ToString());
 
-        // For now, we don't handle data - just acknowledge and finish
-        // Data export will be implemented later
         if (ev->Sender == Scanner) {
             if (ev->Get()->Last) {
+                EXPORT_LOG_I("Handle TEvBuffer - last buffer received, finishing"
+                    << ": self# " << SelfId());
                 Finish(true);
             } else {
-                // Request more data (but we'll finish when we get the last buffer)
+                EXPORT_LOG_I("Handle TEvBuffer - requesting more data"
+                    << ": self# " << SelfId());
                 Send(Scanner, new TEvExportScan::TEvFeed());
             }
         }
@@ -338,34 +393,58 @@ public:
     }
 
     void Bootstrap() {
-        EXPORT_LOG_D("Bootstrap"
+        EXPORT_LOG_I("Bootstrap"
             << ": self# " << SelfId()
             << ", shardNum# " << Settings.Shard
             << ", basePath# " << Settings.BasePath
-            << ", relativePath# " << Settings.RelativePath);
+            << ", relativePath# " << Settings.RelativePath
+            << ", metadataUploaded# " << MetadataUploaded
+            << ", schemeUploaded# " << SchemeUploaded
+            << ", permissionsUploaded# " << PermissionsUploaded
+            << ", changefeedsUploaded# " << ChangefeedsUploaded);
 
         if (!MetadataUploaded) {
+            EXPORT_LOG_I("Starting metadata upload (shard 0 path)"
+                << ": self# " << SelfId());
             UploadMetadata();
         } else {
+            EXPORT_LOG_I("Non-zero shard, waiting for scanner"
+                << ": self# " << SelfId());
             Become(&TThis::StateWaitForScanner);
         }
     }
 
     STATEFN(StateBase) {
+        EXPORT_LOG_D("StateBase received event"
+            << ": self# " << SelfId()
+            << ", type# " << ev->GetTypeRewrite());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExportScan::TEvReady, Handle);
 
             sFunc(TEvents::TEvWakeup, Bootstrap);
             sFunc(TEvents::TEvPoisonPill, PassAway);
+        default:
+            EXPORT_LOG_W("StateBase unhandled event"
+                << ": self# " << SelfId()
+                << ", type# " << ev->GetTypeRewrite());
+            break;
         }
     }
 
     STATEFN(StateWaitForScanner) {
+        EXPORT_LOG_D("StateWaitForScanner received event"
+            << ": self# " << SelfId()
+            << ", type# " << ev->GetTypeRewrite());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExportScan::TEvReady, Handle);
             hFunc(TEvBuffer, Handle);
 
             sFunc(TEvents::TEvPoisonPill, PassAway);
+        default:
+            EXPORT_LOG_W("StateWaitForScanner unhandled event"
+                << ": self# " << SelfId()
+                << ", type# " << ev->GetTypeRewrite());
+            break;
         }
     }
 
@@ -452,10 +531,7 @@ IActor* TFsExport::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         dataShard, txId, Task, std::move(scheme), std::move(changefeeds), std::move(permissions), metadata.Serialize());
 }
 
-// CreateBuffer implementation - reuse S3 buffer for now since we need proper CSV serialization
-// Data export will be fully implemented later
 IExport::IBuffer* TFsExport::CreateBuffer() const {
-#ifndef KIKIMR_DISABLE_S3_OPS
     using namespace NBackupRestoreTraits;
     
     const auto& scanSettings = Task.GetScanSettings();
@@ -485,10 +561,6 @@ IExport::IBuffer* TFsExport::CreateBuffer() const {
     }
 
     return CreateS3ExportBuffer(std::move(bufferSettings));
-#else
-    Y_ENSURE(false, "S3 ops disabled, cannot create export buffer");
-    return nullptr;
-#endif
 }
 
 } // NDataShard

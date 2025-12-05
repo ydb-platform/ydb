@@ -7,6 +7,7 @@
 #include "export_fs.h"
 
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -76,6 +77,13 @@ protected:
                 return false;
             }
         } else if (backup.HasFSSettings()) {
+            LOG_INFO_S(ctx, NKikimrServices::DATASHARD_BACKUP,
+                "TBackupUnit::Run - FS export"
+                << ", tableId# " << tableId
+                << ", basePath# " << backup.GetFSSettings().GetBasePath()
+                << ", path# " << backup.GetFSSettings().GetPath()
+                << ", shardNum# " << backup.GetShardNum());
+            
             NBackupRestoreTraits::ECompressionCodec codec;
             if (!TryCodecFromTask(backup, codec)) {
                 Abort(op, ctx, TStringBuilder() << "Unsupported compression codec"
@@ -85,6 +93,10 @@ protected:
 
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToFs(backup, columns)).swap(exp);
+                LOG_INFO_S(ctx, NKikimrServices::DATASHARD_BACKUP,
+                    "TBackupUnit::Run - FS export created"
+                    << ", tableId# " << tableId
+                    << ", exportPtr# " << (void*)exp.get());
             } else {
                 Abort(op, ctx, "Exports to FS are disabled");
                 return false;
@@ -98,8 +110,18 @@ protected:
             return exp->CreateUploader(self, txId);
         };
 
+        LOG_INFO_S(ctx, NKikimrServices::DATASHARD_BACKUP,
+            "TBackupUnit::Run - creating buffer and scan"
+            << ", tableId# " << tableId
+            << ", txId# " << op->GetTxId());
+
         THolder<IBuffer> buffer{exp->CreateBuffer()};
         THolder<NTable::IScan> scan{CreateExportScan(std::move(buffer), createUploader)};
+
+        LOG_INFO_S(ctx, NKikimrServices::DATASHARD_BACKUP,
+            "TBackupUnit::Run - scan created, queueing"
+            << ", tableId# " << tableId
+            << ", localTableId# " << localTableId);
 
         const auto& taskName = appData->DataShardConfig.GetBackupTaskName();
         const auto taskPrio = appData->DataShardConfig.GetBackupTaskPriority();
@@ -128,12 +150,20 @@ protected:
         return op->HasScanResult();
     }
 
-    bool ProcessResult(TOperation::TPtr op, const TActorContext&) override {
+    bool ProcessResult(TOperation::TPtr op, const TActorContext& ctx) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto* result = CheckedCast<TExportScanProduct*>(op->ScanResult().Get());
         bool done = true;
+
+        LOG_INFO_S(ctx, NKikimrServices::DATASHARD_BACKUP,
+            "TBackupUnit::ProcessResult"
+            << ", txId# " << op->GetTxId()
+            << ", outcome# " << static_cast<int>(result->Outcome)
+            << ", error# " << result->Error
+            << ", bytesRead# " << result->BytesRead
+            << ", rowsRead# " << result->RowsRead);
 
         switch (result->Outcome) {
         case EExportOutcome::Success:
@@ -143,17 +173,29 @@ protected:
                 schemeOp->Error = std::move(result->Error);
                 schemeOp->BytesProcessed = result->BytesRead;
                 schemeOp->RowsProcessed = result->RowsRead;
+                LOG_INFO_S(ctx, NKikimrServices::DATASHARD_BACKUP,
+                    "TBackupUnit::ProcessResult - updated schemeOp"
+                    << ", txId# " << op->GetTxId()
+                    << ", success# " << schemeOp->Success);
             } else {
                 Y_ENSURE(false, "Cannot find schema tx: " << op->GetTxId());
             }
             break;
         case EExportOutcome::Aborted:
+            LOG_INFO_S(ctx, NKikimrServices::DATASHARD_BACKUP,
+                "TBackupUnit::ProcessResult - aborted"
+                << ", txId# " << op->GetTxId());
             done = false;
             break;
         }
 
         op->SetScanResult(nullptr);
         tx->SetScanTask(0);
+
+        LOG_INFO_S(ctx, NKikimrServices::DATASHARD_BACKUP,
+            "TBackupUnit::ProcessResult - done"
+            << ", txId# " << op->GetTxId()
+            << ", done# " << done);
 
         return done;
     }

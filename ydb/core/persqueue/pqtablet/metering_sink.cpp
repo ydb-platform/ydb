@@ -1,7 +1,9 @@
+#include "metering_sink.h"
+
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/metering/metering.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/size_literals.h>
-#include "metering_sink.h"
 
 
 namespace NKikimr::NPQ {
@@ -171,9 +173,12 @@ const TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMe
 
         CurrentUsedStorage_ = 0;
 
+        const TStringBuf schemaName = HasAppData() && AppDataVerified().FeatureFlags.GetUseYdsTopicStorageMetering()
+            ? "yds.serverless.v1"sv
+            : "ydb.serverless.v1"sv;
         return TMeteringSink::FlushParameters(
             "used_storage",
-            "ydb.serverless.v1",
+            ToString(schemaName),
             "byte*second",
             quantity
         ).withTags({

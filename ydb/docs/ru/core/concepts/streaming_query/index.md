@@ -26,7 +26,7 @@
 ### Использование [читателя](../datamodel/topic#consumer)
 
 По умолчанию чтение из топика происходит [без использования читателя](../../reference/ydb-sdk/topic.md#no-consumer).
-Чтобы использовать читателя необходимо предварительно его создать через [CLI](../../reference/ydb-cli/topic-consumer-add) или при создании топика с помощью [YQL](../../../yql/reference/syntax/create-topic.md).
+Чтобы использовать читателя необходимо предварительно его создать через [CLI](../../reference/ydb-cli/topic-consumer-add) или при создании топика с помощью [YQL](../../yql/reference/syntax/create-topic.md).
 Далее указать его имя в тексте запроса через `PRAGMA pq.Consumer=my_consumer` (см. пример в [CREATE STREAMING QUERY](../../../yql/reference/syntax/create-streaming-query)).
 
 ### Состояние запроса

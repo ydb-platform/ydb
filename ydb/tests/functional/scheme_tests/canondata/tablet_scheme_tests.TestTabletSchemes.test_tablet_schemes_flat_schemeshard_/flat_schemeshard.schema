@@ -5291,11 +5291,6 @@
                 "ColumnId": 49,
                 "ColumnName": "SubState",
                 "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 50,
-                "ColumnName": "TargetName",
-                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -5350,8 +5345,7 @@
                     46,
                     47,
                     48,
-                    49,
-                    50
+                    49
                 ],
                 "RoomID": 0,
                 "Codec": 0,

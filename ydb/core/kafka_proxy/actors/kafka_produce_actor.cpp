@@ -419,7 +419,7 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr reque
         Become(&TKafkaProduceActor::StateWork);
         ProcessRequests(ctx);
     } else {
-        KAFKA_LOG_W("Still in Accepting state after TEvPartitionWriter::TEvWriteAccepted cause cookies are expected: " << JoinSeq(", ", expectedCookies));
+        KAFKA_LOG_W("Still in accepting after receive TEvPartitionWriter::TEvWriteAccepted cause cookies are expected: " << JoinSeq(", ", expectedCookies));
     }
 }
 

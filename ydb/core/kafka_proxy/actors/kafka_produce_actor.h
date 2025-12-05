@@ -24,10 +24,6 @@ using namespace NKikimrClient;
 // Requests are processed in parallel, but it is guaranteed that the recording order will be preserved.
 // The order of responses to requests is also guaranteed.
 //
-// When the request begins to be processed, the actor enters the Accepting state. In this state, responses
-// are expected from all TPartitionWriters confirming acceptance of the request (TEvWriteAccepted). After that,
-// the actor switches back to the Work state. This guarantees the order of writing to each partition.
-//
 class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor> {
     struct TPendingRequest;
 

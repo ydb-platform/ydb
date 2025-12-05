@@ -215,6 +215,11 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+        if (!AppData()->FeatureFlags.GetEnableTruncateTable()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "TRUNCATE TABLE statement is not supported");
+            return result;
+        }
+
         const TTabletId ssId = context.SS->SelfTabletId();
 
         THolder<TProposeResponse> result;
@@ -366,14 +371,12 @@ public:
         return result;
     }
 
-    // TRUNCATE TABLE is not mvcc save. We can't abort it.
     void AbortPropose(TOperationContext&) override {
         Y_ABORT("no AbortPropose for TTruncateTable");
     }
 
-    // We don't want to allow the user to abort the TRUNCATE TABLE, this entails data loss
     void AbortUnsafe(TTxId, TOperationContext&) override {
-        Y_ABORT("no AbortUnsafe for TTruncateTable");
+        AbortUnsafeDropOperation(OperationId, forceDropTxId, context);
     }
 };
 

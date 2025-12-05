@@ -9,8 +9,6 @@ from ydb.tests.stress.common.common import WorkloadBase
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-
 class WorkloadConfig:
     """Configuration constants for the secondary index workload"""
     # Table structure constants

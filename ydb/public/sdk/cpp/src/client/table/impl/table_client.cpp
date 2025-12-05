@@ -359,7 +359,9 @@ TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSe
     SessionPool_.GetSession(std::move(ctx));
     return future.Apply([settingsCopy = settings](TAsyncCreateSessionResult future) mutable {
         auto result = future.ExtractValue();
-        result.Session_.SessionImpl_->PropagatedDeadline_ = settingsCopy.PropagatedDeadline_;
+        if (result.Session_.SessionImpl_) {
+            result.Session_.SessionImpl_->PropagatedDeadline_ = settingsCopy.PropagatedDeadline_;
+        }
         return std::move(result);
     });
 }
@@ -498,7 +500,7 @@ TFuture<TStatus> TTableClient::TImpl::CopyTable(const TSession& session, const s
     request.set_destination_path(TStringType{dst});
 
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::CopyTableRequest, Ydb::Table::CopyTableResponse>(
-        std::move(request), 
+        std::move(request),
         &Ydb::Table::V1::TableService::Stub::AsyncCopyTable,
         rpcSettings);
 }

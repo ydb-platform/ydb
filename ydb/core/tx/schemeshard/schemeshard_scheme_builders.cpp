@@ -31,7 +31,15 @@ bool BuildViewScheme(
 
     const auto& viewDesc = pathDesc.GetViewDescription();
     NYql::TIssues issues;
-    scheme = NYdb::NDump::BuildCreateViewQuery(viewDesc.GetName(), describeResult.GetPath(), viewDesc.GetQueryText(), database, backupRoot, issues);
+    scheme = NYdb::NDump::BuildCreateViewQuery(
+        viewDesc.GetName(),
+        describeResult.GetPath(),
+        viewDesc.GetQueryText(),
+        database,
+        backupRoot,
+        issues
+    );
+
     if (!scheme) {
         error = issues.ToString();
         return false;
@@ -117,4 +125,4 @@ NKikimrSchemeOp::EPathType GetPathType(const NKikimrScheme::TEvDescribeSchemeRes
     return describeResult.GetPathDescription().GetSelf().GetPathType();
 }
 
-}
+} // namespace NKikimr::NSchemeShard

@@ -3142,6 +3142,7 @@ attributes {
                     StaticCredentials {
                         User: "user"
                         Password: "pwd"
+                        PasswordSecretName: "pwd-secret-name"
                     }
                 }
                 Specific {
@@ -3161,7 +3162,7 @@ FOR
 WITH (
   CONNECTION_STRING = 'grpc://localhost:2135/?database=',
   USER = 'user',
-  PASSWORD_SECRET_NAME = '',
+  PASSWORD_SECRET_NAME = 'pwd-secret-name',
   CONSISTENCY_LEVEL = 'Row'
 );)";
         TestReplication(scheme, expected);

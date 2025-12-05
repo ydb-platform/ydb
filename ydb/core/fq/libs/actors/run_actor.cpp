@@ -1698,7 +1698,7 @@ private:
         apply("MaxTasksPerStage", ToString(MaxTasksPerStage));
         apply("MaxTasksPerOperation", ToString(MaxTasksPerOperation));
         apply("EnableComputeActor", "1");
-        apply("ComputeActorType", "async");
+        apply("ComputeActorType", "sync");
         apply("_EnablePrecompute", "1");
         apply("WatermarksMode", "disable");
         apply("WatermarksGranularityMs", "1000");

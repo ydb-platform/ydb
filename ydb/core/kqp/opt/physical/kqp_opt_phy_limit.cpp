@@ -359,106 +359,6 @@ TVector<TExprBase> ReplaceStageInput(const TDqStage& stage, size_t index, TExprB
     return inputs;
 }
 
-// Result of finding DqSource with KqpReadRangesSourceSettings in a stage
-struct TDqSourceInfo {
-    TDqSource Source;
-    TKqpReadRangesSourceSettings Settings;
-    size_t InputIndex;
-};
-
-// Find DqSource with KqpReadRangesSourceSettings in stage inputs
-TMaybe<TDqSourceInfo> FindDqSourceWithReadRanges(const TDqStage& stage) {
-    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
-        if (auto dqSource = stage.Inputs().Item(i).Maybe<TDqSource>()) {
-            if (auto sourceSettings = dqSource.Cast().Settings().Maybe<TKqpReadRangesSourceSettings>()) {
-                return TDqSourceInfo{dqSource.Cast(), sourceSettings.Cast(), i};
-            }
-        }
-    }
-    return {};
-}
-
-// Build new DqSource with updated settings (adding VectorTopK)
-TDqSource BuildSourceWithVectorTopK(
-    const TDqSource& oldSource,
-    const TKqpReadRangesSourceSettings& oldSettings,
-    const TKqpReadTableSettings& newSettings,
-    TExprContext& ctx)
-{
-    auto newSettingsNode = newSettings.BuildNode(ctx, oldSettings.Settings().Pos());
-    auto newSourceSettings = Build<TKqpReadRangesSourceSettings>(ctx, oldSettings.Pos())
-        .Table(oldSettings.Table())
-        .Columns(oldSettings.Columns())
-        .Settings(newSettingsNode)
-        .RangesExpr(oldSettings.RangesExpr())
-        .ExplainPrompt(oldSettings.ExplainPrompt())
-        .Done();
-    return Build<TDqSource>(ctx, oldSource.Pos())
-        .Settings(newSourceSettings)
-        .DataSource(oldSource.DataSource())
-        .Done();
-}
-
-// Build new stage with replaced input at given index
-TDqStage BuildStageWithNewInput(const TDqStage& stage, size_t inputIndex, TExprBase newInput, TExprContext& ctx) {
-    return Build<TDqStage>(ctx, stage.Pos())
-        .Inputs()
-            .Add(ReplaceStageInput(stage, inputIndex, newInput))
-            .Build()
-        .Program(stage.Program())
-        .Settings(stage.Settings())
-        .Done();
-}
-
-// Build TDqCnUnionAll with given stage
-TDqCnUnionAll BuildCnUnionAll(const TDqCnUnionAll& oldCnUnionAll, TDqStage newStage, TExprContext& ctx) {
-    return Build<TDqCnUnionAll>(ctx, oldCnUnionAll.Pos())
-        .Output()
-            .Stage(newStage)
-            .Index(oldCnUnionAll.Output().Index())
-            .Build()
-        .Done();
-}
-
-// Build TCoTopSort with given input
-TCoTopSort BuildTopSort(const TCoTopSort& oldTopSort, TExprBase newInput, TExprContext& ctx) {
-    return Build<TCoTopSort>(ctx, oldTopSort.Pos())
-        .Input(newInput)
-        .Count(oldTopSort.Count())
-        .SortDirections(oldTopSort.SortDirections())
-        .KeySelectorLambda(oldTopSort.KeySelectorLambda())
-        .Done();
-}
-
-// Check sort direction - returns true for valid ASC/DESC, false otherwise
-// Sets isAsc output parameter
-bool CheckSortDirection(const TCoTopSort& topSort, bool& isAsc) {
-    ESortDirection direction = GetSortDirection(topSort.SortDirections());
-    if (direction != ESortDirection::Forward && direction != ESortDirection::Reverse) {
-        return false;
-    }
-    isAsc = (direction == ESortDirection::Forward);
-    return true;
-}
-
-// Extract and validate KNN info from TopSort
-// Returns tuple of (columnName, metric, targetExpr) or nullopt if invalid
-std::optional<std::tuple<TString, TString, TExprNode::TPtr>> ExtractValidKnnInfo(
-    const TCoTopSort& topSort,
-    const TKikimrTableDescription& tableDesc,
-    bool isAsc,
-    const TMaybeNode<TCoFlatMapBase>& maybeFlatMap = {})
-{
-    TString metric;
-    auto knnInfo = FindValidKnnCandidate(
-        ExtractKnnInfoFromTopSort(topSort, maybeFlatMap), tableDesc, isAsc, metric);
-    if (!knnInfo) {
-        return std::nullopt;
-    }
-    auto [columnName, _, targetExpr] = *knnInfo;
-    return std::make_tuple(columnName, metric, targetExpr);
-}
-
 } // anonymous namespace
 
 TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
@@ -524,14 +424,19 @@ TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const
             // Check if the stage has a DqSource with KqpReadRangesSourceSettings
             // This happens for data queries where reads are converted to sources
             if (!isReadTableRanges) {
-                if (auto sourceInfo = FindDqSourceWithReadRanges(stage)) {
-                    maybeDqSource = sourceInfo->Source;
-                    maybeSourceSettings = sourceInfo->Settings;
-                    sourceInputIndex = sourceInfo->InputIndex;
-                    isReadTableRanges = true;
-                    if (stageBody.Maybe<TCoFlatMapBase>() && !maybeFlatMap) {
-                        maybeFlatMap = stageBody.Cast<TCoFlatMapBase>();
+                for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+                    if (auto dqSource = stage.Inputs().Item(i).Maybe<TDqSource>()) {
+                        if (auto sourceSettings = dqSource.Cast().Settings().Maybe<TKqpReadRangesSourceSettings>()) {
+                            maybeDqSource = dqSource.Cast();
+                            maybeSourceSettings = sourceSettings.Cast();
+                            sourceInputIndex = i;
+                            isReadTableRanges = true;
+                            break;
+                        }
                     }
+                }
+                if (isReadTableRanges && stageBody.Maybe<TCoFlatMapBase>() && !maybeFlatMap) {
+                    maybeFlatMap = stageBody.Cast<TCoFlatMapBase>();
                 }
             }
         }
@@ -576,18 +481,21 @@ TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const
         return node; // already set
     }
 
-    // Check sort direction and extract KNN info
-    bool isAsc;
-    if (!CheckSortDirection(topSort, isAsc)) {
+    // Check sort direction
+    ESortDirection direction = GetSortDirection(topSort.SortDirections());
+    if (direction != ESortDirection::Forward && direction != ESortDirection::Reverse) {
         return node;
     }
+    const bool isAsc = (direction == ESortDirection::Forward);
 
-    auto knnInfo = ExtractValidKnnInfo(topSort, tableDesc, isAsc, maybeFlatMap);
+    // Extract and validate KNN info
+    TString metric;
+    auto knnInfo = FindValidKnnCandidate(ExtractKnnInfoFromTopSort(topSort, maybeFlatMap), tableDesc, isAsc, metric);
     if (!knnInfo) {
         return node;
     }
 
-    auto [columnName, metric, targetExpr] = *knnInfo;
+    auto [columnName, _, targetExpr] = *knnInfo;
     settings.VectorTopKColumn = columnName;
     settings.VectorTopKMetric = metric;
     settings.VectorTopKTarget = WrapInPrecompute(TExprBase(targetExpr), ctx);
@@ -596,10 +504,33 @@ TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const
     // Handle source-based read (data queries)
     if (maybeSourceSettings && maybeStage) {
         auto stage = maybeStage.Cast();
-        auto newSource = BuildSourceWithVectorTopK(
-            maybeDqSource.Cast(), maybeSourceSettings.Cast(), settings, ctx);
-        auto newStage = BuildStageWithNewInput(stage, sourceInputIndex, newSource, ctx);
-        auto newCnUnionAll = BuildCnUnionAll(maybeCnUnionAll.Cast(), newStage, ctx);
+        auto oldSourceSettings = maybeSourceSettings.Cast();
+
+        auto newSettingsNode = settings.BuildNode(ctx, oldSourceSettings.Settings().Pos());
+        auto newSourceSettings = Build<TKqpReadRangesSourceSettings>(ctx, oldSourceSettings.Pos())
+            .Table(oldSourceSettings.Table())
+            .Columns(oldSourceSettings.Columns())
+            .Settings(newSettingsNode)
+            .RangesExpr(oldSourceSettings.RangesExpr())
+            .ExplainPrompt(oldSourceSettings.ExplainPrompt())
+            .Done();
+        auto newSource = Build<TDqSource>(ctx, maybeDqSource.Cast().Pos())
+            .Settings(newSourceSettings)
+            .DataSource(maybeDqSource.Cast().DataSource())
+            .Done();
+        auto newStage = Build<TDqStage>(ctx, stage.Pos())
+            .Inputs()
+                .Add(ReplaceStageInput(stage, sourceInputIndex, newSource))
+                .Build()
+            .Program(stage.Program())
+            .Settings(stage.Settings())
+            .Done();
+        auto newCnUnionAll = Build<TDqCnUnionAll>(ctx, maybeCnUnionAll.Cast().Pos())
+            .Output()
+                .Stage(newStage)
+                .Index(maybeCnUnionAll.Cast().Output().Index())
+                .Build()
+            .Done();
 
         TExprBase newTopSortInput = newCnUnionAll;
         if (maybeFlatMap && maybeFlatMap.Cast().Raw() != stage.Program().Body().Raw()) {
@@ -616,7 +547,12 @@ TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const
             }
         }
 
-        return BuildTopSort(topSort, newTopSortInput, ctx);
+        return Build<TCoTopSort>(ctx, topSort.Pos())
+            .Input(newTopSortInput)
+            .Count(topSort.Count())
+            .SortDirections(topSort.SortDirections())
+            .KeySelectorLambda(topSort.KeySelectorLambda())
+            .Done();
     }
 
     auto newReadNode = BuildReadNode(node.Pos(), ctx, input, settings);
@@ -651,12 +587,27 @@ TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const
                 .Build()
             .Settings(stage.Settings())
             .Done();
-        auto newCnUnionAll = BuildCnUnionAll(maybeCnUnionAll.Cast(), newStage, ctx);
+        auto newCnUnionAll = Build<TDqCnUnionAll>(ctx, maybeCnUnionAll.Cast().Pos())
+            .Output()
+                .Stage(newStage)
+                .Index(maybeCnUnionAll.Cast().Output().Index())
+                .Build()
+            .Done();
 
-        return BuildTopSort(topSort, newCnUnionAll, ctx);
+        return Build<TCoTopSort>(ctx, topSort.Pos())
+            .Input(newCnUnionAll)
+            .Count(topSort.Count())
+            .SortDirections(topSort.SortDirections())
+            .KeySelectorLambda(topSort.KeySelectorLambda())
+            .Done();
     }
 
-    return BuildTopSort(topSort, newReadNode, ctx);
+    return Build<TCoTopSort>(ctx, topSort.Pos())
+        .Input(newReadNode)
+        .Count(topSort.Count())
+        .SortDirections(topSort.SortDirections())
+        .KeySelectorLambda(topSort.KeySelectorLambda())
+        .Done();
 }
 
 namespace {
@@ -758,12 +709,26 @@ TExprBase KqpApplyVectorTopKToStageWithSource(TExprBase node, TExprContext& ctx,
     auto stage = node.Cast<TDqStage>();
 
     // Find DqSource with KqpReadRangesSourceSettings
-    auto sourceInfo = FindDqSourceWithReadRanges(stage);
-    if (!sourceInfo) {
+    TMaybeNode<TDqSource> maybeDqSource;
+    TMaybeNode<TKqpReadRangesSourceSettings> maybeSourceSettings;
+    size_t sourceInputIndex = 0;
+
+    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+        if (auto dqSource = stage.Inputs().Item(i).Maybe<TDqSource>()) {
+            if (auto sourceSettings = dqSource.Cast().Settings().Maybe<TKqpReadRangesSourceSettings>()) {
+                maybeDqSource = dqSource.Cast();
+                maybeSourceSettings = sourceSettings.Cast();
+                sourceInputIndex = i;
+                break;
+            }
+        }
+    }
+
+    if (!maybeSourceSettings) {
         return node;
     }
 
-    auto sourceSettings = sourceInfo->Settings;
+    auto sourceSettings = maybeSourceSettings.Cast();
     auto settings = TKqpReadTableSettings::Parse(sourceSettings.Settings());
 
     // Skip if already has VectorTopK or not a full table scan
@@ -783,18 +748,21 @@ TExprBase KqpApplyVectorTopKToStageWithSource(TExprBase node, TExprContext& ctx,
     }
     auto topSort = maybeTopSort.Cast();
 
-    // Check sort direction and extract KNN info
-    bool isAsc;
-    if (!CheckSortDirection(topSort, isAsc)) {
+    // Check sort direction
+    ESortDirection direction = GetSortDirection(topSort.SortDirections());
+    if (direction != ESortDirection::Forward && direction != ESortDirection::Reverse) {
         return node;
     }
+    const bool isAsc = (direction == ESortDirection::Forward);
 
-    auto knnInfo = ExtractValidKnnInfo(topSort, tableDesc, isAsc);
+    // Extract and validate KNN info
+    TString metric;
+    auto knnInfo = FindValidKnnCandidate(ExtractKnnInfoFromTopSort(topSort), tableDesc, isAsc, metric);
     if (!knnInfo) {
         return node;
     }
 
-    auto [columnName, metric, targetExpr] = *knnInfo;
+    auto [columnName, _, targetExpr] = *knnInfo;
     TExprNode::TPtr resolvedTarget = ResolveStageTarget(TExprBase(targetExpr), stage, ctx);
     if (!resolvedTarget) {
         return node;
@@ -805,9 +773,26 @@ TExprBase KqpApplyVectorTopKToStageWithSource(TExprBase node, TExprContext& ctx,
     settings.VectorTopKTarget = resolvedTarget;
     settings.VectorTopKLimit = WrapInPrecompute(topSort.Count(), ctx);
 
-    auto newSource = BuildSourceWithVectorTopK(sourceInfo->Source, sourceSettings, settings, ctx);
+    auto newSettingsNode = settings.BuildNode(ctx, sourceSettings.Settings().Pos());
+    auto newSourceSettings = Build<TKqpReadRangesSourceSettings>(ctx, sourceSettings.Pos())
+        .Table(sourceSettings.Table())
+        .Columns(sourceSettings.Columns())
+        .Settings(newSettingsNode)
+        .RangesExpr(sourceSettings.RangesExpr())
+        .ExplainPrompt(sourceSettings.ExplainPrompt())
+        .Done();
+    auto newSource = Build<TDqSource>(ctx, maybeDqSource.Cast().Pos())
+        .Settings(newSourceSettings)
+        .DataSource(maybeDqSource.Cast().DataSource())
+        .Done();
 
-    return BuildStageWithNewInput(stage, sourceInfo->InputIndex, newSource, ctx);
+    return Build<TDqStage>(ctx, stage.Pos())
+        .Inputs()
+            .Add(ReplaceStageInput(stage, sourceInputIndex, newSource))
+            .Build()
+        .Program(stage.Program())
+        .Settings(stage.Settings())
+        .Done();
 }
 
 } // namespace NKikimr::NKqp::NOpt

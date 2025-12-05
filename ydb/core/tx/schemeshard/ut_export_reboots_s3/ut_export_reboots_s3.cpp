@@ -813,19 +813,19 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
     
     // Async Replication
-    Y_UNIT_TEST(ShouldSucceedOnSingleReplicaton) {
+    Y_UNIT_TEST(ShouldSucceedOnSingleReplication) {
         RunS3({
             TTestData::Replication()
         }, TTestData::Request(EPathTypeReplication));
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSingleReplicaton) {
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleReplication) {
         CancelS3({
             TTestData::Replication()
         }, TTestData::Request(EPathTypeReplication));
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnSingleReplicaton) {
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleReplication) {
         ForgetS3({
             TTestData::Replication()
         }, TTestData::Request(EPathTypeReplication));

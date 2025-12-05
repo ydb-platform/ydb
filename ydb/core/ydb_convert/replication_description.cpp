@@ -151,7 +151,7 @@ bool CheckReplicationConfig(const NKikimrReplication::TReplicationConfig config,
             error = "not implemented";
             break;
         case NKikimrReplication::TReplicationConfig::TargetCase::kTransferSpecific:
-            error = "replication config was expected, transer config provided";
+            error = "Replication config was expected, Transfer config provided";
             break;
         default:
             error = "unexpected config type";

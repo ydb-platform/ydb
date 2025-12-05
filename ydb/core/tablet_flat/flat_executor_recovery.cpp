@@ -508,22 +508,19 @@ public:
         Done
     };
 
-    bool Error(const TString& error) {
+    void Error(const TString& error) {
         State = EState::Error;
         ErrorMessage = error;
-        return true;
     }
 
-    bool Done(size_t processedBytes) {
+    void Done(size_t processedBytes) {
         State = EState::Done;
         ProcessedBytes = processedBytes;
-        return true;
     }
 
-    bool PartialDone(size_t processedBytes) {
+    void PartialDone(size_t processedBytes) {
         State = EState::PartialDone;
         ProcessedBytes = processedBytes;
-        return true;
     }
 
     bool IsError() const {
@@ -606,9 +603,8 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         auto it = txc.DB.GetScheme().TableNames.find(Snapshot->Get()->TableName);
         if (it == txc.DB.GetScheme().TableNames.end()) {
-            return Result.Error(
-                TStringBuilder() << "Table " << Snapshot->Get()->TableName << " not found in database schema"
-            );
+            Result.Error(TStringBuilder() << "Table " << Snapshot->Get()->TableName << " not found in database schema");
+            return true;
         }
 
         const auto& table = txc.DB.GetScheme().Tables.at(it->second);
@@ -630,18 +626,19 @@ public:
                     break;
                 }
             } catch (const std::exception& e) {
-                return Result.Error(
-                    TStringBuilder() << "Failed to upload snapshot data: " << e.what() << ", line: " << line
-                );
+                Result.Error(TStringBuilder() << "Failed to upload snapshot data: " << e.what() << ", line: " << line);
+                return true;
             }
         }
 
         if (i < Snapshot->Get()->Lines.size()) {
             // Start new tx to upload the rest data
             Self->Execute(Self->CreateTxUploadSnapshot(std::move(Snapshot), i));
-            return Result.PartialDone(processedBytes);
+            Result.PartialDone(processedBytes);
+            return true;
         } else {
-            return Result.Done(processedBytes);
+            Result.Done(processedBytes);
+            return true;
         }
     }
 
@@ -688,17 +685,20 @@ public:
             try {
                 NJson::ReadJsonTree(line, &json, true);
             } catch (const std::exception& e) {
-                return Result.Error(TStringBuilder() << "Failed to parse changelog: " << e.what() << ", line: " << line);
+                Result.Error(TStringBuilder() << "Failed to parse changelog: " << e.what() << ", line: " << line);
+                return true;
             }
 
             if (!json.IsMap()) {
-                return Result.Error(TStringBuilder() << "Invalid JSON format in changelog line: " << line);
+                Result.Error(TStringBuilder() << "Invalid JSON format in changelog line: " << line);
+                return true;
             }
 
             if (json.Has("schema_changes")) {
                 auto changesJson = json["schema_changes"];
                 if (!changesJson.IsArray()) {
-                    return Result.Error(TStringBuilder() << "Invalid schema changes format in changelog line: " << line);
+                    Result.Error(TStringBuilder() << "Invalid schema changes format in changelog line: " << line);
+                    return true;
                 }
 
                 if (txc.DB.GetCommitRedoBytes() > 0) {
@@ -722,14 +722,16 @@ public:
 
                     txc.DB.Alter().Merge(protoSchema);
                 } catch (const std::exception& e) {
-                    return Result.Error(TStringBuilder() << "Failed to upload changelog schema: " << e.what() << ", line: " << line);
+                    Result.Error(TStringBuilder() << "Failed to upload changelog schema: " << e.what() << ", line: " << line);
+                    return true;
                 }
             }
 
             if (json.Has("data_changes")) {
                 auto changesJson = json["data_changes"];
                 if (!changesJson.IsArray()) {
-                    return Result.Error(TStringBuilder() << "Invalid data changes format in changelog line: " << line);
+                    Result.Error(TStringBuilder() << "Invalid data changes format in changelog line: " << line);
+                    return true;
                 }
 
                 const auto& changesArray = changesJson.GetArray();
@@ -738,7 +740,8 @@ public:
                         UploadData(change, nullptr, std::nullopt, Pool, txc);
                     }
                 } catch (const std::exception& e) {
-                    return Result.Error(TStringBuilder() << "Failed to upload changelog data: " << e.what() << ", line: " << line);
+                    Result.Error(TStringBuilder() << "Failed to upload changelog data: " << e.what() << ", line: " << line);
+                    return true;
                 }
             }
 
@@ -753,10 +756,11 @@ public:
         if (i < Changelog->Get()->Lines.size()) {
             // Start new tx to upload the rest data
             Self->Execute(Self->CreateTxUploadChangelog(std::move(Changelog), i));
-            return Result.PartialDone(processedBytes);
+            Result.PartialDone(processedBytes);
         } else {
-            return Result.Done(processedBytes);
+            Result.Done(processedBytes);
         }
+        return true;
     }
 
     void Complete(const TActorContext& ctx) override {

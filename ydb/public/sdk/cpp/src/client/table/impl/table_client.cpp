@@ -1,5 +1,9 @@
 #include "table_client.h"
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log_lazy.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 namespace NYdb::inline Dev {
 
 namespace NTable {
@@ -20,7 +24,7 @@ TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings) {
 TTableClient::TImpl::TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TClientSettings& settings)
     : TClientImplCommon(std::move(connections), settings)
     , Settings_(settings)
-    , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_)
+    , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_, DbDriverState_)
 {
     if (!DbDriverState_->StatCollector.IsCollecting()) {
         return;
@@ -289,6 +293,9 @@ TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSe
     auto rpcSettings = TRpcRequestSettings::Make(settings);
     rpcSettings.Header.push_back({NYdb::YDB_CLIENT_CAPABILITIES, NYdb::YDB_CLIENT_CAPABILITY_SESSION_BALANCER});
 
+    LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+        TStringBuilder() << "[Table] GetSession from pool");
+
     class TTableClientGetSessionCtx : public NSessionPool::IGetSessionCtx {
     public:
         TTableClientGetSessionCtx(std::shared_ptr<TTableClient::TImpl> client,
@@ -305,11 +312,16 @@ TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSe
         }
 
         void ReplyError(TStatus status) override {
+            LOG_LAZY(Client->DbDriverState_->Log, TLOG_ERR,
+                TStringBuilder() << "[Table] GetSession failed: "
+                    << status.GetStatus() << ", issues: " << status.GetIssues().ToOneLineString());
             TSession session(Client, "", "", false);
             ScheduleReply(TCreateSessionResult(std::move(status), std::move(session)));
         }
 
         void ReplySessionToUser(TKqpSessionCommon* session) override {
+            LOG_LAZY(Client->DbDriverState_->Log, TLOG_DEBUG,
+                TStringBuilder() << "[Table] Session from pool: id=" << session->GetId());
             TCreateSessionResult val(
                 TStatus(TPlainStatus()),
                 TSession(
@@ -383,6 +395,9 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
     auto createSessionPromise = NewPromise<TCreateSessionResult>();
     auto self = shared_from_this();
 
+    LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+        TStringBuilder() << "[Table] CreateSession: standalone=" << standalone);
+
     auto createSessionExtractor = [createSessionPromise, self, standalone]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             Ydb::Table::CreateSessionResult result;
@@ -395,9 +410,16 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
                     session.SessionImpl_->MarkActive();
                 }
                 self->DbDriverState_->StatCollector.IncSessionsOnHost(status.Endpoint);
+                LOG_LAZY(self->DbDriverState_->Log, TLOG_INFO,
+                    TStringBuilder() << "[Table] Session created: id=" << result.session_id()
+                        << ", endpoint=" << status.Endpoint
+                        << ", standalone=" << standalone);
             } else {
                 // We do not use SessionStatusInterception for CreateSession request
                 session.SessionImpl_->MarkBroken();
+                LOG_LAZY(self->DbDriverState_->Log, TLOG_ERR,
+                    TStringBuilder() << "[Table] Failed to create session: "
+                        << status.Status << ", issues: " << status.Issues.ToOneLineString());
             }
             TCreateSessionResult val(TStatus(std::move(status)), std::move(session));
             createSessionPromise.SetValue(std::move(val));
@@ -722,15 +744,29 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
     request.set_session_id(TStringType{session.GetId()});
     SetTxSettings(txSettings, request.mutable_tx_settings());
 
-    auto promise = NewPromise<TBeginTransactionResult>();
+    LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+        TStringBuilder() << "[Table] BeginTransaction: session_id=" << session.GetId());
 
-    auto extractor = [promise, session]
+    auto promise = NewPromise<TBeginTransactionResult>();
+    auto self = shared_from_this();
+
+    auto extractor = [promise, session, self]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             std::string txId;
             if (any) {
                 Ydb::Table::BeginTransactionResult result;
                 any->UnpackTo(&result);
                 txId = result.tx_meta().id();
+            }
+
+            if (status.Ok()) {
+                LOG_LAZY(self->DbDriverState_->Log, TLOG_DEBUG,
+                    TStringBuilder() << "[Table] Transaction started: tx_id=" << txId
+                        << ", session_id=" << session.GetId());
+            } else {
+                LOG_LAZY(self->DbDriverState_->Log, TLOG_ERR,
+                    TStringBuilder() << "[Table] Failed to begin transaction: session_id=" << session.GetId()
+                        << ", " << status.Status << ", issues: " << status.Issues.ToOneLineString());
             }
 
             TBeginTransactionResult beginTxResult(TStatus(std::move(status)),
@@ -758,9 +794,15 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
     request.set_tx_id(TStringType{txId});
     request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
 
-    auto promise = NewPromise<TCommitTransactionResult>();
+    LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+        TStringBuilder() << "[Table] CommitTransaction: tx_id=" << txId
+            << ", session_id=" << session.GetId());
 
-    auto extractor = [promise]
+    auto promise = NewPromise<TCommitTransactionResult>();
+    auto self = shared_from_this();
+    auto sessionId = session.GetId();
+
+    auto extractor = [promise, self, txId, sessionId]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             std::optional<TQueryStats> queryStats;
             if (any) {
@@ -770,6 +812,17 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
                 if (result.has_query_stats()) {
                     queryStats = TQueryStats(result.query_stats());
                 }
+            }
+
+            if (status.Ok()) {
+                LOG_LAZY(self->DbDriverState_->Log, TLOG_INFO,
+                    TStringBuilder() << "[Table] Transaction committed: tx_id=" << txId
+                        << ", session_id=" << sessionId);
+            } else {
+                LOG_LAZY(self->DbDriverState_->Log, TLOG_ERR,
+                    TStringBuilder() << "[Table] Failed to commit transaction: tx_id=" << txId
+                        << ", session_id=" << sessionId
+                        << ", " << status.Status << ", issues: " << status.Issues.ToOneLineString());
             }
 
             TCommitTransactionResult commitTxResult(TStatus(std::move(status)), queryStats);
@@ -794,6 +847,10 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
     auto request = MakeOperationRequest<Ydb::Table::RollbackTransactionRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
     request.set_tx_id(TStringType{txId});
+
+    LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+        TStringBuilder() << "[Table] RollbackTransaction: tx_id=" << txId
+            << ", session_id=" << session.GetId());
 
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RollbackTransactionRequest, Ydb::Table::RollbackTransactionResponse>(
         std::move(request),

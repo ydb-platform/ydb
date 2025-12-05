@@ -2,8 +2,11 @@
 
 #include "kqp_session_common.h"
 
-#include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/db_driver_state/state.h>
+#undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
 
 namespace NYdb::inline Dev {
 
@@ -104,7 +107,7 @@ private:
 public:
     using TKeepAliveCmd = std::function<void(TKqpSessionCommon* s)>;
     using TDeletePredicate = std::function<bool(TKqpSessionCommon* s, size_t sessionsCount)>;
-    TSessionPool(std::uint32_t maxActiveSessions);
+    TSessionPool(std::uint32_t maxActiveSessions, TDbDriverStatePtr dbDriverState);
 
     // Extracts session from pool or creates new one ising given ctx
     void GetSession(std::unique_ptr<IGetSessionCtx> ctx);
@@ -146,6 +149,7 @@ private:
     NSdkStats::TSessionCounter InPoolSessionsCounter_;
     NSdkStats::TSessionCounter SessionWaiterCounter_;
     NSdkStats::TAtomicCounter<::NMonitoring::TRate> FakeSessionsCounter_;
+    TDbDriverStatePtr DbDriverState_;
 };
 
 }

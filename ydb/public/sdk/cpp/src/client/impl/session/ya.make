@@ -9,6 +9,7 @@ PEERDIR(
     library/cpp/threading/future
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/impl/endpoints
+    ydb/public/sdk/cpp/src/client/impl/internal/db_driver_state
     ydb/public/sdk/cpp/src/client/types/operation
     ydb/public/sdk/cpp/src/library/operation_id
 )

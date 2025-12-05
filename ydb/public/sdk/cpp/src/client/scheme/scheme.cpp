@@ -3,6 +3,7 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log_lazy.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
@@ -181,6 +182,9 @@ public:
         auto request = MakeOperationRequest<Ydb::Scheme::MakeDirectoryRequest>(settings);
         request.set_path(TStringType{path});
 
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+            TStringBuilder() << "[Scheme] MakeDirectory: path=" << path);
+
         return RunSimple<Ydb::Scheme::V1::SchemeService, MakeDirectoryRequest, MakeDirectoryResponse>(
             std::move(request),
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncMakeDirectory,
@@ -191,6 +195,9 @@ public:
         auto request = MakeOperationRequest<Ydb::Scheme::RemoveDirectoryRequest>(settings);
         request.set_path(TStringType{path});
 
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+            TStringBuilder() << "[Scheme] RemoveDirectory: path=" << path);
+
         return RunSimple<Ydb::Scheme::V1::SchemeService, RemoveDirectoryRequest, RemoveDirectoryResponse>(
             std::move(request),
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncRemoveDirectory,
@@ -200,6 +207,9 @@ public:
     TAsyncDescribePathResult DescribePath(const std::string& path, const TDescribePathSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Scheme::DescribePathRequest>(settings);
         request.set_path(TStringType{path});
+
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+            TStringBuilder() << "[Scheme] DescribePath: path=" << path);
 
         auto promise = NThreading::NewPromise<TDescribePathResult>();
 
@@ -227,6 +237,9 @@ public:
     TAsyncListDirectoryResult ListDirectory(const std::string& path, const TListDirectorySettings& settings) {
         auto request = MakeOperationRequest<Ydb::Scheme::ListDirectoryRequest>(settings);
         request.set_path(TStringType{path});
+
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+            TStringBuilder() << "[Scheme] ListDirectory: path=" << path);
 
         auto promise = NThreading::NewPromise<TListDirectoryResult>();
 
@@ -273,6 +286,9 @@ public:
         if (settings.SetInterruptInheritance_) {
             request.set_interrupt_inheritance(settings.InterruptInheritanceValue_);
         }
+
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+            TStringBuilder() << "[Scheme] ModifyPermissions: path=" << path);
 
         for (const auto& action : settings.Actions_) {
             auto protoAction = request.add_actions();

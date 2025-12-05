@@ -294,34 +294,67 @@ Y_UNIT_TEST_SUITE_F(TExportToFsTests, TFsExportFixture) {
     }
 
     Y_UNIT_TEST(ShouldAcceptCompressionSettings) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TString basePath = TempDir().Path();
+        TString destinationPath = "backup/Table";
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+        Runtime().GetAppData().FeatureFlags.SetEnablePermissionsExport(true);
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Utf8" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(runtime, txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
-        TestExport(runtime, ++txId, "/MyRoot", R"(
+        TString request = Sprintf(R"(
             ExportToFsSettings {
-              base_path: "/tmp/ydb_export"
+              base_path: "%s"
               compression: "zstd-3"
               items {
                 source_path: "/MyRoot/Table"
-                destination_path: "backup/Table"
+                destination_path: "%s"
               }
             }
-        )");
+        )", basePath.c_str(), destinationPath.c_str());
 
-        auto response = TestGetExport(runtime, txId, "/MyRoot");
+        TestExport(Runtime(), ++txId, "/MyRoot", request);
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto response = TestGetExport(Runtime(), txId, "/MyRoot");
         UNIT_ASSERT(response.GetResponse().GetEntry().HasExportToFsSettings());
         
         const auto& settings = response.GetResponse().GetEntry().GetExportToFsSettings();
         UNIT_ASSERT_VALUES_EQUAL(settings.compression(), "zstd-3");
+
+        // Check that files exist on filesystem
+        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/metadata.json"), 
+                      "metadata.json should exist");
+        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/scheme.pb"), 
+                      "scheme.pb should exist");
+        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/permissions.pb"), 
+                      "permissions.pb should exist");
+        
+        // Check checksums exist
+        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/metadata.json.sha256"), 
+                      "metadata.json.sha256 should exist");
+        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/scheme.pb.sha256"), 
+                      "scheme.pb.sha256 should exist");
+        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/permissions.pb.sha256"), 
+                      "permissions.pb.sha256 should exist");
+
+        TString schemeContent = GetFsFileContent(basePath, destinationPath + "/scheme.pb");
+        UNIT_ASSERT_C(!schemeContent.empty(), "Scheme file should not be empty");
+        
+        Ydb::Table::CreateTableRequest schemeProto;
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(schemeContent, &schemeProto),
+                     "Should parse scheme protobuf");
+        
+        UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(schemeProto.primary_key_size(), 1);
     }
 
     Y_UNIT_TEST(ShouldFailOnNonExistentPath) {

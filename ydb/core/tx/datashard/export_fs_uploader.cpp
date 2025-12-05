@@ -344,12 +344,9 @@ public:
             << ", basePath# " << Settings.BasePath
             << ", relativePath# " << Settings.RelativePath);
 
-        // Only shard 0 uploads metadata/scheme/permissions
         if (!MetadataUploaded) {
             UploadMetadata();
         } else {
-            // Non-zero shards wait for scanner and then finish
-            // (data export will be implemented later)
             Become(&TThis::StateWaitForScanner);
         }
     }

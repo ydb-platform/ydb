@@ -1,4 +1,4 @@
-#include "ydb_state.h"
+#include "ydb_diagnostics.h"
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -11,20 +11,20 @@
 
 namespace NYdb::NConsoleClient {
 
-TCommandClusterState::TCommandClusterState()
-    : TClientCommandTree("state", {}, "Manage cluster internal state")
+TCommandClusterDiagnostics::TCommandClusterDiagnostics()
+    : TClientCommandTree("diagnostics", {}, "Manage cluster internal state")
 {
-    AddCommand(std::make_unique<TCommandClusterStateFetch>());
+    AddCommand(std::make_unique<TCommandClusterDiagnosticsCollect>());
 }
 
-TCommandClusterStateFetch::TCommandClusterStateFetch()
-    : TYdbReadOnlyCommand("fetch", {},
+TCommandClusterDiagnosticsCollect::TCommandClusterDiagnosticsCollect()
+    : TYdbReadOnlyCommand("collect", {},
         "Fetch aggregated cluster node state and metrics over a time period.\n"
         "Sends a cluster-wide request to collect state as a set of metrics from all nodes.\n"
         "One of the nodes gathers metrics from all others over the specified duration, then returns an aggregated result.")
 {}
 
-void TCommandClusterStateFetch::Config(TConfig& config) {
+void TCommandClusterDiagnosticsCollect::Config(TConfig& config) {
     TYdbReadOnlyCommand::Config(config);
     config.SetFreeArgsNum(0);
     config.Opts->AddLongOption("duration",
@@ -47,7 +47,7 @@ void TCommandClusterStateFetch::Config(TConfig& config) {
     config.AllowEmptyDatabase = true;
 }
 
-void TCommandClusterStateFetch::Parse(TConfig& config) {
+void TCommandClusterDiagnosticsCollect::Parse(TConfig& config) {
     TYdbReadOnlyCommand::Parse(config);
     ParseOutputFormats();
 }
@@ -104,7 +104,7 @@ struct TARFile {
     }
 };
 
-int TCommandClusterStateFetch::Run(TConfig& config) {
+int TCommandClusterDiagnosticsCollect::Run(TConfig& config) {
     NMonitoring::TMonitoringClient client(CreateDriver(config));
     NMonitoring::TClusterStateSettings settings;
     settings.DurationSeconds(DurationSeconds);

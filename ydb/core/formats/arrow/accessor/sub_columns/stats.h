@@ -53,30 +53,15 @@ public:
         }
         auto accessorResult = jsonPathAccessorTrie->GetAccessor(ToJsonPath(keyName));
         if (accessorResult.IsFail()) {
-            Cerr << "For key " << keyName << " returning std::nullopt " << __LINE__ << Endl;
             return std::nullopt;
         }
 
         auto accessor = accessorResult.DetachResult();
         if (!accessor) {
-            Cerr << "For key " << keyName << " returning std::nullopt " << __LINE__ << Endl;
             return std::nullopt;
         }
 
-        Cerr << "For key " << keyName << " returning " << accessor->GetCookie() << Endl;
-
         return accessor->GetCookie();
-
-        // for (ui32 i = 0; i < DataNames->length(); ++i) {
-        //     const auto arrView = DataNames->GetView(i);
-        //     Cerr << "Comparing |" << TString(arrView.data(), arrView.size()) << "| with |" << TString(keyName.data(), keyName.size()) << "|" << Endl;
-        //     AFL_VERIFY(keyName != R"("a"."d")");
-        //     if (std::string_view(arrView.data(), arrView.size()) == keyName) {
-        //         Cerr << "Found!!!111 |" << TString(arrView.data(), arrView.size()) << "|" << Endl;
-        //         return i;
-        //     }
-        // }
-        // return std::nullopt;
     }
 
     ui32 GetKeyIndexVerified(const std::string_view keyName) const {

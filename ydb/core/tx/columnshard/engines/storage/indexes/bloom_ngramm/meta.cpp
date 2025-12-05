@@ -370,7 +370,6 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<
     }
     auto strVal = std::static_pointer_cast<arrow::BinaryScalar>(value);
     const TString valString((const char*)strVal->value->data(), strVal->value->size());
-    Cerr << "VLAD DoCheckValueImpl " << valString << Endl;
     builder.FillNGrammHashes(NGrammSize, opLike, valString, predSet);
     return result;
 }

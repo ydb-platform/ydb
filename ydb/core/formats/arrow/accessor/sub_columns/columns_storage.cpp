@@ -14,16 +14,7 @@ TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
         for (auto&& i : records.GetColumns()) {
             AFL_VERIFY(Stats.GetColumnName(idx) == records.GetSchema()->field(idx)->name());
             if (i->GetRecordsCount() > i->GetNullsCount()) {
-                // ui32 dataSize = 0;
-                // i->VisitValues([&dataSize](std::shared_ptr<arrow::Array> arr){
-                //     AFL_VERIFY(arr);
-                //     AFL_VERIFY(arr->type_id() == arrow::binary()->id());
-                //     const auto& binaryArray = static_cast<const arrow::BinaryArray&>(*arr);
-                //     for (int64_t i = 0; i < binaryArray.length(); ++i) {
-                //         dataSize += binaryArray.Value(i).size();
-                //     }
-                // });
-                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), /*dataSize*/ i->GetValueRawBytes(), i->GetType());
+                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType());
             } else {
                 indexesToRemove.emplace_back(idx);
             }

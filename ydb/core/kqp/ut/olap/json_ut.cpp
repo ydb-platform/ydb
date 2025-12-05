@@ -299,34 +299,37 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();
     }
 
-    // TString scriptRestoreJsonArrayVariants = R"(
-    //     SCHEMA:
-    //     CREATE TABLE `/Root/ColumnTable` (
-    //         Col1 Uint64 NOT NULL,
-    //         Col2 JsonDocument,
-    //         PRIMARY KEY (Col1)
-    //     )
-    //     PARTITION BY HASH(Col1)
-    //     WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
-    //     ------
-    //     SCHEMA:
-    //     ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-    //     ------
-    //     SCHEMA:
-    //     ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`,
-    //                 `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`,
-    //                 `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
-    //     ------
-    //     DATA:
-    //     REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('["a", {"v" : 4}, 1,2,3,4,5,6,7,8,9,10,11,12]'))
-    //     ------
-    //     READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
-    //     EXPECTED: [[1u;["[\"a\",{\"v\":4},1,2,3,4,5,6,7,8,9,10,11,12]"]]]
+// TODO: fix if top-level arrays are needed
+#if 0
+    TString scriptRestoreJsonArrayVariants = R"(
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 JsonDocument,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`,
+                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`,
+                    `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('["a", {"v" : 4}, 1,2,3,4,5,6,7,8,9,10,11,12]'))
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["[\"a\",{\"v\":4},1,2,3,4,5,6,7,8,9,10,11,12]"]]]
 
-    // )";
-    // Y_UNIT_TEST_STRING_VARIATOR(RestoreJsonArrayVariants, scriptRestoreJsonArrayVariants) {
-    //     Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
-    // }
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(RestoreJsonArrayVariants, scriptRestoreJsonArrayVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
+#endif
 
     TString scriptDoubleFilterVariants = R"(
         SCHEMA:
@@ -1251,7 +1254,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             auto result = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
                 UPSERT INTO `/Root/olapTable` (id, json_payload)
-                VALUES (1, JsonDocument(@@{"a": {"b": {"c": 1}, "d": "e"}, "f": 3, "g": [1, 2, {"b": 3}]}@@));
+                VALUES (1, JsonDocument(@@{"a": {"b": {"c": 1}, "d": "e"}, "f": 3, "g": [1, 2, {"b": 3}], "h": null, "i": {}}@@));
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         }
@@ -1265,7 +1268,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
-            CompareYson(result, R"([[1u;["{\"a\":{\"b\":{\"c\":1},\"d\":\"e\"},\"f\":3,\"g\":[1,2,{\"b\":3}]}"]]])");
+            CompareYson(result, R"([[1u;["{\"a\":{\"b\":{\"c\":1},\"d\":\"e\"},\"f\":3,\"g\":[1,2,{\"b\":3}],\"h\":null,\"i\":{}}"]]])");
         }
 
         {
@@ -1277,7 +1280,6 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
-            // CompareYson(result, R"([])");?
             CompareYson(result, R"([[#]])");
         }
 
@@ -1341,6 +1343,30 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
             CompareYson(result, R"([[["3"]]])");
+        }
+
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT JSON_VALUE(json_payload, "$.h") FROM `/Root/olapTable`;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(result, R"([[#]])");
+        }
+
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT JSON_VALUE(json_payload, "$.i") FROM `/Root/olapTable`;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(result, R"([[#]])");
         }
     }
 }

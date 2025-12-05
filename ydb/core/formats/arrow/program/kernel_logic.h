@@ -267,10 +267,6 @@ private:
         }
         const auto buffer = std::static_pointer_cast<arrow::StringScalar>(jsonPathScalar)->value;
         std::string_view svPath((const char*)buffer->data(), buffer->size());
-        // if (!svPath.starts_with("$.") || svPath.size() == 2) {
-        //     return TConclusionStatus::Fail("incorrect path format: have to be as '$.**...**', actual: " + TString(svPath.data(), svPath.size()));
-        // }
-        // svPath = svPath.substr(2);
 
         return TDescription(resources.GetAccessorOptional(input.front().GetColumnId()), svPath);
     }

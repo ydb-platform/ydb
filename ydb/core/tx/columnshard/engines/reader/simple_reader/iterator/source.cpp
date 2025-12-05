@@ -207,7 +207,6 @@ TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDat
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
     THashMap<TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> indexInfo;
     for (auto&& i : indexContext.GetOperationsBySubColumn().GetData()) {
-        Cerr << "Check for subcolumn " << i.first << Endl;
         NIndexes::NRequest::TOriginalDataAddress addr(indexContext.GetColumnId(), i.first);
         for (auto&& op : i.second) {
             auto indexMeta = MutableStageData().GetIndexes()->FindIndexFor(addr, op);
@@ -216,19 +215,16 @@ TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDat
                 const auto indexesMeta = GetSourceSchema()->GetIndexInfo().FindSkipIndexes(addr, op);
                 if (indexesMeta.empty()) {
                     MutableStageData().AddRemapDataToIndex(checkAddr, nullptr);
-                    Cerr << "Check for subcolumn NO DATA " << __LINE__ << Endl;
                     continue;
                 }
                 indexMeta = SelectOptimalIndex(indexesMeta, op);
                 if (!indexMeta) {
                     MutableStageData().AddRemapDataToIndex(checkAddr, nullptr);
-                    Cerr << "Check for subcolumn NO DATA " << __LINE__ << Endl;
                     continue;
                 }
             }
             AFL_VERIFY(indexInfo.emplace(checkAddr, indexMeta).second);
             MutableStageData().AddRemapDataToIndex(checkAddr, indexMeta);
-            Cerr << "Check for subcolumn DATA FOUND" << Endl;
         }
     }
     THashMap<ui32, THashSet<NIndexes::NRequest::TOriginalDataAddress>> addresses;
@@ -249,7 +245,6 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
     const NArrow::NSSA::TProcessorContext& context, const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) {
     auto meta = MutableStageData().GetRemapDataToIndex(fetchContext);
     if (!meta) {
-        Cerr << "VLAD_NO_META" << Endl;
         NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed({});
         GetContext()->GetCommonContext()->GetCounters().OnNoIndex(GetRecordsCount());
         return NArrow::TColumnFilter::BuildAllowFilter();

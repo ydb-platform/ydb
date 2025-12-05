@@ -32,17 +32,11 @@ TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialA
     if (accessorResult.IsSuccess() && accessorResult.GetResult()->IsValid()) {
         return accessorResult;
     }
-    // if (auto idx = Header.GetColumnStats().GetKeyIndexOptional(svPath)) {
-    //     return PartialColumnsData.GetAccessorVerified(*idx);
-    // }
+
     if (OthersData) {
         return OthersData->GetPathAccessor(svPath, recordsCount);
     }
-    // TODO: check if it is needed
-    // else {
-    //     AFL_VERIFY(!Header.GetOtherStats().GetKeyIndexOptional(svPath));
-    //     return std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::binary(), recordsCount));
-    // }
+
     return std::shared_ptr<NSubColumns::TJsonPathAccessor>{};
 }
 

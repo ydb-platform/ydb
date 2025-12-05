@@ -78,31 +78,6 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<
         ++recordIndex;
     });
 
-    // accessor->VisitValues([&](std::shared_ptr<arrow::Array> arr) {
-    //     AFL_VERIFY(arr);
-    //     AFL_VERIFY(arr->type_id() == arrow::binary()->id());
-    //     const auto& binaryArray = static_cast<const arrow::BinaryArray&>(*arr);
-    //     for (int64_t i = 0; i < binaryArray.length(); ++i) {
-    //         auto value = binaryArray.Value(i);
-    //         if (value.empty()) {
-    //             builder.AddNull(recordIndex);
-    //             ++recordIndex;
-    //             continue;
-    //         }
-
-    //         auto reader = NBinaryJson::TBinaryJsonReader::Make(TStringBuf(value.data(), value.size()));
-    //         auto rootCursor = reader->GetRootCursor();
-    //         if (rootCursor.GetType() == NBinaryJson::EContainerType::TopLevelScalar &&
-    //             rootCursor.GetElement(0).GetType() == NBinaryJson::EEntryType::String) {
-    //             builder.AddRecord(recordIndex, rootCursor.GetElement(0).GetString());
-    //         } else {
-    //             builder.AddRecord(recordIndex, NBinaryJson::SerializeToJson(rootCursor));
-    //         }
-
-    //         ++recordIndex;
-    //     }
-    // });
-
     return builder.Finish(recordIndex);
 }
 

@@ -22,7 +22,7 @@ class WorkloadConfig:
     UNIQUE_INDEXES_ALLOWED = True
     UNIQUE_INDEX_PROBALITY = 0.1
     NULL_PROBABILITY = 0.05
-    
+
     # Column types
     ALLOWED_COLUMN_TYPES = ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64", "Utf8", "String", "Bool"]
 
@@ -435,7 +435,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
             else:
                 formatted_val = self._format_value_by_type(pk_values[i], col_type)
                 where_clause.append(f"{self._column_names[i]} = {formatted_val}")
-        
+
         return f"""
             UPDATE `{table_path}`
             SET {', '.join(set_clause)}
@@ -457,7 +457,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
             else:
                 formatted_val = self._format_value_by_type(pk_values[i], col_type)
                 where_clause.append(f"{self._column_names[i]} = {formatted_val}")
-        
+
         return f"""
             DELETE FROM `{table_path}`
             WHERE {' AND '.join(where_clause)};

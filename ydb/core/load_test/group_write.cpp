@@ -1020,7 +1020,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                         };
 
                         auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, Generation,
-                                GarbageCollectStep, Channel, true, Generation, GarbageCollectStep,
+                                GarbageCollectStep, Channel, false, Generation, GarbageCollectStep,
                                 new TVector<TLogoBlobID>({id}), nullptr, TInstant::Max(), false);
                         SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(gcCallback)));
                     }

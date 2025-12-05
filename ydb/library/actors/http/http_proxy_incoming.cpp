@@ -22,11 +22,11 @@ public:
 
     struct TResponseState {
         THttpOutgoingResponsePtr Response;
-        NActors::TActorId ProgressNotificationActor;
-        ui64 ProgressNotificationCookie = 0;
-        ui64 ProgressNotificationBytes = 0;
-        ui64 ProgressBytes = 0;
-        ui64 ProgressChunks = 0;
+        NActors::TActorId ProgressNotificationActor; // The actor to send progress notifications to
+        ui64 ProgressNotificationCookie = 0; // Cookie for progress notifications
+        ui64 ProgressNotificationBytes = 0; // The byte interval for progress notifications
+        ui64 ProgressBytes = 0; // Total bytes sent so far
+        ui64 ProgressChunks = 0; // Total data chunks sent so far
 
         operator bool() const {
             return Response != nullptr;
@@ -385,6 +385,9 @@ protected:
                     if (buffer->Size() == 0) { // end of headers / chunk
                         needToNotify = true;
                         if (buffer != response) {
+                            // If buffer != response, this means we are at the end of a data chunk (not headers).
+                            // This comparison distinguishes between the headers buffer (buffer == response)
+                            // and data chunk buffers (buffer != response).
                             CurrentResponse.ProgressChunks++;
                         }
                     } else {

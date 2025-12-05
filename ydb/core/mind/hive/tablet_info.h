@@ -150,7 +150,7 @@ public:
     TString GetLogPrefix() const;
 
 protected:
-    NKikimrTabletBase::TMetrics ResourceValues; // current values of various metrics
+    TMetrics ResourceValues; // current values of various metrics
     TTabletMetricsAggregates ResourceMetricsAggregates;
     TResourceNormalizedValues ResourceNormalizedValues;
 
@@ -281,7 +281,7 @@ public:
     const TNodeFilter& GetNodeFilter() const;
     bool InitiateStart(TNodeInfo* node);
 
-    const NKikimrTabletBase::TMetrics& GetResourceValues() const {
+    const TMetrics& GetResourceValues() const {
         return ResourceValues;
     }
 
@@ -298,7 +298,7 @@ public:
     }
 
     // ONLY for use in unit tests
-    NKikimrTabletBase::TMetrics& GetMutableResourceValues() {
+    TMetrics& GetMutableResourceValues() {
         return ResourceValues;
     }
 

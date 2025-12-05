@@ -27,6 +27,8 @@ namespace NYdb::inline Dev {
 namespace NYdb::inline Dev::NQuery {
 
 struct TCreateSessionSettings : public TSimpleRequestSettings<TCreateSessionSettings> {
+    FLUENT_SETTING_OPTIONAL(TDeadline, PropagatedDeadline);
+
     TCreateSessionSettings() {
         ClientTimeout(TDuration::Seconds(5));
     }
@@ -132,6 +134,8 @@ class TSession {
 public:
     const std::string& GetId() const;
 
+    const std::optional<TDeadline>& GetPropagatedDeadline() const;
+
     TAsyncExecuteQueryResult ExecuteQuery(const std::string& query, const TTxControl& txControl,
         const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
@@ -159,6 +163,7 @@ private:
 
 class TCreateSessionResult: public TStatus {
     friend class TSession::TImpl;
+    friend class TQueryClient;
 public:
     TCreateSessionResult(TStatus&& status, TSession&& session);
     TSession GetSession() const;

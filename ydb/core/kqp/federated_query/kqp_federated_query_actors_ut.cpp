@@ -40,8 +40,8 @@ namespace {
         return ResolveSecrets(TVector<TString>{secretName}, kikimr, userToken);
     }
 
-    void AssertBadRequest(TDescriptionPromise promise, const TString& err) {
-        UNIT_ASSERT_VALUES_EQUAL(Ydb::StatusIds::BAD_REQUEST, promise.GetFuture().GetValueSync().Status);
+    void AssertBadRequest(TDescriptionPromise promise, const TString& err, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::BAD_REQUEST) {
+        UNIT_ASSERT_VALUES_EQUAL(status, promise.GetFuture().GetValueSync().Status);
         UNIT_ASSERT_VALUES_EQUAL(err, promise.GetFuture().GetValueSync().Issues.ToString());
     }
 
@@ -420,6 +420,87 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         }
     }
 
+    Y_UNIT_TEST(SchemeCacheRetryErrors) {
+        class TTestSchemeCacheResponseModifier : public TDescribeSchemaSecretsService::ISchemeCacheResponseModifier {
+        public:
+            TTestSchemeCacheResponseModifier(int failProbablitity)
+                : FailProbablitity(failProbablitity)
+            {
+            }
+
+            void Modify(NSchemeCache::TSchemeCacheNavigate& result) override {
+                for (auto& entry: result.ResultSet) {
+                    if (rand() % 100 < FailProbablitity) {
+                        entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
+                    }
+                }
+            }
+
+        private:
+            const int FailProbablitity;
+        };
+
+        class TTestDescribeSchemaSecretsServiceFactory : public IDescribeSchemaSecretsServiceFactory {
+        public:
+            TTestDescribeSchemaSecretsServiceFactory(TDescribeSchemaSecretsService::ISchemeCacheResponseModifier* modifier)
+                : Modifier(modifier)
+            {
+            }
+
+            NActors::IActor* CreateService() override {
+                auto* service = new TDescribeSchemaSecretsService();
+                service->SetSchemeCacheResponseModifier(Modifier);
+                return service;
+            }
+
+        private:
+            TDescribeSchemaSecretsService::ISchemeCacheResponseModifier* Modifier;
+        };
+
+        {
+            TKikimrSettings settings;
+            auto modifier = MakeHolder<TTestSchemeCacheResponseModifier>(25);
+            auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(modifier.Get());
+            settings.SetDescribeSchemaSecretsServiceFactory(factory);
+            TKikimrRunner kikimr(settings);
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            static const auto SECRETS_CNT = 10;
+            std::vector<std::pair<TString, TString>> secrets;
+            for (int i = 0; i < SECRETS_CNT; ++i) {
+                secrets.push_back({"/Root/secret-name-" + ToString(i), "secret-value-" + ToString(i)});
+                CreateSchemaSecret(secrets.back().first, secrets.back().second, session);
+            }
+            std::vector<TDescriptionPromise> promises;
+            for (const auto& [secretName, secretValue] : secrets) {
+                promises.push_back(ResolveSecret(secretName, kikimr));
+            }
+
+            for (int i = 0; i < SECRETS_CNT; ++i) {
+                AssertSecretValue(secrets[i].second, promises[i]);
+            }
+        }
+
+        // {
+        //     TKikimrSettings settings;
+        //     auto modifier = MakeHolder<TTestSchemeCacheResponseModifier>(100);
+        //     auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(modifier.Get());
+        //     settings.SetDescribeSchemaSecretsServiceFactory(factory);
+        //     TKikimrRunner kikimr(settings);
+        //     kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        //     auto db = kikimr.GetTableClient();
+        //     auto session = db.CreateSession().GetValueSync().GetSession();
+
+        //     TString secretName = "/Root/secret-name";
+        //     TString secretValue = "secret-value";
+        //     CreateSchemaSecret(secretName, secretValue, session);
+
+        //     auto promise = ResolveSecret("/Root/secret-name", kikimr);
+        //     AssertBadRequest(promise, "<main>: Error: Retry limit exceeded for secret `/Root/secret-name`\n", Ydb::StatusIds::UNAVAILABLE);
+        // }
+    }
 }
 
 }

@@ -139,6 +139,9 @@ void TDescribeSchemaSecretsService::HandleIncomingRetryRequest(TEvResolveSecretR
 void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     const auto requestId = ev->Cookie;
     LOG_D(GetLogLabel("TEvNavigateKeySetResult", requestId));
+    if (SchemeCacheResponseModifier) {
+        SchemeCacheResponseModifier->Modify(*ev->Get()->Request);
+    }
 
     auto respIt = ResolveInFlight.find(requestId);
     Y_ENSURE(respIt != ResolveInFlight.end(), "such requestId is not registered");

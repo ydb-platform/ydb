@@ -132,6 +132,15 @@ public:
         SecretUpdateListener = secretUpdateListener;
     }
 
+    class ISchemeCacheResponseModifier : public TThrRefBase {
+    public:
+        virtual void Modify(NSchemeCache::TSchemeCacheNavigate& result) = 0;
+        virtual ~ISchemeCacheResponseModifier() = default;
+    };
+    void SetSchemeCacheResponseModifier(ISchemeCacheResponseModifier* modifier) {
+        SchemeCacheResponseModifier = modifier;
+    }
+
 private:
     ui64 LastRequestId = 0;
     THashMap<ui64, TRequestContext> RequestsInFlight;
@@ -139,6 +148,7 @@ private:
     THashMap<TString, TVersionedSecret> VersionedSecrets;
     THashMap<TString, TActorId> SchemeBoardSubscribers;
     ISecretUpdateListener* SecretUpdateListener;
+    ISchemeCacheResponseModifier* SchemeCacheResponseModifier;
 };
 
 void RegisterDescribeSecretsActor(

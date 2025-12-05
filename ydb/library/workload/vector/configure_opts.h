@@ -7,8 +7,8 @@
 namespace NYdbWorkload::NVector {
 
 struct TVectorOpts {
-    TString VectorType;
-    size_t  VectorDimension;
+    TString VectorType = "float";
+    size_t  VectorDimension = 1024;
 };
 
 void ConfigureVectorOpts(NLastGetopt::TOpts& opts, TVectorOpts* vectorOpts);

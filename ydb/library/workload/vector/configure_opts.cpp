@@ -1,12 +1,35 @@
 #include "configure_opts.h"
 
+#include <ydb/public/lib/ydb_cli/common/colors.h>
+
 namespace NYdbWorkload::NVector {
 
 void ConfigureVectorOpts(NLastGetopt::TOpts& opts, TVectorOpts* vectorOpts) {
-    opts.AddLongOption( "vector-type", "Type of vectors")
-        .Required().StoreResult(&vectorOpts->VectorType);
-    opts.AddLongOption( "vector-dimension", "Vector dimension")
-        .Required().StoreResult(&vectorOpts->VectorDimension);
+    NColorizer::TColors colors = NYdb::NConsoleClient::AutoColors(Cout);
+
+    {
+        const TVector<TString> vectorTypes = {"float", "int8", "uint8", "bit"};
+
+        TStringBuilder builder;
+        builder << "Type of vectors. Available options: ";
+        bool printComma = false;
+        for (const TString& vectorType : vectorTypes) {
+            if (printComma) {
+                builder << ", ";
+            } else {
+                printComma = true;
+            }
+            builder << colors.BoldColor() << vectorType << colors.OldColor();
+        }
+
+        opts.AddLongOption("vector-type", builder)
+            .DefaultValue(vectorOpts->VectorType)
+            .StoreResult(&vectorOpts->VectorType);
+    }
+
+    opts.AddLongOption("vector-dimension", "Vector dimension. Size of embedding vectors")
+        .DefaultValue(vectorOpts->VectorDimension)
+        .StoreResult(&vectorOpts->VectorDimension);
 }
 
 }

@@ -190,9 +190,10 @@ TExprBase KqpApplyLimitToOlapReadTable(TExprBase node, TExprContext& ctx, const 
 
 namespace {
 
-// Helper function to extract info from a Knn::*Distance Apply node
-// Returns all valid {column, method, target} tuples where one arg is a Member (table column)
-TVector<std::tuple<TString, TString, TExprNode::TPtr>> ExtractKnnDistanceFromApplyAll(
+// Helper function to extract KNN distance info from an Apply node.
+// Returns candidate interpretations: {column, method, target} tuples where one arg is a Member (table column).
+// Multiple candidates are returned because either Apply argument could be the column reference.
+TVector<std::tuple<TString, TString, TExprNode::TPtr>> ExtractKnnDistanceCandidates(
     const TCoApply& apply,
     const TNodeMap<TExprNode::TPtr>& argSubstitutions = {}) {
 
@@ -227,21 +228,22 @@ TVector<std::tuple<TString, TString, TExprNode::TPtr>> ExtractKnnDistanceFromApp
     return result;
 }
 
-// Recursively extract KNN info, unwrapping Just/FlatMap wrappers
-TVector<std::tuple<TString, TString, TExprNode::TPtr>> ExtractKnnDistanceInfoAll(
+// Recursively extract KNN distance info, unwrapping Just/FlatMap wrappers.
+// Returns candidate interpretations for the innermost KNN distance Apply node.
+TVector<std::tuple<TString, TString, TExprNode::TPtr>> UnwrapAndExtractKnnDistance(
     const TExprBase& expr, TNodeMap<TExprNode::TPtr> argSubstitutions = {}) {
 
     if (auto apply = expr.Maybe<TCoApply>()) {
-        return ExtractKnnDistanceFromApplyAll(apply.Cast(), argSubstitutions);
+        return ExtractKnnDistanceCandidates(apply.Cast(), argSubstitutions);
     }
     if (auto just = expr.Maybe<TCoJust>()) {
-        return ExtractKnnDistanceInfoAll(just.Cast().Input(), argSubstitutions);
+        return UnwrapAndExtractKnnDistance(just.Cast().Input(), argSubstitutions);
     }
     if (auto flatMap = expr.Maybe<TCoFlatMap>()) {
         if (flatMap.Cast().Lambda().Args().Size() == 1) {
             argSubstitutions[flatMap.Cast().Lambda().Args().Arg(0).Raw()] = flatMap.Cast().Input().Ptr();
         }
-        return ExtractKnnDistanceInfoAll(flatMap.Cast().Lambda().Body(), argSubstitutions);
+        return UnwrapAndExtractKnnDistance(flatMap.Cast().Lambda().Body(), argSubstitutions);
     }
     return {};
 }
@@ -280,7 +282,7 @@ TVector<std::tuple<TString, TString, TExprNode::TPtr>> FindKnnInfoInComputedColu
 
     if (auto asStruct = UnwrapToStruct(body)) {
         if (auto columnExpr = FindColumnExprInStruct(asStruct.Cast(), aliasName)) {
-            return ExtractKnnDistanceInfoAll(columnExpr.Cast());
+            return UnwrapAndExtractKnnDistance(columnExpr.Cast());
         }
     }
     if (auto map = body.Maybe<TCoMap>()) {
@@ -330,7 +332,7 @@ TVector<std::tuple<TString, TString, TExprNode::TPtr>> ExtractKnnInfoFromTopSort
     const TCoTopSort& topSort, const TMaybeNode<TCoFlatMapBase>& maybeFlatMap = {}) {
 
     auto lambdaBody = topSort.KeySelectorLambda().Body();
-    auto result = ExtractKnnDistanceInfoAll(lambdaBody);
+    auto result = UnwrapAndExtractKnnDistance(lambdaBody);
     if (result.empty()) {
         if (auto member = lambdaBody.Maybe<TCoMember>()) {
             auto aliasName = member.Cast().Name().Value();

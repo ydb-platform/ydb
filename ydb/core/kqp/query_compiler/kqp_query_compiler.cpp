@@ -65,7 +65,8 @@ void SetVectorTopKTarget(NKqpProto::TKqpPhyValue* targetProto, const TExprNode::
     } else if (expr.Maybe<TCoParameter>()) {
         targetProto->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
     } else {
-        YQL_ENSURE(false, "Unexpected VectorTopKTarget callable " << expr.Ref().Content());
+        YQL_ENSURE(false, "Unexpected VectorTopKTarget callable '" << expr.Ref().Content()
+            << "'. Expected TCoString or TCoParameter.");
     }
 }
 
@@ -80,7 +81,8 @@ void SetVectorTopKLimit(NKqpProto::TKqpPhyValue* limitProto, const TExprNode::TP
     } else if (expr.Maybe<TCoParameter>()) {
         limitProto->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
     } else {
-        YQL_ENSURE(false, "Unexpected VectorTopKLimit callable " << expr.Ref().Content());
+        YQL_ENSURE(false, "Unexpected VectorTopKLimit callable '" << expr.Ref().Content()
+            << "'. Expected TCoUint64 or TCoParameter.");
     }
 }
 
@@ -108,7 +110,8 @@ void FillVectorTopKSettings(
     auto* indexSettings = vectorTopK.MutableSettings();
     SetVectorTopKMetric(indexSettings, settings.VectorTopKMetric);
 
-    // Default vector settings - actual type will be determined from data
+    // Default vector settings: when vector_dimension is 0, actual type and dimension
+    // will be auto-detected from the target vector's format at runtime.
     indexSettings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
     indexSettings->set_vector_dimension(0);
 

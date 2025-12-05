@@ -115,20 +115,27 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         TExportInfo::TPtr exportInfo = nullptr;
 
+        auto processExportSettings = [&]<typename TSettings>(const TSettings& settings, TExportInfo::EKind kind, bool enableFeatureFlags) -> bool {
+            exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());
+            if (enableFeatureFlags) {
+                exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
+                exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
+            }
+            TString explain;
+            if (!FillItems(*exportInfo, settings, explain)) {
+                return Reply(
+                    std::move(response),
+                    Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder() << "Failed item check: " << explain
+                );
+            }
+            return false;
+        };
+
         switch (request.GetRequest().GetSettingsCase()) {
         case NKikimrExport::TCreateExportRequest::kExportToYtSettings:
-            {
-                const auto& settings = request.GetRequest().GetExportToYtSettings();
-                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::YT, settings, domainPath.Base()->PathId, request.GetPeerName());
-
-                TString explain;
-                if (!FillItems(*exportInfo, settings, explain)) {
-                    return Reply(
-                        std::move(response),
-                        Ydb::StatusIds::BAD_REQUEST,
-                        TStringBuilder() << "Failed item check: " << explain
-                    );
-                }
+            if (processExportSettings(request.GetRequest().GetExportToYtSettings(), TExportInfo::EKind::YT, false)) {
+                return true;
             }
             break;
 
@@ -138,10 +145,6 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 if (!settings.scheme()) {
                     settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
                 }
-
-                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
-                exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
-                exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
                 exportInfo->MaterializeIndexes = settings.materialize_indexes();
                 if (exportInfo->MaterializeIndexes && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
                     return Reply(
@@ -150,34 +153,18 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                         "Index materialization is not enabled"
                     );
                 }
-
-                TString explain;
-                if (!FillItems(*exportInfo, settings, explain)) {
-                    return Reply(
-                        std::move(response),
-                        Ydb::StatusIds::BAD_REQUEST,
-                        TStringBuilder() << "Failed item check: " << explain
-                    );
+                if (processExportSettings(settings, TExportInfo::EKind::S3, true)) {
+                    return true;
                 }
             }
             break;
 
         case NKikimrExport::TCreateExportRequest::kExportToFsSettings:
-            {
-                const auto& settings = request.GetRequest().GetExportToFsSettings();
-                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::FS, settings, domainPath.Base()->PathId, request.GetPeerName());
-                exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
-                exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
-                TString explain;
-                if (!FillItems(*exportInfo, settings, explain)) {
-                    return Reply(
-                        std::move(response),
-                        Ydb::StatusIds::BAD_REQUEST,
-                        TStringBuilder() << "Failed item check: " << explain
-                    );
-                }
+            if (processExportSettings(request.GetRequest().GetExportToFsSettings(), TExportInfo::EKind::FS, true)) {
+                return true;
             }
             break;
+
         default:
             Y_DEBUG_ABORT("Unknown export kind");
         }

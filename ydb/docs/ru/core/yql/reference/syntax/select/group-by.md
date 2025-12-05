@@ -334,6 +334,48 @@ GROUP BY
     HOP(ts, "PT1М", "PT1M", "PT1M");
 ```
 
+## GROUP BY HoppingWindow {#hopping_window}
+
+Новая версия [GROUP BY HOP](#hop)
+
+{% if select_command == "SELECT STREAM" %}
+Отличается от предшественника тем, что не требует указания аргумента `delay` из-за обязательного использования [водяных знаков](../../../../concepts/streaming_query/watermarks.md)
+{% else %}
+Отличается от предшественника тем, что не требует указания игнорируемого аргумента `delay`
+{% endif %}
+
+### Пример
+
+{% if select_command == "SELECT STREAM" %}
+```yql
+SELECT
+    key,
+    COUNT(*)
+FROM my_topic
+WITH (
+    FORMAT = json_each_row,
+    SCHEMA (
+        key String,
+        subkey String,
+        value String
+    )
+)
+GROUP BY
+    key,
+    HoppingWindow(CAST(subkey AS Timestamp), "PT10S", "PT1M");
+```
+{% else %}
+```yql
+SELECT
+    key,
+    COUNT(*)
+FROM my_table
+GROUP BY
+    key,
+    HoppingWindow(CAST(subkey AS Timestamp), "PT10S", "PT1M");
+```
+{% endif %}
+
 ## HAVING {#having}
 
 Фильтрация выборки `SELECT` по результатам вычисления [агрегатных функций](../../builtins/aggregation.md). Синтаксис аналогичен конструкции [`WHERE`](where.md).

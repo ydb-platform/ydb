@@ -87,7 +87,7 @@ struct TChangefeedExportDescriptions {
 class TFsUploader: public TActorBootstrapped<TFsUploader> {
     using TEvBuffer = TEvExportScan::TEvBuffer<TBuffer>;
 
-    bool WriteFile(const TString& path, const TString& data, TString& error) {
+    bool WriteFile(const TString& path, const TStringBuf& data, TString& error) {
         try {
             TFsPath fsPath(path);
             fsPath.Parent().MkDirs();
@@ -105,6 +105,31 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
         } catch (const std::exception& ex) {
             error = TStringBuilder() << "Failed to write file " << path << ": " << ex.what();
             EXPORT_LOG_E("WriteFile failed"
+                << ": self# " << SelfId()
+                << ", path# " << path
+                << ", error# " << error);
+            return false;
+        }
+    }
+
+    bool AppendFile(const TString& path, const TStringBuf& data, TString& error) {
+        try {
+            TFsPath fsPath(path);
+            fsPath.Parent().MkDirs();
+            
+            TFile file(path, OpenAlways | WrOnly | ForAppend);
+            file.Write(data.data(), data.size());
+            file.Close();
+            
+            EXPORT_LOG_D("AppendFile succeeded"
+                << ": self# " << SelfId()
+                << ", path# " << path
+                << ", size# " << data.size());
+            
+            return true;
+        } catch (const std::exception& ex) {
+            error = TStringBuilder() << "Failed to append to file " << path << ": " << ex.what();
+            EXPORT_LOG_E("AppendFile failed"
                 << ": self# " << SelfId()
                 << ", path# " << path
                 << ", error# " << error);
@@ -262,16 +287,25 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
             << ": self# " << SelfId()
             << ", scanner# " << Scanner);
         
+        StartDataUpload();
+    }
+
+    void StartDataUpload() {
+        EXPORT_LOG_I("StartDataUpload"
+            << ": self# " << SelfId()
+            << ", scanner# " << Scanner
+            << ", dataPath# " << Settings.GetDataKey(EDataFormat::Csv, CompressionCodec));
+
+        Become(&TThis::StateUploadData);
+
         if (Scanner) {
-            EXPORT_LOG_I("Scanner already ready, finishing export"
+            // Scanner is ready, request first data buffer
+            EXPORT_LOG_I("StartDataUpload - scanner ready, requesting data"
                 << ": self# " << SelfId());
-            // Tell scanner we're done (skip data export for now)
-            Finish(true);
+            Send(Scanner, new TEvExportScan::TEvFeed());
         } else {
-            EXPORT_LOG_I("Waiting for scanner to become ready"
+            EXPORT_LOG_I("StartDataUpload - waiting for scanner"
                 << ": self# " << SelfId());
-            // Wait for scanner to be ready
-            Become(&TThis::StateWaitForScanner);
         }
     }
 
@@ -301,13 +335,27 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
             << ", enablePermissions# " << EnablePermissions);
             
         if (SchemeUploaded && MetadataUploaded && permissionsDone && ChangefeedsUploaded) {
-            EXPORT_LOG_I("Handle TEvReady - all uploads done, finishing"
+            EXPORT_LOG_I("Handle TEvReady - scheme done, starting data upload"
                 << ": self# " << SelfId());
-            Finish(true);
+            StartDataUpload();
         } else {
             EXPORT_LOG_I("Handle TEvReady - waiting for uploads to complete"
                 << ": self# " << SelfId());
         }
+    }
+
+    void HandleDataReady(TEvExportScan::TEvReady::TPtr& ev) {
+        EXPORT_LOG_I("HandleDataReady"
+            << ": self# " << SelfId()
+            << ", sender# " << ev->Sender);
+
+        Scanner = ev->Sender;
+
+        if (Error) {
+            return PassAway();
+        }
+
+        Send(Scanner, new TEvExportScan::TEvFeed());
     }
 
     void Handle(TEvBuffer::TPtr& ev) {
@@ -316,18 +364,52 @@ class TFsUploader: public TActorBootstrapped<TFsUploader> {
             << ", sender# " << ev->Sender
             << ", isScanner# " << (ev->Sender == Scanner)
             << ", last# " << ev->Get()->Last
+            << ", bufferSize# " << ev->Get()->Buffer.Size()
             << ", msg# " << ev->Get()->ToString());
 
-        if (ev->Sender == Scanner) {
-            if (ev->Get()->Last) {
-                EXPORT_LOG_I("Handle TEvBuffer - last buffer received, finishing"
-                    << ": self# " << SelfId());
-                Finish(true);
-            } else {
-                EXPORT_LOG_I("Handle TEvBuffer - requesting more data"
-                    << ": self# " << SelfId());
-                Send(Scanner, new TEvExportScan::TEvFeed());
+        if (ev->Sender != Scanner) {
+            EXPORT_LOG_W("Handle TEvBuffer - ignoring buffer from unknown sender"
+                << ": self# " << SelfId()
+                << ", sender# " << ev->Sender
+                << ", scanner# " << Scanner);
+            return;
+        }
+
+        auto& buffer = ev->Get()->Buffer;
+        const TString dataPath = Settings.GetDataKey(EDataFormat::Csv, CompressionCodec);
+
+        // Append data to file
+        if (buffer.Size() > 0) {
+            TString error;
+            if (!AppendFile(dataPath, TStringBuf(buffer.Data(), buffer.Size()), error)) {
+                return Finish(false, error);
             }
+            DataBytesWritten += buffer.Size();
+        }
+
+        if (ev->Get()->Last) {
+            EXPORT_LOG_I("Handle TEvBuffer - last buffer received"
+                << ": self# " << SelfId()
+                << ", totalBytesWritten# " << DataBytesWritten
+                << ", checksum# " << ev->Get()->Checksum);
+
+            if (EnableChecksums && !ev->Get()->Checksum.empty()) {
+                TString checksumPath = ChecksumKey(dataPath);
+                TFsPath fsPath(dataPath);
+                TString checksumContent = ev->Get()->Checksum + ' ' + fsPath.GetName();
+                
+                TString error;
+                if (!WriteFile(checksumPath, checksumContent, error)) {
+                    return Finish(false, error);
+                }
+            }
+
+            Finish(true);
+        } else {
+            EXPORT_LOG_I("Handle TEvBuffer - requesting more data"
+                << ": self# " << SelfId()
+                << ", bytesWrittenSoFar# " << DataBytesWritten);
+            Send(Scanner, new TEvExportScan::TEvFeed());
         }
     }
 
@@ -371,7 +453,8 @@ public:
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
             TVector<TChangefeedExportDescriptions> changefeeds,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
-            TString&& metadata)
+            TString&& metadata,
+            ECompressionCodec compressionCodec)
         : Settings(TFsSettings::FromBackupTask(task))
         , DataShard(dataShard)
         , TxId(txId)
@@ -380,6 +463,7 @@ public:
         , Metadata(std::move(metadata))
         , Permissions(std::move(permissions))
         , Retries(task.GetNumberOfRetries())
+        , CompressionCodec(compressionCodec)
         , SchemeUploaded(task.GetShardNum() == 0 ? false : true)
         , ChangefeedsUploaded(task.GetShardNum() == 0 ? false : true)
         , MetadataUploaded(task.GetShardNum() == 0 ? false : true)
@@ -448,6 +532,23 @@ public:
         }
     }
 
+    STATEFN(StateUploadData) {
+        EXPORT_LOG_D("StateUploadData received event"
+            << ": self# " << SelfId()
+            << ", type# " << ev->GetTypeRewrite());
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExportScan::TEvReady, HandleDataReady);
+            hFunc(TEvBuffer, Handle);
+
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        default:
+            EXPORT_LOG_W("StateUploadData unhandled event"
+                << ": self# " << SelfId()
+                << ", type# " << ev->GetTypeRewrite());
+            break;
+        }
+    }
+
 private:
     TFsSettings Settings;
 
@@ -459,7 +560,9 @@ private:
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
     const ui32 Retries;
+    const ECompressionCodec CompressionCodec;
     ui64 IndexExportedChangefeed = 0;
+    ui64 DataBytesWritten = 0;
 
     TActorId Scanner;
     bool SchemeUploaded;
@@ -528,7 +631,8 @@ IActor* TFsExport::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     metadata.AddFullBackup(backup);
 
     return new TFsUploader(
-        dataShard, txId, Task, std::move(scheme), std::move(changefeeds), std::move(permissions), metadata.Serialize());
+        dataShard, txId, Task, std::move(scheme), std::move(changefeeds), std::move(permissions), 
+        metadata.Serialize(), CodecFromTask(Task));
 }
 
 IExport::IBuffer* TFsExport::CreateBuffer() const {

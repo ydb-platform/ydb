@@ -426,7 +426,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors", 10} // brute force vector search pushdown returns only LIMIT rows
+                {"/Root/Vectors", 100} // brute force vector search pushdown returns only 10 rows but scans 100 rows
             });
 
             // SELECT Key, Value --- same stats
@@ -435,7 +435,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors", 10}
+                {"/Root/Vectors", 100}
             });
         }
 

@@ -2833,7 +2833,9 @@ private:
             << ", execution id " << context->CurrentExecutionId
             << ", checkpoint id " << checkpointId << ", generation " << Generation
             << ", state load mode " << FederatedQuery::StateLoadMode_Name(stateLoadMode)
-            << ", streaming disposition " << streamingDisposition.ShortDebugString());
+            << ", streaming disposition " << streamingDisposition.ShortDebugString()
+            << ", has QueryPhysicalGraph " << (Request.QueryPhysicalGraph != nullptr)
+            << ", enabled watermarks " << Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks());
     }
 
 private:

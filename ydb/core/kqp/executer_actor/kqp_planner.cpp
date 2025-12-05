@@ -639,6 +639,7 @@ void TKqpPlanner::PrepareCheckpoints() {
     }
 
     const auto enableCheckpoints = static_cast<bool>(CheckpointCoordinatorId);
+    LOG_D("BuildCheckpointingAndWatermarksMode, enableCheckpoints: " << enableCheckpoints << ", EnableWatermarks: " << EnableWatermarks);
     TasksGraph.BuildCheckpointingAndWatermarksMode(enableCheckpoints, EnableWatermarks);
 
     if (!enableCheckpoints) {

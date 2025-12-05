@@ -635,11 +635,10 @@ public:
             // Start new tx to upload the rest data
             Self->Execute(Self->CreateTxUploadSnapshot(std::move(Snapshot), i));
             Result.PartialDone(processedBytes);
-            return true;
         } else {
             Result.Done(processedBytes);
-            return true;
         }
+        return true;
     }
 
     void Complete(const TActorContext& ctx) override {

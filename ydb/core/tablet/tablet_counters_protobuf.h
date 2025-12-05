@@ -69,7 +69,7 @@ public:
 
     const char* const * GetNames() const
     {
-        return Names.begin();
+        return Names.data();
     }
 
     virtual const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const

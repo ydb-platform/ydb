@@ -568,10 +568,35 @@ public:
         }
 
         TChannelsBindings channelsBinding;
-        bool isResolved = context.SS->ResolveSolomonChannels(op.GetStorageConfig(), dstPath.GetPathIdForDomain(), channelsBinding);
-        if (!isResolved) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
-            return result;
+        if (op.GetStorageConfig().ChannelSize() == 0) {
+            auto domainInfo = context.SS->ResolveDomainInfo(dstPath.GetPathIdForDomain());
+            const auto& pools = domainInfo->GetStoragePools();
+            if (pools.empty()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "No storage pools available in domain");
+                return result;
+            }
+
+            NKikimrSchemeOp::TKeyValueStorageConfig defaultConfig;
+            for (int i = 0; i < 3; ++i) {
+                auto* channel = defaultConfig.AddChannel();
+                if (static_cast<size_t>(i) < pools.size()) {
+                    channel->SetPreferredPoolKind(pools[i].GetKind());
+                } else {
+                    channel->SetPreferredPoolKind(pools[0].GetKind());
+                }
+            }
+
+            bool isResolved = context.SS->ResolveSolomonChannels(defaultConfig, dstPath.GetPathIdForDomain(), channelsBinding);
+            if (!isResolved) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct default channel binding");
+                return result;
+            }
+        } else {
+            bool isResolved = context.SS->ResolveSolomonChannels(op.GetStorageConfig(), dstPath.GetPathIdForDomain(), channelsBinding);
+            if (!isResolved) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
+                return result;
+            }
         }
 
         dstPath.MaterializeLeaf(owner);

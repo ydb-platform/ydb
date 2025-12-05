@@ -186,6 +186,7 @@ validation:
         stub->CreateTestShard(&ctx, request, &response);
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
         response.operation().result().UnpackTo(&result);
+        UNIT_ASSERT_VALUES_EQUAL(result.tablet_ids_size(), 1);
     }
 
     void DeleteTestShard(auto &channel, const TString &path) {

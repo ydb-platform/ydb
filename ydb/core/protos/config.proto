@@ -1933,6 +1933,17 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 70 }];
+        optional uint64 EncryptionThreadCountHDD = 7 [(ControlOptions) = {
+            Description: "Enables separate chunkwrites encryption threads for HDD disks only",
+            MinValue: 0,
+            MaxValue: 16,
+            DefaultValue: 0 }];
+        optional uint64 EncryptionThreadCountSSD = 8 [(ControlOptions) = {
+            Description: "Enables separate chunkwrites encryption threads for SSD, NVME",
+            MinValue: 0,
+            MaxValue: 16,
+            DefaultValue: 0 }];
+
     }
 
     message TBlobStorageControllerControls {

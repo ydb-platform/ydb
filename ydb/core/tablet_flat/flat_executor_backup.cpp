@@ -16,6 +16,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <yql/essentials/types/binary_json/read.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/util.h>
@@ -46,6 +47,12 @@ EScanStatus ToScanStatus(EStatus status) {
             return EScanStatus::Exception;
     }
     return EScanStatus::InProgress;
+}
+
+void WriteJson(TStringBuf in, NJsonWriter::TBuf& out) {
+    NJson::TJsonValue value;
+    Y_ENSURE(NJson::ReadJsonTree(in, &value));
+    out.WriteJsonValue(&value);
 }
 
 void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
@@ -91,13 +98,13 @@ void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
         writer.WriteKey(columnName).WriteFloat(columnData.AsValue<float>());
         break;
     case NScheme::NTypeIds::Date:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui16>());
+        writer.WriteKey(columnName).WriteString(TInstant::Days(columnData.AsValue<ui16>()).ToString());
         break;
     case NScheme::NTypeIds::Datetime:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui32>());
+        writer.WriteKey(columnName).WriteString(TInstant::Seconds(columnData.AsValue<ui32>()).ToString());
         break;
     case NScheme::NTypeIds::Timestamp:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui64>());
+        writer.WriteKey(columnName).WriteString(TInstant::MicroSeconds(columnData.AsValue<ui64>()).ToString());
         break;
     case NScheme::NTypeIds::Interval:
         writer.WriteKey(columnName).WriteLongLong(columnData.AsValue<i64>());
@@ -111,11 +118,14 @@ void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
         writer.WriteKey(columnName).WriteLongLong(columnData.AsValue<i64>());
         break;
     case NScheme::NTypeIds::Utf8:
-    case NScheme::NTypeIds::Json:
         writer.WriteKey(columnName).WriteString(columnData.AsBuf());
+    case NScheme::NTypeIds::Json:
+        writer.WriteKey(columnName);
+        WriteJson(columnData.AsBuf(), writer);
         break;
     case NScheme::NTypeIds::JsonDocument:
-        writer.WriteKey(columnName).WriteString(Base64Encode(NBinaryJson::SerializeToJson(columnData.AsBuf())));
+        writer.WriteKey(columnName);
+        WriteJson(NBinaryJson::SerializeToJson(columnData.AsBuf()), writer);
         break;
     case NScheme::NTypeIds::PairUi64Ui64: {
         auto pair = columnData.AsValue<std::pair<ui64, ui64>>();
@@ -131,6 +141,7 @@ void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
         writer.WriteKey(columnName).WriteString(actorId.ToString());
         break;
     }
+    case NScheme::NTypeIds::String:
     default:
         writer.WriteKey(columnName).WriteString(Base64Encode(columnData.AsBuf()));
         break;

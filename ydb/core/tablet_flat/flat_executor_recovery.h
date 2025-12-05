@@ -72,25 +72,21 @@ struct TEvSchemaData : public TEventLocal<TEvSchemaData, EvSchemaData> {
 };
 
 struct TEvSnapshotData : public TEventLocal<TEvSnapshotData, EvSnapshotData> {
-    TEvSnapshotData(const TString& tableName, TVector<TString>&& lines, ui64 size)
+    TEvSnapshotData(const TString& tableName, TVector<TString>&& lines)
         : TableName(tableName)
         , Lines(std::move(lines))
-        , Size(size)
     {}
 
     TString TableName;
     TVector<TString> Lines;
-    ui64 Size = 0;
 };
 
 struct TEvChangelogData : public TEventLocal<TEvChangelogData, EvChangelogData> {
-    TEvChangelogData(TVector<TString>&& lines, ui64 size)
+    TEvChangelogData(TVector<TString>&& lines)
         : Lines(std::move(lines))
-        , Size(size)
     {}
 
     TVector<TString> Lines;
-    ui64 Size = 0;
 };
 
 struct TEvDataAck : public TEventLocal<TEvDataAck, EvDataAck> {

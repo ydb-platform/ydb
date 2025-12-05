@@ -5,6 +5,8 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/io_formats/cell_maker/cell_maker.h>
+#include <ydb/core/protos/recoveryshard_config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -15,7 +17,6 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/file.h>
-#include <variant>
 
 
 namespace NKikimr::NTabletFlatExecutor::NRecovery {
@@ -37,170 +38,58 @@ TRawTypeValue MakeTypeValueFromJson(NScheme::TTypeInfo type, const NJson::TJsonV
     }
 
     NScheme::TTypeId typeId = type.GetTypeId();
-
     switch (typeId) {
         case NScheme::NTypeIds::Int32:
-            if (!value.IsInteger()) {
-                throw yexception() << "Expected integer value for Int32 type";
-            }
-            return ToRawTypeValue<NScheme::TInt32>(value.GetInteger(), pool);
         case NScheme::NTypeIds::Uint32:
-            if (!value.IsUInteger()) {
-                throw yexception() << "Expected unsigned integer value for Uint32 type";
-            }
-            return ToRawTypeValue<NScheme::TUint32>(value.GetUInteger(), pool);
         case NScheme::NTypeIds::Int64:
-            if (!value.IsInteger()) {
-                throw yexception() << "Expected integer value for Int64 type";
-            }
-            return ToRawTypeValue<NScheme::TInt64>(value.GetInteger(), pool);
         case NScheme::NTypeIds::Uint64:
-            if (!value.IsUInteger()) {
-                throw yexception() << "Expected unsigned integer value for Uint64 type";
-            }
-            return ToRawTypeValue<NScheme::TUint64>(value.GetUInteger(), pool);
         case NScheme::NTypeIds::Uint8:
-            if (!value.IsUInteger()) {
-                throw yexception() << "Expected unsigned integer value for Uint8 type";
-            }
-            return ToRawTypeValue<NScheme::TUint8>(value.GetUInteger(), pool);
         case NScheme::NTypeIds::Int8:
-            if (!value.IsInteger()) {
-                throw yexception() << "Expected integer value for Int8 type";
-            }
-            return ToRawTypeValue<NScheme::TInt8>(value.GetInteger(), pool);
         case NScheme::NTypeIds::Int16:
-            if (!value.IsInteger()) {
-                throw yexception() << "Expected integer value for Int16 type";
-            }
-            return ToRawTypeValue<NScheme::TInt16>(value.GetInteger(), pool);
         case NScheme::NTypeIds::Uint16:
-            if (!value.IsUInteger()) {
-                throw yexception() << "Expected unsigned integer value for Uint16 type";
-            }
-            return ToRawTypeValue<NScheme::TUint16>(value.GetUInteger(), pool);
         case NScheme::NTypeIds::Bool:
-            if (!value.IsBoolean()) {
-                throw yexception() << "Expected boolean value for Bool type";
-            }
-            return ToRawTypeValue<NScheme::TBool>(value.GetBoolean(), pool);
         case NScheme::NTypeIds::Double:
-            if (!value.IsDouble()) {
-                throw yexception() << "Expected double value for Double type";
-            }
-            return ToRawTypeValue<NScheme::TDouble>(value.GetDouble(), pool);
         case NScheme::NTypeIds::Float:
-            if (!value.IsDouble()) {
-                throw yexception() << "Expected double value for Float type";
-            }
-            return ToRawTypeValue<NScheme::TFloat>(value.GetDouble(), pool);
         case NScheme::NTypeIds::Date:
-            if (!value.IsUInteger()) {
-                throw yexception() << "Expected unsigned integer value for Date type";
-            }
-            return ToRawTypeValue<NScheme::TDate>(value.GetUInteger(), pool);
         case NScheme::NTypeIds::Datetime:
-            if (!value.IsUInteger()) {
-                throw yexception() << "Expected unsigned integer value for Datetime type";
-            }
-            return ToRawTypeValue<NScheme::TDatetime>(value.GetUInteger(), pool);
         case NScheme::NTypeIds::Timestamp:
-            if (!value.IsUInteger()) {
-                throw yexception() << "Expected unsigned integer value for Timestamp type";
-            }
-            return ToRawTypeValue<NScheme::TTimestamp>(value.GetUInteger(), pool);
         case NScheme::NTypeIds::Interval:
-            if (!value.IsInteger()) {
-                throw yexception() << "Expected integer value for Interval type";
-            }
-            return ToRawTypeValue<NScheme::TInterval>(value.GetInteger(), pool);
         case NScheme::NTypeIds::Date32:
-            if (!value.IsInteger()) {
-                throw yexception() << "Expected integer value for Date32 type";
-            }
-            return ToRawTypeValue<NScheme::TDate32>(value.GetInteger(), pool);
         case NScheme::NTypeIds::Datetime64:
-            if (!value.IsInteger()) {
-                throw yexception() << "Expected integer value for Datetime64 type";
-            }
-            return ToRawTypeValue<NScheme::TDatetime64>(value.GetInteger(), pool);
         case NScheme::NTypeIds::Timestamp64:
-            if (!value.IsInteger()) {
-                throw yexception() << "Expected integer value for Timestamp64 type";
-            }
-            return ToRawTypeValue<NScheme::TTimestamp64>(value.GetInteger(), pool);
         case NScheme::NTypeIds::Interval64:
-            if (!value.IsInteger()) {
-                throw yexception() << "Expected integer value for Interval64 type";
-            }
-            return ToRawTypeValue<NScheme::TInterval64>(value.GetInteger(), pool);
-        case NScheme::NTypeIds::Utf8: {
-            if (!value.IsString()) {
-                throw yexception() << "Expected string value for Utf8 type";
-            }
-            auto saved = pool.AppendString(TStringBuf(value.GetString()));
-            return TRawTypeValue(saved, typeId);
-        }
-        case NScheme::NTypeIds::Json: {
-            if (!value.IsString()) {
-                throw yexception() << "Expected string value for Json type";
-            }
-            auto saved = pool.AppendString(TStringBuf(value.GetString()));
-            return TRawTypeValue(saved, typeId);
-        }
+        case NScheme::NTypeIds::Utf8:
+        case NScheme::NTypeIds::Json:
         case NScheme::NTypeIds::JsonDocument: {
-            if (!value.IsString()) {
-                throw yexception() << "Expected string value for JsonDocument type";
+            auto* cell = pool.Allocate<TCell>();
+            TString err;
+            if (!NFormats::MakeCell(*cell, value, type, pool, err)) {
+                throw yexception() << "Failed to parse " << value << " for type " << typeId << ": " << err;
             }
-            TString decoded = Base64StrictDecode(value.GetString());
-            auto maybeBinaryJson = NBinaryJson::SerializeToBinaryJson(decoded);
-            if (std::holds_alternative<TString>(maybeBinaryJson)) {
-                throw yexception() << "Invalid JSON for JsonDocument provided: " + std::get<TString>(maybeBinaryJson);
+            if (!NFormats::CheckCellValue(*cell, type)) {
+                throw yexception() << "Invalid value " << value << " for type " << typeId;
             }
-            const auto& binaryJson = std::get<NBinaryJson::TBinaryJson>(maybeBinaryJson);
-            auto saved = pool.AppendString(TStringBuf(binaryJson.Data(), binaryJson.Size()));
-            return TRawTypeValue(saved, typeId);
+            return TRawTypeValue(cell->Data(), cell->Size(), typeId);
         }
         case NScheme::NTypeIds::PairUi64Ui64: {
-            if (!value.IsArray()) {
-                throw yexception() << "Expected array value for PairUi64Ui64 type";
-            }
-            const auto& arr = value.GetArray();
+            const auto& arr = value.GetArraySafe();
             if (arr.size() != 2) {
                 throw yexception() << "Expected array of size 2 for PairUi64Ui64 type";
             }
-            if (!arr[0].IsUInteger() || !arr[1].IsUInteger()) {
-                throw yexception() << "Expected unsigned integer values in array for PairUi64Ui64 type";
-            }
-            std::pair<ui64, ui64> pair = {arr[0].GetUInteger(), arr[1].GetUInteger()};
+            std::pair<ui64, ui64> pair = {arr[0].GetUIntegerSafe(), arr[1].GetUIntegerSafe()};
             return ToRawTypeValue<NScheme::TPairUi64Ui64>(pair, pool);
         }
         case NScheme::NTypeIds::ActorId: {
-            if (!value.IsString()) {
-                throw yexception() << "Expected string value for ActorId type";
-            }
             TActorId actorId;
-
-            const auto& v = value.GetString();
+            const auto& v = value.GetStringSafe();
             if (!actorId.Parse(v.data(), v.size())) {
                 throw yexception() << "Failed to parse ActorId from string: " << v;
             }
             return ToRawTypeValue<NScheme::TActorId>(actorId, pool);
         }
-        case NScheme::NTypeIds::String: {
-            if (!value.IsString()) {
-                throw yexception() << "Expected string value for String type";
-            }
-
-            TString decoded = Base64StrictDecode(value.GetString());
-            auto saved = pool.AppendString(TStringBuf(decoded));
-            return TRawTypeValue(saved, typeId);
-        }
+        case NScheme::NTypeIds::String:
         default: {
-            if (!value.IsString()) {
-                throw yexception() << "Expected string value for type id " << typeId;
-            }
-            TString decoded = Base64StrictDecode(value.GetString());
+            TString decoded = Base64StrictDecode(value.GetStringSafe());
             auto saved = pool.AppendString(TStringBuf(decoded));
             return TRawTypeValue(saved, typeId);
         }
@@ -307,6 +196,18 @@ void UploadData(const NJson::TJsonValue& json,  const NTable::TScheme::TTableInf
     }
 }
 
+ui64 RestoreTxMaxRedoBytes() {
+    return AppData()->RecoveryShardConfig.GetRestoreTxMaxRedoBytes();
+}
+
+ui64 RestoreTxMaxLines() {
+    return AppData()->RecoveryShardConfig.GetRestoreTxMaxLines();
+}
+
+ui64 RestoreInFlightBytes() {
+    return AppData()->RecoveryShardConfig.GetRestoreInFlightBytes();
+}
+
 } // anonymous namespace
 
 class TRecoveryShard : public TActor<TRecoveryShard>, public TTabletExecutedFlat {
@@ -315,9 +216,9 @@ public:
     friend class TTxUploadSnapshot;
     friend class TTxUploadChangelog;
 
-    ITransaction *CreateTxUploadSchema(TEvSchemaData::TPtr& ev);
-    ITransaction *CreateTxUploadSnapshot(TEvSnapshotData::TPtr& ev);
-    ITransaction *CreateTxUploadChangelog(TEvChangelogData::TPtr& ev);
+    ITransaction *CreateTxUploadSchema(TEvSchemaData::TPtr ev);
+    ITransaction *CreateTxUploadSnapshot(TEvSnapshotData::TPtr ev, size_t startLine = 0);
+    ITransaction *CreateTxUploadChangelog(TEvChangelogData::TPtr ev, size_t startLine = 0);
 
     explicit TRecoveryShard(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateWork)
@@ -599,6 +500,58 @@ private:
     TActorId RestoreSubscriber; // only for tests
 }; // TRecoveryShard
 
+class TUploadTxResult {
+public:
+    enum class EState : ui8 {
+        Error,
+        PartialDone,
+        Done
+    };
+
+    bool Error(const TString& error) {
+        State = EState::Error;
+        ErrorMessage = error;
+        return true;
+    }
+
+    bool Done(size_t processedBytes) {
+        State = EState::Done;
+        ProcessedBytes = processedBytes;
+        return true;
+    }
+
+    bool PartialDone(size_t processedBytes) {
+        State = EState::PartialDone;
+        ProcessedBytes = processedBytes;
+        return true;
+    }
+
+    bool IsError() const {
+        return State == EState::Error;
+    }
+
+    bool IsDone() const {
+        return State == EState::Done;
+    }
+
+    bool IsPartialDone() const {
+        return State == EState::PartialDone;
+    }
+
+    TString GetErrorMessage() const {
+        return ErrorMessage;
+    }
+
+    ui64 GetProcessedBytes() const {
+        return ProcessedBytes;
+    }
+
+private:
+    EState State = EState::Error;
+    TString ErrorMessage;
+    ui64 ProcessedBytes = 0;
+};
+
 class TTxUploadSchema : public TTransactionBase<TRecoveryShard> {
 public:
     TTxUploadSchema(TRecoveryShard* self, TEvSchemaData::TPtr& schema)
@@ -639,80 +592,119 @@ private:
 
 class TTxUploadSnapshot : public TTransactionBase<TRecoveryShard> {
 public:
-    TTxUploadSnapshot(TRecoveryShard* self, TEvSnapshotData::TPtr& snapshot)
+    TTxUploadSnapshot(TRecoveryShard* self, TEvSnapshotData::TPtr& snapshot, size_t startLine)
         : TBase(self)
         , Snapshot(snapshot)
         , Pool(1_MB)
+        , StartLine(startLine)
     {}
+
+    size_t ProcessedLines(size_t currentLine) const {
+        return currentLine - StartLine;
+    }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         auto it = txc.DB.GetScheme().TableNames.find(Snapshot->Get()->TableName);
         if (it == txc.DB.GetScheme().TableNames.end()) {
-            Error = TStringBuilder() << "Table " << Snapshot->Get()->TableName << " not found in database schema";
-            return true;
+            return Result.Error(
+                TStringBuilder() << "Table " << Snapshot->Get()->TableName << " not found in database schema"
+            );
         }
 
         const auto& table = txc.DB.GetScheme().Tables.at(it->second);
 
-        for (const auto& line : Snapshot->Get()->Lines) {
-            NJson::TJsonValue json;
+        size_t processedBytes = 0;
+        size_t i = StartLine;
+        while (i < Snapshot->Get()->Lines.size()) {
+            const auto& line = Snapshot->Get()->Lines[i];
 
             try {
+                NJson::TJsonValue json;
                 NJson::ReadJsonTree(line, &json, true);
                 UploadData(json, &table, NTable::ERowOp::Upsert, Pool, txc);
+
+                processedBytes += line.size() + 1; // +1 for newline
+                ++i;
+
+                if (ProcessedLines(i) >= RestoreTxMaxLines() || txc.DB.GetCommitRedoBytes() >= RestoreTxMaxRedoBytes()) {
+                    break;
+                }
             } catch (const std::exception& e) {
-                Error = TStringBuilder() << "Failed to upload snapshot data: " << e.what() << ", line: " << line;
-                return true;
+                return Result.Error(
+                    TStringBuilder() << "Failed to upload snapshot data: " << e.what() << ", line: " << line
+                );
             }
         }
 
-        return true;
+        if (i < Snapshot->Get()->Lines.size()) {
+            // Start new tx to upload the rest data
+            Self->Execute(Self->CreateTxUploadSnapshot(std::move(Snapshot), i));
+            return Result.PartialDone(processedBytes);
+        } else {
+            return Result.Done(processedBytes);
+        }
     }
 
     void Complete(const TActorContext& ctx) override {
-        if (Error) {
-            Self->CompleteRestore(false, Error);
-            ctx.Send(Snapshot->Sender, new TEvDataAck(false, Error));
-        } else {
-            Self->ProcessedBytes += Snapshot->Get()->Size;
+        if (Result.IsDone()) {
+            Self->ProcessedBytes += Result.GetProcessedBytes();
             ctx.Send(Snapshot->Sender, new TEvDataAck(true));
+        } else if (Result.IsPartialDone()) {
+            Self->ProcessedBytes += Result.GetProcessedBytes();
+         } else if (Result.IsError()) {
+            Self->CompleteRestore(false, Result.GetErrorMessage());
+            ctx.Send(Snapshot->Sender, new TEvDataAck(false, Result.GetErrorMessage()));
         }
     }
+
 private:
     TEvSnapshotData::TPtr Snapshot;
-    TString Error;
+    TUploadTxResult Result;
     TMemoryPool Pool;
+    size_t StartLine;
 }; // TTxUploadSnapshot
 
 class TTxUploadChangelog : public TTransactionBase<TRecoveryShard> {
 public:
-    TTxUploadChangelog(TRecoveryShard* self, TEvChangelogData::TPtr& changelog)
+    TTxUploadChangelog(TRecoveryShard* self, TEvChangelogData::TPtr& changelog, size_t startLine)
         : TBase(self)
         , Changelog(changelog)
         , Pool(1_MB)
+        , StartLine(startLine)
     {}
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        for (const auto& line : Changelog->Get()->Lines) {
-            NJson::TJsonValue json;
+    size_t ProcessedLines(size_t currentLine) const {
+        return currentLine - StartLine;
+    }
 
+    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+        size_t processedBytes = 0;
+        size_t i = StartLine;
+
+        while (i < Changelog->Get()->Lines.size()) {
+            const auto& line = Changelog->Get()->Lines[i];
+
+            NJson::TJsonValue json;
             try {
                 NJson::ReadJsonTree(line, &json, true);
             } catch (const std::exception& e) {
-                Error = TStringBuilder() << "Failed to parse changelog: " << e.what() << ", line: " << line;
-                return true;
+                return Result.Error(TStringBuilder() << "Failed to parse changelog: " << e.what() << ", line: " << line);
             }
 
             if (!json.IsMap()) {
-                Error = TStringBuilder() << "Invalid JSON format in changelog line: " << line;
-                return true;
+                return Result.Error(TStringBuilder() << "Invalid JSON format in changelog line: " << line);
             }
 
             if (json.Has("schema_changes")) {
                 auto changesJson = json["schema_changes"];
                 if (!changesJson.IsArray()) {
-                    Error = TStringBuilder() << "Invalid schema changes format in changelog line: " << line;
-                    return true;
+                    return Result.Error(TStringBuilder() << "Invalid schema changes format in changelog line: " << line);
+                }
+
+                if (txc.DB.GetCommitRedoBytes() > 0) {
+                    // Schema changes can't be applied after data changes in the same transaction.
+                    // Restart from this line in a new transaction.
+                    break;
                 }
 
                 const auto& changesArray = changesJson.GetArray();
@@ -729,17 +721,15 @@ public:
                     }
 
                     txc.DB.Alter().Merge(protoSchema);
-                } catch (const yexception& e) {
-                    Error = TStringBuilder() << "Failed to upload changelog schema: " << e.what() << ", line: " << line;
-                    return true;
+                } catch (const std::exception& e) {
+                    return Result.Error(TStringBuilder() << "Failed to upload changelog schema: " << e.what() << ", line: " << line);
                 }
             }
 
             if (json.Has("data_changes")) {
                 auto changesJson = json["data_changes"];
                 if (!changesJson.IsArray()) {
-                    Error = TStringBuilder() << "Invalid data changes format in changelog line: " << line;
-                    return true;
+                    return Result.Error(TStringBuilder() << "Invalid data changes format in changelog line: " << line);
                 }
 
                 const auto& changesArray = changesJson.GetArray();
@@ -748,40 +738,55 @@ public:
                         UploadData(change, nullptr, std::nullopt, Pool, txc);
                     }
                 } catch (const std::exception& e) {
-                    Error = TStringBuilder() << "Failed to upload changelog data: " << e.what() << ", line: " << line;
-                    return true;
+                    return Result.Error(TStringBuilder() << "Failed to upload changelog data: " << e.what() << ", line: " << line);
                 }
+            }
+
+            processedBytes += line.size() + 1; // +1 for newline;
+            ++i;
+
+            if (ProcessedLines(i) >= RestoreTxMaxLines() || txc.DB.GetCommitRedoBytes() >= RestoreTxMaxRedoBytes()) {
+                break;
             }
         }
 
-        return true;
+        if (i < Changelog->Get()->Lines.size()) {
+            // Start new tx to upload the rest data
+            Self->Execute(Self->CreateTxUploadChangelog(std::move(Changelog), i));
+            return Result.PartialDone(processedBytes);
+        } else {
+            return Result.Done(processedBytes);
+        }
     }
 
     void Complete(const TActorContext& ctx) override {
-        if (Error) {
-            Self->CompleteRestore(true, Error); // changelog errors are warnings
-            ctx.Send(Changelog->Sender, new TEvDataAck(false, Error));
-        } else {
-            Self->ProcessedBytes += Changelog->Get()->Size;
+         if (Result.IsDone()) {
+            Self->ProcessedBytes += Result.GetProcessedBytes();
             ctx.Send(Changelog->Sender, new TEvDataAck(true));
+        } else if (Result.IsPartialDone()) {
+            Self->ProcessedBytes += Result.GetProcessedBytes();
+        } else if (Result.IsError()) {
+            Self->CompleteRestore(true, Result.GetErrorMessage()); // changelog errors are warnings
+            ctx.Send(Changelog->Sender, new TEvDataAck(false, Result.GetErrorMessage()));
         }
     }
 private:
     TEvChangelogData::TPtr Changelog;
-    TString Error;
+    TUploadTxResult Result;
     TMemoryPool Pool;
+    size_t StartLine;
 }; // TTxUploadChangelog
 
-ITransaction* TRecoveryShard::CreateTxUploadSchema(TEvSchemaData::TPtr& ev) {
+ITransaction* TRecoveryShard::CreateTxUploadSchema(TEvSchemaData::TPtr ev) {
     return new TTxUploadSchema(this, ev);
 }
 
-ITransaction* TRecoveryShard::CreateTxUploadSnapshot(TEvSnapshotData::TPtr& ev) {
-    return new TTxUploadSnapshot(this, ev);
+ITransaction* TRecoveryShard::CreateTxUploadSnapshot(TEvSnapshotData::TPtr ev, size_t startLine) {
+    return new TTxUploadSnapshot(this, ev, startLine);
 }
 
-ITransaction* TRecoveryShard::CreateTxUploadChangelog(TEvChangelogData::TPtr& ev) {
-    return new TTxUploadChangelog(this, ev);
+ITransaction* TRecoveryShard::CreateTxUploadChangelog(TEvChangelogData::TPtr ev, size_t startLine) {
+    return new TTxUploadChangelog(this, ev, startLine);
 }
 
 class TBackupReader : public TActorBootstrapped<TBackupReader> {
@@ -907,7 +912,7 @@ public:
             ui64 linesSize = 0;
             try {
                 TString line;
-                while (linesSize < 1_MB && CurrentFileInput->ReadLine(line)) {
+                while (linesSize < RestoreInFlightBytes() && CurrentFileInput->ReadLine(line)) {
                     linesSize += line.size() + 1; // +1 for \n
                     lines.push_back(std::move(line));
                 }
@@ -922,9 +927,9 @@ public:
             }
 
             if (CurrentTableName) {
-                Send(Owner, new TEvSnapshotData(CurrentTableName, std::move(lines), linesSize));
+                Send(Owner, new TEvSnapshotData(CurrentTableName, std::move(lines)));
             } else {
-                Send(Owner, new TEvChangelogData(std::move(lines), linesSize));
+                Send(Owner, new TEvChangelogData(std::move(lines)));
             }
             return;
         }

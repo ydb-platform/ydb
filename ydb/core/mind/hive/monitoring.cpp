@@ -3122,7 +3122,7 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            Error = "must use POST request";
+            Error = "Must use POST request";
             return true;
         }
         if (!ForcedGroupIds.empty() && ForcedGroupIds.size() != TabletChannels.size()) {
@@ -3454,7 +3454,7 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -3547,7 +3547,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -3600,7 +3600,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
             return true;
         }
         TDomainInfo* domain = Self->FindDomain(DomainId);
@@ -3700,7 +3700,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -3722,7 +3722,7 @@ public:
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
         } else {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
         }
         return true;
     }
@@ -4226,7 +4226,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -4290,7 +4290,7 @@ public:
     {}
 
     void HandleTimeout(const TActorContext& ctx) {
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"error\": \"Timeout\"}"));
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Timeout"})"));
         Die(ctx);
     }
 
@@ -4339,7 +4339,7 @@ public:
     }
 
     void HandleTimeout(const TActorContext& ctx) {
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"error\": \"Timeout\"}"));
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Timeout"})"));
         Die(ctx);
     }
 
@@ -4416,7 +4416,7 @@ public:
 
 private:
     void HandleTimeout(const TActorContext& ctx) {
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"error\": \"Timeout\"}"));
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Timeout"})"));
         Die(ctx);
     }
 
@@ -4925,7 +4925,7 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
                 TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
                 ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, tabletId, this));
             } else {
-                ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\": \"tablet or (owner, owner_idx) params must be specified\"}"));
+                ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes(R"({"error":"tablet or (owner, owner_idx) params must be specified"})"));
             }
         }
         return;

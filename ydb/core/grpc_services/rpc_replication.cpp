@@ -5,6 +5,7 @@
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/util/backoff.h>
+#include <ydb/core/ydb_convert/replication_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -153,109 +154,6 @@ private:
         Convert(record, Result);
 
         return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ctx);
-    }
-
-    static TString BuildConnectionString(const NKikimrReplication::TConnectionParams& params) {
-        return TStringBuilder()
-            << (params.GetEnableSsl() ? "grpcs://" : "grpc://")
-            << params.GetEndpoint()
-            << "/?database=" << params.GetDatabase();
-    }
-
-    static void ConvertConnectionParams(const NKikimrReplication::TConnectionParams& from, Ydb::Replication::ConnectionParams& to) {
-        to.set_endpoint(from.GetEndpoint());
-        to.set_database(from.GetDatabase());
-        to.set_enable_ssl(from.GetEnableSsl());
-        to.set_connection_string(BuildConnectionString(from));
-
-        switch (from.GetCredentialsCase()) {
-        case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            return ConvertStaticCredentials(from.GetStaticCredentials(), *to.mutable_static_credentials());
-        case NKikimrReplication::TConnectionParams::kOAuthToken:
-            return ConvertOAuth(from.GetOAuthToken(), *to.mutable_oauth());
-        default:
-            break;
-        }
-    }
-
-    static void ConvertStaticCredentials(const NKikimrReplication::TStaticCredentials& from, Ydb::Replication::ConnectionParams::StaticCredentials& to) {
-        to.set_user(from.GetUser());
-        to.set_password_secret_name(from.GetPasswordSecretName());
-    }
-
-    static void ConvertOAuth(const NKikimrReplication::TOAuthToken& from, Ydb::Replication::ConnectionParams::OAuth& to) {
-        to.set_token_secret_name(from.GetTokenSecretName());
-    }
-
-    static void ConvertConsistencySettings(const NKikimrReplication::TConsistencySettings& from, Ydb::Replication::DescribeReplicationResult& to) {
-        switch (from.GetLevelCase()) {
-        case NKikimrReplication::TConsistencySettings::kRow:
-            return ConvertRowConsistencySettings(from.GetRow(), *to.mutable_row_consistency());
-        case NKikimrReplication::TConsistencySettings::kGlobal:
-            return ConvertGlobalConsistencySettings(from.GetGlobal(), *to.mutable_global_consistency());
-        default:
-            break;
-        }
-    }
-
-    static void ConvertRowConsistencySettings(const NKikimrReplication::TConsistencySettings::TRowConsistency&, Ydb::Replication::ConsistencyLevelRow&) {
-        // nop
-    }
-
-    static void ConvertGlobalConsistencySettings(const NKikimrReplication::TConsistencySettings::TGlobalConsistency& from, Ydb::Replication::ConsistencyLevelGlobal& to) {
-        *to.mutable_commit_interval() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
-            from.GetCommitIntervalMilliSeconds());
-    }
-
-    static void ConvertItem(const NKikimrReplication::TReplicationConfig::TTargetSpecific::TTarget& from, Ydb::Replication::DescribeReplicationResult::Item& to) {
-        to.set_id(from.GetId());
-        to.set_source_path(from.GetSrcPath());
-        to.set_destination_path(from.GetDstPath());
-        if (from.HasSrcStreamName()) {
-            to.set_source_changefeed_name(from.GetSrcStreamName());
-        }
-        if (from.HasLagMilliSeconds()) {
-            *to.mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
-                from.GetLagMilliSeconds());
-        }
-        if (from.HasInitialScanProgress()) {
-            to.mutable_stats()->set_initial_scan_progress(from.GetInitialScanProgress());
-        }
-    }
-
-    static void ConvertStats(NKikimrReplication::TReplicationState& from, Ydb::Replication::DescribeReplicationResult& to) {
-        if (from.GetStandBy().HasLagMilliSeconds()) {
-            *to.mutable_running()->mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
-                from.GetStandBy().GetLagMilliSeconds());
-        }
-        if (from.GetStandBy().HasInitialScanProgress()) {
-            to.mutable_running()->mutable_stats()->set_initial_scan_progress(from.GetStandBy().GetInitialScanProgress());
-        }
-    }
-
-    static void ConvertStats(NKikimrReplication::TReplicationState&, Ydb::Replication::DescribeTransferResult&) {
-        // nop
-    }
-
-    template<typename T>
-    static void ConvertState(NKikimrReplication::TReplicationState& from, T& to) {
-        switch (from.GetStateCase()) {
-        case NKikimrReplication::TReplicationState::kStandBy:
-            to.mutable_running();
-            ConvertStats(from, to);
-            break;
-        case NKikimrReplication::TReplicationState::kError:
-            *to.mutable_error()->mutable_issues() = std::move(*from.MutableError()->MutableIssues());
-            break;
-        case NKikimrReplication::TReplicationState::kDone:
-            to.mutable_done();
-            break;
-        case NKikimrReplication::TReplicationState::kPaused:
-            to.mutable_paused();
-            break;
-        default:
-            break;
-        }
     }
 
     static void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replication::DescribeReplicationResult& result) {

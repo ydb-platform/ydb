@@ -1,14 +1,10 @@
 #include "replication_description.h"
-#include "ydb_convert.h"
 
-#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
-#include <ydb/core/protos/replication.pb.h>
+#include "ydb_convert.h"
 
 #include <google/protobuf/util/time_util.h>
 
 namespace NKikimr {
-
-namespace {
 
 TString BuildConnectionString(const NKikimrReplication::TConnectionParams& params) {
     return TStringBuilder()
@@ -17,16 +13,25 @@ TString BuildConnectionString(const NKikimrReplication::TConnectionParams& param
         << "/?database=" << params.GetDatabase();
 }
 
-void ConvertStaticCredentials(const NKikimrReplication::TStaticCredentials& from, Ydb::Replication::ConnectionParams::StaticCredentials& to) {
+void ConvertStaticCredentials(
+    const NKikimrReplication::TStaticCredentials& from,
+    Ydb::Replication::ConnectionParams::StaticCredentials& to) {
+
     to.set_user(from.GetUser());
     to.set_password_secret_name(from.GetPasswordSecretName());
 }
 
-void ConvertOAuth(const NKikimrReplication::TOAuthToken& from, Ydb::Replication::ConnectionParams::OAuth& to) {
+void ConvertOAuth(
+    const NKikimrReplication::TOAuthToken& from,
+    Ydb::Replication::ConnectionParams::OAuth& to) {
+
     to.set_token_secret_name(from.GetTokenSecretName());
 }
 
-void ConvertConnectionParams(const NKikimrReplication::TConnectionParams& from, Ydb::Replication::ConnectionParams& to) {
+void ConvertConnectionParams(
+    const NKikimrReplication::TConnectionParams& from,
+    Ydb::Replication::ConnectionParams& to) {
+
     to.set_endpoint(from.GetEndpoint());
     to.set_database(from.GetDatabase());
     to.set_enable_ssl(from.GetEnableSsl());
@@ -42,16 +47,25 @@ void ConvertConnectionParams(const NKikimrReplication::TConnectionParams& from, 
     }
 }
 
-void ConvertRowConsistencySettings(const NKikimrReplication::TConsistencySettings::TRowConsistency&, Ydb::Replication::ConsistencyLevelRow&) {
+void ConvertRowConsistencySettings(
+    const NKikimrReplication::TConsistencySettings::TRowConsistency&,
+    Ydb::Replication::ConsistencyLevelRow&) {
+
     // nop
 }
 
-void ConvertGlobalConsistencySettings(const NKikimrReplication::TConsistencySettings::TGlobalConsistency& from, Ydb::Replication::ConsistencyLevelGlobal& to) {
+void ConvertGlobalConsistencySettings(
+    const NKikimrReplication::TConsistencySettings::TGlobalConsistency& from,
+    Ydb::Replication::ConsistencyLevelGlobal& to) {
+
     *to.mutable_commit_interval() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
         from.GetCommitIntervalMilliSeconds());
 }
 
-void ConvertConsistencySettings(const NKikimrReplication::TConsistencySettings& from, Ydb::Replication::DescribeReplicationResult& to) {
+void ConvertConsistencySettings(
+    const NKikimrReplication::TConsistencySettings& from,
+    Ydb::Replication::DescribeReplicationResult& to) {
+
     switch (from.GetLevelCase()) {
     case NKikimrReplication::TConsistencySettings::kRow:
         return ConvertRowConsistencySettings(from.GetRow(), *to.mutable_row_consistency());
@@ -62,7 +76,10 @@ void ConvertConsistencySettings(const NKikimrReplication::TConsistencySettings& 
     }
 }
 
-void ConvertItem(const NKikimrReplication::TReplicationConfig::TTargetSpecific::TTarget& from, Ydb::Replication::DescribeReplicationResult::Item& to) {
+void ConvertItem(
+    const NKikimrReplication::TReplicationConfig::TTargetSpecific::TTarget& from,
+    Ydb::Replication::DescribeReplicationResult::Item& to) {
+
     to.set_id(from.GetId());
     to.set_source_path(from.GetSrcPath());
     to.set_destination_path(from.GetDstPath());
@@ -78,7 +95,10 @@ void ConvertItem(const NKikimrReplication::TReplicationConfig::TTargetSpecific::
     }
 }
 
-void ConvertStats(const NKikimrReplication::TReplicationState& from, Ydb::Replication::DescribeReplicationResult& to) {
+void ConvertStats(
+    const NKikimrReplication::TReplicationState& from,
+    Ydb::Replication::DescribeReplicationResult& to) {
+
     if (from.GetStandBy().HasLagMilliSeconds()) {
         *to.mutable_running()->mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
             from.GetStandBy().GetLagMilliSeconds());
@@ -88,30 +108,17 @@ void ConvertStats(const NKikimrReplication::TReplicationState& from, Ydb::Replic
     }
 }
 
-template<typename T>
-void ConvertState(const NKikimrReplication::TReplicationState& from, T& to) {
-    switch (from.GetStateCase()) {
-    case NKikimrReplication::TReplicationState::kStandBy:
-        to.mutable_running();
-        ConvertStats(from, to);
-        break;
-    case NKikimrReplication::TReplicationState::kError:
-        *to.mutable_error()->mutable_issues() = from.GetError().GetIssues();
-        break;
-    case NKikimrReplication::TReplicationState::kDone:
-        to.mutable_done();
-        break;
-    case NKikimrReplication::TReplicationState::kPaused:
-        to.mutable_paused();
-        break;
-    default:
-        break;
-    }
+void ConvertStats(
+    const NKikimrReplication::TReplicationState&,
+    Ydb::Replication::DescribeTransferResult&) {
+
+    // nop
 }
 
 bool CheckReplicationConfig(const NKikimrReplication::TReplicationConfig config,
     Ydb::StatusIds_StatusCode& status,
     TString& error) {
+
     switch (config.GetTargetCase()) {
         case NKikimrReplication::TReplicationConfig::TargetCase::kSpecific:
             return true;
@@ -130,32 +137,29 @@ bool CheckReplicationConfig(const NKikimrReplication::TReplicationConfig config,
     return false;
 }
 
-} // anonymous namespace
-
-// TODO (maybenotilya): reuse in grpc_services/rpc_replication
-// TODO (maybenotilya): specify for transfer
 bool FillReplicationDescription(
     Ydb::Replication::DescribeReplicationResult& out,
     const NKikimrSchemeOp::TReplicationDescription inDesc,
     const NKikimrSchemeOp::TDirEntry& inDirEntry,
     Ydb::StatusIds_StatusCode& status,
     TString& error) {
-        const auto& config = inDesc.GetConfig();
-        if (!CheckReplicationConfig(config, status, error)) {
-            return false;
-        }
-
-        ConvertDirectoryEntry(inDirEntry, out.mutable_self(), true);
         
-        ConvertConnectionParams(config.GetSrcConnectionParams(), *out.mutable_connection_params());
-        ConvertConsistencySettings(config.GetConsistencySettings(), out);
-        ConvertState(inDesc.GetState(), out);
-
-        for (const auto& target : config.GetSpecific().GetTargets()) {
-            ConvertItem(target, *out.add_items());
-        }
-
-        return true;
+    const auto& config = inDesc.GetConfig();
+    if (!CheckReplicationConfig(config, status, error)) {
+        return false;
     }
+
+    ConvertDirectoryEntry(inDirEntry, out.mutable_self(), true);
+    
+    ConvertConnectionParams(config.GetSrcConnectionParams(), *out.mutable_connection_params());
+    ConvertConsistencySettings(config.GetConsistencySettings(), out);
+    ConvertState(inDesc.GetState(), out);
+
+    for (const auto& target : config.GetSpecific().GetTargets()) {
+        ConvertItem(target, *out.add_items());
+    }
+
+    return true;
+}
 
 }

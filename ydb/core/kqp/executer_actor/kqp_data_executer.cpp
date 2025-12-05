@@ -316,7 +316,7 @@ public:
 
         ResponseEv->Snapshot = GetSnapshot();
 
-        if (!Locks.empty() || TxManager) {
+        if (!Locks.empty() || (TxManager && TxManager->HasLocks())) {
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }

@@ -82,7 +82,14 @@ struct TTableInfo {
 // Create empty column table with the requested number of shards.
 TTableInfo CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
 
-void InsertDataIntoTable(TTestEnv& env, const TString& databaseName, const TString& tableName, size_t rowCount);
+struct TInsertedRow {
+    ui64 Key;
+    TString Value;
+};
+
+void InsertDataIntoTable(
+    TTestEnv& env, const TString& databaseName, const TString& tableName,
+    std::vector<TInsertedRow> rows);
 
 // Create a column table and insert ColumnTableRowsNumber rows.
 TTableInfo PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
@@ -90,6 +97,8 @@ TTableInfo PrepareColumnTable(TTestEnv& env, const TString& databaseName, const 
 // Create a column table, enable count-min-sketch column indexes,
 // and insert ColumnTableRowsNumber rows with some overlap to trigger compaction.
 TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
+
+std::vector<TInsertedRow> RowsWithFewDistinctValues(size_t count);
 
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey = nullptr, ui64* saTabletId = nullptr);
 
@@ -107,8 +116,21 @@ void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableN
 
 std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag = 1);
 
-void ValidateCountMinDatashard(TTestActorRuntime& runtime, TPathId pathId);
 void ValidateCountMinAbsence(TTestActorRuntime& runtime, TPathId pathId);
+
+struct TCountMinSketchProbes {
+    struct TProbe {
+        TString Value;
+        ui64 Expected;
+    };
+
+    ui16 Tag;
+    std::vector<TProbe> Probes;
+};
+
+void CheckCountMinSketch(
+    TTestActorRuntime& runtime, const TPathId& pathId,
+    const std::vector<TCountMinSketchProbes>& expected);
 
 struct TAnalyzedTable {
     TPathId PathId;

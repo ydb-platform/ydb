@@ -62,7 +62,7 @@ int TWorkloadCommandBuildIndex::DoRun() {
             );
         )_",
         Params.DbPath.c_str(),
-        Params.TableName.c_str(),
+        Params.TableOpts.Name.c_str(),
         Params.IndexName.c_str(),
         Params.Distance.c_str(),
         Params.VectorOpts.VectorType.c_str(),
@@ -94,7 +94,7 @@ int TWorkloadCommandDropIndex::DoRun() {
             DROP INDEX `{2}`;
         )_",
         Params.DbPath.c_str(),
-        Params.TableName.c_str(),
+        Params.TableOpts.Name.c_str(),
         Params.IndexName.c_str()
     );
 

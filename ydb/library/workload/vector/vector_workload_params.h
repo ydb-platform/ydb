@@ -31,9 +31,13 @@ public:
 
     TVector<TString> GetColumns() const;
 
-    TString TableName;
+    NVector::TTableOpts TableOpts;
+    NVector::TTablePartitioningOpts TablePartitioningOpts;
+    NVector::TVectorOpts VectorOpts;
+
+    TString IndexName = "index";
+
     TString QueryTableName;
-    TString IndexName;
     std::vector<std::string> KeyColumns;
     std::string EmbeddingColumn;
     std::vector<std::string> QueryTableKeyColumns;
@@ -41,7 +45,6 @@ public:
     std::optional<std::string> PrefixType;
     NYdb::NTable::TVectorIndexSettings::EMetric Metric;
     TString Distance;
-    NVector::TVectorOpts VectorOpts;
     size_t KmeansTreeLevels = 0;
     size_t KmeansTreeClusters = 0;
     size_t Targets = 0;

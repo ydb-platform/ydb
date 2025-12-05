@@ -26,6 +26,8 @@ class RecordBatch;
 }
 
 namespace NKikimr {
+    
+struct IDestructable;
 
 namespace NDataShard {
     using TShardState = NKikimrTxDataShard::EDatashardState;
@@ -371,6 +373,8 @@ namespace TEvDataShard {
 
         EvBuildFulltextIndexRequest,
         EvBuildFulltextIndexResponse,
+        
+        EvAsyncJobComplete,
 
         EvBuildFulltextDictRequest,
         EvBuildFulltextDictResponse,
@@ -1461,6 +1465,15 @@ namespace TEvDataShard {
                 << " Info: " << Info
             << " }";
         }
+    };
+
+    struct TEvAsyncJobComplete : public TEventLocal<TEvAsyncJobComplete, TEvDataShard::EvAsyncJobComplete> {
+        explicit TEvAsyncJobComplete(TAutoPtr<IDestructable> prod)
+            : Prod(prod)
+        {
+        }
+
+        TAutoPtr<IDestructable> Prod;
     };
 
     struct TEvObjectStorageListingRequest

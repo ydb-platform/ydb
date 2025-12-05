@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/datashard_backup.pb.h>
+#include <ydb/core/tablet_flat/util_basics.h>
 
 #include <util/generic/maybe.h>
 

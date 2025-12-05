@@ -23,9 +23,9 @@ class AbstractMonitoredNemesis(object):
         labels = {'nemesis': self.name}
         if scope is not None:
             labels.update({'scope': scope})
-        self.inject_completed = self.registry.rate('InjectCompleted', labels)
+        self.inject_completed = self.registry.counter('InjectCompleted', labels)
         self.inject_in_flight = self.registry.int_gauge('InjectInFlight', labels)
-        self.extract_completed = self.registry.rate('ExtractCompleted', labels)
+        self.extract_completed = self.registry.counter('ExtractCompleted', labels)
 
     def start_inject_fault(self):
         self.inject_in_flight_value += 1

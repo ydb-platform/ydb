@@ -5,7 +5,7 @@ import logging
 from typing import Dict, List, Tuple, Any, Optional, Union
 from enum import Enum
 import ydb
-from contrib.ydb.tests.stress.common.common import WorkloadBase
+from ydb.tests.stress.common.common import WorkloadBase
 
 # Configure logging
 logger = logging.getLogger(__name__)

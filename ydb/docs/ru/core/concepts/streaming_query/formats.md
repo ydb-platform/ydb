@@ -102,6 +102,7 @@ FROM
     $json
 ;
 ```
+
 {% endcut %}
 
 ### Формат json_list {#json_list}
@@ -188,11 +189,12 @@ FROM
 END DO;
 
 ```
+
 {% endcut %}
 
 ### Формат json_as_string {#json_as_string}
 
-Данный формат основан на [JSON-представлении](https://ru.wikipedia.org/wiki/JSON) данных. 
+Данный формат основан на [JSON-представлении](https://ru.wikipedia.org/wiki/JSON) данных.
 
 В этом формате внутри каждого сообщения должен находиться:
 
@@ -243,11 +245,12 @@ SELECT
 FROM
     $json
 ```
+
 {% endcut %}
 
 ### Формат parquet {#parquet}
 
-Данный формат позволяет считывать содержимое сообщний в формате [Apache Parquet](https://parquet.apache.org).
+Данный формат позволяет считывать содержимое сообщений в формате [Apache Parquet](https://parquet.apache.org).
 
 
 {% cut "Пример запроса" %}
@@ -280,6 +283,7 @@ SELECT
 FROM
     $json
 ```
+
 {% endcut %}
 
 ### Формат raw {#raw}
@@ -317,6 +321,7 @@ FROM
 ;
 END DO;
 ```
+
 {% endcut %}
 
 ### Поддерживаемые типы данных {#schema}

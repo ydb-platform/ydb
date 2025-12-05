@@ -1,6 +1,6 @@
 # Рецепты работы с потоковыми запросами
 
-Эта статья поможет быстро начать работу с [потоковыми запросами](../concepts/streaming_query/index.md) в {{ ydb-short-name }} на простейшем модельном примере.  Мы будем читать из входного топика сообщения в формате JSON, фильтровать их, агрегировать (считать количество ошибок по каждому хосту в интервале 10m) и результат записывать в выходной топик.
+Эта статья поможет быстро начать работу с [потоковыми запросами](../concepts/streaming_query/index.md) в {{ ydb-short-name }} на простейшем модельном примере.  Мы будем считать количество ошибок по каждому хосту в интервале 10m. Для этого будем читать из входного топика сообщения в формате JSON, фильтровать их, агрегировать и результат записывать в выходной топик.
 
 В статье рассматриваются следующие шаги работы:
 
@@ -20,14 +20,16 @@
   * если вы запускаете {{ ydb-short-name }} через docker, то передайте флаги в `docker run`:
 
     ```bash
-    docker run ... -e YDB_FEATURE_FLAGS=enable_external_data_sources,enable_streaming_queries ydbplatform/local-ydb:trunk
+    docker run -d --rm --name ydb-local -h localhost   --platform linux/amd64   -p 2135:2135 -p 2136:2136 -p 8765:8765 -p 9092:9092   -v $(pwd)/ydb_certs:/ydb_certs    -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765   -e YDB_KAFKA_PROXY_PORT=9092 -e YDB_FEATURE_FLAGS=enable_external_data_sources,enable_streaming_queries ydbplatform/local-ydb:trunk
     ```
 
   * если вы запускаете {{ ydb-short-name }} через `local_ydb`, то передайте флаги в `deploy`:
 
     ```bash
-    ./local_ydb deploy --ydb-working-dir=... --ydb-binary-path=... --enable-feature-flag=enable_external_data_sources --enable-feature-flag=enable_streaming_queries
+    ./local_ydb deploy --ydb-working-dir=/absolute/path/to/working/directory --ydb-binary-path=/path/to/kikimr/driver --enable-feature-flag=enable_external_data_sources --enable-feature-flag=enable_streaming_queries
     ```
+
+{% include [ydb-cli-profile](../_includes/ydb-cli-profile.md) %}
 
 ## Шаг 1. Создание топиков {#step1}
 
@@ -53,7 +55,7 @@ CREATE EXTERNAL DATA SOURCE source_name WITH (
 
 ## Шаг 3. Создание потокового запроса {#step3}
 
-Далее необходимо запустить потоковый запрос, который будет обрабатывать сообщения. Это можно сделать с помощью SQL-запроса:
+Далее необходимо запустить потоковый запрос. Это можно сделать с помощью SQL-запроса:
 
 ```yql
 CREATE STREAMING QUERY `my_queries/query_name` AS
@@ -136,7 +138,7 @@ echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"
 
 ## Шаг 6. Проверка содержимого выходного топика {#step6}
 
-Прочитать данные из выходного топика можно через cli:
+Прочитать данные из выходного топика можно через cli (читаем партицию с номером 0 c нулевого смещения):
 
 ```bash
 ./ydb --profile quickstart topic read 'streaming_recipe/output_topic' --partition-ids=0 --start-offset 0 --limit 10 --format=newline-delimited

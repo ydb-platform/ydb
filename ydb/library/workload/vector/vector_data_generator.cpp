@@ -266,50 +266,21 @@ private:
 
 private:
     template<typename T>
-    TStringBuilder GenerateEmbedding();
-
-    template <>
-    TStringBuilder GenerateEmbedding<float>() {
+    TStringBuilder GenerateEmbedding() {
         TStringBuilder buffer;
-        NKnnVectorSerialization::TSerializer<float> serializer(&buffer.Out);
+        NKnnVectorSerialization::TSerializer<T> serializer(&buffer.Out);
         for (size_t j = 0; j < VectorOpts.VectorDimension; ++j) {
-            serializer.HandleElement(Distribution(RandomGenerator) * 2 - 1);
-        }
-        serializer.Finish();
-
-        return buffer;
-    }
-
-    template <>
-    TStringBuilder GenerateEmbedding<uint8_t>() {
-        TStringBuilder buffer;
-        NKnnVectorSerialization::TSerializer<uint8_t> serializer(&buffer.Out);
-        for (size_t j = 0; j < VectorOpts.VectorDimension; ++j) {
-            serializer.HandleElement(Distribution(RandomGenerator) * (UINT8_MAX + 1));
-        }
-        serializer.Finish();
-
-        return buffer;
-    }
-
-    template <>
-    TStringBuilder GenerateEmbedding<int8_t>() {
-        TStringBuilder buffer;
-        NKnnVectorSerialization::TSerializer<int8_t> serializer(&buffer.Out);
-        for (size_t j = 0; j < VectorOpts.VectorDimension; ++j) {
-            serializer.HandleElement(Distribution(RandomGenerator) * (INT8_MAX - INT8_MIN + 1) + INT8_MIN);
-        }
-        serializer.Finish();
-
-        return buffer;
-    }
-
-    template <>
-    TStringBuilder GenerateEmbedding<bool>() {
-        TStringBuilder buffer;
-        NKnnVectorSerialization::TSerializer<bool> serializer(&buffer.Out);
-        for (size_t j = 0; j < VectorOpts.VectorDimension; ++j) {
-            serializer.HandleElement(static_cast<int>(Distribution(RandomGenerator) * 2));
+            if constexpr (std::is_same<T, float>::value) {
+                serializer.HandleElement(Distribution(RandomGenerator) * 2 - 1);
+            } else if constexpr (std::is_same<T, uint8_t>::value) {
+                serializer.HandleElement(Distribution(RandomGenerator) * (UINT8_MAX + 1));
+            } else if constexpr (std::is_same<T, int8_t>::value) {
+                serializer.HandleElement(Distribution(RandomGenerator) * (INT8_MAX - INT8_MIN + 1) + INT8_MIN);
+            } else if constexpr (std::is_same<T, bool>::value) {
+                serializer.HandleElement(static_cast<int>(Distribution(RandomGenerator) * 2));
+            } else {
+                static_assert(false, "Unsupported type");
+            }
         }
         serializer.Finish();
 

@@ -75,25 +75,25 @@ namespace {
                 TFsPath exportPath = TFsPath(basePath) / destinationPath;
                 
                 // Check metadata file
-                TFsPath metadataPath = exportPath / "metadata";
+                TFsPath metadataPath = exportPath / "metadata.json";
                 UNIT_ASSERT_C(metadataPath.Exists(), "Metadata file should exist: " << metadataPath.GetPath());
                 
                 // Check scheme file
-                TFsPath schemePath = exportPath / "scheme";
+                TFsPath schemePath = exportPath / "scheme.pb";
                 UNIT_ASSERT_C(schemePath.Exists(), "Scheme file should exist: " << schemePath.GetPath());
                 
                 // Check permissions file (if enabled)
                 if (Runtime().GetAppData().FeatureFlags.GetEnablePermissionsExport()) {
-                    TFsPath permissionsPath = exportPath / "permissions";
+                    TFsPath permissionsPath = exportPath / "permissions.pb";
                     UNIT_ASSERT_C(permissionsPath.Exists(), "Permissions file should exist: " << permissionsPath.GetPath());
                 }
                 
                 // Check checksums (if enabled)
                 if (Runtime().GetAppData().FeatureFlags.GetEnableChecksumsExport()) {
-                    TFsPath metadataChecksumPath = exportPath / "metadata.checksum";
+                    TFsPath metadataChecksumPath = exportPath / "metadata.json.sha256";
                     UNIT_ASSERT_C(metadataChecksumPath.Exists(), "Metadata checksum should exist: " << metadataChecksumPath.GetPath());
                     
-                    TFsPath schemeChecksumPath = exportPath / "scheme.checksum";
+                    TFsPath schemeChecksumPath = exportPath / "scheme.pb.sha256";
                     UNIT_ASSERT_C(schemeChecksumPath.Exists(), "Scheme checksum should exist: " << schemeChecksumPath.GetPath());
                 }
             }
@@ -129,7 +129,7 @@ namespace {
             if (expectedStatus == Ydb::StatusIds::SUCCESS) {
                 for (size_t i = 0; i < destinationPaths.size(); ++i) {
                     TFsPath exportPath = TFsPath(basePath) / destinationPaths[i];
-                    TFsPath schemePath = exportPath / "scheme";
+                    TFsPath schemePath = exportPath / "scheme.pb";
                     UNIT_ASSERT_C(schemePath.Exists(), "Scheme file should exist for table " << i << ": " << schemePath.GetPath());
                 }
             }
@@ -265,15 +265,15 @@ Y_UNIT_TEST_SUITE_F(TExportToFsTests, TFsExportFixture) {
         }, basePath, destinationPath);
 
         // Check all expected files exist
-        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/metadata"), "metadata");
-        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/scheme"), "scheme");
-        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/permissions"), "permissions");
-        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/metadata.checksum"), "metadata.checksum");
-        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/scheme.checksum"), "scheme.checksum");
-        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/permissions.checksum"), "permissions.checksum");
+        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/metadata.json"), "metadata.json");
+        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/scheme.pb"), "scheme.pb");
+        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/permissions.pb"), "permissions.pb");
+        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/metadata.json.sha256"), "metadata.json.sha256");
+        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/scheme.pb.sha256"), "scheme.pb.sha256");
+        UNIT_ASSERT_C(HasFsFile(basePath, destinationPath + "/permissions.pb.sha256"), "permissions.pb.sha256");
         
         // Check scheme content
-        TString schemeContent = GetFsFileContent(basePath, destinationPath + "/scheme");
+        TString schemeContent = GetFsFileContent(basePath, destinationPath + "/scheme.pb");
         UNIT_ASSERT_C(!schemeContent.empty(), "Scheme file should not be empty");
         
         Ydb::Table::CreateTableRequest schemeProto;
@@ -287,9 +287,9 @@ Y_UNIT_TEST_SUITE_F(TExportToFsTests, TFsExportFixture) {
         UNIT_ASSERT_VALUES_EQUAL(schemeProto.primary_key(0), "key");
         
         // Check checksum format
-        TString checksumContent = GetFsFileContent(basePath, destinationPath + "/metadata.checksum");
+        TString checksumContent = GetFsFileContent(basePath, destinationPath + "/metadata.json.sha256");
         UNIT_ASSERT_C(!checksumContent.empty(), "Checksum should not be empty");
-        UNIT_ASSERT_C(checksumContent.Contains("metadata"), "Checksum should contain filename");
+        UNIT_ASSERT_C(checksumContent.Contains("metadata.json"), "Checksum should contain filename");
         UNIT_ASSERT_GE(checksumContent.size(), 64); // sha256 is 64 hex chars
     }
 

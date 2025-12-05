@@ -1,6 +1,7 @@
 #include "export.h"
 
 #include <ydb/core/tx/datashard/export_s3.h>
+#include <ydb/core/tx/datashard/export_fs.h>
 
 NKikimr::NDataShard::IExport* TDataShardExportFactory::CreateExportToYt(
         const IExport::TTask& task, const IExport::TTableColumns& columns) const
@@ -20,6 +21,12 @@ NKikimr::NDataShard::IExport* TDataShardExportFactory::CreateExportToS3(
     Y_UNUSED(columns);
     return nullptr;
 #endif
+}
+
+NKikimr::NDataShard::IExport* TDataShardExportFactory::CreateExportToFs(
+        const IExport::TTask& task, const IExport::TTableColumns& columns) const
+{
+    return new NKikimr::NDataShard::TFsExport(task, columns);
 }
 
 void TDataShardExportFactory::Shutdown() {

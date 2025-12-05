@@ -2936,12 +2936,11 @@ class TTxMonEvent_ReassignTablet : public TTransactionBase<THive> {
 public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
-    TTabletId TabletId = 0;
+    std::optional<TTabletId> TabletId; // nullopt for all, 0 for invalid
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
     TVector<ui32> TabletChannels;
     ui32 GroupId = 0;
     TVector<ui32> ForcedGroupIds;
-    int TabletPercent = 100;
     TString Error;
     bool Wait = true;
     bool Async = false;
@@ -2951,13 +2950,16 @@ public:
         , Event(ev->Release())
         , Source(source)
     {
-        TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
+        auto tablet = Event->Cgi().Get("tablet");
+        if (tablet == "all") {
+            TabletId = std::nullopt;
+        } else {
+            TabletId = FromStringWithDefault<TTabletId>(tablet, 0);
+        }
         TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(Event->Cgi().Get("type"), TabletType);
         TabletChannels = Scan<ui32>(SplitString(Event->Cgi().Get("channel"), ","));
-        TabletPercent = FromStringWithDefault<int>(Event->Cgi().Get("percent"), TabletPercent);
         GroupId = FromStringWithDefault(Event->Cgi().Get("group"), GroupId);
         ForcedGroupIds = Scan<ui32>(SplitString(Event->Cgi().Get("forcedGroup"), ","));
-        TabletPercent = std::min(std::abs(TabletPercent), 100);
         Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
         Async = FromStringWithDefault(Event->Cgi().Get("async"), Async);
     }
@@ -2993,29 +2995,31 @@ public:
             Error = "cannot provide force groups in async mode";
             return true;
         }
+        if (TabletId == 0) {
+            Error = "must specify tablet";
+            return true;
+        }
         TVector<TLeaderTabletInfo*> tablets;
-        if (TabletId != 0) {
-            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
-            if (tablet != nullptr) {
-                tablets.push_back(tablet);
-            }
-        } else if (TabletType != TTabletTypes::TypeInvalid) {
-            for (auto& pr : Self->Tablets) {
-                if (pr.second.Type == TabletType) {
-                    tablets.push_back(&pr.second);
+        if (!TabletId && TabletType != TTabletTypes::TypeInvalid) {
+            for (auto& [_, tablet] : Self->Tablets) {
+                if (tablet.Type == TabletType) {
+                    tablets.push_back(&tablet);
                 }
             }
-        } else {
-            for (auto& pr : Self->Tablets) {
-                tablets.push_back(&pr.second);
+        } else if (!TabletId && GroupId != 0) {
+            for (auto& [_, tablet] : Self->Tablets) {
+                tablets.push_back(&tablet);
+            }
+        } else if (TabletId) {
+            auto* tablet = Self->FindTablet(*TabletId);
+            if (tablet != nullptr) {
+                tablets.push_back(tablet);
+            } else {
+                Error = "no such tablet";
+                return true;
             }
         }
-        if (TabletPercent != 100) {
-            std::sort(tablets.begin(), tablets.end(), [this](TLeaderTabletInfo* a, TLeaderTabletInfo* b) -> bool {
-                return GetMaxTimestamp(a) < GetMaxTimestamp(b);
-            });
-            tablets.resize(tablets.size() * TabletPercent / 100);
-        }
+
         TVector<THolder<TEvHive::TEvReassignTablet>> operations;
         TActorId waitActorId;
         TReassignTabletWaitActor* waitActor = nullptr;

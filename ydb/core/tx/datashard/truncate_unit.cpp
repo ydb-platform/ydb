@@ -43,6 +43,12 @@ EExecutionStatus TTruncateUnit::Execute(
         return EExecutionStatus::Executed;
     }
 
+    if (!AppData()->FeatureFlags.GetEnableTruncateTable()) {
+        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR)
+            ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, "TRUNCATE TABLE statement is not supported");
+        return EExecutionStatus::Executed;
+    }
+
     const auto& truncate = schemeTx.GetTruncateTable();
     const auto& pathId = truncate.GetPathId();
     Y_ENSURE(DataShard.GetPathOwnerId() == pathId.GetOwnerId());

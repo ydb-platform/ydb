@@ -17,11 +17,13 @@ public:
     TServerHelper() {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
 
         Server = new TServer(serverSettings);
         Runtime = Server->GetRuntime();
-        EdgeSender = runtime->AllocateEdgeActor();
+        Runtime->GetAppData(0).FeatureFlags.SetEnableTruncateTable(true);
+        EdgeSender = Runtime->AllocateEdgeActor();
 
         InitRoot(Server, EdgeSender);
     }

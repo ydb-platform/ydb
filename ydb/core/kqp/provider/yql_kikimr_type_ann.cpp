@@ -2038,8 +2038,15 @@ private:
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext&) override {
+    virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext& ctx) override {
+        // there is will be checking on feature flag
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+
+        if (!node.TablePath().Value()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.TablePath().Pos()), "TablePath can't be empty."));
+            return TStatus::Error;
+        }
+
         return TStatus::Ok;
     }
 
@@ -2051,7 +2058,7 @@ private:
         }
 
         if (!node.DatabasePath().Value()) {
-                ctx.AddError(TIssue(ctx.GetPosition(node.DatabasePath().Pos()), "DatabasePath can't be empty."));
+            ctx.AddError(TIssue(ctx.GetPosition(node.DatabasePath().Pos()), "DatabasePath can't be empty."));
             return TStatus::Error;
         }
 

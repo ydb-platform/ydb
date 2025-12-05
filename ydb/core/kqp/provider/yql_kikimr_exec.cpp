@@ -166,7 +166,7 @@ namespace {
 
     TTruncateTableSettings ParseTruncateTableSettings(TKiTruncateTable truncateTable) {
         TTruncateTableSettings truncateTableSettings;
-        Y_UNUSED(truncateTable);
+        truncateTableSettings.TablePath = truncateTable.TablePath().Value();
         return truncateTableSettings;
     }
 

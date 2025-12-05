@@ -542,7 +542,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     PlanTransactionActivation();
 
-    StartBackup();
+    StartNewBackup();
 
     Owner->ActivateExecutor(OwnerCtx());
 
@@ -4358,6 +4358,7 @@ STFUNC(TExecutor::StateWork) {
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
         hFunc(NBackup::TEvSnapshotCompleted, Handle);
         hFunc(NBackup::TEvChangelogFailed, Handle);
+        cFunc(NBackup::TEvStartNewBackup::EventType, StartNewBackup);
     default:
         break;
     }
@@ -5122,7 +5123,7 @@ void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
 }
 
 
-void TExecutor::StartBackup() {
+void TExecutor::StartNewBackup() {
     if (!Owner->NeedBackup()) {
         return;
     }
@@ -5167,6 +5168,10 @@ void TExecutor::StartBackup() {
 void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
     Y_ENSURE(ev->Get()->Success, "Backup snapshot failed: " + ev->Get()->Error);
     Owner->BackupSnapshotComplete(OwnerCtx());
+
+    if (CommitManager) {
+        Forward(ev, CommitManager->GetBackupWriter());
+    }
 }
 
 void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {

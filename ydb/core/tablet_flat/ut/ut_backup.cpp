@@ -1384,6 +1384,31 @@ Y_UNIT_TEST_SUITE(Backup) {
         auto schemaContent = TFileInput(schema).ReadAll();
         UNIT_ASSERT_C(schemaContent.Contains(R"("column_name":"NoBackupColumn")"), "Snapshot doesn't contain NoBackupColumn schema");
     }
+
+    Y_UNIT_TEST(NewSnapshotChangelogSize) {
+        TEnv env;
+
+        // Small limit
+        env->GetAppData().SystemTabletBackupConfig.SetNewBackupChangelogMinBytes(100);
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing much data to changelog" << Endl;
+        env.WriteRange(0, 1000, 10);
+
+        Cerr << "...waiting for new snapshot" << Endl;
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...writing little bit more data to changelog" << Endl;
+        env.WriteValue(1000, 10);
+
+        env.WaitChangelogFlush();
+    }
 }
 
 } // namespace NKikimr::NTabletFlatExecutor::NBackup

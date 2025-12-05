@@ -109,10 +109,33 @@ namespace NKikimr {
 
         Send(MonActor, new TEvBlobStorage::TEvConfigureProxy(Info, nullptr));
         if (Info) {
-            Y_ABORT_UNLESS(!EncryptionMode || *EncryptionMode == Info->GetEncryptionMode());
-            Y_ABORT_UNLESS(!LifeCyclePhase || *LifeCyclePhase == Info->GetLifeCyclePhase());
-            Y_ABORT_UNLESS(!GroupKeyNonce || *GroupKeyNonce == Info->GetGroupKeyNonce());
-            Y_ABORT_UNLESS(!CypherKey || *CypherKey == *Info->GetCypherKey());
+            auto printOptional = [&](const auto& val) -> TString {
+                using T = std::decay_t<decltype(*val)>;
+                if (!val) {
+                    return "<nullopt>";
+                } else {
+                    if constexpr(std::is_same_v<T, ui64>) {
+                        return IntToString<10>(*val);
+                    }
+                    if constexpr(std::is_same_v<T, TBlobStorageGroupInfo::EEncryptionMode>) {
+                        return TBlobStorageGroupInfo::PrintEncryptionMode(*val);
+                    }
+                    if constexpr(std::is_same_v<T, TBlobStorageGroupInfo::ELifeCyclePhase>) {
+                        return TBlobStorageGroupInfo::PrintLifeCyclePhase(*val);
+                    }
+                    // we don't want to print CypherKey value!
+                    return "<value>";
+                }
+            };
+
+            Y_VERIFY_S(!EncryptionMode || *EncryptionMode == Info->GetEncryptionMode(),
+                    "EncryptionMode# " << printOptional(EncryptionMode) << " Info# " << Info->ToString());
+            Y_VERIFY_S(!LifeCyclePhase || *LifeCyclePhase == Info->GetLifeCyclePhase(),
+                    "LifeCyclePhase# " << printOptional(LifeCyclePhase) << " Info# " << Info->ToString());
+            Y_VERIFY_S(!GroupKeyNonce || *GroupKeyNonce == Info->GetGroupKeyNonce(),
+                    "GroupKeyNonce# " << printOptional(GroupKeyNonce) << " Info# " << Info->ToString());
+            Y_VERIFY_S(!CypherKey || *CypherKey == *Info->GetCypherKey(),
+                    "CypherKey# " << printOptional(CypherKey) << " Info# " << Info->ToString());
             EncryptionMode = Info->GetEncryptionMode();
             LifeCyclePhase = Info->GetLifeCyclePhase();
             GroupKeyNonce = Info->GetGroupKeyNonce();

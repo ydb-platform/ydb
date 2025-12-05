@@ -147,10 +147,10 @@ public:
 
     ILayoutPolicy::TPtr GetTablesLayoutPolicy() const;
 
-    void UpdateShardStats(TShardIdx shardIdx, const TPartitionStats& newStats) {
+    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx shardIdx, const TPartitionStats& newStats, TInstant now) {
         Stats.Aggregated.PartCount = ColumnShards.size();
         Stats.PartitionStats[shardIdx]; // insert if none
-        Stats.UpdateShardStats(shardIdx, newStats);
+        Stats.UpdateShardStats(diskSpaceUsageDelta, shardIdx, newStats, now);
     }
 };
 

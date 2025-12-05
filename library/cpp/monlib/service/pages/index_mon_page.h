@@ -11,6 +11,7 @@ namespace NMonitoring {
         TPages Pages; // a list of pages to maintain specific order
         using TPagesByPath = THashMap<TString, TPages::iterator>;
         TPagesByPath PagesByPath;
+        bool SortPagesPending = false;
 
         TIndexMonPage(const TString& path, const TString& title)
             : IMonPage(path, title)

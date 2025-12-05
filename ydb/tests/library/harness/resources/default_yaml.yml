@@ -117,7 +117,7 @@ actor_system_config:
     name: "IC"
     time_per_mailbox_micro_secs: 100
   scheduler:
-    resolution: 256
+    resolution: 1024
     spin_threshold: 0
     progress_threshold: 10000
   sys_executor: 0

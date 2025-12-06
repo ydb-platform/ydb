@@ -12,15 +12,25 @@ struct TSessionSettings {
     TString HistoryFilePath;
     TString HelpMessage;
     std::unordered_map<char, std::function<void()>> KeyHandlers;
+    bool EnableYqlCompletion = true;
+};
+
+class ILineReaderController {
+public:
+    using TPtr = std::shared_ptr<ILineReaderController>;
+
+    virtual ~ILineReaderController() = default;
+
+    virtual void Setup(const TSessionSettings& settings) = 0;
 };
 
 class ISessionRunner {
 public:
-    using TPtr = std::unique_ptr<ISessionRunner>;
+    using TPtr = std::shared_ptr<ISessionRunner>;
 
     virtual ~ISessionRunner() = default;
 
-    virtual TSessionSettings GetSettings() const = 0;
+    virtual void Setup(ILineReaderController::TPtr controller) = 0;
 
     virtual void HandleLine(const TString& line) = 0;
 };

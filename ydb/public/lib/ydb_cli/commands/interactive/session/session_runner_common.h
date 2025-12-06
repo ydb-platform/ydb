@@ -17,7 +17,7 @@ protected:
 public:
     TSessionRunnerBase(const TSessionSettings& settings, const TInteractiveLogger& log);
 
-    virtual TSessionSettings GetSettings() const final;
+    virtual void Setup(ILineReaderController::TPtr controller) final;
 
 protected:
     static TString PrintCommonHotKeys();
@@ -28,6 +28,7 @@ protected:
 
 protected:
     TInteractiveLogger Log;
+    ILineReaderController::TPtr Controller;
 
 private:
     const TSessionSettings Settings;

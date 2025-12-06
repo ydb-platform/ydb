@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    # ai_session_runner.cpp
+    ai_session_runner.cpp
     session_runner_common.cpp
     sql_session_runner.cpp
 )

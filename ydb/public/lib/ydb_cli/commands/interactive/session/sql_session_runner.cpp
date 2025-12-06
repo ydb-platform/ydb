@@ -117,9 +117,10 @@ public:
     }
 
 private:
-    static TString CreateHelMessage() {
+    static TString CreateHelpMessage() {
         return TStringBuilder() << Endl << "YDB CLI Interactive Mode – Hotkeys and Special Commands." << Endl
             << Endl << PrintBold("Hotkeys:") << Endl
+            << "  " << PrintBold("Ctrl+T") << ": switch to AI interactive mode." << Endl
             << "  " << PrintBold("TAB") << ": complete the current word based on YQL syntax." << Endl
             << PrintCommonHotKeys()
             << Endl << PrintBold("Special Commands:") << Endl
@@ -132,8 +133,8 @@ private:
     static TSessionSettings CreateSessionSettings(const TSqlSessionSettings& settings) {
         return {
             .Prompt = TStringBuilder() << Colors.LightGreen() << (settings.ProfileName ? settings.ProfileName : "ydb") << Colors.OldColor() << "> ",
-            .HistoryFilePath = TFsPath(settings.YdbPath) / "test" / "interactive_cli_history.txt",
-            .HelpMessage = CreateHelMessage(),
+            .HistoryFilePath = TFsPath(settings.YdbPath) / "bin" / "interactive_cli_sql_history.txt",
+            .HelpMessage = CreateHelpMessage(),
         };
     }
 
@@ -178,7 +179,7 @@ private:
 } // anonymous namespace
 
 ISessionRunner::TPtr CreateSqlSessionRunner(const TSqlSessionSettings& settings, const TInteractiveLogger& log) {
-    return std::make_unique<TSqlSessionRunner>(settings, log);
+    return std::make_shared<TSqlSessionRunner>(settings, log);
 }
 
 } // namespace NYdb::NConsoleClient

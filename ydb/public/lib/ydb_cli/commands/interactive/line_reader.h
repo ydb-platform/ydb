@@ -9,13 +9,18 @@
 
 namespace NYdb::NConsoleClient {
 
-class ILineReader {
+class ILineReader : public ILineReaderController {
 public:
-    using TPtr = std::unique_ptr<ILineReader>;
+    using TPtr = std::shared_ptr<ILineReader>;
 
-    virtual void Setup(const TSessionSettings& settings) = 0;
+    struct TLine {
+        TString Data;
+    };
 
-    virtual std::optional<TString> ReadLine() = 0;
+    struct TSwitch {
+    };
+
+    virtual std::optional<std::variant<TLine, TSwitch>> ReadLine() = 0;
 
     virtual void Finish() = 0;
 

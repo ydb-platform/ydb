@@ -3,6 +3,7 @@
 #include <ydb/core/base/validation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/line_reader.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/session/ai_session_runner.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/session/sql_session_runner.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_table.h>
@@ -80,27 +81,42 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     Cout << "Press " << colors.BoldColor() << "Ctrl+K" << colors.OldColor() << " for more information." << Endl;
 
-    const auto sqlSession = CreateSqlSessionRunner({
-        .ProfileName = Profile,
-        .YdbPath = YdbPath,
-        .Driver = driver,
-    }, Log);
+    const std::vector sessions = {
+        CreateSqlSessionRunner({
+            .ProfileName = Profile,
+            .YdbPath = YdbPath,
+            .Driver = driver,
+        }, Log),
+        CreateAiSessionRunner({
+            .ProfileName = Profile,
+            .YdbPath = YdbPath,
+        }, Log),
+    };
 
+    ui64 activeSession = 0;
     const auto lineReader = CreateLineReader(driver, config.Database, Log);
-    lineReader->Setup(sqlSession->GetSettings());
+    sessions[activeSession]->Setup(lineReader);
 
-    while (const auto lineOptional = lineReader->ReadLine()) {
-        const auto& line = *lineOptional;
+    while (const auto inputOptional = lineReader->ReadLine()) {
+        const auto& input = *inputOptional;
+        if (std::holds_alternative<ILineReader::TSwitch>(input)) {
+            activeSession ^= 1;
+            sessions[activeSession]->Setup(lineReader);
+            Log.Info() << "Switching to " << (activeSession ? "AI" : "SQL") << " mode";
+            continue;
+        }
+
+        const auto& line = std::get<ILineReader::TLine>(input).Data;
         if (line.empty()) {
             continue;
         }
 
         try {
-            sqlSession->HandleLine(line);
+            sessions[activeSession]->HandleLine(line);
         } catch (NStatusHelpers::TYdbErrorException& error) {
-            Cerr << colors.Red() << "Failed to handle command: " << colors.OldColor() << error;
+            Cerr << colors.Red() << "Failed to handle command:" << colors.OldColor() << Endl << error;
         } catch (std::exception& error) {
-            Cerr << colors.Red() << "Failed to handle command: " << colors.OldColor() << error.what();
+            Cerr << colors.Red() << "Failed to handle command:" << colors.OldColor() << Endl << error.what();
         }
     }
 

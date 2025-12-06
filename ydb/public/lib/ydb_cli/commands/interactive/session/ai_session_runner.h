@@ -7,6 +7,8 @@
 namespace NYdb::NConsoleClient {
 
 struct TAiSessionSettings {
+    TString ProfileName;
+    TString YdbPath;
 };
 
 ISessionRunner::TPtr CreateAiSessionRunner(const TAiSessionSettings& settings, const TInteractiveLogger& log);

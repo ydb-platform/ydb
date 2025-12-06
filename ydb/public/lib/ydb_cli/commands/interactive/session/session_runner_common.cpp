@@ -9,8 +9,9 @@ TSessionRunnerBase::TSessionRunnerBase(const TSessionSettings& settings, const T
     , Settings(settings)
 {}
 
-TSessionSettings TSessionRunnerBase::GetSettings() const {
-    return Settings;
+void TSessionRunnerBase::Setup(ILineReaderController::TPtr controller) {
+    controller->Setup(Settings);
+    Controller = std::move(controller);
 }
 
 TString TSessionRunnerBase::PrintCommonHotKeys() {
@@ -18,7 +19,8 @@ TString TSessionRunnerBase::PrintCommonHotKeys() {
         << "  " << PrintBold("Up and Down arrow keys") << ": navigate through query history." << Endl
         << "  " << PrintBold("Ctrl+R") << ": search for a query in history containing a specified substring." << Endl
         << "  " << PrintBold("Ctrl+O") << ": open new line." << Endl
-        << "  " << PrintBold("Ctrl+D") << ": exit interactive mode." << Endl;
+        << "  " << PrintBold("Ctrl+D") << ": exit interactive mode." << Endl
+        << "  " << PrintBold("Ctrl+K") << ": print this help message." << Endl;
 }
 
 TString TSessionRunnerBase::PrintBold(const TString& text) {

@@ -358,7 +358,10 @@ Y_UNIT_TEST(CreateTable) {
             "WITH (tiering = 'some');\n"},
         {"create table if not  exists user(user int32)", "CREATE TABLE IF NOT EXISTS user (\n\tuser int32\n);\n"},
         {"create temp   table    user(user int32)", "CREATE TEMP TABLE user (\n\tuser int32\n);\n"},
-        {"create   temporary   table    user(user int32)", "CREATE TEMPORARY TABLE user (\n\tuser int32\n);\n"}
+        {"create   temporary   table    user(user int32)", "CREATE TEMPORARY TABLE user (\n\tuser int32\n);\n"},
+        {"create table user(user int32 (default 0, not null))","CREATE TABLE user (\n\tuser int32 (DEFAULT 0, NOT NULL)\n);\n"},
+        {"create table user(user int32 (default 0, not null, family f))","CREATE TABLE user (\n\tuser int32 (DEFAULT 0, NOT NULL, FAMILY f)\n);\n"},
+        {"create table user(user int32 (default 0, family f, not null))","CREATE TABLE user (\n\tuser int32 (DEFAULT 0, FAMILY f, NOT NULL)\n);\n"}
     };
 
     TSetup setup;

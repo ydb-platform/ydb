@@ -9,6 +9,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
+#include <library/cpp/resource/resource.h>
 #include <util/system/env.h>
 
 #include <ctime>

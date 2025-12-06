@@ -4,6 +4,7 @@ SRCS(
     query_utils.cpp
     util.cpp
     view_utils.cpp
+    replication_utils.cpp
 )
 
 PEERDIR(

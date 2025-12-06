@@ -3722,7 +3722,7 @@ public:
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
         } else {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Tablet not found"})"));
         }
         return true;
     }

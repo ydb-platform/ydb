@@ -92,12 +92,12 @@ TString TMetadata::Serialize() const {
     if (Indexes) {
         for (const auto& index : *Indexes) {
             NJson::TJsonMap indexMap;
-            indexMap["prefix"] = index.ExportPrefix;
-            indexMap["name"] = index.Name;
+            indexMap["export_prefix"] = index.ExportPrefix;
+            indexMap["impl_table_prefix"] = index.ImplTablePrefix;
             indexes.AppendValue(std::move(indexMap));
         }
     }
-    //m["indexes"] = indexes;
+    m["indexes"] = indexes;
 
     return NJson::WriteJson(&m, false);
 }
@@ -134,8 +134,8 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
         const NJson::TJsonValue& indexes = json["indexes"];
         for (const NJson::TJsonValue& index : indexes.GetArray()) {
             result.AddIndex({
-                .ExportPrefix = index["prefix"].GetString(),
-                .Name = index["name"].GetString(),
+                .ExportPrefix = index["export_prefix"].GetString(),
+                .ImplTablePrefix = index["impl_table_prefix"].GetString(),
             });
         }
     }

@@ -1048,9 +1048,9 @@ private:
         item.ChildItems.reserve(materializedIndexes.size());
         importInfo->Items.reserve(importInfo->Items.size() + materializedIndexes.size());
 
-        for (auto& [indexImplTablePrefix, scheme] : materializedIndexes) {
-            auto src = TStringBuilder() << parentSrc << "/" << indexImplTablePrefix;
-            auto dst = TStringBuilder() << parentDst << "/" << indexImplTablePrefix;
+        for (auto& [indexMetadata, scheme] : materializedIndexes) {
+            auto src = TStringBuilder() << parentSrc << "/" << indexMetadata.ExportPrefix;
+            auto dst = TStringBuilder() << parentDst << "/" << indexMetadata.ImplTablePrefix;
 
             auto& childItem = importInfo->Items.emplace_back(std::move(dst));
             const ui32 childIdx = importInfo->Items.size() - 1;

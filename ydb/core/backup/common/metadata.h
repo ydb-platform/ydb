@@ -43,7 +43,7 @@ struct TChangefeedMetadata {
 
 struct TIndexMetadata {
     TString ExportPrefix;
-    TString Name;
+    TString ImplTablePrefix;
 };
 
 class TMetadata {

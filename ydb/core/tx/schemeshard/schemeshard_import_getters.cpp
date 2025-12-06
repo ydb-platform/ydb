@@ -413,7 +413,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
         GetObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
-            IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable]), result.GetResult().GetContentLength());
+            IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix), result.GetResult().GetContentLength());
     }
 
     void HandleChangefeed(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -621,7 +621,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
         const auto& indexImplTablePrefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable];
-        item.MaterializedIndexes.emplace(indexImplTablePrefix, std::move(request));
+        item.MaterializedIndexes.emplace_back(indexImplTablePrefix, std::move(request));
 
         auto nextStep = [this]() {
             if (++IndexCheckedMaterializedIndexImplTable >= IndexImplTablePrefixes.size()) {
@@ -629,13 +629,13 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             } else {
                 Become(&TThis::StateCheckIndexes);
                 HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
-                    IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable]));
+                    IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
             }
         };
 
         if (NeedValidateChecksums) {
             StartValidatingChecksum(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
-                IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable]), content, nextStep);
+                IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix), content, nextStep);
         } else {
             nextStep();
         }
@@ -787,20 +787,13 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Download(PermissionsKey);
     }
 
-    static TMaybe<NKikimrSchemeOp::EIndexType> ConvertIndexType(Ydb::Table::TableIndex::TypeCase type) {
-        switch (type) {
-        case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobal;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalAsync;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalUnique;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalFulltext;
+    static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexFillingMode mode) {
+        switch (mode) {
+        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
+        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+            return true;
         default:
-            return Nothing();
+            return false;
         }
     }
 
@@ -814,7 +807,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             IndexImplTablePrefixes.clear();
             IndexImplTablePrefixes.reserve(indexes->size());
             for (const auto& index : *indexes) {
-                IndexImplTablePrefixes.push_back(index.ExportPrefix);
+                IndexImplTablePrefixes.push_back(index);
             }
 
             DownloadMaterializedIndexes();
@@ -829,16 +822,17 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                     IndexImplTablePrefixes.reserve(item.Table->indexes_size());
 
                     for (const auto& index : item.Table->indexes()) {
-                        const auto indexType = ConvertIndexType(index.type_case());
+                        const auto indexType = NTableIndex::TryConvertIndexType(index.type_case());
                         if (!indexType) {
                             return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unsupported index"
                                 << ": name# " << index.name()
                                 << ": type# " << static_cast<int>(index.type_case()));
                         }
 
-                        TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
+                        const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
                         for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
-                            IndexImplTablePrefixes.push_back(TStringBuilder() << index.name() << "/" << implTable);
+                            const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
+                            IndexImplTablePrefixes.push_back({implTablePrefix, implTablePrefix});
                         }
                     }
                 }
@@ -850,21 +844,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
     }
 
-    static bool NeedToDownloadMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexFillingMode mode) {
-        switch (mode) {
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
-            return true;
-        default:
-            return false;
-        }
-    }
-
     void DownloadMaterializedIndexes() {
-        if (!IndexImplTablePrefixes.empty() && NeedToDownloadMaterializedIndexes(IndexFillingMode)) {
+        if (!IndexImplTablePrefixes.empty()) {
             Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
             HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
-                IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable]));
+                IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
         } else {
             StartDownloadingChangefeeds();
         }
@@ -916,7 +900,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void StartCheckingMaterializedIndexes() {
         ResetRetries();
-        CheckMaterializedIndexes();
+        if (NeedToCheckMaterializedIndexes(IndexFillingMode)) {
+            CheckMaterializedIndexes();
+        } else {
+            StartDownloadingChangefeeds();
+        }
     }
 
     void StartDownloadingChangefeeds() {
@@ -1018,7 +1006,7 @@ private:
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;
 
-    TVector<TString> IndexImplTablePrefixes;
+    TVector<NBackup::TIndexMetadata> IndexImplTablePrefixes;
     ui64 IndexCheckedMaterializedIndexImplTable = 0;
     Ydb::Import::ImportFromS3Settings::IndexFillingMode IndexFillingMode;
 

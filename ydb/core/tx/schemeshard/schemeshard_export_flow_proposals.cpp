@@ -4,6 +4,7 @@
 #include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/ydb_convert/compression.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
@@ -228,7 +229,46 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                     dstPrefix += '/';
                 }
 
-                dstPrefix += item.SourcePathName;
+                std::stringstream itemPrefix;
+                if (exportSettings.has_encryption_settings()) {
+                    static constexpr int INVALID_IDX = 999;
+                    int idx = INVALID_IDX;
+                    bool found = false;
+
+                    Y_ABORT_UNLESS(item.ParentIdx < exportInfo.Items.size());
+                    const auto& parentItem = exportInfo.Items[item.ParentIdx];
+
+                    auto parentPath = TPath::Init(parentItem.SourcePathId, ss);
+                    TStringBuf indexName;
+                    TStringBuf implTableName;
+                    if (parentPath.IsResolved() && TStringBuf(item.SourcePathName).TrySplit('/', indexName, implTableName)) {
+                        const auto parentDescription = GetDescription(ss, parentPath.Base()->PathId);
+                        idx = parentDescription.GetTable().CdcStreamsSize() + 1;
+
+                        for (const auto& index : parentDescription.GetTable().GetTableIndexes()) {
+                            if (index.GetName() != indexName) {
+                                ++idx;
+                                continue;
+                            }
+
+                            const TVector<TString> indexColumns(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end());
+                            for (const auto& implTable : NTableIndex::GetImplTables(index.GetType(), indexColumns)) {
+                                if (implTable != implTableName) {
+                                    ++idx;
+                                    continue;
+                                }
+
+                                found = true;
+                            }
+                        }
+                    }
+
+                    itemPrefix << std::setfill('0') << std::setw(3) << std::right << (found ? idx : INVALID_IDX);
+                } else {
+                    itemPrefix << item.SourcePathName;
+                }
+
+                dstPrefix += itemPrefix.str();
             }
 
             backupSettings.SetObjectKeyPattern(dstPrefix);

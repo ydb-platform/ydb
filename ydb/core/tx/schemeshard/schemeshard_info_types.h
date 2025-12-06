@@ -3157,7 +3157,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
-        THashMap<TString, Ydb::Table::CreateTableRequest> MaterializedIndexes;
+        TVector<std::pair<NBackup::TIndexMetadata, Ydb::Table::CreateTableRequest>> MaterializedIndexes;
         NKikimrSchemeOp::TImportTableChangefeeds Changefeeds;
 
         EState State = EState::GetScheme;

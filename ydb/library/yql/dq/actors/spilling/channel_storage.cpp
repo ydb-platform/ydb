@@ -30,7 +30,7 @@ class TDqChannelStorage : public IDqChannelStorage {
         NThreading::TFuture<void> IsBlobWrittenFuture_;
     };
 public:
-    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback, 
+    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback,
         TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, TActorSystem* actorSystem)
     : ActorSystem_(actorSystem)
     {
@@ -89,6 +89,10 @@ public:
         --StoredBlobsCount_;
 
         return true;
+    }
+
+    void SetWakeUpCallback(TWakeUpCallback&& wakeUpCallback) override {
+        ActorSystem_->Send(ChannelStorageActorId_, new TEvDqChannelSpilling::TEvSetWakeUpCallback(std::move(wakeUpCallback)));
     }
 
 private:

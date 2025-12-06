@@ -156,18 +156,28 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_INFO, BLOB_DEPOT, BDTS06, "AddTrashToCollect", (Id, Self->GetLogId()), (Locator, locator));
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_OBJECTS] = ++TotalS3TrashObjects;
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_SIZE] = TotalS3TrashSize += locator.Len;
-        DeleteQueue.push_back(locator);
+        if (const ui32 generation = Self->Executor()->Generation(); locator.Generation < generation) {
+            DeleteQueueInPrevGenerations.push_back(locator);
+        } else {
+            Y_DEBUG_ABORT_UNLESS(locator.Generation == generation);
+            DeleteQueueInCurrentGeneration.push_back(locator);
+        }
         RunDeletersIfNeeded();
     }
 
     void TS3Manager::RunDeletersIfNeeded() {
-        while (!DeleteQueue.empty() && NumDeleteTxInFlight + ActiveDeleters.size() < MaxDeletesInFlight) {
+        while (NumDeleteTxInFlight + ActiveDeleters.size() < MaxDeletesInFlight) {
+            // create list of locators we are going to delete during this operation
             THashMap<TString, TS3Locator> locators;
-
-            while (!DeleteQueue.empty() && locators.size() < MaxObjectsToDeleteAtOnce) {
-                const TS3Locator& locator = DeleteQueue.front();
-                locators.emplace(locator.MakeObjectName(BasePath), locator);
-                DeleteQueue.pop_front();
+            for (auto *queue : {&DeleteQueueInPrevGenerations, &DeleteQueueInCurrentGeneration}) {
+                while (!queue->empty() && locators.size() < MaxObjectsToDeleteAtOnce) {
+                    const TS3Locator& locator = queue->front();
+                    locators.emplace(locator.MakeObjectName(BasePath), locator);
+                    queue->pop_front();
+                }
+            }
+            if (!locators) {
+                break;
             }
 
             const TActorId actorId = Self->Register(new TDeleterActor(Self->SelfId(), locators, Self->GetLogId()));
@@ -218,7 +228,15 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 if (!msg.LocatorsError.empty()) {
-                    DeleteQueue.insert(DeleteQueue.end(), msg.LocatorsError.begin(), msg.LocatorsError.end());
+                    const ui32 generation = Self->Executor()->Generation();
+                    for (auto& locator : msg.LocatorsError) {
+                        if (locator.Generation < generation) {
+                            DeleteQueueInPrevGenerations.push_back(locator);
+                        } else {
+                            Y_DEBUG_ABORT_UNLESS(locator.Generation == generation);
+                            DeleteQueueInCurrentGeneration.push_back(locator);
+                        }
+                    }
                     RunDeletersIfNeeded();
                 }
             })

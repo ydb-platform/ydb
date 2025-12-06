@@ -69,7 +69,9 @@ namespace NKikimr::NBlobDepot {
         static constexpr ui32 MaxDeletesInFlight = 3;
         static constexpr size_t MaxObjectsToDeleteAtOnce = 10;
 
-        std::deque<TS3Locator> DeleteQueue; // items we are definitely going to delete (must be present in TrashS3)
+        // items we are definitely going to delete (must be present in TrashS3)
+        std::deque<TS3Locator> DeleteQueueInPrevGenerations;
+        std::deque<TS3Locator> DeleteQueueInCurrentGeneration;
         THashSet<TActorId> ActiveDeleters;
         ui32 NumDeleteTxInFlight = 0;
         ui64 TotalS3TrashObjects = 0;

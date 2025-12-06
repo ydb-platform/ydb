@@ -98,9 +98,9 @@ namespace NKikimr::NBlobDepot {
     };
 
     TS3Locator TS3Manager::AllocateS3Locator(ui32 len) {
-        if (!DeleteQueue.empty()) {
-            TS3Locator res = DeleteQueue.front();
-            DeleteQueue.pop_front();
+        if (!DeleteQueueInCurrentGeneration.empty()) {
+            TS3Locator res = DeleteQueueInCurrentGeneration.front();
+            DeleteQueueInCurrentGeneration.pop_front();
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_OBJECTS] = --TotalS3TrashObjects;
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_SIZE] = TotalS3TrashSize -= res.Len;
             res.Len = len;

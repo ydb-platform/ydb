@@ -30,8 +30,6 @@ TString TKafkaProduceActor::LogPrefix() {
         sb << "Init ";
     } else if (stateFunc == &TKafkaProduceActor::StateWork) {
         sb << "Work ";
-    } else if (stateFunc == &TKafkaProduceActor::StateAccepting) {
-        sb << "Accepting ";
     } else {
         sb << "Unknown ";
     }
@@ -229,7 +227,6 @@ void TKafkaProduceActor::Handle(TEvKafka::TEvProduceRequest::TPtr request, const
 
 void TKafkaProduceActor::ProcessRequests(const TActorContext& ctx) {
     if (&TKafkaProduceActor::StateWork != CurrentStateFunc()) {
-        KAFKA_LOG_ERROR("Produce actor: Unexpected state");
         return;
     }
 
@@ -237,14 +234,15 @@ void TKafkaProduceActor::ProcessRequests(const TActorContext& ctx) {
         return;
     }
 
-    if (EnqueueInitialization()) {
+    auto canProcess = EnqueueInitialization();
+    while (canProcess--) {
         PendingRequests.push_back(std::make_shared<TPendingRequest>(Requests.front()));
         Requests.pop_front();
 
         ProcessRequest(PendingRequests.back(), ctx);
-    } else {
-        ProcessInitializationRequests(ctx);
     }
+
+    ProcessInitializationRequests(ctx);
 }
 
 size_t TKafkaProduceActor::EnqueueInitialization() {
@@ -399,12 +397,10 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
     if (pendingRequest->WaitResultCookies.empty()) {
         // All request for unknown topic or empty request
         SendResults(ctx);
-    } else {
-        Become(&TKafkaProduceActor::StateAccepting);
     }
 }
 
-void TKafkaProduceActor::HandleAccepting(TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext& ctx) {
+void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext& ctx) {
     auto r = request->Get();
     auto cookie = r->Cookie;
 
@@ -422,37 +418,78 @@ void TKafkaProduceActor::HandleAccepting(TEvPartitionWriter::TEvWriteAccepted::T
         Become(&TKafkaProduceActor::StateWork);
         ProcessRequests(ctx);
     } else {
-        KAFKA_LOG_W("Still in Accepting state after TEvPartitionWriter::TEvWriteAccepted cause cookies are expected: " << JoinSeq(", ", expectedCookies));
+        KAFKA_LOG_W("Still in accepting after receive TEvPartitionWriter::TEvWriteAccepted cause cookies are expected: " << JoinSeq(", ", expectedCookies));
     }
 }
 
 void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr request, const TActorContext& /*ctx*/) {
     KAFKA_LOG_D("Produce actor: Init " << request->Get()->ToString());
+
+    if (!request->Get()->IsSuccess()) {
+        auto sender = request->Sender;
+
+        if (WriterDied(sender, EKafkaErrors::UNKNOWN_SERVER_ERROR, request->Get()->GetError().Reason)) {
+            KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvInitResult for " << sender << " with error: " << request->Get()->GetError().Reason);
+            return;
+        }
+
+        KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvInitResult with unexpected writer " << sender);
+    }
 }
 
-void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr request, const TActorContext& ctx) {
+void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr request, const TActorContext& /*ctx*/) {
     auto sender = request->Sender;
 
-    auto [topicPath, partitionId] = WriterDied(sender);
-    if (topicPath.empty()) {
-        KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvDisconnected with unexpected writer " << sender);
+    if (WriterDied(sender, EKafkaErrors::NOT_LEADER_OR_FOLLOWER, TStringBuilder() << "Partition writer " << sender << " disconnected")) {
+        KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvDisconnected for " << sender);
         return;
     }
 
-    KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvDisconnected for " << topicPath << ":" << partitionId);
+    KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvDisconnected with unexpected writer " << sender);
+}
+
+bool TKafkaProduceActor::WriterDied(const TActorId& writerId, EKafkaErrors errorCode, TStringBuf errorMessage) {
+    auto findAndCleanWriter = [&]() -> std::pair<TString, ui32> {
+        for (auto it = TransactionalWriters.begin(); it != TransactionalWriters.end(); ++it) {
+            if (it->second.ActorId == writerId) {
+                auto id = it->first;
+                CleanWriter(id, writerId);
+                TransactionalWriters.erase(it);
+                return {id.TopicPath, id.PartitionId};
+            }
+        }
+
+        for (auto& [topicPath, partitionWriters] : NonTransactionalWriters) {
+            for (auto it = partitionWriters.begin(); it != partitionWriters.end(); ++it) {
+                if (it->second.ActorId == writerId) {
+                    auto id = it->first;
+                    CleanWriter({topicPath, static_cast<ui32>(id)}, writerId);
+                    partitionWriters.erase(it);
+                    return {topicPath, static_cast<ui32>(id)};
+                }
+            }
+        }
+
+        return {"", 0};
+    };
+
+    auto [topicPath, partitionId] = findAndCleanWriter();
+    if (topicPath.empty()) {
+        return false;
+    }
 
     for (auto it = Cookies.begin(); it != Cookies.end();) {
         auto cookie = it->first;
         auto& info = it->second;
 
         if (info.TopicPath == topicPath && info.PartitionId == partitionId) {
-            info.Request->Results[info.Position].ErrorCode = EKafkaErrors::NOT_LEADER_OR_FOLLOWER;
-            info.Request->Results[info.Position].ErrorMessage = TStringBuilder() << "Partition writer " << sender << " disconnected";
+            info.Request->Results[info.Position].ErrorCode = errorCode;
+            info.Request->Results[info.Position].ErrorMessage = errorMessage;
             info.Request->WaitAcceptingCookies.erase(cookie);
             info.Request->WaitResultCookies.erase(cookie);
 
             if (info.Request->WaitAcceptingCookies.empty() && info.Request->WaitResultCookies.empty()) {
-                SendResults(ctx);
+                SendResults(ActorContext());
             }
 
             it = Cookies.erase(it);
@@ -460,30 +497,8 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr reques
             ++it;
         }
     }
-}
 
-std::pair<TString, ui32>  TKafkaProduceActor::WriterDied(const TActorId& writerId) {
-    for (auto it = TransactionalWriters.begin(); it != TransactionalWriters.end(); ++it) {
-        if (it->second.ActorId == writerId) {
-            auto id = it->first;
-            CleanWriter(id, writerId);
-            TransactionalWriters.erase(it);
-            return {id.TopicPath, id.PartitionId};
-        }
-    }
-
-    for (auto& [topicPath, partitionWriters] : NonTransactionalWriters) {
-        for (auto it = partitionWriters.begin(); it != partitionWriters.end(); ++it) {
-            if (it->second.ActorId == writerId) {
-                auto id = it->first;
-                CleanWriter({topicPath, static_cast<ui32>(id)}, writerId);
-                partitionWriters.erase(it);
-                return {topicPath, static_cast<ui32>(id)};
-            }
-        }
-    }
-
-    return {"", 0};
+    return true;
 }
 
 void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr request, const TActorContext& ctx) {
@@ -641,20 +656,6 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
 
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(correlationId, response, metricsErrorCode));
 
-        if (!pendingRequest->WaitAcceptingCookies.empty()) {
-            if (!expired) {
-                TStringBuilder sb;
-                sb << "Produce actor: All TEvWriteResponse were received, but not all TEvWriteAccepted. Unreceived cookies:";
-                for(auto cookie : pendingRequest->WaitAcceptingCookies) {
-                    sb << " " << cookie;
-                }
-                KAFKA_LOG_W(sb);
-            }
-            if (&TKafkaProduceActor::StateAccepting == CurrentStateFunc()) {
-                Become(&TKafkaProduceActor::StateWork);
-            }
-        }
-
         for(auto cookie : pendingRequest->WaitAcceptingCookies) {
             Cookies.erase(cookie);
         }
@@ -664,6 +665,8 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
 
         PendingRequests.pop_front();
     }
+
+    ProcessRequests(ctx);
 }
 
 void TKafkaProduceActor::ProcessInitializationRequests(const TActorContext& ctx) {
@@ -738,18 +741,19 @@ void TKafkaProduceActor::SendWriteRequest(const TProduceRequestData::TTopicProdu
     auto& result = pendingRequest->Results[position];
     if (OK == writer.first) {
         auto ownCookie = ++Cookie;
-        auto& cookieInfo = Cookies[ownCookie];
-        cookieInfo.TopicPath = topicPath;
-        cookieInfo.PartitionId = partitionId;
-        cookieInfo.Position = position;
-        cookieInfo.RuPerRequest = ruPerRequest;
-        cookieInfo.Request = pendingRequest;
-
-        pendingRequest->WaitAcceptingCookies.insert(ownCookie);
-        pendingRequest->WaitResultCookies.insert(ownCookie);
 
         auto [error, ev] = Convert(transactionalId.GetOrElse(""), partitionData, topicPath, ownCookie, ClientDC, ruPerRequest);
         if (error == EKafkaErrors::NONE_ERROR) {
+            auto& cookieInfo = Cookies[ownCookie];
+            cookieInfo.TopicPath = topicPath;
+            cookieInfo.PartitionId = partitionId;
+            cookieInfo.Position = position;
+            cookieInfo.RuPerRequest = ruPerRequest;
+            cookieInfo.Request = pendingRequest;
+
+            pendingRequest->WaitAcceptingCookies.insert(ownCookie);
+            pendingRequest->WaitResultCookies.insert(ownCookie);
+
             ruPerRequest = false;
             KAFKA_LOG_T("Sending TEvPartitionWriter::TEvWriteRequest to " << writer.second << " with cookie " << ownCookie);
             Send(writer.second, std::move(ev));

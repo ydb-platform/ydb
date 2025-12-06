@@ -58,6 +58,7 @@ namespace NKikimr::NBlobDepot {
 
                     const bool inserted = agent.S3WritesInFlight.insert(locator).second;
                     Y_ABORT_UNLESS(inserted);
+                    Self->Data->AddS3WriteInFlight(locator);
                 }
             }
 

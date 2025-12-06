@@ -459,6 +459,7 @@ namespace NKikimr::NBlobDepot {
         TClosedIntervalSet<TKey> LoadedKeys; // keys that are already scanned and loaded in the local database
         THashMap<TLogoBlobID, ui32> RefCountBlobs;
         THashMap<TS3Locator, ui32> RefCountS3;
+        THashSet<TS3Locator> S3WritesInFlight;
         THashMap<std::tuple<ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
         std::optional<TLogoBlobID> LastAssimilatedBlobId;
         THashSet<std::tuple<ui8, ui32>> AlreadyCutHistory;
@@ -718,6 +719,9 @@ namespace NKikimr::NBlobDepot {
         bool CanBeCollected(TBlobSeqId id) const;
 
         void OnLeastExpectedBlobIdChange(ui8 channel);
+
+        void AddS3WriteInFlight(TS3Locator locator);
+        void RemoveS3WriteInFlight(TS3Locator locator);
 
         template<typename TCallback>
         void EnumerateRefCount(TCallback&& callback) {

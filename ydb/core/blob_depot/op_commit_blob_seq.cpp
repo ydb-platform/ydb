@@ -77,6 +77,7 @@ namespace NKikimr::NBlobDepot {
                             const size_t numErased = agent.S3WritesInFlight.erase(locator);
                             Y_ABORT_UNLESS(numErased);
                             Self->S3Manager->AddTrashToCollect(locator);
+                            Self->Data->RemoveS3WriteInFlight(locator);
                         }
                     };
 
@@ -177,6 +178,7 @@ namespace NKikimr::NBlobDepot {
                             // remove item from agent's inflight
                             const size_t numErased = agent.S3WritesInFlight.erase(locator);
                             Y_ABORT_UNLESS(numErased == 1);
+                            Self->Data->RemoveS3WriteInFlight(locator);
 
                             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_OK] += 1;
                             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_BYTES] += locator.Len;
@@ -244,6 +246,7 @@ namespace NKikimr::NBlobDepot {
             const size_t numErased = agent.S3WritesInFlight.erase(locator);
             Y_ABORT_UNLESS(numErased == 1);
             S3Manager->AddTrashToCollect(locator);
+            Data->RemoveS3WriteInFlight(locator);
         }
     }
 

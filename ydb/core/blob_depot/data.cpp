@@ -809,7 +809,16 @@ namespace NKikimr::NBlobDepot {
 
     bool TData::IsUseful(const TS3Locator& locator) const {
         Y_DEBUG_ABORT_UNLESS(IsLoaded());
-        return RefCountS3.contains(locator);
+        return RefCountS3.contains(locator) || S3WritesInFlight.contains(locator);
+    }
+
+    void TData::AddS3WriteInFlight(TS3Locator locator) {
+        S3WritesInFlight.insert(locator);
+    }
+
+    void TData::RemoveS3WriteInFlight(TS3Locator locator) {
+        const size_t n = S3WritesInFlight.erase(locator);
+        Y_ABORT_UNLESS(n == 1);
     }
 
 } // NKikimr::NBlobDepot

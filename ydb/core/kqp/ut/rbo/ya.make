@@ -10,10 +10,12 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/resource
     ydb/core/kqp/ut/common
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+    ydb/library/benchmarks/queries/tpch
     ydb/public/lib/ut_helpers
 )
 
@@ -22,9 +24,7 @@ ADDINCL(
 )
 
 DATA (
-    arcadia/ydb/core/kqp/ut/join
-    arcadia/ydb/library/benchmarks/queries
-    arcadia/ydb/library/benchmarks/gen_queries/consts.yql
+    arcadia/ydb/core/kqp/ut/join/data
 )
 
 IF (OS_WINDOWS)

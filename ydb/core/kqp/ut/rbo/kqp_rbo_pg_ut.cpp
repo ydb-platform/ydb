@@ -1284,10 +1284,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         }
 
         for (const auto qId : queries) {
-            const TString qPath = TStringBuilder{} << ArcadiaSourceRoot() << "/ydb/library/benchmarks/queries/tpch/pg/" << "q" << qId << ".sql";
-
-            TIFStream s(qPath);
-            std::string q = s.ReadAll();
+            std::string q = NResource::Find("tpch/queries/pg/q" + ::ToString(qId));
             Replace(q, "{% include 'header.sql.jinja' %}", "");
             std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
             q = "--!syntax_pg\n" + std::regex_replace(q, pattern, "$1");

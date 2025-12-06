@@ -45,6 +45,8 @@ public:
         AddHandler(0, IsSort, HNDL(RemoveRedundantSortOverReadTable));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
         AddHandler(0, &TCoTopSort::Match, HNDL(ApplyLimitToOlapReadTable));
+        AddHandler(0, &TCoTopSort::Match, HNDL(ApplyVectorTopKToReadTable));
+        AddHandler(0, &TDqStage::Match, HNDL(ApplyVectorTopKToStageWithSource));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapProjections));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
@@ -206,7 +208,7 @@ protected:
         else {
             TExprBase output = KqpBuildStreamIdxLookupJoinStagesKeepSorted(node, ctx, TypesCtx, true);
             DumpAppliedRule("BuildStreamIdxLookupJoinStagesKeepSorted", node.Ptr(), output.Ptr(), ctx);
-            return output;   
+            return output;
         }
     }
 
@@ -257,6 +259,18 @@ protected:
     TMaybeNode<TExprBase> ApplyLimitToOlapReadTable(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpApplyLimitToOlapReadTable(node, ctx, KqpCtx);
         DumpAppliedRule("ApplyLimitToOlapReadTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> ApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpApplyVectorTopKToReadTable(node, ctx, KqpCtx);
+        DumpAppliedRule("ApplyVectorTopKToReadTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> ApplyVectorTopKToStageWithSource(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpApplyVectorTopKToStageWithSource(node, ctx, KqpCtx);
+        DumpAppliedRule("ApplyVectorTopKToStageWithSource", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

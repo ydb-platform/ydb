@@ -5220,6 +5220,7 @@ void TPersQueue::BeginDeletePartitions(const TWriteId& writeId, TTxWriteInfo& wr
     writeInfo.Deleting = true;
     if (writeInfo.Partitions.empty()) {
         TryDeleteWriteId(writeId, writeInfo, ActorContext());
+        TxWritesChanged = true;
     } else {
         for (auto& [_, partitionId] : writeInfo.Partitions) {
             PQ_ENSURE(Partitions.contains(partitionId));

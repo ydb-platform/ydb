@@ -18,21 +18,7 @@ namespace NKikimr {
 namespace NKqp {
 class TTestHelper {
 public:
-    class TCompression {
-        YDB_ACCESSOR(TString, SerializerClassName, "ARROW_SERIALIZER");
-        YDB_OPT(NKikimrSchemeOp::EColumnCodec, CompressionType);
-        YDB_ACCESSOR_DEF(std::optional<i32>, CompressionLevel);
-
-    public:
-        bool DeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializer);
-        TString BuildQuery() const;
-
-        bool IsEqual(const TCompression& rhs, TString& errorMessage) const;
-
-        TString ToString() const;
-    };
-
-    class TColumnSchema {
+class TColumnSchema {
         YDB_ACCESSOR_DEF(TString, Name);
         YDB_ACCESSOR_DEF(NScheme::TTypeInfo, TypeInfo);
         YDB_FLAG_ACCESSOR(Nullable, true);
@@ -110,8 +96,6 @@ public:
     void ExecuteQuery(const TString& query) const;
     void RebootTablets(const TString& tableName);
     void WaitTabletDeletionInHive(ui64 tabletId, TDuration duration);
-    void SetCompression(const TColumnTableBase& columnTable, const TString& columnName, const TCompression& compression,
-        const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
 };
 }
 }

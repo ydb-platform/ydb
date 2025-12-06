@@ -69,20 +69,26 @@ class KeyValueClient(object):
 
                 time.sleep(self.__retry_sleep_seconds)
 
-    def kv_write(self, path, partition_id, key, value):
+    def kv_write(self, path, partition_id, key, value, channel=None):
         request = keyvalue_api.ExecuteTransactionRequest()
         request.path = path
         request.partition_id = partition_id
         write = request.commands.add().write
         write.key = key
         write.value = to_bytes(value)
+        if channel is not None:
+            write.storage_channel = channel
         return self.invoke(request, 'ExecuteTransaction')
 
-    def kv_read(self, path, partition_id, key):
+    def kv_read(self, path, partition_id, key, offset=None, size=None):
         request = keyvalue_api.ReadRequest()
         request.path = path
         request.partition_id = partition_id
         request.key = key
+        if offset is not None:
+            request.offset = offset
+        if size is not None:
+            request.size = size
         return self.invoke(request, 'Read')
 
     def kv_get_tablets_read_state(self, path, partition_ids):
@@ -109,10 +115,20 @@ class KeyValueClient(object):
         elif channels_list() != '':
             channels = {idx: value for idx, value in enumerate(channels_list().split(';'))}
         if channels:
-            for _ in range(len(channels.items())):
-                new_channel = request.storage_config.channel.add()
-                new_channel.media = 'hdd'
+            if isinstance(channels, dict):
+                for _ in range(len(channels.items())):
+                    new_channel = request.storage_config.channel.add()
+                    new_channel.media = 'hdd'
+            elif isinstance(channels, list):
+                for media in channels:
+                    new_channel = request.storage_config.channel.add()
+                    new_channel.media = media
         return self.invoke(request, 'CreateVolume')
+
+    def drop_tablets(self, path):
+        request = keyvalue_api.DropVolumeRequest()
+        request.path = path
+        return self.invoke(request, 'DropVolume')
 
     def close(self):
         self._channel.close()

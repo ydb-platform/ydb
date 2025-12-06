@@ -1,6 +1,5 @@
 # State Storage Move
 
-{% include [deprecated](_includes/deprecated.md) %}
 
 If you need to decommission a {{ ydb-short-name }} cluster host that contains part of [State Storage](../../../reference/configuration/domains_config.md#domains-state), you need to move it to another host.
 

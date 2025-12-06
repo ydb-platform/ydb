@@ -43,6 +43,21 @@ void AskInputWithPrompt(const TString& prompt, std::function<bool(const TString&
     }
 }
 
+void AskAnyInputWithPrompt(const TString& prompt, std::function<void(const TString&)> handler, bool verbose) {
+    AskInputWithPrompt(prompt, [&](const TString& input) {
+        handler(input);
+        return true;
+    }, verbose);
+}
+
+TString AskAnyInputWithPrompt(const TString& prompt, bool verbose) {
+    TString result;
+    AskAnyInputWithPrompt(prompt, [&](const TString& input) {
+        result = input;
+    }, verbose);
+    return result;
+}
+
 bool AskYesOrNo(const TString& query, std::optional<bool> defaultAnswer) {
     std::vector<TString> choices = {"y", "yes", "n", "no"};
     if (defaultAnswer) {

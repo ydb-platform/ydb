@@ -66,6 +66,7 @@ namespace {
     class TNumericOptionsPicker {
     public:
         using TPickableAction = std::function<void()>;
+        using TInputAction = std::function<void(const TString&)>;
 
         explicit TNumericOptionsPicker(bool verbose)
             : Verbose(verbose)
@@ -75,6 +76,12 @@ namespace {
             const auto& colors = NColorizer::AutoColors(Cout);
             Cout << " [" << colors.Green() << ++OptionsCount << colors.OldColor() << "] " << description << Endl;
             Options.emplace(OptionsCount, std::move(action));
+        }
+
+        void AddInputOption(const TString& description, const TString& prompt, TInputAction&& action) {
+            AddOption(description, [this, prompt, a = std::move(action)]() {
+                AskAnyInputWithPrompt(prompt, a, Verbose);
+            });
         }
 
         void PickOptionAndDoAction() const {
@@ -117,17 +124,16 @@ namespace {
         const auto profileNames = profileManager->ListProfiles();
         if (!profileNames) {
             Cout << "You have no existing profiles yet." << Endl;
-            Cout << "Please enter name for a new profile: ";
-            Cin >> profileName;
+            profileName = AskAnyInputWithPrompt("Please enter name for a new profile: ", verbose);
         }
 
         Cout << "Please choose profile to configure:" << Endl;
         TNumericOptionsPicker picker(verbose);
-        picker.AddOption(
+        picker.AddInputOption(
             "Create a new profile",
-            [&profileName]() {
-                Cout << "Please enter name for a new profile: ";
-                Cin >> profileName;
+            "Please enter name for a new profile: ",
+            [&profileName](const TString& input) {
+                profileName = input;
             }
         );
 
@@ -180,21 +186,15 @@ namespace {
         profile->SetValue(AuthNode, authValue);
     }
 
-    void SetAuthMethod(const TString& id, const TString& fullName, std::shared_ptr<IProfile> profile,
-            const TString& profileName) {
-        Cout << "Please enter " << fullName << " (" << id << "): ";
-        TString newValue;
-        Cin >> newValue;
-        if (newValue) {
+    void SetAuthMethod(const TString& id, const TString& fullName, std::shared_ptr<IProfile> profile, const TString& profileName) {
+        if (auto newValue = AskAnyInputWithPrompt(TStringBuilder() << "Please enter " << fullName << " (" << id << "): ")) {
             Cout << "Setting " << fullName << " for profile \"" << profileName << "\"" << Endl;
             PutAuthMethod( profile, id, newValue );
         }
     }
 
     void SetStaticCredentials(std::shared_ptr<IProfile> profile, const TString& profileName) {
-        Cout << "Please enter user name: ";
-        TString userName;
-        Cin >> userName;
+        TString userName = AskAnyInputWithPrompt("Please enter user name: ");
         Cout << "Please enter password: ";
         TString userPassword = InputPassword();
         if (userName) {
@@ -504,16 +504,14 @@ void TCommandProfileCommon::SetupProfileSetting(const TString& name, const TStri
     Cout << Endl << "Pick desired action to configure " << name << " in profile \"" << profileName << "\":" << Endl;
 
     TNumericOptionsPicker picker(verbose);
-    picker.AddOption(
+    picker.AddInputOption(
         TStringBuilder() << "Set a new " << name << " value",
-        [&name, &profileName, &profile]() {
-            Cout << "Please enter new " << name << " value: ";
-            TString newValue;
-            Cin >> newValue;
-            if (newValue) {
-                Cout << "Setting " << name << " value \"" << newValue << "\" for profile \"" << profileName
+        TStringBuilder() << "Please enter new " << name << " value: ",
+        [&name, &profileName, &profile](const TString& input) {
+            if (input) {
+                Cout << "Setting " << name << " value \"" << input << "\" for profile \"" << profileName
                         << "\"" << Endl;
-                profile->SetValue(name, newValue);
+                profile->SetValue(name, input);
             }
         }
     );
@@ -547,68 +545,68 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
     TNumericOptionsPicker picker(config.IsVerbose());
     if (config.UseStaticCredentials) {
         picker.AddOption(
-                "Use static credentials (user & password)",
-                [&profile, &profileName]() {
-                    SetStaticCredentials(profile, profileName);
-                }
+            "Use static credentials (user & password)",
+            [&profile, &profileName]() {
+                SetStaticCredentials(profile, profileName);
+            }
         );
     }
     if (config.UseIamAuth) {
         picker.AddOption(
-                "Use IAM token (iam-token) cloud.yandex.ru/docs/iam/concepts/authorization/iam-token",
-                [&profile, &profileName]() {
-                    SetAuthMethod("iam-token", "IAM token", profile, profileName);
-                }
+            "Use IAM token (iam-token) cloud.yandex.ru/docs/iam/concepts/authorization/iam-token",
+            [&profile, &profileName]() {
+                SetAuthMethod("iam-token", "IAM token", profile, profileName);
+            }
         );
         picker.AddOption(
-                "Use OAuth token of a Yandex Passport user (yc-token). Doesn't work with federative accounts."
-                " cloud.yandex.ru/docs/iam/concepts/authorization/oauth-token",
-                [&profile, &profileName]() {
-                    SetAuthMethod("yc-token", "OAuth token of a Yandex Passport user", profile, profileName);
-                }
+            "Use OAuth token of a Yandex Passport user (yc-token). Doesn't work with federative accounts."
+            " cloud.yandex.ru/docs/iam/concepts/authorization/oauth-token",
+            [&profile, &profileName]() {
+                SetAuthMethod("yc-token", "OAuth token of a Yandex Passport user", profile, profileName);
+            }
         );
         picker.AddOption(
-                "Use OAuth 2.0 RFC8693 token exchange credentials parameters json file.",
-                [&profile, &profileName]() {
-                    SetAuthMethod("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file", profile, profileName);
-                }
+            "Use OAuth 2.0 RFC8693 token exchange credentials parameters json file.",
+            [&profile, &profileName]() {
+                SetAuthMethod("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file", profile, profileName);
+            }
         );
         picker.AddOption(
-                "Use metadata service on a virtual machine (use-metadata-credentials)"
-                " cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm",
-                [&profile, &profileName]() {
-                    Cout << "Setting metadata service usage for profile \"" << profileName << "\"" << Endl;
-                    PutAuthMethodWithoutPars(profile, "use-metadata-credentials");
-                }
+            "Use metadata service on a virtual machine (use-metadata-credentials)"
+            " cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm",
+            [&profile, &profileName]() {
+                Cout << "Setting metadata service usage for profile \"" << profileName << "\"" << Endl;
+                PutAuthMethodWithoutPars(profile, "use-metadata-credentials");
+            }
         );
         picker.AddOption(
-                "Use service account key file (sa-key-file)"
-                " cloud.yandex.ru/docs/iam/operations/iam-token/create-for-sa",
-                [&profile, &profileName]() {
-                    SetAuthMethod("sa-key-file", "Path to service account key file", profile, profileName);
-                }
+            "Use service account key file (sa-key-file)"
+            " cloud.yandex.ru/docs/iam/operations/iam-token/create-for-sa",
+            [&profile, &profileName]() {
+                SetAuthMethod("sa-key-file", "Path to service account key file", profile, profileName);
+            }
         );
     }
     if (config.UseAccessToken) {
         picker.AddOption(
-                "Set new access token (ydb-token)",
-                [&profile, &profileName]() {
-                    SetAuthMethod("ydb-token", "YDB token", profile, profileName);
-                }
+            "Set new access token (ydb-token)",
+            [&profile, &profileName]() {
+                SetAuthMethod("ydb-token", "YDB token", profile, profileName);
+            }
         );
     }
     picker.AddOption(
-            TStringBuilder() << "Set anonymous authentication for profile \"" << profileName << "\"",
-            [&profile, &profileName]() {
-                Cout << "Setting anonymous authentication method for profile \"" << profileName << "\"" << Endl;
-                PutAuthMethodWithoutPars(profile, "anonymous-auth");
-            }
+        TStringBuilder() << "Set anonymous authentication for profile \"" << profileName << "\"",
+        [&profile, &profileName]() {
+            Cout << "Setting anonymous authentication method for profile \"" << profileName << "\"" << Endl;
+            PutAuthMethodWithoutPars(profile, "anonymous-auth");
+        }
     );
     picker.AddOption(
-            TStringBuilder() << "Don't save authentication data for profile (environment variables can be used) \"" << profileName << "\"",
-            [&profile]() {
-                profile->RemoveValue(AuthNode);
-            }
+        TStringBuilder() << "Don't save authentication data for profile (environment variables can be used) \"" << profileName << "\"",
+        [&profile]() {
+            profile->RemoveValue(AuthNode);
+        }
     );
     if (existingProfile && profile->Has(AuthNode)) {
         auto& authValue = profile->GetValue(AuthNode);
@@ -622,8 +620,8 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
                 description << " and value \"" << authValue["data"].as<TString>() << "\"";
             }
             picker.AddOption(
-                    description,
-                    []() {}
+                description,
+                []() {}
             );
         }
     }
@@ -798,8 +796,7 @@ int TCommandCreateProfile::Run(TConfig& config) {
         profileManager->CreateProfile(ProfileName);
     }
     if (!profileName) {
-        Cout << "Please enter configuration profile name to create or re-configure: ";
-        Cin >> profileName;
+        profileName = AskAnyInputWithPrompt("Please enter configuration profile name to create or re-configure: ", config.IsVerbose());
     }
     ConfigureProfile(profileName, profileManager, config, Interactive, true);
     return EXIT_SUCCESS;

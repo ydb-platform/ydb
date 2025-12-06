@@ -1,217 +1,201 @@
 #include "interactive_cli.h"
 
-#include <vector>
-
-#include <library/cpp/resource/resource.h>
-#include <util/folder/path.h>
-#include <util/folder/dirut.h>
-#include <util/string/strip.h>
-
+#include <ydb/core/base/validation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_table.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sql.h>
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+
+#include <util/folder/path.h>
+#include <util/folder/dirut.h>
+#include <util/string/strip.h>
+
+#include <library/cpp/resource/resource.h>
+
+#include <vector>
 
 namespace NYdb::NConsoleClient {
 
 namespace {
 
-const char* VersionResourceName = "version.txt";
+constexpr char VersionResourceName[] = "version.txt";
 
-std::string ToLower(std::string_view value) {
-    size_t value_size = value.size();
-    std::string result;
-    result.resize(value_size);
+class TLexer {
+public:
+    struct TToken {
+        std::string_view data;
+    };
 
-    for (size_t i = 0; i < value_size; ++i) {
-        result[i] = std::tolower(value[i]);
+    explicit TLexer(std::string_view input)
+        : Input(input)
+        , Position(Input.data())
+    {}
+
+    static std::vector<TToken> Tokenize(std::string_view input) {
+        std::vector<TToken> tokens;
+        TLexer lexer(input);
+
+        while (auto token = lexer.GetNextToken()) {
+            tokens.push_back(*token);
+        }
+
+        return tokens;
     }
 
-    return result;
-}
+private:
+    std::optional<TToken> GetNextToken() {
+        while (Position < Input.end() && std::isspace(*Position)) {
+            ++Position;
+        }
 
-struct Token {
-    std::string_view data;
-};
+        if (Position == Input.end()) {
+            return {};
+        }
 
-class Lexer {
-public:
-    Lexer(std::string_view input);
+        const char* tokenStart = Position;
+        if (IsSeparatedTokenSymbol(*Position)) {
+            ++Position;
+        } else {
+            while (Position < Input.end() && !std::isspace(*Position) && !IsSeparatedTokenSymbol(*Position)) {
+                ++Position;
+            }
+        }
 
-    std::optional<Token> GetNextToken();
+        std::string_view TokenData(tokenStart, Position);
+        return TToken{TokenData};
+    }
 
-    static bool IsSeparatedTokenSymbol(char c);
+    static bool IsSeparatedTokenSymbol(char c) {
+        return c == '=' || c == ';';
+    }
 
 private:
     std::string_view Input;
     const char* Position = nullptr;
 };
 
-Lexer::Lexer(std::string_view input)
-    : Input(input)
-    , Position(Input.data())
-{
-}
+class TInteractiveCLIState {
+public:
+    void TrySetCollectStatsMode(const std::vector<TLexer::TToken>& tokens) {
+        size_t tokensSize = tokens.size();
+        Y_DEBUG_VERIFY(tokensSize >= 4, "Not enough tokens for \"SET stats\" special command.");
 
-std::optional<Token> Lexer::GetNextToken() {
-    while (Position < Input.end() && std::isspace(*Position)) {
-        ++Position;
-    }
-
-    if (Position == Input.end()) {
-        return {};
-    }
-
-    const char* tokenStart = Position;
-    if (IsSeparatedTokenSymbol(*Position)) {
-        ++Position;
-    } else {
-        while (Position < Input.end() && !std::isspace(*Position) && !IsSeparatedTokenSymbol(*Position)) {
-            ++Position;
+        if (tokensSize > 4) {
+            Cerr << "Variable value for \"SET stats\" special command should contain exactly one token." << Endl;
+            return;
         }
+
+        auto statsMode = NTable::ParseQueryStatsMode(tokens[3].data);
+        if (!statsMode) {
+            Cerr << "Unknown stats collection mode: \"" << tokens[3].data << "\"." << Endl;
+        }
+
+        CollectStatsMode = *statsMode;
     }
 
-    std::string_view TokenData(tokenStart, Position);
-    return Token{TokenData};
-}
-
-bool Lexer::IsSeparatedTokenSymbol(char c) {
-    return c == '=' || c == ';';
-}
-
-std::vector<Token> Tokenize(std::string_view input) {
-    std::vector<Token> tokens;
-    Lexer lexer(input);
-
-    while (auto token = lexer.GetNextToken()) {
-        tokens.push_back(*token);
-    }
-
-    return tokens;
-}
-
-struct InteractiveCLIState {
+public:
     NTable::ECollectQueryStatsMode CollectStatsMode = NTable::ECollectQueryStatsMode::None;
 };
 
-std::optional<NTable::ECollectQueryStatsMode> TryParseCollectStatsMode(const std::vector<Token>& tokens) {
-    size_t tokensSize = tokens.size();
-
-    if (tokensSize > 4) {
-        Cerr << "Variable value for \"SET stats\" special command should contain exactly one token." << Endl;
-        return {};
-    }
-
-    auto statsMode = NTable::ParseQueryStatsMode(tokens[3].data);
-    if (!statsMode) {
-        Cerr << "Unknown stats collection mode: \"" << tokens[3].data << "\"." << Endl;
-    }
-    return statsMode;
-}
-
-void ParseSetCommand(const std::vector<Token>& tokens, InteractiveCLIState& interactiveCLIState) {
+void ParseSetCommand(const std::vector<TLexer::TToken>& tokens, TInteractiveCLIState& interactiveCLIState) {
     if (tokens.size() == 1) {
         Cerr << "Missing variable name for \"SET\" special command." << Endl;
     } else if (tokens.size() == 2 || tokens[2].data != "=") {
         Cerr << "Missing \"=\" symbol for \"SET\" special command." << Endl;
     } else if (tokens.size() == 3) {
         Cerr << "Missing variable value for \"SET\" special command." << Endl;
-    } else if (ToLower(tokens[1].data) == "stats") {
-        if (auto statsMode = TryParseCollectStatsMode(tokens)) {
-            interactiveCLIState.CollectStatsMode = *statsMode;
-        }
+    } else if (to_lower(TString(tokens[1].data)) == "stats") {
+        interactiveCLIState.TrySetCollectStatsMode(tokens);
     } else {
         Cerr << "Unknown variable name \"" << tokens[1].data << "\" for \"SET\" special command." << Endl;
     }
 }
 
-} // namespace
+} // anonymous namespace
 
-TInteractiveCLI::TInteractiveCLI(std::string prompt)
-    : Prompt(std::move(prompt))
-{
-}
+TInteractiveCLI::TInteractiveCLI(const TString& profileName, const TString& ydbPath)
+    : Prompt(TStringBuilder() << Colors.LightGreen() << (profileName ? profileName : "ydb") << Colors.OldColor() << "> ")
+    , YdbPath(ydbPath)
+{}
 
 int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
-    std::string cliVersion;
+    Log.Setup(config);
+
+    TString cliVersion;
     try {
         cliVersion = StripString(NResource::Find(TStringBuf(VersionResourceName)));
     } catch (const std::exception& e) {
+        Log.Error() << "Couldn't read version from resource: " << e.what();
         cliVersion.clear();
     }
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    const auto& colors = NColorizer::AutoColors(Cout);
     Cout << "Welcome to YDB CLI";
     if (!cliVersion.empty()) {
-        Cout << " " << colors.BoldColor() << cliVersion << colors.OldColor() ;
+        Cout << " " << colors.BoldColor() << cliVersion << colors.OldColor();
     }
     Cout << " interactive mode";
 
-    auto driver = TDriver(config.CreateDriverConfig());
+    TDriver driver(config.CreateDriverConfig());
     NQuery::TQueryClient client(driver);
-    auto selectVersionResult = client.RetryQuery([](NQuery::TSession session) {
-        return session.ExecuteQuery("SELECT version() AS version;", NQuery::TTxControl::NoTx());
-    }).GetValueSync();
-    std::string serverVersion;
+
+    const auto selectVersionResult = client.RetryQuery([](NQuery::TSession session) {
+        return session.ExecuteQuery("SELECT version()", NQuery::TTxControl::NoTx());
+    }).ExtractValueSync();
+    TString serverVersion;
     if (selectVersionResult.IsSuccess()) {
         try {
             auto parser = selectVersionResult.GetResultSetParser(0);
             parser.TryNextRow();
-            serverVersion = parser.ColumnParser("version").GetString();
+            serverVersion = parser.ColumnParser(0).GetString();
         } catch (const std::exception& e) {
-            Cerr << Endl << "Couldn't parse server version: " << e.what() << Endl;
+            Cerr << Endl << colors.Red() << "Couldn't parse server version: " << colors.OldColor() << e.what() << Endl;
         }
+    } else {
+        Log.Error() << "Couldn't read version from YDB server:" << Endl << TStatus(selectVersionResult);
     }
+
     if (!serverVersion.empty()) {
         Cout << " (YDB Server " << colors.BoldColor() << serverVersion << colors.OldColor() << ")" << Endl;
     } else {
         Cout << Endl;
-        auto select1Status = client.RetryQuerySync([](NQuery::TSession session) {
-            return session.ExecuteQuery("SELECT 1;", NQuery::TTxControl::NoTx()).GetValueSync();
-        });
+        const auto select1Status = client.RetryQuery([](NQuery::TSession session) {
+            return session.ExecuteQuery("SELECT 1", NQuery::TTxControl::NoTx());
+        }).ExtractValueSync();
         if (!select1Status.IsSuccess()) {
-            Cerr << "Couldn't connect to YDB server:" << Endl << select1Status << Endl;
+            Cerr << colors.Red() << "Couldn't connect to YDB server:" << colors.OldColor() << Endl << TStatus(select1Status) << Endl;
             return EXIT_FAILURE;
         }
     }
 
-    Cout << colors.BoldColor() << "Hotkeys:" << colors.OldColor() << Endl
-        << "  " << colors.BoldColor() << "Up and Down arrow keys" << colors.OldColor() << ": navigate through query history." << Endl
-        << "  " << colors.BoldColor() << "TAB" << colors.OldColor() << ": complete the current word based on YQL syntax." << Endl
-        << "  " << colors.BoldColor() << "Ctrl+R" << colors.OldColor() << ": search for a query in history containing a specified substring." << Endl
-        << "  " << colors.BoldColor() << "Ctrl+D" << colors.OldColor() << ": exit interactive mode." << Endl
-        << Endl;
+    Cout << "Press " << colors.BoldColor() << "Ctrl+K" << colors.OldColor() << " for more information." << Endl;
 
-    TFsPath homeDirPath(HomeDir);
-    TString historyFilePath(homeDirPath / ".ydb_history");
-    std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath, config);
+    TString historyFilePath(TFsPath(YdbPath) / "test" / "interactive_cli_history.txt");
+    const auto lineReader = CreateLineReader(Prompt, historyFilePath, driver, config.Database, Log);
 
-    InteractiveCLIState interactiveCLIState;
-
-    while (auto lineOptional = lineReader->ReadLine())
-    {
+    TInteractiveCLIState interactiveCLIState;
+    while (const auto lineOptional = lineReader->ReadLine()) {
         auto& line = *lineOptional;
         if (line.empty()) {
             continue;
         }
 
         try {
-            auto tokens = Tokenize(line);
-            size_t tokensSize = tokens.size();
+            const auto& tokens = TLexer::Tokenize(line);
             if (tokens.empty()) {
                 continue;
             }
 
-            if (ToLower(tokens[0].data) == "set") {
+            if (to_lower(TString(tokens[0].data)) == "set") {
                 ParseSetCommand(tokens, interactiveCLIState);
                 continue;
             }
 
-            if (ToLower(tokens[0].data) == "explain") {
-                bool printAst = tokensSize >= 2 && ToLower(tokens[1].data) == "ast";
+            size_t tokensSize = tokens.size();
+            if (to_lower(TString(tokens[0].data)) == "explain") {
+                bool printAst = tokensSize >= 2 && to_lower(TString(tokens[1].data)) == "ast";
                 size_t skipTokens = 1 + printAst;
                 TString explainQuery;
 
@@ -239,17 +223,15 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
             sqlCommand.SetSyntax("yql");
             sqlCommand.Run(config);
         } catch (NStatusHelpers::TYdbErrorException& error) {
-            Cerr << error;
-        } catch (yexception& error) {
-            Cerr << error;
+            Cerr << colors.Red() << "Failed to handle command: " << colors.OldColor() << error;
         } catch (std::exception& error) {
-            Cerr << error.what();
+            Cerr << colors.Red() << "Failed to handle command: " << colors.OldColor() << error.what();
         }
     }
 
     // Clear line (hints can be still present)
-    lineReader->ClearHints();
-    std::cout << "Bye" << std::endl;
+    lineReader->Finish();
+    Cout << "Exiting." << Endl;
     return EXIT_SUCCESS;
 }
 

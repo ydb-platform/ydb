@@ -1,22 +1,25 @@
 #pragma once
 
-#include <memory>
-#include <optional>
-#include <string>
+#include "interactive_log.h"
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
+
+#include <memory>
+#include <optional>
 
 namespace NYdb::NConsoleClient {
 
 class ILineReader {
 public:
-    virtual std::optional<std::string> ReadLine() = 0;
-    virtual void ClearHints() = 0;
+    using TPtr = std::unique_ptr<ILineReader>;
+
+    virtual std::optional<TString> ReadLine() = 0;
+
+    virtual void Finish() = 0;
 
     virtual ~ILineReader() = default;
 };
 
-std::unique_ptr<ILineReader> CreateLineReader(
-    std::string prompt, std::string historyFilePath, TClientCommand::TConfig& config);
+ILineReader::TPtr CreateLineReader(const TString& prompt, const TString& historyFilePath, const TDriver& driver, const TString& database, const TInteractiveLogger& log);
 
 } // namespace NYdb::NConsoleClient

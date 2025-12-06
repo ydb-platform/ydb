@@ -651,12 +651,12 @@ int TClientCommandRootCommon::Run(TConfig& config) {
 
     TString prompt;
     if (!ProfileName.empty()) {
-        prompt = ProfileName + "> ";
-    } else {
-        prompt = "ydb> ";
+        prompt = ProfileName;
+    } if (const auto& activeProfileName = ProfileManager->GetActiveProfileName(); !config.OnlyExplicitProfile && activeProfileName) {
+        prompt = activeProfileName;
     }
 
-    TInteractiveCLI interactiveCLI(prompt);
+    TInteractiveCLI interactiveCLI(prompt, TStringBuilder() << HomeDir << '/' << Settings.YdbDir);
     return interactiveCLI.Run(config);
 }
 

@@ -89,6 +89,7 @@ public:
             TArgSetting Max;
         };
 
+        static ELogPriority VerbosityLevelToELogPrioritySilent(ui32 lvl);
         static ELogPriority VerbosityLevelToELogPriority(ui32 lvl);
         static ELogPriority VerbosityLevelToELogPriorityChatty(ui32 lvl);
 

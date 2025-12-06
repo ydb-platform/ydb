@@ -1,20 +1,28 @@
 #pragma once
 
-#include <util/generic/string.h>
+#include "interactive_log.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 
+#include <util/generic/string.h>
+
+#include <library/cpp/logger/log.h>
+
 namespace NYdb::NConsoleClient {
 
 class TInteractiveCLI {
+    inline const static NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
+
 public:
-    TInteractiveCLI(std::string prompt);
+    TInteractiveCLI(const TString& profileName, const TString& ydbPath);
 
     int Run(TClientCommand::TConfig& config);
 
 private:
-    std::string Prompt;
+    const TString Prompt;
+    const TString YdbPath;
+    TInteractiveLogger Log;
 };
 
 } // namespace NYdb::NConsoleClient

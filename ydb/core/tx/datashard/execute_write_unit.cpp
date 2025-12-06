@@ -43,6 +43,7 @@ public:
         NEvents::TDataEvents::TEvWriteResult& writeResult = *writeOp->GetWriteResult();
 
         auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
+        writeResult.Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
         NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), writeOp->GetTxId(), locksBrokenByTx);
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add locks to result: " << locks.size());
         for (const auto& lock : locks) {
@@ -116,11 +117,11 @@ public:
                 key.emplace_back(cell.Data(), cell.Size(), vtypeId);
             }
         }
-    };    
+    };
 
     EExecutionStatus OnTabletNotReadyException(TDataShardUserDb& userDb, TWriteOperation& writeOp, size_t operationIndexToPrecharge, TTransactionContext& txc, const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
-        
+
         // Precharge
         if (operationIndexToPrecharge != SIZE_MAX) {
             const TValidatedWriteTx::TPtr& writeTx = writeOp.GetWriteTx();
@@ -237,7 +238,7 @@ public:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
-            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: 
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                 DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
                 DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
@@ -432,6 +433,7 @@ public:
 
                 KqpEraseLocks(tabletId, kqpLocks, sysLocks);
                 auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
+                writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
                 NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
                 DataShard.SubscribeNewLocks(ctx);
 

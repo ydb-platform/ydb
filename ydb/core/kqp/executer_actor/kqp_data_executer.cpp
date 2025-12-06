@@ -45,6 +45,7 @@ static constexpr ui32 ReplySizeLimit = 48 * 1024 * 1024; // 48 MB
 
 class TKqpDataExecuter : public TKqpExecuterBase<TKqpDataExecuter, EExecType::Data> {
     using TBase = TKqpExecuterBase<TKqpDataExecuter, EExecType::Data>;
+    using TBase::ReplyErrorAndDie;
     using TKqpSnapshot = IKqpGateway::TKqpSnapshot;
 
     struct TReattachState {
@@ -297,10 +298,8 @@ public:
     }
 
     void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr& ev) {
-        if (ev->Get()->Stats) {
-            if (Stats) {
-                Stats->AddBufferStats(std::move(*ev->Get()->Stats));
-            }
+        if (ev->Get()->Stats && Stats) {
+            Stats->AddBufferStats(std::move(*ev->Get()->Stats));
         }
         MakeResponseAndPassAway();
     }
@@ -310,11 +309,30 @@ public:
         LOG_W("Got Undelivered from BufferActor: " << ev->Sender);
     }
 
+    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
+        google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues) override
+    {
+        // Set locks broken counts before calling base implementation
+        if (Stats) {
+            ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
+            ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim + LocksBrokenAsVictim;
+        } else {
+            ResponseEv->LocksBrokenAsVictim = LocksBrokenAsVictim;
+        }
+        TBase::ReplyErrorAndDie(status, issues);
+    }
+
     void MakeResponseAndPassAway() {
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
 
         ResponseEv->Snapshot = GetSnapshot();
+        if (Stats) {
+            ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
+            ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim + LocksBrokenAsVictim;
+        } else {
+            ResponseEv->LocksBrokenAsVictim = LocksBrokenAsVictim;
+        }
 
         if (!Locks.empty() || (TxManager && TxManager->HasLocks())) {
             if (LockHandle) {
@@ -583,6 +601,7 @@ private:
                 YQL_ENSURE(shardState->State == TShardState::EState::Preparing);
                 Counters->TxProxyMon->TxResultAborted->Inc();
                 LocksBroken = true;
+                LocksBrokenAsVictim++;
                 ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
@@ -1310,6 +1329,7 @@ private:
                 shardState->State = TShardState::EState::Finished;
                 Counters->TxProxyMon->TxResultAborted->Inc();
                 LocksBroken = true;
+                LocksBrokenAsVictim++;
                 ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
@@ -1379,6 +1399,7 @@ private:
 
                 Counters->TxProxyMon->TxResultAborted->Inc(); // TODO: dedicated counter?
                 LocksBroken = true;
+                LocksBrokenAsVictim++;
                 ResponseEv->BrokenLockShardId = shardId; // todo: without responseEv
 
                 if (!res->Record.GetTxLocks().empty()) {
@@ -2973,6 +2994,7 @@ private:
     bool ImmediateTx = false;
     bool TxPlanned = false;
     bool LocksBroken = false;
+    ui64 LocksBrokenAsVictim = 0;
 
     TInstant FirstPrepareReply;
     TInstant LastPrepareReply;

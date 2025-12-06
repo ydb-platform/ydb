@@ -1,5 +1,6 @@
 #include "kqp_executer_stats.h"
 
+#include <ydb/core/protos/kqp_stats.pb.h>
 
 namespace NKikimr::NKqp {
 
@@ -1256,6 +1257,8 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
 {
 //    Cerr << (TStringBuilder() << "::AddDatashardStats " << stats.DebugString() << ", " << txStats.DebugString() << Endl);
 
+    LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+
     ui64 datashardCpuTimeUs = 0;
     for (const auto& perShard : txStats.GetPerShardStats()) {
         AffectedShards.emplace(perShard.GetShardId());
@@ -1330,6 +1333,8 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
 }
 
 void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats) {
+    LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+
     ui64 datashardCpuTimeUs = 0;
     for (const auto& perShard : txStats.GetPerShardStats()) {
         AffectedShards.emplace(perShard.GetShardId());
@@ -1346,6 +1351,12 @@ void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txSta
 }
 
 void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskStats) {
+    NKqpProto::TKqpTaskExtraStats extraStats;
+    if (taskStats.GetExtra().UnpackTo(&extraStats)) {
+        LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
+        LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
+    }
+
     for (auto& table : taskStats.GetTables()) {
         NYql::NDqProto::TDqTableStats* tableAggr = nullptr;
         if (auto it = TableStats.find(table.GetTablePath()); it != TableStats.end()) {

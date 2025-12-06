@@ -48,9 +48,15 @@ message TKqpScanTaskExtraStats {
     uint32 RetriesCount = 1;
 }
 
+message TKqpLockStats {
+    uint64 BrokenAsBreaker = 1;
+    uint64 BrokenAsVictim = 2;
+}
+
 // extra for NYql.NDqProto.TDqTaskStats
 message TKqpTaskExtraStats {
     TKqpScanTaskExtraStats ScanTaskExtraStats = 1;
+    TKqpLockStats LockStats = 2;
 }
 
 message TNodeExecutionStats {

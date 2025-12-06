@@ -14,6 +14,24 @@ void TNodeState::AddRequest(TNodeRequest&& request) {
     }
 }
 
+bool TNodeState::AddTasksToRequest(ui64 txId, TActorId executerId, const TVector<ui64>& taskIds) {
+    auto& bucket = GetBucketByTxId(txId);
+    TWriteGuard guard(bucket.Mutex);
+
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
+        if (requestIt->second.ExecuterId == executerId) {
+            if (requestIt->second.ExecutionCancelled) {
+                return false;
+            }
+            for (ui64 taskId : taskIds) {
+                requestIt->second.Tasks.emplace(taskId, std::nullopt);
+            }
+            return true;
+        }
+    }
+    return false;
+}
 bool TNodeState::HasRequest(ui64 txId) const {
     const auto& bucket = GetBucketByTxId(txId);
     TReadGuard guard(bucket.Mutex);
@@ -50,13 +68,11 @@ bool TNodeState::OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId, 
             if (auto taskIt = request.Tasks.find(taskId); taskIt != request.Tasks.end()) {
                 taskIt->second = computeActorId;
                 return true;
-            } else {
-                // If request has more tasks, then this one may already be finished and not exist.
-                return false;
             }
+            // If request has more tasks, then this one may already be finished and not exist.
+            return false;
         }
     }
-
     // If request(s) had a single task, then the task may already be finished - and request(s) may not exist.
     return false;
 }
@@ -112,6 +128,16 @@ std::vector<TNodeRequest::TTaskInfo> TNodeState::GetTasksByTxId(ui64 txId) const
     return tasks;
 }
 
+void TNodeState::MarkRequestAsCancelled(ui64 txId) {
+    auto& bucket = GetBucketByTxId(txId);
+    TWriteGuard guard(bucket.Mutex);
+
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
+        requestIt->second.ExecutionCancelled = true;
+    }
+}
+
 void TNodeState::DumpInfo(TStringStream& str) const {
     for (const auto& bucket : Buckets) {
         TReadGuard guard(bucket.Mutex);
@@ -140,4 +166,4 @@ void TNodeState::DumpInfo(TStringStream& str) const {
     }
 }
 
-} // namespace NKikimr::NKqp::NKqpNode
+} // namespace NKikimr::NKqp

@@ -127,7 +127,7 @@ private:
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
             default: {
-                Y_ABORT("Unexpected event 0x%x for TKqpNodeService", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TKqpNodeService in WorkState", ev->GetTypeRewrite());
             }
         }
     }
@@ -135,8 +135,20 @@ private:
     STATEFN(ShuttingDownState) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleShuttingDown);
+            hFunc(TEvKqpNode::TEvCancelKqpTasksRequest , HandleWork);
+
+            // misc
+            hFunc(TEvents::TEvWakeup, HandleShuttingDown);
+            hFunc(TEvents::TEvPoison, HandleShuttingDown);
+            hFunc(NMon::TEvHttpInfo, HandleShuttingDown);
+            hFunc(TEvents::TEvUndelivered, HandleWork);
+
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::TEvConsole::TEvConfigNotificationRequest);
+            
             default: {
-                LOG_D("Unexpected event" << ev->GetTypeName() << " for TKqpNodeService");
+                LOG_W("Ignoring unexpected event 0x%x (" << ev->GetTypeName() 
+                      << ") during graceful shutdown, sender: " << ev->Sender);
             }
         }
     }
@@ -202,15 +214,17 @@ private:
             request.Deadline = now + timeout + /* gap */ TDuration::Seconds(5);
         }
 
-        if (State_->HasRequest(txId)) {
-            LOG_E("TxId: " << txId << ", requester: " << requester << ", request already exists");
-            co_return ReplyError(txId, request.ExecuterId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, ev->Cookie);
+        TVector<ui64> requestTaskIds;
+        for (const auto& dqTask : msg.GetTasks()) {
+            requestTaskIds.push_back(dqTask.GetId());
         }
 
-        for (const auto& dqTask : msg.GetTasks()) {
-            request.Tasks.emplace(dqTask.GetId(), std::nullopt);
+        if (!State_->HasRequest(txId) || !State_->AddTasksToRequest(txId, executerId, requestTaskIds)) {
+            for (ui64 taskId : requestTaskIds) {
+                request.Tasks.emplace(taskId, std::nullopt);
+            }
+            State_->AddRequest(std::move(request));
         }
-        State_->AddRequest(std::move(request));
 
         NRm::EKqpMemoryPool memoryPool;
         if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN) {
@@ -356,6 +370,8 @@ private:
     }
 
     void TerminateTx(ui64 txId, const TString& reason, NYql::NDqProto::StatusIds_StatusCode status = NYql::NDqProto::StatusIds::UNSPECIFIED) {
+        State_->MarkRequestAsCancelled(txId);
+
         if (auto tasksToAbort = State_->GetTasksByTxId(txId); !tasksToAbort.empty()) {
             TStringBuilder finalReason;
             finalReason << "node service cancelled the task, because it " << reason
@@ -383,7 +399,7 @@ private:
             LOG_I("Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request");
             return;
         }
-        LOG_I("Prepare to shutdown: do not acccept any messages from this time");
+        LOG_I("Prepare to shutdown: do not accept any messages from this time");
         ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
         Become(&TKqpNodeService::ShuttingDownState);
     }
@@ -396,6 +412,35 @@ private:
         } else {
             HandleWork(ev);
         }
+    }
+
+    void HandleShuttingDown(TEvents::TEvWakeup::TPtr&) {
+        LOG_D("Received TEvWakeup in ShuttingDownState, not rescheduling timer");
+        auto expiredRequests = State_->ClearExpiredRequests();
+        for (auto& txId : expiredRequests) {
+            TerminateTx(txId, "reached execution deadline during shutdown", NYql::NDqProto::StatusIds::TIMEOUT);
+        }
+    }
+    void HandleShuttingDown(TEvents::TEvPoison::TPtr&) {
+        PassAway();
+    }
+
+    void HandleShuttingDown(NMon::TEvHttpInfo::TPtr& ev) {
+        TStringStream str;
+        HTML(str) {
+            PRE() {
+                str << "This node is in graceful shutdown mode and will not accept new requests." << Endl;
+                str << "Current config:" << Endl;
+                str << Config.DebugString() << Endl;
+                str << Endl;
+
+                str << "Active Transactions:" << Endl;
+                State_->DumpInfo(str);
+                str << Endl;
+            }
+        }
+
+        Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
 private:
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {

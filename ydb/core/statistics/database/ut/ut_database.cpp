@@ -23,12 +23,13 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvStatTableCreationResponse>(sender);
 
         TPathId pathId(1, 1);
-        ui64 statType = 1;
-        std::vector<ui32> columnTags = {1, 2};
-        std::vector<TString> data = {"dataA", "dataB"};
+        EStatType statType = EStatType::COUNT_MIN_SKETCH;
+        std::vector<TStatisticsItem> statItems;
+        statItems.emplace_back(1, statType, "dataA");
+        statItems.emplace_back(2, statType, "dataB");
 
         runtime.Register(CreateSaveStatisticsQuery(sender, "/Root/Database",
-            pathId, statType, std::move(columnTags), std::move(data)),
+            pathId, std::move(statItems)),
             0, 0, TMailboxType::Simple, 0, sender);
         auto saveResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender);
         UNIT_ASSERT(saveResponse->Get()->Success);
@@ -61,12 +62,13 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         runtime.GrabEdgeEvent<TEvStatistics::TEvStatTableCreationResponse>(sender);
 
         TPathId pathId(1, 1);
-        ui64 statType = 1;
-        std::vector<ui32> columnTags = {1, 2};
-        std::vector<TString> data = {"dataA", "dataB"};
+        EStatType statType = EStatType::COUNT_MIN_SKETCH;
+        std::vector<TStatisticsItem> statItems;
+        statItems.emplace_back(1, statType, "dataA");
+        statItems.emplace_back(2, statType, "dataB");
 
         runtime.Register(CreateSaveStatisticsQuery(sender, "/Root/Database",
-            pathId, statType, std::move(columnTags), std::move(data)),
+            pathId, std::move(statItems)),
             0, 0, TMailboxType::Simple, 0, sender);
         auto saveResponse = runtime.GrabEdgeEvent<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender);
         UNIT_ASSERT(saveResponse->Get()->Success);
@@ -87,7 +89,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database", 1, true);
-        CreateUniformTable(env, "Database", "Table");
+        PrepareUniformTable(env, "Database", "Table");
 
         NYdb::EStatus status;
         auto test = [&] () {

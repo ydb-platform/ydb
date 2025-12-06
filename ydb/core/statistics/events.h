@@ -27,7 +27,7 @@ struct TStatCountMinSketch {
 
 enum EStatType {
     SIMPLE = 0,
-    HYPER_LOG_LOG = 1,
+    SIMPLE_COLUMN = 1,
     COUNT_MIN_SKETCH = 2,
 };
 
@@ -42,6 +42,22 @@ struct TResponse {
     TStatSimple Simple;
     TStatHyperLogLog HyperLogLog;
     TStatCountMinSketch CountMinSketch;
+};
+
+// A single item of columnar statistics ready to be saved in the internal table.
+struct TStatisticsItem {
+    TStatisticsItem(
+            std::optional<ui32> columnTag,
+            EStatType type,
+            TString data)
+        : ColumnTag(columnTag)
+        , Type(type)
+        , Data(std::move(data))
+    {}
+
+    std::optional<ui32> ColumnTag;
+    EStatType Type;
+    TString Data;
 };
 
 struct TEvStatistics {
@@ -283,6 +299,12 @@ struct TEvStatistics {
             TableNotFound,
         };
         EStatus Status;
+        std::vector<TStatisticsItem> Statistics;
+
+        explicit TEvFinishTraversal(std::vector<TStatisticsItem> statistics)
+            : Status(EStatus::Success)
+            , Statistics(std::move(statistics))
+        {}
 
         explicit TEvFinishTraversal(EStatus status) : Status(status) {}
     };

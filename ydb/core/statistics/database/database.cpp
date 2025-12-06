@@ -81,40 +81,40 @@ NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBas
 class TSaveStatisticsQuery : public NKikimr::TQueryBase {
 private:
     const TPathId PathId;
-    const ui64 StatType;
-    const std::vector<ui32> ColumnTags;
-    const std::vector<TString> Data;
+    const std::vector<TStatisticsItem> Items;
 
 public:
-    TSaveStatisticsQuery(const TString& database, const TPathId& pathId, ui64 statType,
-        const std::vector<ui32>& columnTags, const std::vector<TString>& data)
+    TSaveStatisticsQuery(
+        const TString& database, const TPathId& pathId, std::vector<TStatisticsItem> items)
         : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
         , PathId(pathId)
-        , StatType(statType)
-        , ColumnTags(columnTags)
-        , Data(data)
-    {
-        Y_ABORT_UNLESS(ColumnTags.size() == Data.size());
-    }
+        , Items(std::move(items))
+    {}
 
     void OnRunQuery() override {
         TStringBuilder sql;
         sql << R"(
             DECLARE $owner_id AS Uint64;
             DECLARE $local_path_id AS Uint64;
-            DECLARE $stat_type AS Uint32;
-            DECLARE $column_tags AS List<Uint32>;
+            DECLARE $stat_types AS List<Uint32>;
+            DECLARE $column_tags AS List<Optional<Uint32>>;
             DECLARE $data AS List<String>;
+
+            $to_struct = ($t) -> {
+                RETURN <|
+                    owner_id:$owner_id,
+                    local_path_id:$local_path_id,
+                    stat_type:$t.0,
+                    column_tag:$t.1,
+                    data:$t.2,
+                |>;
+            };
 
             UPSERT INTO `.metadata/_statistics`
                 (owner_id, local_path_id, stat_type, column_tag, data)
-            VALUES
+            SELECT owner_id, local_path_id, stat_type, column_tag, data FROM
+            AS_TABLE(ListMap(ListZip($stat_types, $column_tags, $data), $to_struct));
         )";
-
-        for (size_t i = 0; i < Data.size(); ++i) {
-            sql << " ($owner_id, $local_path_id, $stat_type, $column_tags[" << i << "], $data[" << i << "])";
-            sql << (i == Data.size() - 1 ? ";" : ",");
-        }
 
         NYdb::TParamsBuilder params;
         params
@@ -123,22 +123,29 @@ public:
                 .Build()
             .AddParam("$local_path_id")
                 .Uint64(PathId.LocalPathId)
-                .Build()
-            .AddParam("$stat_type")
-                .Uint32(StatType)
                 .Build();
+
+        auto& statTypes = params.AddParam("$stat_types").BeginList();
+        for (const auto& item : Items) {
+            statTypes
+                .AddListItem()
+                .Uint32(item.Type);
+        }
+        statTypes.EndList().Build();
+
         auto& columnTags = params.AddParam("$column_tags").BeginList();
-        for (size_t i = 0; i < ColumnTags.size(); ++i) {
+        for (const auto& item : Items) {
             columnTags
                 .AddListItem()
-                .Uint32(ColumnTags[i]);
+                .OptionalUint32(item.ColumnTag);
         }
         columnTags.EndList().Build();
+
         auto& data = params.AddParam("$data").BeginList();
-        for (size_t i = 0; i < Data.size(); ++i) {
+        for (const auto& item : Items) {
             data
                 .AddListItem()
-                .String(Data[i]);
+                .String(item.Data);
         }
         data.EndList().Build();
 
@@ -162,23 +169,19 @@ private:
     const NActors::TActorId ReplyActorId;
     const TString Database;
     const TPathId PathId;
-    const ui64 StatType;
-    const std::vector<ui32> ColumnTags;
-    const std::vector<TString> Data;
+    const std::vector<TStatisticsItem> Items;
 
 public:
     using TSaveRetryingQuery = TQueryRetryActor<
         TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse,
-        const TString&, const TPathId&, ui64, const std::vector<ui32>&, const std::vector<TString>&>;
+        const TString&, const TPathId&, const std::vector<TStatisticsItem>&>;
 
     TSaveStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
-        const TPathId& pathId, ui64 statType, std::vector<ui32>&& columnTags, std::vector<TString>&& data)
+        const TPathId& pathId, std::vector<TStatisticsItem>&& items)
         : ReplyActorId(replyActorId)
         , Database(database)
         , PathId(pathId)
-        , StatType(statType)
-        , ColumnTags(std::move(columnTags))
-        , Data(std::move(data))
+        , Items(std::move(items))
     {}
 
     void Bootstrap() {
@@ -188,7 +191,7 @@ public:
                 TSaveRetryingQuery::Retryable, TDuration::MilliSeconds(10),
                 TDuration::MilliSeconds(200), TDuration::Seconds(1),
                 std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
-            Database, PathId, StatType, ColumnTags, Data
+            Database, PathId, std::move(Items)
         ));
         Become(&TSaveStatisticsRetryingQuery::StateFunc);
     }
@@ -204,9 +207,9 @@ public:
 };
 
 NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
-    const TPathId& pathId, ui64 statType, std::vector<ui32>&& columnTags, std::vector<TString>&& data)
+    const TPathId& pathId, std::vector<TStatisticsItem>&& items)
 {
-    return new TSaveStatisticsRetryingQuery(replyActorId, database, pathId, statType, std::move(columnTags), std::move(data));
+    return new TSaveStatisticsRetryingQuery(replyActorId, database, pathId, std::move(items));
 }
 
 

@@ -680,6 +680,10 @@ ids {
     severity: S_WARNING
 }
 ids {
+    code: YQL_DISCARD_IN_INVALID_PLACE
+    severity: S_WARNING
+}
+ids {
   code: YQL_SYNTAX_AMBIGUITY
   severity: S_WARNING
 }

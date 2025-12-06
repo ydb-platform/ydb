@@ -27,11 +27,7 @@ bool TOlapSchema::ValidateTtlSettings(
 }
 
 bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
-    if (!ColumnFamilies.ApplyUpdate(schemaUpdate.GetColumnFamilies(), errors, NextColumnFamilyId)) {
-        return false;
-    }
-
-    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), ColumnFamilies, errors, NextColumnId)) {
+    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), errors, NextColumnId)) {
         return false;
     }
 
@@ -49,10 +45,8 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
 
 void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     NextColumnId = tableSchema.GetNextColumnId();
-    NextColumnFamilyId = tableSchema.GetNextColumnFamilyId();
     Version = tableSchema.GetVersion();
 
-    ColumnFamilies.Parse(tableSchema);
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
     Options.Parse(tableSchema);
@@ -61,10 +55,8 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
 void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {
     NKikimrSchemeOp::TColumnTableSchema resultLocal;
     resultLocal.SetNextColumnId(NextColumnId);
-    resultLocal.SetNextColumnFamilyId(NextColumnFamilyId);
     resultLocal.SetVersion(Version);
 
-    ColumnFamilies.Serialize(resultLocal);
     Columns.Serialize(resultLocal);
     Indexes.Serialize(resultLocal);
     Options.Serialize(resultLocal);
@@ -84,9 +76,6 @@ bool TOlapSchema::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& op
         return false;
     }
 
-    if (!ColumnFamilies.ValidateForStore(opSchema, errors)) {
-        return false;
-    }
     return true;
 }
 

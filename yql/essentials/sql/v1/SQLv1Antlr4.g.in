@@ -802,9 +802,22 @@ alter_table_alter_changefeed: ALTER CHANGEFEED an_id changefeed_alter_settings;
 alter_table_drop_changefeed: DROP CHANGEFEED an_id;
 alter_table_alter_index: ALTER INDEX an_id alter_table_alter_index_action;
 
-column_schema: an_id_schema type_name_or_bind family_relation? opt_column_constraints;
+column_schema: an_id_schema type_name_or_bind column_option_list;
+
+column_option_list: column_option_list_space | column_option_list_comma;
+column_option_list_space: (column_option)*;
+column_option_list_comma: LPAREN column_option (COMMA column_option)* RPAREN;
+
+column_option:
+    family_relation
+    | nullability
+    | default_value
+    ;
+
 family_relation: FAMILY an_id;
-opt_column_constraints: (NOT? NULL)? (DEFAULT expr)?;
+nullability: NOT? NULL;  
+default_value: DEFAULT expr;
+
 column_order_by_specification: an_id (ASC | DESC)?;
 
 table_constraint:

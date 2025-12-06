@@ -73,9 +73,8 @@ class TLineReader final : public ILineReader {
     };
 
 public:
-    TLineReader(const TString& prompt, const TString& historyFilePath, const TDriver& driver, const TString& database, const TInteractiveLogger& log)
+    TLineReader(const TDriver& driver, const TString& database, const TInteractiveLogger& log)
         : Log(log)
-        , Prompt(prompt)
         , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco(), driver, database, Log.IsVerbose()))
         , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
     {
@@ -108,30 +107,13 @@ public:
         Rx.bind_key(replxx::Replxx::KEY::control('J'), [&](char32_t code) {
             return Rx.invoke(replxx::Replxx::ACTION::COMMIT_LINE, code);
         });
+        Rx.bind_key(replxx::Replxx::KEY::control('O'), [&](char32_t) {
+            Rx.invoke(replxx::Replxx::ACTION::INSERT_CHARACTER, '\n');
+            return replxx::Replxx::ACTION_RESULT::CONTINUE;
+        });
         Rx.bind_key(replxx::Replxx::KEY::control('K'), [&](char32_t code) {
             Cout << "\x1b[J"; // Clear suggestions
-
-            const auto printBold = [&](const TString& text) {
-                return TStringBuilder() << Colors.BoldColor() << text << Colors.OldColor();
-            };
-
-            const auto printGreen = [&](const TString& text) {
-                return TStringBuilder() << Colors.Green() << text << Colors.OldColor();
-            };
-
-            Cout << Endl << Endl << "YDB CLI Interactive Mode – Hotkeys and Special Commands." << Endl
-                << Endl << printBold("Hotkeys:") << Endl
-                << "  " << printBold("Up and Down arrow keys") << ": navigate through query history." << Endl
-                << "  " << printBold("TAB") << ": complete the current word based on YQL syntax." << Endl
-                << "  " << printBold("Ctrl+R") << ": search for a query in history containing a specified substring." << Endl
-                << "  " << printBold("Ctrl+D") << ": exit interactive mode." << Endl
-                << Endl << printBold("Special Commands:") << Endl
-                << "  " << printGreen("SET stats = ") << printBold("STATS_MODE") << ": set statistics collection mode, allowed modes: "
-                << printBold("none") << ", " << printBold("basic") << ", " << printBold("full") << ", " << printBold("profile") << "." << Endl
-                << "  " << printGreen("EXPLAIN") << " [" << printGreen("AST") << "] " << printBold("SQL_QUERY") << ": execute query in explain mode and optionally print AST." << Endl
-                << "  {" << printGreen("QUIT") << "|" << printGreen("EXIT") << "}: exit interactive mode." << Endl
-                << Endl << "By default, any input is treated as an YQL query and sent directly to the YDB server." << Endl << Endl;
-
+            Cout << Endl << HelpMessage << Endl;
             return Rx.invoke(replxx::Replxx::ACTION::ABORT_LINE, code);
         });
 
@@ -150,19 +132,34 @@ public:
         }
 
         Rx.enable_bracketed_paste();
+    }
 
-        UpdateHistoryPath(historyFilePath);
-        if (!History) {
-            return;
+    void Setup(const TSessionSettings& settings) final {
+        Prompt = settings.Prompt;
+        HelpMessage = settings.HelpMessage;
+
+        for (const auto& [key, action] : settings.KeyHandlers) {
+            Rx.bind_key(key, [&, action](char32_t code) {
+                action();
+                return Rx.invoke(replxx::Replxx::ACTION::ABORT_LINE, code);
+            });
+            KeyHandlers.erase(key);
         }
+        for (const auto& [key, action] : KeyHandlers) {
+            Rx.bind_key(key, [&, action](char32_t) { return replxx::Replxx::ACTION_RESULT::CONTINUE; });
+        }
+        KeyHandlers = settings.KeyHandlers;
 
-        if (const auto fileLockGuard = TFileHandlerLockGuard::Lock(History->GetHandle())) {
-            Rx.set_unique_history(true);
-            if (!Rx.history_load(History->GetPath())) {
-                Log.Error() << "Loading history failed: " << strerror(errno);
+        UpdateHistoryPath(settings.HistoryFilePath);
+        if (History) {
+            if (const auto fileLockGuard = TFileHandlerLockGuard::Lock(History->GetHandle())) {
+                Rx.set_unique_history(true);
+                if (!Rx.history_load(History->GetPath())) {
+                    Log.Error() << "Loading history failed: " << strerror(errno);
+                }
+            } else {
+                Log.Error() << "Lock of history file failed: " << strerror(errno);
             }
-        } else {
-            Log.Error() << "Lock of history file failed: " << strerror(errno);
         }
     }
 
@@ -224,17 +221,20 @@ private:
 
 private:
     const TInteractiveLogger Log;
-    const TString Prompt;
     const IYQLCompleter::TPtr YQLCompleter;
     const IYQLHighlighter::TPtr YQLHighlighter;
     replxx::Replxx Rx;
+
+    TString Prompt;
+    TString HelpMessage;
     std::optional<THistory> History;
+    std::unordered_map<char, std::function<void()>> KeyHandlers;
 };
 
 } // anonymous namespace
 
-std::unique_ptr<ILineReader> CreateLineReader(const TString& prompt, const TString& historyFilePath, const TDriver& driver, const TString& database, const TInteractiveLogger& log) {
-    return std::make_unique<TLineReader>(prompt, historyFilePath, driver, database, log);
+std::unique_ptr<ILineReader> CreateLineReader(const TDriver& driver, const TString& database, const TInteractiveLogger& log) {
+    return std::make_unique<TLineReader>(driver, database, log);
 }
 
 } // namespace NYdb::NConsoleClient

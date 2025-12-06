@@ -1,7 +1,6 @@
 #pragma once
 
-#include "interactive_log.h"
-
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 
@@ -20,7 +19,7 @@ public:
     int Run(TClientCommand::TConfig& config);
 
 private:
-    const TString Prompt;
+    const TString Profile;
     const TString YdbPath;
     TInteractiveLogger Log;
 };

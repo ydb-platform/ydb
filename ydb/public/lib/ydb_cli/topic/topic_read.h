@@ -4,7 +4,7 @@
 #include "ydb/public/lib/ydb_cli/commands/ydb_command.h"
 #include <util/stream/null.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -60,7 +60,7 @@ namespace NYdb::NConsoleClient {
     class TTopicReaderTests;
 
     // TODO(shmel1k@): think about interruption here.
-    class TTopicReader: public TInterruptibleCommand {
+    class TTopicReader: public TInterruptableCommand {
         using TReceivedMessage = NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage;
 
     public:

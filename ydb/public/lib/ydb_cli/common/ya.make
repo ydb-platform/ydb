@@ -11,7 +11,7 @@ SRCS(
     examples.cpp
     format.cpp
     interactive.cpp
-    interruptible.cpp
+    interruptable.cpp
     normalize_path.cpp
     parameter_stream.cpp
     parameters.cpp
@@ -23,6 +23,7 @@ SRCS(
     progress_bar.cpp
     progress_indication.cpp
     query_stats.cpp
+    query_utils.cpp
     recursive_list.cpp
     recursive_remove.cpp
     retry_func.cpp
@@ -55,6 +56,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/client/types/credentials
     ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange
+    ydb/public/sdk/cpp/src/client/types/status
     ydb/library/arrow_parquet
     ydb/library/plan2svg
     ydb/public/lib/ydb_cli/common/ini_config

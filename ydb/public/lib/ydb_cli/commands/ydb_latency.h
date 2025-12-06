@@ -5,7 +5,7 @@
 #include "ydb_ping.h"
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 
 #include <memory>
 
@@ -20,7 +20,7 @@ namespace NConsoleClient {
 class TCommandLatency
     : public TYdbCommand
     , public TCommandWithFormat
-    , public TInterruptibleCommand
+    , public TInterruptableCommand
 {
 public:
     enum class EFormat {

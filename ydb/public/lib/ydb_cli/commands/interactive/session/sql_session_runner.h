@@ -1,0 +1,18 @@
+#pragma once
+
+#include "session_runner_interface.h"
+
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+
+namespace NYdb::NConsoleClient {
+
+struct TSqlSessionSettings {
+    TString ProfileName;
+    TString YdbPath;
+    TDriver Driver;
+};
+
+ISessionRunner::TPtr CreateSqlSessionRunner(const TSqlSessionSettings& settings, const TInteractiveLogger& log);
+
+} // namespace NYdb::NConsoleClient

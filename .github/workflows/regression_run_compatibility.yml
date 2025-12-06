@@ -1,9 +1,9 @@
 name: Regression-run_compatibility
 run-name: >- 
           ${{
-          inputs.initial_version_ref != '' && inputs.initial_version_ref || 'default-init'}} -> ${{
-          inputs.inter_version_ref != '' && inputs.inter_version_ref || 'default-inter'}} -> ${{
-          inputs.target_version_ref != '' && inputs.target_version_ref || 'default-target'}}
+          github.event_name == 'workflow_dispatch' && github.event.inputs.initial_version_ref != '' && github.event.inputs.initial_version_ref || 'default-init'}} -> ${{
+          github.event_name == 'workflow_dispatch' && github.event.inputs.inter_version_ref != '' && github.event.inputs.inter_version_ref || 'default-inter'}} -> ${{
+          github.event_name == 'workflow_dispatch' && github.event.inputs.target_version_ref != '' && github.event.inputs.target_version_ref || 'default-target'}}
 
 on:
   schedule:
@@ -26,21 +26,77 @@ on:
         description: Target(newest) version ("current" - compiles binary from the chosen branch)
         type: string
         required: false
+      build_preset:
+        description: 'Build preset (all, relwithdebinfo, release-asan, release-tsan, release-msan)'
+        type: choice
+        required: false
+        default: 'all'
+        options:
+          - all
+          - relwithdebinfo
+          - release-asan
+          - release-tsan
+          - release-msan
 jobs:
+  # Compute parameters based on trigger type and inputs
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.compute.outputs.branches }}
+      branches_config_path: ${{ steps.compute.outputs.branches_config_path }}
+      pull_number: ${{ steps.compute.outputs.pull_number }}
+      additional_ya_make_args: ${{ steps.compute.outputs.additional_ya_make_args }}
+    steps:
+      - name: Compute regression parameters
+        id: compute
+        run: |
+          # branches: use current branch if schedule OR (workflow_dispatch with no PR)
+          if [[ "${{ github.event_name }}" == "schedule" ]] || \
+             ([[ "${{ github.event_name }}" == "workflow_dispatch" ]] && \
+              [[ -z "${{ github.event.inputs.pull_request_input }}" ]]); then
+            echo "branches=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "branches=" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "branches_config_path=" >> $GITHUB_OUTPUT
+          
+          # pull_number: use input if workflow_dispatch and PR number provided
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && \
+             [[ -n "${{ github.event.inputs.pull_request_input }}" ]]; then
+            echo "pull_number=${{ github.event.inputs.pull_request_input }}" >> $GITHUB_OUTPUT
+          else
+            echo "pull_number=" >> $GITHUB_OUTPUT
+          fi
+          
+          # additional_ya_make_args: build compatibility test arguments from version refs
+          additional_args=""
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ -n "${{ github.event.inputs.initial_version_ref }}" ]]; then
+              additional_args="${additional_args} -DYDB_COMPAT_INIT_REF=${{ github.event.inputs.initial_version_ref }}"
+            fi
+            if [[ -n "${{ github.event.inputs.inter_version_ref }}" ]]; then
+              additional_args="${additional_args} -DYDB_COMPAT_INTER_REF=${{ github.event.inputs.inter_version_ref }}"
+            fi
+            if [[ -n "${{ github.event.inputs.target_version_ref }}" ]]; then
+              additional_args="${additional_args} -DYDB_COMPAT_TARGET_REF=${{ github.event.inputs.target_version_ref }}"
+            fi
+          fi
+          echo "additional_ya_make_args=${additional_args}" >> $GITHUB_OUTPUT
+
   main:
     name: Regression-run_compatibility
+    needs: prepare
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
     strategy:
       fail-fast: false
       matrix: 
-        build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
+        build_preset: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.build_preset == '' || github.event.inputs.build_preset == 'all') && fromJSON('["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]') || fromJSON(format('["{0}"]', github.event.inputs.build_preset)) }}
     with:
       test_targets: ydb/tests/compatibility/
-      branches: ${{ inputs.pull_request_input && format('pull/{0}', inputs.pull_request_input) || github.ref_name }}
+      branches: ${{ needs.prepare.outputs.branches }}
+      branches_config_path: ${{ needs.prepare.outputs.branches_config_path }}
       build_preset: ${{ matrix.build_preset }}
-      additional_ya_make_args: >-
-        ${{
-          inputs.initial_version_ref != '' && format(' -DYDB_COMPAT_INIT_REF={0} ', inputs.initial_version_ref) || ''}}${{
-          inputs.inter_version_ref != '' && format(' -DYDB_COMPAT_INTER_REF={0} ', inputs.inter_version_ref) || ''}}${{
-          inputs.target_version_ref != '' && format(' -DYDB_COMPAT_TARGET_REF={0}', inputs.target_version_ref) || ''}}
+      pull_number: ${{ needs.prepare.outputs.pull_number }}
+      additional_ya_make_args: ${{ needs.prepare.outputs.additional_ya_make_args }}

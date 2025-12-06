@@ -2,12 +2,11 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
-bool AskYesOrNo();
+void AskInputWithPrompt(const TString& prompt, std::function<bool(const TString&)> handler, bool verbose = false);
 
-bool AskPrompt(const std::string &query, bool defaultAnswer);
+bool AskYesOrNo(const TString& query, std::optional<bool> defaultAnswer = std::nullopt);
 
 bool IsStdinInteractive();
 
@@ -15,5 +14,4 @@ bool IsStdoutInteractive();
 
 std::optional<size_t> GetTerminalWidth();
 
-}
-}
+} // namespace NYdb::NConsoleClient

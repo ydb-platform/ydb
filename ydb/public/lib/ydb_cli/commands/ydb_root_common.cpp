@@ -1,7 +1,6 @@
 #include "ydb_root_common.h"
 #include "ydb_profile.h"
 #include "ydb_admin.h"
-#include "ydb_ai.h"
 #include "ydb_debug.h"
 #include "ydb_service_auth.h"
 #include "ydb_service_discovery.h"
@@ -29,9 +28,9 @@
 #include <util/string/strip.h>
 #include <util/string/builder.h>
 #include <util/system/env.h>
+#include <util/system/execpath.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TClientSettings& settings)
     : TClientCommandRootBase(name)
@@ -39,7 +38,6 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
 {
     ValidateSettings();
     AddDangerousCommand(std::make_unique<TCommandAdmin>());
-    AddCommand(std::make_unique<TCommandAi>());
     AddCommand(std::make_unique<TCommandAuth>());
     AddCommand(std::make_unique<TCommandDiscovery>());
     AddCommand(std::make_unique<TCommandScheme>());
@@ -420,8 +418,11 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         oauth2TokenExchangeAuth
     );
 
+    const TString programName(config.ArgC > 0 ? config.ArgV[0] : GetExecPath().data());
     TStringStream stream;
-    stream << " [options...] <subcommand>" << Endl << Endl
+    stream
+        << "├─ Interactive:  " << programName << " [options...]" << Endl
+        << "└─ Command line: " << programName << " [options...] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
     RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
     stream << Endl << Endl << colors.BoldColor() << "Commands in " << colors.Red() << colors.BoldColor() <<  "admin" << colors.OldColor() << colors.BoldColor() << " subtree may treat global flags and profile differently, see corresponding help" << colors.OldColor() << Endl;
@@ -431,6 +432,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     stream << colors.Green() << "-hh" << colors.OldColor() << ": Print detailed help" << Endl;
 
     opts.GetOpts().SetCmdLineDescr(stream.Str());
+    opts.GetOpts().SetCustomUsage("\n");
 
     opts.GetOpts().GetLongOption("time").Hidden();
     opts.GetOpts().GetLongOption("progress").Hidden();
@@ -662,5 +664,4 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
     Y_UNUSED(config);
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

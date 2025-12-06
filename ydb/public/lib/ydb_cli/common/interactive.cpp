@@ -1,5 +1,11 @@
 #include "interactive.h"
 
+#include <contrib/restricted/patched/replxx/include/replxx.hxx>
+
+#include <library/cpp/colorizer/colors.h>
+
+#include <util/string/builder.h>
+
 #if defined(_unix_)
 #include <sys/ioctl.h>
 #include <termios.h>
@@ -9,50 +15,86 @@
 #include <io.h>
 #endif
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
-bool AskYesOrNo() {
-    TString input;
-    for (;;) {
-        Cin >> input;
-        if (to_lower(input) == "y" || to_lower(input) == "yes") {
-            return true;
-        } else if (to_lower(input) == "n" || to_lower(input) == "no") {
-            return false;
-        } else {
-            Cout << "Type \"y\" (yes) or \"n\" (no): ";
-        }
-    }
-    return false;
-}
+void AskInputWithPrompt(const TString& prompt, std::function<bool(const TString&)> handler, bool verbose) {
+    const auto& colors = NColorizer::AutoColors(Cout);
+    replxx::Replxx rx;
 
-bool AskPrompt(const std::string &query, bool defaultAnswer) {
-    if (IsStdinInteractive()) {
-        Cerr << query << (defaultAnswer ? " [Y/n] " : " [y/N] ");
+    while (true) {
+        const char* input = nullptr;
 
-        while(true) {
-            std::string text;
-            std::getline(std::cin, text);
-
-            std::transform(text.begin(), text.end(), text.begin(),
-                [](unsigned char c){ return std::tolower(c); });
-
-            if (text == "y" || text == "yes") {
-                return true;
-            } else if (text == "n" || text == "no") {
-                return false;
-            } else if (text == "") {
-                return defaultAnswer;
-            } else {
-                Cerr << "Please type \"y\" or \"n\". ";
+        try {
+            input = rx.input(prompt.c_str());
+        } catch (const std::exception& e) {
+            if (verbose) {
+                Cerr << colors.Yellow() << "Error while reading input: " << colors.OldColor() << e.what() << Endl;
             }
         }
-    } else {
-        Cerr << query << " Non interactive session, assuming default answer: " << defaultAnswer << Endl;
+
+        if (!input) {
+            Cerr << "Exiting." << Endl;
+            exit(1);
+        }
+
+        if (handler(input)) {
+            break;
+        }
+    }
+}
+
+bool AskYesOrNo(const TString& query, std::optional<bool> defaultAnswer) {
+    std::vector<TString> choices = {"y", "yes", "n", "no"};
+    if (defaultAnswer) {
+        choices.push_back("");
     }
 
-    return defaultAnswer;
+    bool result = defaultAnswer.value_or(false);
+    TString prompt = query;
+    AskInputWithPrompt(prompt, [&](const TString& input) {
+        const auto choice = to_lower(input);
+        if (!IsIn(choices, choice)) {
+            prompt = "Please type \"y\" (yes) or \"n\" (no): ";
+            return false;
+        }
+
+        if (choice == "y" || choice == "yes") {
+            result = true;
+        } else if (choice == "n" || choice == "no") {
+            result = false;
+        }
+
+        return true;
+    });
+
+    return result;
+}
+
+bool AskPrompt(const std::string& query, bool defaultAnswer) {
+    if (!IsStdinInteractive()) {
+        Cerr << query << " Non interactive session, assuming default answer: " << defaultAnswer << Endl;
+        return defaultAnswer;
+    }
+
+    bool result = defaultAnswer;
+    TString prompt = TStringBuilder() << query << (defaultAnswer ? " [Y/n] " : " [y/N] ");
+    AskInputWithPrompt(prompt, [&](const TString& input) {
+        const auto choice = to_lower(input);
+        if (!IsIn({"y", "yes", "n", "no", ""}, choice)) {
+            prompt = "Please type \"y\" (yes) or \"n\" (no): ";
+            return false;
+        }
+
+        if (choice == "y" || choice == "yes") {
+            result = true;
+        } else if (choice == "n" || choice == "no") {
+            result = false;
+        }
+
+        return true;
+    });
+
+    return result;
 }
 
 bool IsStdinInteractive() {
@@ -91,5 +133,4 @@ std::optional<size_t> GetTerminalWidth() {
     return {};
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

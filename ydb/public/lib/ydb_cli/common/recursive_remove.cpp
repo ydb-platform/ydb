@@ -90,8 +90,7 @@ NYdb::NIssue::TIssues MakeIssues(const TString& error) {
 }
 
 bool Prompt(const TString& path, ESchemeEntryType type) {
-    Cout << "Remove " << to_lower(ToString(type)) << " '" << path << "' (y/n)? ";
-    return AskYesOrNo();
+    return AskYesOrNo(TStringBuilder() << "Remove " << to_lower(ToString(type)) << " '" << path << "' (y/n)? ");
 }
 
 bool Prompt(ERecursiveRemovePrompt mode, const TString& path, NScheme::ESchemeEntryType type, bool first) {
@@ -299,4 +298,4 @@ namespace NInternal {
 
 }
 
-}
+} // namespace NYdb::NConsoleClient

@@ -3,9 +3,7 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
 #include <util/folder/dirut.h>
-
 #include <util/stream/input.h>
-
 #include <util/string/strip.h>
 
 #include <library/cpp/string_utils/url/url.h>
@@ -50,48 +48,52 @@ TCommandProfile::TCommandProfile()
 }
 
 namespace {
-    size_t MakeNumericChoice(const size_t optCount) {
-        Cout << "Please enter your numeric choice: ";
+    size_t MakeNumericChoice(const size_t optCount, bool verbose) {
         size_t numericChoice = 0;
-        for (;;) {
-            try {
-                Cin >> numericChoice;
+        TString prompt = "Please enter your numeric choice: ";
+        AskInputWithPrompt(prompt, [&](const TString& input) {
+            if (TryFromString(input, numericChoice) && 0 < numericChoice && numericChoice <= optCount) {
+                return true;
             }
-            catch (yexception&) {
-            }
-            if (numericChoice > 0 && numericChoice <= optCount) {
-                break;
-            }
-            Cerr << "Please enter a value between 1 and " << optCount << ": ";
-        }
+
+            prompt = TStringBuilder() << "Please enter a value between 1 and " << optCount << ": ";
+            return false;
+        }, verbose);
+
         return numericChoice;
     }
 
     class TNumericOptionsPicker {
     public:
         using TPickableAction = std::function<void()>;
-        TNumericOptionsPicker() {};
+
+        explicit TNumericOptionsPicker(bool verbose)
+            : Verbose(verbose)
+        {}
 
         void AddOption(const TString& description, TPickableAction&& action) {
-            Cout << " [" << ++OptionsCount << "] " << description << Endl;
+            const auto& colors = NColorizer::AutoColors(Cout);
+            Cout << " [" << colors.Green() << ++OptionsCount << colors.OldColor() << "] " << description << Endl;
             Options.emplace(OptionsCount, std::move(action));
         }
 
-        void PickOptionAndDoAction() {
-            size_t numericChoice = MakeNumericChoice(OptionsCount);
-            auto optionIt = Options.find(numericChoice);
-            if (optionIt != Options.end()) {
-                // Do action
-                optionIt->second();
-            } else {
+        void PickOptionAndDoAction() const {
+            while (true) {
+                const auto numericChoice = MakeNumericChoice(OptionsCount, Verbose);
+                if (auto* option = Options.FindPtr(numericChoice)) {
+                    // Do action
+                    (*option)();
+                    break;
+                }
+
                 Cerr << "Can't find action with index " << numericChoice << Endl;
             }
         }
 
     private:
+        const bool Verbose = false;
         size_t OptionsCount = 0;
         THashMap<size_t, TPickableAction> Options;
-
     };
 
     std::string BlurSecret(const std::string& in) {
@@ -107,42 +109,46 @@ namespace {
         return std::string(in.length(), '*');
     }
 
-    void SetupProfileName(TString& profileName, std::shared_ptr<IProfileManager> profileManager) {
+    void SetupProfileName(TString& profileName, std::shared_ptr<IProfileManager> profileManager, bool verbose) {
         if (profileName) {
             return;
         }
+
         const auto profileNames = profileManager->ListProfiles();
-        TString activeProfileName = profileManager->GetActiveProfileName();
-        if (profileNames.size()) {
-            Cout << "Please choose profile to configure:" << Endl;
-            TNumericOptionsPicker picker;
-            picker.AddOption(
-                "Create a new profile",
-                [&profileName]() {
-                Cout << "Please enter name for a new profile: ";
-                Cin >> profileName;
-            }
-            );
-            for (size_t i = 0; i < profileNames.size(); ++i) {
-                TStringBuilder description;
-                TString currentProfile = profileNames[i];
-                description << currentProfile;
-                if (currentProfile == activeProfileName) {
-                    description << " (active)";
-                }
-                picker.AddOption(
-                    description,
-                    [&profileName, currentProfile]() {
-                    profileName = currentProfile;
-                }
-                );
-            }
-            picker.PickOptionAndDoAction();
-        } else {
+        if (!profileNames) {
             Cout << "You have no existing profiles yet." << Endl;
             Cout << "Please enter name for a new profile: ";
             Cin >> profileName;
         }
+
+        Cout << "Please choose profile to configure:" << Endl;
+        TNumericOptionsPicker picker(verbose);
+        picker.AddOption(
+            "Create a new profile",
+            [&profileName]() {
+                Cout << "Please enter name for a new profile: ";
+                Cin >> profileName;
+            }
+        );
+
+        const auto& colors = NColorizer::AutoColors(Cout);
+        const auto& activeProfileName = profileManager->GetActiveProfileName();
+        for (size_t i = 0; i < profileNames.size(); ++i) {
+            TStringBuilder description;
+            TString currentProfile = profileNames[i];
+            description << currentProfile;
+            if (currentProfile == activeProfileName) {
+                description << " (" << colors.Green() << "active" << colors.OldColor() << ")";
+            }
+            picker.AddOption(
+                description,
+                [&profileName, currentProfile]() {
+                    profileName = currentProfile;
+                }
+            );
+        }
+
+        picker.PickOptionAndDoAction();
     }
 
     void PutAuthMethod(std::shared_ptr<IProfile> profile, const TString& id, const TString& value) {
@@ -354,12 +360,11 @@ void TCommandInit::Config(TConfig& config) {
 }
 
 int TCommandInit::Run(TConfig& config) {
-    //Y_UNUSED(config);
     Cout << "Welcome! This command will take you through the configuration process." << Endl;
     auto profileManager = CreateProfileManager(config.ProfileFile);
     TString profileName;
-    SetupProfileName(profileName, profileManager);
-    ConfigureProfile(profileName, profileManager, config, true, false);
+    SetupProfileName(profileName, profileManager, config.IsVerbose());
+    ConfigureProfile(profileName, profileManager, config, /* interactive */ true, /* cmdLine */ false);
     return EXIT_SUCCESS;
 }
 
@@ -447,8 +452,8 @@ void TCommandProfileCommon::ConfigureProfile(const TString& profileName, std::sh
         Cout << "Configuring " << (existingProfile ? "existing" : "new")
              << " profile \"" << profileName << "\"." << Endl;
     }
-    SetupProfileSetting("endpoint", Endpoint, existingProfile, profileName, profile, interactive, cmdLine);
-    SetupProfileSetting("database", Database, existingProfile, profileName, profile, interactive, cmdLine);
+    SetupProfileSetting("endpoint", Endpoint, existingProfile, profileName, profile, interactive, cmdLine, config.IsVerbose());
+    SetupProfileSetting("database", Database, existingProfile, profileName, profile, interactive, cmdLine, config.IsVerbose());
     SetupProfileAuthentication(existingProfile, profileName, profile, config, interactive, cmdLine);
     if (cmdLine && CaCertsFile) {
         profile->SetValue("ca-file", CaCertsFile);
@@ -466,15 +471,15 @@ void TCommandProfileCommon::ConfigureProfile(const TString& profileName, std::sh
     if (interactive) {
         TString activeProfileName = profileManager->GetActiveProfileName();
         if (profileName != activeProfileName) {
-            Cout << Endl << "Activate profile \"" << profileName << "\" to use by default? (current active profile is ";
+            auto query = TStringBuilder() << Endl << "Activate profile \"" << profileName << "\" to use by default? (current active profile is ";
             TString currentActiveProfile = profileManager->GetActiveProfileName();
             if (currentActiveProfile) {
-                Cout << "\"" << currentActiveProfile << "\"";
+                query << "\"" << currentActiveProfile << "\"";
             } else {
-                Cout << "not set";
+                query << "not set";
             }
-            Cout << ") y/n: ";
-            if (AskYesOrNo()) {
+            query << ") y/n: ";
+            if (AskYesOrNo(query)) {
                 profileManager->SetActiveProfile(profileName);
                 Cout << "Profile \"" << profileName << "\" was set as active." << Endl;
             }
@@ -484,7 +489,8 @@ void TCommandProfileCommon::ConfigureProfile(const TString& profileName, std::sh
 }
 
 void TCommandProfileCommon::SetupProfileSetting(const TString& name, const TString& value, bool existingProfile, const TString& profileName,
-                         std::shared_ptr<IProfile> profile, bool interactive, bool cmdLine) {
+    std::shared_ptr<IProfile> profile, bool interactive, bool cmdLine, bool verbose)
+{
     if (cmdLine) {
         if (value) {
             profile->SetValue(name, value);
@@ -497,38 +503,38 @@ void TCommandProfileCommon::SetupProfileSetting(const TString& name, const TStri
 
     Cout << Endl << "Pick desired action to configure " << name << " in profile \"" << profileName << "\":" << Endl;
 
-    TNumericOptionsPicker picker;
+    TNumericOptionsPicker picker(verbose);
     picker.AddOption(
-            TStringBuilder() << "Set a new " << name << " value",
-            [&name, &profileName, &profile]() {
-                Cout << "Please enter new " << name << " value: ";
-                TString newValue;
-                Cin >> newValue;
-                if (newValue) {
-                    Cout << "Setting " << name << " value \"" << newValue << "\" for profile \"" << profileName
-                         << "\"" << Endl;
-                    profile->SetValue(name, newValue);
-                }
+        TStringBuilder() << "Set a new " << name << " value",
+        [&name, &profileName, &profile]() {
+            Cout << "Please enter new " << name << " value: ";
+            TString newValue;
+            Cin >> newValue;
+            if (newValue) {
+                Cout << "Setting " << name << " value \"" << newValue << "\" for profile \"" << profileName
+                        << "\"" << Endl;
+                profile->SetValue(name, newValue);
             }
+        }
     );
     picker.AddOption(
-            TStringBuilder() << "Don't save " << name << " for profile \"" << profileName << "\"",
-            [&name, &profile]() {
-                profile->RemoveValue(name);
-            }
+        TStringBuilder() << "Don't save " << name << " for profile \"" << profileName << "\"",
+        [&name, &profile]() {
+            profile->RemoveValue(name);
+        }
     );
     if (existingProfile && profile->Has(name)) {
         picker.AddOption(
-                TStringBuilder() << "Use current " << name << " value \"" << profile->GetValue(name).as<TString>() << "\"",
-                []() {}
+            TStringBuilder() << "Use current " << name << " value \"" << profile->GetValue(name).as<TString>() << "\"",
+            []() {}
         );
     }
     picker.PickOptionAndDoAction();
 }
 
 void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, const TString& profileName, std::shared_ptr<IProfile> profile,
-                                TConfig& config, bool interactive, bool cmdLine) {
-
+    TConfig& config, bool interactive, bool cmdLine)
+{
     if (cmdLine) {
         if (SetAuthFromCommandLine(profile)) {
             return;
@@ -538,7 +544,7 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
         return;
     }
     Cout << Endl << "Pick desired action to configure authentication method:" << Endl;
-    TNumericOptionsPicker picker;
+    TNumericOptionsPicker picker(config.IsVerbose());
     if (config.UseStaticCredentials) {
         picker.AddOption(
                 "Use static credentials (user & password)",
@@ -779,14 +785,12 @@ void TCommandCreateProfile::Parse(TConfig& config) {
 }
 
 int TCommandCreateProfile::Run(TConfig& config) {
-//    Y_UNUSED(config);
     TString profileName = ProfileName;
     Interactive = (!AnyProfileOptionInCommandLine() || !profileName) && IsStdinInteractive();
     auto profileManager = CreateProfileManager(config.ProfileFile);
     if (Interactive) {
         Cout << "Welcome! This command will take you through configuration profile creation process." << Endl;
-    }
-    else {
+    } else {
         if (profileManager->HasProfile(ProfileName)) {
             Cerr << "Profile \"" << ProfileName << "\" already exists. Consider using update, replace or delete command." << Endl;
             return EXIT_FAILURE;
@@ -826,7 +830,6 @@ void TCommandDeleteProfile::Parse(TConfig& config) {
 }
 
 int TCommandDeleteProfile::Run(TConfig& config) {
-    Y_UNUSED(config);
     auto profileManager = CreateProfileManager(config.ProfileFile);
     const auto profileNames = profileManager->ListProfiles();
     if (ProfileName) {
@@ -843,7 +846,7 @@ int TCommandDeleteProfile::Run(TConfig& config) {
         if (profileNames.size()) {
             TMaybe<int> returnCode;
             Cout << "Please choose profile to remove:" << Endl;
-            TNumericOptionsPicker picker;
+            TNumericOptionsPicker picker(config.IsVerbose());
             picker.AddOption(
                 "Don't remove anything, just exit",
                 [&returnCode]() {
@@ -872,8 +875,7 @@ int TCommandDeleteProfile::Run(TConfig& config) {
     if (Force) {
         profileManager->RemoveProfile(ProfileName);
     } else {
-        Cout << "Profile \"" << ProfileName << "\" will be permanently removed. Continue? (y/n): ";
-        if (AskYesOrNo()) {
+        if (AskYesOrNo(TStringBuilder() << "Profile \"" << ProfileName << "\" will be permanently removed. Continue? (y/n): ")) {
             if (profileManager->RemoveProfile(ProfileName)) {
                 Cout << "Profile \"" << ProfileName << "\" was removed." << Endl;
             } else {
@@ -923,7 +925,7 @@ int TCommandActivateProfile::Run(TConfig& config) {
         if (profileNames.size()) {
             TMaybe<int> returnCode;
             Cout << "Please choose profile to activate:" << Endl;
-            TNumericOptionsPicker picker;
+            TNumericOptionsPicker picker(config.IsVerbose());
             picker.AddOption(
                 "Don't do anything, just exit",
                 [&returnCode]() {
@@ -1048,7 +1050,6 @@ void TCommandGetProfile::Parse(TConfig& config) {
 }
 
 int TCommandGetProfile::Run(TConfig& config) {
-    Y_UNUSED(config);
     auto profileManager = CreateProfileManager(config.ProfileFile);
     const auto profileNames = profileManager->ListProfiles();
     if (ProfileName) {
@@ -1062,7 +1063,7 @@ int TCommandGetProfile::Run(TConfig& config) {
         const auto profileNames = profileManager->ListProfiles();
         if (profileNames.size()) {
             Cout << "Please choose profile to list its values:" << Endl;
-            TNumericOptionsPicker picker;
+            TNumericOptionsPicker picker(config.IsVerbose());
             TString activeProfileName = profileManager->GetActiveProfileName();
             for (size_t i = 0; i < profileNames.size(); ++i) {
                 TString currentProfileName = profileNames[i];
@@ -1214,8 +1215,7 @@ int TCommandReplaceProfile::Run(TConfig& config) {
     auto profileManager = CreateProfileManager(config.ProfileFile);
     if (profileManager->HasProfile(ProfileName)) {
         if (!Force) {
-            Cout << "Current profile will be replaced with a new one. All current profile data will be lost. Continue? (y/n): ";
-            if (!AskYesOrNo()) {
+            if (!AskYesOrNo("Current profile will be replaced with a new one. All current profile data will be lost. Continue? (y/n): ")) {
                 return EXIT_FAILURE;
             }
         }

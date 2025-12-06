@@ -3,8 +3,7 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include "ydb_sdk_core_access.h"
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 TCommandAuth::TCommandAuth()
     : TClientCommandTree("auth", {}, "Auth service operations")
@@ -23,13 +22,12 @@ void TCommandGetToken::Config(TConfig& config) {
 }
 
 bool TCommandGetToken::Prompt(TConfig& config) {
-    Y_UNUSED(config);
     if (!config.AssumeYes) {
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         Cout << colors.RedColor() << "Caution: Your auth token will be printed to console." << colors.OldColor()
             << " Use \"--force\" (\"-f\") option to print without prompting." << Endl;
 
-        if (!AskPrompt("Do you want to proceed?", false)) {
+        if (!AskYesOrNo("Do you want to proceed?", /* defaultAnswer */ false)) {
             return false;
         }
     }
@@ -53,5 +51,4 @@ int TCommandGetToken::Run(TConfig& config) {
     return EXIT_FAILURE;
 }
 
-}
-}
+} // namespace NConsoleClient::NYdb

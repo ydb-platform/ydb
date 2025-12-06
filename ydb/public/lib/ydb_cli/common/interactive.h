@@ -4,9 +4,9 @@
 
 namespace NYdb::NConsoleClient {
 
-void AskInputWithPrompt(const TString& prompt, std::function<bool(const TString&)> handler, bool verbose = false);
+bool AskInputWithPrompt(const TString& prompt, std::function<bool(const TString&)> handler, bool verbose = false, bool exitOnError = true);
 
-void AskAnyInputWithPrompt(const TString& prompt, std::function<void(const TString&)> handler, bool verbose = false);
+bool AskAnyInputWithPrompt(const TString& prompt, std::function<void(const TString&)> handler, bool verbose = false, bool exitOnError = true);
 
 TString AskAnyInputWithPrompt(const TString& prompt, bool verbose = false);
 
@@ -17,5 +17,27 @@ bool IsStdinInteractive();
 bool IsStdoutInteractive();
 
 std::optional<size_t> GetTerminalWidth();
+
+class TNumericOptionsPicker {
+public:
+    using TPickableAction = std::function<void()>;
+    using TInputAction = std::function<void(const TString&)>;
+
+    explicit TNumericOptionsPicker(bool verbose);
+
+    void AddOption(const TString& description, TPickableAction&& action);
+
+    void AddInputOption(const TString& description, const TString& prompt, TInputAction&& action);
+
+    bool PickOptionAndDoAction(bool exitOnError = true) const;
+
+private:
+    std::optional<size_t> MakeNumericChoice(size_t optCount, bool exitOnError) const;
+
+private:
+    const bool Verbose = false;
+    size_t OptionsCount = 0;
+    std::unordered_map<size_t, TPickableAction> Options;
+};
 
 } // namespace NYdb::NConsoleClient

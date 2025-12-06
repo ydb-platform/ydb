@@ -48,61 +48,6 @@ TCommandProfile::TCommandProfile()
 }
 
 namespace {
-    size_t MakeNumericChoice(const size_t optCount, bool verbose) {
-        size_t numericChoice = 0;
-        TString prompt = "Please enter your numeric choice: ";
-        AskInputWithPrompt(prompt, [&](const TString& input) {
-            if (TryFromString(input, numericChoice) && 0 < numericChoice && numericChoice <= optCount) {
-                return true;
-            }
-
-            prompt = TStringBuilder() << "Please enter a value between 1 and " << optCount << ": ";
-            return false;
-        }, verbose);
-
-        return numericChoice;
-    }
-
-    class TNumericOptionsPicker {
-    public:
-        using TPickableAction = std::function<void()>;
-        using TInputAction = std::function<void(const TString&)>;
-
-        explicit TNumericOptionsPicker(bool verbose)
-            : Verbose(verbose)
-        {}
-
-        void AddOption(const TString& description, TPickableAction&& action) {
-            const auto& colors = NColorizer::AutoColors(Cout);
-            Cout << " [" << colors.Green() << ++OptionsCount << colors.OldColor() << "] " << description << Endl;
-            Options.emplace(OptionsCount, std::move(action));
-        }
-
-        void AddInputOption(const TString& description, const TString& prompt, TInputAction&& action) {
-            AddOption(description, [this, prompt, a = std::move(action)]() {
-                AskAnyInputWithPrompt(prompt, a, Verbose);
-            });
-        }
-
-        void PickOptionAndDoAction() const {
-            while (true) {
-                const auto numericChoice = MakeNumericChoice(OptionsCount, Verbose);
-                if (auto* option = Options.FindPtr(numericChoice)) {
-                    // Do action
-                    (*option)();
-                    break;
-                }
-
-                Cerr << "Can't find action with index " << numericChoice << Endl;
-            }
-        }
-
-    private:
-        const bool Verbose = false;
-        size_t OptionsCount = 0;
-        THashMap<size_t, TPickableAction> Options;
-    };
-
     std::string BlurSecret(const std::string& in) {
         std::string out(in);
         size_t clearSymbolsCount = Min(size_t(10), out.length() / 4);
@@ -260,7 +205,7 @@ namespace {
             Cout << "  client-cert-key-password-file: " << profile->GetValue("client-cert-key-password-file").as<TString>() << Endl;
         }
     }
-}
+} // anonymous namespace
 
 TCommandConnectionInfo::TCommandConnectionInfo()
     : TClientCommand("info", {}, "List current connection parameters")

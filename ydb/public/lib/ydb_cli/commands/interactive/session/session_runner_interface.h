@@ -30,7 +30,7 @@ public:
 
     virtual ~ISessionRunner() = default;
 
-    virtual void Setup(ILineReaderController::TPtr controller) = 0;
+    virtual bool Setup(ILineReaderController::TPtr controller) = 0;
 
     virtual void HandleLine(const TString& line) = 0;
 };

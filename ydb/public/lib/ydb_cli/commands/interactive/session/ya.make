@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/colorizer
+    library/cpp/yaml/as
     ydb/core/base
     ydb/public/lib/ydb_cli/commands/interactive/common
     ydb/public/lib/ydb_cli/common

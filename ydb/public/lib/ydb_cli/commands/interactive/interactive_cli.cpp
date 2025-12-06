@@ -81,6 +81,9 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     Cout << "Press " << colors.BoldColor() << "Ctrl+K" << colors.OldColor() << " for more information." << Endl;
 
+    const auto configurationManager = std::make_shared<TInteractiveConfigurationManager>(config.ProfileFile, Log);
+    ui64 activeSession = static_cast<ui64>(configurationManager->GetDefaultMode());
+
     const std::vector sessions = {
         CreateSqlSessionRunner({
             .ProfileName = Profile,
@@ -90,10 +93,11 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         CreateAiSessionRunner({
             .ProfileName = Profile,
             .YdbPath = YdbPath,
+            .ConfigurationManager = configurationManager,
         }, Log),
     };
+    Y_DEBUG_VERIFY(sessions.size() > activeSession);
 
-    ui64 activeSession = 0;
     const auto lineReader = CreateLineReader(driver, config.Database, Log);
     sessions[activeSession]->Setup(lineReader);
 
@@ -101,8 +105,12 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         const auto& input = *inputOptional;
         if (std::holds_alternative<ILineReader::TSwitch>(input)) {
             activeSession ^= 1;
-            sessions[activeSession]->Setup(lineReader);
-            Log.Info() << "Switching to " << (activeSession ? "AI" : "SQL") << " mode";
+            if (sessions[activeSession]->Setup(lineReader)) {
+                Log.Info() << "Switching to " << (activeSession ? "AI" : "SQL") << " mode";
+            } else {
+                Log.Error() << "Failed to switch to " << (activeSession ? "AI" : "SQL") << " mode";
+                Y_DEBUG_VERIFY(sessions[activeSession ^= 1]->Setup(lineReader));
+            }
             continue;
         }
 

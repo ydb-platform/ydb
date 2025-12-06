@@ -17,7 +17,7 @@ protected:
 public:
     TSessionRunnerBase(const TSessionSettings& settings, const TInteractiveLogger& log);
 
-    virtual void Setup(ILineReaderController::TPtr controller) final;
+    virtual bool Setup(ILineReaderController::TPtr controller) override;
 
 protected:
     static TString PrintCommonHotKeys();
@@ -29,9 +29,7 @@ protected:
 protected:
     TInteractiveLogger Log;
     ILineReaderController::TPtr Controller;
-
-private:
-    const TSessionSettings Settings;
+    TSessionSettings Settings;
 };
 
 } // namespace NYdb::NConsoleClient

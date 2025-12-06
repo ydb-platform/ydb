@@ -4,6 +4,7 @@
 
 #include <library/cpp/colorizer/colors.h>
 
+#include <util/string/cast.h>
 #include <util/string/builder.h>
 
 #if defined(_unix_)
@@ -17,7 +18,7 @@
 
 namespace NYdb::NConsoleClient {
 
-void AskInputWithPrompt(const TString& prompt, std::function<bool(const TString&)> handler, bool verbose) {
+bool AskInputWithPrompt(const TString& prompt, std::function<bool(const TString&)> handler, bool verbose, bool exitOnError) {
     const auto& colors = NColorizer::AutoColors(Cout);
     replxx::Replxx rx;
 
@@ -33,21 +34,25 @@ void AskInputWithPrompt(const TString& prompt, std::function<bool(const TString&
         }
 
         if (!input) {
-            Cerr << "Exiting." << Endl;
-            exit(1);
+            if (exitOnError) {
+                Cerr << "Exiting." << Endl;
+                exit(1);
+            } else {
+                return false;
+            }
         }
 
         if (handler(input)) {
-            break;
+            return true;
         }
     }
 }
 
-void AskAnyInputWithPrompt(const TString& prompt, std::function<void(const TString&)> handler, bool verbose) {
-    AskInputWithPrompt(prompt, [&](const TString& input) {
+bool AskAnyInputWithPrompt(const TString& prompt, std::function<void(const TString&)> handler, bool verbose, bool exitOnError) {
+    return AskInputWithPrompt(prompt, [&](const TString& input) {
         handler(input);
         return true;
-    }, verbose);
+    }, verbose, exitOnError);
 }
 
 TString AskAnyInputWithPrompt(const TString& prompt, bool verbose) {
@@ -80,7 +85,7 @@ bool AskYesOrNo(const TString& query, std::optional<bool> defaultAnswer) {
         }
 
         return true;
-    });
+    }, /* verbose */ false, /* exitOnError */ false);
 
     return result;
 }
@@ -146,6 +151,58 @@ std::optional<size_t> GetTerminalWidth() {
     }
 #endif
     return {};
+}
+
+TNumericOptionsPicker::TNumericOptionsPicker(bool verbose)
+    : Verbose(verbose)
+{}
+
+void TNumericOptionsPicker::AddOption(const TString& description, TPickableAction&& action) {
+    const auto& colors = NColorizer::AutoColors(Cout);
+    Cout << " [" << colors.Green() << ++OptionsCount << colors.OldColor() << "] " << description << Endl;
+    Options.emplace(OptionsCount, std::move(action));
+}
+
+void TNumericOptionsPicker::AddInputOption(const TString& description, const TString& prompt, TInputAction&& action) {
+    AddOption(description, [this, prompt, a = std::move(action)]() {
+        AskAnyInputWithPrompt(prompt, a, Verbose);
+    });
+}
+
+bool TNumericOptionsPicker::PickOptionAndDoAction(bool exitOnError) const {
+    while (true) {
+        const auto numericChoice = MakeNumericChoice(OptionsCount, exitOnError);
+        if (!numericChoice) {
+            return false;
+        }
+
+        if (const auto it = Options.find(*numericChoice); it != Options.end()) {
+            // Do action
+            it->second();
+            return true;
+        }
+
+        Cerr << "Can't find action with index " << *numericChoice << Endl;
+    }
+}
+
+std::optional<size_t> TNumericOptionsPicker::MakeNumericChoice(size_t optCount, bool exitOnError) const {
+    size_t numericChoice = 0;
+    TString prompt = "Please enter your numeric choice: ";
+    const bool result = AskInputWithPrompt(prompt, [&](const TString& input) {
+        if (TryFromString(input, numericChoice) && 0 < numericChoice && numericChoice <= optCount) {
+            return true;
+        }
+
+        prompt = TStringBuilder() << "Please enter a value between 1 and " << optCount << ": ";
+        return false;
+    }, Verbose, exitOnError);
+
+    if (!result) {
+        return std::nullopt;
+    }
+
+    return numericChoice;
 }
 
 } // namespace NYdb::NConsoleClient

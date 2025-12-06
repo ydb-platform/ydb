@@ -9,9 +9,10 @@ TSessionRunnerBase::TSessionRunnerBase(const TSessionSettings& settings, const T
     , Settings(settings)
 {}
 
-void TSessionRunnerBase::Setup(ILineReaderController::TPtr controller) {
+bool TSessionRunnerBase::Setup(ILineReaderController::TPtr controller) {
     controller->Setup(Settings);
     Controller = std::move(controller);
+    return true;
 }
 
 TString TSessionRunnerBase::PrintCommonHotKeys() {

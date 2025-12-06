@@ -52,7 +52,10 @@ class TLineReader final : public ILineReader {
         explicit THistory(const TString& historyFilePath)
             : HistoryFilePath(historyFilePath)
         {
-            TFsPath(HistoryFilePath).Parent().MkDirs();
+            if (const auto& parent = TFsPath(HistoryFilePath).Parent(); !parent.Exists()) {
+                parent.MkDirs();
+            }
+
             HistoryFileHandle = TFileHandle(HistoryFilePath.c_str(), EOpenModeFlag::OpenAlways | EOpenModeFlag::RdWr | EOpenModeFlag::AW | EOpenModeFlag::ARUser | EOpenModeFlag::ARGroup);
             if (!HistoryFileHandle.IsOpen()) {
                 throw yexception() << "file handle open error: " << strerror(errno);

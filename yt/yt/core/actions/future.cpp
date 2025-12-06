@@ -42,6 +42,15 @@ TFutureCallbackCookie TFutureState<void>::Subscribe(TVoidResultHandler handler)
     }
 }
 
+TFutureCallbackCookie TFutureState<void>::SubscribeUnique(TUniqueVoidResultHandler handler)
+{
+    // TODO(babenko): consider optimizing this (rare) case.
+    return Subscribe(BIND([handler = std::move(handler)] (const TError& error) {
+        auto errorCopy = error;
+        handler(std::move(errorCopy));
+    }));
+}
+
 void TFutureState<void>::Unsubscribe(TFutureCallbackCookie cookie)
 {
     // Fast path.

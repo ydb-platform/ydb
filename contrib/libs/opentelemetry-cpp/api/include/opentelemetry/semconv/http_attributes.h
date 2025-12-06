@@ -43,19 +43,23 @@ static constexpr const char *kHttpRequestHeader = "http.request.header";
   <p>
   HTTP request method value SHOULD be "known" to the instrumentation.
   By default, this convention defines "known" methods as the ones listed in <a
-  href="https://www.rfc-editor.org/rfc/rfc9110.html#name-methods">RFC9110</a> and the PATCH method
-  defined in <a href="https://www.rfc-editor.org/rfc/rfc5789.html">RFC5789</a>. <p> If the HTTP
-  request method is not known to instrumentation, it MUST set the @code http.request.method @endcode
-  attribute to @code _OTHER @endcode. <p> If the HTTP instrumentation could end up converting valid
-  HTTP request methods to @code _OTHER @endcode, then it MUST provide a way to override the list of
-  known HTTP methods. If this override is done via environment variable, then the environment
-  variable MUST be named OTEL_INSTRUMENTATION_HTTP_KNOWN_METHODS and support a comma-separated list
-  of case-sensitive known HTTP methods (this list MUST be a full override of the default known
-  method, it is not a list of known methods in addition to the defaults). <p> HTTP method names are
-  case-sensitive and @code http.request.method @endcode attribute value MUST match a known HTTP
-  method name exactly. Instrumentations for specific web frameworks that consider HTTP methods to be
-  case insensitive, SHOULD populate a canonical equivalent. Tracing instrumentations that do so,
-  MUST also set @code http.request.method_original @endcode to the original value.
+  href="https://www.rfc-editor.org/rfc/rfc9110.html#name-methods">RFC9110</a>, the PATCH method
+  defined in <a href="https://www.rfc-editor.org/rfc/rfc5789.html">RFC5789</a> and the QUERY method
+  defined in <a
+  href="https://datatracker.ietf.org/doc/draft-ietf-httpbis-safe-method-w-body/?include_text=1">httpbis-safe-method-w-body</a>.
+  <p>
+  If the HTTP request method is not known to instrumentation, it MUST set the @code
+  http.request.method @endcode attribute to @code _OTHER @endcode. <p> If the HTTP instrumentation
+  could end up converting valid HTTP request methods to @code _OTHER @endcode, then it MUST provide
+  a way to override the list of known HTTP methods. If this override is done via environment
+  variable, then the environment variable MUST be named OTEL_INSTRUMENTATION_HTTP_KNOWN_METHODS and
+  support a comma-separated list of case-sensitive known HTTP methods (this list MUST be a full
+  override of the default known method, it is not a list of known methods in addition to the
+  defaults). <p> HTTP method names are case-sensitive and @code http.request.method @endcode
+  attribute value MUST match a known HTTP method name exactly. Instrumentations for specific web
+  frameworks that consider HTTP methods to be case insensitive, SHOULD populate a canonical
+  equivalent. Tracing instrumentations that do so, MUST also set @code http.request.method_original
+  @endcode to the original value.
  */
 static constexpr const char *kHttpRequestMethod = "http.request.method";
 
@@ -97,11 +101,19 @@ static constexpr const char *kHttpResponseHeader = "http.response.header";
 static constexpr const char *kHttpResponseStatusCode = "http.response.status_code";
 
 /**
-  The matched route, that is, the path template in the format used by the respective server
-  framework. <p> MUST NOT be populated when this is not supported by the HTTP server framework as
-  the route attribute should have low-cardinality and the URI path can NOT substitute it. SHOULD
-  include the <a href="/docs/http/http-spans.md#http-server-definitions">application root</a> if
-  there is one.
+  The matched route template for the request. This MUST be low-cardinality and include all static
+  path segments, with dynamic path segments represented with placeholders. <p> MUST NOT be populated
+  when this is not supported by the HTTP server framework as the route attribute should have
+  low-cardinality and the URI path can NOT substitute it. SHOULD include the <a
+  href="/docs/http/http-spans.md#http-server-definitions">application root</a> if there is one. <p>
+  A static path segment is a part of the route template with a fixed, low-cardinality value. This
+  includes literal strings like @code /users/ @endcode and placeholders that are constrained to a
+  finite, predefined set of values, e.g. @code {controller} @endcode or @code {action} @endcode. <p>
+  A dynamic path segment is a placeholder for a value that can have high cardinality and is not
+  constrained to a predefined list like static path segments. <p> Instrumentations SHOULD use
+  routing information provided by the corresponding web framework. They SHOULD pick the most precise
+  source of routing information and MAY support custom route formatting. Instrumentations SHOULD
+  document the format and the API used to obtain the route string.
  */
 static constexpr const char *kHttpRoute = "http.route";
 

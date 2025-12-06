@@ -62,6 +62,37 @@ static constexpr const char *kGenAiConversationId = "gen_ai.conversation.id";
 static constexpr const char *kGenAiDataSourceId = "gen_ai.data_source.id";
 
 /**
+  The number of dimensions the resulting output embeddings should have.
+ */
+static constexpr const char *kGenAiEmbeddingsDimensionCount = "gen_ai.embeddings.dimension.count";
+
+/**
+  A free-form explanation for the assigned score provided by the evaluator.
+ */
+static constexpr const char *kGenAiEvaluationExplanation = "gen_ai.evaluation.explanation";
+
+/**
+  The name of the evaluation metric used for the GenAI response.
+ */
+static constexpr const char *kGenAiEvaluationName = "gen_ai.evaluation.name";
+
+/**
+  Human readable label for evaluation.
+  <p>
+  This attribute provides a human-readable interpretation of the evaluation score produced by an
+  evaluator. For example, a score value of 1 could mean "relevant" in one evaluation system and "not
+  relevant" in another, depending on the scoring range and evaluator. The label SHOULD have low
+  cardinality. Possible values depend on the evaluation metric and evaluator used; implementations
+  SHOULD document the possible values.
+ */
+static constexpr const char *kGenAiEvaluationScoreLabel = "gen_ai.evaluation.score.label";
+
+/**
+  The evaluation score returned by the evaluator.
+ */
+static constexpr const char *kGenAiEvaluationScoreValue = "gen_ai.evaluation.score.value";
+
+/**
   The chat history provided to the model as an input.
   <p>
   Instrumentations MUST follow <a href="/docs/gen-ai/gen-ai-input-messages.json">Input messages JSON
@@ -314,9 +345,50 @@ static constexpr const char *kGenAiSystemInstructions = "gen_ai.system_instructi
 static constexpr const char *kGenAiTokenType = "gen_ai.token.type";
 
 /**
+  Parameters passed to the tool call.
+  <blockquote>
+  [!WARNING]
+  This attribute may contain sensitive information.</blockquote>
+  <p>
+  It's expected to be an object - in case a serialized string is available
+  to the instrumentation, the instrumentation SHOULD do the best effort to
+  deserialize it to an object. When recorded on spans, it MAY be recorded as a JSON string if
+  structured format is not supported and SHOULD be recorded in structured form otherwise.
+ */
+static constexpr const char *kGenAiToolCallArguments = "gen_ai.tool.call.arguments";
+
+/**
   The tool call identifier.
  */
 static constexpr const char *kGenAiToolCallId = "gen_ai.tool.call.id";
+
+/**
+  The result returned by the tool call (if any and if execution was successful).
+  <blockquote>
+  [!WARNING]
+  This attribute may contain sensitive information.</blockquote>
+  <p>
+  It's expected to be an object - in case a serialized string is available
+  to the instrumentation, the instrumentation SHOULD do the best effort to
+  deserialize it to an object. When recorded on spans, it MAY be recorded as a JSON string if
+  structured format is not supported and SHOULD be recorded in structured form otherwise.
+ */
+static constexpr const char *kGenAiToolCallResult = "gen_ai.tool.call.result";
+
+/**
+  The list of source system tool definitions available to the GenAI agent or model.
+  <p>
+  The value of this attribute matches source system tool definition format.
+  <p>
+  It's expected to be an array of objects where each object represents a tool definition. In case a
+  serialized string is available to the instrumentation, the instrumentation SHOULD do the best
+  effort to deserialize it to an array. When recorded on spans, it MAY be recorded as a JSON string
+  if structured format is not supported and SHOULD be recorded in structured form otherwise. <p>
+  Since this attribute could be large, it's NOT RECOMMENDED to populate
+  it by default. Instrumentations MAY provide a way to enable
+  populating this attribute.
+ */
+static constexpr const char *kGenAiToolDefinitions = "gen_ai.tool.definitions";
 
 /**
   The tool description.
@@ -604,13 +676,21 @@ static constexpr const char *kCohere = "cohere";
 
 /**
   Azure AI Inference
+
+  @deprecated
+  {"note": "Replaced by @code azure.ai.inference @endcode.", "reason": "renamed", "renamed_to":
+  "azure.ai.inference"}
  */
-static constexpr const char *kAzAiInference = "az.ai.inference";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kAzAiInference = "az.ai.inference";
 
 /**
   Azure OpenAI
+
+  @deprecated
+  {"note": "Replaced by @code azure.ai.openai @endcode.", "reason": "renamed", "renamed_to":
+  "azure.ai.openai"}
  */
-static constexpr const char *kAzAiOpenai = "az.ai.openai";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kAzAiOpenai = "az.ai.openai";
 
 /**
   Azure AI Inference
@@ -639,11 +719,8 @@ static constexpr const char *kPerplexity = "perplexity";
 
 /**
   xAI
-
-  @deprecated
-  {"note": "Replaced by @code x_ai @endcode.", "reason": "renamed", "renamed_to": "x_ai"}
  */
-OPENTELEMETRY_DEPRECATED static constexpr const char *kXai = "xai";
+static constexpr const char *kXai = "xai";
 
 /**
   DeepSeek

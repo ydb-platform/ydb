@@ -290,6 +290,151 @@ CreateAsyncDoubleMetricContainerFilesystemUsage(metrics::Meter *meter)
 }
 
 /**
+  Container memory available.
+  <p>
+  Available memory for use.  This is defined as the memory limit - workingSetBytes. If memory limit
+  is undefined, the available bytes is omitted. In general, this metric can be derived from <a
+  href="https://github.com/google/cadvisor/blob/v0.53.0/docs/storage/prometheus.md#prometheus-container-metrics">cadvisor</a>
+  and by subtracting the @code container_memory_working_set_bytes @endcode metric from the @code
+  container_spec_memory_limit_bytes @endcode metric. In K8s, this metric is derived from the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.AvailableBytes</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#PodStats">PodStats.Memory</a>
+  of the Kubelet's stats API. <p> updowncounter
+ */
+static constexpr const char *kMetricContainerMemoryAvailable     = "container.memory.available";
+static constexpr const char *descrMetricContainerMemoryAvailable = "Container memory available.";
+static constexpr const char *unitMetricContainerMemoryAvailable  = "By";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricContainerMemoryAvailable(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricContainerMemoryAvailable,
+                                         descrMetricContainerMemoryAvailable,
+                                         unitMetricContainerMemoryAvailable);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricContainerMemoryAvailable(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricContainerMemoryAvailable,
+                                          descrMetricContainerMemoryAvailable,
+                                          unitMetricContainerMemoryAvailable);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricContainerMemoryAvailable(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricContainerMemoryAvailable,
+                                                   descrMetricContainerMemoryAvailable,
+                                                   unitMetricContainerMemoryAvailable);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricContainerMemoryAvailable(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricContainerMemoryAvailable,
+                                                    descrMetricContainerMemoryAvailable,
+                                                    unitMetricContainerMemoryAvailable);
+}
+
+/**
+  Container memory paging faults.
+  <p>
+  In general, this metric can be derived from <a
+  href="https://github.com/google/cadvisor/blob/v0.53.0/docs/storage/prometheus.md#prometheus-container-metrics">cadvisor</a>
+  and specifically the @code container_memory_failures_total{failure_type=pgfault, scope=container}
+  @endcode and @code container_memory_failures_total{failure_type=pgmajfault, scope=container}
+  @endcodemetric. In K8s, this metric is derived from the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.PageFaults</a>
+  and <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.MajorPageFaults</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#PodStats">PodStats.Memory</a>
+  of the Kubelet's stats API. <p> counter
+ */
+static constexpr const char *kMetricContainerMemoryPagingFaults = "container.memory.paging.faults";
+static constexpr const char *descrMetricContainerMemoryPagingFaults =
+    "Container memory paging faults.";
+static constexpr const char *unitMetricContainerMemoryPagingFaults = "{fault}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
+CreateSyncInt64MetricContainerMemoryPagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricContainerMemoryPagingFaults,
+                                    descrMetricContainerMemoryPagingFaults,
+                                    unitMetricContainerMemoryPagingFaults);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>>
+CreateSyncDoubleMetricContainerMemoryPagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricContainerMemoryPagingFaults,
+                                    descrMetricContainerMemoryPagingFaults,
+                                    unitMetricContainerMemoryPagingFaults);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricContainerMemoryPagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(kMetricContainerMemoryPagingFaults,
+                                             descrMetricContainerMemoryPagingFaults,
+                                             unitMetricContainerMemoryPagingFaults);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricContainerMemoryPagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(kMetricContainerMemoryPagingFaults,
+                                              descrMetricContainerMemoryPagingFaults,
+                                              unitMetricContainerMemoryPagingFaults);
+}
+
+/**
+  Container memory RSS.
+  <p>
+  In general, this metric can be derived from <a
+  href="https://github.com/google/cadvisor/blob/v0.53.0/docs/storage/prometheus.md#prometheus-container-metrics">cadvisor</a>
+  and specifically the @code container_memory_rss @endcode metric. In K8s, this metric is derived
+  from the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.RSSBytes</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#PodStats">PodStats.Memory</a>
+  of the Kubelet's stats API. <p> updowncounter
+ */
+static constexpr const char *kMetricContainerMemoryRss     = "container.memory.rss";
+static constexpr const char *descrMetricContainerMemoryRss = "Container memory RSS.";
+static constexpr const char *unitMetricContainerMemoryRss  = "By";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricContainerMemoryRss(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricContainerMemoryRss, descrMetricContainerMemoryRss,
+                                         unitMetricContainerMemoryRss);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricContainerMemoryRss(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricContainerMemoryRss, descrMetricContainerMemoryRss,
+                                          unitMetricContainerMemoryRss);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricContainerMemoryRss(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricContainerMemoryRss, descrMetricContainerMemoryRss, unitMetricContainerMemoryRss);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricContainerMemoryRss(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricContainerMemoryRss, descrMetricContainerMemoryRss, unitMetricContainerMemoryRss);
+}
+
+/**
   Memory usage of the container.
   <p>
   Memory usage of the container.
@@ -326,6 +471,54 @@ CreateAsyncDoubleMetricContainerMemoryUsage(metrics::Meter *meter)
 {
   return meter->CreateDoubleObservableCounter(
       kMetricContainerMemoryUsage, descrMetricContainerMemoryUsage, unitMetricContainerMemoryUsage);
+}
+
+/**
+  Container memory working set.
+  <p>
+  In general, this metric can be derived from <a
+  href="https://github.com/google/cadvisor/blob/v0.53.0/docs/storage/prometheus.md#prometheus-container-metrics">cadvisor</a>
+  and specifically the @code container_memory_working_set_bytes @endcode metric. In K8s, this metric
+  is derived from the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.WorkingSetBytes</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#PodStats">PodStats.Memory</a>
+  of the Kubelet's stats API. <p> updowncounter
+ */
+static constexpr const char *kMetricContainerMemoryWorkingSet     = "container.memory.working_set";
+static constexpr const char *descrMetricContainerMemoryWorkingSet = "Container memory working set.";
+static constexpr const char *unitMetricContainerMemoryWorkingSet  = "By";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricContainerMemoryWorkingSet(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricContainerMemoryWorkingSet,
+                                         descrMetricContainerMemoryWorkingSet,
+                                         unitMetricContainerMemoryWorkingSet);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricContainerMemoryWorkingSet(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricContainerMemoryWorkingSet,
+                                          descrMetricContainerMemoryWorkingSet,
+                                          unitMetricContainerMemoryWorkingSet);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricContainerMemoryWorkingSet(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricContainerMemoryWorkingSet,
+                                                   descrMetricContainerMemoryWorkingSet,
+                                                   unitMetricContainerMemoryWorkingSet);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricContainerMemoryWorkingSet(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricContainerMemoryWorkingSet,
+                                                    descrMetricContainerMemoryWorkingSet,
+                                                    unitMetricContainerMemoryWorkingSet);
 }
 
 /**

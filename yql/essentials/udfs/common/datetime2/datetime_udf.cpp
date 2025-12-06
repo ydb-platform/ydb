@@ -2918,7 +2918,7 @@ private:
                                 return Size;
                             }
 
-                            *out++ = shift > 0 ? '+' : '-';
+                            *out++ = shift >= 0 ? '+' : '-';
                             shift = std::abs(shift);
                             out += PrintNDigits<2U>::Do(shift / 60U, out);
                             out += PrintNDigits<2U>::Do(shift % 60U, out);

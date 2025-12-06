@@ -1,14 +1,17 @@
 pkgs: attrs: with pkgs; rec {
-  version = "1.23.0";
+  version = "1.24.0";
 
   src = fetchFromGitHub {
     owner = "open-telemetry";
     repo = "opentelemetry-cpp";
     rev = "v${version}";
-    hash = "sha256-4SmKB2368I/2WTKYCqsZAAdkJygA15zCT+I7/RF8Knk=";
+    hash = "sha256-rVR8JWNoT5mxIgzynY8VzlZ4QxhWIEFBqogi+WFDcF0=";
   };
 
-  patches = [];
+  patches = [
+    ./revert-pr3661-aggregate.patch
+    ./revert-pr3687-aggregate.patch
+  ];
 
   nativeBuildInputs = [ cmake ninja pkg-config git cacert];
 

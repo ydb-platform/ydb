@@ -9,6 +9,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
+#include <library/cpp/resource/resource.h>
 #include <util/system/env.h>
 
 #include <ctime>
@@ -1284,10 +1285,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         }
 
         for (const auto qId : queries) {
-            const TString qPath = TStringBuilder{} << ArcadiaSourceRoot() << "/ydb/library/benchmarks/queries/tpch/pg/" << "q" << qId << ".sql";
-
-            TIFStream s(qPath);
-            std::string q = s.ReadAll();
+            std::string q = NResource::Find(TStringBuilder() << "resfs/file/tpch/queries/pg/q" << qId << ".sql");
             Replace(q, "{% include 'header.sql.jinja' %}", "");
             std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
             q = "--!syntax_pg\n" + std::regex_replace(q, pattern, "$1");

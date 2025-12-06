@@ -1285,7 +1285,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         }
 
         for (const auto qId : queries) {
-            std::string q = NResource::Find(TStringBuilder() << "tpch/queries/pg/q" << qId << ".sql");
+            std::string q = NResource::Find(TStringBuilder() << "resfs/file/tpch/queries/pg/q" << qId << ".sql");
             Replace(q, "{% include 'header.sql.jinja' %}", "");
             std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
             q = "--!syntax_pg\n" + std::regex_replace(q, pattern, "$1");

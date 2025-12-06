@@ -24,19 +24,26 @@ enum EEv {
     EvWriteChangelog,
     EvChangelogFailed,
 
+    EvStartNewBackup,
+
     EvEnd
 };
 
 static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR));
 
 struct TEvSnapshotCompleted : public TEventLocal<TEvSnapshotCompleted, EvSnapshotCompleted> {
-    TEvSnapshotCompleted(bool success, const TString& error = "")
-        : Success(success)
-        , Error(error)
+    TEvSnapshotCompleted(const TString& error)
+        : Error(error)
     {}
 
-    bool Success;
+    TEvSnapshotCompleted(ui64 writtenBytes)
+        : Success(true)
+        , WrittenBytes(writtenBytes)
+    {}
+
+    bool Success = false;
     TString Error;
+    ui64 WrittenBytes = 0;
 };
 
 enum class EScanStatus {
@@ -81,6 +88,8 @@ struct TEvChangelogFailed : public TEventLocal<TEvChangelogFailed, EvChangelogFa
 
     TString Error;
 };
+
+struct TEvStartNewBackup : public TEventLocal<TEvStartNewBackup, EvStartNewBackup> {};
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                              const THashMap<ui32, NTable::TScheme::TTableInfo>& tables,

@@ -8,11 +8,21 @@ namespace NKqp {
 using namespace NYql;
 
 struct TInfoUnit;
+struct TPhysicalOpProps;
 
 struct TColumnLineage {
     TColumnLineage(TString alias, TString tableName, TString columnName) : SourceAlias(alias), 
         TableName(tableName),
         ColumnName(columnName) {}
+
+    TString GetCannonicalAlias() {
+        if (SourceAlias != "") {
+            return SourceAlias;
+        }
+        else {
+            return TableName;
+        }
+    }
 
     TString SourceAlias;
     TString TableName;
@@ -33,6 +43,7 @@ public:
     std::optional<std::int64_t> SortingOrderingIdx;
     std::optional<std::int64_t> ShufflingOrderingIdx;
 
+    TInfoUnit MapColumn(TInfoUnit col);
     TString ToString(ui32 printOptions);
 };
 
@@ -44,6 +55,9 @@ public:
 
     TString ToString(ui32 printOptions);
 };
+
+std::shared_ptr<TOptimizerStatistics> BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts);
+std::shared_ptr<TOptimizerStatistics> BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, TVector<TInfoUnit> keyColumns);
 
 }
 }

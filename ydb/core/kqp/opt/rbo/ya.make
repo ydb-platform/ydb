@@ -13,6 +13,7 @@ SRCS(
     kqp_rewrite_select.cpp
     kqp_rbo_compute_statistics.cpp
     kqp_rbo_statistics.cpp
+    kqp_rbo_dp_cost_based.cpp
 )
 
 PEERDIR(

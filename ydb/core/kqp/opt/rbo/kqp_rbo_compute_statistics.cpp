@@ -15,23 +15,6 @@ using namespace NKikimr::NKqp;
 using namespace NYql;
 using namespace NYql::NDq;
 
-std::shared_ptr<TOptimizerStatistics> BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts) {
-    TVector<TString> keyColumnNames;
-    for (auto iu: props.Metadata->KeyColumns) {
-        keyColumnNames.push_back(iu.ColumnName);
-    }
-
-    double cost = props.Cost.has_value() ? *props.Cost : 0.0;
-
-    return std::make_shared<TOptimizerStatistics>(props.Metadata->Type, 
-        withStatsAndCosts ? props.Statistics->DataSize : 0.0,
-        props.Metadata->ColumnsCount,
-        withStatsAndCosts ? props.Statistics->DataSize : 0.0,
-        withStatsAndCosts ? cost : 0.0,
-        TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(
-            new TOptimizerStatistics::TKeyColumns(keyColumnNames)));
-}
-
 TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NYql::TOptimizerStatistics::TKeyColumns> keyColumns, const TVector<TInfoUnit>& outputColumns) {
     if (!keyColumns) {
         return {};
@@ -232,6 +215,9 @@ void TOpMap::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
     }
     auto inputMetadata = *GetInput()->Props.Metadata;
     Props.Metadata = TRBOMetadata();
+
+    Props.Metadata->Type = inputMetadata.Type;
+    Props.Metadata->StorageType = inputMetadata.StorageType;
 
     if (Project) {
         Props.Metadata->ColumnsCount = MapElements.size();

@@ -2,18 +2,114 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_cbo.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
 #include <typeinfo>
 
-using namespace NYql::NNodes;
-
 namespace {
+using namespace NYql::NDq;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+// To use DP CBO, we need to use the column lineage map and map all variables in join condition to
+// original aliases and column names in order to correctly use column statistics and shuffle elimination
+//
+// However, the same alias can appear multiple times in a query, but might already be out of scope
+// So we first collect all join conditions and fetch aliases and mappings only for the columns used in join conditions
+
+std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> & cboTree, TVector<std::shared_ptr<TRelOptimizerNode>> & rels) {
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> allJoinColumns;
+    std::shared_ptr<TJoinOptimizerNode> result;
+
+    auto lineageMap = cboTree->TreeRoot->Props.Metadata->ColumnLineage;
+    int fakeAliasId = 0;
+
+    for (auto op : cboTree->TreeNodes) {
+        auto joinOp = CastOperator<TOpJoin>(op);
+        for (auto & [left, right] : joinOp->JoinKeys) {
+            allJoinColumns.insert(left);
+            allJoinColumns.insert(right);
+        }
+    }
+
+    THashMap<IOperator*, std::shared_ptr<IBaseOptimizerNode>> nodeMap;
+
+    // Build rels for CBO. Rel contains a set of aliases and statistics object
+    for (auto child : cboTree->Children) {
+
+        TVector<TString> childAliases;
+        for (auto col : allJoinColumns) {
+            if (auto it = lineageMap.find(col.GetFullName()); it != lineageMap.end()) {
+                auto alias = it->second.GetCannonicalAlias();
+                if (std::find(childAliases.begin(), childAliases.end(), alias) == childAliases.end()) {
+                    childAliases.push_back(alias);
+                }
+            }
+        }
+        // If there is a real cross join in the plan with no conditions just create a fake alias
+        if (childAliases.empty()) {
+            childAliases.push_back("#fake_alias" + std::to_string(fakeAliasId++));
+        }
+
+        TVector<TInfoUnit> mappedKeyColumns;
+        for (auto col : child->Props.Metadata->KeyColumns) {
+            mappedKeyColumns.push_back(cboTree->TreeRoot->Props.Metadata->MapColumn(col));
+        }
+
+        auto stats = BuildOptimizerStatistics(child->Props, true, mappedKeyColumns);
+        auto relNode = std::make_shared<TRBORelOptimizerNode>(childAliases, *stats, child);
+        rels.push_back(relNode);
+        nodeMap.insert({child.get(), relNode});
+    }
+    
+    for (auto node : cboTree->TreeNodes) {
+        auto join = CastOperator<TOpJoin>(node);
+        auto leftNode = nodeMap.at(join->GetLeftInput().get());
+        auto rightNode = nodeMap.at(join->GetRightInput().get());
+        TVector<TJoinColumn> leftKeys;
+        TVector<TJoinColumn> rightKeys;
+
+        for (auto [leftKey, rightKey] : join->JoinKeys) {
+            auto mappedLeftKey = cboTree->TreeRoot->Props.Metadata->MapColumn(leftKey);
+            auto mappedRightKey = cboTree->TreeRoot->Props.Metadata->MapColumn(rightKey);
+
+            leftKeys.push_back(TJoinColumn(mappedLeftKey.Alias, mappedLeftKey.ColumnName));
+            rightKeys.push_back(TJoinColumn(mappedRightKey.Alias, mappedRightKey.ColumnName));
+        }
+
+        result = std::make_shared<TJoinOptimizerNode>(leftNode, 
+            rightNode, 
+            leftKeys, 
+            rightKeys, 
+            ConvertToJoinKind(join->JoinKind), 
+            EJoinAlgoType::Undefined,
+            false,
+            false,
+            false);
+
+        nodeMap.insert({join.get(), result});
+    }
+
+    return result;
+}
+
+}
+
+namespace NKikimr {
+namespace NKqp {
+
+
 /**
  * Run dynamic programming CBO and convert the resulting tree into operator tree
+ * 
+ * In order to support good CBO with pg syntax, where all the variables in the joins
+ * are transformed into Pg types, we remap the synthenic variables back into original ones
+ * to run the CBO, and then map them back
  */
 std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    Y_UNUSED(props);
+
     if (input->Kind != EOperator::CBOTree) {
         return input;
     }
@@ -25,13 +121,13 @@ std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleTestAndApply(const std::s
         return input;
     }
 
-    auto cboTree = CastOperator<TCBOTree>(input);
+    auto cboTree = CastOperator<TOpCBOTree>(input);
     
     // Check that all inputs have statistics
-    for (auto c : cboTree.Children()) {
+    for (auto c : cboTree->Children) {
         if (!c->Props.Statistics.has_value()) {
             ctx.ExprCtx.AddWarning(
-                YqlIssue(ctx.GetPosition(equiJoin.Pos()), TIssuesIds::CBO_MISSING_TABLE_STATS,
+                YqlIssue(ctx.ExprCtx.GetPosition(cboTree->Pos), TIssuesIds::CBO_MISSING_TABLE_STATS,
                 "Cost Based Optimizer could not be applied to this query: couldn't load statistics"
             )
         );
@@ -40,6 +136,7 @@ std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleTestAndApply(const std::s
     }
 
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
+    auto joinTree = ConvertJoinTree(cboTree, rels);
 
     bool allRowStorage = std::any_of(
         rels.begin(),
@@ -55,13 +152,11 @@ std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleTestAndApply(const std::s
         .ShuffleEliminationJoinNumCutoff = Config->ShuffleEliminationJoinNumCutoff.Get().GetOrElse(TDqSettings::TDefault::ShuffleEliminationJoinNumCutoff)
     };
 
-    bool enableShuffleElimination = KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleElimination);
-
     // Shuffle elimination is currently disabled
-    auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx, false, nullptr, nullptr));
+    //bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->DefaultEnableShuffleElimination);
 
-    // Generate an initial tree
-    auto joinTree = ConvertToJoinTree(joinTuple, rels);
+    auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel);
+    auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx.ExprCtx, false, nullptr, nullptr));
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;
@@ -72,7 +167,7 @@ std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleTestAndApply(const std::s
 
     {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
-        joinTree = opt.JoinSearch(joinTree, ctx.KqpCtx.GetOptimizerHints());
+        joinTree = opt->JoinSearch(joinTree, ctx.KqpCtx.GetOptimizerHints());
     }
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
@@ -82,11 +177,9 @@ std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleTestAndApply(const std::s
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
-
-    // rewrite the join tree and record the output statistics
-    TExprBase res = RearrangeEquiJoinTree(typesCtx, ctx, equiJoin, joinTree, shufflingOrderingsByJoinLabels);
-
-
+    //return ConvertOptimizedTree(joinTree, cboTree);
+    return cboTree;
 }
 
+}
 }

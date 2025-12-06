@@ -4,6 +4,36 @@
 namespace NKikimr {
 namespace NKqp {
 
+
+TInfoUnit TRBOMetadata::MapColumn(TInfoUnit key) {
+    auto fullName = key.GetFullName();
+    if (ColumnLineage.contains(fullName)) {
+        return TInfoUnit(ColumnLineage.at(fullName).GetCannonicalAlias(), ColumnLineage.at(fullName).ColumnName);
+    } else {
+        return key;
+    }
+}
+std::shared_ptr<TOptimizerStatistics> BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts ){
+    return BuildOptimizerStatistics(props, withStatsAndCosts, {});
+}
+
+std::shared_ptr<TOptimizerStatistics> BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, TVector<TInfoUnit> keyColumns) {
+    TVector<TString> keyColumnNames;
+    for (auto iu: (keyColumns.empty() ? props.Metadata->KeyColumns : keyColumns)) {
+        keyColumnNames.push_back(iu.ColumnName);
+    }
+
+    double cost = props.Cost.has_value() ? *props.Cost : 0.0;
+
+    return std::make_shared<TOptimizerStatistics>(props.Metadata->Type, 
+        withStatsAndCosts ? props.Statistics->DataSize : 0.0,
+        props.Metadata->ColumnsCount,
+        withStatsAndCosts ? props.Statistics->DataSize : 0.0,
+        withStatsAndCosts ? cost : 0.0,
+        TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(
+            new TOptimizerStatistics::TKeyColumns(keyColumnNames)));
+}
+
 TString TRBOMetadata::ToString(ui32 printOptions) {
     TStringBuilder builder;
 

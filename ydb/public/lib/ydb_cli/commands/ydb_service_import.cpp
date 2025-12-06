@@ -14,6 +14,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 #include <ydb/library/backup/util.h>
 
+#include <util/generic/algorithm.h>
+#include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/stream/format.h> // for SF_BYTES
@@ -98,6 +100,44 @@ void TCommandImportFromS3::Config(TConfig& config) {
 
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
+
+    {
+        TStringBuilder help;
+        help << "Index filling mode. Supported values: ";
+        bool first = true;
+        for (auto mode : GetEnumAllValues<NImport::EIndexFillingMode>()) {
+            if (mode == NImport::EIndexFillingMode::Unknown) {
+                continue;
+            }
+
+            if (!first && config.HelpCommandVerbosiltyLevel < 2) {
+                help << ", ";
+            }
+
+            if (config.HelpCommandVerbosiltyLevel >= 2) {
+                help << Endl;
+                switch (mode) {
+                case NImport::EIndexFillingMode::Build:
+                    help << "    - " << colors.BoldColor() << mode << colors.OldColor() << ": build index";
+                    break;
+                case NImport::EIndexFillingMode::Import:
+                    help << "    - " << colors.BoldColor() << mode << colors.OldColor() << ": import materialized index";
+                    break;
+                case NImport::EIndexFillingMode::Auto:
+                    help << "    - " << colors.BoldColor() << mode << colors.OldColor() << ": try to import materialized index, build otherwise";
+                    break;
+                case NImport::EIndexFillingMode::Unknown:
+                    break;
+                }
+            } else {
+                help << colors.BoldColor() << mode << colors.OldColor();
+            }
+
+            first = false;
+        }
+        config.Opts->AddLongOption("index-filling-mode", help)
+            .RequiredArgument("STRING").StoreResult(&IndexFillingMode).DefaultValue(IndexFillingMode);
+    }
 
     config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
             << "Sets bucket URL style. Value "
@@ -206,6 +246,8 @@ void TCommandImportFromS3::FillItemsFromItemParam(NYdb::NImport::TImportFromS3Se
             if (item.Destination.empty() || item.Destination.back() != '/') {
                 item.Destination += "/";
             }
+
+            TVector<NImport::TImportFromS3Settings::TItem> items;
             do {
                 auto listResult = s3Client->ListObjectKeys(item.Source, token);
                 token = listResult.NextToken;
@@ -218,10 +260,27 @@ void TCommandImportFromS3::FillItemsFromItemParam(NYdb::NImport::TImportFromS3Se
                         } else {
                             destination = NormalizePath(item.Destination);
                         }
-                        settings.AppendItem({TString(key), std::move(destination)});
+                        items.push_back({TString(key), std::move(destination)});
                     }
                 }
             } while (token);
+
+            Sort(items, [](const auto& a, const auto& b) {
+                return a.Src < b.Src;
+            });
+
+            THashSet<TString> seen;
+            for (auto& item : items) {
+                TStringBuf key = item.Src;
+                // try to skip /<index_name>/<indexImplTable>
+                key.RNextTok('/');
+                key.RNextTok('/');
+                if (seen.contains(key)) {
+                    continue;
+                }
+                seen.insert(TString{item.Src});
+                settings.AppendItem(std::move(item));
+            }
         }
     } catch (...) {
         ShutdownAwsAPI();
@@ -277,6 +336,7 @@ TSettings TCommandImportFromS3::MakeSettings() {
         }
 
         settings.NumberOfRetries(NumberOfRetries);
+        settings.IndexFillingMode(IndexFillingMode);
         settings.NoACL(NoACL);
         settings.SkipChecksumValidation(SkipChecksumValidation);
 

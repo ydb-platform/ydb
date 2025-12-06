@@ -269,6 +269,7 @@ bool CreateConsistentCopyTables(
                                        TStringBuilder{} << "Consistent copy table doesn't support table with index type " << indexInfo->Type)};
                 return false;
             }
+            scheme->SetInternal(tx.GetInternal());
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), *scheme));
 
             for (const auto& [srcImplTableName, srcImplTablePathId] : srcIndexPath.Base()->GetChildren()) {

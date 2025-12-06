@@ -30,7 +30,8 @@ void AddIssue(T& response, const TString& message, NYql::TSeverityIds::ESeverity
 struct TImportInfo;
 
 TString MakeIndexBuildUid(const TImportInfo& importInfo, ui32 itemIdx, i32 indexIdx);
-
 TString MakeIndexBuildUid(const TImportInfo& importInfo, ui32 itemIdx);
+
+bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx);
 
 } // NKikimr::NSchemeShard

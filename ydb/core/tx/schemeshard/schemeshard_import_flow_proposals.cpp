@@ -1,4 +1,5 @@
 #include "schemeshard_import_flow_proposals.h"
+#include "schemeshard_import_helpers.h"
 
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
@@ -52,6 +53,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         return nullptr;
     }
 
+    if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(*indexedTable, *item.Table, status, error)) {
+        return nullptr;
+    }
+
     for(const auto& column: item.Table->columns()) {
         switch (column.default_value_case()) {
             case Ydb::Table::ColumnMeta::kFromSequence: {
@@ -93,8 +98,15 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     return CreateTablePropose(ss, txId, importInfo, itemIdx, unused);
 }
 
+template <typename TPath>
+static auto GetDescription(TSchemeShard* ss, const TPath& path) {
+    NKikimrSchemeOp::TDescribeOptions opts;
+    opts.SetShowPrivateTable(true);
+    return DescribePath(ss, TlsActivationContext->AsActorContext(), path, opts);
+}
+
 static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, const TPathId& pathId) {
-    auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId);
+    auto desc = GetDescription(ss, pathId);
     auto record = desc->GetRecord();
 
     Y_ABORT_UNLESS(record.HasPathDescription());
@@ -359,13 +371,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
 
     pqGroup.SetName("streamImpl");
 
-    NKikimrSchemeOp::TDescribeOptions opts;
-    opts.SetReturnPartitioningInfo(false);
-    opts.SetReturnPartitionConfig(true);
-    opts.SetReturnBoundaries(true);
-    opts.SetReturnIndexTableBoundaries(true);
-    opts.SetShowPrivateTable(true);
-    auto describeSchemeResult = DescribePath(ss, TlsActivationContext->AsActorContext(),changefeedPath + "/streamImpl", opts);
+    auto describeSchemeResult = GetDescription(ss, changefeedPath + "/streamImpl");
 
     const auto& response = describeSchemeResult->GetRecord().GetPathDescription();
     item.StreamImplPathId = {response.GetSelf().GetSchemeshardId(), response.GetSelf().GetPathId()};

@@ -90,14 +90,14 @@ public:
         Y_DEBUG_VERIFY(Rx);
 
         for (const auto& [key, action] : settings.KeyHandlers) {
-            Rx->bind_key(key, [&, action](char32_t code) {
+            Rx->bind_key(replxx::Replxx::KEY::control(key), [&, action](char32_t code) {
                 action();
                 return Rx->invoke(replxx::Replxx::ACTION::ABORT_LINE, code);
             });
             KeyHandlers.erase(key);
         }
         for (const auto& [key, action] : KeyHandlers) {
-            Rx->bind_key(key, [&, action](char32_t) { return replxx::Replxx::ACTION_RESULT::CONTINUE; });
+            Rx->bind_key(replxx::Replxx::KEY::control(key), [&, action](char32_t) { return replxx::Replxx::ACTION_RESULT::CONTINUE; });
         }
         KeyHandlers = settings.KeyHandlers;
 

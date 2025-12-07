@@ -18,13 +18,41 @@ public:
     public:
         using TPtr = std::shared_ptr<TAiProfile>;
 
-        TAiProfile(const TString& name, YAML::Node config, TInteractiveConfigurationManager::TPtr manager);
+        enum class EApiType {
+            OpenAI,
+            Anthropic,
+            Invalid,
+        };
+
+        TAiProfile(const TString& name, YAML::Node config, TInteractiveConfigurationManager::TPtr manager, const TInteractiveLogger& log);
+
+        bool IsValid(TString& error) const;
 
         const TString& GetName() const;
+
+        std::optional<EApiType> GetApiType() const;
+
+        TString GetApiEndpoint() const;
+
+        TString GetToken() const;
+
+        TString GetModelName() const;
+
+        bool SetupProfile();
+
+    private:
+        bool SetupApiType();
+
+        bool SetupApiEndpoint();
+
+        bool SetupApiToken();
+
+        bool SetupModelName();
 
     private:
         const TString Name;
         const TInteractiveConfigurationManager::TPtr Manager;
+        const TInteractiveLogger Log;
         YAML::Node Config;
     };
 
@@ -36,21 +64,28 @@ public:
     enum class EMode {
         YQL,
         AI,
+        Invalid,
     };
 
     EMode GetDefaultMode() const;
 
-    TAiProfile::TPtr InitAiModelProfile();
-
-private:
-    void ChangeDefaultMode(EMode mode);
-
-    void ChangeActiveProfile(const TString& name);
-
-    TAiProfile::TPtr InitNewProfile(const TString& name);
-
     TString GetActiveAiProfileName() const;
 
+    TAiProfile::TPtr GetAiProfile(const TString& name);
+
+    std::unordered_map<TString, TAiProfile::TPtr> ListAiProfiles();
+
+    TAiProfile::TPtr InitAiModelProfile();
+
+    TAiProfile::TPtr CreateNewAiModelProfile();
+
+    void RemoveAiModelProfile(const TString& name);
+
+    void ChangeDefaultMode(EMode mode);
+
+    void ChangeActiveAiProfile(const TString& name);
+
+private:
     void LoadProfile();
 
     void CanonizeStructure();

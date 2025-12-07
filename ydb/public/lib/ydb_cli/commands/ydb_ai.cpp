@@ -14,6 +14,7 @@
 
 FEATURES-TODO:
 
+- Config time validation and advanced suggestions
 - Streamable model response printing
 - Streamable results printing
 - Adjusting errors, progress and response printing

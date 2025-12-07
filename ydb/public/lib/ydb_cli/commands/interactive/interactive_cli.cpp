@@ -83,6 +83,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     const auto configurationManager = std::make_shared<TInteractiveConfigurationManager>(config.ProfileFile, Log);
     ui64 activeSession = static_cast<ui64>(configurationManager->GetDefaultMode());
+    Y_DEBUG_VERIFY(activeSession != static_cast<ui64>(TInteractiveConfigurationManager::EMode::Invalid));
 
     const std::vector sessions = {
         CreateSqlSessionRunner({
@@ -99,7 +100,10 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     Y_DEBUG_VERIFY(sessions.size() > activeSession);
 
     const auto lineReader = CreateLineReader(driver, config.Database, Log);
-    sessions[activeSession]->Setup(lineReader);
+    if (!sessions[activeSession]->Setup(lineReader)) {
+        Log.Error() << "Failed to perform initial setup in " << (activeSession ? "AI" : "SQL") << " mode";
+        Y_DEBUG_VERIFY(sessions[activeSession ^= 1]->Setup(lineReader));
+    }
 
     while (const auto inputOptional = lineReader->ReadLine()) {
         const auto& input = *inputOptional;

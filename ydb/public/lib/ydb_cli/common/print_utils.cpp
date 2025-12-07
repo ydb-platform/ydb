@@ -6,8 +6,7 @@
 #include <util/string/printf.h>
 #include <util/stream/format.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NColorizer::TColors colors) {
     switch (entry.Type) {
@@ -153,5 +152,13 @@ FHANDLE GetStdinFileno() {
 #endif
 }
 
+TString BlurSecret(const TString& in) {
+    TString out(in);
+    size_t clearSymbolsCount = Min(size_t(10), out.length() / 4);
+    for (size_t i = clearSymbolsCount; i < out.length() - clearSymbolsCount; ++i) {
+        out[i] = '*';
+    }
+    return out;
 }
-}
+
+} // namespace NYdb::NConsoleClient

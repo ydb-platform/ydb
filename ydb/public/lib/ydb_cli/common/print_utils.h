@@ -4,8 +4,7 @@
 #include <library/cpp/colorizer/colors.h>
 #include <util/system/file.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NColorizer::TColors colors);
 TString FormatTime(TInstant time);
@@ -15,6 +14,6 @@ TString PrettyNumber(ui64 number);
 TString EntryTypeToString(NScheme::ESchemeEntryType entry);
 int PrintProtoJsonBase64(const google::protobuf::Message& msg);
 FHANDLE GetStdinFileno();
+TString BlurSecret(const TString& in);
 
-}
-}
+} // namespace NYdb::NConsoleClient

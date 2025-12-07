@@ -1,6 +1,7 @@
 #include "ydb_profile.h"
 
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
 
 #include <util/folder/dirut.h>
 #include <util/stream/input.h>
@@ -48,15 +49,6 @@ TCommandProfile::TCommandProfile()
 }
 
 namespace {
-    std::string BlurSecret(const std::string& in) {
-        std::string out(in);
-        size_t clearSymbolsCount = Min(size_t(10), out.length() / 4);
-        for (size_t i = clearSymbolsCount; i < out.length() - clearSymbolsCount; ++i) {
-            out[i] = '*';
-        }
-        return out;
-    }
-
     std::string ReplaceWithAsterisks(const std::string& in) {
         return std::string(in.length(), '*');
     }
@@ -148,7 +140,7 @@ namespace {
         }
     }
 
-    std::string TryBlurValue(const TString& authMethod, const std::string& value) {
+    std::string TryBlurValue(const TString& authMethod, const TString& value) {
         if (!IsStdoutInteractive() || authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file" || authMethod == "oauth2-key-file") {
             return value;
         }
@@ -261,7 +253,7 @@ void TCommandConnectionInfo::PrintInfo(TConfig& config) {
             Cout << "user: " << config.StaticCredentials.User << Endl;
         }
         if (!config.StaticCredentials.Password.empty()) {
-            Cout << "password: " << TryBlurValue("password", config.StaticCredentials.Password) << Endl;
+            Cout << "password: " << TryBlurValue("password", TString(config.StaticCredentials.Password)) << Endl;
         }
     }
     if (config.CaCertsFile) {

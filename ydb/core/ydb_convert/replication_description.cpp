@@ -2,9 +2,15 @@
 
 #include "ydb_convert.h"
 
+#include <ydb/core/protos/replication.pb.h>
+
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+
 #include <google/protobuf/util/time_util.h>
 
 namespace NKikimr {
+
+namespace {
 
 TString BuildConnectionString(const NKikimrReplication::TConnectionParams& params) {
     return TStringBuilder()
@@ -115,7 +121,29 @@ void ConvertStats(
     // nop
 }
 
-bool CheckReplicationConfig(const NKikimrReplication::TReplicationConfig config,
+template<typename T>
+void ConvertState(const NKikimrReplication::TReplicationState& from, T& to) {
+    switch (from.GetStateCase()) {
+    case NKikimrReplication::TReplicationState::kStandBy:
+        to.mutable_running();
+        ConvertStats(from, to);
+        break;
+    case NKikimrReplication::TReplicationState::kError:
+        *to.mutable_error()->mutable_issues() = from.GetError().GetIssues();
+        break;
+    case NKikimrReplication::TReplicationState::kDone:
+        to.mutable_done();
+        break;
+    case NKikimrReplication::TReplicationState::kPaused:
+        to.mutable_paused();
+        break;
+    default:
+        break;
+    }
+}
+
+bool CheckReplicationConfig(
+    const NKikimrReplication::TReplicationConfig config,
     Ydb::StatusIds_StatusCode& status,
     TString& error) {
 
@@ -126,7 +154,7 @@ bool CheckReplicationConfig(const NKikimrReplication::TReplicationConfig config,
             error = "not implemented";
             break;
         case NKikimrReplication::TReplicationConfig::TargetCase::kTransferSpecific:
-            error = "Replication config was expected, Transfer config provided";
+            error = "Replication config was expected, Async Transfer config provided";
             break;
         default:
             error = "unexpected config type";
@@ -136,6 +164,31 @@ bool CheckReplicationConfig(const NKikimrReplication::TReplicationConfig config,
     status = Ydb::StatusIds::INTERNAL_ERROR;
     return false;
 }
+
+bool CheckTransferConfig(
+    const NKikimrReplication::TReplicationConfig config,
+    Ydb::StatusIds_StatusCode& status,
+    TString& error) {
+
+    switch (config.GetTargetCase()) {
+        case NKikimrReplication::TReplicationConfig::TargetCase::kTransferSpecific:
+            return true;
+        case NKikimrReplication::TReplicationConfig::TargetCase::kEverything:
+            error = "not implemented";
+            break;
+        case NKikimrReplication::TReplicationConfig::TargetCase::kSpecific:
+            error = "Transfer config was expected, Async Replication config provided";
+            break;
+        default:
+            error = "unexpected config type";
+            break;
+    }
+    
+    status = Ydb::StatusIds::INTERNAL_ERROR;
+    return false;
+}
+
+} // anonymous namespace
 
 bool FillReplicationDescription(
     Ydb::Replication::DescribeReplicationResult& out,
@@ -160,6 +213,64 @@ bool FillReplicationDescription(
     }
 
     return true;
+}
+
+bool FillTransferDescription(
+    Ydb::Replication::DescribeTransferResult& out,
+    const NKikimrSchemeOp::TReplicationDescription inDesc,
+    const NKikimrSchemeOp::TDirEntry& inDirEntry,
+    Ydb::StatusIds_StatusCode& status,
+    TString& error) {
+        
+    const auto& config = inDesc.GetConfig();
+    if (!CheckTransferConfig(config, status, error)) {
+        return false;
+    }
+
+    ConvertDirectoryEntry(inDirEntry, out.mutable_self(), true);
+    
+    ConvertConnectionParams(config.GetSrcConnectionParams(), *out.mutable_connection_params());
+    ConvertState(inDesc.GetState(), out);
+
+    const auto& transferSpecific = config.GetTransferSpecific();
+    out.set_source_path(transferSpecific.GetTarget().GetSrcPath());
+    out.set_destination_path(transferSpecific.GetTarget().GetDstPath());
+    out.set_consumer_name(transferSpecific.GetTarget().GetConsumerName());
+    out.set_transformation_lambda(transferSpecific.GetTarget().GetTransformLambda());
+    out.mutable_batch_settings()->set_size_bytes(transferSpecific.GetBatching().GetBatchSizeBytes());
+    out.mutable_batch_settings()->mutable_flush_interval()->set_seconds(transferSpecific.GetBatching().GetFlushIntervalMilliSeconds() / 1000);
+
+    return true;
+}
+
+void FillReplicationDescription(
+    Ydb::Replication::DescribeReplicationResult& out,
+    const NKikimrReplication::TEvDescribeReplicationResult& inDesc) {
+
+    ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
+    ConvertConsistencySettings(inDesc.GetConsistencySettings(), out);
+    ConvertState(inDesc.GetState(), out);
+
+    for (const auto& target : inDesc.GetTargets()) {
+        ConvertItem(target, *out.add_items());
+    }
+}
+
+void FillTransferDescription(
+    Ydb::Replication::DescribeTransferResult& out,
+    const NKikimrReplication::TEvDescribeReplicationResult& inDesc) {
+    
+    ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
+    ConvertState(inDesc.GetState(), out);
+
+    const auto& transferSpecific = inDesc.GetTransferSpecific();
+    out.set_source_path(transferSpecific.GetTarget().GetSrcPath());
+    out.set_destination_path(transferSpecific.GetTarget().GetDstPath());
+    out.set_consumer_name(transferSpecific.GetTarget().GetConsumerName());
+    out.set_transformation_lambda(transferSpecific.GetTarget().GetTransformLambda());
+    out.mutable_batch_settings()->set_size_bytes(transferSpecific.GetBatching().GetBatchSizeBytes());
+    out.mutable_batch_settings()->mutable_flush_interval()->set_seconds(transferSpecific.GetBatching().GetFlushIntervalMilliSeconds() / 1000);
+
 }
 
 } // namespace NKikimr

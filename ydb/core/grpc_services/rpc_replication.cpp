@@ -157,26 +157,11 @@ private:
     }
 
     static void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replication::DescribeReplicationResult& result) {
-        ConvertConnectionParams(record.GetConnectionParams(), *result.mutable_connection_params());
-        ConvertConsistencySettings(record.GetConsistencySettings(), result);
-        ConvertState(*record.MutableState(), result);
-
-        for (const auto& target : record.GetTargets()) {
-            ConvertItem(target, *result.add_items());
-        }
+        FillReplicationDescription(result, record);
     }
 
     static void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replication::DescribeTransferResult& result) {
-        ConvertConnectionParams(record.GetConnectionParams(), *result.mutable_connection_params());
-        ConvertState(*record.MutableState(), result);
-
-        const auto& transferSpecific = record.GetTransferSpecific();
-        result.set_source_path(transferSpecific.GetTarget().GetSrcPath());
-        result.set_destination_path(transferSpecific.GetTarget().GetDstPath());
-        result.set_consumer_name(transferSpecific.GetTarget().GetConsumerName());
-        result.set_transformation_lambda(transferSpecific.GetTarget().GetTransformLambda());
-        result.mutable_batch_settings()->set_size_bytes(transferSpecific.GetBatching().GetBatchSizeBytes());
-        result.mutable_batch_settings()->mutable_flush_interval()->set_seconds(transferSpecific.GetBatching().GetFlushIntervalMilliSeconds() / 1000);
+        FillTransferDescription(result, record);
     }
 
     static void BuildRequest(const Replication::DescribeReplicationRequest* from, NKikimrReplication::TEvDescribeReplication& to) {

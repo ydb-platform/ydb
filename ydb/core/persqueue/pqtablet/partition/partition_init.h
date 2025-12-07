@@ -21,6 +21,7 @@ class TPartition;
 struct TInitializionContext {
     std::optional<ui64> StartOffset;
     std::optional<ui64> EndOffset;
+    std::deque<TString> DeletedKeys;
 };
 
 
@@ -156,6 +157,14 @@ private:
     void FormHeadAndProceed();
 
     TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult> Ranges;
+};
+
+class TDeleteKeysStep: public TBaseKVStep {
+public:
+    TDeleteKeysStep(TInitializer* initializer);
+
+    void Execute(const TActorContext& ctx) override;
+    void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
 };
 
 class TInitDataStep: public TBaseKVStep {

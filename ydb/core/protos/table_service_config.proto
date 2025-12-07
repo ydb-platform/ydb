@@ -431,4 +431,8 @@ message TTableServiceConfig {
     optional bool EnableDataShardCreateTableAs = 102 [default = false];
 
     optional bool EnableDqHashCombineByDefault = 105 [default = false];
+
+    optional bool EnableBuildAggregationResultStages = 106 [default = false];
+
+    optional bool EnableWatermarks = 110 [default = false];
 };

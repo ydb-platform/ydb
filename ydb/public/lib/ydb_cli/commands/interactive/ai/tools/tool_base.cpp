@@ -28,7 +28,7 @@ TToolBase::TResponse TToolBase::Execute(const NJson::TJsonValue& parameters) {
 
     if (!AskPermissions()) {
         Log.Notice() << "Tool execution cancelled by user";
-        return TResponse(TStringBuilder() << "Tool execution cancelled by user");
+        return TResponse(TStringBuilder() << "Tool execution request was rejected by the user (execution is not permited)");
     }
 
     try {

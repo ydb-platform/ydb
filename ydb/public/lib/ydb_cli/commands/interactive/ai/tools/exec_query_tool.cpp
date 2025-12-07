@@ -6,6 +6,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
@@ -105,6 +106,12 @@ Tool will return:
 
     static constexpr char QUERY_PROPERTY[] = "query";
 
+    enum class EAction {
+        Approve,
+        Reject,
+        Edit,
+    };
+
 public:
     TExecQueryTool(const TExecQueryToolSettings& settings, const TInteractiveLogger& log)
         : TBase(CreateParametersSchema(), DESCRIPTION, log)
@@ -128,9 +135,29 @@ private:
             colors.assign(Query.size(), replxx::Replxx::Color::DEFAULT);
         }
 
-        Cout << Endl << Colors.BoldColor() << "Agent wants to execute query:\n" << Colors.OldColor() << Endl << PrintAnsiColors(Query, colors) << Endl;
+        Cout << Endl << Colors.BoldColor() << "Agent wants to execute query:\n" << Colors.OldColor() << Endl << PrintAnsiColors(Query, colors) << Endl << Endl;
 
-        return true;
+        EAction action = EAction::Reject;
+        TString prompt = "Approve query execution? Type \"y\" (yes), \"n\" (no) or \"e\" (edit): ";
+        AskInputWithPrompt(prompt, [&](const TString& input) {
+            const auto choice = to_lower(Strip(input));
+            if (!IsIn({"y", "yes", "n", "no", "e", "edit"}, choice)) {
+                prompt = "Please type \"y\" (yes), \"n\" (no) or \"e\" (edit): ";
+                return false;
+            }
+
+            if (choice == "y" || choice == "yes") {
+                action = EAction::Approve;
+            } else if (choice == "n" || choice == "no") {
+                action = EAction::Reject;
+            } else {
+                action = EAction::Edit;
+            }
+
+            return true;
+        }, Log.IsVerbose(), /* exitOnError */ false);
+
+        return action == EAction::Approve;
     }
 
     TResponse DoExecute() final {

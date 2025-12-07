@@ -93,6 +93,5 @@ RECURSE(
     sdk_core_access
     topic_workload
     transfer_workload
-    ydb_ai
     ydb_discovery
 )

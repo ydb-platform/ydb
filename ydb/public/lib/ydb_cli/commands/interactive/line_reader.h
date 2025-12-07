@@ -2,7 +2,6 @@
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/session/session_runner_interface.h>
-#include <ydb/public/lib/ydb_cli/common/command.h>
 
 #include <memory>
 #include <optional>

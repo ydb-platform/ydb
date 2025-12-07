@@ -95,6 +95,8 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
             .ProfileName = Profile,
             .YdbPath = YdbPath,
             .ConfigurationManager = configurationManager,
+            .Database = config.Database,
+            .Driver = driver,
         }, Log),
     };
     Y_DEBUG_VERIFY(sessions.size() > activeSession);

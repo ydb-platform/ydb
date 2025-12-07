@@ -3,27 +3,45 @@
 #include <ydb/core/base/validation.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_anthropic.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_openai.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/list_directory_tool.h>
 
 namespace NYdb::NConsoleClient::NAi {
+
+namespace {
+
+TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {
+    TStringBuilder builder;
+    for (ui64 i = 0; const auto& [name, tool] : tools) {
+        if (i++) {
+            builder << ", ";
+        }
+        builder << name;
+    }
+    return builder;
+}
+
+} // anonymous namespace
 
 /*
 
 FEATURES-TODO:
 
+- Formating of tool params
+- Approving before tool use + rewriting request
 - Config time validation and advanced suggestions
 - Streamable model response printing
 - Progress printing
-- Approving before tool use
 - Think about robust
 - Provide system prompt
 - Somehow render markdown
 
 */
 
-TModelHandler::TModelHandler(TInteractiveConfigurationManager::TAiProfile::TPtr profile, const TInteractiveLogger& log)
+TModelHandler::TModelHandler(const TSettings& settings, const TInteractiveLogger& log)
     : Log(log)
 {
-    SetupModel(profile);
+    SetupModel(settings.Profile);
+    SetupTools(settings);
 }
 
 void TModelHandler::HandleLine(const TString& input) {
@@ -53,6 +71,26 @@ void TModelHandler::HandleLine(const TString& input) {
 
         if (output.Text) {
             Cout << Endl << output.Text << Endl << Endl;
+        }
+
+        for (const auto& toolCall : output.ToolCalls) {
+            NAi::IModel::TToolResponse response = {.ToolCallId = toolCall.Id};
+
+            if (const auto it = Tools.find(toolCall.Name); it != Tools.end()) {
+                const auto& result = it->second->Execute(toolCall.Parameters);
+                if (!result.IsSuccess) {
+                    Log.Warning() << "Tool call failed: " << result.Text;
+                }
+                response.IsSuccess = result.IsSuccess;
+                response.Text = result.Text;
+            } else {
+                Log.Warning() << "Call to unknown tool: " << toolCall.Name;
+                response.IsSuccess = false;
+                response.Text = TStringBuilder() << "Call to unknown tool: " << toolCall.Name << ". Only allowed tools: " << PrintToolsNames(Tools);
+                messages.push_back(response);
+            }
+
+            messages.emplace_back(std::move(response));
         }
     }
 }
@@ -86,6 +124,18 @@ void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPt
             break;
         case TInteractiveConfigurationManager::TAiProfile::EApiType::Invalid:
             Y_DEBUG_VERIFY(false, "Invalid API type: %s", ToString(*apiType).c_str());
+    }
+}
+
+void TModelHandler::SetupTools(const TSettings& settings) {
+    Y_DEBUG_VERIFY(Model, "Model must be initialized before initializing tools");
+
+    Tools = {
+        {"list_directory", NAi::CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver}, Log)},
+    };
+
+    for (const auto& [name, tool] : Tools) {
+        Model->RegisterTool(name, tool->GetParametersSchema(), tool->GetDescription());
     }
 }
 

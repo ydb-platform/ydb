@@ -4,7 +4,6 @@
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/public/lib/ydb_cli//commands/interactive/common/interactive_log.h>
-#include <ydb/public/lib/ydb_cli/common/command.h>
 
 namespace NYdb::NConsoleClient::NAi {
 

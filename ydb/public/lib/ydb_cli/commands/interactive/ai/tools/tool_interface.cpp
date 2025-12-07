@@ -1,6 +1,6 @@
 #include "tool_interface.h"
 
-#include <ydb/public/lib/ydb_cli/commands/ydb_ai/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 
 namespace NYdb::NConsoleClient::NAi {
 

@@ -19,6 +19,8 @@ public:
         : TBase(CreateSessionSettings(settings), log)
         , ProfileName(settings.ProfileName)
         , ConfigurationManager(settings.ConfigurationManager)
+        , Database(settings.Database)
+        , Driver(settings.Driver)
     {
         Y_DEBUG_VERIFY(ConfigurationManager, "ConfigurationManager is not initialized");
         Settings.KeyHandlers = {{'G', [&]() { ChangeSessionSettings(); }}};
@@ -57,7 +59,7 @@ public:
 
         if (!ModelHandler) {
             try {
-                ModelHandler = TModelHandler(AiModel, Log);
+                ModelHandler = TModelHandler({.Profile = AiModel, .Database = Database, .Driver = Driver}, Log);
             } catch (const std::exception& e) {
                 ModelHandler = std::nullopt;
                 Cerr << Colors.Red() << "Failed to setup AI model session. "
@@ -149,9 +151,10 @@ private:
             const auto& profile = ConfigurationManager->GetActiveAiProfileName();
             const auto& profiles = ConfigurationManager->ListAiProfiles();
             if (const auto it = profiles.find(profile); profile && it != profiles.end()) {
-                picker.AddOption(TStringBuilder() << "Change current AI profile \"" << profile << "\" settings", [profile = it->second]() {
+                picker.AddOption(TStringBuilder() << "Change current AI profile \"" << profile << "\" settings", [profile = it->second, this]() {
                     Cout << Endl << "Changing current AI profile \"" << profile->GetName() << "\" settings." << Endl;
                     profile->SetupProfile();
+                    ChangeAiProfile(profile);
                 });
             }
 
@@ -159,7 +162,7 @@ private:
             for (const auto& [name, model] : profiles) {
                 if (name != profile) {
                     picker.AddOption(TStringBuilder() << "Switch AI profile to \"" << name << "\"", [model, this]() {
-                        SwitchAiProfile(model);
+                        ChangeAiProfile(model);
                     });
 
                     if (!otherProfile) {
@@ -171,7 +174,7 @@ private:
             picker.AddOption("Create new AI profile", [&]() {
                 Cout << Endl << "Creating new AI profile." << Endl;
                 if (const auto profile = ConfigurationManager->CreateNewAiModelProfile()) {
-                    SwitchAiProfile(profile);
+                    ChangeAiProfile(profile);
                 }
             });
 
@@ -179,7 +182,7 @@ private:
                 picker.AddOption(TStringBuilder() << "Remove current AI profile \"" << profile << "\"", [profile, otherProfile, this]() {
                     Cout << "Removing current AI profile \"" << profile << "\"" << Endl;
                     ConfigurationManager->RemoveAiModelProfile(profile);
-                    SwitchAiProfile(std::move(otherProfile));
+                    ChangeAiProfile(std::move(otherProfile));
                 });
             }
 
@@ -190,18 +193,16 @@ private:
         }
     }
 
-    void SwitchAiProfile(TInteractiveConfigurationManager::TAiProfile::TPtr profile) {
+    void ChangeAiProfile(TInteractiveConfigurationManager::TAiProfile::TPtr profile) {
         Y_DEBUG_VERIFY(profile, "Profile is not set");
         Y_DEBUG_VERIFY(AiModel && Controller, "AI session is not initialized");
 
         const auto& newProfileName = profile->GetName();
-        if (newProfileName == AiModel->GetName()) {
-            return;
-        }
-
         if (ModelHandler) {
-            Cout << Colors.Yellow() << "Active AI profile is changed to \"" << newProfileName << "\", session context will be reset" << Colors.OldColor();
-        } else {
+            Cout << Colors.Yellow() << "Active AI profile is changed"
+                << (newProfileName != AiModel->GetName() ? TStringBuilder() << " to \"" << newProfileName << "\"" : TStringBuilder())
+                << ", session context will be reset" << Colors.OldColor();
+        } else if (newProfileName != AiModel->GetName()) {
             Cout << "Switching AI profile to \"" << newProfileName << "\"";
         }
 
@@ -215,6 +216,8 @@ private:
 private:
     const TString ProfileName;
     const TInteractiveConfigurationManager::TPtr ConfigurationManager;
+    const TString Database;
+    const TDriver Driver;
 
     TInteractiveConfigurationManager::TAiProfile::TPtr AiModel;
     std::optional<TModelHandler> ModelHandler;

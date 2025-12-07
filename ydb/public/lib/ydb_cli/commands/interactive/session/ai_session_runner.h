@@ -11,6 +11,8 @@ struct TAiSessionSettings {
     TString ProfileName;
     TString YdbPath;
     TInteractiveConfigurationManager::TPtr ConfigurationManager;
+    TString Database;
+    TDriver Driver;
 };
 
 ISessionRunner::TPtr CreateAiSessionRunner(const TAiSessionSettings& settings, const TInteractiveLogger& log);

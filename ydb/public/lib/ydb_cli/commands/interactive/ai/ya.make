@@ -7,9 +7,13 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/public/lib/ydb_cli/commands/interactive/ai/models
+    ydb/public/lib/ydb_cli/commands/interactive/ai/tools
     ydb/public/lib/ydb_cli/commands/interactive/common
 )
 
 END()
 
-RECURSE(models)
+RECURSE(
+    models
+    tools
+)

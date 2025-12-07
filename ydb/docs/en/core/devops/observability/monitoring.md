@@ -51,7 +51,7 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
 1. Edit the Prometheus [configuration files](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus):
 
     1. In the `targets` section of [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml), specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of storage nodes running on the servers.
-       
+
         ```json
         - labels:
             container: ydb-static
@@ -60,8 +60,6 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
           - "ydb-s2.example.com:8765"
           - "ydb-s3.example.com:8765"
         ```
-
-        For a local single-node YDB cluster, specify one address in the targets section:
 
         ```json
         - labels:
@@ -72,6 +70,23 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
 
    1. In the `targets` section of [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml), specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of all database nodes running on the servers.
   
+        ```json
+        - labels:
+            container: ydb-dynamic
+          targets:
+          - "ydb-s1.example.com:31002"
+          - "ydb-s1.example.com:31012"
+          - "ydb-s1.example.com:31022"
+          - "ydb-s2.example.com:31002"
+          - "ydb-s2.example.com:31012"
+          - "ydb-s2.example.com:31022"
+          - "ydb-s3.example.com:31002"
+          - "ydb-s3.example.com:31012"
+          - "ydb-s3.example.com:31022"
+        ```
+
+   1. In the `targets` section of [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml), specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of all database nodes running on the servers.
+
         ```json
         - labels:
             container: ydb-dynamic

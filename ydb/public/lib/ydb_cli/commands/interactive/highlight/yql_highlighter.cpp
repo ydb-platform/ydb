@@ -3,7 +3,10 @@
 #include <yql/essentials/sql/v1/highlight/sql_highlight.h>
 #include <yql/essentials/sql/v1/highlight/sql_highlighter.h>
 
+#include <contrib/restricted/patched/replxx/src/util.hxx>
+
 #include <util/charset/utf8.h>
+#include <util/string/builder.h>
 #include <util/string/strip.h>
 
 #include <regex>
@@ -12,10 +15,21 @@ namespace NYdb::NConsoleClient {
     using NSQLHighlight::MakeHighlighter;
     using NSQLHighlight::MakeHighlighting;
 
-    class TYQLHighlighter: public IYQLHighlighter {
-    private:
-        static constexpr size_t InvalidPosition = Max<std::ptrdiff_t>();
+namespace {
 
+    static constexpr size_t InvalidPosition = Max<std::ptrdiff_t>();
+
+    TVector<std::ptrdiff_t> BuildSymbolByByteIndex(TStringBuf text) {
+        TVector<std::ptrdiff_t> index(text.size(), InvalidPosition);
+        for (size_t i = 0, j = 0; i < text.size(); i += UTF8RuneLen(text[i]), j += 1) {
+            index[i] = j;
+        }
+        return index;
+    }
+
+} // anonymous namespace
+
+    class TYQLHighlighter: public IYQLHighlighter {
     public:
         explicit TYQLHighlighter(TColorSchema color)
             : Coloring(color)
@@ -75,18 +89,29 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        static TVector<std::ptrdiff_t> BuildSymbolByByteIndex(TStringBuf text) {
-            TVector<std::ptrdiff_t> index(text.size(), InvalidPosition);
-            for (size_t i = 0, j = 0; i < text.size(); i += UTF8RuneLen(text[i]), j += 1) {
-                index[i] = j;
-            }
-            return index;
-        }
-
     private:
         TColorSchema Coloring;
         NSQLHighlight::IHighlighter::TPtr Highlighter;
     };
+
+    TString PrintAnsiColors(const TString& queryUtf8, const TColors& colors) {
+        TStringBuilder result;
+
+        replxx::Replxx::Color lastColor = replxx::Replxx::Color::DEFAULT;
+        result << replxx::ansi_color(lastColor);
+
+        const TVector<std::ptrdiff_t> symbolIndexByByte = BuildSymbolByByteIndex(queryUtf8);
+        for (size_t i = 0; i < queryUtf8.length(); ++i) {
+            if (symbolIndexByByte[i] != InvalidPosition && colors[symbolIndexByByte[i]] != lastColor) {
+                result << replxx::ansi_color(colors[i]);
+                lastColor = colors[i];
+            }
+            result << queryUtf8[i];
+        }
+
+        result << replxx::ansi_color(replxx::Replxx::Color::DEFAULT);
+        return result;
+    }
 
     IYQLHighlighter::TPtr MakeYQLHighlighter(TColorSchema color) {
         return IYQLHighlighter::TPtr(new TYQLHighlighter(std::move(color)));

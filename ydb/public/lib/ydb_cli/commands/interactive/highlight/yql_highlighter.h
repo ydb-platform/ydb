@@ -19,6 +19,8 @@ namespace NYdb::NConsoleClient {
         virtual ~IYQLHighlighter() = default;
     };
 
+    TString PrintAnsiColors(const TString& queryUtf8, const TColors& colors);
+
     IYQLHighlighter::TPtr MakeYQLHighlighter(TColorSchema color);
 
 } // namespace NYdb::NConsoleClient

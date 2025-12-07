@@ -4,6 +4,7 @@
 #include <ydb/core/base/validation.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
@@ -107,6 +108,7 @@ Tool will return:
 public:
     TExecQueryTool(const TExecQueryToolSettings& settings, const TInteractiveLogger& log)
         : TBase(CreateParametersSchema(), DESCRIPTION, log)
+        , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
         , ExecuteRunner(settings.Driver, Log)
     {}
 
@@ -117,7 +119,16 @@ private:
     }
 
     bool AskPermissions() final {
-        Cout << Endl << Colors.BoldColor() << "Agent wants to execute query:\n" << Colors.OldColor() << Endl << Query << Endl;
+        TColors colors;
+        try {
+            colors.resize(Query.size(), replxx::Replxx::Color::DEFAULT);
+            YQLHighlighter->Apply(Query, colors);
+        } catch (const std::exception& e) {
+            Log.Warning() << "Error highlighting query: " << e.what() << Endl;
+            colors.assign(Query.size(), replxx::Replxx::Color::DEFAULT);
+        }
+
+        Cout << Endl << Colors.BoldColor() << "Agent wants to execute query:\n" << Colors.OldColor() << Endl << PrintAnsiColors(Query, colors) << Endl;
 
         return true;
     }
@@ -149,6 +160,7 @@ private:
     }
 
 private:
+    const IYQLHighlighter::TPtr YQLHighlighter;
     TQueryRunner ExecuteRunner;
 
     TString Query;

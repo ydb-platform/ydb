@@ -1,0 +1,114 @@
+#include "helpers.h"
+
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/common/simple/services.h>
+
+namespace NKikimr::NKqp {
+    using TDescriptionPromise = NThreading::TPromise<TEvDescribeSecretsResponse::TDescription>;
+
+    void CreateSchemaSecret(const TString& secretName, const TString& secretValue, NYdb::NTable::TSession& session) {
+        auto createSecretQuery = "CREATE SECRET `" + secretName + "` WITH (value = \"" + secretValue + "\");";
+        auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
+        UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
+    }
+
+    void AlterSchemaSecret(const TString& secretName, const TString& secretValue, NYdb::NTable::TSession& session) {
+        auto createSecretQuery = "ALTER  SECRET `" + secretName + "` WITH (value = \"" + secretValue + "\");";
+        auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
+        UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
+    }
+
+    void DropSchemaSecret(const TString& secretName, NYdb::NTable::TSession& session) {
+        auto createSecretQuery = "DROP  SECRET `" + secretName + "`;";
+        auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
+        UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
+    }
+
+    TDescriptionPromise
+    ResolveSecrets(const TVector<TString>& secretNames, TKikimrRunner& kikimr, const TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
+        auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
+        const auto evResolveSecret = new TDescribeSchemaSecretsService::TEvResolveSecret(userToken, "/Root", secretNames, promise);
+        auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetActorSystem(0);
+        actorSystem->Send(MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId), evResolveSecret);
+        return promise;
+    }
+
+    TDescriptionPromise
+    ResolveSecret(const TString& secretName, TKikimrRunner& kikimr, const TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
+        return ResolveSecrets(TVector<TString>{secretName}, kikimr, userToken);
+    }
+
+    void AssertBadRequest(TDescriptionPromise promise, const TString& err, Ydb::StatusIds::StatusCode status) {
+        UNIT_ASSERT_VALUES_EQUAL(status, promise.GetFuture().GetValueSync().Status);
+        UNIT_ASSERT_VALUES_EQUAL(err, promise.GetFuture().GetValueSync().Issues.ToString());
+    }
+
+    TIntrusiveConstPtr<NACLib::TUserToken> GetUserToken(const TString& userSid, const TVector<TString>& groupSids) {
+        if (userSid.empty() && groupSids.empty()) {
+            return nullptr;
+        }
+        return new NACLib::TUserToken(userSid, groupSids);
+    }
+
+    void AssertSecretValues(const TVector<TString>& secretValues, TDescriptionPromise promise) {
+        UNIT_ASSERT_VALUES_EQUAL_C(secretValues.size(), promise.GetFuture().GetValueSync().SecretValues.size(), promise.GetFuture().GetValueSync().Issues.ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(secretValues, promise.GetFuture().GetValueSync().SecretValues);
+    }
+
+    void AssertSecretValue(const TString& secretValue, TDescriptionPromise promise) {
+        AssertSecretValues(TVector<TString>{secretValue}, promise);
+    }
+
+    TTestDescribeSchemaSecretsServiceFactory::TTestDescribeSchemaSecretsServiceFactory(
+        TDescribeSchemaSecretsService::ISecretUpdateListener* secretUpdateListener,
+        TDescribeSchemaSecretsService::ISchemeCacheResponseModifier* schemeCacheResponseModifier
+    )
+        : SecretUpdateListener(secretUpdateListener)
+        , SchemeCacheResponseModifier(schemeCacheResponseModifier)
+    {
+    }
+
+    NActors::IActor* TTestDescribeSchemaSecretsServiceFactory::CreateService() {
+        auto* service = new TDescribeSchemaSecretsService();
+        service->SetSecretUpdateListener(SecretUpdateListener);
+        service->SetSchemeCacheResponseModifier(SchemeCacheResponseModifier);
+        return service;
+    }
+
+    TTestSchemeCacheResponseModifier::TTestSchemeCacheResponseModifier(EFailProbablity failProbablitity)
+        : FailProbablitity(failProbablitity)
+    {
+    }
+
+    void TTestSchemeCacheResponseModifier::Modify(NSchemeCache::TSchemeCacheNavigate& result) {
+        for (auto& entry: result.ResultSet) {
+            switch (FailProbablitity) {
+                case EFailProbablity::FailProbabilityNever:
+                    return;
+                case EFailProbablity::FailProbabilityQuoter: {
+                    if (rand() % 4 == 0) {
+                        entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
+                    }
+                    break;
+                }
+                case EFailProbablity::FailProbabilityHalf: {
+                    if (rand() % 2 == 0) {
+                        entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
+                    }
+                    break;
+                }
+                case EFailProbablity::FailProbabilityAlways:
+                    entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
+                    break;
+                default:
+                    Y_ENSURE(false, "Unexpected value");
+            }
+        }
+    }
+
+    void TTestSchemeCacheResponseModifier::SetFailProbablitity(EFailProbablity failProbablitity) {
+        FailProbablitity = failProbablitity;    
+    }
+
+} // NKikimr::NKqp

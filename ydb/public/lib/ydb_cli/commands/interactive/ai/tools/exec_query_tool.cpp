@@ -1,9 +1,11 @@
 #include "exec_query_tool.h"
+#include "tool_base.h"
 
 #include <ydb/core/base/validation.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <util/string/strip.h>
@@ -12,9 +14,66 @@ namespace NYdb::NConsoleClient::NAi {
 
 namespace {
 
-class TExecQueryTool final : public ITool {
+class TQueryRunner final : public TExecuteGenericQuery {
+    using TBase = TExecuteGenericQuery;
+
+public:
+    TQueryRunner(const TDriver& driver, const TInteractiveLogger& log)
+        : TBase(driver)
+        , Log(log)
+    {}
+
+    NJson::TJsonValue ExtractResults() {
+        NJson::TJsonValue result;
+        std::swap(result, ResultSets);
+        InittedResultSets.clear();
+        return result;
+    }
+
+protected:
+    void OnResultPart(ui64 resultSetIndex, const TResultSet& resultSet) final {
+        auto& result = ResultSets[resultSetIndex];
+
+        if (InittedResultSets.emplace(resultSetIndex).second) {
+            const auto& columnMeta = resultSet.GetColumnsMeta();
+            auto& columns = result["columns"].SetType(NJson::JSON_ARRAY).GetArraySafe();
+            for (const auto& column : columnMeta) {
+                auto& item = columns.emplace_back();
+                item["name"] = column.Name;
+                item["type"] = column.Type.ToString();
+            }
+        }
+
+        auto& rows = result["rows"].SetType(NJson::JSON_ARRAY).GetArraySafe();
+        TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            try {
+                TJsonParser row;
+                Y_DEBUG_VERIFY(row.Parse(FormatResultRowJson(parser, resultSet.GetColumnsMeta(), EBinaryStringEncoding::Unicode)), "Internal error. Invalid serialized JSON row value.");
+                rows.emplace_back(row.GetValue());
+            } catch (const std::exception& e) {
+                Log.Warning() << "Error parsing result #" << resultSetIndex << " row #" << rows.size() << ": " << e.what() << Endl;
+                rows.emplace_back(TStringBuilder() << "Row conversion to JSON format failed: " << e.what() << ". Try to simplify result column types");
+            }
+        }
+    }
+
+private:
+    const TInteractiveLogger Log;
+    NJson::TJsonValue ResultSets;
+    std::unordered_set<ui64> InittedResultSets;
+};
+
+class TExecQueryTool final : public TToolBase {
+    using TBase = TToolBase;
+
     static constexpr char DESCRIPTION[] = R"(
-Execute query in Yandex Data Base (YDB) on YQL (SQL dialect). Returns list of result sets for query, each contains list of rows and column metadata.
+Execute query in Yandex Data Base (YDB) on YQL (SQL dialect). Use cases:
+- Execute data query to fetch or modify data in database tables
+- Execute DDL query to create new scheme entities e. g. tablas, topics e. t. c.
+- Get scheme entity info by running `SHOW CREATE ...`
+
+Returns list of result sets for query, each contains list of rows and column metadata.
 For example if there exists table 'my_table' with string column 'Data' and we execute query:
 ```
 $filtered = SELECT * FROM my_table WHERE Data IS NOT NULL;
@@ -46,79 +105,59 @@ Tool will return:
     static constexpr char QUERY_PROPERTY[] = "query";
 
 public:
-    explicit TExecQueryTool(TClientCommand::TConfig& config)
-        :  ParametersSchema(TJsonSchemaBuilder()
+    TExecQueryTool(const TExecQueryToolSettings& settings, const TInteractiveLogger& log)
+        : TBase(CreateParametersSchema(), DESCRIPTION, log)
+        , ExecuteRunner(settings.Driver, Log)
+    {}
+
+private:
+    void ParseParameters(const NJson::TJsonValue& parameters) final {
+        TJsonParser parser(parameters);
+        Query = Strip(parser.GetKey(QUERY_PROPERTY).GetString());
+    }
+
+    bool AskPermissions() final {
+        Cout << Endl << Colors.BoldColor() << "Agent wants to execute query:\n" << Colors.OldColor() << Endl << Query << Endl;
+
+        return true;
+    }
+
+    TResponse DoExecute() final {
+        Cout << Endl;
+
+        try {
+            if (ExecuteRunner.Execute(Query, {}) != EXIT_SUCCESS) {
+                Log.Notice() << "Query execution was interrupted by user";
+                return TResponse(TStringBuilder() << "Query execution was interrupted by user");
+            }
+        } catch (const std::exception& e) {
+            Cout << Colors.Red() << "Query execution failed:\n" << Colors.OldColor() << e.what() << Endl;
+            return TResponse(TStringBuilder() << "Query execution failed with error:\n" << e.what());
+        }
+
+        return TResponse(ExecuteRunner.ExtractResults());
+    }
+
+    static NJson::TJsonValue CreateParametersSchema() {
+        return TJsonSchemaBuilder()
             .Type(TJsonSchemaBuilder::EType::Object)
             .Property(QUERY_PROPERTY)
                 .Type(TJsonSchemaBuilder::EType::String)
                 .Description("Query to execute on YQL (SQL dialect), for example 'SELECT * FROM my_table'")
                 .Done()
-            .Build()
-        )
-        , Description(DESCRIPTION)
-        , Client(TDriver(config.CreateDriverConfig()))
-    {}
-
-    const NJson::TJsonValue& GetParametersSchema() const final {
-        return ParametersSchema;
-    }
-
-    const TString& GetDescription() const final {
-        return Description;
-    }
-
-    TResponse Execute(const NJson::TJsonValue& parameters) final try {
-        const TString& query = ParseParameters(parameters);
-        const auto response = Client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        if (!response.IsSuccess()) {
-            return TResponse(TStringBuilder() << "Query execution failed with status " << response.GetStatus() << ", reason:\n" << response.GetIssues().ToString());
-        }
-
-        NJson::TJsonValue result;
-        auto& resultArray = result.SetType(NJson::JSON_ARRAY).GetArraySafe();
-        for (const auto& resultSet : response.GetResultSets()) {
-            auto& item = resultArray.emplace_back();
-
-            const auto& columnMeta = resultSet.GetColumnsMeta();
-            auto& columns = item["columns"].SetType(NJson::JSON_ARRAY).GetArraySafe();
-            for (const auto& column : columnMeta) {
-                auto& item = columns.emplace_back();
-                item["name"] = column.Name;
-                item["type"] = column.Type.ToString();
-            }
-
-            auto& rows = item["rows"].SetType(NJson::JSON_ARRAY).GetArraySafe();
-            TResultSetParser parser(resultSet);
-            while (parser.TryNextRow()) {
-                TJsonParser row;
-                Y_DEBUG_VERIFY(row.Parse(FormatResultRowJson(parser, resultSet.GetColumnsMeta(), EBinaryStringEncoding::Unicode)), "Internal error. Invalid serialized JSON row value.");
-                rows.emplace_back(row.GetValue());
-            }
-
-            TResultSetPrinter(EDataFormat::Pretty).Print(resultSet);
-        }
-
-        return TResponse(std::move(result));
-    } catch (const std::exception& e) {
-        return TResponse(TStringBuilder() << "Query execution failed. " << e.what());
+            .Build();
     }
 
 private:
-    TString ParseParameters(const NJson::TJsonValue& parameters) const {
-        TJsonParser parser(parameters);
-        return Strip(parser.GetKey(QUERY_PROPERTY).GetString());
-    }
+    TQueryRunner ExecuteRunner;
 
-private:
-    const NJson::TJsonValue ParametersSchema;
-    const TString Description;
-    NQuery::TQueryClient Client;
+    TString Query;
 };
 
 } // anonymous namespace
 
-ITool::TPtr CreateExecQueryTool(TClientCommand::TConfig& config) {
-    return std::make_shared<TExecQueryTool>(config);
+ITool::TPtr CreateExecQueryTool(const TExecQueryToolSettings& settings, const TInteractiveLogger& log) {
+    return std::make_shared<TExecQueryTool>(settings, log);
 }
 
 } // namespace NYdb::NConsoleClient::NAi

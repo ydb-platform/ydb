@@ -24,7 +24,7 @@ private:
     NQuery::TQueryClient Client;
 };
 
-class TExecuteGenericQuery final : public TInterruptableCommand {
+class TExecuteGenericQuery : public TInterruptableCommand {
 public:
     explicit TExecuteGenericQuery(const TDriver& driver);
 
@@ -40,10 +40,13 @@ public:
 
     int Execute(const TString& query, const TSettings& execSettings);
 
+protected:
+    virtual void OnResultPart(ui64 resultSetIndex, const TResultSet& resultSet);
+
 private:
     NQuery::TAsyncExecuteQueryIterator StartQuery(const TString& query, const TSettings& execSettings);
 
-    static int PrintResponse(NQuery::TExecuteQueryIterator& result, const TString& query, const TSettings& execSettings);
+    int PrintResponse(NQuery::TExecuteQueryIterator& result, const TString& query, const TSettings& execSettings);
 
 private:
     const TDriver Driver;

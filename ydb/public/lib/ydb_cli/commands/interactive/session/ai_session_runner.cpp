@@ -33,7 +33,7 @@ public:
             try {
                 Controller->Setup(Settings);
             } catch (...) {
-                Log.Critical() << "Failed to reset line reader controller: " << CurrentExceptionMessage() << Endl;
+                Log.Critical() << "Failed to reset line reader controller: " << CurrentExceptionMessage();
             }
         }
     }

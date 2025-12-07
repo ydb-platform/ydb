@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    # exec_query_tool.cpp
+    exec_query_tool.cpp
     list_directory_tool.cpp
     tool_base.cpp
     tool_interface.cpp

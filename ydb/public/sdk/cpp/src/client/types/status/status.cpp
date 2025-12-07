@@ -119,6 +119,6 @@ void ThrowOnErrorOrPrintIssues(TStatus status) {
     });
 }
 
-}
+} // namespace NStatusHelpers
 
 } // namespace NYdb

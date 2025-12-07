@@ -55,7 +55,7 @@ TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& me
     Y_DEBUG_VERIFY(!messages.empty(), "Internal error. Messages should not be empty for advance conversation");
 
     AdvanceConversation(messages);
-    Log.Debug() << "Request to model API body:\n" << FormatJsonValue(ChatCompletionRequest) << Endl;
+    Log.Debug() << "Request to model API body:\n" << FormatJsonValue(ChatCompletionRequest);
 
     NJsonWriter::TBuf requestJsonWriter;
     requestJsonWriter.WriteJsonValue(&ChatCompletionRequest);

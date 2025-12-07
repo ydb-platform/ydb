@@ -3,7 +3,10 @@
 #include <ydb/core/base/validation.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_anthropic.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_openai.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/exec_query_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/list_directory_tool.h>
+
+#include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
@@ -70,7 +73,7 @@ void TModelHandler::HandleLine(const TString& input) {
         }
 
         if (output.Text) {
-            Cout << Endl << output.Text << Endl << Endl;
+            Cout << Endl << StripStringRight(output.Text) << Endl;
         }
 
         for (const auto& toolCall : output.ToolCalls) {
@@ -93,6 +96,8 @@ void TModelHandler::HandleLine(const TString& input) {
             messages.emplace_back(std::move(response));
         }
     }
+
+    Cout << Endl;
 }
 
 void TModelHandler::ClearContext() {
@@ -132,6 +137,7 @@ void TModelHandler::SetupTools(const TSettings& settings) {
 
     Tools = {
         {"list_directory", NAi::CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver}, Log)},
+        {"exec_query", NAi::CreateExecQueryTool({.Driver = settings.Driver}, Log)},
     };
 
     for (const auto& [name, tool] : Tools) {

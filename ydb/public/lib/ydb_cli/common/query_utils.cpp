@@ -74,6 +74,10 @@ int TExecuteGenericQuery::Execute(const TString& query, const TSettings& execSet
     return PrintResponse(result, query, execSettings);
 }
 
+void TExecuteGenericQuery::OnResultPart(ui64 resultSetIndex, const TResultSet& resultSet) {
+    Y_UNUSED(resultSetIndex, resultSet);
+}
+
 NQuery::TAsyncExecuteQueryIterator TExecuteGenericQuery::StartQuery(const TString& query, const TSettings& execSettings) {
     if (execSettings.Parameters) {
         return Client.StreamExecuteQuery(
@@ -135,6 +139,7 @@ int TExecuteGenericQuery::PrintResponse(NQuery::TExecuteQueryIterator& result, c
                 }
 
                 progressIndication.Finish();
+                OnResultPart(streamPart.GetResultSetIndex(), streamPart.GetResultSet());
                 printer.Print(streamPart.GetResultSet());
             }
         }

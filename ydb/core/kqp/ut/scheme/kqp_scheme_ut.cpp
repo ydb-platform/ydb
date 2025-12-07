@@ -14668,7 +14668,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(
             result.GetIssues().ToString(),
-            "Field `CACHE_MODE` is not supported for OLAP tables in column family 'family1'",
+            "Column FAMILY is not supported for column tables",
             result.GetIssues().ToString());
     }
 }

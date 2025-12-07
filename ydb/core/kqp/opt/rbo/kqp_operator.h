@@ -15,7 +15,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Aggregate, Limit, UnionAll, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Aggregate, Limit, UnionAll, CBOTree, Root };
 
 /* Represents aggregation phases. */
 enum EAggregationPhase : ui32 {Intermediate, Final};
@@ -387,6 +387,7 @@ class IUnaryOperator : public IOperator {
     IUnaryOperator(EOperator kind, TPositionHandle pos) : IOperator(kind, pos) {}
     IUnaryOperator(EOperator kind, TPositionHandle pos, std::shared_ptr<IOperator> input) : IOperator(kind, pos) { Children.push_back(input); }
     std::shared_ptr<IOperator> &GetInput() { return Children[0]; }
+    void SetInput(std::shared_ptr<IOperator> newInput) { Children[0] = newInput; }
 
     virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
     virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
@@ -402,6 +403,9 @@ class IBinaryOperator : public IOperator {
 
     std::shared_ptr<IOperator> &GetLeftInput() { return Children[0]; }
     std::shared_ptr<IOperator> &GetRightInput() { return Children[1]; }
+
+    void SetLeftInput(std::shared_ptr<IOperator> newInput) { Children[0] = newInput; }
+    void SetRightInput(std::shared_ptr<IOperator> newInput) { Children[1] = newInput; }
 };
 
 class TOpEmptySource : public IOperator {
@@ -446,6 +450,7 @@ class TOpMap : public IUnaryOperator {
     bool HasRenames() const;
     bool HasLambdas() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenamesWithTransforms(TPlanProps& props) const;
     TVector<std::pair<TInfoUnit, TExprNode::TPtr>> GetLambdas() const;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
 
@@ -553,6 +558,27 @@ class TOpLimit : public IUnaryOperator {
     TExprNode::TPtr LimitCond;
 };
 
+/***
+ * This operator packages a subtree of operators in order to pass them to dynamic programming optimizer
+ * Currently it requires that the list of operators TreeNodes is in a post-order traversal of the tree
+ * No validation is currently used
+ */
+class TOpCBOTree : public IOperator {
+  public:
+    TOpCBOTree(std::shared_ptr<IOperator> treeRoot, TPositionHandle pos);
+    TOpCBOTree(std::shared_ptr<IOperator> treeRoot, TVector<std::shared_ptr<IOperator>> treeNodes, TPositionHandle pos);
+    
+    virtual TVector<TInfoUnit> GetOutputIUs() override { return TreeRoot->GetOutputIUs(); }
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
+    virtual TString ToString(TExprContext& ctx) override;
+
+    virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
+    virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
+
+    std::shared_ptr<IOperator> TreeRoot;
+    TVector<std::shared_ptr<IOperator>> TreeNodes;
+};
+
 class TOpRoot : public IUnaryOperator {
   public:
     TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<TString> columnOrder);
@@ -596,7 +622,7 @@ class TOpRoot : public IUnaryOperator {
             for (auto scalarSubplan : Root->PlanProps.ScalarSubplans.Get()) {
                 BuildDfsList(scalarSubplan, {}, size_t(0), visited);
             }
-            auto child = ptr->Children[0];
+            auto child = ptr->GetInput();
             BuildDfsList(child, {}, size_t(0), visited);
             CurrElement = 0;
         }

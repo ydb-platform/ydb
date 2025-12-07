@@ -229,6 +229,8 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        // FIXME: Temporarily disabled cost-based optimizer, it break on this query
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
@@ -1229,6 +1231,66 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([["0";"0"];["0";"1"];["1";"0"];["1";"1"];["2";"0"];["2";"1"]])");
+    }
+
+    Y_UNIT_TEST(FiveJoinsCBO) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schema = R"(
+            CREATE TABLE `/Root/foo_0` (
+                id Int64 NOT NULL,
+                join_id Int64,
+                primary key(id)
+            );
+            CREATE TABLE `/Root/foo_1` (
+                id Int64 NOT NULL,
+                join_id Int64,
+                primary key(id)
+           );
+            CREATE TABLE `/Root/foo_2` (
+                id Int64 NOT NULL,
+                join_id Int64,
+                primary key(id)
+            );
+            CREATE TABLE `/Root/foo_3` (
+                id Int64 NOT NULL,
+                join_id Int64,
+                primary key(id)
+            );
+            CREATE TABLE `/Root/foo_4` (
+                id Int64 NOT NULL,
+                join_id Int64,
+                primary key(id)
+            );
+            CREATE TABLE `/Root/foo_5` (
+                id Int64 NOT NULL,
+                join_id Int64,
+                primary key(id)
+            );
+        )";
+
+        session.ExecuteSchemeQuery(schema).GetValueSync();
+
+        auto query = R"(
+            --!syntax_pg
+            SET TablePathPrefix = "/Root/";
+            SELECT foo_0.id as "id2"
+            FROM foo_0, foo_1, foo_2, foo_3, foo_4, foo_5
+            WHERE foo_0.join_id = foo_1.id AND foo_0.join_id = foo_2.id AND foo_0.join_id = foo_3.id AND foo_0.join_id = foo_4.id AND foo_0.join_id = foo_5.id;
+        )";
+
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
     void Replace(std::string& s, const std::string& from, const std::string& to) {

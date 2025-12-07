@@ -34,7 +34,7 @@ public:
 
         TString GetApiEndpoint() const;
 
-        TString GetToken() const;
+        TString GetApiToken() const;
 
         TString GetModelName() const;
 

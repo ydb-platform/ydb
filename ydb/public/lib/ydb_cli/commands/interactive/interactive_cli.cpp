@@ -118,9 +118,13 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
             continue;
         }
 
-        const auto& line = std::get<ILineReader::TLine>(input).Data;
+        const auto& line = Strip(std::get<ILineReader::TLine>(input).Data);
         if (line.empty()) {
             continue;
+        }
+
+        if (const auto input = to_lower(line); input == "quit" || input == "exit") {
+            return EXIT_SUCCESS;
         }
 
         try {

@@ -136,7 +136,7 @@ namespace {
         TString userPassword = InputPassword();
         if (userName) {
             Cout << "Setting user & password for profile \"" << profileName << "\"" << Endl;
-            PutAuthStatic( profile, userName, userPassword, false );
+            PutAuthStatic(profile, userName, userPassword, false);
         }
     }
 

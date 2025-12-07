@@ -19,6 +19,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    ai
     complete
     highlight
     session

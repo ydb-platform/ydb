@@ -1,7 +1,8 @@
 #include "model_base.h"
 
 #include <ydb/core/base/validation.h>
-#include <ydb/public/lib/ydb_cli/commands/ydb_ai/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json.h>
@@ -14,11 +15,11 @@ namespace NYdb::NConsoleClient::NAi {
 
 namespace {
 
-NYql::THttpHeader CreateApiHeaders(const std::optional<TString>& authToken) {
+NYql::THttpHeader CreateApiHeaders(const TString& authToken) {
     TSmallVec<TString> headers = {"Content-Type: application/json"};
 
     if (authToken) {
-        headers.emplace_back(TStringBuilder() << "Authorization: Bearer " << *authToken);
+        headers.emplace_back(TStringBuilder() << "Authorization: Bearer " << authToken);
     }
 
     return {.Fields = std::move(headers)};
@@ -40,28 +41,21 @@ struct THttpResponse {
 
 } // anonymous namespace
 
-TModelBase::TModelBase(const TString& apiUrl, const std::optional<TString>& authToken, const TClientCommand::TConfig& config)
-    : Verbosity(config.VerbosityLevel)
+TModelBase::TModelBase(const TString& apiUrl, const TString& authToken, const TInteractiveLogger& log)
+    : Log(log)
     , ApiUrl(apiUrl)
     , ApiHeaders(CreateApiHeaders(authToken))
     , HttpGateway(NYql::IHTTPGateway::Make())
 {
     Y_DEBUG_VERIFY(apiUrl, "Internal error. Url should not be empty for model API");
-
-    if (Verbosity >= VERB_INFO) {
-        Cerr << "Using model API url: " << apiUrl << " with "
-            << (authToken ? TStringBuilder() << "auth token " << TString(authToken->size(), '*') : TStringBuilder() << "anonymous access") << Endl;
-    }
+    Log.Notice() << "Using model API url: \"" << apiUrl << "\" with " << (authToken ? TStringBuilder() << "auth token " << BlurSecret(authToken) : TStringBuilder() << "anonymous access");
 }
 
 TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& messages) {
     Y_DEBUG_VERIFY(!messages.empty(), "Internal error. Messages should not be empty for advance conversation");
 
     AdvanceConversation(messages);
-
-    if (Verbosity >= VERB_TRACE) {
-        Cerr << "Request to model API:\n" << FormatJsonValue(ChatCompletionRequest) << Endl;
-    }
+    Log.Debug() << "Request to model API body:\n" << FormatJsonValue(ChatCompletionRequest) << Endl;
 
     NJsonWriter::TBuf requestJsonWriter;
     requestJsonWriter.WriteJsonValue(&ChatCompletionRequest);
@@ -86,14 +80,8 @@ TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& me
     HttpGateway->Upload(ApiUrl, ApiHeaders, std::move(request), std::move(httpCallback));
     const auto response = responsePromise.GetFuture().ExtractValueSync();
 
-    if (Verbosity >= VERB_TRACE) {
-        Cerr << "Model API response http code: " << response.HttpCode;
-        if (response.Content) {
-            Cerr << ". Response data:\n" << FormatJsonValue(response.Content);
-        }
-        Cerr << Endl;
-    }
-
+    Log.Info() << "Model API response http code: " << response.HttpCode;
+    Log.Debug() << "Model API response:" << Endl << FormatJsonValue(response.Content);
     if (!response.IsSuccess()) {
         throw yexception() << HandleErrorResponse(response.HttpCode, response.Content);
     }
@@ -118,28 +106,6 @@ TString TModelBase::HandleErrorResponse(ui64 httpCode, const TString& response) 
         error << ". Response:\n" << FormatJsonValue(response);
     }
     return error;
-}
-
-TString TModelBase::CreateApiUrl(const TString& baseUrl, const TString& uri) {
-    Y_DEBUG_VERIFY(uri, "Internal error. Uri should not be empty for model API");
-
-    TStringBuf sanitizedUrl;
-    TStringBuf query;
-    TStringBuf fragment;
-    SeparateUrlFromQueryAndFragment(baseUrl, sanitizedUrl, query, fragment);
-
-    if (query || fragment) {
-        auto error = yexception() << "Invalid model API base url: '" << baseUrl << "'";
-        if (query) {
-            error << ". Query part should be empty, but got: '" << query << "'";
-        }
-        if (fragment) {
-            error << ". Fragment part should be empty, but got: '" << fragment << "'";
-        }
-        throw error;
-    }
-
-    return TStringBuilder() << RemoveFinalSlash(sanitizedUrl) << uri;
 }
 
 } // namespace NYdb::NConsoleClient::NAi

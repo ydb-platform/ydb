@@ -10,6 +10,7 @@ PEERDIR(
     library/cpp/colorizer
     library/cpp/yaml/as
     ydb/core/base
+    ydb/public/lib/ydb_cli/commands/interactive/ai
     ydb/public/lib/ydb_cli/commands/interactive/common
     ydb/public/lib/ydb_cli/common
     ydb/public/sdk/cpp/src/client/table/query_stats

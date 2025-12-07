@@ -2,7 +2,8 @@
 #include "model_base.h"
 
 #include <ydb/core/base/validation.h>
-#include <ydb/public/lib/ydb_cli/commands/ydb_ai/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/api_utils.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -19,13 +20,13 @@ class TModelOpenAi final : public TModelBase {
     static constexpr ui64 MAX_COMPLETION_TOKENS = 1024;
 
 public:
-    TModelOpenAi(const TOpenAiModelSettings& settings, const TClientCommand::TConfig& config)
-        : TBlase(CreateApiUrl(settings.BaseUrl, "/v1/chat/completions"), settings.ApiKey, config)
+    TModelOpenAi(const TOpenAiModelSettings& settings, const TInteractiveLogger& log)
+        : TBlase(CreateApiUrl(settings.BaseUrl, "/v1/chat/completions"), settings.ApiKey, log)
         , Tools(ChatCompletionRequest["tools"].SetType(NJson::JSON_ARRAY).GetArraySafe())
         , Conversation(ChatCompletionRequest["messages"].SetType(NJson::JSON_ARRAY).GetArraySafe())
     {
         if (settings.ModelId) {
-            ChatCompletionRequest["model"] = *settings.ModelId;
+            ChatCompletionRequest["model"] = settings.ModelId;
         }
 
         ChatCompletionRequest["max_completion_tokens"] = MAX_COMPLETION_TOKENS;
@@ -41,6 +42,10 @@ public:
         toolInfo["name"] = name;
         toolInfo["parameters"] = parametersSchema;
         toolInfo["description"] = description;
+    }
+
+    void ClearContext() final {
+        Conversation.clear();
     }
 
 protected:
@@ -150,8 +155,8 @@ private:
 
 } // anonymous namespace
 
-IModel::TPtr CreateOpenAiModel(const TOpenAiModelSettings& settings, const TClientCommand::TConfig& config) {
-    return std::make_shared<TModelOpenAi>(settings, config);
+IModel::TPtr CreateOpenAiModel(const TOpenAiModelSettings& settings, const TInteractiveLogger& log) {
+    return std::make_shared<TModelOpenAi>(settings, log);
 }
 
 } // namespace NYdb::NConsoleClient::NAi

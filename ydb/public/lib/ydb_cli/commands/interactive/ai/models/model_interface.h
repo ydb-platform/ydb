@@ -40,6 +40,8 @@ public:
     virtual TResponse HandleMessages(const std::vector<TMessage>& messages) = 0;
 
     virtual void RegisterTool(const TString& name, const NJson::TJsonValue& parametersSchema, const TString& description) = 0;
+
+    virtual void ClearContext() = 0;
 };
 
 } // namespace NYdb::NConsoleClient::NAi

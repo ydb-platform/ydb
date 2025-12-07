@@ -2,7 +2,8 @@
 #include "model_base.h"
 
 #include <ydb/core/base/validation.h>
-#include <ydb/public/lib/ydb_cli/commands/ydb_ai/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/api_utils.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -19,12 +20,15 @@ class TModelAnthropic final : public TModelBase {
     static constexpr ui64 MAX_COMPLETION_TOKENS = 1024;
 
 public:
-    TModelAnthropic(const TAnthropicModelSettings& settings, const TClientCommand::TConfig& config)
-        : TBlase(CreateApiUrl(settings.BaseUrl, "/v1/messages"), settings.ApiKey, config)
+    TModelAnthropic(const TAnthropicModelSettings& settings, const TInteractiveLogger& log)
+        : TBlase(CreateApiUrl(settings.BaseUrl, "/v1/messages"), settings.ApiKey, log)
         , Tools(ChatCompletionRequest["tools"].SetType(NJson::JSON_ARRAY).GetArraySafe())
         , Conversation(ChatCompletionRequest["messages"].SetType(NJson::JSON_ARRAY).GetArraySafe())
     {
-        ChatCompletionRequest["model"] = settings.ModelId;
+        if (settings.ModelId) {
+            ChatCompletionRequest["model"] = settings.ModelId;
+        }
+
         ChatCompletionRequest["max_tokens"] = MAX_COMPLETION_TOKENS;
     }
 
@@ -35,6 +39,10 @@ public:
         tool["name"] = name;
         tool["input_schema"] = parametersSchema;
         tool["description"] = description;
+    }
+
+    void ClearContext() final {
+        Conversation.clear();
     }
 
 protected:
@@ -126,8 +134,8 @@ private:
 
 } // anonymous namespace
 
-IModel::TPtr CreateAnthropicModel(const TAnthropicModelSettings& settings, const TClientCommand::TConfig& config) {
-    return std::make_shared<TModelAnthropic>(settings, config);
+IModel::TPtr CreateAnthropicModel(const TAnthropicModelSettings& settings, const TInteractiveLogger& log) {
+    return std::make_shared<TModelAnthropic>(settings, log);
 }
 
 } // namespace NYdb::NConsoleClient::NAi

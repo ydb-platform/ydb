@@ -72,7 +72,7 @@ TString TInteractiveConfigurationManager::TAiProfile::GetApiEndpoint() const {
     return "";
 }
 
-TString TInteractiveConfigurationManager::TAiProfile::GetToken() const {
+TString TInteractiveConfigurationManager::TAiProfile::GetApiToken() const {
     TString token;
     if (auto apiToken = Config["api_token"]) {
         token = apiToken.as<TString>("");
@@ -256,18 +256,13 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiToken() {
     Cout << "Pick desired action to configure API token in AI profile \"" << Name << "\":" << Endl;
 
     TNumericOptionsPicker picker(Log.IsVerbose());
-    picker.AddOption("Set a new token value", [&]() {
-        try {
-            Cout << "Please enter token: ";
-            token = InputPassword();
-        } catch (const std::exception& e) {
-            Log.Error() << "Failed to read token: " << e.what();
-        }
+    picker.AddInputOption("Set a new token value", "Please enter token: ", [&](const TString& input) {
+        token = input;
     });
 
     picker.AddOption(TStringBuilder() << "Don't save token for AI profile \"" << Name << "\"", []() {});
 
-    const auto currentToken = GetToken();
+    const auto currentToken = GetApiToken();
     if (currentToken) {
         picker.AddOption(TStringBuilder() << "Use current token value \"" << BlurSecret(currentToken) << "\"", [&]() {
             token = currentToken;

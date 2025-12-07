@@ -21,26 +21,20 @@ TInteractiveConfigurationManager::TInteractiveConfigurationManager(const TString
     : Log(log)
     , ConfigurationPath(configurationPath)
 {
-    try {
-        LoadProfile();
-    } catch (...) {
-        Log.Critical() << "Couldn't load configuration from file \"" << ConfigurationPath << "\": " << CurrentExceptionMessage() << Endl;
-    }
+    LoadProfile();
+    CanonizeStructure();
 }
 
 TInteractiveConfigurationManager::~TInteractiveConfigurationManager() {
-    try {
-        if (ConfigChanged) {
-            SaveConfig();
-        }
-    } catch (...) {
-        Log.Critical() << "Couldn't save configuration to file \"" << ConfigurationPath << "\": " << CurrentExceptionMessage() << Endl;
+    if (ConfigChanged) {
+        SaveConfig();
     }
 }
 
 TInteractiveConfigurationManager::EMode TInteractiveConfigurationManager::GetDefaultMode() const {
     if (Config["interactive_settings"] && Config["interactive_settings"]["default_mode"]) {
-        return static_cast<EMode>(Config["interactive_settings"]["default_mode"].as<ui64>());
+        const auto defaultMode = Config["interactive_settings"]["default_mode"].as<ui64>(static_cast<ui64>(EMode::YQL));
+        return static_cast<EMode>(std::min(defaultMode, static_cast<ui64>(EMode::AI)));
     }
     return EMode::YQL;
 }
@@ -49,9 +43,12 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
     std::unordered_map<TString, TAiProfile::TPtr> existingAiProfiles;
     if (auto interactiveSettings = Config["interactive_settings"]; interactiveSettings && interactiveSettings["ai_profiles"]) {
         for (const auto& profile : interactiveSettings["ai_profiles"]) {
-            const auto& name = profile.first.as<TString>();
+            const auto& name = profile.first.as<TString>("");
+            if (!name) {
+                Log.Warning() << "AI profile has no name";
+            }
             if (!existingAiProfiles.emplace(name, std::make_shared<TAiProfile>(name, profile.second, shared_from_this())).second) {
-                Log.Warning() << "AI profile \"" << name << "\" already exists" << Endl;
+                Log.Warning() << "AI profile \"" << name << "\" already exists";
             }
         }
     }
@@ -59,11 +56,11 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
     auto activeAiProfile = GetActiveAiProfileName();
     if (!activeAiProfile && existingAiProfiles.size() == 1) {
         activeAiProfile = existingAiProfiles.begin()->first;
-        ChangeActiveProfile(*activeAiProfile);
+        ChangeActiveProfile(activeAiProfile);
     }
 
     if (activeAiProfile) {
-        if (auto it = existingAiProfiles.find(*activeAiProfile); it != existingAiProfiles.end()) {
+        if (auto it = existingAiProfiles.find(activeAiProfile); it != existingAiProfiles.end()) {
             return it->second;
         }
     }
@@ -79,13 +76,17 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
             });
         }
 
-        std::optional<TString> newProfile;
-        picker.AddInputOption(
+        TString newProfile;
+        TString prompt = "Please enter name for a new profile: ";
+        picker.AddInputOptionWithValidation(
             "Create a new profile",
-            "Please enter name for a new profile: ",
-            [&newProfile](const TString& input) {
+            prompt,
+            [&](const TString& input) {
                 newProfile = input;
-            }
+                prompt = "Please enter non empty name for a new profile: ";
+                return !newProfile.empty();
+            },
+            /* exitOnError */ false
         );
 
         picker.AddOption("Return to YQL mode", []() {});
@@ -97,7 +98,7 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
         }
 
         if (newProfile) {
-            return InitNewProfile(*newProfile);
+            return InitNewProfile(newProfile);
         }
 
         return nullptr;
@@ -107,15 +108,18 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
     Cout << "You have no existing AI profiles yet, configure new profile or return to YQL mode by using " << Colors.BoldColor() << "Ctrl+C" << Colors.OldColor() << Endl;
 
     TString profileName;
-    if (!AskAnyInputWithPrompt("Please enter name for a new AI profile: ", [&profileName](const TString& input) {
+    TString prompt = "Please enter name for a new AI profile: ";
+    if (!AskInputWithPrompt(prompt, [&](const TString& input) {
         profileName = input;
+        prompt = "Please enter non empty name for a new AI profile: ";
+        return !profileName.empty();
     }, Log.IsVerbose(), /* exitOnError */ false)) {
         return nullptr;
     }
 
     auto result = InitNewProfile(profileName);
 
-    if (AskYesOrNo("Activate AI interactive mode by default? y/n: ")) {
+    if (AskYesOrNo("Activate AI interactive mode by default? y/n: ", /* defaultAnswer */ false)) {
         ChangeDefaultMode(EMode::AI);
         Cout << "AI interactive mode is set by default, you can change it by using " << Colors.BoldColor() << "Ctrl+G" << Colors.OldColor() << " hotkey in AI interactive mode." << Endl;
     }
@@ -125,19 +129,23 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
 
 void TInteractiveConfigurationManager::ChangeDefaultMode(EMode mode) {
     Config["interactive_settings"]["default_mode"] = static_cast<ui64>(mode);
+    Log.Info() << "Default interactive mode was changed to " << mode;
 }
 
 void TInteractiveConfigurationManager::ChangeActiveProfile(const TString& name) {
     Config["interactive_settings"]["active_ai_profile"] = name;
     ConfigChanged = true;
+    Log.Info() << "Active AI profile was changed to \"" << name << "\"";
 }
 
 TInteractiveConfigurationManager::TAiProfile::TPtr  TInteractiveConfigurationManager::InitNewProfile(const TString& name) {
+    Y_DEBUG_VERIFY(name, "Profiles with empty names are not allowed");
+
     Cout << "Configuring new AI profile \"" << name << "\"." << Endl << Endl;
     Cout << "Configuration process for AI profile \"" << name << "\" is complete." << Endl;
 
-    if (const auto activeProfile = GetActiveAiProfileName(); activeProfile && *activeProfile != name) {
-        if (AskYesOrNo(TStringBuilder() << Endl << "Activate AI profile \"" << name << "\" to use by default? (current active AI profile is \"" << *activeProfile << "\") y/n: ")) {
+    if (const auto activeProfile = GetActiveAiProfileName(); activeProfile && activeProfile != name) {
+        if (AskYesOrNo(TStringBuilder() << Endl << "Activate AI profile \"" << name << "\" to use by default? (current active AI profile is \"" << activeProfile << "\") y/n: ")) {
             ChangeActiveProfile(name);
             Cout << "AI profile \"" << name << "\" was set as active." << Endl;
         }
@@ -147,41 +155,75 @@ TInteractiveConfigurationManager::TAiProfile::TPtr  TInteractiveConfigurationMan
 
     Config["interactive_settings"]["ai_profiles"][name] = YAML::Node();
     ConfigChanged = true;
+    Log.Notice() << "AI profile \"" << name << "\" was created";
+
     return std::make_shared<TAiProfile>(name, Config["interactive_settings"]["ai_profiles"][name], shared_from_this());
 }
 
-std::optional<TString> TInteractiveConfigurationManager::GetActiveAiProfileName() const {
+TString TInteractiveConfigurationManager::GetActiveAiProfileName() const {
     if (auto interactiveSettings = Config["interactive_settings"]; interactiveSettings && interactiveSettings["active_ai_profile"]) {
-        return interactiveSettings["active_ai_profile"].as<TString>();
+        if (auto activeProfile = interactiveSettings["active_ai_profile"].as<TString>("")) {
+            return activeProfile;
+        }
+
+        Log.Warning() << "Current active profile has empty name";
     }
-    return std::nullopt;
+
+    return "";
 }
 
 void TInteractiveConfigurationManager::LoadProfile() {
-    TFsPath configFilePath(ConfigurationPath);
-    configFilePath.Fix();
+    try {
+        TFsPath configFilePath(ConfigurationPath);
+        configFilePath.Fix();
 
-    if (configFilePath.Exists()) {
-        Config = YAML::LoadFile(configFilePath.GetPath());
+        if (configFilePath.Exists()) {
+            Config = YAML::LoadFile(configFilePath.GetPath());
+        }
+    } catch (...) {
+        Log.Critical() << "Couldn't load configuration from file \"" << ConfigurationPath << "\": " << CurrentExceptionMessage();
+    }
+}
+
+void TInteractiveConfigurationManager::CanonizeStructure() {
+    ConfigChanged = true;
+
+    auto interactiveSettings = Config["interactive_settings"];
+    if (!interactiveSettings) {
+        return;
+    }
+
+    if (interactiveSettings.Type() != YAML::NodeType::Map) {
+        Log.Error() << "$.interactive_settings section has unexpected type " << static_cast<ui64>(interactiveSettings.Type()) << ", changed to map and cleared";
+        interactiveSettings = YAML::Node();
+    }
+
+    if (auto aiProfiles = interactiveSettings["ai_profiles"]; aiProfiles && aiProfiles.Type() != YAML::NodeType::Map) {
+        Log.Error() << "$.interactive_settings.ai_profiles section has unexpected type " << static_cast<ui64>(interactiveSettings.Type()) << ", changed to map and cleared";
+        aiProfiles = YAML::Node();
     }
 }
 
 void TInteractiveConfigurationManager::SaveConfig() {
-    TFsPath configFilePath(ConfigurationPath);
-    configFilePath.Fix();
+    try {
+        TFsPath configFilePath(ConfigurationPath);
+        configFilePath.Fix();
 
-    if (const auto& parent = configFilePath.Parent(); !parent.Exists()) {
-        parent.MkDirs();
-    }
-
-    if (TFileStat(configFilePath).Mode & (S_IRGRP | S_IROTH)) {
-        if (Chmod(configFilePath.GetPath().c_str(), S_IRUSR | S_IWUSR)) {
-            throw yexception() << "Couldn't change permissions for the file \"" << configFilePath.GetPath() << "\"";
+        if (const auto& parent = configFilePath.Parent(); !parent.Exists()) {
+            parent.MkDirs();
         }
-    }
 
-    TFileOutput resultConfigFile(TFile(configFilePath, CreateAlways | WrOnly | AWUser | ARUser));
-    resultConfigFile << YAML::Dump(Config);
+        if (TFileStat(configFilePath).Mode & (S_IRGRP | S_IROTH)) {
+            if (Chmod(configFilePath.GetPath().c_str(), S_IRUSR | S_IWUSR)) {
+                throw yexception() << "Couldn't change permissions for the file \"" << configFilePath.GetPath() << "\"";
+            }
+        }
+
+        TFileOutput resultConfigFile(TFile(configFilePath, CreateAlways | WrOnly | AWUser | ARUser));
+        resultConfigFile << YAML::Dump(Config);
+    } catch (...) {
+        Log.Critical() << "Couldn't save configuration to file \"" << ConfigurationPath << "\": " << CurrentExceptionMessage();
+    }
 }
 
 } // namespace NYdb::NConsoleClient

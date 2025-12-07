@@ -11,4 +11,6 @@ PEERDIR(
     ydb/public/lib/ydb_cli/common
 )
 
+GENERATE_ENUM_SERIALIZATION(interactive_config.h)
+
 END()

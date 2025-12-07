@@ -22,12 +22,15 @@ class TNumericOptionsPicker {
 public:
     using TPickableAction = std::function<void()>;
     using TInputAction = std::function<void(const TString&)>;
+    using TValidationAction = std::function<bool(const TString&)>;
 
     explicit TNumericOptionsPicker(bool verbose);
 
     void AddOption(const TString& description, TPickableAction&& action);
 
-    void AddInputOption(const TString& description, const TString& prompt, TInputAction&& action);
+    void AddInputOption(const TString& description, const TString& prompt, TInputAction&& action, bool exitOnError = true);
+
+    void AddInputOptionWithValidation(const TString& description, const TString& prompt, TValidationAction&& action, bool exitOnError = true);
 
     bool PickOptionAndDoAction(bool exitOnError = true) const;
 

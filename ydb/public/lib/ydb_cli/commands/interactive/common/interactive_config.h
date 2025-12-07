@@ -49,9 +49,11 @@ private:
 
     TAiProfile::TPtr InitNewProfile(const TString& name);
 
-    std::optional<TString> GetActiveAiProfileName() const;
+    TString GetActiveAiProfileName() const;
 
     void LoadProfile();
+
+    void CanonizeStructure();
 
     void SaveConfig();
 

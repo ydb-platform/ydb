@@ -85,7 +85,7 @@ bool AskYesOrNo(const TString& query, std::optional<bool> defaultAnswer) {
         }
 
         return true;
-    }, /* verbose */ false, /* exitOnError */ false);
+    }, /* verbose */ false, /* exitOnError */ defaultAnswer.has_value());
 
     return result;
 }
@@ -163,9 +163,15 @@ void TNumericOptionsPicker::AddOption(const TString& description, TPickableActio
     Options.emplace(OptionsCount, std::move(action));
 }
 
-void TNumericOptionsPicker::AddInputOption(const TString& description, const TString& prompt, TInputAction&& action) {
-    AddOption(description, [this, prompt, a = std::move(action)]() {
-        AskAnyInputWithPrompt(prompt, a, Verbose);
+void TNumericOptionsPicker::AddInputOption(const TString& description, const TString& prompt, TInputAction&& action, bool exitOnError) {
+    AddOption(description, [this, prompt, a = std::move(action), exitOnError]() {
+        AskAnyInputWithPrompt(prompt, a, Verbose, exitOnError);
+    });
+}
+
+void TNumericOptionsPicker::AddInputOptionWithValidation(const TString& description, const TString& prompt, TValidationAction&& action, bool exitOnError) {
+    AddOption(description, [this, prompt, a = std::move(action), exitOnError]() {
+        AskInputWithPrompt(prompt, a, Verbose, exitOnError);
     });
 }
 

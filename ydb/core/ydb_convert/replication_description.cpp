@@ -2,6 +2,7 @@
 #include "ydb_convert.h"
 
 #include <ydb/core/protos/replication.pb.h>
+
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 
 #include <google/protobuf/util/time_util.h>
@@ -140,10 +141,11 @@ void ConvertState(const NKikimrReplication::TReplicationState& from, T& to) {
     }
 }
 
-bool CheckReplicationConfig(const NKikimrReplication::TReplicationConfig config,
+bool CheckReplicationConfig(
+    const NKikimrReplication::TReplicationConfig config,
     Ydb::StatusIds_StatusCode& status,
-    TString& error) {
-
+    TString& error)
+{
     switch (config.GetTargetCase()) {
         case NKikimrReplication::TReplicationConfig::TargetCase::kSpecific:
             return true;
@@ -151,7 +153,7 @@ bool CheckReplicationConfig(const NKikimrReplication::TReplicationConfig config,
             error = "not implemented";
             break;
         case NKikimrReplication::TReplicationConfig::TargetCase::kTransferSpecific:
-            error = "Replication config was expected, Transfer config provided";
+            error = "Replication config was expected, Async Transfer config provided";
             break;
         default:
             error = "unexpected config type";

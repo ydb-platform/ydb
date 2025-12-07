@@ -1,12 +1,21 @@
 #pragma once
 
-#include <ydb/core/protos/replication.pb.h>
+#include <util/generic/fwd.h>
 
 namespace Ydb {
     namespace Replication {
         class DescribeReplicationResult;
         class DescribeTransferResult;
     }
+    enum StatusIds_StatusCode : int;
+}
+
+namespace Ydb {
+    namespace Replication {
+        class DescribeReplicationResult;
+        class DescribeTransferResult;
+    }
+    class StatusIds;
     enum StatusIds_StatusCode : int;
 }
 

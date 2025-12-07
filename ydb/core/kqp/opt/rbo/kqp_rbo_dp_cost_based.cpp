@@ -39,11 +39,15 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
     for (auto child : cboTree->Children) {
 
         TVector<TString> childAliases;
+        auto childIUs = child->GetOutputIUs();
+
         for (auto col : allJoinColumns) {
-            if (auto it = lineageMap.find(col.GetFullName()); it != lineageMap.end()) {
-                auto alias = it->second.GetCannonicalAlias();
-                if (std::find(childAliases.begin(), childAliases.end(), alias) == childAliases.end()) {
-                    childAliases.push_back(alias);
+            if (std::find(childIUs.begin(), childIUs.end(), col) != childIUs.end()) {
+                if (auto it = lineageMap.find(col.GetFullName()); it != lineageMap.end()) {
+                    auto alias = it->second.GetCannonicalAlias();
+                    if (std::find(childAliases.begin(), childAliases.end(), alias) == childAliases.end()) {
+                        childAliases.push_back(alias);
+                    }
                 }
             }
         }
@@ -58,7 +62,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
         }
 
         auto stats = BuildOptimizerStatistics(child->Props, true, mappedKeyColumns);
-        auto relNode = std::make_shared<TRBORelOptimizerNode>(childAliases, *stats, child);
+        auto relNode = std::make_shared<TRBORelOptimizerNode>(childAliases, stats, child);
         rels.push_back(relNode);
         nodeMap.insert({child.get(), relNode});
     }
@@ -92,6 +96,71 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
     }
 
     return result;
+}
+std::shared_ptr<IOperator> ConvertOptimizedTreeRec(std::shared_ptr<IBaseOptimizerNode> tree,
+        THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & mapping,
+        TPositionHandle pos) {
+
+    if (tree->Kind == RelNodeType) {
+        auto rel = std::static_pointer_cast<TRBORelOptimizerNode>(tree);
+        return rel->Op;
+    } else {
+        auto join = std::static_pointer_cast<TJoinOptimizerNode>(tree);
+        auto leftArg = ConvertOptimizedTreeRec(join->LeftArg, mapping, pos);
+        auto rightArg = ConvertOptimizedTreeRec(join->RightArg, mapping, pos);
+
+        Y_ENSURE(join->LeftJoinKeys.size() == join->RightJoinKeys.size());
+
+        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        for (size_t i=0; i<join->LeftJoinKeys.size(); i++) {
+            auto leftKey = TInfoUnit(join->LeftJoinKeys[i].RelName, join->LeftJoinKeys[i].AttributeName);
+            auto rightKey = TInfoUnit(join->RightJoinKeys[i].RelName, join->RightJoinKeys[i].AttributeName);
+            if (mapping.contains(leftKey)) {
+                leftKey = mapping.at(leftKey);
+            }
+            if (mapping.contains(rightKey)) {
+                rightKey = mapping.at(rightKey);
+            }
+            joinKeys.push_back(std::make_pair(leftKey, rightKey));
+        }
+
+        auto joinKind = ConvertToJoinString(join->JoinType);
+
+        auto res = std::make_shared<TOpJoin>(leftArg, rightArg, pos, joinKind, joinKeys);
+        res->Props.JoinAlgo = join->JoinAlgo;
+        return res;
+    }
+}
+
+std::shared_ptr<IOperator> ConvertOptimizedTree(std::shared_ptr<TJoinOptimizerNode> tree, std::shared_ptr<TOpCBOTree> & cboTree) {
+    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> reverseJoinCondMap;
+    auto lineageMap = cboTree->TreeRoot->Props.Metadata->ColumnLineage;
+
+    auto createReverseMapping = [&lineageMap, &reverseJoinCondMap](TInfoUnit column) {
+        auto fullName = column.GetFullName();
+        if (lineageMap.contains(fullName)) {
+            auto lineage = lineageMap.at(fullName);
+            auto alias = lineage.GetCannonicalAlias();
+            auto columnName = lineage.ColumnName;
+            TInfoUnit target(alias, columnName);
+
+            if (reverseJoinCondMap.contains(target)) {
+                Y_ENSURE(reverseJoinCondMap.at(target) == column);
+            }
+
+            reverseJoinCondMap.insert({target, column});
+        }
+    };
+
+    for (auto op : cboTree->TreeNodes) {
+        auto joinOp = CastOperator<TOpJoin>(op);
+        for (auto & [left, right] : joinOp->JoinKeys) {
+            createReverseMapping(left);
+            createReverseMapping(right);
+        }
+    }
+
+    return ConvertOptimizedTreeRec(tree, reverseJoinCondMap, cboTree->Pos);
 }
 
 }
@@ -177,8 +246,7 @@ std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleTestAndApply(const std::s
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
-    //return ConvertOptimizedTree(joinTree, cboTree);
-    return cboTree;
+    return ConvertOptimizedTree(joinTree, cboTree);
 }
 
 }

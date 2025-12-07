@@ -56,8 +56,8 @@ public:
     TString ToString(ui32 printOptions);
 };
 
-std::shared_ptr<TOptimizerStatistics> BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts);
-std::shared_ptr<TOptimizerStatistics> BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, TVector<TInfoUnit> keyColumns);
+TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts);
+TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, TVector<TInfoUnit> keyColumns);
 
 }
 }

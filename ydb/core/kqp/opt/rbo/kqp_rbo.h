@@ -59,6 +59,8 @@ class ISimplifiedRule : public IRule {
  */
 class IRBOStage {
   public:
+    IRBOStage(TString stageName) : StageName(stageName) {}
+    
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) = 0;
     virtual ~IRBOStage() = default;
     ui32 Props = 0x00;
@@ -74,7 +76,6 @@ class TRuleBasedStage : public IRBOStage {
     TRuleBasedStage(TString stageName, TVector<std::shared_ptr<IRule>> rules);
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
 
-    TString StageName;
     TVector<std::shared_ptr<IRule>> Rules;
 };
 

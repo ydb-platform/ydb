@@ -124,6 +124,9 @@ using namespace NYql;
 using namespace NNodes;
 
 TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx) {
+    if (expr->IsLambda()) {
+        expr = expr->Child(1);
+    }
     try {
         TConvertToAstSettings settings;
         settings.AllowFreeArgs = true;
@@ -818,10 +821,20 @@ void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
     }
 }
 
+const THashMap<EJoinAlgoType,TString> AlgoNames = {
+    {EJoinAlgoType::LookupJoin, "Lookup"},
+    {EJoinAlgoType::LookupJoinReverse, "ReverseLookup"},
+    {EJoinAlgoType::MapJoin, "Map"},
+    {EJoinAlgoType::GraceJoin, "Shuffle"}};
+
 TString TOpJoin::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     TStringBuilder res;
-    res << "Join [";
+    res << "Join, Kind: " << JoinKind;
+    if (Props.JoinAlgo.has_value()) {
+        res << ", Algo: " << AlgoNames.at(*Props.JoinAlgo);
+    }
+    res << " [";
     for (size_t i = 0; i < JoinKeys.size(); i++) {
         auto [x,y] = JoinKeys[i];
         res << x.GetFullName() + "=" + y.GetFullName();

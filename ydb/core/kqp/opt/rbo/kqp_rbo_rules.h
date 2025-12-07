@@ -70,7 +70,7 @@ class TPushFilterRule : public ISimplifiedRule {
  */
 class TBuildInitialCBOTreeRule : public ISimplifiedRule {
   public:
-    TBuildInitialCBOTreeRule() : ISimplifiedRule("Building initial CBO tree", ERuleProperties::RequireParents, true) {}
+    TBuildInitialCBOTreeRule() : ISimplifiedRule("Building initial CBO tree", ERuleProperties::RequireParents) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -80,7 +80,7 @@ class TBuildInitialCBOTreeRule : public ISimplifiedRule {
  */
 class TExpandCBOTreeRule : public ISimplifiedRule {
   public:
-    TExpandCBOTreeRule() : ISimplifiedRule("Expand CBO tree", ERuleProperties::RequireParents, true) {}
+    TExpandCBOTreeRule() : ISimplifiedRule("Expand CBO tree", ERuleProperties::RequireParents) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -90,7 +90,7 @@ class TExpandCBOTreeRule : public ISimplifiedRule {
  */
 class TOptimizeCBOTreeRule : public ISimplifiedRule {
   public:
-    TOptimizeCBOTreeRule() : ISimplifiedRule("Optimize CBO tree", ERuleProperties::RequireParents) {}
+    TOptimizeCBOTreeRule() : ISimplifiedRule("Optimize CBO tree", ERuleProperties::RequireParents | ERuleProperties::RequireStatistics) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -118,7 +118,7 @@ class TAssignStagesRule : public IRule {
 extern TRuleBasedStage RuleStage1;
 extern TRuleBasedStage RuleStage2;
 extern TRuleBasedStage RuleStage3;
-//extern TRuleBasedStage RuleStage4;
+extern TRuleBasedStage RuleStage4;
 extern TRuleBasedStage RuleStage5;
 extern TRuleBasedStage RuleStage6;
 

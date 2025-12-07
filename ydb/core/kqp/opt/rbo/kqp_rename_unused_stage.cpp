@@ -106,8 +106,7 @@ struct TIntTUnitPairHash {
  * Global stage that removed unnecessary renames and unused columns
  */
 
-TRenameStage::TRenameStage() {
-    StageName = "Remove redundant maps";
+TRenameStage::TRenameStage() : IRBOStage("Remove redundant maps") {
     Props = ERuleProperties::RequireParents;
 }
 

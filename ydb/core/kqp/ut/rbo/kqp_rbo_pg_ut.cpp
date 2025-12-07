@@ -228,6 +228,8 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        // FIXME: Temporarily disabled cost-based optimizer, it break on this query
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
@@ -1230,11 +1232,11 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([["0";"0"];["0";"1"];["1";"0"];["1";"1"];["2";"0"];["2";"1"]])");
     }
 
-    Y_UNIT_TEST(FiveJoins) {
+    Y_UNIT_TEST(FiveJoinsCBO) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
-
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

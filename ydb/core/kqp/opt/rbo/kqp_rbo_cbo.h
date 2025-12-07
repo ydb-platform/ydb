@@ -47,13 +47,10 @@ struct TRBOProviderContext : public TKqpProviderContext {
         NYql::EJoinAlgoType joinAlgo,  
         NYql::EJoinKind joinKind
     ) override {
-        Y_UNUSED(left);
-        Y_UNUSED(right);
-        Y_UNUSED(leftJoinKeys);
-        Y_UNUSED(rightJoinKeys);
-        Y_UNUSED(joinAlgo);
-        Y_UNUSED(joinKind);
-        return false;
+        if (joinAlgo == EJoinAlgoType::LookupJoin || joinAlgo == EJoinAlgoType::LookupJoinReverse) {
+            return false;
+        }
+        return TKqpProviderContext::IsJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind);
     }
 };
 }

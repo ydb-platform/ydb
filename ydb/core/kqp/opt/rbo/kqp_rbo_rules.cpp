@@ -927,7 +927,7 @@ TRuleBasedStage RuleStage3 = TRuleBasedStage("Prepare for CBO",
         std::make_shared<TExpandCBOTreeRule>()
     });
 
-//TRuleBasedStage RuleStage4 = TRuleBasedStage("Invoke CBO", {std::make_shared<TOptimizeCBOTreeRule>()});
+TRuleBasedStage RuleStage4 = TRuleBasedStage("Invoke CBO", {std::make_shared<TOptimizeCBOTreeRule>()});
 
 TRuleBasedStage RuleStage5 = TRuleBasedStage("Clean up after CBO", 
     {std::make_shared<TInlineCBOTreeRule>(),

@@ -74,8 +74,7 @@ namespace {
 namespace NKikimr {
 namespace NKqp {
 
-TConstantFoldingStage::TConstantFoldingStage() {
-    StageName = "Constant folding stage";
+TConstantFoldingStage::TConstantFoldingStage() : IRBOStage("Constant folding stage") {
     Props = ERuleProperties::RequireParents |  ERuleProperties::RequireTypes;
 }
 

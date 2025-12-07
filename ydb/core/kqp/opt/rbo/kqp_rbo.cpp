@@ -18,7 +18,7 @@ bool ISimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContex
 }
 
 TRuleBasedStage::TRuleBasedStage(TString stageName, TVector<std::shared_ptr<IRule>> rules) : 
-    StageName(stageName),
+    IRBOStage(stageName),
     Rules(rules) {
     for (auto & r : Rules) {
         Props |= r->Props;
@@ -29,7 +29,7 @@ void ComputeRequiredProps(TOpRoot &root, ui32 props, TRBOContext &ctx) {
     if (props & ERuleProperties::RequireParents) {
         root.ComputeParents();
     }
-    if (props & ERuleProperties::RequireTypes) {
+    if (props & (ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics)) {
         if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
             Y_ENSURE(false, "RBO type annotation failed");
         }

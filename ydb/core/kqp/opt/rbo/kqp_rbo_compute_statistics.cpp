@@ -195,7 +195,7 @@ void TOpFilter::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
     Props.Statistics = GetInput()->Props.Statistics;
     Props.Cost = GetInput()->Props.Cost;
 
-    auto inputStats = BuildOptimizerStatistics(GetInput()->Props, true);
+    auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetInput()->Props, true));
     auto lambda = TCoLambda(FilterLambda);
     double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
 
@@ -336,8 +336,8 @@ void TOpJoin::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
 
     Props.Metadata = TRBOMetadata();
     
-    auto leftStats = BuildOptimizerStatistics(GetLeftInput()->Props, false);
-    auto rightStats = BuildOptimizerStatistics(GetRightInput()->Props, false);
+    auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetLeftInput()->Props, false));
+    auto rightStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetRightInput()->Props, false));
 
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
@@ -352,7 +352,7 @@ void TOpJoin::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
     TVector<TString> unionOfAliases;
     ComputeAlisesForJoin(GetLeftInput(), GetRightInput(), leftAliases, rightAliases, unionOfAliases);
     
-    EJoinAlgoType joinAlgo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : EJoinAlgoType::MapJoin;
+    EJoinAlgoType joinAlgo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : EJoinAlgoType::Undefined;
 
     auto hints = ctx.KqpCtx.GetOptimizerHints();
     auto CBOStats = ctx.CBOCtx.ComputeJoinStatsV2(*leftStats, 
@@ -390,8 +390,8 @@ void TOpJoin::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
 
     Props.Statistics = TRBOStatistics();
     
-    auto leftStats = BuildOptimizerStatistics(GetLeftInput()->Props, true);
-    auto rightStats = BuildOptimizerStatistics(GetRightInput()->Props, true);
+    auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetLeftInput()->Props, true));
+    auto rightStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetRightInput()->Props, true));
 
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
@@ -418,7 +418,7 @@ void TOpJoin::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
         *rightStats, 
         leftJoinKeys, 
         rightJoinKeys,
-        Props.JoinAlgo.has_value() ? *Props.JoinAlgo : EJoinAlgoType::MapJoin,
+        Props.JoinAlgo.has_value() ? *Props.JoinAlgo : EJoinAlgoType::Undefined,
         ConvertToJoinKind(JoinKind),
         FindCardHint(unionOfAliases, *hints.CardinalityHints),
         false,

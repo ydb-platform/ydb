@@ -1,5 +1,7 @@
 #include "schemeshard_scheme_builders.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/replication_description.h>
 

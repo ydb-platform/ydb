@@ -43,7 +43,6 @@ PY3TEST()
 END()
 
 RECURSE(
-    column_family
     common
     docs
     high_load

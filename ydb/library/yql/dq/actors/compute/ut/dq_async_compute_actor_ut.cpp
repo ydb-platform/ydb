@@ -45,6 +45,9 @@ struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
     TStringStream Out;
     TCgiParameters Params;
     THttpHeaders Headers;
+    TMockHttpRequest() {
+        Params.Scan("view=dump");
+    }
     IOutputStream& Output() override {
         return Out;
     }
@@ -639,8 +642,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     }
 
     void DumpMonPage(auto asyncCA, auto hook) {
+        TMockHttpRequest request;
         {
-            TMockHttpRequest request;
             auto evHttpInfo = MakeHolder<NActors::NMon::TEvHttpInfo>(request);
             ActorSystem.Send(asyncCA, EdgeActor, evHttpInfo.Release());
         }

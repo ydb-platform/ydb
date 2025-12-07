@@ -297,6 +297,7 @@ struct TCommonAppOptions {
     ui32 MonitoringThreads = 10;
     ui32 MonitoringMaxRequestsPerSecond = 0;
     TString MonitoringCertificateFile;
+    TString MonitoringPrivateKeyFile;
     TString RestartsCountFile = "";
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService
     TString UDFsDir;
@@ -393,7 +394,8 @@ struct TCommonAppOptions {
             .RequiredArgument("NAME").StoreResult(&TenantName);
         opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
         opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&MonitoringAddress);
-        opts.AddLongOption("mon-cert", "Monitoring certificate (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
+        opts.AddLongOption("mon-cert", "Path to monitoring certificate file (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
+        opts.AddLongOption("mon-key", "Path to monitoring private key file (https)").OptionalArgument("PATH").StoreResult(&MonitoringPrivateKeyFile);
         opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
         opts.AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument().SetFlag(&SuppressVersionCheck);
 
@@ -598,13 +600,12 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (MonitoringCertificateFile) {
-            TString sslCertificate = TUnbufferedFileInput(MonitoringCertificateFile).ReadAll();
-            if (!sslCertificate.empty()) {
-                appConfig.MutableMonitoringConfig()->SetMonitoringCertificate(sslCertificate);
-                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
-            } else {
-                ythrow yexception() << "invalid ssl certificate file";
-            }
+            appConfig.MutableMonitoringConfig()->SetMonitoringCertificateFile(MonitoringCertificateFile);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+        if (MonitoringPrivateKeyFile) {
+            appConfig.MutableMonitoringConfig()->SetMonitoringPrivateKeyFile(MonitoringPrivateKeyFile);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (SqsHttpPort) {
             appConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);

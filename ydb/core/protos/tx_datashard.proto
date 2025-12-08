@@ -273,15 +273,9 @@ message TKqpReadRangesSourceSettings {
     optional bool IsBatch = 22 [default = false];
 
     optional bool IsTableImmutable = 23 [default = false];
-<<<<<<< HEAD
-=======
-    optional NKikimrKqp.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
-
-    optional string Database = 25;
 
     // Vector top-K pushdown for brute force vector search
     optional NKikimrKqp.TReadVectorTopK VectorTopK = 26;
->>>>>>> 37c50f88631 (Brute force KNN vector search pushdown (#29621))
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given
@@ -1733,7 +1727,7 @@ message TEvIncrementalRestoreResponse {
         RETRY = 1;
         ERROR = 2;
     }
-    
+
     optional uint64 TxId = 1;
     optional uint64 TableId = 2;
     optional uint64 OperationId = 3;

@@ -1062,6 +1062,15 @@ Y_UNIT_TEST(UnlockLockedMessage_WithKeepMessageOrder) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(UnlockUnlockedMessage) {
@@ -1079,6 +1088,15 @@ Y_UNIT_TEST(UnlockUnlockedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(UnlockCommittedMessage) {
@@ -1115,6 +1133,15 @@ Y_UNIT_TEST(UnlockCommittedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
@@ -1145,6 +1172,17 @@ Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
     ++it;
     UNIT_ASSERT(it == storage.end());
+
+    auto& metrics = storage.GetMetrics();
+
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(ChangeDeadlineUnlockedMessage) {
@@ -1158,6 +1196,16 @@ Y_UNIT_TEST(ChangeDeadlineUnlockedMessage) {
 
     auto deadline = storage.GetMessageDeadline(3);
     UNIT_ASSERT_VALUES_EQUAL(deadline, TInstant::Zero());
+    auto& metrics = storage.GetMetrics();
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(EmptyStorageSerialization) {
@@ -1308,124 +1356,94 @@ Y_UNIT_TEST(StorageSerialization) {
 }
 
 Y_UNIT_TEST(StorageSerialization_WAL_Unlocked) {
-    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
-    auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(13);
+    TUtils utils;
 
-    NKikimrPQ::TMLPStorageSnapshot snapshot;
-    NKikimrPQ::TMLPStorageWAL wal;
+    auto writeTimestamp = utils.TimeProvider->Now() - TDuration::Seconds(13);
 
+    utils.Begin();
+    utils.Storage.AddMessage(3, true, 5, writeTimestamp);
+    utils.End();
+
+    auto it = utils.Storage.begin();
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
-        storage.SerializeTo(snapshot);
-
-        storage.AddMessage(3, true, 5, writeTimestamp);
-
-        auto batch = storage.GetBatch();
-        UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1); // new message
-        batch.SerializeTo(wal);
-
-        Cerr << "DUMP 1: " << storage.DebugString() << Endl;
+        UNIT_ASSERT(it != utils.Storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
     }
+    ++it;
+    UNIT_ASSERT(it == utils.Storage.end());
 
-    timeProvider->Tick(TDuration::Seconds(5));
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 
-    {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
 
-        storage.Initialize(snapshot);
-        storage.ApplyWAL(wal);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 
-        Cerr << "DUMP 2: " << storage.DebugString() << Endl;
+    utils.TimeProvider->Tick(TDuration::Seconds(5));
 
-        auto it = storage.begin();
-        {
-            UNIT_ASSERT(it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
-            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 0);
-            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
-            UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
-        }
-        ++it;
-        UNIT_ASSERT(it == storage.end());
-
-
-        auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
-    }
+    utils.AssertLoad();
 }
 
 Y_UNIT_TEST(StorageSerialization_WAL_Locked) {
-    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    TUtils utils;
 
-    auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(13);
-    auto deadline = timeProvider->Now() + TDuration::Seconds(4);
+    auto writeTimestamp = utils.TimeProvider->Now() - TDuration::Seconds(3);
 
-    NKikimrPQ::TMLPStorageSnapshot snapshot;
-    NKikimrPQ::TMLPStorageWAL wal;
+    utils.Begin();
+    utils.Storage.AddMessage(3, true, 5, writeTimestamp);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(7)), 3);
+    utils.End();
 
+    auto it = utils.Storage.begin();
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
-        storage.SerializeTo(snapshot);
-
-        storage.AddMessage(3, true, 5, writeTimestamp);
-
-        TStorage::TPosition position;
-        auto r = storage.Next(deadline, position);
-        UNIT_ASSERT(r);
-        UNIT_ASSERT_VALUES_EQUAL(r.value(), 3);
-
-        auto batch = storage.GetBatch();
-        UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1); // new message and changed message
-        UNIT_ASSERT_VALUES_EQUAL(batch.ChangedMessageCount(), 1); // new message and changed message
-        batch.SerializeTo(wal);
-
-        Cerr << "DUMP 1: " << storage.DebugString() << Endl;
+        UNIT_ASSERT(it != utils.Storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
     }
+    ++it;
+    UNIT_ASSERT(it == utils.Storage.end());
 
-    timeProvider->Tick(TDuration::Seconds(5));
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 
-    {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 1}});
 
-        storage.Initialize(snapshot);
-        Cerr << "DUMP: " << storage.DebugString() << Endl;
-        storage.ApplyWAL(wal);
-        Cerr << "DUMP AFTER WAL: " << storage.DebugString() << Endl;
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 
-        auto it = storage.begin();
-        {
-            UNIT_ASSERT(it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
-            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 1);
-            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, deadline);
-            UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
-        }
-        ++it;
-        UNIT_ASSERT(it == storage.end());
+    utils.TimeProvider->Tick(TDuration::Seconds(5));
 
-        auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
-    }
+    utils.AssertLoad();
 }
 
 Y_UNIT_TEST(StorageSerialization_WAL_Committed) {

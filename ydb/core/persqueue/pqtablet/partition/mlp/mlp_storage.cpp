@@ -572,10 +572,8 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     message.SetStatus(EMessageStatus::Locked);
     message.DeadlineDelta = NormalizeDeadline(deadline);
     if (message.ProcessingCount < MAX_PROCESSING_COUNT) {
-        Cerr << ">>>> Decrement for " << message.ProcessingCount << Endl;
         Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
         ++message.ProcessingCount;
-        Cerr << ">>>> Increment for " << message.ProcessingCount << Endl;
         Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
     }
 

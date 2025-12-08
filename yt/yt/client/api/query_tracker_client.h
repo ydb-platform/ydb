@@ -110,7 +110,7 @@ struct TListQueriesOptions
     NYTree::TAttributeFilter Attributes;
 
     bool SearchByTokenPrefix = false;
-    bool UseFullTextSearch = true;
+    bool UseFullTextSearch = false;
     EListQueriesSortOrder SortOrder = EListQueriesSortOrder::Cursor;
 };
 

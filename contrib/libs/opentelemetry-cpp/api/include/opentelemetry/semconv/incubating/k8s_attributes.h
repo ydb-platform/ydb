@@ -392,6 +392,20 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kK8sPodLabels = "k8s.pod.l
 static constexpr const char *kK8sPodName = "k8s.pod.name";
 
 /**
+  The phase for the pod. Corresponds to the @code phase @endcode field of the: <a
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.33/#podstatus-v1-core">K8s
+  PodStatus</a>
+ */
+static constexpr const char *kK8sPodStatusPhase = "k8s.pod.status.phase";
+
+/**
+  The reason for the pod state. Corresponds to the @code reason @endcode field of the: <a
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.33/#podstatus-v1-core">K8s
+  PodStatus</a>
+ */
+static constexpr const char *kK8sPodStatusReason = "k8s.pod.status.reason";
+
+/**
   The UID of the Pod.
  */
 static constexpr const char *kK8sPodUid = "k8s.pod.uid";
@@ -450,7 +464,7 @@ static constexpr const char *kK8sResourcequotaName = "k8s.resourcequota.name";
   string (e.g., count/deployments.apps, count/pods), or, for certain core Kubernetes resources, just
   the resource name (e.g., pods, services, configmaps). Both forms are supported by Kubernetes for
   object count quotas. See <a
-  href="https://kubernetes.io/docs/concepts/policy/resource-quotas/#object-count-quota">Kubernetes
+  href="https://kubernetes.io/docs/concepts/policy/resource-quotas/#quota-on-object-count">Kubernetes
   Resource Quotas documentation</a> for more details.
  */
 static constexpr const char *kK8sResourcequotaResourceName = "k8s.resourcequota.resource_name";
@@ -632,6 +646,72 @@ static constexpr const char *kPidPressure = "PIDPressure";
 static constexpr const char *kNetworkUnavailable = "NetworkUnavailable";
 
 }  // namespace K8sNodeConditionTypeValues
+
+namespace K8sPodStatusPhaseValues
+{
+/**
+  The pod has been accepted by the system, but one or more of the containers has not been started.
+  This includes time before being bound to a node, as well as time spent pulling images onto the
+  host.
+ */
+static constexpr const char *kPending = "Pending";
+
+/**
+  The pod has been bound to a node and all of the containers have been started. At least one
+  container is still running or is in the process of being restarted.
+ */
+static constexpr const char *kRunning = "Running";
+
+/**
+  All containers in the pod have voluntarily terminated with a container exit code of 0, and the
+  system is not going to restart any of these containers.
+ */
+static constexpr const char *kSucceeded = "Succeeded";
+
+/**
+  All containers in the pod have terminated, and at least one container has terminated in a failure
+  (exited with a non-zero exit code or was stopped by the system).
+ */
+static constexpr const char *kFailed = "Failed";
+
+/**
+  For some reason the state of the pod could not be obtained, typically due to an error in
+  communicating with the host of the pod.
+ */
+static constexpr const char *kUnknown = "Unknown";
+
+}  // namespace K8sPodStatusPhaseValues
+
+namespace K8sPodStatusReasonValues
+{
+/**
+  The pod is evicted.
+ */
+static constexpr const char *kEvicted = "Evicted";
+
+/**
+  The pod is in a status because of its node affinity
+ */
+static constexpr const char *kNodeAffinity = "NodeAffinity";
+
+/**
+  The reason on a pod when its state cannot be confirmed as kubelet is unresponsive on the node it
+  is (was) running.
+ */
+static constexpr const char *kNodeLost = "NodeLost";
+
+/**
+  The node is shutdown
+ */
+static constexpr const char *kShutdown = "Shutdown";
+
+/**
+  The pod was rejected admission to the node because of an error during admission that could not be
+  categorized.
+ */
+static constexpr const char *kUnexpectedAdmissionError = "UnexpectedAdmissionError";
+
+}  // namespace K8sPodStatusReasonValues
 
 namespace K8sVolumeTypeValues
 {

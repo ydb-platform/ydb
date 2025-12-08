@@ -1028,7 +1028,7 @@ private:
 
 
         TFmrUserJob mapJob;
-        TMapJobBuilder mapJobBuilder("Fmr");
+        TMapJobBuilder mapJobBuilder;
 
         mapJobBuilder.SetInputType(&mapJob, map);
         mapJobBuilder.SetBlockInput(&mapJob, map);

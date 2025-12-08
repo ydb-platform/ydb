@@ -168,7 +168,8 @@ void TCommandImportFromS3::ExtractParams(TConfig& config) {
 
 bool IsSupportedObject(TStringBuf& key) {
     return key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
-        || key.ChopSuffix(NDump::NFiles::CreateView().FileName);
+        || key.ChopSuffix(NDump::NFiles::CreateView().FileName)
+        || key.ChopSuffix(NDump::NFiles::CreateTopic().FileName);
 }
 
 void TCommandImportFromS3::FillItems(NYdb::NImport::TImportFromS3Settings& settings) const {

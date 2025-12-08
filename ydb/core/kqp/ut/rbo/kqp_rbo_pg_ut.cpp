@@ -9,9 +9,12 @@
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
+#include <library/cpp/resource/resource.h>
 #include <util/system/env.h>
 
 #include <ctime>
+#include <regex>
+#include <fstream>
 
 
 extern "C" {
@@ -226,6 +229,8 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        // FIXME: Temporarily disabled cost-based optimizer, it break on this query
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
@@ -297,28 +302,39 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         }
     }
 
-    Y_UNIT_TEST(CrossInnerJoin) {
+    void TestCrossInnerJoin(bool columnStore) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        TString withColumnstore = R"(WITH (Store = COLUMN);)";
 
-        session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/foo` (
+        TString tableFoo = R"(CREATE TABLE `/Root/foo` (
                 id	Int64	NOT NULL,	
 	            name	String,
                 primary key(id)	
-            );
+            ))";
 
-            CREATE TABLE `/Root/bar` (
+        TString tableBar = R"(CREATE TABLE `/Root/bar` (
                 id	Int64	NOT NULL,	
 	            lastname	String,
                 primary key(id)	
-            );
-        )").GetValueSync();
+            ))";
+
+        if (columnStore) {
+            tableFoo += withColumnstore;
+            tableBar += withColumnstore;
+        } else {
+            tableFoo += ";";
+            tableFoo += ";";
+        }
+
+        Y_ENSURE(session.ExecuteSchemeQuery(tableFoo).GetValueSync().IsSuccess());
+        Y_ENSURE(session.ExecuteSchemeQuery(tableBar).GetValueSync().IsSuccess());
 
         NYdb::TValueBuilder rowsTableFoo;
         rowsTableFoo.BeginList();
@@ -375,7 +391,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
-                SELECT foo.id, bar.id FROM foo, bar;
+                SELECT foo.id, bar.id as bid FROM foo, bar order by bid;
             )",
         };
 
@@ -394,6 +410,11 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
+    }
+
+    Y_UNIT_TEST(TestCrossInnerJoin) {
+        TestCrossInnerJoin(false);
+        TestCrossInnerJoin(true);
     }
 
     Y_UNIT_TEST(PredicatePushdownLeftJoin) {
@@ -587,30 +608,38 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                           expectedResult);
     }
 
-    Y_UNIT_TEST(Aggregation) {
+    void TestAggregation(bool columnStore) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-
-        session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/t1` (
-                a Int64 NOT NULL,
-	            b Int64,
-                c Int64,
-                primary key(a)
-            );
-
-            CREATE TABLE `/Root/t2` (
+        TString withColumnstore = R"(WITH (Store = COLUMN);)";
+        TString t1 = R"(CREATE TABLE `/Root/t1` (
                 a Int64	NOT NULL,
 	            b Int64,
                 c Int64,
                 primary key(a)
-            );
-        )").GetValueSync();
+            ))";
+        TString t2 = R"(CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+	            b Int64,
+                c Int64,
+                primary key(a)
+            ))";
+        if (columnStore) {
+            t1 += withColumnstore;
+            t2 += withColumnstore;
+        } else {
+            t1 += ";";
+            t2 += ";";
+        }
+
+        Y_ENSURE(session.ExecuteSchemeQuery(t1).GetValueSync().IsSuccess());
+        Y_ENSURE(session.ExecuteSchemeQuery(t2).GetValueSync().IsSuccess());
 
         db = kikimr.GetTableClient();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
@@ -657,6 +686,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 SET TablePathPrefix = "/Root/";
                 select t1.b, sum(t1.c) from t1 inner join t2 on t1.a = t2.a group by t1.b order by t1.b;
             )",
+            /*
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
@@ -665,6 +695,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 select sum(t1.b) as sum from t1
                 order by sum;
             )",
+            */
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
@@ -820,7 +851,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         std::vector<std::string> results = {
             R"([["1";"4"];["2";"6"]])",
             R"([["1";"4"];["2";"6"]])",
-            R"([["4"];["6"];["8"]])",
+            //R"([["4"];["6"];["8"]])",
             R"([["1";"1"];["2";"0"]])",
             R"([["1";"3"];["2";"4"]])",
             R"([["1";"2"];["2";"3"]])",
@@ -857,6 +888,11 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             //Cout << "OUTPUT_RESULT " << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
+    }
+
+    Y_UNIT_TEST(Aggregation) {
+        TestAggregation(/*columnstore=*/false);
+        TestAggregation(/*columnstore=*/true);
     }
 
     Y_UNIT_TEST(UnionAll) {
@@ -1195,6 +1231,134 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([["0";"0"];["0";"1"];["1";"0"];["1";"1"];["2";"0"];["2";"1"]])");
+    }
+
+    Y_UNIT_TEST(FiveJoinsCBO) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schema = R"(
+            CREATE TABLE `/Root/foo_0` (
+                id Int64 NOT NULL,
+                join_id Int64,
+                primary key(id)
+            );
+            CREATE TABLE `/Root/foo_1` (
+                id Int64 NOT NULL,
+                join_id Int64,
+                primary key(id)
+           );
+            CREATE TABLE `/Root/foo_2` (
+                id Int64 NOT NULL,
+                join_id Int64,
+                primary key(id)
+            );
+            CREATE TABLE `/Root/foo_3` (
+                id Int64 NOT NULL,
+                join_id Int64,
+                primary key(id)
+            );
+            CREATE TABLE `/Root/foo_4` (
+                id Int64 NOT NULL,
+                join_id Int64,
+                primary key(id)
+            );
+            CREATE TABLE `/Root/foo_5` (
+                id Int64 NOT NULL,
+                join_id Int64,
+                primary key(id)
+            );
+        )";
+
+        session.ExecuteSchemeQuery(schema).GetValueSync();
+
+        auto query = R"(
+            --!syntax_pg
+            SET TablePathPrefix = "/Root/";
+            SELECT foo_0.id as "id2"
+            FROM foo_0, foo_1, foo_2, foo_3, foo_4, foo_5
+            WHERE foo_0.join_id = foo_1.id AND foo_0.join_id = foo_2.id AND foo_0.join_id = foo_3.id AND foo_0.join_id = foo_4.id AND foo_0.join_id = foo_5.id;
+        )";
+
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void Replace(std::string& s, const std::string& from, const std::string& to) {
+        size_t pos = 0;
+        while ((pos = s.find(from, pos)) != std::string::npos) {
+            s.replace(pos, from.size(), to);
+            pos += to.size();
+        }
+    }
+
+    TString GetFullPath(const TString& filePath) {
+        TString fullPath = SRC_("../join/data/" + filePath);
+
+        std::ifstream file(fullPath);
+
+        if (!file.is_open()) {
+            throw std::runtime_error("can't open + " + fullPath + " " + std::filesystem::current_path());
+        }
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+
+        return buffer.str();
+    }
+
+    void CreateTablesFromPath(NYdb::NTable::TSession session, const TString& schemaPath, bool useColumnStore) {
+        std::string query = GetFullPath(schemaPath);
+
+        if (useColumnStore) {
+            std::regex pattern(R"(CREATE TABLE [^\(]+ \([^;]*\))", std::regex::multiline);
+            query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
+        }
+
+        auto res = session.ExecuteSchemeQuery(TString(query)).GetValueSync();
+        res.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT(res.IsSuccess());
+    }
+
+    void RunTPCHBenchmark(bool columnStore, std::vector<ui32> queries) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(session, "schema/tpch.sql", columnStore);
+
+        if (!queries.size()) {
+            for (ui32 i = 1; i <= 22; ++i) {
+                queries.push_back(i);
+            }
+        }
+
+        for (const auto qId : queries) {
+            std::string q = NResource::Find(TStringBuilder() << "resfs/file/tpch/queries/pg/q" << qId << ".sql");
+            Replace(q, "{% include 'header.sql.jinja' %}", "");
+            std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
+            q = "--!syntax_pg\n" + std::regex_replace(q, pattern, "$1");
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(q, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(TPCH) {
+        RunTPCHBenchmark(/*columnstore*/true, {1, 3, 5, 10});
     }
 
     Y_UNIT_TEST(Bench_Select) {

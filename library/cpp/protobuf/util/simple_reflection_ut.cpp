@@ -19,6 +19,21 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
         return smf;
     }
 
+    Y_UNIT_TEST(GetStringReference) {
+        TSample src(GenSampleForMergeFrom());
+        const Descriptor* descr = src.GetDescriptor();
+        TString scratch;
+
+        TConstField srcOneStr(src, descr->FindFieldByName("OneStr"));
+        UNIT_ASSERT_VALUES_EQUAL("one str"_sb, srcOneStr.GetStringReference(&scratch));
+
+        src.ClearOneStr();
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(), srcOneStr.GetStringReference(&scratch));
+
+        TConstField repStr(src, descr->FindFieldByName("RepStr"));
+        UNIT_ASSERT_VALUES_EQUAL("two rep str"_sb, repStr.GetStringReference(1, &scratch));
+    }
+
     Y_UNIT_TEST(MergeFromGeneric) {
         const TSample src(GenSampleForMergeFrom());
         TSample dst;

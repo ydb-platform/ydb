@@ -122,4 +122,3 @@ class WorkloadRunnerBackup:
                 t.join(timeout=5)
             bthread.join(timeout=5)
             print("Stopped")
-

@@ -116,7 +116,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     } else {
         ExprRoot_ = Compile(options.Query, options.TranslationMode,
                             options.SyntaxVersion, options.Modules,
-                            options.InputSpec, options.OutputSpec, options.UseAntlr4, processorMode, typeCtx.Get());
+                            options.InputSpec, options.OutputSpec, processorMode, typeCtx.Get());
 
         RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
 
@@ -188,10 +188,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     const THashMap<TString, TString>& modules,
     const TInputSpecBase& inputSpec,
     const TOutputSpecBase& outputSpec,
-    bool useAntlr4,
     EProcessorMode processorMode,
     TTypeAnnotationContext* typeContext) {
-    Y_ENSURE(useAntlr4, "Antlr3 support is dropped");
     if (mode == ETranslationMode::PG && processorMode != EProcessorMode::PullList) {
         ythrow TCompileError("", "") << "only PullList mode is compatible to PostgreSQL syntax";
     }
@@ -219,7 +217,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         settings.EmitReadsForExists = true;
-        settings.Antlr4Parser = useAntlr4;
+        settings.Antlr4Parser = true;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
         settings.DefaultCluster = PurecalcDefaultCluster;
         settings.ClusterMapping[settings.DefaultCluster] = PurecalcDefaultService;

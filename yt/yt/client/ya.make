@@ -110,9 +110,11 @@ SRCS(
     security_client/public.cpp
     security_client/helpers.cpp
 
+    signature/dynamic.cpp
+    signature/generator.cpp
+    signature/provided.cpp
     signature/signature.cpp
     signature/validator.cpp
-    signature/generator.cpp
 
     table_client/public.cpp
     table_client/adapters.cpp
@@ -125,6 +127,7 @@ SRCS(
     table_client/column_rename_descriptor.cpp
     table_client/column_sort_schema.cpp
     table_client/comparator.cpp
+    table_client/constrained_schema.cpp
     table_client/key.cpp
     table_client/key_bound.cpp
     table_client/key_bound_compressor.cpp

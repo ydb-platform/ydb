@@ -1,5 +1,7 @@
 #pragma once
 
+#include "configure_opts.h"
+
 #include <ydb/library/workload/benchmark_base/workload.h>
 #include <ydb/library/workload/abstract/workload_query_generator.h>
 
@@ -39,10 +41,9 @@ public:
     std::optional<std::string> PrefixType;
     NYdb::NTable::TVectorIndexSettings::EMetric Metric;
     TString Distance;
-    TString VectorType;
+    NVector::TVectorOpts VectorOpts;
     size_t KmeansTreeLevels = 0;
     size_t KmeansTreeClusters = 0;
-    size_t VectorDimension = 0;
     size_t Targets = 0;
     size_t VectorInitCount = 0;
     size_t KmeansTreeSearchClusters = 0;

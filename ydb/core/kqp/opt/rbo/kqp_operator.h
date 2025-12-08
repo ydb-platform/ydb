@@ -15,10 +15,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Aggregate, Limit, UnionAll, Root };
-
-/* Represents a table source type. */
-enum ETableSourceType : ui32 { Row, Column };
+enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Aggregate, Limit, UnionAll, CBOTree, Root };
 
 /* Represents aggregation phases. */
 enum EAggregationPhase : ui32 {Intermediate, Final};
@@ -119,55 +116,72 @@ struct TPhysicalOpProps {
  * We make a special case for a Source connection that is required due to the limitation of the Data shard sources
  */
 struct TConnection {
-    TConnection(TString type, bool fromSourceStage) : Type(type), FromSourceStage(fromSourceStage) {}
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                            TExprContext &ctx) = 0;
+    TConnection(TString type, NYql::EStorageType fromSourceStageStorageType)
+        : Type(type)
+        , FromSourceStageStorageType(fromSourceStageStorageType) {
+    }
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
+                                            TExprContext& ctx) = 0;
     virtual ~TConnection() = default;
 
     TString Type;
-    bool FromSourceStage;
+    NYql::EStorageType FromSourceStageStorageType;
 };
 
-struct TBroadcastConnection : public TConnection {
-    TBroadcastConnection(bool fromSourceStage) : TConnection("Broadcast", fromSourceStage) {}
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                            TExprContext &ctx) override;
+struct TBroadcastConnection: public TConnection {
+    TBroadcastConnection(NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA)
+        : TConnection("Broadcast", fromSourceStageStorageType) {
+    }
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
+                                            TExprContext& ctx) override;
 };
 
-struct TMapConnection : public TConnection {
-    TMapConnection(bool fromSourceStage) : TConnection("Map", fromSourceStage) {}
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                            TExprContext &ctx) override;
+struct TMapConnection: public TConnection {
+    TMapConnection(NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA)
+        : TConnection("Map", fromSourceStageStorageType) {
+    }
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
+                                            TExprContext& ctx) override;
 };
 
-struct TUnionAllConnection : public TConnection {
-    TUnionAllConnection(bool fromSourceStage) : TConnection("UnionAll", fromSourceStage) {}
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                            TExprContext &ctx) override;
+struct TUnionAllConnection: public TConnection {
+    TUnionAllConnection(NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA)
+        : TConnection("UnionAll", fromSourceStageStorageType) {
+    }
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
+                                            TExprContext& ctx) override;
 };
 
-struct TShuffleConnection : public TConnection {
-    TShuffleConnection(TVector<TInfoUnit> keys, bool fromSourceStage) : TConnection("Shuffle", fromSourceStage), Keys(keys) {}
+struct TShuffleConnection: public TConnection {
+    TShuffleConnection(TVector<TInfoUnit> keys, NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA)
+        : TConnection("Shuffle", fromSourceStageStorageType)
+        , Keys(keys) {
+    }
 
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                            TExprContext &ctx) override;
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
+                                            TExprContext& ctx) override;
 
     TVector<TInfoUnit> Keys;
 };
 
-struct TMergeConnection : public TConnection {
-    TMergeConnection(TVector<TSortElement> order, bool fromSourceStage) : TConnection("Merge", fromSourceStage), Order(order) {}
+struct TMergeConnection: public TConnection {
+    TMergeConnection(TVector<TSortElement> order, NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA)
+        : TConnection("Merge", fromSourceStageStorageType)
+        , Order(order) {
+    }
 
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                            TExprContext &ctx) override;
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
+                                            TExprContext& ctx) override;
 
     TVector<TSortElement> Order;
 };
 
-struct TSourceConnection : public TConnection {
-    TSourceConnection() : TConnection("Source", true) {}
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                            TExprContext &ctx) override;
+struct TSourceConnection: public TConnection {
+    TSourceConnection()
+        : TConnection("Source", NYql::EStorageType::RowStorage) {
+    }
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
+                                            TExprContext& ctx) override;
 };
 
 /**
@@ -178,12 +192,12 @@ struct TSourceConnection : public TConnection {
 
 struct TStageGraph {
     struct TSourceStageTraits {
-        TSourceStageTraits(TVector<std::pair<TString, TInfoUnit>>&& renames, const ETableSourceType sourceType)
+        TSourceStageTraits(TVector<std::pair<TString, TInfoUnit>>&& renames, const NYql::EStorageType storageType)
             : Renames(std::move(renames))
-            , SourceType(sourceType) {
+            , StorageType(storageType) {
         }
         TVector<std::pair<TString, TInfoUnit>> Renames;
-        ETableSourceType SourceType;
+        NYql::EStorageType StorageType;
     };
 
     TVector<int> StageIds;
@@ -200,7 +214,8 @@ struct TStageGraph {
         return newStageId;
     }
 
-    int AddSourceStage(const TVector<TString>& columns, const TVector<TInfoUnit>& renames, const ETableSourceType& sourceType, bool needsMap = true) {
+    int AddSourceStage(const TVector<TString>& columns, const TVector<TInfoUnit>& renames, const NYql::EStorageType& storageType,
+                       bool needsMap = true) {
         int res = AddStage();
         TVector<std::pair<TString, TInfoUnit>> renamePairs;
         if (needsMap) {
@@ -209,20 +224,28 @@ struct TStageGraph {
             }
         }
 
-        SourceStageRenames.insert({res, TSourceStageTraits(std::move(renamePairs), sourceType)});
+        SourceStageRenames.insert({res, TSourceStageTraits(std::move(renamePairs), storageType)});
         return res;
     }
 
-    bool IsSourceStage(int id) {
+    bool IsSourceStage(const int id) {
         return SourceStageRenames.contains(id);
     }
 
-    bool IsSourceStageRowType(int id) {
-        return IsSourceStageTypeImpl(id, ETableSourceType::Row);
+    bool IsSourceStageRowType(const int id) {
+        return IsSourceStageTypeImpl(id, NYql::EStorageType::RowStorage);
     }
 
-    bool IsSourceStageColumnType(int id) {
-        return IsSourceStageTypeImpl(id, ETableSourceType::Column);
+    bool IsSourceStageColumnType(const int id) {
+        return IsSourceStageTypeImpl(id, NYql::EStorageType::ColumnStorage);
+    }
+
+    NYql::EStorageType GetStorageType(const int id) {
+        auto it = SourceStageRenames.find(id);
+        if (it != SourceStageRenames.end()) {
+            return it->second.StorageType;
+        }
+        return NYql::EStorageType::NA;
     }
 
     void Connect(int from, int to, std::shared_ptr<TConnection> conn) {
@@ -244,10 +267,11 @@ struct TStageGraph {
 
     void TopologicalSort();
 private:
-    bool IsSourceStageTypeImpl(int id, ETableSourceType tableSourceType) {
+
+    bool IsSourceStageTypeImpl(const int id, const NYql::EStorageType tableStorageType) {
         auto it = SourceStageRenames.find(id);
         if (it != SourceStageRenames.end()) {
-            return it->second.SourceType == tableSourceType;
+            return it->second.StorageType == tableStorageType;
         }
         return false;
     }
@@ -363,6 +387,7 @@ class IUnaryOperator : public IOperator {
     IUnaryOperator(EOperator kind, TPositionHandle pos) : IOperator(kind, pos) {}
     IUnaryOperator(EOperator kind, TPositionHandle pos, std::shared_ptr<IOperator> input) : IOperator(kind, pos) { Children.push_back(input); }
     std::shared_ptr<IOperator> &GetInput() { return Children[0]; }
+    void SetInput(std::shared_ptr<IOperator> newInput) { Children[0] = newInput; }
 
     virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
     virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
@@ -378,6 +403,9 @@ class IBinaryOperator : public IOperator {
 
     std::shared_ptr<IOperator> &GetLeftInput() { return Children[0]; }
     std::shared_ptr<IOperator> &GetRightInput() { return Children[1]; }
+
+    void SetLeftInput(std::shared_ptr<IOperator> newInput) { Children[0] = newInput; }
+    void SetRightInput(std::shared_ptr<IOperator> newInput) { Children[1] = newInput; }
 };
 
 class TOpEmptySource : public IOperator {
@@ -398,13 +426,15 @@ class TOpRead : public IOperator {
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
     bool NeedsMap();
 
-    virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
-    virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+    virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+    NYql::EStorageType GetTableStorageType();
 
+   // TODO: make it private members, we should not access it directly
     TString Alias;
     TVector<TString> Columns;
     TVector<TInfoUnit> OutputIUs;
-    ETableSourceType SourceType;
+    NYql::EStorageType StorageType;
     TExprNode::TPtr TableCallable;
 };
 
@@ -420,6 +450,7 @@ class TOpMap : public IUnaryOperator {
     bool HasRenames() const;
     bool HasLambdas() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenamesWithTransforms(TPlanProps& props) const;
     TVector<std::pair<TInfoUnit, TExprNode::TPtr>> GetLambdas() const;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
 
@@ -527,6 +558,27 @@ class TOpLimit : public IUnaryOperator {
     TExprNode::TPtr LimitCond;
 };
 
+/***
+ * This operator packages a subtree of operators in order to pass them to dynamic programming optimizer
+ * Currently it requires that the list of operators TreeNodes is in a post-order traversal of the tree
+ * No validation is currently used
+ */
+class TOpCBOTree : public IOperator {
+  public:
+    TOpCBOTree(std::shared_ptr<IOperator> treeRoot, TPositionHandle pos);
+    TOpCBOTree(std::shared_ptr<IOperator> treeRoot, TVector<std::shared_ptr<IOperator>> treeNodes, TPositionHandle pos);
+    
+    virtual TVector<TInfoUnit> GetOutputIUs() override { return TreeRoot->GetOutputIUs(); }
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
+    virtual TString ToString(TExprContext& ctx) override;
+
+    virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
+    virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
+
+    std::shared_ptr<IOperator> TreeRoot;
+    TVector<std::shared_ptr<IOperator>> TreeNodes;
+};
+
 class TOpRoot : public IUnaryOperator {
   public:
     TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<TString> columnOrder);
@@ -570,7 +622,7 @@ class TOpRoot : public IUnaryOperator {
             for (auto scalarSubplan : Root->PlanProps.ScalarSubplans.Get()) {
                 BuildDfsList(scalarSubplan, {}, size_t(0), visited);
             }
-            auto child = ptr->Children[0];
+            auto child = ptr->GetInput();
             BuildDfsList(child, {}, size_t(0), visited);
             CurrElement = 0;
         }

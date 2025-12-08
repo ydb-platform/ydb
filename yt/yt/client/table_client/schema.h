@@ -191,6 +191,7 @@ private:
 void FormatValue(TStringBuilderBase* builder, const TColumnSchema& schema, TStringBuf spec);
 
 void Serialize(const TColumnSchema& schema, NYson::IYsonConsumer* consumer);
+void Serialize(const TColumnSchema& schema, std::optional<std::string> constraint, NYson::IYsonConsumer* consumer);
 
 void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema);
 void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
@@ -210,6 +211,8 @@ public:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TDeletedColumn& schema, NYson::IYsonConsumer* consumer);
 
 void ToProto(NProto::TDeletedColumn* protoSchema, const TDeletedColumn& schema);
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema);

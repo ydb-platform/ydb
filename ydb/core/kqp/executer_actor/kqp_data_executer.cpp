@@ -316,7 +316,7 @@ public:
 
         ResponseEv->Snapshot = GetSnapshot();
 
-        if (!Locks.empty() || (TxManager && TxManager->HasLocks())) {
+        if (!Locks.empty() || TxManager) {
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
@@ -593,7 +593,7 @@ private:
                 ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 return;
             }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
             case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
                 if (res->Record.HasOverloadSubscribed()) {
                     LOG_D("Shard " << shardId << " is overloaded. Waiting.");
@@ -903,9 +903,9 @@ private:
                         case NKikimrTxDataShard::TError::SCHEME_ERROR:
                             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, YqlIssue({},
                                 TIssuesIds::KIKIMR_SCHEME_MISMATCH, er.GetReason()));
-                        //TODO Split OUT_OF_SPACE and DISK_SPACE_EXHAUSTED cases. The first one is temporary, the second one is permanent.
-                        case NKikimrTxDataShard::TError::OUT_OF_SPACE:
-                        case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED: {
+                        //TODO Split DISK_GROUP_OUT_OF_SPACE and DATABASE_DISK_SPACE_QUOTA_EXCEEDED cases. The first one is temporary, the second one is permanent.
+                        case NKikimrTxDataShard::TError::DISK_GROUP_OUT_OF_SPACE:
+                        case NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED: {
                             auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
                             AddDataShardErrors(result, issue);
                             return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
@@ -2815,13 +2815,17 @@ private:
             }
         }
 
+        auto counters = Counters->Counters->GetKqpCounters();
+        if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {
+            counters = counters->GetSubgroup("path", context->StreamingQueryPath);
+        }
         const auto& checkpointId = context->CheckpointId;
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
             ::NFq::TCoordinatorId(checkpointId, Generation),
             NYql::NDq::MakeCheckpointStorageID(),
             SelfId(),
             {},
-            Counters->Counters->GetKqpCounters()->GetSubgroup("path", context->StreamingQueryPath),
+            counters,
             graphParams,
             stateLoadMode,
             streamingDisposition).Release());

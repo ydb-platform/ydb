@@ -52,7 +52,7 @@ public:
     }
 
     void OnWriteOverloadDisk() const {
-        TabletCounters->IncCounter(COUNTER_OUT_OF_SPACE);
+        TabletCounters->IncCounter(COUNTER_DISK_GROUP_OUT_OF_SPACE);
     }
 
     void OnWriteOverloadMetadata(const ui64 size) const {

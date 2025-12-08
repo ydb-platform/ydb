@@ -148,12 +148,14 @@ NJson::TJsonValue ToMonarchMultiLineState(const TUnit& unit, const TRangePattern
                 json.AppendValue(NJson::TJsonArray{std::move(tag), *embedded});
             }
         }
-        if (escape) {
-            json.AppendValue(NJson::TJsonArray{*escape, group + ".escape"});
-        }
     } else if (unit.Kind == EUnitKind::Comment && ansi) {
         json.AppendValue(NJson::TJsonArray{begin, group, "@" + group});
     }
+
+    if (escape) {
+        json.AppendValue(NJson::TJsonArray{*escape, group + ".escape"});
+    }
+
     json.AppendValue(NJson::TJsonArray{"[^" + begin + "]", group});
     json.AppendValue(NJson::TJsonArray{end, group, "@pop"});
     json.AppendValue(NJson::TJsonArray{begin, group});

@@ -472,9 +472,9 @@ private:
                 return TStatus::Error;
             }
 
-            if (mode != EYtWriteMode::Upsert && mode != EYtWriteMode::Renew) {
+            if (mode != EYtWriteMode::Replace && mode != EYtWriteMode::Renew) {
                 ctx.AddError(TIssue(pos, TStringBuilder() <<
-                    "Modification of dynamic table " << outTableInfo.Name.Quote() << " is supported only by UPSERT or INSERT WITH TRUNCATE"));
+                    "Modification of dynamic table " << outTableInfo.Name.Quote() << " is supported only by REPLACE or INSERT WITH TRUNCATE"));
                 return TStatus::Error;
             }
 
@@ -500,7 +500,7 @@ private:
                 }
             }
         }
-        if (mode == EYtWriteMode::Upsert && !notFlowDynamic) {
+        if (mode == EYtWriteMode::Replace && !notFlowDynamic) {
             ctx.AddError(TIssue(pos, TStringBuilder() <<
                 "Modification of static table " << outTableInfo.Name.Quote() << " is supported only by INSERT"));
             return TStatus::Error;
@@ -508,12 +508,12 @@ private:
 
         bool insertWithTruncateIntoDynamicTable = (mode == EYtWriteMode::Renew && notFlowDynamic);
         bool replaceMeta = !meta->DoesExist || (mode != EYtWriteMode::Append
-            && mode != EYtWriteMode::Upsert
+            && mode != EYtWriteMode::Replace
             && !insertWithTruncateIntoDynamicTable
             && mode != EYtWriteMode::RenewKeepMeta);
         bool checkLayout = meta->DoesExist && (mode == EYtWriteMode::Append
             || mode == EYtWriteMode::RenewKeepMeta
-            || mode == EYtWriteMode::Upsert
+            || mode == EYtWriteMode::Replace
             || insertWithTruncateIntoDynamicTable
             || description.IsReplaced);
 

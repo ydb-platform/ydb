@@ -10,11 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 class YdbClient:
-    def __init__(self, endpoint, database, use_query_service=False):
+    def __init__(self, endpoint, database, use_query_service=False, sessions=100):
         self.driver = ydb.Driver(endpoint=endpoint, database=database, oauth=None)
         self.database = database
         self.use_query_service = use_query_service
-        self.session_pool = ydb.QuerySessionPool(self.driver) if use_query_service else ydb.SessionPool(self.driver)
+        self.session_pool = ydb.QuerySessionPool(self.driver, size=sessions) if use_query_service else ydb.SessionPool(self.driver, size=sessions)
 
     def wait_connection(self, timeout=5):
         self.driver.wait(timeout, fail_fast=True)

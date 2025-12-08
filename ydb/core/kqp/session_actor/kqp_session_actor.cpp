@@ -2071,8 +2071,8 @@ public:
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
 
-        QueryState->LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
-        QueryState->LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
+        QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
+        QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
 
         if (QueryState->TxCtx->TxManager) {
             QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
@@ -2274,8 +2274,8 @@ public:
 
         stats->DurationUs = ((TInstant::Now() - QueryState->StartTime).MicroSeconds());
         stats->WorkerCpuTimeUs = (QueryState->GetCpuTime().MicroSeconds());
-        stats->LocksBrokenAsBreaker = QueryState->LocksBrokenAsBreaker;
-        stats->LocksBrokenAsVictim = QueryState->LocksBrokenAsVictim;
+        stats->LocksBrokenAsBreaker = QueryState->QueryStats.LocksBrokenAsBreaker;
+        stats->LocksBrokenAsVictim = QueryState->QueryStats.LocksBrokenAsVictim;
         if (const auto continueTime = QueryState->ContinueTime) {
             stats->QueuedTimeUs = (continueTime - QueryState->StartTime).MicroSeconds();
         }

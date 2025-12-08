@@ -154,8 +154,6 @@ public:
     TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
-    ui64 LocksBrokenAsBreaker = 0;
-    ui64 LocksBrokenAsVictim = 0;
     TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;

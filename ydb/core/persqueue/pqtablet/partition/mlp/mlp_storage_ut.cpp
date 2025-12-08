@@ -489,6 +489,8 @@ Y_UNIT_TEST(AddMessageWithDelay) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
+
     utils.End();
     utils.AssertLoad();
 }
@@ -1954,17 +1956,13 @@ Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndCommit) {
 
 Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndDLQ) {
     TUtils utils;
-    Cerr  << ">>>>> AddMessage(6)" << Endl;
     utils.AddMessage(6);
     AssertMessagesLocks(utils.Storage.GetMetrics().MessageLocks, {{0, 6}});
     utils.Begin();
-    Cerr  << ">>>>> AddMessage(1)" << Endl;
     utils.AddMessage(1);
     AssertMessagesLocks(utils.Storage.GetMetrics().MessageLocks, {{0, 7}});
-    Cerr  << ">>>>> Next()" << Endl;
     UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(13)), 0);
     AssertMessagesLocks(utils.Storage.GetMetrics().MessageLocks, {{0, 6}, {1, 1}});
-    Cerr  << ">>>>> Unlock()" << Endl;
     UNIT_ASSERT(utils.Unlock(0));
     AssertMessagesLocks(utils.Storage.GetMetrics().MessageLocks, {{0, 6}});
     utils.End();

@@ -601,34 +601,6 @@ struct TDictCase {
         }
     }
 
-    Y_UNIT_TEST(ShuttingDownOneNode) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableShuttingDownNodeState(true);
-        TKikimrRunner kikimr(TKikimrSettings()
-                                        .SetFeatureFlags(featureFlags)
-                                        .SetNodeCount(1));
-        CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
-
-        auto queryClient = kikimr.GetQueryClient();
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto shutdownState = new TKqpShutdownState();
-        auto nodeId = runtime.GetNodeId(0);
-        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {}, new TEvKqp::TEvInitiateShutdownRequest(shutdownState)), 0);
-
-        Sleep(TDuration::MilliSeconds(500));
-        auto result = queryClient.ExecuteQuery(R"(
-                SELECT Key, COUNT(*) AS cnt, SUM(Data) AS sum_data, MAX(DataText) AS max_text
-                FROM `/Root/LargeTable`
-                WHERE Data > 0
-                GROUP BY Key
-                ORDER BY cnt DESC
-                LIMIT 100
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::UNAVAILABLE, result.GetIssues().ToString());
-    }
-
-
     Y_UNIT_TEST(ThreeNodesGradualShutdown) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableShuttingDownNodeState(true);
@@ -664,10 +636,9 @@ struct TDictCase {
                 LIMIT 100
             )"
         });
-        auto const statuses = std::vector({NYdb::EStatus::SUCCESS, NYdb::EStatus::SUCCESS, NYdb::EStatus::UNAVAILABLE});
-        for (size_t i = 0; i < statuses.size(); ++i) {
-            i32 nodeIndexToShutdown = statuses.size() - (i + 1);
-            TestShutdownNodeAndExecuteQuery(kikimr, queries[i], nodeIndexToShutdown, i + 1, statuses[i], "Stage " + ToString(i + 1));
+        for (size_t i = 0; i < queries.size(); ++i) {
+            i32 nodeIndexToShutdown = queries.size() - (i + 1);
+            TestShutdownNodeAndExecuteQuery(kikimr, queries[i], nodeIndexToShutdown, i + 1, NYdb::EStatus::SUCCESS, "Stage " + ToString(i + 1));
         }
     }
 

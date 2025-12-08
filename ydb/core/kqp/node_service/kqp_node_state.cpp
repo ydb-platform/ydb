@@ -38,6 +38,19 @@ bool TNodeState::HasRequest(ui64 txId) const {
     return bucket.Requests.contains(txId);
 }
 
+bool TNodeState::IsRequestCancelled(ui64 txId, TActorId executerId) const {
+    const auto& bucket = GetBucketByTxId(txId);
+    TReadGuard guard(bucket.Mutex);
+
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
+        if (requestIt->second.ExecuterId == executerId) {
+            return requestIt->second.ExecutionCancelled;
+        }
+    }
+    return false;
+}
+
 std::vector<ui64> TNodeState::ClearExpiredRequests() {
     std::vector<ui64> requests;
 

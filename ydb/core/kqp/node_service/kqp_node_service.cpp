@@ -219,7 +219,20 @@ private:
             requestTaskIds.push_back(dqTask.GetId());
         }
 
-        if (!State_->HasRequest(txId) || !State_->AddTasksToRequest(txId, executerId, requestTaskIds)) {
+        if (State_->HasRequest(txId)) {
+            if (State_->IsRequestCancelled(txId, executerId)) {
+                LOG_D("TxId: " << txId << ", rejecting tasks for cancelled request");
+                co_return ReplyError(txId, executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, 
+                    ev->Cookie, "Request was cancelled");
+            }
+            if (State_->AddTasksToRequest(txId, executerId, requestTaskIds)) {
+            } else {
+                for (ui64 taskId : requestTaskIds) {
+                    request.Tasks.emplace(taskId, std::nullopt);
+                }
+                State_->AddRequest(std::move(request));
+            }
+        } else {
             for (ui64 taskId : requestTaskIds) {
                 request.Tasks.emplace(taskId, std::nullopt);
             }
@@ -405,9 +418,14 @@ private:
     }
 
     void HandleShuttingDown(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
-        auto& msg = ev->Get()->Record;
-        if (msg.HasSupportShuttingDown() && msg.GetSupportShuttingDown()) {
-            LOG_D("Can't handle StartRequest TxId" << msg.GetTxId() << " in ShuttingDown State");
+        // in shutting down state do not accept new tasks, but accept local requests
+        // continue to process tasks that are already started before shutdown
+        auto& msg = ev->Get()->Record;        
+        if (ev->Sender.NodeId() == SelfId().NodeId()) {
+            LOG_D("Accepting local StartRequest TxId: " << msg.GetTxId() << " during shutdown");
+            HandleWork(ev);
+        } else if (msg.HasSupportShuttingDown() && msg.GetSupportShuttingDown()) {
+            LOG_D("Rejecting remote StartRequest TxId: " << msg.GetTxId() << " in ShuttingDown State");
             ReplyError(msg.GetTxId(), ev->Sender, msg, NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN, ev->Cookie);
         } else {
             HandleWork(ev);

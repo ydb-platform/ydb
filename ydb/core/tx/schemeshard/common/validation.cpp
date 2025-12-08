@@ -19,7 +19,8 @@ bool TTTLValidator::ValidateUnit(const NScheme::TTypeInfo columnType, NKikimrSch
         case NScheme::NTypeIds::Datetime64:
         case NScheme::NTypeIds::Timestamp64:
             if (unit != NKikimrSchemeOp::TTTLSettings::UNIT_AUTO) {
-                errStr = "To enable TTL on date type column 'DateTypeColumnModeSettings' should be specified";
+                errStr = "To enable TTL on date type column 'DateTypeColumnModeSettings' should be specified
+                ";
                 return false;
             }
             break;

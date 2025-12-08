@@ -528,17 +528,17 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     if (outOfSpace) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "quota_exceeded")("source", "dataevent");
     }
-    auto overloadStatus = outOfSpace ? EOverloadStatus::Disk : CheckOverloadedImmediate(*internalPathId);
-    if (overloadStatus == EOverloadStatus::None) {
+    auto overloadStatus = outOfSpace ? TOverloadStatus{EOverloadStatus::Disk, "The disk quota has been exhausted. Please increase the available database disk resources or delete unused data."} : CheckOverloadedImmediate(*internalPathId);
+    if (overloadStatus.Status == EOverloadStatus::None) {
         overloadStatus = ResourcesStatusToOverloadStatus(Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize()));
     }
-    if (overloadStatus != EOverloadStatus::None) {
+    if (overloadStatus.Status != EOverloadStatus::None) {
         LWPROBE(EvWriteResult, TabletID(), source.ToString(), record.GetTxId(), cookie, "immediate error", false, "overload data error");
-        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", false, operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED), "overload data error " + ToString(overloadStatus));
+        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", false, operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED), "overload data error " + ToString(overloadStatus.Status));
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-            TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
+            TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, TStringBuilder{} << "Сolumn shard " << TabletID() << " is overloaded. Reason: " << overloadStatus.Reason);
 
-        if ((overloadStatus == EOverloadStatus::ShardWritesSizeInFly || overloadStatus == EOverloadStatus::ShardWritesInFly) && record.HasOverloadSubscribe()) {
+        if ((overloadStatus.Status == EOverloadStatus::ShardWritesSizeInFly || overloadStatus.Status == EOverloadStatus::ShardWritesInFly) && record.HasOverloadSubscribe()) {
             auto seqNo = record.GetOverloadSubscribe();
             result->Record.SetOverloadSubscribed(seqNo);
             Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
@@ -546,7 +546,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                     NOverload::TPipeServerInfo{.PipeServerId = ev->Recipient, .InterconnectSessionId = PipeServersInterconnectSessions[ev->Recipient]},
                     NOverload::TOverloadSubscriberInfo{.PipeServerId = ev->Recipient, .OverloadSubscriberId = ev->Sender, .SeqNo = seqNo}));
         }
-        OverloadWriteFail(overloadStatus,
+        OverloadWriteFail(overloadStatus.Status,
             NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString(),
                 Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters()),
             arrowData->GetSize(), cookie, std::move(result), ctx);

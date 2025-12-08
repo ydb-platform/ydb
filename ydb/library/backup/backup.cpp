@@ -772,12 +772,10 @@ TString GetSecretSettingName(TStringBuf secretName, const TString& secretSetting
     return secretName.StartsWith('/') ? secretSettingPrefix + "_PATH" : secretSettingPrefix + "_NAME";
 }
 
-bool AddSecretSettingIfNotEmpty(const std::string& secretName, const TString& secretSettingName, TVector<TString>& options) {
+void AddSecretSettingIfNotEmpty(const std::string& secretName, const TString& secretSettingName, TVector<TString>& options) {
     if (!secretName.empty()) {
         options.push_back(BuildOption(GetSecretSettingName(secretName, secretSettingName).c_str(), Quote(secretName)));
-        return true;
     }
-    return false;
 }
 
 void AddConnectionOptions(const NReplication::TConnectionParams& connectionParams, TVector<TString>& options) {
@@ -785,18 +783,14 @@ void AddConnectionOptions(const NReplication::TConnectionParams& connectionParam
     switch (connectionParams.GetCredentials()) {
         case NReplication::TConnectionParams::ECredentials::Static: {
             options.push_back(BuildOption("USER", Quote(connectionParams.GetStaticCredentials().User)));
-            if (AddSecretSettingIfNotEmpty(connectionParams.GetStaticCredentials().PasswordSecretName,
-                "PASSWORD_SECRET", options)
-            ) {
-                break;
-            }
+            AddSecretSettingIfNotEmpty(connectionParams.GetStaticCredentials().PasswordSecretName,
+                "PASSWORD_SECRET", options);
+            break;
         }
         case NReplication::TConnectionParams::ECredentials::OAuth: {
-            if (AddSecretSettingIfNotEmpty(connectionParams.GetOAuthCredentials().TokenSecretName,
-                "TOKEN_SECRET", options)
-            ) {
-                break;
-            }
+            AddSecretSettingIfNotEmpty(connectionParams.GetOAuthCredentials().TokenSecretName,
+                "TOKEN_SECRET", options);
+            break;
         }
     }
 }

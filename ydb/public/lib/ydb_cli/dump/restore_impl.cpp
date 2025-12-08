@@ -1227,7 +1227,8 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
 }
 
 TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEntry>& backupEntries, const TVector<size_t>& externalDataSources,
-    const THashMap<TString, size_t>& externalTables, const TString& dbRestoreRoot, const TRestoreSettings& settings) {
+    const THashMap<TString, size_t>& externalTables, const TString& dbRestoreRoot, const TRestoreSettings& settings)
+{
     for (size_t i : externalDataSources) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
         if (!ExistingEntries.contains(dbPath)) {

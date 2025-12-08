@@ -220,6 +220,10 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         case NKikimrImport::TCreateImportRequest::kImportFromFsSettings:
             {
+                if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
+                    return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
+                }
+
                 const auto& settings = request.GetRequest().GetImportFromFsSettings();
 
                 importInfo = new TImportInfo(id, uid, TImportInfo::EKind::FS, settings, domainPath.Base()->PathId, request.GetPeerName());

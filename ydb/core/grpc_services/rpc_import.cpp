@@ -127,10 +127,6 @@ public:
         }
 
         if constexpr (IsFsImport) {
-            if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
-                return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "The feature flag \"EnableFsBackups\" is disabled. \
-                     The operation cannot be performed.");
-            }
             if (!settings.base_path().StartsWith("/")) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
                     "base_path must be an absolute path");

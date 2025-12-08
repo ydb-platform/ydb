@@ -160,6 +160,9 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             break;
 
         case NKikimrExport::TCreateExportRequest::kExportToFsSettings:
+            if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
+                return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
+            }
             if (processExportSettings(request.GetRequest().GetExportToFsSettings(), TExportInfo::EKind::FS, true)) {
                 return true;
             }

@@ -2,7 +2,6 @@
 #include "ydb_update.h"
 #include "ydb_version.h"
 
-#include <ydb/core/base/backtrace.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
@@ -10,58 +9,6 @@
 #include <filesystem>
 
 namespace NYdb::NConsoleClient {
-
-namespace {
-
-// Debug ony terminate handlers
-
-std::terminate_handler DefaultTerminateHandler;
-
-void TerminateHandler() {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
-        Cerr << colors.Red() << "======== exception call stack =========" << colors.Default() << Endl;
-        backtrace.PrintTo(Cerr);
-    }
-    Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
-
-    if (DefaultTerminateHandler) {
-        DefaultTerminateHandler();
-    } else {
-        abort();
-    }
-}
-
-TString SignalToString(int signal) {
-#ifndef _unix_
-    return TStringBuilder() << "signal " << signal;
-#else
-    return strsignal(signal);
-#endif
-}
-
-void BackTraceSignalHandler(int signal) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= " << SignalToString(signal) << " call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "===============================================" << colors.Default() << Endl;
-
-    abort();
-}
-
-void SetupSignalActions() {
-    DefaultTerminateHandler = std::set_terminate(&TerminateHandler);
-
-    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
-        signal(sig, &BackTraceSignalHandler);
-    }
-}
-
-} // anonymous namespace
 
 TClientCommandRoot::TClientCommandRoot(const TString& name, const TClientSettings& settings)
     : TClientCommandRootCommon(name, settings)
@@ -127,7 +74,7 @@ namespace {
             }
         }
     }
-}
+} // anonymous namespace
 
 void TYdbClientCommandRoot::Config(TConfig& config) {
     TClientCommandRoot::Config(config);
@@ -156,11 +103,6 @@ int NewYdbClient(int argc, char** argv) {
     settings.MentionUserAccount = false;
     settings.StorageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/release";
     settings.YdbDir = "ydb";
-
-    NKikimr::EnableYDBBacktraceFormat();
-#ifndef NDEBUG
-    SetupSignalActions();
-#endif
 
     auto commandsRoot = MakeHolder<TYdbClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
     commandsRoot->Opts.SetTitle("YDB client");

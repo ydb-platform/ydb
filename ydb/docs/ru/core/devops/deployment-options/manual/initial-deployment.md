@@ -229,7 +229,7 @@ vdb    252:16   0   186G  0 disk
 
 1. Включите аутентификацию пользователей (опционально).
 
-    Если вы планируете использовать в кластере {{ ydb-short-name }} возможности аутентификации и разграничения доступа пользователей, добавьте секцию `security_config` со следующими параметрами:
+    Если вы планируете использовать в кластере {{ ydb-short-name }} возможности аутентификации и разграничения доступа пользователей, добавьте секцию [`security_config`](../../../reference/configuration/security_config.md) со следующими параметрами:
 
     ```yaml
     security_config:
@@ -252,14 +252,18 @@ vdb    252:16   0   186G  0 disk
       - "DATABASE-ADMINS"
     ```
 
-    Добавьте секцию [`client_certificate_authorization`](../../../reference/configuration/client_certificate_authorization.md) для проверки клиентского сертификата при первичном запуске кластера (bootstrap). Сертификат должен соответствовать группе из `bootstrap_allowed_sids` (пример для группы `ADMINS`):
+    В приведенной конфигурации `root`, `ADMINS` и `DATABASE-ADMINS` — это встроенные пользователи и группы. Подробнее о них читайте в статье [Встроенная безопасность](../../../security/builtin-security.md).
+
+    Добавьте секцию [`client_certificate_authorization`](../../../reference/configuration/client_certificate_authorization.md) для проверки клиентского сертификата при первичном запуске кластера (bootstrap). Сертификат должен соответствовать группе из `bootstrap_allowed_sids`.
+
+    В примере ниже разрешен доступ для сертификатов, выданных для организации `YDB` (поле `O` в субъекте сертификата), и пользователи с такими сертификатами будут включены в группу `ADMINS`:
 
     ```yaml
     client_certificate_authorization:
       request_client_certificate: true
       client_certificate_definitions:
       - member_groups: ["ADMINS"]
-        subject_terms:  
+        subject_terms:
         - short_name: "O"
           values: ["YDB"]
     ```

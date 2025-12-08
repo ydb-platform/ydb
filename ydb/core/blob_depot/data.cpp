@@ -495,7 +495,10 @@ namespace NKikimr::NBlobDepot {
         if (const auto [it, inserted] = record.Trash.insert(id); !inserted) {
             return; // the same situation: this item has just been inserted into the set
         }
+<<<<<<< HEAD
         ++LoadedTrashRecords;
+=======
+>>>>>>> 357aebf69e6 (Fix Trash table loading (#30273))
         AccountBlob(id, true);
         TotalStoredTrashSize += id.BlobSize();
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = TotalStoredTrashSize;
@@ -680,7 +683,10 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(usedIt != Used.end());
         const bool inserted = Trash.insert(Used.extract(usedIt)).inserted;
         Y_DEBUG_ABORT_UNLESS(inserted);
+<<<<<<< HEAD
         ++self->LoadedTrashRecords;
+=======
+>>>>>>> 357aebf69e6 (Fix Trash table loading (#30273))
         self->TotalStoredTrashSize += id.BlobSize();
         self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
     }

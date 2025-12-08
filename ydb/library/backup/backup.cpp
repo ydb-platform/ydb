@@ -781,13 +781,12 @@ void AddSecretSettingIfNotEmpty(const std::string& secretName, const TString& se
 void AddConnectionOptions(const NReplication::TConnectionParams& connectionParams, TVector<TString>& options) {
     options.push_back(BuildOption("CONNECTION_STRING", Quote(BuildConnectionString(connectionParams))));
     switch (connectionParams.GetCredentials()) {
-        case NReplication::TConnectionParams::ECredentials::Static: {
+        case NReplication::TConnectionParams::ECredentials::Static:
             options.push_back(BuildOption("USER", Quote(connectionParams.GetStaticCredentials().User)));
             AddSecretSettingIfNotEmpty(connectionParams.GetStaticCredentials().PasswordSecretName,
                 "PASSWORD_SECRET", options);
             break;
-        }
-        case NReplication::TConnectionParams::ECredentials::OAuth: {
+        case NReplication::TConnectionParams::ECredentials::OAuth:
             AddSecretSettingIfNotEmpty(connectionParams.GetOAuthCredentials().TokenSecretName,
                 "TOKEN_SECRET", options);
             break;

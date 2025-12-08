@@ -148,9 +148,9 @@ NTable::ERowOp FindOpFromJson(const NJson::TJsonValue& json) {
     }
 }
 
-void UploadData(const NJson::TJsonValue& json,  const NTable::TScheme::TTableInfo* table,
-                std::optional<NTable::ERowOp> op, TMemoryPool& pool, TTransactionContext &txc) {
-
+void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo* table,
+                std::optional<NTable::ERowOp> op, TMemoryPool& pool, TTransactionContext &txc)
+{
     if (table == nullptr) {
         table = FindTableFromJson(json, txc);
     }
@@ -505,7 +505,7 @@ public:
     enum class EState : ui8 {
         Error,
         PartialDone,
-        Done
+        Done,
     };
 
     void Error(const TString& error) {
@@ -944,8 +944,8 @@ public:
     }
 
 private:
-    TActorId Owner;
-    TFsPath BackupPath;
+    const TActorId Owner;
+    const TFsPath BackupPath;
 
     TFsPath SchemaFilePath;
     TFsPath ChangelogFilePath;

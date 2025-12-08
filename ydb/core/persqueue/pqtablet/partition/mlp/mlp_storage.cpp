@@ -449,6 +449,7 @@ bool TStorage::WakeUpDLQ() {
 
             --Metrics.DLQMessageCount;
             ++Metrics.UnprocessedMessageCount;
+            Metrics.MessageLocks.IncrementFor(message->ProcessingCount);
         }
     }
 

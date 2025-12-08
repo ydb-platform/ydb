@@ -1757,8 +1757,7 @@ TRestoreResult TRestoreClient::RestoreExternalDataSource(
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
-    LOG_I("Restore external data source " << fsPath.GetPath().Quote() << " to " << dbPath.Quote()
-        << ", dbRestoreRoot=" << dbRestoreRoot.Quote());
+    LOG_I("Restore external data source " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
     if (settings.DryRun_) {
         return CheckExistenceAndType(dbPath, ESchemeEntryType::ExternalDataSource);

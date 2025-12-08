@@ -69,6 +69,7 @@ RECURSE_FOR_TESTS(
     ut_topic_splitmerge
     ut_topic_set_boundaries
     ut_transfer
+    ut_truncate_table
     ut_ttl
     ut_user_attributes
     ut_user_attributes_reboots

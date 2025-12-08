@@ -215,16 +215,17 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        if (!AppData()->FeatureFlags.GetEnableTruncateTable()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "TRUNCATE TABLE statement is not supported");
-            return result;
-        }
-
         const TTabletId ssId = context.SS->SelfTabletId();
 
         THolder<TProposeResponse> result;
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
+
+        if (!AppData()->FeatureFlags.GetEnableTruncateTable()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "TRUNCATE TABLE statement is not supported");
+            return result;
+        }
+
         TString errStr;
 
         const auto& op = Transaction.GetTruncateTable();
@@ -371,11 +372,14 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TTruncateTable");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TTruncateTable AbortPropose"
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << context.SS->TabletID());
     }
 
-    void AbortUnsafe(TTxId, TOperationContext&) override {
+    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         AbortUnsafeDropOperation(OperationId, forceDropTxId, context);
     }
 };
@@ -389,8 +393,8 @@ ISubOperation::TPtr CreateTruncateTable(TOperationId id, const TTxTransaction& t
 }
 
 ISubOperation::TPtr CreateTruncateTable(TOperationId id, TTxState::ETxState state) {
-    Y_ABORT_UNLESS(state == TTxState::Invalid || state == TTxState::Propose);
-    return MakeSubOperation<TTruncateTable>(id);
+    Y_ABORT_UNLESS(state == TTxState::Invalid || state == TTxState::Propose || state == TTxState::ProposedWaitParts);
+    return MakeSubOperation<TTruncateTable>(id, state);
 }
 
 }

@@ -55,7 +55,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
             , Name(std::move(name))
         {}
         TColumnDesc(TColumnDesc&&) noexcept = default;
-        TColumnDesc& operator=(TColumnDesc&) noexcept = default;
+        TColumnDesc& operator=(TColumnDesc&&) noexcept = default;
 
         NKikimrStat::TSimpleColumnStatistics ExtractSimpleStats(
             ui64 count, const TVector<NYdb::TValue>& aggColumns) const;

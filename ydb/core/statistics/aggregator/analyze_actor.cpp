@@ -24,14 +24,16 @@ public:
     static std::optional<TCMSEval> MaybeCreate(
             const NKikimrStat::TSimpleColumnStatistics& simpleStats,
             const NScheme::TTypeInfo&) {
-        if (simpleStats.GetCountDistinct() >= 0.8 * simpleStats.GetCount()) {
+        if (simpleStats.GetCount() == 0 || simpleStats.GetCountDistinct() == 0) {
+            // Empty table
             return std::nullopt;
         }
 
         const double n = simpleStats.GetCount();
         const double ndv = simpleStats.GetCountDistinct();
-        if (ndv == 0) {
-            return TCMSEval(MIN_WIDTH);
+
+        if (ndv >= 0.8 * n) {
+            return std::nullopt;
         }
 
         const double c = 10;
@@ -208,7 +210,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         for (const auto& colTag : RequestedColumnTags) {
             auto colIt = tag2Column.find(colTag);
             if (colIt == tag2Column.end()) {
-                // Column probably already deleted, skip it.
+                // Column probably already dropped, skip it.
                 continue;
             }
             addColumn(colIt->second);
@@ -217,6 +219,14 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         for (const auto& [tag, info] : tag2Column) {
             addColumn(info);
         }
+    }
+
+    if (Columns.empty()) {
+        // All requested columns were already dropped. Send empty response right away.
+        auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(std::move(Results));
+        Send(Parent, response.release());
+        PassAway();
+        return;
     }
 
     Become(&TThis::StateQueryStage1);
@@ -263,7 +273,6 @@ void TAnalyzeActor::HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                 continue;
             }
             if (statEval->EstimateSize() >= 4_MB) {
-                // To avoid: Error: ydb/library/yql/dq/runtime/dq_output_channel.cpp:405: Row data size is too big: 53839241 bytes, exceeds limit of 50331648 bytes
                 continue;
             }
             statEval->AddAggregations(col.Name, stage2Builder);

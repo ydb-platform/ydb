@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
 
         std::vector<TCountMinSketchProbes> expected = {
             {
-                .Tag = 2, // Key column
+                .Tag = 2, // Value column
                 .Probes{ {"1", 100}, {"2", 100} }
             }
         };

@@ -510,14 +510,28 @@ private:
     }
 
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev) {
+
+        const TCgiParameters &cgi = ev->Get()->Request.GetParams();
+        TActorId id;
+
+        auto caId = cgi.Get("ca");
+        if (caId && State_->ValidateComputeActorId(caId, id)) {
+            TActivationContext::Send(ev->Forward(id));
+            return;
+        }
+
+        auto exId = cgi.Get("ex");
+        if (exId && State_->ValidateKqpExecuterId(exId, SelfId().NodeId(), id)) {
+            TActivationContext::Send(ev->Forward(id));
+            return;
+        }
+
         TStringStream str;
         HTML(str) {
             PRE() {
-                str << "Current config:" << Endl;
+                str << "TKqpNodeService, SelfId=" << SelfId() << Endl;
+                str << Endl << "Current config:" << Endl;
                 str << Config.DebugString() << Endl;
-                str << Endl;
-
-                str << Endl << "Transactions:" << Endl;
                 State_->DumpInfo(str);
             }
         }

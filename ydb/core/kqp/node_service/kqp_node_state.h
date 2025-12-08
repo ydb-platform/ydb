@@ -61,6 +61,8 @@ public:
     std::vector<TNodeRequest::TTaskInfo> GetTasksByTxId(ui64 txId) const;
 
     void DumpInfo(TStringStream& str) const;
+    bool ValidateComputeActorId(const TString& computeActorId, TActorId& id) const;
+    bool ValidateKqpExecuterId(const TString& kqpExecuterId, ui32 nodeId, TActorId& id) const;
 
 private:
     inline auto& GetBucketByTxId(ui64 txId) {

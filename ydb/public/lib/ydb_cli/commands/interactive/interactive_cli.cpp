@@ -102,7 +102,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     };
     Y_DEBUG_VERIFY(sessions.size() > activeSession);
 
-    const auto lineReader = CreateLineReader(driver, config.Database, Log);
+    const auto lineReader = CreateLineReader({.Driver = driver, .Database = config.Database}, Log);
     if (!sessions[activeSession]->Setup(lineReader)) {
         YDB_CLI_LOG(Error, "Failed to perform initial setup in " << (activeSession ? "AI" : "SQL") << " mode");
         Y_DEBUG_VERIFY(sessions[activeSession ^= 1]->Setup(lineReader));

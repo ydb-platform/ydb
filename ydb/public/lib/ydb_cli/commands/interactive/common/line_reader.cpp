@@ -76,10 +76,11 @@ class TLineReader final : public ILineReader {
     };
 
 public:
-    TLineReader(const TDriver& driver, const TString& database, const TInteractiveLogger& log)
+    TLineReader(const TLineReaderSettings& settings, const TInteractiveLogger& log)
         : Log(log)
-        , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco(), driver, database, Log.IsVerbose()))
+        , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco(), settings.Driver, settings.Database, Log.IsVerbose()))
         , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
+        , ContinueAfterCancel(settings.ContinueAfterCancel)
     {}
 
     void Setup(const TSettings& settings) final {
@@ -131,7 +132,7 @@ public:
             }
 
             if (input == nullptr) {
-                if (errno == EAGAIN) {
+                if (errno == EAGAIN && ContinueAfterCancel) {
                     continue;
                 }
                 break;
@@ -283,6 +284,7 @@ private:
     const TInteractiveLogger Log;
     const IYQLCompleter::TPtr YQLCompleter;
     const IYQLHighlighter::TPtr YQLHighlighter;
+    const bool ContinueAfterCancel = true;
     std::optional<replxx::Replxx> Rx;
 
     TString Prompt;
@@ -294,8 +296,8 @@ private:
 
 } // anonymous namespace
 
-ILineReader::TPtr CreateLineReader(const TDriver& driver, const TString& database, const TInteractiveLogger& log) {
-    return std::make_shared<TLineReader>(driver, database, log);
+ILineReader::TPtr CreateLineReader(const TLineReaderSettings& settings, const TInteractiveLogger& log) {
+    return std::make_shared<TLineReader>(settings, log);
 }
 
 } // namespace NYdb::NConsoleClient

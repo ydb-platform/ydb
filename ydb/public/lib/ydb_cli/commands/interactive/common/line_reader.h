@@ -43,6 +43,12 @@ public:
     virtual ~ILineReader() = default;
 };
 
-ILineReader::TPtr CreateLineReader(const TDriver& driver, const TString& database, const TInteractiveLogger& log);
+struct TLineReaderSettings {
+    TDriver Driver;
+    TString Database;
+    bool ContinueAfterCancel = true;
+};
+
+ILineReader::TPtr CreateLineReader(const TLineReaderSettings& settings, const TInteractiveLogger& log);
 
 } // namespace NYdb::NConsoleClient

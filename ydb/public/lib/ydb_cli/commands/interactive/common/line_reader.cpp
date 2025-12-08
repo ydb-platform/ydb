@@ -87,7 +87,9 @@ public:
         Prompt = settings.Prompt;
         HelpMessage = settings.HelpMessage;
 
-        InitReplxx(settings.EnableYqlCompletion, settings.EnableSwitchMode);
+        if (!Rx || settings.EnableYqlCompletion != EnableYqlCompletion || settings.EnableSwitchMode != EnableSwitchMode) {
+            InitReplxx(settings.EnableYqlCompletion, settings.EnableSwitchMode);
+        }
         Y_VALIDATE(Rx, "Replxx is not initialized");
 
         for (const auto& [key, action] : settings.KeyHandlers) {
@@ -102,15 +104,17 @@ public:
         }
         KeyHandlers = settings.KeyHandlers;
 
-        UpdateHistoryPath(settings.HistoryFilePath);
-        if (History) {
-            if (const auto fileLockGuard = TFileHandlerLockGuard::Lock(History->GetHandle())) {
-                Rx->set_unique_history(true);
-                if (!Rx->history_load(History->GetPath())) {
-                    YDB_CLI_LOG(Error, "Loading history failed: " << strerror(errno));
+        if (!History || !settings.HistoryFilePath || History->GetPath() != *settings.HistoryFilePath) {
+            UpdateHistoryPath(settings.HistoryFilePath);
+            if (History) {
+                if (const auto fileLockGuard = TFileHandlerLockGuard::Lock(History->GetHandle())) {
+                    Rx->set_unique_history(true);
+                    if (!Rx->history_load(History->GetPath())) {
+                        YDB_CLI_LOG(Error, "Loading history failed: " << strerror(errno));
+                    }
+                } else {
+                    YDB_CLI_LOG(Error, "Lock of history file failed: " << strerror(errno));
                 }
-            } else {
-                YDB_CLI_LOG(Error, "Lock of history file failed: " << strerror(errno));
             }
         }
     }
@@ -163,6 +167,8 @@ private:
             Rx.reset();
         }
 
+        EnableYqlCompletion = enableCompletion;
+        EnableSwitchMode = enableSwitchMode;
         Rx = replxx::Replxx();
         Rx->install_window_change_handler();
 
@@ -291,6 +297,8 @@ private:
     std::optional<TString> HelpMessage;
     std::optional<THistory> History;
     std::unordered_map<char, std::function<void()>> KeyHandlers;
+    bool EnableYqlCompletion = true;
+    bool EnableSwitchMode = true;
     bool SwitchRequested = false;
 };
 

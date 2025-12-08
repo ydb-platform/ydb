@@ -267,32 +267,4 @@ bool TNodeState::ValidateKqpExecuterId(const TString& kqpExecuterId, ui32 nodeId
     return false;
 }
 
-bool TNodeState::ValidateComputeActorId(const TString& computeActorId, TActorId& id) const {
-    for (const auto& bucket : Buckets) {
-        TReadGuard guard(bucket.Mutex);
-        for (const auto& [_, request] : bucket.Requests) {
-            for (auto& [_, actorId] : request.Tasks) {
-                if (actorId && ToString(*actorId) == computeActorId) {
-                    id = *actorId;
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-
-bool TNodeState::ValidateKqpExecuterId(const TString& kqpExecuterId, ui32 nodeId, TActorId& id) const {
-    for (const auto& bucket : Buckets) {
-        TReadGuard guard(bucket.Mutex);
-        for (const auto& [_, request] : bucket.Requests) {
-            if (ToString(request.ExecuterId) == kqpExecuterId && request.ExecuterId.NodeId() == nodeId) {
-                id = request.ExecuterId;
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 } // namespace NKikimr::NKqp::NKqpNode

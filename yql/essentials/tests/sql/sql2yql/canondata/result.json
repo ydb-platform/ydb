@@ -8532,6 +8532,27 @@
             "uri": "https://{canondata_backend}/1784117/01d5a74e6d83f8c3d38e7fc80ab9529f2963f1fb/resource.tar.gz#test_sql2yql.test_select_yql-group_by_count_b_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-join_cross_2_implicit]": [
+        {
+            "checksum": "a2ca9d925f403e403a0e15b3f10f097c",
+            "size": 1152,
+            "uri": "https://{canondata_backend}/1937367/c34283db49bea9d65b8158fd5b8545be27ee80ce/resource.tar.gz#test_sql2yql.test_select_yql-join_cross_2_implicit_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-join_cross_3_explicit_precedence]": [
+        {
+            "checksum": "d9ea5e1c0a1084f093c39562f9cf69da",
+            "size": 1439,
+            "uri": "https://{canondata_backend}/1937367/c34283db49bea9d65b8158fd5b8545be27ee80ce/resource.tar.gz#test_sql2yql.test_select_yql-join_cross_3_explicit_precedence_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-join_cross_3_implicit_precedence]": [
+        {
+            "checksum": "d9ea5e1c0a1084f093c39562f9cf69da",
+            "size": 1439,
+            "uri": "https://{canondata_backend}/1937367/c34283db49bea9d65b8158fd5b8545be27ee80ce/resource.tar.gz#test_sql2yql.test_select_yql-join_cross_3_implicit_precedence_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-join_disambiguation_off]": [
         {
             "checksum": "33cdd7665c11aeafe35a4e5891106466",
@@ -8546,6 +8567,27 @@
             "uri": "https://{canondata_backend}/1942100/20a5144fdf43300e78841c4de8361cb8c2d84ea1/resource.tar.gz#test_sql2yql.test_select_yql-join_disambiguation_on_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-join_inner_on_2]": [
+        {
+            "checksum": "12268dded0bd6a99933326bdf55d762e",
+            "size": 1230,
+            "uri": "https://{canondata_backend}/1942173/a89a4f9ebcfb35ae373c1c27cfc1be539e53e8bb/resource.tar.gz#test_sql2yql.test_select_yql-join_inner_on_2_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-join_left_on_2]": [
+        {
+            "checksum": "c5b40868edc3f41d77f48056f9bae277",
+            "size": 1229,
+            "uri": "https://{canondata_backend}/1942173/a89a4f9ebcfb35ae373c1c27cfc1be539e53e8bb/resource.tar.gz#test_sql2yql.test_select_yql-join_left_on_2_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-join_left_outer_on_2]": [
+        {
+            "checksum": "c5b40868edc3f41d77f48056f9bae277",
+            "size": 1229,
+            "uri": "https://{canondata_backend}/1942173/a89a4f9ebcfb35ae373c1c27cfc1be539e53e8bb/resource.tar.gz#test_sql2yql.test_select_yql-join_left_outer_on_2_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-join_on_2]": [
         {
             "checksum": "a0c0aa89a02d3dff1ea88604ca04a8df",
@@ -8558,6 +8600,20 @@
             "checksum": "16c5093668bcec0117655827a6e62b43",
             "size": 2245,
             "uri": "https://{canondata_backend}/1942100/20a5144fdf43300e78841c4de8361cb8c2d84ea1/resource.tar.gz#test_sql2yql.test_select_yql-join_on_3_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-join_right_on_2]": [
+        {
+            "checksum": "581141f6ad4d033a4c46458518e23fdb",
+            "size": 1230,
+            "uri": "https://{canondata_backend}/1942173/a89a4f9ebcfb35ae373c1c27cfc1be539e53e8bb/resource.tar.gz#test_sql2yql.test_select_yql-join_right_on_2_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-join_right_outer_on_2]": [
+        {
+            "checksum": "581141f6ad4d033a4c46458518e23fdb",
+            "size": 1230,
+            "uri": "https://{canondata_backend}/1942173/a89a4f9ebcfb35ae373c1c27cfc1be539e53e8bb/resource.tar.gz#test_sql2yql.test_select_yql-join_right_outer_on_2_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-minimal]": [
@@ -14021,6 +14077,21 @@
             "uri": "file://test_sql_format.test_select_yql-group_by_count_b_/formatted.sql"
         }
     ],
+    "test_sql_format.test[select_yql-join_cross_2_implicit]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-join_cross_2_implicit_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-join_cross_3_explicit_precedence]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-join_cross_3_explicit_precedence_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-join_cross_3_implicit_precedence]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-join_cross_3_implicit_precedence_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[select_yql-join_disambiguation_off]": [
         {
             "uri": "file://test_sql_format.test_select_yql-join_disambiguation_off_/formatted.sql"
@@ -14031,6 +14102,21 @@
             "uri": "file://test_sql_format.test_select_yql-join_disambiguation_on_/formatted.sql"
         }
     ],
+    "test_sql_format.test[select_yql-join_inner_on_2]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-join_inner_on_2_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-join_left_on_2]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-join_left_on_2_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-join_left_outer_on_2]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-join_left_outer_on_2_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[select_yql-join_on_2]": [
         {
             "uri": "file://test_sql_format.test_select_yql-join_on_2_/formatted.sql"
@@ -14039,6 +14125,16 @@
     "test_sql_format.test[select_yql-join_on_3]": [
         {
             "uri": "file://test_sql_format.test_select_yql-join_on_3_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-join_right_on_2]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-join_right_on_2_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-join_right_outer_on_2]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-join_right_outer_on_2_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-minimal]": [

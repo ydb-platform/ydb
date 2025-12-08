@@ -15,6 +15,7 @@ struct TYqlSource {
 };
 
 enum class EYqlJoinKind {
+    Cross,
     Inner,
     Left,
     Right,
@@ -22,7 +23,7 @@ enum class EYqlJoinKind {
 
 struct TYqlJoinConstraint {
     EYqlJoinKind Kind;
-    TNodePtr Condition;
+    TNullable<TNodePtr> Condition;
 };
 
 struct TYqlJoin {

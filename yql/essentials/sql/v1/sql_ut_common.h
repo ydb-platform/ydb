@@ -11634,6 +11634,83 @@ Y_UNIT_TEST(Join3Mix) {
     UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
 
+Y_UNIT_TEST(ImplicitCrossIsDisabled) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT id FROM plato.xx, plato.yy;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToOneLineString(),
+        "Cartesian product of tables is disabled");
+}
+
+Y_UNIT_TEST(ImplicitCrossJoin2) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA AnsiImplicitCrossJoin;
+        SELECT id FROM plato.xx, plato.yy;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(ImplicitCrossJoin3) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA AnsiImplicitCrossJoin;
+        SELECT id FROM plato.xx, plato.yy, plato.zz;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(ImplicitCrossJoinAndExplicitJoin) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA AnsiImplicitCrossJoin;
+        SELECT id
+        FROM plato.xx, plato.yy
+        JOIN plato.zz ON xx.id = zz.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(ExplicitCrossJoin) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT id FROM plato.xx CROSS JOIN plato.yy;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(LeftRightOuterJoin) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT id FROM plato.xx LEFT        JOIN plato.yy ON TRUE;
+        SELECT id FROM plato.xx RIGHT       JOIN plato.yy ON TRUE;
+        SELECT id FROM plato.xx LEFT  OUTER JOIN plato.yy ON TRUE;
+        SELECT id FROM plato.xx RIGHT OUTER JOIN plato.yy ON TRUE;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
 Y_UNIT_TEST(OrderBy) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();

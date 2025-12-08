@@ -1,8 +1,10 @@
 --- a/utf8proc.h
 +++ b/utf8proc.h
-@@ -120,15 +120,1 @@ typedef bool utf8proc_bool;
+@@ -120,17 +120,1 @@ typedef bool utf8proc_bool;
 -#ifdef UTF8PROC_STATIC
--#  define UTF8PROC_DLLEXPORT
+-#  ifndef UTF8PROC_DLLEXPORT
+-#    define UTF8PROC_DLLEXPORT
+-#  endif
 -#else
 -#  ifdef _WIN32
 -#    ifdef UTF8PROC_EXPORTS

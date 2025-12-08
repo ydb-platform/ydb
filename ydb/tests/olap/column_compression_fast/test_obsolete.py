@@ -1,6 +1,5 @@
 import logging
 import os
-import pytest
 import random
 import yatest.common
 import ydb

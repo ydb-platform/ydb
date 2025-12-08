@@ -766,14 +766,20 @@ bool TTableSchema::IsEmpty() const
     return Columns().empty();
 }
 
-bool TTableSchema::IsCGComparatorApplicable() const
+bool TTableSchema::IsCGComparatorApplicable(std::optional<int> keyColumnCount) const
 {
-    if (GetKeyColumnCount() > MaxKeyColumnCountInDynamicTable) {
+    auto keyTypes = GetKeyColumnTypes();
+    auto checkCount = keyColumnCount.value_or(std::ssize(keyTypes));
+
+    if (checkCount > std::ssize(keyTypes)) {
         return false;
     }
 
-    auto keyTypes = GetKeyColumnTypes();
-    return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
+    if (checkCount > MaxKeyColumnCountInDynamicTable) {
+        return false;
+    }
+
+    return std::none_of(keyTypes.begin(), keyTypes.begin() + checkCount, [](const auto& type) {
         return type == EValueType::Any || type == EValueType::Null;
     });
 }

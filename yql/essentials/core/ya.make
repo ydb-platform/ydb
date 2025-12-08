@@ -30,6 +30,7 @@ SRCS(
     yql_holding_file_storage.h
     yql_join.cpp
     yql_join.h
+    yql_module_helpers.cpp
     yql_library_compiler.cpp
     yql_linear_checker.cpp
     yql_layers_helpers.cpp

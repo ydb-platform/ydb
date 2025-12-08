@@ -1,6 +1,7 @@
 #include "sql_select_yql.h"
 
 #include "sql_expression.h"
+#include "sql_group_by.h"
 #include "select_yql.h"
 
 #include <util/generic/overloaded.h>
@@ -212,7 +213,11 @@ private:
         }
 
         if (rule.HasBlock11()) {
-            return Unsupported("group_by_clause");
+            if (auto result = Build(rule.GetBlock11().GetRule_group_by_clause1())) {
+                select.GroupBy = std::move(*result);
+            } else {
+                return std::unexpected(result.error());
+            }
         }
 
         if (rule.HasBlock12()) {
@@ -302,7 +307,7 @@ private:
     TNodeResult Build(const TRule_result_column::TAlt2& alt) {
         TNodeResult expr = Build(alt.GetRule_expr1(), EColumnRefState::Allow);
         if (!expr) {
-            return std::unexpected(ESQLError::Basic);
+            return std::unexpected(expr.error());
         }
 
         if (const auto label = Label(alt)) {
@@ -543,6 +548,31 @@ private:
         return columns;
     }
 
+    TSQLResult<TGroupBy> Build(const TRule_group_by_clause& rule) {
+        TGroupByClause legacy(Ctx_, Mode_);
+        legacy.SetYqlSelectProduced(true);
+        if (!legacy.Build(rule)) {
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        if (!legacy.Aliases().empty()) {
+            return Unsupported("GROUP BY aliases");
+        }
+        if (legacy.GetLegacyHoppingWindow() != nullptr) {
+            return Unsupported("GROUP BY HOP");
+        }
+        if (legacy.IsCompactGroupBy()) {
+            return Unsupported("GROUP COMPACT BY");
+        }
+        if (!legacy.GetSuffix().empty()) {
+            return Unsupported("GROUP BY ... WITH an_id");
+        }
+
+        return TGroupBy{
+            .Keys = std::move(legacy.Content()),
+        };
+    }
+
     TSQLResult<TOrderBy> Build(const TRule_ext_order_by_clause& rule) {
         TOrderBy orderBy;
 
@@ -604,7 +634,7 @@ private:
     TNodeResult Build(const TRule& rule, EColumnRefState state) {
         TColumnRefScope scope(Ctx_, state);
         TSqlExpression sqlExpr(Ctx_, Mode_);
-        sqlExpr.ProduceYqlSelect();
+        sqlExpr.SetYqlSelectProduced(true);
 
         return sqlExpr.Build(rule);
     }
@@ -657,7 +687,7 @@ private:
     }
 
     std::unexpected<ESQLError> Unsupported(TStringBuf message) {
-        return YqlSelectUnsupported(Ctx_, message);
+        return UnsupportedYqlSelect(Ctx_, message);
     }
 };
 

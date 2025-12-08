@@ -7,15 +7,6 @@
 
 namespace NSQLTranslationV1 {
 
-bool Init(TContext& ctx, ISource* src, const TVector<TNodePtr>& nodes) {
-    for (const TNodePtr& node : nodes) {
-        if (!node->Init(ctx, src)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 class TYqlTableRefNode final: public INode, private TYqlTableRefArgs {
 public:
     TYqlTableRefNode(TPosition position, TYqlTableRefArgs&& args)
@@ -179,6 +170,7 @@ public:
         if (!InitProjection(ctx, src) ||
             !InitSource(ctx, src) ||
             (Where && !Where->GetRef().Init(ctx, src)) ||
+            (GroupBy && !NSQLTranslationV1::Init(ctx, src, GroupBy->Keys)) ||
             !InitOrderBy(ctx, src) ||
             (Limit && !Limit->GetRef().Init(ctx, src)) ||
             (Offset && !Offset->GetRef().Init(ctx, src))) {
@@ -231,6 +223,10 @@ public:
             }
 
             item->Add(Q(Y(Q("where"), Y("YqlWhere", Y("Void"), Y("lambda", Q(Y()), *Where)))));
+        }
+
+        if (GroupBy) {
+            item->Add(Q(Y(Q("group_by"), Q(BuildGroupBy(*GroupBy)))));
         }
 
         if (OrderBy) {
@@ -422,6 +418,18 @@ private:
         return Q(Y(
             Q(ToString(constraint.Kind)),
             Y("YqlWhere", Y("Void"), Y("lambda", Q(Y()), constraint.Condition))));
+    }
+
+    TNodePtr BuildGroupBy(const TGroupBy& groupBy) const {
+        TNodePtr clause = Y();
+        for (TNodePtr key : groupBy.Keys) {
+            clause = L(std::move(clause), BuildYqlGroup(std::move(key)));
+        }
+        return clause;
+    }
+
+    TNodePtr BuildYqlGroup(TNodePtr node) const {
+        return Y("YqlGroup", Y("Void"), Y("lambda", Q(Y()), std::move(node)));
     }
 
     TNodePtr BuildSortSpecification(const TVector<TSortSpecificationPtr>& keys) const {

@@ -1080,6 +1080,7 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
     };
 
     map["PgGrouping"] = ExpandPgGrouping;
+    map["YqlGrouping"] = ExpandPgGrouping;
 
     map["PruneKeys"] = map["PruneAdjacentKeys"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext&) {
         TCoPruneKeysBase pruneKeys(node);

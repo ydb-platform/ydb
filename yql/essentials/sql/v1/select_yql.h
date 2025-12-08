@@ -36,6 +36,10 @@ using TProjection = std::variant<
     TVector<TNodePtr>,
     TPlainAsterisk>;
 
+struct TGroupBy {
+    TVector<TNodePtr> Keys;
+};
+
 struct TOrderBy {
     TVector<TSortSpecificationPtr> Keys;
 };
@@ -56,6 +60,7 @@ struct TYqlSelectArgs {
     TMaybe<TNodePtr> Where;
     TMaybe<TNodePtr> Limit;
     TMaybe<TNodePtr> Offset;
+    TMaybe<TGroupBy> GroupBy;
     TMaybe<TOrderBy> OrderBy;
 };
 

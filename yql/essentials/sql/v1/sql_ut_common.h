@@ -11717,6 +11717,125 @@ Y_UNIT_TEST(ExistsSubqueryWhere) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 4);
 }
 
+Y_UNIT_TEST(GroupByUnsupportsTwoArg) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT AggList(a) FROM (VALUES (1)) AS x(a);
+    )sql", settings);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "YqlSelect unsupported: Aggregation 'AggList'");
+}
+
+Y_UNIT_TEST(GroupByCountImplicit) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT Count(b) FROM (VALUES (1)) AS x(b);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {"YqlSelect", "YqlColumnRef", "YqlGroup", "YqlAgg"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlColumnRef"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 1 + 1);
+}
+
+Y_UNIT_TEST(GroupByCount) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, Count(b) FROM (VALUES (1, 2)) AS x(a, b) GROUP BY a;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {"YqlSelect", "YqlColumnRef", "YqlGroup", "YqlAgg"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlColumnRef"], 2 + 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroup"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 1 + 1);
+}
+
+Y_UNIT_TEST(GroupByCountAll) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, Count(*) FROM (VALUES (1, 2)) AS x(a, b) GROUP BY a;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {"YqlSelect", "YqlColumnRef", "YqlGroup", "YqlAgg"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlColumnRef"], 1 + 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroup"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 1 + 1);
+}
+
+Y_UNIT_TEST(GroupByMinOrMax) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, Min(b) FROM (VALUES (1, 2)) AS x(a, b) GROUP BY a;
+        SELECT a, Max(b) FROM (VALUES (1, 2)) AS x(a, b) GROUP BY a;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {"YqlSelect", "YqlColumnRef", "YqlGroup", "YqlAgg"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2 * 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlColumnRef"], 2 * 3);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroup"], 2 * 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 2 * (1 + 1));
+}
+
+Y_UNIT_TEST(GroupBySum) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, Sum(b) FROM (VALUES (1, 2)) AS x(a, b) GROUP BY a;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {"YqlSelect", "YqlColumnRef", "YqlGroup", "YqlAgg"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlColumnRef"], 3);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroup"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 1 + 1);
+}
+
+Y_UNIT_TEST(GroupByAvg) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, Avg(b) FROM (VALUES (1, 2)) AS x(a, b) GROUP BY a;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {"YqlSelect", "YqlColumnRef", "YqlGroup", "YqlAgg"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlColumnRef"], 3);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroup"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 1 + 1);
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelect)
 
 Y_UNIT_TEST_SUITE(CreateViewNewSyntax) {

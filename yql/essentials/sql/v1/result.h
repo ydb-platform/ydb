@@ -7,6 +7,8 @@
 
 namespace NSQLTranslationV1 {
 
+class TContext;
+
 template <class TPtr>
 class TNonNull final: public TPtr {
 public:
@@ -21,6 +23,8 @@ enum class ESQLError {
     Basic,
     UnsupportedYqlSelect,
 };
+
+std::unexpected<ESQLError> UnsupportedYqlSelect(TContext& ctx, TStringBuf message);
 
 template <class T>
 using TSQLResult = std::expected<T, ESQLError>;

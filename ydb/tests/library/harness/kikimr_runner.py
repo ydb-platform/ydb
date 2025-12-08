@@ -642,6 +642,9 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             else self.nodes[1].grpc_port
         )
 
+        if tenant_affiliation is None:
+            tenant_affiliation = "dynamic"
+
         if encryption_key is None and self.__configurator.enable_pool_encryption:
             workdir = os.path.join(self.__configurator.working_dir, self.__cluster_name)
             slug = tenant_affiliation.replace('/', '_')
@@ -662,7 +665,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             udfs_dir=self.__common_udfs_dir,
             role='slot',
             node_broker_port=node_broker_port,
-            tenant_affiliation=tenant_affiliation if tenant_affiliation is not None else 'dynamic',
+            tenant_affiliation=tenant_affiliation,
             encryption_key=encryption_key,
             binary_path=self.__configurator.get_binary_path(slot_index),
             seed_nodes_file=seed_nodes_file,

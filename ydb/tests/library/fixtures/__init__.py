@@ -2,6 +2,7 @@
 import contextlib
 import logging
 import os
+import copy
 
 import pytest
 
@@ -171,17 +172,13 @@ def ydb_client_session(ydb_client, request):
 
 @pytest.fixture(scope='module', params=[True, False], ids=["encryption_enabled", "encryption_disabled"])
 def encryption_enabled(request):
-    """
-    Parametrized fixture that runs tests with both encryption enabled and disabled.
-    """
+    """Parametrized fixture that runs tests with both encryption enabled and disabled."""
     return request.param
 
 
 @pytest.fixture(scope='module')
 def ydb_cluster_configuration_with_encryption_parametrized(ydb_cluster_configuration, encryption_enabled):
-    """
-    Extended cluster configuration that includes encryption settings based on the parametrized fixture.
-    """
-    config = ydb_cluster_configuration.copy()
+    """Extended cluster configuration that includes encryption settings based on the parametrized fixture."""
+    config = copy.deepcopy(ydb_cluster_configuration)
     config['enable_pool_encryption'] = encryption_enabled
     return config

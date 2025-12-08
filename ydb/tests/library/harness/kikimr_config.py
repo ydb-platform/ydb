@@ -686,7 +686,7 @@ class KikimrConfigGenerator(object):
     @property
     def domains_txt(self):
         app_config = config_pb2.TAppConfig()
-        assert not self.enable_pool_encryption, "pool encryption isn't addressed in domains.txt"
+        assert not self.enable_pool_encryption, "pool encryption is not addressed in domains.txt"
         Parse(read_binary(__name__, "resources/default_domains.txt"), app_config.DomainsConfig)
         return app_config.DomainsConfig
 

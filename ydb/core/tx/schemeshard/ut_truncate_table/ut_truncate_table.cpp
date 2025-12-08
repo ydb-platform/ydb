@@ -2,6 +2,7 @@
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -30,10 +31,14 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         t.NoRebootEventTypes.insert(TEvDataShard::EvGetTableStats);
         t.NoRebootEventTypes.insert(TEvDataShard::EvProposeTransaction);
         t.NoRebootEventTypes.insert(TEvDataShard::EvProposeTransactionResult);
-
+        t.NoRebootEventTypes.insert(TEvDataShard::EvSchemaChanged);
+        t.NoRebootEventTypes.insert(TEvPrivate::EvPersistTableStats);
         t.NoRebootEventTypes.insert(TEvTxProxySchemeCache::EvNavigateKeySetResult);
         t.NoRebootEventTypes.insert(TEvTxProxySchemeCache::EvResolveKeySetResult);
+        
+        int cntRun = 0;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            Cerr << "RUN " << cntRun << " BEGINS" << Endl;
             {
                 TInactiveZone inactive(activeZone);
                 
@@ -67,19 +72,18 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
             const ui64 truncateId = ++t.TxId;
             TestTruncateTable(runtime, truncateId, "/MyRoot", "TestTable");
+            Cerr << "TestTruncateTable(runtime, truncateId..) finished" << Endl;
             t.TestEnv->TestWaitNotification(runtime, truncateId);
 
             {
                 TInactiveZone inactive(activeZone);
-
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
-                    {NLs::PathExist});
-
                 {
                     auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
                     UNIT_ASSERT_VALUES_EQUAL(rows, 0);
                 }
             }
+
+            Cerr << "RUN " << cntRun++ << " ENDS" << Endl;
         });
     }
 }

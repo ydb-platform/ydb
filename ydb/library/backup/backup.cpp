@@ -790,7 +790,6 @@ void AddConnectionOptions(const NReplication::TConnectionParams& connectionParam
             AddSecretSettingIfNotEmpty(connectionParams.GetOAuthCredentials().TokenSecretName,
                 "TOKEN_SECRET", options);
             break;
-        }
     }
 }
 

@@ -738,7 +738,6 @@ private:
 class TFDConnectionImpl
     : public TPollableBase
 {
-    struct TIODirection;
 public:
     static TFDConnectionImplPtr Create(
         TFileDescriptor fd,

@@ -45,7 +45,6 @@ static constexpr ui32 ReplySizeLimit = 48 * 1024 * 1024; // 48 MB
 
 class TKqpDataExecuter : public TKqpExecuterBase<TKqpDataExecuter, EExecType::Data> {
     using TBase = TKqpExecuterBase<TKqpDataExecuter, EExecType::Data>;
-    using TBase::ReplyErrorAndDie;
     using TKqpSnapshot = IKqpGateway::TKqpSnapshot;
 
     struct TReattachState {
@@ -309,26 +308,11 @@ public:
         LOG_W("Got Undelivered from BufferActor: " << ev->Sender);
     }
 
-    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
-        google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues) override
-    {
-        // Fill lock stats from Stats before calling base implementation
-        if (Stats) {
-            ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
-            ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim;
-        }
-        TBase::ReplyErrorAndDie(status, issues);
-    }
-
     void MakeResponseAndPassAway() {
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
 
         ResponseEv->Snapshot = GetSnapshot();
-        if (Stats) {
-            ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
-            ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim;
-        }
 
         if (!Locks.empty() || (TxManager && TxManager->HasLocks())) {
             if (LockHandle) {

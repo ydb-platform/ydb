@@ -58,7 +58,6 @@ FROM
     $json
 ;
 ```
-
 {% endcut %}
 
 ### Формат tsv_with_names {#tsv_with_names}
